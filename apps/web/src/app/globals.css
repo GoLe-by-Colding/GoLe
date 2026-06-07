@@ -1,36 +1,78 @@
-@import "./styles/tokens.css";
-@import "./styles/reset.css";
+@import "tailwindcss";
 
-html {
-  font-family: var(--font-sans);
-  color: var(--color-text);
-  background-color: var(--color-bg);
+/**
+ * GoLe 디자인 시스템 — Tailwind v4 @theme 토큰(단일 출처).
+ * 여기 정의한 변수는 자동으로 유틸리티(bg-brand-500, rounded-lg, font-sans 등)를 생성한다.
+ */
+@theme {
+  /* --- Brand (orange) --- */
+  --color-brand-50: #fff3ed;
+  --color-brand-100: #ffe1d1;
+  --color-brand-200: #ffbd9e;
+  --color-brand-300: #ff936a;
+  --color-brand-400: #ff6f3d;
+  --color-brand-500: #ff5a1f;
+  --color-brand-600: #e8430c;
+  --color-brand-700: #c0330a;
+  --color-brand-800: #982a0e;
+  --color-brand-900: #7a260f;
+
+  /* --- Neutral (디자인 팔레트로 Tailwind 기본 neutral 재정의) --- */
+  --color-neutral-50: #f7f8fa;
+  --color-neutral-100: #eef0f4;
+  --color-neutral-200: #e1e5ec;
+  --color-neutral-300: #cbd2dd;
+  --color-neutral-400: #9aa4b4;
+  --color-neutral-500: #6b7585;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #343b47;
+  --color-neutral-800: #20252e;
+  --color-neutral-900: #12151b;
+
+  /* --- Semantic --- */
+  --color-success: #18a957;
+  --color-success-soft: #e8f7ee;
+  --color-danger: #e23b3b;
+  --color-danger-soft: #fcebeb;
+  --color-warning: #f0a020;
+  --color-warning-soft: #fdf3e2;
+  --color-info: #2f74e0;
+  --color-info-soft: #eaf1fc;
+
+  /* --- Typography --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Noto Sans KR", "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  /* --- Radius --- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 }
 
-body {
-  font-size: var(--text-md);
-  color: var(--color-text);
-  background-color: var(--color-bg);
-}
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-neutral-900);
+    background-color: var(--color-neutral-50);
+  }
 
-h1,
-h2,
-h3,
-h4 {
-  line-height: var(--leading-tight);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: -0.01em;
-}
+  body {
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-a {
-  color: var(--color-primary);
-  transition: color var(--transition-fast);
-}
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
 
-a:hover {
-  color: var(--color-primary-hover);
-}
-
-::selection {
-  background-color: var(--color-brand-200);
+  ::selection {
+    background-color: var(--color-brand-200);
+  }
 }
