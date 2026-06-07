@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import {
   conditionLabel,
   fetchListingById,
@@ -6,8 +7,9 @@ import {
   type Listing,
 } from "@entities/listing";
 import { ApiError } from "@shared/api";
-import { Badge, Button, Container, Heading, Text } from "@shared/ui";
+import { Badge, Button, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
+import { WishlistButton } from "@features/wishlist-toggle";
 
 async function loadListing(id: string): Promise<Listing> {
   try {
@@ -57,10 +59,16 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
               채팅하기
             </Button>
           </div>
+          {listing.catalogSetNumber !== null ? (
+            <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
+          ) : null}
           <div className="mt-1 flex flex-col gap-1 border-t border-neutral-200 pt-4">
-            <Text size="sm" tone="muted">
-              판매자 {listing.sellerId}
-            </Text>
+            <Link
+              href={`/shops/${listing.sellerId}`}
+              className="text-sm text-neutral-500 hover:text-neutral-900"
+            >
+              판매자 {listing.sellerId.slice(0, 8)} 님의 샵 →
+            </Link>
           </div>
         </div>
       </div>
