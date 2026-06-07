@@ -105,6 +105,27 @@ class ListingServiceTest {
         public Optional<Listing> reserveIfActive(String listingId) {
             return findById(listingId).filter(Listing::isActive);
         }
+
+        @Override
+        public List<Listing> findActiveBySeller(String sellerId) {
+            return store.stream()
+                    .filter(Listing::isActive)
+                    .filter(l -> l.getSellerId().equals(sellerId))
+                    .toList();
+        }
+
+        @Override
+        public List<Listing> findActiveBySellers(List<String> sellerIds) {
+            return store.stream()
+                    .filter(Listing::isActive)
+                    .filter(l -> sellerIds.contains(l.getSellerId()))
+                    .toList();
+        }
+
+        @Override
+        public List<Listing> findByIds(List<String> ids) {
+            return store.stream().filter(l -> ids.contains(l.getId())).toList();
+        }
     }
 
     private static final class SequentialIdGenerator implements ListingIdGeneratorPort {

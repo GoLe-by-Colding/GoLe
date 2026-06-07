@@ -1,5 +1,6 @@
 package com.gole.api.listing.application.service;
 
+import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
@@ -31,6 +32,7 @@ public class ListingService
                 MarkListingSoldUseCase,
                 ReserveListingUseCase,
                 ReleaseListingUseCase,
+                BrowseListingsUseCase,
                 DeleteListingUseCase {
 
     private final ListingRepositoryPort listingRepository;
@@ -89,6 +91,21 @@ public class ListingService
         Listing listing = getById(listingId);
         listing.release();
         listingRepository.save(listing);
+    }
+
+    @Override
+    public List<Listing> activeBySeller(String sellerId) {
+        return listingRepository.findActiveBySeller(sellerId);
+    }
+
+    @Override
+    public List<Listing> activeBySellers(List<String> sellerIds) {
+        return listingRepository.findActiveBySellers(sellerIds);
+    }
+
+    @Override
+    public List<Listing> byIds(List<String> ids) {
+        return listingRepository.findByIds(ids);
     }
 
     @Override
