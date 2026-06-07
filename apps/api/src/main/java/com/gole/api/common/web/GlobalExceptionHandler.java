@@ -4,6 +4,7 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.DomainException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.common.exception.UnauthorizedException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,6 +27,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    }
+
+    // 요구사항 13.7: 동시 갱신 충돌(낙관적 락) → 409
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(OptimisticLockingFailureException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("CONCURRENT_UPDATE_CONFLICT", "Resource was updated concurrently"));
     }
 
     @ExceptionHandler(UnauthorizedException.class)

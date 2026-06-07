@@ -4,6 +4,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/gole?replicaSet=rs0}
+      database: ${MONGODB_DATABASE:gole}
       auto-index-creation: true
     redis:
       host: ${REDIS_HOST:localhost}
