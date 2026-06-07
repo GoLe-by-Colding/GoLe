@@ -10,6 +10,12 @@ export type { BadgeProps, BadgeTone } from "./badge";
 export { Container } from "./container";
 export type { ContainerProps, ContainerWidth } from "./container";
 
+export { Input } from "./input";
+export type { InputProps } from "./input";
+
+export { Field } from "./field";
+export type { FieldProps } from "./field";
+
 export { Heading, Text } from "./typography";
 export type {
   HeadingProps,
