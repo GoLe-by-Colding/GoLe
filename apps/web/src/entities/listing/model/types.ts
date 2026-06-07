@@ -1,6 +1,8 @@
 /**
  * 리스팅 도메인 타입. 백엔드 ListingResponse와 1:1 대응.
  */
+import { formatKrw } from "@shared/lib";
+
 export type ItemCondition = "new_sealed" | "used_complete" | "used_incomplete";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
 
@@ -28,5 +30,5 @@ export function conditionLabel(condition: ItemCondition): string {
 }
 
 export function formatPriceKrw(price: number): string {
-  return `₩${price.toLocaleString("ko-KR")}`;
+  return formatKrw(price);
 }
