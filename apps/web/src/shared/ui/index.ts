@@ -1,5 +1,7 @@
 export { Button } from "./button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
+export { LinkButton } from "./button";
+export type { LinkButtonProps } from "./button";
 
 export { Card } from "./card";
 export type { CardProps, CardElevation } from "./card";
