@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@entities/user";
-import { Button, Container } from "@shared/ui";
+import { Button, Container, LinkButton } from "@shared/ui";
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/", label: "홈" },
@@ -46,6 +46,9 @@ export function SiteHeader() {
           <div className="flex items-center gap-2">
             {session ? (
               <div className="inline-flex items-center gap-2">
+                <LinkButton href="/sell" size="sm" variant="secondary">
+                  판매하기
+                </LinkButton>
                 <span
                   className="grid h-8 w-8 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
                   aria-hidden="true"
