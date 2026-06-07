@@ -100,6 +100,11 @@ class ListingServiceTest {
         public List<Listing> search(ListingSearchQuery query) {
             return store.stream().filter(Listing::isActive).toList();
         }
+
+        @Override
+        public Optional<Listing> reserveIfActive(String listingId) {
+            return findById(listingId).filter(Listing::isActive);
+        }
     }
 
     private static final class SequentialIdGenerator implements ListingIdGeneratorPort {
