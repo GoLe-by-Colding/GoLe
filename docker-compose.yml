@@ -1,0 +1,52 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: gole-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    # 단일 노드 replica set: 멀티 도큐먼트 트랜잭션(주문/결제/정산 정합성)에 필요.
+    # 로컬 개발 단순화를 위해 auth는 비활성. 운영에서는 keyfile + auth 적용 필요.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 단일 노드 replica set 자동 초기화
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        mongosh --host mongo:27017 --quiet --eval '
+          try { rs.status().ok }
+          catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]}) }
+        '
+
+  redis:
+    image: redis:7-alpine
+    container_name: gole-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
+  redis_data:

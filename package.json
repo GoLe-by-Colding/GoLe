@@ -1,0 +1,21 @@
+{
+  "name": "gole",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GoLe - LEGO Marketplace monorepo",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "test:web": "pnpm --filter web test",
+    "e2e:web": "pnpm --filter web e2e",
+    "dev:api": "cd apps/api && ./gradlew bootRun",
+    "build:api": "cd apps/api && ./gradlew build",
+    "test:api": "cd apps/api && ./gradlew test",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.30.3"
+}
