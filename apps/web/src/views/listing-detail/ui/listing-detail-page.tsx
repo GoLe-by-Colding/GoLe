@@ -7,6 +7,7 @@ import {
 } from "@entities/listing";
 import { ApiError } from "@shared/api";
 import { Badge, Button, Container, Heading, Text } from "@shared/ui";
+import { PurchaseButton } from "@features/purchase";
 
 async function loadListing(id: string): Promise<Listing> {
   try {
@@ -51,9 +52,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             {listing.description}
           </p>
           <div className="mt-2 flex gap-3">
-            <Button size="lg" disabled={!isAvailable}>
-              {isAvailable ? "구매하기" : "거래완료"}
-            </Button>
+            <PurchaseButton listingId={listing.id} available={isAvailable} />
             <Button size="lg" variant="secondary" disabled={!isAvailable}>
               채팅하기
             </Button>
