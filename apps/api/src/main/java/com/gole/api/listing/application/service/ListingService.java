@@ -3,10 +3,11 @@ package com.gole.api.listing.application.service;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
-import com.gole.api.listing.application.port.in.ListActiveListingsUseCase;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
+import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.Money;
@@ -23,7 +24,7 @@ import org.springframework.stereotype.Service;
 public class ListingService
         implements CreateListingUseCase,
                 GetListingUseCase,
-                ListActiveListingsUseCase,
+                SearchListingsUseCase,
                 MarkListingSoldUseCase,
                 DeleteListingUseCase {
 
@@ -62,8 +63,8 @@ public class ListingService
     }
 
     @Override
-    public List<Listing> listActive() {
-        return listingRepository.findActive();
+    public List<Listing> search(ListingSearchQuery query) {
+        return listingRepository.search(query);
     }
 
     @Override

@@ -5,8 +5,11 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
-import com.gole.api.listing.application.port.in.ListActiveListingsUseCase;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
+import com.gole.api.listing.application.port.in.SearchListingsUseCase;
+import com.gole.api.listing.application.query.ListingSearchQuery;
+import com.gole.api.listing.application.query.ListingSortOrder;
+import com.gole.api.listing.domain.model.ItemCondition;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,19 +32,19 @@ public class ListingController {
 
     private final CreateListingUseCase createListingUseCase;
     private final GetListingUseCase getListingUseCase;
-    private final ListActiveListingsUseCase listActiveListingsUseCase;
+    private final SearchListingsUseCase searchListingsUseCase;
     private final MarkListingSoldUseCase markListingSoldUseCase;
     private final DeleteListingUseCase deleteListingUseCase;
 
     public ListingController(
             CreateListingUseCase createListingUseCase,
             GetListingUseCase getListingUseCase,
-            ListActiveListingsUseCase listActiveListingsUseCase,
+            SearchListingsUseCase searchListingsUseCase,
             MarkListingSoldUseCase markListingSoldUseCase,
             DeleteListingUseCase deleteListingUseCase) {
         this.createListingUseCase = createListingUseCase;
         this.getListingUseCase = getListingUseCase;
-        this.listActiveListingsUseCase = listActiveListingsUseCase;
+        this.searchListingsUseCase = searchListingsUseCase;
         this.markListingSoldUseCase = markListingSoldUseCase;
         this.deleteListingUseCase = deleteListingUseCase;
     }
@@ -59,9 +63,17 @@ public class ListingController {
         return ListingResponse.from(getListingUseCase.getById(id));
     }
 
+    /** 활성 리스팅 검색/필터/정렬. 파라미터가 없으면 최신순 전체. (요구사항 14) */
     @GetMapping
-    public List<ListingResponse> listActive() {
-        return listActiveListingsUseCase.listActive().stream()
+    public List<ListingResponse> search(
+            @RequestParam(value = "query", required = false) String query,
+            @RequestParam(value = "condition", required = false) ItemCondition condition,
+            @RequestParam(value = "minPrice", required = false) Long minPrice,
+            @RequestParam(value = "maxPrice", required = false) Long maxPrice,
+            @RequestParam(value = "sort", required = false) ListingSortOrder sort) {
+        ListingSearchQuery searchQuery =
+                new ListingSearchQuery(query, condition, minPrice, maxPrice, sort);
+        return searchListingsUseCase.search(searchQuery).stream()
                 .map(ListingResponse::from)
                 .toList();
     }

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
 import com.gole.api.listing.domain.exception.ListingStateException;
 import com.gole.api.listing.domain.exception.MissingPhotoException;
@@ -65,7 +66,7 @@ class ListingServiceTest {
     void markSold_excludesFromActive() {
         String id = service.create(validCommand());
         service.markSold(id);
-        assertThat(service.listActive()).isEmpty();
+        assertThat(service.search(ListingSearchQuery.newestAll())).isEmpty();
         assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
     }
 
@@ -96,7 +97,7 @@ class ListingServiceTest {
         }
 
         @Override
-        public List<Listing> findActive() {
+        public List<Listing> search(ListingSearchQuery query) {
             return store.stream().filter(Listing::isActive).toList();
         }
     }
