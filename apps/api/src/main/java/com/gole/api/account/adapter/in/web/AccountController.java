@@ -1,0 +1,63 @@
+package com.gole.api.account.adapter.in.web;
+
+import com.gole.api.account.adapter.in.web.AccountRequests.RegisterRequest;
+import com.gole.api.account.adapter.in.web.AccountRequests.SignInRequest;
+import com.gole.api.account.adapter.in.web.AccountRequests.VerifyEmailRequest;
+import com.gole.api.account.adapter.in.web.AccountResponses.RegisterResponse;
+import com.gole.api.account.adapter.in.web.AccountResponses.SignInResponse;
+import com.gole.api.account.application.port.in.RegisterAccountUseCase;
+import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
+import com.gole.api.account.application.port.in.SignInUseCase;
+import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
+import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
+import com.gole.api.account.application.port.in.VerifyEmailUseCase;
+import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Inbound 어댑터(REST). use case 인터페이스에만 의존한다.
+ */
+@RestController
+@RequestMapping("/api/v1/accounts")
+public class AccountController {
+
+    private final RegisterAccountUseCase registerAccountUseCase;
+    private final VerifyEmailUseCase verifyEmailUseCase;
+    private final SignInUseCase signInUseCase;
+
+    public AccountController(
+            RegisterAccountUseCase registerAccountUseCase,
+            VerifyEmailUseCase verifyEmailUseCase,
+            SignInUseCase signInUseCase) {
+        this.registerAccountUseCase = registerAccountUseCase;
+        this.verifyEmailUseCase = verifyEmailUseCase;
+        this.signInUseCase = signInUseCase;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
+        String accountId = registerAccountUseCase.register(
+                new RegisterAccountCommand(request.email(), request.password()));
+        return new RegisterResponse(accountId);
+    }
+
+    @PostMapping("/verification")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verify(@Valid @RequestBody VerifyEmailRequest request) {
+        verifyEmailUseCase.verify(new VerifyEmailCommand(request.email(), request.code()));
+    }
+
+    @PostMapping("/sessions")
+    public SignInResponse signIn(@Valid @RequestBody SignInRequest request) {
+        SignInResult result =
+                signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
+        return new SignInResponse(result.accountId(), result.sessionToken());
+    }
+}
