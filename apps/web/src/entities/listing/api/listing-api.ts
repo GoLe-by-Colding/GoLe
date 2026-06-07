@@ -37,6 +37,44 @@ export function fetchActiveListings(
   });
 }
 
+export type ListingSort = "newest" | "price_asc" | "price_desc";
+
+export interface SearchListingsParams {
+  readonly query?: string;
+  readonly condition?: ItemCondition;
+  readonly minPrice?: number;
+  readonly maxPrice?: number;
+  readonly sort?: ListingSort;
+}
+
+/** 활성 리스팅 검색/필터/정렬. 백엔드는 enum을 대문자로 받는다. (요구사항 14) */
+export function searchListings(
+  params: SearchListingsParams,
+  signal?: AbortSignal,
+): Promise<readonly Listing[]> {
+  const qs = new URLSearchParams();
+  if (params.query) {
+    qs.set("query", params.query);
+  }
+  if (params.condition) {
+    qs.set("condition", params.condition.toUpperCase());
+  }
+  if (params.minPrice !== undefined) {
+    qs.set("minPrice", String(params.minPrice));
+  }
+  if (params.maxPrice !== undefined) {
+    qs.set("maxPrice", String(params.maxPrice));
+  }
+  if (params.sort) {
+    qs.set("sort", params.sort.toUpperCase());
+  }
+  const suffix = qs.toString().length > 0 ? `?${qs.toString()}` : "";
+  return apiRequest<readonly Listing[]>(`/api/v1/listings${suffix}`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
 export function fetchListingById(
   listingId: string,
   signal?: AbortSignal,
