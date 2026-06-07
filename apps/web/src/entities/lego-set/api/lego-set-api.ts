@@ -27,3 +27,13 @@ export function searchLegoSets(
     withSignal(signal),
   );
 }
+
+/** 홈 추천 세트. 항상 최신을 반영하도록 캐시하지 않는다. */
+export function fetchFeaturedLegoSets(
+  signal?: AbortSignal,
+): Promise<readonly LegoSet[]> {
+  return apiRequest<readonly LegoSet[]>("/api/v1/catalog/sets/featured", {
+    ...withSignal(signal),
+    cache: "no-store",
+  });
+}

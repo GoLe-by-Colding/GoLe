@@ -22,6 +22,7 @@ export interface RequestOptions {
   readonly body?: unknown;
   readonly signal?: AbortSignal;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly cache?: RequestCache;
 }
 
 /**
@@ -32,11 +33,12 @@ export async function apiRequest<TResponse>(
   path: string,
   options: RequestOptions = {},
 ): Promise<TResponse> {
-  const { method = "GET", body, signal, headers } = options;
+  const { method = "GET", body, signal, headers, cache } = options;
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     method,
     signal: signal ?? null,
+    ...(cache === undefined ? {} : { cache }),
     headers: {
       "Content-Type": "application/json",
       ...headers,
