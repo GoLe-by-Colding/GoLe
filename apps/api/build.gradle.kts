@@ -63,6 +63,22 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// 통합 테스트(*IntegrationTest)는 Docker(Testcontainers)가 필요하므로 기본 test에서 제외.
+tasks.named<Test>("test") {
+    filter { excludeTestsMatching("*IntegrationTest") }
+}
+
+// Docker 사용 가능 환경(CI 등)에서 명시적으로 실행: ./gradlew integrationTest
+tasks.register<Test>("integrationTest") {
+    description = "Testcontainers 기반 통합 테스트 실행"
+    group = "verification"
+    useJUnitPlatform()
+    filter { includeTestsMatching("*IntegrationTest") }
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    shouldRunAfter("test")
+}
+
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("-Xlint:deprecation")
 }
