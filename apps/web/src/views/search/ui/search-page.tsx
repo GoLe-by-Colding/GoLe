@@ -1,17 +1,76 @@
-import { fetchActiveListings, type Listing } from "@entities/listing";
+import {
+  searchListings,
+  type ItemCondition,
+  type Listing,
+  type ListingSort,
+  type SearchListingsParams,
+} from "@entities/listing";
+import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
 import { Container, Heading, Text } from "@shared/ui";
 import { ListingGrid } from "@widgets/listing-grid";
 
-async function loadListings(): Promise<readonly Listing[]> {
+export interface SearchPageProps {
+  readonly query?: string | undefined;
+  readonly condition?: string | undefined;
+  readonly minPrice?: string | undefined;
+  readonly maxPrice?: string | undefined;
+  readonly sort?: string | undefined;
+}
+
+const CONDITIONS: readonly ItemCondition[] = [
+  "new_sealed",
+  "used_complete",
+  "used_incomplete",
+];
+const SORTS: readonly ListingSort[] = ["newest", "price_asc", "price_desc"];
+
+function parseCondition(value: string | undefined): ItemCondition | undefined {
+  return CONDITIONS.find((c) => c === value);
+}
+
+function parseSort(value: string | undefined): ListingSort {
+  return SORTS.find((s) => s === value) ?? "newest";
+}
+
+function parsePrice(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+async function loadListings(params: SearchListingsParams): Promise<readonly Listing[]> {
   try {
-    return await fetchActiveListings();
+    return await searchListings(params);
   } catch {
     return [];
   }
 }
 
-export async function SearchPage() {
-  const listings = await loadListings();
+export async function SearchPage(props: SearchPageProps) {
+  const condition = parseCondition(props.condition);
+  const sort = parseSort(props.sort);
+  const minPrice = parsePrice(props.minPrice);
+  const maxPrice = parsePrice(props.maxPrice);
+
+  const params: SearchListingsParams = {
+    ...(props.query ? { query: props.query } : {}),
+    ...(condition ? { condition } : {}),
+    ...(minPrice !== undefined ? { minPrice } : {}),
+    ...(maxPrice !== undefined ? { maxPrice } : {}),
+    sort,
+  };
+
+  const listings = await loadListings(params);
+
+  const initial: ListingFilterValues = {
+    query: props.query ?? "",
+    condition: condition ?? "",
+    minPrice: props.minPrice ?? "",
+    maxPrice: props.maxPrice ?? "",
+    sort,
+  };
 
   return (
     <Container width="xl">
@@ -20,9 +79,10 @@ export async function SearchPage() {
           <Heading level={1}>상품 탐색</Heading>
           <Text tone="secondary">지금 거래 가능한 레고 {listings.length}개</Text>
         </div>
+        <ListingFilterBar initial={initial} />
         <ListingGrid
           listings={listings}
-          emptyMessage="아직 등록된 상품이 없습니다. 백엔드(API)가 실행 중인지 확인해 주세요."
+          emptyMessage="조건에 맞는 상품이 없습니다."
         />
       </div>
     </Container>
