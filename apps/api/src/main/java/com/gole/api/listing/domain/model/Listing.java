@@ -82,6 +82,13 @@ public final class Listing {
         this.status = ListingStatus.DELETED;
     }
 
+    /** 선점 해제(RESERVED → ACTIVE). 결제 실패/환불 시. 이미 활성이면 무시(멱등). */
+    public void release() {
+        if (status == ListingStatus.RESERVED) {
+            this.status = ListingStatus.ACTIVE;
+        }
+    }
+
     public boolean isActive() {
         return status == ListingStatus.ACTIVE;
     }

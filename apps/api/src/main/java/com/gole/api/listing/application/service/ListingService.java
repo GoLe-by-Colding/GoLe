@@ -4,6 +4,8 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
+import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
+import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
@@ -14,6 +16,7 @@ import com.gole.api.listing.domain.model.Money;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,6 +29,8 @@ public class ListingService
                 GetListingUseCase,
                 SearchListingsUseCase,
                 MarkListingSoldUseCase,
+                ReserveListingUseCase,
+                ReleaseListingUseCase,
                 DeleteListingUseCase {
 
     private final ListingRepositoryPort listingRepository;
@@ -71,6 +76,18 @@ public class ListingService
     public void markSold(String listingId) {
         Listing listing = getById(listingId);
         listing.markSold();
+        listingRepository.save(listing);
+    }
+
+    @Override
+    public Optional<Listing> reserve(String listingId) {
+        return listingRepository.reserveIfActive(listingId);
+    }
+
+    @Override
+    public void release(String listingId) {
+        Listing listing = getById(listingId);
+        listing.release();
         listingRepository.save(listing);
     }
 
