@@ -3,7 +3,7 @@ import {
   fetchFeaturedLegoSets,
   type LegoSet,
 } from "@entities/lego-set";
-import { Button, Container, Heading, Text } from "@shared/ui";
+import { Container, Heading, LinkButton, Text } from "@shared/ui";
 import styles from "./home-page.module.css";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
@@ -29,12 +29,12 @@ export async function HomePage() {
             안전거래부터 동네 직거래까지 한곳에서.
           </p>
           <div className={styles.heroActions}>
-            <Button variant="secondary" size="lg">
+            <LinkButton href="/search" variant="secondary" size="lg">
               상품 둘러보기
-            </Button>
-            <Button variant="ghost" size="lg">
+            </LinkButton>
+            <LinkButton href="/prices" variant="ghost" size="lg" className={styles.heroGhost}>
               시세 확인하기
-            </Button>
+            </LinkButton>
           </div>
         </section>
 
