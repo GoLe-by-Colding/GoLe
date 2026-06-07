@@ -1,8 +1,12 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@shared/lib";
-import styles from "./card.module.css";
 
 export type CardElevation = "flat" | "raised";
+
+const ELEVATION: Record<CardElevation, string> = {
+  flat: "shadow-none",
+  raised: "shadow-sm",
+};
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   readonly elevation?: CardElevation;
@@ -22,10 +26,11 @@ export function Card({
   return (
     <div
       className={cn(
-        styles.card,
-        styles[elevation],
-        interactive && styles.interactive,
-        padded && styles.padded,
+        "bg-white border border-neutral-200 rounded-lg overflow-hidden",
+        ELEVATION[elevation],
+        interactive &&
+          "cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 hover:border-neutral-300",
+        padded && "p-5",
         className,
       )}
       {...rest}

@@ -1,10 +1,27 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@shared/lib";
-import styles from "./typography.module.css";
 
 export type TextSize = "sm" | "md" | "lg";
 export type TextTone = "default" | "secondary" | "muted";
 export type TextWeight = "regular" | "medium" | "semibold";
+
+const SIZE: Record<TextSize, string> = {
+  sm: "text-sm",
+  md: "text-base",
+  lg: "text-lg",
+};
+
+const TONE: Record<TextTone, string> = {
+  default: "text-neutral-900",
+  secondary: "text-neutral-600",
+  muted: "text-neutral-500",
+};
+
+const WEIGHT: Record<TextWeight, string> = {
+  regular: "font-normal",
+  medium: "font-medium",
+  semibold: "font-semibold",
+};
 
 export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
   readonly size?: TextSize;
@@ -12,24 +29,6 @@ export interface TextProps extends HTMLAttributes<HTMLParagraphElement> {
   readonly weight?: TextWeight;
   readonly children: ReactNode;
 }
-
-const SIZE_CLASS: Record<TextSize, string | undefined> = {
-  sm: styles.textSm,
-  md: styles.textMd,
-  lg: styles.textLg,
-};
-
-const TONE_CLASS: Record<TextTone, string | undefined> = {
-  default: styles.default,
-  secondary: styles.secondary,
-  muted: styles.muted,
-};
-
-const WEIGHT_CLASS: Record<TextWeight, string | undefined> = {
-  regular: undefined,
-  medium: styles.weightMedium,
-  semibold: styles.weightSemibold,
-};
 
 export function Text({
   size = "md",
@@ -40,10 +39,7 @@ export function Text({
   ...rest
 }: TextProps) {
   return (
-    <p
-      className={cn(SIZE_CLASS[size], TONE_CLASS[tone], WEIGHT_CLASS[weight], className)}
-      {...rest}
-    >
+    <p className={cn(SIZE[size], TONE[tone], WEIGHT[weight], className)} {...rest}>
       {children}
     </p>
   );

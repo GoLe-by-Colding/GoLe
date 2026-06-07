@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@shared/lib";
-import styles from "./button.module.css";
-import type { ButtonSize, ButtonVariant } from "./button";
+import {
+  BUTTON_BASE,
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  type ButtonSize,
+  type ButtonVariant,
+} from "./button";
 
 export interface LinkButtonProps {
   readonly href: string;
@@ -14,7 +19,7 @@ export interface LinkButtonProps {
 }
 
 /**
- * 버튼 외형을 가진 링크. 시각적으로 Button과 동일한 토큰/클래스를 사용한다.
+ * 버튼 외형을 가진 링크. Button과 동일한 Tailwind 클래스 셋을 재사용한다.
  */
 export function LinkButton({
   href,
@@ -28,10 +33,10 @@ export function LinkButton({
     <Link
       href={href}
       className={cn(
-        styles.button,
-        styles[variant],
-        styles[size],
-        fullWidth && styles.fullWidth,
+        BUTTON_BASE,
+        BUTTON_VARIANT[variant],
+        BUTTON_SIZE[size],
+        fullWidth && "w-full",
         className,
       )}
     >
