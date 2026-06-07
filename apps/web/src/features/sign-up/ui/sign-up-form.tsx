@@ -4,7 +4,6 @@ import { type FormEvent, useState } from "react";
 import { registerAccount } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Field, Input } from "@shared/ui";
-import styles from "./sign-up-form.module.css";
 
 export interface SignUpFormProps {
   /** 가입 성공 시 인증 단계로 진행하기 위해 이메일을 전달한다. */
@@ -34,9 +33,9 @@ export function SignUpForm({ onRegistered }: SignUpFormProps) {
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit} noValidate>
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
           {error}
         </p>
       ) : null}

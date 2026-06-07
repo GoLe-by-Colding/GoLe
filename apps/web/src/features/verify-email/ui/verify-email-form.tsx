@@ -4,7 +4,6 @@ import { type FormEvent, useState } from "react";
 import { verifyEmail } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Field, Input } from "@shared/ui";
-import styles from "./verify-email-form.module.css";
 
 export interface VerifyEmailFormProps {
   readonly initialEmail?: string;
@@ -34,9 +33,9 @@ export function VerifyEmailForm({ initialEmail = "", onVerified }: VerifyEmailFo
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit} noValidate>
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
           {error}
         </p>
       ) : null}

@@ -4,7 +4,6 @@ import { type FormEvent, useState } from "react";
 import { saveSession, signIn, type Session } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Field, Input } from "@shared/ui";
-import styles from "./sign-in-form.module.css";
 
 export interface SignInFormProps {
   readonly onSignedIn: (session: Session) => void;
@@ -34,9 +33,9 @@ export function SignInForm({ onSignedIn }: SignInFormProps) {
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit} noValidate>
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
           {error}
         </p>
       ) : null}

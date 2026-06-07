@@ -1,7 +1,6 @@
 import { fetchActiveListings, type Listing } from "@entities/listing";
 import { Container, Heading, Text } from "@shared/ui";
 import { ListingGrid } from "@widgets/listing-grid";
-import styles from "./search-page.module.css";
 
 async function loadListings(): Promise<readonly Listing[]> {
   try {
@@ -16,12 +15,10 @@ export async function SearchPage() {
 
   return (
     <Container width="xl">
-      <div className={styles.page}>
-        <div className={styles.header}>
+      <div className="flex flex-col gap-6 pt-8 pb-16">
+        <div className="flex flex-col gap-1">
           <Heading level={1}>상품 탐색</Heading>
-          <Text tone="secondary">
-            지금 거래 가능한 레고 {listings.length}개
-          </Text>
+          <Text tone="secondary">지금 거래 가능한 레고 {listings.length}개</Text>
         </div>
         <ListingGrid
           listings={listings}

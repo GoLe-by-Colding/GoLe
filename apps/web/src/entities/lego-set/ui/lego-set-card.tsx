@@ -1,7 +1,6 @@
 import { Badge, Card } from "@shared/ui";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
-import styles from "./lego-set-card.module.css";
 
 export interface LegoSetCardProps {
   readonly set: LegoSet;
@@ -9,13 +8,18 @@ export interface LegoSetCardProps {
 
 export function LegoSetCard({ set }: LegoSetCardProps) {
   return (
-    <Card interactive padded={false} className={styles.card} data-testid="lego-set-card">
-      <div className={styles.thumb} aria-hidden="true">
+    <Card interactive padded={false} className="flex flex-col" data-testid="lego-set-card">
+      <div
+        className="aspect-[4/3] flex items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-5xl font-bold text-brand-300"
+        aria-hidden="true"
+      >
         {set.imageUrl === null ? "🧱" : null}
       </div>
-      <div className={styles.body}>
-        <div className={styles.header}>
-          <span className={styles.title}>{set.name}</span>
+      <div className="flex flex-col gap-2 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-base font-semibold leading-tight text-neutral-900">
+            {set.name}
+          </span>
           {isRetired(set) ? (
             <Badge tone="danger" data-testid="retired-badge">
               단종
@@ -24,14 +28,14 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
             <Badge tone="brand">{set.theme}</Badge>
           )}
         </div>
-        <span className={styles.setNumber}>#{set.setNumber}</span>
-        <dl className={styles.meta}>
-          <div className={styles.metaItem}>
-            <dt className={styles.metaLabel}>피스</dt>
+        <span className="font-mono text-xs text-neutral-500">#{set.setNumber}</span>
+        <dl className="flex flex-wrap gap-x-3 gap-y-1 m-0 text-sm text-neutral-600">
+          <div className="inline-flex gap-1">
+            <dt className="text-neutral-500">피스</dt>
             <dd>{set.pieceCount.toLocaleString()}</dd>
           </div>
-          <div className={styles.metaItem}>
-            <dt className={styles.metaLabel}>출시</dt>
+          <div className="inline-flex gap-1">
+            <dt className="text-neutral-500">출시</dt>
             <dd>{set.releaseYear}</dd>
           </div>
         </dl>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@entities/user";
 import { Button, Container } from "@shared/ui";
-import styles from "./site-header.module.css";
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/", label: "홈" },
@@ -23,24 +22,34 @@ export function SiteHeader() {
   }
 
   return (
-    <header className={styles.header}>
+    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/85 backdrop-blur-md backdrop-saturate-150">
       <Container width="xl">
-        <div className={styles.inner}>
-          <Link href="/" className={styles.brand}>
+        <div className="flex h-16 items-center gap-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-neutral-900"
+          >
             🧱 GoLe
           </Link>
-          <nav className={styles.nav}>
+          <nav className="flex items-center gap-5 max-sm:hidden">
             {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} className={styles.navLink}>
+              <Link
+                key={item.href}
+                href={item.href}
+                className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
+              >
                 {item.label}
               </Link>
             ))}
           </nav>
-          <div className={styles.spacer} />
-          <div className={styles.actions}>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
             {session ? (
-              <div className={styles.userChip}>
-                <span className={styles.avatar} aria-hidden="true">
+              <div className="inline-flex items-center gap-2">
+                <span
+                  className="grid h-8 w-8 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
+                  aria-hidden="true"
+                >
                   {session.accountId.slice(0, 1).toUpperCase()}
                 </span>
                 <Button variant="ghost" size="sm" onClick={handleSignOut}>
@@ -49,11 +58,7 @@ export function SiteHeader() {
               </div>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push("/login")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => router.push("/login")}>
                   로그인
                 </Button>
                 <Button size="sm" onClick={() => router.push("/signup")}>
