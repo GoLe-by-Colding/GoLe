@@ -18,6 +18,12 @@ export type { InputProps } from "./input";
 export { Field } from "./field";
 export type { FieldProps } from "./field";
 
+export { Select } from "./select";
+export type { SelectProps } from "./select";
+
+export { Textarea } from "./textarea";
+export type { TextareaProps } from "./textarea";
+
 export { Heading, Text } from "./typography";
 export type {
   HeadingProps,
