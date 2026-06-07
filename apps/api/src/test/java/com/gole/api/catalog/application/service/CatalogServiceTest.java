@@ -57,5 +57,10 @@ class CatalogServiceTest {
         public List<LegoSet> searchByNameOrTheme(String query) {
             return bySearch;
         }
+
+        @Override
+        public List<LegoSet> loadFeatured(int limit) {
+            return bySearch;
+        }
     }
 }

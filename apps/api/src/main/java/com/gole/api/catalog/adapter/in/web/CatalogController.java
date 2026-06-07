@@ -1,6 +1,7 @@
 package com.gole.api.catalog.adapter.in.web;
 
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
+import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,12 +19,22 @@ public class CatalogController {
 
     private final FindLegoSetUseCase findLegoSetUseCase;
     private final SearchLegoSetsUseCase searchLegoSetsUseCase;
+    private final ListFeaturedLegoSetsUseCase listFeaturedLegoSetsUseCase;
 
     public CatalogController(
             FindLegoSetUseCase findLegoSetUseCase,
-            SearchLegoSetsUseCase searchLegoSetsUseCase) {
+            SearchLegoSetsUseCase searchLegoSetsUseCase,
+            ListFeaturedLegoSetsUseCase listFeaturedLegoSetsUseCase) {
         this.findLegoSetUseCase = findLegoSetUseCase;
         this.searchLegoSetsUseCase = searchLegoSetsUseCase;
+        this.listFeaturedLegoSetsUseCase = listFeaturedLegoSetsUseCase;
+    }
+
+    @GetMapping("/featured")
+    public List<LegoSetResponse> featured() {
+        return listFeaturedLegoSetsUseCase.findFeatured().stream()
+                .map(LegoSetResponse::from)
+                .toList();
     }
 
     @GetMapping("/{setNumber}")
