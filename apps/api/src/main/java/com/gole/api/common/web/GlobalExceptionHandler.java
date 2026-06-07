@@ -2,6 +2,7 @@ package com.gole.api.common.web;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.DomainException;
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.common.exception.UnauthorizedException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -39,6 +40,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
     }
 
