@@ -10,3 +10,10 @@ export interface Session {
 export interface RegisterResult {
   readonly accountId: string;
 }
+
+/** GET /me 응답: 현재 로그인 사용자 정보. */
+export interface Me {
+  readonly accountId: string;
+  readonly email: string;
+  readonly role: "USER" | "ADMIN";
+}
