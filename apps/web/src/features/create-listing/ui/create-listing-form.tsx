@@ -115,20 +115,23 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
           </Select>
         )}
       </Field>
-      <Field label="대표 이미지 URL">
+      <Field
+        label="대표 이미지 URL"
+        hint="직접 촬영한 실물 사진을 올려주세요. 레고 공식 제품 이미지 도용은 금지됩니다."
+      >
         {({ inputId, describedBy }) => (
           <Input
             id={inputId}
             type="url"
             value={photoUrl}
-            placeholder="https://..."
+            placeholder="직접 촬영한 사진 URL (https://...)"
             aria-describedby={describedBy}
             onChange={(e) => setPhotoUrl(e.target.value)}
             required
           />
         )}
       </Field>
-      <Field label="레고 세트 번호 (선택)" hint="해당하는 공식 세트 번호가 있으면 입력하세요.">
+      <Field label="레고 세트 번호 (선택)" hint="해당하는 공식 세트 번호가 있으면 입력하세요. 세트명·번호는 식별용 텍스트로만 표시됩니다.">
         {({ inputId, describedBy }) => (
           <Input
             id={inputId}
