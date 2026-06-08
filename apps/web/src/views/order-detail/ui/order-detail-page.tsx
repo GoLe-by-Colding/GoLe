@@ -12,6 +12,7 @@ import {
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import { Badge, Button, Card, Container, Heading, Text } from "@shared/ui";
+import { WriteReviewForm } from "@features/write-review";
 
 export interface OrderDetailPageProps {
   readonly orderId: string;
@@ -138,6 +139,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             ))}
           </ol>
         </div>
+
+        {order.status === "completed" ? (
+          <Card padded className="flex flex-col gap-3">
+            <Text weight="semibold">판매자 후기 남기기</Text>
+            <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />
+          </Card>
+        ) : null}
       </div>
     </Container>
   );
