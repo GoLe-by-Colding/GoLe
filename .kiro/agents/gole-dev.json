@@ -1,0 +1,27 @@
+{
+  "name": "gole-dev",
+  "description": "GoLe LEGO Marketplace — full access agent (build, deploy, git, shell)",
+  "prompt": null,
+  "mcpServers": {},
+  "tools": [
+    "read",
+    "write",
+    "shell",
+    "aws",
+    "report",
+    "introspect",
+    "knowledge",
+    "thinking",
+    "todo",
+    "delegate",
+    "grep",
+    "glob"
+  ],
+  "toolAliases": {},
+  "allowedTools": ["*"],
+  "resources": [],
+  "hooks": {},
+  "toolsSettings": {},
+  "includeMcpJson": true,
+  "model": null
+}
