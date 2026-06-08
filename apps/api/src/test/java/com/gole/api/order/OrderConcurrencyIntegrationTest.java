@@ -8,7 +8,6 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListi
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
-import com.gole.api.order.adapter.out.settlement.SettlementMongoRepository;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
@@ -55,7 +54,6 @@ class OrderConcurrencyIntegrationTest {
     @Autowired PlaceOrderUseCase placeOrder;
     @Autowired PayOrderUseCase payOrder;
     @Autowired CompleteOrderUseCase completeOrder;
-    @Autowired SettlementMongoRepository settlements;
 
     private String createActiveListing() {
         return createListing.create(new CreateListingCommand(
@@ -109,8 +107,5 @@ class OrderConcurrencyIntegrationTest {
         // Property 2: 두 번째 완료는 거부되어 중복 정산이 발생하지 않는다.
         assertThatThrownBy(() -> completeOrder.complete(orderId))
                 .isInstanceOf(OrderStateException.class);
-
-        assertThat(settlements.findById(orderId)).isPresent();
-        assertThat(settlements.count()).isEqualTo(1);
     }
 }

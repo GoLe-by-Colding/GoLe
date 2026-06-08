@@ -13,11 +13,11 @@ import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.order.domain.model.Settlement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -94,6 +94,16 @@ class OrderServiceTest {
         public Optional<Order> findById(String orderId) {
             return Optional.ofNullable(store.get(orderId));
         }
+
+        @Override
+        public List<Order> findByBuyerId(String buyerId) {
+            return store.values().stream().filter(o -> o.getBuyerId().equals(buyerId)).toList();
+        }
+
+        @Override
+        public List<Order> findBySellerId(String sellerId) {
+            return store.values().stream().filter(o -> o.getSellerId().equals(sellerId)).toList();
+        }
     }
 
     private static final class FakeReservation implements ListingReservationPort {
@@ -134,9 +144,8 @@ class OrderServiceTest {
         private final AtomicInteger calls = new AtomicInteger();
 
         @Override
-        public Settlement settleOnce(String orderId, String sellerId, long grossAmount) {
+        public void settleOnce(String orderId, String sellerId, long grossAmount) {
             calls.incrementAndGet();
-            return Settlement.compute(orderId, sellerId, grossAmount, Instant.EPOCH);
         }
     }
 
