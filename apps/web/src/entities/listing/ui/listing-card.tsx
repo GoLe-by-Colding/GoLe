@@ -1,6 +1,6 @@
 import { Badge, Card } from "@shared/ui";
 import type { Listing } from "../model/types";
-import { conditionLabel, formatPriceKrw } from "../model/types";
+import { completenessLabel, conditionLabel, formatPriceKrw } from "../model/types";
 
 export interface ListingCardProps {
   readonly listing: Listing;
@@ -20,7 +20,11 @@ export function ListingCard({ listing }: ListingCardProps) {
       />
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-center justify-between gap-2">
-          <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
+          <div className="flex flex-wrap gap-1">
+            <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
+            <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
+            {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
+          </div>
           {listing.catalogSetNumber !== null ? (
             <span className="text-xs text-neutral-500">#{listing.catalogSetNumber}</span>
           ) : null}

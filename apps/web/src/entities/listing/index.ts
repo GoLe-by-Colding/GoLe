@@ -7,5 +7,5 @@ export {
   createListing,
 } from "./api/listing-api";
 export type { CreateListingInput, SearchListingsParams, ListingSort } from "./api/listing-api";
-export type { Listing, ItemCondition, ListingStatus } from "./model/types";
-export { conditionLabel, formatPriceKrw } from "./model/types";
+export type { Listing, ItemCondition, Completeness, ListingStatus } from "./model/types";
+export { conditionLabel, completenessLabel, formatPriceKrw } from "./model/types";

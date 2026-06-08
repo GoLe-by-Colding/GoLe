@@ -1,5 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type { ItemCondition, Listing } from "../model/types";
+import type { Completeness, ItemCondition, Listing } from "../model/types";
 
 export interface CreateListingInput {
   readonly sellerId: string;
@@ -7,11 +7,17 @@ export interface CreateListingInput {
   readonly description: string;
   readonly price: number;
   readonly condition: ItemCondition;
+  readonly completeness: Completeness;
+  readonly hasBox: boolean;
+  readonly hasManual: boolean;
+  readonly hasMissingParts: boolean;
+  readonly missingPartsNote: string;
+  readonly defectsNote: string;
   readonly photoUrls: readonly string[];
   readonly catalogSetNumber: string | null;
 }
 
-/** 리스팅 생성. 백엔드는 condition을 대문자 enum으로 받는다. */
+/** 리스팅 생성. 백엔드는 condition/completeness를 대문자 enum으로 받는다. */
 export function createListing(input: CreateListingInput): Promise<Listing> {
   return apiRequest<Listing>("/api/v1/listings", {
     method: "POST",
@@ -21,6 +27,12 @@ export function createListing(input: CreateListingInput): Promise<Listing> {
       description: input.description,
       price: input.price,
       condition: input.condition.toUpperCase(),
+      completeness: input.completeness.toUpperCase(),
+      hasBox: input.hasBox,
+      hasManual: input.hasManual,
+      hasMissingParts: input.hasMissingParts,
+      missingPartsNote: input.missingPartsNote,
+      defectsNote: input.defectsNote,
       photoUrls: input.photoUrls,
       catalogSetNumber: input.catalogSetNumber,
     },
