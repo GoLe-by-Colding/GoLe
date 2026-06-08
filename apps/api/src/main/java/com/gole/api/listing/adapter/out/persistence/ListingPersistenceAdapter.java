@@ -1,0 +1,160 @@
+package com.gole.api.listing.adapter.out.persistence;
+
+import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.query.ListingSearchQuery;
+import com.gole.api.listing.application.query.ListingSortOrder;
+import com.gole.api.listing.domain.model.ItemCondition;
+import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.listing.domain.model.ListingStatus;
+import com.gole.api.listing.domain.model.Money;
+import java.util.List;
+import java.util.Optional;
+import java.util.regex.Pattern;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Component;
+
+/**
+ * 리스팅 영속성 어댑터. 도메인 {@link Listing}과 {@link ListingDocument}를 양방향 매핑한다.
+ *
+ * <p>단순 조회는 {@link ListingMongoRepository} 파생 쿼리로, 복합 검색/원자적 선점은
+ * {@link MongoTemplate}으로 처리한다.
+ */
+@Component
+public class ListingPersistenceAdapter implements ListingRepositoryPort {
+
+    private static final String DEFAULT_CURRENCY = "KRW";
+
+    private final ListingMongoRepository repository;
+    private final MongoTemplate mongoTemplate;
+
+    public ListingPersistenceAdapter(
+            ListingMongoRepository repository, MongoTemplate mongoTemplate) {
+        this.repository = repository;
+        this.mongoTemplate = mongoTemplate;
+    }
+
+    @Override
+    public Listing save(Listing listing) {
+        ListingDocument saved = repository.save(toDocument(listing));
+        return toDomain(saved);
+    }
+
+    @Override
+    public Optional<Listing> findById(String listingId) {
+        return repository.findById(listingId).map(this::toDomain);
+    }
+
+    @Override
+    public List<Listing> search(ListingSearchQuery query) {
+        // 검색은 항상 활성(ACTIVE) 리스팅만 대상으로 한다. (ListingSearchQuery 규약)
+        Criteria criteria = Criteria.where("status").is(ListingStatus.ACTIVE.name());
+
+        if (query.text() != null && !query.text().isBlank()) {
+            String escaped = Pattern.quote(query.text().trim());
+            Criteria textCriteria = new Criteria()
+                    .orOperator(
+                            Criteria.where("title").regex(escaped, "i"),
+                            Criteria.where("description").regex(escaped, "i"));
+            criteria = new Criteria().andOperator(criteria, textCriteria);
+        }
+
+        if (query.condition() != null) {
+            criteria = criteria.and("condition").is(query.condition().name());
+        }
+
+        if (query.minPrice() != null || query.maxPrice() != null) {
+            Criteria priceCriteria = Criteria.where("priceAmount");
+            if (query.minPrice() != null) {
+                priceCriteria = priceCriteria.gte(query.minPrice());
+            }
+            if (query.maxPrice() != null) {
+                priceCriteria = priceCriteria.lte(query.maxPrice());
+            }
+            criteria = new Criteria().andOperator(criteria, priceCriteria);
+        }
+
+        Query mongoQuery = new Query(criteria).with(toSort(query.sort()));
+        return mongoTemplate.find(mongoQuery, ListingDocument.class).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Optional<Listing> reserveIfActive(String listingId) {
+        // ACTIVE → RESERVED 원자적 전이. 활성이 아니면 매칭 없음 → 비어있음.
+        Query query = new Query(
+                Criteria.where("_id").is(listingId).and("status").is(ListingStatus.ACTIVE.name()));
+        Update update = Update.update("status", ListingStatus.RESERVED.name());
+        ListingDocument updated = mongoTemplate.findAndModify(
+                query,
+                update,
+                FindAndModifyOptions.options().returnNew(true),
+                ListingDocument.class);
+        return Optional.ofNullable(updated).map(this::toDomain);
+    }
+
+    @Override
+    public List<Listing> findActiveBySeller(String sellerId) {
+        return repository
+                .findBySellerIdAndStatus(sellerId, ListingStatus.ACTIVE.name())
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Listing> findActiveBySellers(List<String> sellerIds) {
+        return repository
+                .findBySellerIdInAndStatus(sellerIds, ListingStatus.ACTIVE.name())
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Listing> findByIds(List<String> ids) {
+        return repository.findByIdIn(ids).stream().map(this::toDomain).toList();
+    }
+
+    private Sort toSort(ListingSortOrder order) {
+        return switch (order) {
+            case NEWEST -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case PRICE_ASC -> Sort.by(Sort.Direction.ASC, "priceAmount");
+            case PRICE_DESC -> Sort.by(Sort.Direction.DESC, "priceAmount");
+        };
+    }
+
+    private ListingDocument toDocument(Listing listing) {
+        return new ListingDocument(
+                listing.getId(),
+                listing.getSellerId(),
+                listing.getTitle(),
+                listing.getDescription(),
+                listing.getPrice().amount(),
+                DEFAULT_CURRENCY,
+                listing.getCondition().name(),
+                listing.getPhotoUrls(),
+                listing.getCatalogSetNumber(),
+                listing.getStatus().name(),
+                listing.getCreatedAt());
+    }
+
+    private Listing toDomain(ListingDocument document) {
+        return new Listing(
+                document.getId(),
+                document.getSellerId(),
+                document.getTitle(),
+                document.getDescription(),
+                Money.won(document.getPriceAmount()),
+                ItemCondition.valueOf(document.getCondition()),
+                document.getPhotoUrls(),
+                document.getCatalogSetNumber(),
+                ListingStatus.valueOf(document.getStatus()),
+                document.getCreatedAt());
+    }
+}
