@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.pricing.application.port.in.RecordExecutedPriceUseCase.RecordExecutedPriceCommand;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
+import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import java.time.Instant;
@@ -75,6 +76,11 @@ class PricingServiceTest {
                     .filter(t -> to == null || !t.executedAt().isAfter(to))
                     .sorted(Comparator.comparing(PriceTransaction::executedAt))
                     .toList();
+        }
+
+        @Override
+        public List<TradeAggregate> findTopTradedSets(int limit) {
+            return List.of();
         }
     }
 }

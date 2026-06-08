@@ -3,6 +3,8 @@ import {
   fetchFeaturedLegoSets,
   type LegoSet,
 } from "@entities/lego-set";
+import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
+import { TrendingSets } from "@widgets/trending-sets";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
@@ -14,8 +16,16 @@ async function loadFeatured(): Promise<readonly LegoSet[]> {
   }
 }
 
+async function loadTrending(): Promise<readonly TrendingSet[]> {
+  try {
+    return await fetchTrendingSets(8);
+  } catch {
+    return [];
+  }
+}
+
 export async function HomePage() {
-  const featured = await loadFeatured();
+  const [featured, trending] = await Promise.all([loadFeatured(), loadTrending()]);
 
   return (
     <Container width="xl">
@@ -52,6 +62,16 @@ export async function HomePage() {
               ))}
             </dl>
           </div>
+        </section>
+
+        <section className="flex flex-col gap-6">
+          <div className="flex items-baseline justify-between gap-4">
+            <Heading level={2}>지금 뜨는 세트</Heading>
+            <Text tone="secondary" size="sm">
+              체결 거래량 기준 인기 랭킹
+            </Text>
+          </div>
+          <TrendingSets items={trending} />
         </section>
 
         <section className="flex flex-col gap-6">

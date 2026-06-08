@@ -1,11 +1,14 @@
 package com.gole.api.pricing.adapter.out.persistence;
 
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
+import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
@@ -59,6 +62,27 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 .map(this::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<TradeAggregate> findTopTradedSets(int limit) {
+        Aggregation aggregation = Aggregation.newAggregation(
+                Aggregation.group("setNumber")
+                        .count().as("tradeCount")
+                        .avg("price").as("averagePrice"),
+                Aggregation.sort(Sort.Direction.DESC, "tradeCount"),
+                Aggregation.limit(limit));
+
+        AggregationResults<TradeAggregateRow> results = mongoTemplate.aggregate(
+                aggregation, "price_transactions", TradeAggregateRow.class);
+
+        return results.getMappedResults().stream()
+                .map(row -> new TradeAggregate(
+                        row.id(), row.tradeCount(), Math.round(row.averagePrice())))
+                .toList();
+    }
+
+    /** 집계 결과 행 매핑용. {@code _id}에는 group 키(setNumber)가 담긴다. */
+    private record TradeAggregateRow(String id, long tradeCount, double averagePrice) {}
 
     private PriceTransactionDocument toDocument(PriceTransaction transaction) {
         // id는 신규 저장 시 MongoDB가 생성하도록 null로 둔다.

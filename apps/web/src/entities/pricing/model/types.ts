@@ -15,3 +15,11 @@ export interface PricePoint {
   readonly quantity: number;
   readonly executedAt: string;
 }
+
+export interface TrendingSet {
+  readonly setNumber: string;
+  readonly name: string;
+  readonly imageUrl: string | null;
+  readonly tradeCount: number;
+  readonly averagePrice: number;
+}
