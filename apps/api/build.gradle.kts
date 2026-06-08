@@ -27,6 +27,7 @@ repositories {
 }
 
 extra["testcontainersVersion"] = "1.20.6"
+extra["awsSdkVersion"] = "2.31.6"
 
 dependencies {
     // Web / Validation / Actuator
@@ -47,6 +48,9 @@ dependencies {
     // 버전은 Spring Boot dependency management(BOM)가 관리한다.
     implementation("org.springframework.security:spring-security-crypto")
 
+    // 객체 스토리지(MinIO, S3 호환). AWS SDK v2 S3 클라이언트.
+    implementation("software.amazon.awssdk:s3")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
@@ -61,6 +65,7 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom("org.testcontainers:testcontainers-bom:${property("testcontainersVersion")}")
+        mavenBom("software.amazon.awssdk:bom:${property("awsSdkVersion")}")
     }
 }
 
