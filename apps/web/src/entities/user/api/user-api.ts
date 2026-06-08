@@ -1,5 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type { RegisterResult, Session } from "../model/types";
+import type { Me, RegisterResult, Session } from "../model/types";
 
 export function registerAccount(
   email: string,
@@ -64,6 +64,14 @@ export function socialCallback(
 export function logout(sessionToken: string): Promise<void> {
   return apiRequest<void>("/api/v1/accounts/sessions", {
     method: "DELETE",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+}
+
+/** 현재 로그인 사용자 정보(이메일/권한)를 조회한다. */
+export function fetchMe(sessionToken: string): Promise<Me> {
+  return apiRequest<Me>("/api/v1/accounts/me", {
+    cache: "no-store",
     headers: { Authorization: `Bearer ${sessionToken}` },
   });
 }

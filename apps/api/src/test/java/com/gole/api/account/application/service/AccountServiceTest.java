@@ -159,6 +159,11 @@ class AccountServiceTest {
         }
 
         @Override
+        public Optional<Account> findById(String id) {
+            return byEmail.values().stream().filter(a -> a.getId().equals(id)).findFirst();
+        }
+
+        @Override
         public Account save(Account account) {
             byEmail.put(account.getEmail().value(), account);
             return account;

@@ -58,12 +58,13 @@ export function SiteHeader() {
                 <LinkButton href="/sell" size="sm" variant="secondary">
                   판매하기
                 </LinkButton>
-                <span
-                  className="grid h-8 w-8 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
-                  aria-hidden="true"
+                <Link
+                  href="/profile"
+                  aria-label="내 정보"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 transition-colors hover:bg-brand-100"
                 >
                   {session.accountId.slice(0, 1).toUpperCase()}
-                </span>
+                </Link>
                 <Button variant="ghost" size="sm" onClick={handleSignOut}>
                   로그아웃
                 </Button>
@@ -128,6 +129,9 @@ export function SiteHeader() {
                   ) : null}
                   <LinkButton href="/sell" fullWidth variant="secondary" onClick={() => setMenuOpen(false)}>
                     판매하기
+                  </LinkButton>
+                  <LinkButton href="/profile" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
+                    내 정보
                   </LinkButton>
                   <Button fullWidth variant="ghost" onClick={handleSignOut}>
                     로그아웃

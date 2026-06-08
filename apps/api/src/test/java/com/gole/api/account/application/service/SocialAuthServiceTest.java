@@ -154,6 +154,11 @@ class SocialAuthServiceTest {
         }
 
         @Override
+        public Optional<Account> findById(String id) {
+            return byEmail.values().stream().filter(a -> a.getId().equals(id)).findFirst();
+        }
+
+        @Override
         public Account save(Account account) {
             saved++;
             byEmail.put(account.getEmail().value(), account);

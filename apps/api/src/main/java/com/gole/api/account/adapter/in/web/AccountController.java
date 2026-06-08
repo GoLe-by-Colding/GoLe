@@ -81,7 +81,7 @@ public class AccountController {
         String token = extractBearer(authorization);
         CurrentSession session = getCurrentSessionUseCase.resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
-        return new MeResponse(session.accountId(), session.role().name());
+        return new MeResponse(session.accountId(), session.email(), session.role().name());
     }
 
     /** 로그아웃: 서버측 세션을 폐기한다. Authorization: Bearer <token>. */

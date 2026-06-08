@@ -142,6 +142,8 @@ public class AccountService
     @Override
     public Optional<CurrentSession> resolve(String token) {
         return sessionStore.resolve(token)
-                .map(p -> new CurrentSession(p.accountId(), p.role()));
+                .flatMap(p -> accountRepository.findById(p.accountId())
+                        .map(account -> new CurrentSession(
+                                account.getId(), account.getEmail().value(), account.getRole())));
     }
 }

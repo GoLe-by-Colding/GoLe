@@ -14,4 +14,7 @@ public interface AccountRepositoryPort {
     Account save(Account account);
 
     Optional<Account> findByEmail(Email email);
+
+    /** 계정 ID로 조회. 세션 해석 시 이메일 등 프로필을 얻기 위해 사용한다. */
+    Optional<Account> findById(String id);
 }
