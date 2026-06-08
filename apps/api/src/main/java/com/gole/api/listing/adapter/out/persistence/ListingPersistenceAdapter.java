@@ -3,6 +3,8 @@ package com.gole.api.listing.adapter.out.persistence;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.application.query.ListingSortOrder;
+import com.gole.api.listing.domain.model.Completeness;
+import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingStatus;
@@ -130,6 +132,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     }
 
     private ListingDocument toDocument(Listing listing) {
+        ConditionDisclosure d = listing.getDisclosure();
         return new ListingDocument(
                 listing.getId(),
                 listing.getSellerId(),
@@ -138,6 +141,12 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 listing.getPrice().amount(),
                 DEFAULT_CURRENCY,
                 listing.getCondition().name(),
+                d.completeness().name(),
+                d.hasBox(),
+                d.hasManual(),
+                d.hasMissingParts(),
+                d.missingPartsNote(),
+                d.defectsNote(),
                 listing.getPhotoUrls(),
                 listing.getCatalogSetNumber(),
                 listing.getStatus().name(),
@@ -152,9 +161,24 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 document.getDescription(),
                 Money.won(document.getPriceAmount()),
                 ItemCondition.valueOf(document.getCondition()),
+                toDisclosure(document),
                 document.getPhotoUrls(),
                 document.getCatalogSetNumber(),
                 ListingStatus.valueOf(document.getStatus()),
                 document.getCreatedAt());
+    }
+
+    /** 레거시 문서(고지 필드 없음)는 기본값으로 보정한다. */
+    private ConditionDisclosure toDisclosure(ListingDocument d) {
+        if (d.getCompleteness() == null) {
+            return ConditionDisclosure.basic();
+        }
+        return new ConditionDisclosure(
+                Completeness.valueOf(d.getCompleteness()),
+                Boolean.TRUE.equals(d.getHasBox()),
+                Boolean.TRUE.equals(d.getHasManual()),
+                Boolean.TRUE.equals(d.getHasMissingParts()),
+                d.getMissingPartsNote() == null ? "" : d.getMissingPartsNote(),
+                d.getDefectsNote() == null ? "" : d.getDefectsNote());
     }
 }

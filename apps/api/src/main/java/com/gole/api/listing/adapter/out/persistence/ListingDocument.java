@@ -31,6 +31,14 @@ public class ListingDocument {
 
     private String condition;
 
+    // 상태 고지(구성/박스/설명서/누락/하자). 레거시 문서는 null → 기본값 보정.
+    private String completeness;
+    private Boolean hasBox;
+    private Boolean hasManual;
+    private Boolean hasMissingParts;
+    private String missingPartsNote;
+    private String defectsNote;
+
     private List<String> photoUrls;
 
     private String catalogSetNumber; // nullable
@@ -52,6 +60,12 @@ public class ListingDocument {
             long priceAmount,
             String priceCurrency,
             String condition,
+            String completeness,
+            Boolean hasBox,
+            Boolean hasManual,
+            Boolean hasMissingParts,
+            String missingPartsNote,
+            String defectsNote,
             List<String> photoUrls,
             String catalogSetNumber,
             String status,
@@ -63,6 +77,12 @@ public class ListingDocument {
         this.priceAmount = priceAmount;
         this.priceCurrency = priceCurrency;
         this.condition = condition;
+        this.completeness = completeness;
+        this.hasBox = hasBox;
+        this.hasManual = hasManual;
+        this.hasMissingParts = hasMissingParts;
+        this.missingPartsNote = missingPartsNote;
+        this.defectsNote = defectsNote;
         this.photoUrls = photoUrls;
         this.catalogSetNumber = catalogSetNumber;
         this.status = status;
@@ -95,6 +115,30 @@ public class ListingDocument {
 
     public String getCondition() {
         return condition;
+    }
+
+    public String getCompleteness() {
+        return completeness;
+    }
+
+    public Boolean getHasBox() {
+        return hasBox;
+    }
+
+    public Boolean getHasManual() {
+        return hasManual;
+    }
+
+    public Boolean getHasMissingParts() {
+        return hasMissingParts;
+    }
+
+    public String getMissingPartsNote() {
+        return missingPartsNote;
+    }
+
+    public String getDefectsNote() {
+        return defectsNote;
     }
 
     public List<String> getPhotoUrls() {

@@ -57,6 +57,7 @@ public class ListingService
                 command.description(),
                 Money.won(command.price()),
                 command.condition(),
+                command.disclosure(),
                 command.photoUrls(),
                 command.catalogSetNumber(),
                 Instant.now(clock));

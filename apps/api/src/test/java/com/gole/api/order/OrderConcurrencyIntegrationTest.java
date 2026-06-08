@@ -59,7 +59,8 @@ class OrderConcurrencyIntegrationTest {
     private String createActiveListing() {
         return createListing.create(new CreateListingCommand(
                 "seller-x", "동시성 테스트 세트", "설명", 100_000,
-                ItemCondition.NEW_SEALED, List.of("p.jpg"), "10307"));
+                ItemCondition.NEW_SEALED, com.gole.api.listing.domain.model.ConditionDisclosure.basic(),
+                List.of("p.jpg"), "10307"));
     }
 
     @Test

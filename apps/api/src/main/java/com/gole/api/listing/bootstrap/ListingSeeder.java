@@ -3,6 +3,8 @@ package com.gole.api.listing.bootstrap;
 import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
+import com.gole.api.listing.domain.model.Completeness;
+import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import java.util.List;
 import org.slf4j.Logger;
@@ -74,6 +76,22 @@ public class ListingSeeder implements CommandLineRunner {
             ItemCondition condition,
             String setNumber) {
         return new CreateListingCommand(
-                sellerId, title, description, price, condition, photos(setNumber), setNumber);
+                sellerId, title, description, price, condition,
+                disclosureFor(condition), photos(setNumber), setNumber);
+    }
+
+    /** 상태 등급에 따라 현실감 있는 고지(구성/박스/설명서/누락/하자)를 생성한다. */
+    private static ConditionDisclosure disclosureFor(ItemCondition condition) {
+        return switch (condition) {
+            case NEW_SEALED -> new ConditionDisclosure(
+                    Completeness.FULL_BOX, true, true, false, "", "");
+            case USED_COMPLETE -> new ConditionDisclosure(
+                    Completeness.FULL_BOX, true, true, false, "",
+                    "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
+            case USED_INCOMPLETE -> new ConditionDisclosure(
+                    Completeness.BULK, false, false, true,
+                    "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.",
+                    "일부 피스에 변색이 있습니다.");
+        };
     }
 }

@@ -18,6 +18,7 @@ public final class Listing {
     private final String description;
     private final Money price;
     private final ItemCondition condition;
+    private final ConditionDisclosure disclosure;
     private final List<String> photoUrls;
     private final String catalogSetNumber; // nullable
     private final Instant createdAt;
@@ -30,6 +31,7 @@ public final class Listing {
             String description,
             Money price,
             ItemCondition condition,
+            ConditionDisclosure disclosure,
             List<String> photoUrls,
             String catalogSetNumber,
             ListingStatus status,
@@ -40,6 +42,7 @@ public final class Listing {
         this.description = Objects.requireNonNull(description, "description");
         this.price = Objects.requireNonNull(price, "price");
         this.condition = Objects.requireNonNull(condition, "condition");
+        this.disclosure = disclosure == null ? ConditionDisclosure.basic() : disclosure;
         if (photoUrls == null || photoUrls.isEmpty()) {
             throw new MissingPhotoException(); // 요구사항 5.2
         }
@@ -57,11 +60,12 @@ public final class Listing {
             String description,
             Money price,
             ItemCondition condition,
+            ConditionDisclosure disclosure,
             List<String> photoUrls,
             String catalogSetNumber,
             Instant createdAt) {
         return new Listing(
-                id, sellerId, title, description, price, condition,
+                id, sellerId, title, description, price, condition, disclosure,
                 photoUrls, catalogSetNumber, ListingStatus.ACTIVE, createdAt);
     }
 
@@ -122,6 +126,10 @@ public final class Listing {
 
     public ItemCondition getCondition() {
         return condition;
+    }
+
+    public ConditionDisclosure getDisclosure() {
+        return disclosure;
     }
 
     public List<String> getPhotoUrls() {

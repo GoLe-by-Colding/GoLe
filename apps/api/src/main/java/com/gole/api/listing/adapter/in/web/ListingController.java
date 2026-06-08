@@ -9,6 +9,8 @@ import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.application.query.ListingSortOrder;
+import com.gole.api.listing.domain.model.Completeness;
+import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -58,6 +60,13 @@ public class ListingController {
                 request.description(),
                 request.price(),
                 request.condition(),
+                new ConditionDisclosure(
+                        request.completeness() == null ? Completeness.NO_BOX : request.completeness(),
+                        request.hasBox(),
+                        request.hasManual(),
+                        request.hasMissingParts(),
+                        request.missingPartsNote(),
+                        request.defectsNote()),
                 request.photoUrls(),
                 request.catalogSetNumber()));
         return ListingResponse.from(getListingUseCase.getById(id));

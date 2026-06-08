@@ -1,5 +1,6 @@
 package com.gole.api.listing.adapter.in.web;
 
+import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.Listing;
 import java.time.Instant;
 import java.util.List;
@@ -14,12 +15,19 @@ public record ListingResponse(
         String description,
         long price,
         String condition,
+        String completeness,
+        boolean hasBox,
+        boolean hasManual,
+        boolean hasMissingParts,
+        String missingPartsNote,
+        String defectsNote,
         List<String> photoUrls,
         String catalogSetNumber,
         String status,
         Instant createdAt) {
 
     public static ListingResponse from(Listing listing) {
+        ConditionDisclosure d = listing.getDisclosure();
         return new ListingResponse(
                 listing.getId(),
                 listing.getSellerId(),
@@ -27,6 +35,12 @@ public record ListingResponse(
                 listing.getDescription(),
                 listing.getPrice().amount(),
                 listing.getCondition().name().toLowerCase(),
+                d.completeness().name().toLowerCase(),
+                d.hasBox(),
+                d.hasManual(),
+                d.hasMissingParts(),
+                d.missingPartsNote(),
+                d.defectsNote(),
                 listing.getPhotoUrls(),
                 listing.getCatalogSetNumber(),
                 listing.getStatus().name().toLowerCase(),

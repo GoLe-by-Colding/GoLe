@@ -1,5 +1,6 @@
 package com.gole.api.listing.application.port.in;
 
+import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import java.util.List;
 
@@ -16,6 +17,7 @@ public interface CreateListingUseCase {
             String description,
             long price,
             ItemCondition condition,
+            ConditionDisclosure disclosure,
             List<String> photoUrls,
             String catalogSetNumber) {
     }
