@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Inbound 어댑터(REST): 이미지 업로드 및 공개 스트리밍 조회. (요구사항 M1, M2)
@@ -27,6 +28,9 @@ import java.time.Duration;
 @RestController
 @RequestMapping("/api/v1/media")
 public class MediaController {
+
+    /** 배치 업로드 1회 최대 파일 수. */
+    private static final int MAX_BATCH_SIZE = 10;
 
     private final UploadImageUseCase uploadImageUseCase;
     private final LoadImageUseCase loadImageUseCase;
@@ -39,6 +43,23 @@ public class MediaController {
     @PostMapping("/images")
     @ResponseStatus(HttpStatus.CREATED)
     public UploadResponse upload(@RequestParam("file") MultipartFile file) {
+        return storeOne(file);
+    }
+
+    /** 다중 이미지 업로드. 매물 사진 등 여러 장을 한 번에 올린다. (요구사항 M1, N2) */
+    @PostMapping("/images/batch")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<UploadResponse> uploadBatch(@RequestParam("files") List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            throw new InvalidImageException("No files were uploaded");
+        }
+        if (files.size() > MAX_BATCH_SIZE) {
+            throw new InvalidImageException("Too many files: max " + MAX_BATCH_SIZE + " per request");
+        }
+        return files.stream().map(this::storeOne).toList();
+    }
+
+    private UploadResponse storeOne(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new InvalidImageException("Uploaded file is empty");
         }

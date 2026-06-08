@@ -12,7 +12,7 @@ spring:
   servlet:
     multipart:
       max-file-size: ${STORAGE_MAX_IMAGE_BYTES:5242880}
-      max-request-size: 6291456
+      max-request-size: ${STORAGE_MAX_REQUEST_BYTES:55000000}
 
 storage:
   s3:

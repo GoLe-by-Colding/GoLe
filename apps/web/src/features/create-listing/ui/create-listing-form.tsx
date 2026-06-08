@@ -8,7 +8,7 @@ import {
   conditionLabel,
   completenessLabel,
 } from "@entities/listing";
-import { ApiError, uploadImage } from "@shared/api";
+import { ApiError, uploadImages } from "@shared/api";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
 const CONDITIONS: readonly ItemCondition[] = [
@@ -35,36 +35,49 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
   const [hasMissingParts, setHasMissingParts] = useState(false);
   const [missingPartsNote, setMissingPartsNote] = useState("");
   const [defectsNote, setDefectsNote] = useState("");
-  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<readonly string[]>([]);
   const [catalogSetNumber, setCatalogSetNumber] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const MAX_PHOTOS = 10;
+
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (file === undefined) {
+    const selected = Array.from(event.target.files ?? []);
+    if (selected.length === 0) {
       return;
     }
     setError(undefined);
+    const remaining = MAX_PHOTOS - photoUrls.length;
+    if (remaining <= 0) {
+      setError(`이미지는 최대 ${MAX_PHOTOS}장까지 올릴 수 있어요.`);
+      return;
+    }
+    const toUpload = selected.slice(0, remaining);
     setUploading(true);
     try {
-      const uploaded = await uploadImage(file);
-      setPhotoUrl(uploaded.url);
+      const uploaded = await uploadImages(toUpload);
+      setPhotoUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
     } catch (cause) {
       setError(
         cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.",
       );
     } finally {
       setUploading(false);
+      event.target.value = ""; // 같은 파일 재선택 허용
     }
+  }
+
+  function removePhoto(url: string) {
+    setPhotoUrls((prev) => prev.filter((u) => u !== url));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
-    if (photoUrl.trim().length === 0) {
-      setError("대표 이미지를 업로드해 주세요.");
+    if (photoUrls.length === 0) {
+      setError("상품 이미지를 한 장 이상 업로드해 주세요.");
       return;
     }
     if (hasMissingParts && missingPartsNote.trim().length === 0) {
@@ -85,7 +98,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         hasMissingParts,
         missingPartsNote: missingPartsNote.trim(),
         defectsNote: defectsNote.trim(),
-        photoUrls: photoUrl.trim().length > 0 ? [photoUrl.trim()] : [],
+        photoUrls: [...photoUrls],
         catalogSetNumber: catalogSetNumber.trim().length > 0 ? catalogSetNumber.trim() : null,
       });
       onCreated(listing.id);
@@ -222,30 +235,45 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         )}
       </Field>
       <Field
-        label="대표 이미지"
-        hint="직접 촬영한 실물 사진을 올려주세요. 레고 공식 제품 이미지 도용은 금지됩니다."
+        label="상품 이미지"
+        hint={`직접 촬영한 실물 사진을 올려주세요(최대 ${MAX_PHOTOS}장). 레고 공식 제품 이미지 도용은 금지됩니다.`}
       >
         {({ inputId, describedBy }) => (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <input
               id={inputId}
               type="file"
               accept="image/*"
+              multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
-              disabled={uploading || submitting}
+              disabled={uploading || submitting || photoUrls.length >= MAX_PHOTOS}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
             {uploading ? (
               <p className="text-sm text-neutral-500">업로드 중...</p>
             ) : null}
-            {photoUrl.length > 0 && !uploading ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={photoUrl}
-                alt="업로드한 대표 이미지 미리보기"
-                className="h-32 w-32 rounded-lg border border-neutral-200/70 object-cover"
-              />
+            {photoUrls.length > 0 ? (
+              <ul className="flex flex-wrap gap-3">
+                {photoUrls.map((url, index) => (
+                  <li key={url} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`상품 이미지 ${index + 1}`}
+                      className="h-24 w-24 rounded-lg border border-neutral-200/70 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(url)}
+                      aria-label={`이미지 ${index + 1} 삭제`}
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900/80 text-sm text-white"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
         )}

@@ -36,3 +36,33 @@ export async function uploadImage(
 
   return (await response.json()) as UploadedImage;
 }
+
+/**
+ * 여러 이미지 파일을 한 번에 업로드한다. (백로그 N2 — 다중 이미지)
+ */
+export async function uploadImages(
+  files: readonly File[],
+  signal?: AbortSignal,
+): Promise<readonly UploadedImage[]> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const response = await fetch(`${env.apiBaseUrl}/api/v1/media/images/batch`, {
+    method: "POST",
+    body: formData,
+    signal: signal ?? null,
+  });
+
+  if (!response.ok) {
+    const fallback: ApiErrorBody = {
+      code: "UPLOAD_FAILED",
+      message: `Image upload failed with status ${response.status}`,
+    };
+    const parsed = (await response.json().catch(() => fallback)) as ApiErrorBody;
+    throw new ApiError(response.status, parsed);
+  }
+
+  return (await response.json()) as readonly UploadedImage[];
+}
