@@ -28,10 +28,6 @@ public class CatalogSeeder implements CommandLineRunner {
         this.repository = repository;
     }
 
-    private static String img(String setNumber) {
-        return "https://placehold.co/600x450/2f56e6/ffffff?text=" + setNumber;
-    }
-
     @Override
     public void run(String... args) {
         if (repository.count() > 0) {
@@ -62,7 +58,9 @@ public class CatalogSeeder implements CommandLineRunner {
             int releaseYear,
             RetirementStatus status,
             boolean featured) {
+        // 공식 레고 이미지는 호스팅하지 않는다(IP 안전). 이미지 없이 텍스트로 운영하고
+        // 매물 사진은 판매자가 직접 촬영한 것만 사용한다.
         return new LegoSetDocument(
-                setNumber, name, theme, pieceCount, releaseYear, status, img(setNumber), featured);
+                setNumber, name, theme, pieceCount, releaseYear, status, null, featured);
     }
 }
