@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ChangeEvent, useState } from "react";
 import {
   createListing,
   type ItemCondition,
@@ -8,7 +8,7 @@ import {
   conditionLabel,
   completenessLabel,
 } from "@entities/listing";
-import { ApiError } from "@shared/api";
+import { ApiError, uploadImage } from "@shared/api";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
 const CONDITIONS: readonly ItemCondition[] = [
@@ -39,10 +39,34 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
   const [catalogSetNumber, setCatalogSetNumber] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file === undefined) {
+      return;
+    }
+    setError(undefined);
+    setUploading(true);
+    try {
+      const uploaded = await uploadImage(file);
+      setPhotoUrl(uploaded.url);
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
+    if (photoUrl.trim().length === 0) {
+      setError("대표 이미지를 업로드해 주세요.");
+      return;
+    }
     if (hasMissingParts && missingPartsNote.trim().length === 0) {
       setError("누락 부품이 있으면 누락 내용을 입력해 주세요.");
       return;
@@ -198,19 +222,32 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         )}
       </Field>
       <Field
-        label="대표 이미지 URL"
+        label="대표 이미지"
         hint="직접 촬영한 실물 사진을 올려주세요. 레고 공식 제품 이미지 도용은 금지됩니다."
       >
         {({ inputId, describedBy }) => (
-          <Input
-            id={inputId}
-            type="url"
-            value={photoUrl}
-            placeholder="직접 촬영한 사진 URL (https://...)"
-            aria-describedby={describedBy}
-            onChange={(e) => setPhotoUrl(e.target.value)}
-            required
-          />
+          <div className="flex flex-col gap-2">
+            <input
+              id={inputId}
+              type="file"
+              accept="image/*"
+              aria-describedby={describedBy}
+              onChange={handleFileChange}
+              disabled={uploading || submitting}
+              className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
+            />
+            {uploading ? (
+              <p className="text-sm text-neutral-500">업로드 중...</p>
+            ) : null}
+            {photoUrl.length > 0 && !uploading ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoUrl}
+                alt="업로드한 대표 이미지 미리보기"
+                className="h-32 w-32 rounded-lg border border-neutral-200/70 object-cover"
+              />
+            ) : null}
+          </div>
         )}
       </Field>
       <Field label="레고 세트 번호 (선택)" hint="해당하는 공식 세트 번호가 있으면 입력하세요. 세트명·번호는 식별용 텍스트로만 표시됩니다.">
@@ -224,7 +261,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
           />
         )}
       </Field>
-      <Button type="submit" size="lg" fullWidth disabled={submitting}>
+      <Button type="submit" size="lg" fullWidth disabled={submitting || uploading}>
         {submitting ? "등록 중..." : "상품 등록"}
       </Button>
     </form>

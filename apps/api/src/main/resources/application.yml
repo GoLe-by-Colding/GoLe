@@ -9,6 +9,20 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  servlet:
+    multipart:
+      max-file-size: ${STORAGE_MAX_IMAGE_BYTES:5242880}
+      max-request-size: 6291456
+
+storage:
+  s3:
+    endpoint: ${STORAGE_S3_ENDPOINT:http://host.docker.internal:9000}
+    access-key: ${STORAGE_S3_ACCESS_KEY:minioadmin}
+    secret-key: ${STORAGE_S3_SECRET_KEY:minioadmin}
+    region: ${STORAGE_S3_REGION:us-east-1}
+    bucket: ${STORAGE_S3_BUCKET:gole}
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.kscold.com}
+  max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
 
 server:
   port: ${SERVER_PORT:8080}
