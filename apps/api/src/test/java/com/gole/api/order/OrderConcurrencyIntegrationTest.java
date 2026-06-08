@@ -47,6 +47,7 @@ class OrderConcurrencyIntegrationTest {
         registry.add("gole.catalog.seed-on-empty", () -> "false");
         registry.add("gole.listing.seed-on-empty", () -> "false");
         registry.add("gole.pricing.seed-on-empty", () -> "false");
+        registry.add("gole.community.seed-on-empty", () -> "false");
     }
 
     @Autowired CreateListingUseCase createListing;

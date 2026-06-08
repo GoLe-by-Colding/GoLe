@@ -26,3 +26,14 @@ management:
 logging:
   level:
     com.gole.api: DEBUG
+
+# 시드 데이터: 각 컬렉션이 비어 있을 때만 1회 적재(멱등). 테스트에서는 false로 비활성화한다.
+gole:
+  catalog:
+    seed-on-empty: ${GOLE_CATALOG_SEED:true}
+  listing:
+    seed-on-empty: ${GOLE_LISTING_SEED:true}
+  pricing:
+    seed-on-empty: ${GOLE_PRICING_SEED:true}
+  community:
+    seed-on-empty: ${GOLE_COMMUNITY_SEED:true}

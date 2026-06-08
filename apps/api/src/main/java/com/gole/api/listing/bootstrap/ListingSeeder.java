@@ -1,0 +1,79 @@
+package com.gole.api.listing.bootstrap;
+
+import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
+import com.gole.api.listing.application.port.in.CreateListingUseCase;
+import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
+import com.gole.api.listing.domain.model.ItemCondition;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+/**
+ * 리스팅 시드 데이터. 컬렉션이 비어 있을 때만 데모 매물을 등록한다(멱등).
+ * 카탈로그 세트 번호를 참조하며, 인바운드 유스케이스를 통해 도메인 규칙을 거쳐 생성한다.
+ */
+@Component
+@Order(2)
+@ConditionalOnProperty(name = "gole.listing.seed-on-empty", havingValue = "true", matchIfMissing = true)
+public class ListingSeeder implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(ListingSeeder.class);
+
+    private final CreateListingUseCase createListing;
+    private final ListingMongoRepository repository;
+
+    public ListingSeeder(CreateListingUseCase createListing, ListingMongoRepository repository) {
+        this.createListing = createListing;
+        this.repository = repository;
+    }
+
+    private static List<String> photos(String setNumber) {
+        return List.of("https://placehold.co/800x600/eef3ff/1b2f66?text=" + setNumber);
+    }
+
+    @Override
+    public void run(String... args) {
+        if (repository.count() > 0) {
+            return;
+        }
+        List<CreateListingCommand> demo = List.of(
+                listing("seller-aurora", "에펠탑 미개봉 새상품", "10307 에펠탑 풀박스 미개봉입니다. 보관 깔끔합니다.",
+                        890_000, ItemCondition.NEW_SEALED, "10307"),
+                listing("seller-aurora", "밀레니엄 팰컨 UCS 정품", "75192 조립 후 전시만 했습니다. 부품 누락 없음.",
+                        1_250_000, ItemCondition.USED_COMPLETE, "75192"),
+                listing("seller-brickbank", "타이타닉 미개봉", "10294 타이타닉 새상품, 영수증 포함.",
+                        780_000, ItemCondition.NEW_SEALED, "10294"),
+                listing("seller-brickbank", "페라리 데이토나 SP3", "42143 조립완성품, 설명서/박스 보관.",
+                        430_000, ItemCondition.USED_COMPLETE, "42143"),
+                listing("seller-minifig", "호그와트 성 일부 부품", "71043 일부 미니피겨 분실, 본체는 완전.",
+                        520_000, ItemCondition.USED_INCOMPLETE, "71043"),
+                listing("seller-minifig", "백 투 더 퓨처 타임머신 새상품", "10300 미개봉 새상품입니다.",
+                        180_000, ItemCondition.NEW_SEALED, "10300"),
+                listing("seller-aurora", "나 홀로 집에 미개봉", "21330 풀박스 미개봉.",
+                        330_000, ItemCondition.NEW_SEALED, "21330"),
+                listing("seller-brickbank", "AT-AT UCS 조립완성", "75313 전시품, 상태 최상.",
+                        980_000, ItemCondition.USED_COMPLETE, "75313"),
+                listing("seller-minifig", "콜로세움 단종품 미개봉", "10276 단종된 콜로세움 새상품.",
+                        650_000, ItemCondition.NEW_SEALED, "10276"),
+                listing("seller-aurora", "갤럭시 익스플로러 새상품", "10497 미개봉 새상품.",
+                        150_000, ItemCondition.NEW_SEALED, "10497"));
+
+        demo.forEach(createListing::create);
+        log.info("[seed] listing: {}개 데모 매물 등록", demo.size());
+    }
+
+    private CreateListingCommand listing(
+            String sellerId,
+            String title,
+            String description,
+            long price,
+            ItemCondition condition,
+            String setNumber) {
+        return new CreateListingCommand(
+                sellerId, title, description, price, condition, photos(setNumber), setNumber);
+    }
+}
