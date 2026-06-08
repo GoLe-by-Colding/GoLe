@@ -20,7 +20,8 @@
 - [x] 1.5 adapter-out: Mongo persistence, SHA-256 해시, opaque 세션토큰, numeric 코드 생성/로깅 전송, UUID
 - [x] 1.6 adapter-in: `AccountController` + Request/Response DTO
 - [x] 1.7 테스트: `AccountServiceTest`
-- [ ] 1.8 (후속) 비밀번호 해시 BCrypt/Argon2 전환, 세션 만료/회전
+- [x] 1.8 비밀번호 해시 BCrypt 전환 + 레거시 SHA-256 호환 검증 + 로그인 시 자동 승격 (요구사항 1.12) — `BCryptPasswordHasherAdapter`(@Primary), `Account.upgradePasswordHash`, `BCryptPasswordHasherAdapterTest`
+- [ ] 1.9 (후속) 세션 만료/회전 정책 강화
 
 ## 2. catalog (요구사항 2)
 
@@ -112,7 +113,8 @@
 
 ## 13. 후속 백로그 (Not started)
 
-- [ ] 13.1 비밀번호 해시 강화(BCrypt/Argon2) + 세션 만료/회전 (1.8)
+- [x] 13.1 비밀번호 해시 강화(BCrypt) + 레거시 호환 + 로그인 시 자동 승격 (요구사항 1.12)
+- [ ] 13.1a (후속) 세션 만료/회전 정책 강화
 - [ ] 13.2 실 결제 PG 연동(`PaymentGatewayPort` 실구현) (4.7)
 - [ ] 13.3 이미지 업로드 MinIO(S3) 연동 — 매물/게시글 사진을 URL 입력 대신 업로드로
 - [ ] 13.4 시세 통계 Redis 캐싱 및 인기 세트 랭킹

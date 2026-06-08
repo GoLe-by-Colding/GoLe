@@ -43,6 +43,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
+    // 비밀번호 해싱(BCrypt). 전체 Spring Security 스택 없이 crypto 모듈만 사용한다.
+    // 버전은 Spring Boot dependency management(BOM)가 관리한다.
+    implementation("org.springframework.security:spring-security-crypto")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

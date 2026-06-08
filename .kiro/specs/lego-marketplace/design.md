@@ -170,7 +170,7 @@ shared   → ui kit(button,input,card,badge,...), api(http-client, apiRequest), 
 
 ## 6. 보안 / 운영 고려
 
-- 현재 인증은 **불투명 세션 토큰 + SHA-256 비밀번호 해시**. 운영 강화 시 BCrypt/Argon2 + 토큰 만료/회전으로 교체 가능(포트 추상화로 어댑터만 교체).
+- 현재 인증은 **불투명 세션 토큰 + BCrypt 비밀번호 해시**(`BCryptPasswordHasherAdapter`, @Primary). 레거시 SHA-256 해시는 `Sha256PasswordHasherAdapter`로 검증하고 로그인 성공 시 BCrypt로 자동 승격한다(요구사항 1.12). 추가 강화 시 Argon2 + 토큰 만료/회전으로 교체 가능(포트 추상화로 어댑터만 교체).
 - 결제/정산은 Stub 어댑터(`StubPaymentGatewayAdapter`, `StubSettlementAdapter`). 실 PG 연동 시 포트 구현체만 추가.
 - `/api/admin/**`는 ADMIN 강제. 그 외 쓰기 API의 호출자 검증(작성자/소유자)은 도메인/서비스에서 수행.
 - 이미지 업로드는 MinIO(S3 호환) 사용 예정(`.kiro/steering/minio.md`). 현재 매물/게시글은 URL 문자열로 사진을 받는다.
