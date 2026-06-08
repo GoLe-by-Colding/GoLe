@@ -15,6 +15,7 @@ export interface LinkButtonProps {
   readonly size?: ButtonSize;
   readonly fullWidth?: boolean;
   readonly className?: string | undefined;
+  readonly onClick?: () => void;
   readonly children: ReactNode;
 }
 
@@ -27,11 +28,13 @@ export function LinkButton({
   size = "md",
   fullWidth = false,
   className,
+  onClick,
   children,
 }: LinkButtonProps) {
   return (
     <Link
       href={href}
+      {...(onClick ? { onClick } : {})}
       className={cn(
         BUTTON_BASE,
         BUTTON_VARIANT[variant],
