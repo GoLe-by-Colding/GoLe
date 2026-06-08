@@ -5,6 +5,8 @@
 interface AppEnv {
   readonly apiBaseUrl: string;
   readonly siteUrl: string;
+  readonly portOneStoreId: string;
+  readonly portOneChannelKey: string;
   readonly nodeEnv: "development" | "production" | "test";
 }
 
@@ -35,5 +37,7 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
   siteUrl: readSiteUrl(),
+  portOneStoreId: process.env["NEXT_PUBLIC_PORTONE_STORE_ID"] ?? "",
+  portOneChannelKey: process.env["NEXT_PUBLIC_PORTONE_CHANNEL_KEY"] ?? "",
   nodeEnv: readNodeEnv(),
 });

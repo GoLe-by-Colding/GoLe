@@ -10,7 +10,7 @@ import {
   type Order,
 } from "@entities/order";
 import { ApiError } from "@shared/api";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, isPortOneEnabled, requestPortOnePayment } from "@shared/lib";
 import { Badge, Button, Card, Container, Heading, Text } from "@shared/ui";
 import { WriteReviewForm } from "@features/write-review";
 
@@ -56,6 +56,34 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     },
     [orderId],
   );
+
+  // 결제: 포트원이 설정돼 있으면 브라우저 결제창을 먼저 띄우고(paymentId=주문 id),
+  // 성공 후 서버가 결제를 검증한다(payOrder). 미설정 시 서버 스텁 결제로 진행한다.
+  const handlePay = useCallback(async () => {
+    setError(undefined);
+    setBusy(true);
+    try {
+      const current = await fetchOrder(orderId);
+      if (isPortOneEnabled()) {
+        await requestPortOnePayment({
+          paymentId: current.id,
+          orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
+          totalAmount: current.amount,
+        });
+      }
+      setOrder(await payOrder(orderId));
+    } catch (cause) {
+      if (cause instanceof ApiError) {
+        setError(cause.message);
+      } else if (cause instanceof Error) {
+        setError(cause.message);
+      } else {
+        setError("결제 중 오류가 발생했습니다.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [orderId]);
 
   if (error && order === null) {
     return (
@@ -105,7 +133,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
 
         <div className="flex gap-3">
           {order.status === "payment_pending" ? (
-            <Button size="lg" fullWidth disabled={busy} onClick={() => run(payOrder)}>
+            <Button size="lg" fullWidth disabled={busy} onClick={handlePay}>
               {busy ? "처리 중..." : "결제하기"}
             </Button>
           ) : null}
