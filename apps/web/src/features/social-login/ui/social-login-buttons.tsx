@@ -5,35 +5,50 @@ import {
   fetchSocialAuthorizeUrl,
   fetchSocialProviders,
 } from "@entities/user";
-import { Button } from "@shared/ui";
 
 /** OAuth state 검증용 sessionStorage 키. 콜백 페이지와 공유한다. */
 export const OAUTH_STATE_KEY = "gole.oauth.state";
 
-const PROVIDER_LABEL: Record<string, string> = {
-  google: "Google로 계속하기",
-  kakao: "카카오로 계속하기",
-  naver: "네이버로 계속하기",
-};
-
-function labelOf(provider: string): string {
-  return PROVIDER_LABEL[provider] ?? `${provider}로 계속하기`;
+interface ProviderMeta {
+  readonly key: string;
+  readonly label: string;
+  readonly className: string;
 }
 
+/** 노출 순서·라벨·브랜드 스타일. 항상 3개를 보여준다(미설정은 비활성). */
+const PROVIDERS: readonly ProviderMeta[] = [
+  {
+    key: "google",
+    label: "Google로 계속하기",
+    className: "bg-white text-neutral-800 border border-neutral-300 hover:bg-neutral-50",
+  },
+  {
+    key: "kakao",
+    label: "카카오로 계속하기",
+    className: "bg-[#FEE500] text-[#191600] hover:brightness-95",
+  },
+  {
+    key: "naver",
+    label: "네이버로 계속하기",
+    className: "bg-[#03C75A] text-white hover:brightness-95",
+  },
+];
+
 /**
- * 활성(설정된) 소셜 provider 버튼을 노출한다. 토큰 미설정 시 목록이 비어 아무것도 렌더하지 않는다.
- * 클릭 시 state를 생성·저장하고 provider 동의 화면으로 리다이렉트한다(CSRF 방지).
+ * 소셜 로그인 버튼. Google/Kakao/Naver 3개를 항상 노출한다.
+ * 백엔드에 토큰(client-id)이 설정된 provider만 활성화되고, 미설정 provider는 "준비 중"으로 비활성.
+ * 클릭 시 state를 생성·저장하고 동의 화면으로 이동한다(CSRF 방지).
  */
 export function SocialLoginButtons() {
-  const [providers, setProviders] = useState<readonly string[]>([]);
+  const [enabled, setEnabled] = useState<readonly string[]>([]);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchSocialProviders(controller.signal)
-      .then(setProviders)
-      .catch(() => setProviders([]));
+      .then(setEnabled)
+      .catch(() => setEnabled([]));
     return () => controller.abort();
   }, []);
 
@@ -52,10 +67,6 @@ export function SocialLoginButtons() {
     }
   }
 
-  if (providers.length === 0) {
-    return null;
-  }
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 text-xs text-neutral-400">
@@ -68,19 +79,25 @@ export function SocialLoginButtons() {
           {error}
         </p>
       ) : null}
-      {providers.map((provider) => (
-        <Button
-          key={provider}
-          type="button"
-          variant="secondary"
-          size="lg"
-          fullWidth
-          disabled={pending !== undefined}
-          onClick={() => start(provider)}
-        >
-          {pending === provider ? "이동 중..." : labelOf(provider)}
-        </Button>
-      ))}
+      {PROVIDERS.map((provider) => {
+        const isEnabled = enabled.includes(provider.key);
+        return (
+          <button
+            key={provider.key}
+            type="button"
+            disabled={!isEnabled || pending !== undefined}
+            onClick={() => start(provider.key)}
+            aria-label={isEnabled ? provider.label : `${provider.label} (준비 중)`}
+            className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${provider.className}`}
+          >
+            {pending === provider.key
+              ? "이동 중..."
+              : isEnabled
+                ? provider.label
+                : `${provider.label} (준비 중)`}
+          </button>
+        );
+      })}
     </div>
   );
 }
