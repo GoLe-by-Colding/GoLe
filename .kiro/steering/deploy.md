@@ -16,6 +16,26 @@
 
 ---
 
+## 표준 배포 (권장 — git 기반 재현 가능 패턴)
+
+`/app` 은 `origin/main` 을 추적하는 정식 git 체크아웃이며, PM2 프로세스는 `ecosystem.config.js`(infra-as-code)로 정의된다. 배포는 `scripts/deploy.sh` 한 줄로 수행한다.
+
+```bash
+# 로컬에서 코드 push 후
+git push origin main
+
+# ubuntu-gole 컨테이너에서 표준 배포 (git pull → 빌드 → pm2 reload → health)
+DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
+  docker exec ubuntu-gole bash -lc "cd /app && bash scripts/deploy.sh all"
+# 일부만:  ... scripts/deploy.sh backend   |   ... scripts/deploy.sh frontend
+```
+
+- 이 절차는 **`ubuntu-gole` 컨테이너 한정**이며 다른 컨테이너/호스트에 영향을 주지 않는다.
+- 프로세스 정의 변경이 필요하면 `ecosystem.config.js` 를 수정해 커밋한다(런타임 형태는 `bash -c` 유지).
+- 아래의 수동 절차는 스크립트가 막힐 때를 위한 참고용으로 남겨둔다.
+
+---
+
 ## 컨테이너 내부 구조
 
 ```
