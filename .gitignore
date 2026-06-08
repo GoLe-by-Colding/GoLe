@@ -1,7 +1,10 @@
 # Node / Next.js
 node_modules/
 .next/
-out/
+# Next.js 정적 export 디렉토리 (web 앱으로 한정).
+# 주의: 단순히 `out/`으로 두면 헥사고날의 adapter/out·application/port/out
+# 소스 디렉토리까지 무시되어 영속성 어댑터가 커밋되지 않는다.
+apps/web/out/
 .turbo/
 *.tsbuildinfo
 next-env.d.ts
