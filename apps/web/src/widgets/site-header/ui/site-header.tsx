@@ -47,6 +47,11 @@ export function SiteHeader() {
           <div className="flex items-center gap-2">
             {session ? (
               <div className="inline-flex items-center gap-2">
+                {session.role === "ADMIN" ? (
+                  <LinkButton href="/admin" size="sm" variant="ghost">
+                    관리자
+                  </LinkButton>
+                ) : null}
                 <LinkButton href="/sell" size="sm" variant="secondary">
                   판매하기
                 </LinkButton>

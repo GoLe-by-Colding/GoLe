@@ -4,6 +4,7 @@
 export interface Session {
   readonly accountId: string;
   readonly sessionToken: string;
+  readonly role: "USER" | "ADMIN";
 }
 
 export interface RegisterResult {
