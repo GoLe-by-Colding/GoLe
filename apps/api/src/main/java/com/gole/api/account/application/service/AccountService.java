@@ -1,6 +1,7 @@
 package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
+import com.gole.api.account.application.port.in.LogoutUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
@@ -33,6 +34,7 @@ public class AccountService
         implements RegisterAccountUseCase,
                 VerifyEmailUseCase,
                 SignInUseCase,
+                LogoutUseCase,
                 GetCurrentSessionUseCase {
 
     private static final int MIN_PASSWORD_LENGTH = 8; // 요구사항 1.3
@@ -128,6 +130,13 @@ public class AccountService
         String token = sessionToken.issue(account);
         sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
         return new SignInResult(account.getId(), token, account.getRole());
+    }
+
+    @Override
+    public void logout(String token) {
+        if (token != null && !token.isBlank()) {
+            sessionStore.revoke(token);
+        }
     }
 
     @Override

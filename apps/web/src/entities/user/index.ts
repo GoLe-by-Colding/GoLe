@@ -8,3 +8,4 @@ export {
   fetchSocialAuthorizeUrl,
   socialCallback,
 } from "./api/user-api";
+export { logout } from "./api/user-api";
