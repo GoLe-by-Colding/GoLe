@@ -117,5 +117,5 @@
 - [ ] 13.1a (후속) 세션 만료/회전 정책 강화
 - [ ] 13.2 실 결제 PG 연동(`PaymentGatewayPort` 실구현) (4.7)
 - [ ] 13.3 이미지 업로드 MinIO(S3) 연동 — 매물/게시글 사진을 URL 입력 대신 업로드로
-- [ ] 13.4 시세 통계 Redis 캐싱 및 인기 세트 랭킹
+- [x] 13.4 시세 인기 세트 랭킹(체결 거래량) + Redis 캐싱 — `GetTrendingSetsUseCase`/`TrendingService`/`RedisTrendingCacheAdapter`, 프론트 `widgets/trending-sets`(홈). 스펙: `.kiro/specs/trending-sets/`
 - [ ] 13.5 알림(팔로우 셀러 신규 매물, 위시리스트 가격 변동)

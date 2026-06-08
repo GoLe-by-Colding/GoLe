@@ -1,6 +1,7 @@
-export type { PriceStatistics, PricePoint } from "./model/types";
+export type { PriceStatistics, PricePoint, TrendingSet } from "./model/types";
 export {
   fetchPriceStatistics,
   fetchPriceChart,
   fetchPriceHistory,
+  fetchTrendingSets,
 } from "./api/pricing-api";

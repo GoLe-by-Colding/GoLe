@@ -20,4 +20,18 @@ public interface PriceTransactionRepositoryPort {
      * <p>{@code from}/{@code to}가 {@code null}이면 해당 경계는 제한하지 않는다(전체 기간).
      */
     List<PriceTransaction> findInRangeAscending(String setNumber, Instant from, Instant to);
+
+    /**
+     * 체결 건수 기준 상위 세트를 집계한다(인기 랭킹). (백로그 13.4)
+     *
+     * @param limit 반환할 최대 세트 수
+     */
+    List<TradeAggregate> findTopTradedSets(int limit);
+
+    /**
+     * @param setNumber    세트 번호
+     * @param tradeCount   체결 건수
+     * @param averagePrice 평균 체결가(반올림 KRW)
+     */
+    record TradeAggregate(String setNumber, long tradeCount, long averagePrice) {}
 }
