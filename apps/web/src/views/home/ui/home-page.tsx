@@ -87,7 +87,7 @@ export async function HomePage() {
 }
 
 const HERO_STATS: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
-  { label: "안전거래", value: "에스크로" },
-  { label: "실시간 시세", value: "KREAM식" },
-  { label: "동네 직거래", value: "당근식" },
+  { label: "안전결제", value: "에스크로 보호" },
+  { label: "실시간 시세", value: "체결가 기반" },
+  { label: "거래 방식", value: "직거래·택배" },
 ];
