@@ -20,6 +20,8 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 @EnableConfigurationProperties(StorageProperties.class)
 public class S3Config {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(S3Config.class);
+
     @Bean
     public S3Client s3Client(StorageProperties properties) {
         StorageProperties.S3 s3 = properties.s3();
@@ -37,7 +39,14 @@ public class S3Config {
     public ObjectStoragePort objectStoragePort(S3Client s3Client, StorageProperties properties) {
         S3ObjectStorageAdapter adapter =
                 new S3ObjectStorageAdapter(s3Client, properties.s3().bucket());
-        adapter.ensureBucket(); // 요구사항 M1.5: 버킷 보장
+        try {
+            adapter.ensureBucket(); // 요구사항 M1.5: 버킷 보장
+        } catch (RuntimeException e) {
+            // 스토리지 일시 장애가 전체 앱 부팅을 막지 않도록 한다(다른 도메인과 디커플링).
+            // 버킷은 첫 업로드 시 지연 보장된다(S3ObjectStorageAdapter.put).
+            log.warn("Object storage bucket ensure failed at startup; will retry lazily: {}",
+                    e.getMessage());
+        }
         return adapter;
     }
 

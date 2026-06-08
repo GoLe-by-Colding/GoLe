@@ -20,6 +20,7 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
 
     private final S3Client s3Client;
     private final String bucket;
+    private volatile boolean bucketReady = false;
 
     public S3ObjectStorageAdapter(S3Client s3Client, String bucket) {
         this.s3Client = s3Client;
@@ -28,15 +29,20 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
 
     @Override
     public void ensureBucket() {
+        if (bucketReady) {
+            return;
+        }
         try {
             s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
         } catch (NoSuchBucketException e) {
             s3Client.createBucket(b -> b.bucket(bucket));
         }
+        bucketReady = true;
     }
 
     @Override
     public void put(String key, byte[] content, String contentType) {
+        ensureBucket(); // 지연 보장: 스토리지 일시 장애 후에도 첫 업로드 시 복구
         s3Client.putObject(
                 PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType).build(),
                 RequestBody.fromBytes(content));
