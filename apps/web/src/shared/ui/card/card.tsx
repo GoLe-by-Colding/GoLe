@@ -26,10 +26,10 @@ export function Card({
   return (
     <div
       className={cn(
-        "bg-white border border-neutral-200/80 rounded-xl overflow-hidden",
+        "bg-white border border-neutral-200/70 rounded-xl overflow-hidden",
         ELEVATION[elevation],
         interactive &&
-          "cursor-pointer transition duration-200 hover:shadow-lift hover:-translate-y-1 hover:border-brand-200",
+          "cursor-pointer transition duration-200 hover:border-neutral-300 hover:shadow-lift hover:-translate-y-0.5",
         padded && "p-5",
         className,
       )}
