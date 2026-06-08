@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignInForm } from "@features/sign-in";
+import { SocialLoginButtons } from "@features/social-login";
 import { AuthCard } from "@widgets/auth-layout";
 
 export function SignInPage() {
@@ -18,7 +19,10 @@ export function SignInPage() {
         </>
       }
     >
-      <SignInForm onSignedIn={() => router.push("/")} />
+      <div className="flex flex-col gap-5">
+        <SignInForm onSignedIn={() => router.push("/")} />
+        <SocialLoginButtons />
+      </div>
     </AuthCard>
   );
 }
