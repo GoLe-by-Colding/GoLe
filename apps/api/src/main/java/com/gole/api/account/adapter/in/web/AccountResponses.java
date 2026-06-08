@@ -14,6 +14,6 @@ public final class AccountResponses {
     public record SignInResponse(String accountId, String sessionToken, String role) {
     }
 
-    public record MeResponse(String accountId, String role) {
+    public record MeResponse(String accountId, String email, String role) {
     }
 }

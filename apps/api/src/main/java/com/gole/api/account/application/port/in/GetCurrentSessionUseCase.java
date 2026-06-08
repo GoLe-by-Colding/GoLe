@@ -10,6 +10,6 @@ public interface GetCurrentSessionUseCase {
 
     Optional<CurrentSession> resolve(String sessionToken);
 
-    record CurrentSession(String accountId, Role role) {
+    record CurrentSession(String accountId, String email, Role role) {
     }
 }

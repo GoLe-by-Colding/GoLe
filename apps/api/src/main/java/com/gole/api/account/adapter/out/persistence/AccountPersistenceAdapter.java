@@ -38,6 +38,11 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
         return repository.findByEmail(email.value()).map(this::toDomain);
     }
 
+    @Override
+    public Optional<Account> findById(String id) {
+        return repository.findById(id).map(this::toDomain);
+    }
+
     private AccountDocument toDocument(Account account) {
         VerificationCode code = account.getVerificationCode();
         return new AccountDocument(
