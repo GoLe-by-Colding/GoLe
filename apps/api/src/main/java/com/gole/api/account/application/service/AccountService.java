@@ -117,6 +117,11 @@ public class AccountService
         }
 
         account.recordSuccessfulSignIn();
+
+        // 요구사항 1.12: 레거시 해시(SHA-256 등)는 로그인 성공 시 BCrypt로 점진 승격.
+        if (passwordHasher.needsRehash(account.getPasswordHash())) {
+            account.upgradePasswordHash(passwordHasher.hash(command.rawPassword()));
+        }
         accountRepository.save(account);
 
         // 요구사항 1.6: 세션 토큰 발급 + Redis 세션 저장(실제 검증 가능 세션)

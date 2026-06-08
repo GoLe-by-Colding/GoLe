@@ -106,6 +106,32 @@ class AccountServiceTest {
                 .isInstanceOf(AccountLockedException.class);
     }
 
+    @Test
+    void signIn_upgradesLegacyHash_onSuccess() {
+        // 요구사항 1.12: 레거시 해시로 저장된 기존 계정을 시드한다.
+        AccountService upgradingService = new AccountService(
+                repository,
+                new UpgradingHasher(),
+                (email, code) -> { /* no-op */ },
+                () -> "123456",
+                new SequentialIdGenerator(),
+                account -> "token-" + account.getId(),
+                new InMemorySessionStore(),
+                clock);
+        repository.save(Account.provisioned(
+                "acc-legacy",
+                new Email("legacy@b.com"),
+                new PasswordHash("legacy:password1"),
+                com.gole.api.account.domain.model.Role.USER));
+
+        upgradingService.signIn(new SignInCommand("legacy@b.com", "password1"));
+
+        // 로그인 성공 후 저장된 해시가 BCrypt(여기선 "bcrypt:") 포맷으로 승격되어야 한다.
+        PasswordHash stored =
+                repository.findByEmail(new Email("legacy@b.com")).orElseThrow().getPasswordHash();
+        assertThat(stored.value()).isEqualTo("bcrypt:password1");
+    }
+
     // --- 가짜 구현들 ---
 
     private static final class InMemoryAccountRepository implements AccountRepositoryPort {
@@ -137,6 +163,25 @@ class AccountServiceTest {
         @Override
         public boolean matches(String rawPassword, PasswordHash hash) {
             return hash.value().equals("plain:" + rawPassword);
+        }
+    }
+
+    /** 레거시("legacy:") 해시를 검증하되, 성공 시 BCrypt("bcrypt:")로 승격을 요구하는 페이크. */
+    private static final class UpgradingHasher implements PasswordHasherPort {
+        @Override
+        public PasswordHash hash(String rawPassword) {
+            return new PasswordHash("bcrypt:" + rawPassword);
+        }
+
+        @Override
+        public boolean matches(String rawPassword, PasswordHash hash) {
+            return hash.value().equals("bcrypt:" + rawPassword)
+                    || hash.value().equals("legacy:" + rawPassword);
+        }
+
+        @Override
+        public boolean needsRehash(PasswordHash hash) {
+            return hash.value().startsWith("legacy:");
         }
     }
 

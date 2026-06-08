@@ -112,6 +112,16 @@ public final class Account {
         lockedUntil = null;
     }
 
+    /**
+     * 비밀번호 해시를 더 강한 알고리즘으로 승격한다. (요구사항 1.12)
+     *
+     * <p>평문 비밀번호 변경이 아니라, 동일 비밀번호의 저장 표현만 교체하는 마이그레이션 연산이다.
+     * 로그인 성공 직후 호출되어 레거시 해시를 BCrypt로 점진 전환한다.
+     */
+    public void upgradePasswordHash(PasswordHash newHash) {
+        this.passwordHash = Objects.requireNonNull(newHash, "newHash");
+    }
+
     public boolean isVerified() {
         return status == AccountStatus.VERIFIED;
     }
