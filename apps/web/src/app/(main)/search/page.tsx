@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { SearchPage } from "@views/search";
+
+export const metadata: Metadata = {
+  title: "레고 매물 검색",
+  description:
+    "상태·가격·테마로 레고 중고 매물을 검색하세요. 미개봉 새상품부터 조립완성품까지 안전결제로 거래합니다.",
+  alternates: { canonical: "/search" },
+};
 
 // 활성 리스팅을 매 요청 시 백엔드에서 조회하므로 동적 렌더링한다.
 export const dynamic = "force-dynamic";

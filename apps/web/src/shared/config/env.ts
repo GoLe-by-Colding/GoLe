@@ -4,6 +4,7 @@
  */
 interface AppEnv {
   readonly apiBaseUrl: string;
+  readonly siteUrl: string;
   readonly nodeEnv: "development" | "production" | "test";
 }
 
@@ -11,6 +12,14 @@ function readApiBaseUrl(): string {
   const raw = process.env["NEXT_PUBLIC_API_BASE_URL"];
   if (raw === undefined || raw.length === 0) {
     return "http://localhost:8080";
+  }
+  return raw.replace(/\/+$/, "");
+}
+
+function readSiteUrl(): string {
+  const raw = process.env["NEXT_PUBLIC_SITE_URL"];
+  if (raw === undefined || raw.length === 0) {
+    return "https://gole.kscold.com";
   }
   return raw.replace(/\/+$/, "");
 }
@@ -25,5 +34,6 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
+  siteUrl: readSiteUrl(),
   nodeEnv: readNodeEnv(),
 });
