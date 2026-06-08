@@ -10,6 +10,8 @@ import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCo
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
+import com.gole.api.account.application.port.out.SessionStorePort;
+import com.gole.api.account.application.port.out.SessionStorePort.SessionPrincipal;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
@@ -51,6 +53,7 @@ class AccountServiceTest {
                 () -> "123456",
                 new SequentialIdGenerator(),
                 account -> "token-" + account.getId(),
+                new InMemorySessionStore(),
                 clock);
     }
 
@@ -143,6 +146,25 @@ class AccountServiceTest {
         @Override
         public String newAccountId() {
             return "acc-" + (++counter);
+        }
+    }
+
+    private static final class InMemorySessionStore implements SessionStorePort {
+        private final Map<String, SessionPrincipal> store = new HashMap<>();
+
+        @Override
+        public void store(String token, String accountId, com.gole.api.account.domain.model.Role role, Duration ttl) {
+            store.put(token, new SessionPrincipal(accountId, role));
+        }
+
+        @Override
+        public Optional<SessionPrincipal> resolve(String token) {
+            return Optional.ofNullable(store.get(token));
+        }
+
+        @Override
+        public void revoke(String token) {
+            store.remove(token);
         }
     }
 

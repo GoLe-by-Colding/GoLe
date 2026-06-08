@@ -22,6 +22,8 @@ public class AccountDocument {
 
     private String status;
 
+    private String role;
+
     // 인증 코드(검증 완료 시 null)
     private String verificationCode;
     private Instant verificationCodeIssuedAt;
@@ -39,6 +41,7 @@ public class AccountDocument {
             String email,
             String passwordHash,
             String status,
+            String role,
             String verificationCode,
             Instant verificationCodeIssuedAt,
             int failedAttempts,
@@ -48,6 +51,7 @@ public class AccountDocument {
         this.email = email;
         this.passwordHash = passwordHash;
         this.status = status;
+        this.role = role;
         this.verificationCode = verificationCode;
         this.verificationCodeIssuedAt = verificationCodeIssuedAt;
         this.failedAttempts = failedAttempts;
@@ -69,6 +73,10 @@ public class AccountDocument {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getRole() {
+        return role;
     }
 
     public String getVerificationCode() {

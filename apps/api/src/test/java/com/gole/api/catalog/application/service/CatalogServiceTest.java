@@ -3,6 +3,7 @@ package com.gole.api.catalog.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
 import com.gole.api.catalog.domain.model.LegoSet;
@@ -22,7 +23,7 @@ class CatalogServiceTest {
 
     @Test
     void findBySetNumber_returnsSet_whenPresent() {
-        CatalogService service = new CatalogService(new FakeLoadPort(Optional.of(eiffel), List.of()));
+        CatalogService service = new CatalogService(new FakeLoadPort(Optional.of(eiffel), List.of()), new FakeAdminPort());
 
         LegoSet result = service.findBySetNumber("10307");
 
@@ -32,7 +33,7 @@ class CatalogServiceTest {
 
     @Test
     void findBySetNumber_throws_whenMissing() {
-        CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of()));
+        CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of()), new FakeAdminPort());
 
         assertThatThrownBy(() -> service.findBySetNumber("99999"))
                 .isInstanceOf(LegoSetNotFoundException.class);
@@ -40,7 +41,7 @@ class CatalogServiceTest {
 
     @Test
     void search_returnsEmpty_forBlankQuery() {
-        CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)));
+        CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)), new FakeAdminPort());
 
         assertThat(service.search("  ")).isEmpty();
     }
@@ -61,6 +62,18 @@ class CatalogServiceTest {
         @Override
         public List<LegoSet> loadFeatured(int limit) {
             return bySearch;
+        }
+    }
+
+    private static final class FakeAdminPort implements CatalogAdminPort {
+        @Override
+        public LegoSet save(LegoSet set, boolean featured) {
+            return set;
+        }
+
+        @Override
+        public List<LegoSet> findAll() {
+            return List.of();
         }
     }
 }

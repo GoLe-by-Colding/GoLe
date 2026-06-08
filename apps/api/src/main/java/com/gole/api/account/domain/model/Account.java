@@ -20,6 +20,7 @@ public final class Account {
     private final Email email;
     private PasswordHash passwordHash;
     private AccountStatus status;
+    private final Role role;
     private VerificationCode verificationCode; // nullable (검증 완료 시 제거)
     private int failedAttempts;
     private Instant failureWindowStartedAt; // nullable
@@ -31,6 +32,7 @@ public final class Account {
             Email email,
             PasswordHash passwordHash,
             AccountStatus status,
+            Role role,
             VerificationCode verificationCode,
             int failedAttempts,
             Instant failureWindowStartedAt,
@@ -39,17 +41,25 @@ public final class Account {
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
         this.status = Objects.requireNonNull(status, "status");
+        this.role = Objects.requireNonNull(role, "role");
         this.verificationCode = verificationCode;
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
     }
 
-    /** 신규 가입: 미인증 상태 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
+    /** 신규 가입: 미인증 + 일반(USER) 권한 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
     public static Account register(
             String id, Email email, PasswordHash passwordHash, VerificationCode code) {
         return new Account(
-                id, email, passwordHash, AccountStatus.UNVERIFIED, code, 0, null, null);
+                id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, code, 0, null, null);
+    }
+
+    /** 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다. */
+    public static Account provisioned(
+            String id, Email email, PasswordHash passwordHash, Role role) {
+        return new Account(
+                id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
     }
 
     /** 이메일 인증. 만료(1.5)/불일치 시 예외, 성공 시 VERIFIED 전이(1.4). */
@@ -104,6 +114,14 @@ public final class Account {
 
     public boolean isVerified() {
         return status == AccountStatus.VERIFIED;
+    }
+
+    public boolean isAdmin() {
+        return role == Role.ADMIN;
+    }
+
+    public Role getRole() {
+        return role;
     }
 
     public String getId() {

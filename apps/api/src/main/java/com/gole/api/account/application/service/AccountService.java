@@ -1,11 +1,13 @@
 package com.gole.api.account.application.service;
 
+import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
+import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
@@ -17,17 +19,24 @@ import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.VerificationCode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
- * 계정 유스케이스 구현(가입/인증/로그인). inbound port를 구현하고 outbound port에만 의존한다.
+ * 계정 유스케이스 구현(가입/인증/로그인/세션해석). inbound port를 구현하고 outbound port에만 의존한다.
  * 시간은 Clock으로 주입받아 테스트 가능하게 한다. 횡단 로깅은 AOP가 처리.
  */
 @Service
-public class AccountService implements RegisterAccountUseCase, VerifyEmailUseCase, SignInUseCase {
+public class AccountService
+        implements RegisterAccountUseCase,
+                VerifyEmailUseCase,
+                SignInUseCase,
+                GetCurrentSessionUseCase {
 
     private static final int MIN_PASSWORD_LENGTH = 8; // 요구사항 1.3
+    private static final Duration SESSION_TTL = Duration.ofDays(7);
 
     private final AccountRepositoryPort accountRepository;
     private final PasswordHasherPort passwordHasher;
@@ -35,6 +44,7 @@ public class AccountService implements RegisterAccountUseCase, VerifyEmailUseCas
     private final VerificationCodeGeneratorPort verificationCodeGenerator;
     private final IdentifierGeneratorPort identifierGenerator;
     private final SessionTokenPort sessionToken;
+    private final SessionStorePort sessionStore;
     private final Clock clock;
 
     public AccountService(
@@ -44,6 +54,7 @@ public class AccountService implements RegisterAccountUseCase, VerifyEmailUseCas
             VerificationCodeGeneratorPort verificationCodeGenerator,
             IdentifierGeneratorPort identifierGenerator,
             SessionTokenPort sessionToken,
+            SessionStorePort sessionStore,
             Clock clock) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
@@ -51,6 +62,7 @@ public class AccountService implements RegisterAccountUseCase, VerifyEmailUseCas
         this.verificationCodeGenerator = verificationCodeGenerator;
         this.identifierGenerator = identifierGenerator;
         this.sessionToken = sessionToken;
+        this.sessionStore = sessionStore;
         this.clock = clock;
     }
 
@@ -107,7 +119,15 @@ public class AccountService implements RegisterAccountUseCase, VerifyEmailUseCas
         account.recordSuccessfulSignIn();
         accountRepository.save(account);
 
-        // 요구사항 1.6: 세션 토큰 발급
-        return new SignInResult(account.getId(), sessionToken.issue(account));
+        // 요구사항 1.6: 세션 토큰 발급 + Redis 세션 저장(실제 검증 가능 세션)
+        String token = sessionToken.issue(account);
+        sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
+        return new SignInResult(account.getId(), token, account.getRole());
+    }
+
+    @Override
+    public Optional<CurrentSession> resolve(String token) {
+        return sessionStore.resolve(token)
+                .map(p -> new CurrentSession(p.accountId(), p.role()));
     }
 }

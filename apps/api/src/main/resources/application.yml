@@ -37,3 +37,13 @@ gole:
     seed-on-empty: ${GOLE_PRICING_SEED:true}
   community:
     seed-on-empty: ${GOLE_COMMUNITY_SEED:true}
+  # 관리자 부트스트랩: 둘 다 설정되고 계정이 없을 때만 ADMIN 계정 1회 생성(멱등)
+  admin:
+    email: ${GOLE_ADMIN_EMAIL:}
+    password: ${GOLE_ADMIN_PASSWORD:}
+
+# 포트원(PortOne) V2 결제. enabled=true + api-secret 설정 시 실제 검증, 아니면 스텁 사용.
+portone:
+  enabled: ${PORTONE_ENABLED:false}
+  api-base: ${PORTONE_API_BASE:https://api.portone.io}
+  api-secret: ${PORTONE_API_SECRET:}

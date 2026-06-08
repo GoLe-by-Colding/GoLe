@@ -11,6 +11,9 @@ public final class AccountResponses {
     public record RegisterResponse(String accountId) {
     }
 
-    public record SignInResponse(String accountId, String sessionToken) {
+    public record SignInResponse(String accountId, String sessionToken, String role) {
+    }
+
+    public record MeResponse(String accountId, String role) {
     }
 }

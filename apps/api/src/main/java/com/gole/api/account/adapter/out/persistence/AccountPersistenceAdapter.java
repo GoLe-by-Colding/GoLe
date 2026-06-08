@@ -5,6 +5,7 @@ import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
+import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.VerificationCode;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -44,6 +45,7 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 account.getEmail().value(),
                 account.getPasswordHash().value(),
                 account.getStatus().name(),
+                account.getRole().name(),
                 code == null ? null : code.code(),
                 code == null ? null : code.issuedAt(),
                 account.getFailedAttempts(),
@@ -63,6 +65,7 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 new Email(document.getEmail()),
                 new PasswordHash(document.getPasswordHash()),
                 AccountStatus.valueOf(document.getStatus()),
+                document.getRole() == null ? Role.USER : Role.valueOf(document.getRole()),
                 code,
                 document.getFailedAttempts(),
                 document.getFailureWindowStartedAt(),
