@@ -37,7 +37,7 @@ class MediaServiceTest {
 
         assertThat(stored.key()).startsWith("images/").endsWith(".png");
         assertThat(stored.url())
-                .isEqualTo("https://gole.kscold.com/api/v1/media/images/" + stored.key());
+                .isEqualTo("https://gole.kscold.com/api/v1/media/" + stored.key());
         assertThat(stored.contentType()).isEqualTo("image/png");
         assertThat(storage.objects).containsKey(stored.key());
     }

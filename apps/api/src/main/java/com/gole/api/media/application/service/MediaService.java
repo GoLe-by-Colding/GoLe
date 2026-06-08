@@ -20,8 +20,9 @@ import java.util.UUID;
  */
 public class MediaService implements UploadImageUseCase, LoadImageUseCase {
 
-    /** 공개 조회 경로 프리픽스. {@code GET /api/v1/media/images/{key}} 와 일치해야 한다. */
-    public static final String PUBLIC_PATH_PREFIX = "/api/v1/media/images/";
+    /** 공개 조회 경로 프리픽스. {@code GET /api/v1/media/{key}} 와 일치해야 한다.
+     *  (key 자체가 {@code images/<uuid>.ext} 형태이므로 여기서 images 를 중복하지 않는다.) */
+    public static final String PUBLIC_PATH_PREFIX = "/api/v1/media/";
 
     private static final Map<String, String> EXTENSION_BY_TYPE = Map.of(
             "image/jpeg", "jpg",

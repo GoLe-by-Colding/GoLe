@@ -56,10 +56,11 @@ storage:
 ## 4. API
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/api/v1/media/images` | multipart `file` → `{ "key": "...", "url": "https://.../api/v1/media/images/..." }` |
-| GET | `/api/v1/media/images/**` | 객체 스트리밍(Content-Type 설정, Cache-Control) |
+| POST | `/api/v1/media/images` | multipart `file` → `{ "key": "images/<uuid>.ext", "url": "https://.../api/v1/media/images/<uuid>.ext" }` |
+| GET | `/api/v1/media/{*key}` | 객체 스트리밍(Content-Type 설정, Cache-Control). key 예: `images/<uuid>.ext` |
 
-- 키에 `/`가 포함되므로 GET은 `/images/**`로 매핑하고 와일드카드 경로를 키로 사용.
+- 공개 URL = `${storage.public-base-url}/api/v1/media/{key}` (key 자체가 `images/...` 를 포함하므로 프리픽스에서 중복하지 않음).
+- 키에 `/`가 포함되므로 GET은 `/{*key}`로 매핑하고 와일드카드 경로를 키로 사용.
 
 ## 5. 프론트 — FSD
 - `shared/api/upload-client.ts`: `uploadImage(file: File): Promise<{ key: string; url: string }>` — `FormData` + `fetch`(JSON 클라이언트와 분리, Content-Type 자동). `shared/api`의 공개 API에 export.
