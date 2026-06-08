@@ -10,8 +10,9 @@ description = "GoLe LEGO Marketplace API (hexagonal)"
 
 java {
     toolchain {
-        // Java 25 LTS (로컬에 Temurin 25 설치됨). Spring Boot 4는 Java 17~26 지원.
-        languageVersion = JavaLanguageVersion.of(25)
+        // Java 21 LTS. Spring Boot 4는 Java 17~26을 지원한다.
+        // 배포 컨테이너(ubuntu-gole)가 Temurin 21을 사용하므로 21로 고정한다.
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
