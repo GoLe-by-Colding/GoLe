@@ -7,6 +7,7 @@ import {
   loadSession,
   subscribeSession,
 } from "./session-store";
+import { logout } from "../api/user-api";
 import type { Session } from "./types";
 
 export interface UseSessionResult {
@@ -26,6 +27,11 @@ export function useSession(): UseSessionResult {
   );
 
   const signOut = useCallback(() => {
+    const current = loadSession();
+    if (current !== null) {
+      // 서버측 세션도 폐기(best-effort). 실패해도 로컬은 정리한다.
+      void logout(current.sessionToken).catch(() => undefined);
+    }
     clearSession();
   }, []);
 

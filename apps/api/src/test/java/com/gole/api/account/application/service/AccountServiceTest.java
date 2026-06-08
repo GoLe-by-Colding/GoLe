@@ -95,6 +95,17 @@ class AccountServiceTest {
     }
 
     @Test
+    void logout_revokesSession() {
+        service.register(new RegisterAccountCommand("a@b.com", "password1"));
+        SignInResult result = service.signIn(new SignInCommand("a@b.com", "password1"));
+        assertThat(service.resolve(result.sessionToken())).isPresent();
+
+        service.logout(result.sessionToken());
+
+        assertThat(service.resolve(result.sessionToken())).isEmpty();
+    }
+
+    @Test
     void signIn_locksAccount_afterFiveFailures() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
         for (int i = 0; i < 5; i++) {

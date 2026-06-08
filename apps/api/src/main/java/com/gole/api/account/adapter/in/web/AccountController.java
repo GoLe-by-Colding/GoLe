@@ -8,6 +8,7 @@ import com.gole.api.account.adapter.in.web.AccountResponses.RegisterResponse;
 import com.gole.api.account.adapter.in.web.AccountResponses.SignInResponse;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
+import com.gole.api.account.application.port.in.LogoutUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
 import com.gole.api.account.application.port.in.SignInUseCase;
@@ -20,6 +21,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,16 +39,19 @@ public class AccountController {
     private final VerifyEmailUseCase verifyEmailUseCase;
     private final SignInUseCase signInUseCase;
     private final GetCurrentSessionUseCase getCurrentSessionUseCase;
+    private final LogoutUseCase logoutUseCase;
 
     public AccountController(
             RegisterAccountUseCase registerAccountUseCase,
             VerifyEmailUseCase verifyEmailUseCase,
             SignInUseCase signInUseCase,
-            GetCurrentSessionUseCase getCurrentSessionUseCase) {
+            GetCurrentSessionUseCase getCurrentSessionUseCase,
+            LogoutUseCase logoutUseCase) {
         this.registerAccountUseCase = registerAccountUseCase;
         this.verifyEmailUseCase = verifyEmailUseCase;
         this.signInUseCase = signInUseCase;
         this.getCurrentSessionUseCase = getCurrentSessionUseCase;
+        this.logoutUseCase = logoutUseCase;
     }
 
     @PostMapping
@@ -77,6 +82,13 @@ public class AccountController {
         CurrentSession session = getCurrentSessionUseCase.resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
         return new MeResponse(session.accountId(), session.role().name());
+    }
+
+    /** 로그아웃: 서버측 세션을 폐기한다. Authorization: Bearer <token>. */
+    @DeleteMapping("/sessions")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        logoutUseCase.logout(extractBearer(authorization));
     }
 
     private static String extractBearer(String authorization) {

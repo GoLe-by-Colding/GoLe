@@ -59,3 +59,11 @@ export function socialCallback(
     body: { code, redirectUri },
   });
 }
+
+/** 로그아웃: 서버측 세션을 폐기한다(Bearer 토큰). best-effort. */
+export function logout(sessionToken: string): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/sessions", {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+}
