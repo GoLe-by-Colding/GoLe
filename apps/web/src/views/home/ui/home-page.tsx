@@ -22,7 +22,7 @@ export async function HomePage() {
       <div className="flex flex-col gap-16 pt-12 pb-20">
         <section className="rounded-2xl border border-neutral-200/70 bg-white px-10 py-16 shadow-soft max-sm:px-6 max-sm:py-12">
           <div className="flex flex-col gap-5">
-            <span className="inline-flex items-center gap-2 self-start rounded-full bg-brand-50 px-3 py-1 text-sm font-semibold text-brand-700">
+            <span className="inline-flex items-center gap-2 self-start rounded-full bg-accent-100 px-3 py-1 text-sm font-semibold text-accent-700">
               🧱 레고 마켓플레이스
             </span>
             <h1 className="max-w-[20ch] text-5xl font-bold leading-[1.12] tracking-tight text-neutral-900 max-sm:text-4xl">

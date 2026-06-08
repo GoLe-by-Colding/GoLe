@@ -5,17 +5,27 @@
  * 여기 정의한 변수는 자동으로 유틸리티(bg-brand-500, rounded-lg, font-sans 등)를 생성한다.
  */
 @theme {
-  /* --- Brand (orange) --- */
-  --color-brand-50: #fff3ed;
-  --color-brand-100: #ffe1d1;
-  --color-brand-200: #ffbd9e;
-  --color-brand-300: #ff936a;
-  --color-brand-400: #ff6f3d;
-  --color-brand-500: #ff5a1f;
-  --color-brand-600: #e8430c;
-  --color-brand-700: #c0330a;
-  --color-brand-800: #982a0e;
-  --color-brand-900: #7a260f;
+  /* --- Brand: GoLe Cobalt (퍼스널 컬러 — 신뢰의 코발트 블루) --- */
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dce6ff;
+  --color-brand-200: #bdd0ff;
+  --color-brand-300: #94b1ff;
+  --color-brand-400: #5c83ff;
+  --color-brand-500: #2f56e6;
+  --color-brand-600: #1f43c8;
+  --color-brand-700: #1c39a0;
+  --color-brand-800: #1d357f;
+  --color-brand-900: #1b2f66;
+
+  /* --- Accent: Brick Yellow (레고다운 포인트 — 커뮤니티/자랑/MOC에 절제 사용) --- */
+  --color-accent-50: #fff8e1;
+  --color-accent-100: #ffeeb3;
+  --color-accent-200: #ffe080;
+  --color-accent-300: #ffd24d;
+  --color-accent-400: #ffc62a;
+  --color-accent-500: #fbb500;
+  --color-accent-600: #d99700;
+  --color-accent-700: #a66f00;
 
   /* --- Neutral (디자인 팔레트로 Tailwind 기본 neutral 재정의) --- */
   --color-neutral-50: #f7f8fa;
