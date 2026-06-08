@@ -1,0 +1,119 @@
+# GoLe LEGO Marketplace — Implementation Tasks
+
+> `requirements.md` / `design.md`를 구현 단위로 분해한다. 체크된 항목(`[x]`)은 현재 코드베이스에 구현·커밋·배포 완료된 것이다.
+> 구현 순서는 헥사고날(domain → port-in → port-out → service → persistence → web) 및 FSD(shared → entities → features → widgets → views → app) 규약을 따른다.
+
+## 0. 기반 (Foundations)
+
+- [x] 0.1 모노레포 구성(pnpm workspace, `apps/web`, `apps/api`, docker-compose: mongo/redis)
+- [x] 0.2 백엔드 빌드 toolchain Java 21 LTS 고정(`build.gradle.kts`)
+- [x] 0.3 공통 예외 계층 + `GlobalExceptionHandler` + `ErrorResponse{code,message}` (NFR-1)
+- [x] 0.4 `UseCaseLoggingAspect`(AOP), `MongoTransactionConfig`, `TimeConfig(Clock)`, `WebCorsConfig`
+- [x] 0.5 프론트 FSD 골격 + 강제 도구(eslint-boundaries, steiger, tsconfig strict)
+
+## 1. account (요구사항 1)
+
+- [x] 1.1 도메인: `Account` 애그리거트(상태/권한/잠금 불변식), `Email`/`PasswordHash`/`VerificationCode`, `AccountStatus`/`Role`
+- [x] 1.2 port-in: `RegisterAccountUseCase`, `VerifyEmailUseCase`, `SignInUseCase`, `GetCurrentSessionUseCase`
+- [x] 1.3 port-out: `AccountRepositoryPort`, `PasswordHasherPort`, `SessionTokenPort`, `VerificationCodeGeneratorPort`, `VerificationCodeSenderPort`, `IdentifierGeneratorPort`
+- [x] 1.4 service: `AccountService`(가입/인증/로그인 잠금/세션 해석)
+- [x] 1.5 adapter-out: Mongo persistence, SHA-256 해시, opaque 세션토큰, numeric 코드 생성/로깅 전송, UUID
+- [x] 1.6 adapter-in: `AccountController` + Request/Response DTO
+- [x] 1.7 테스트: `AccountServiceTest`
+- [ ] 1.8 (후속) 비밀번호 해시 BCrypt/Argon2 전환, 세션 만료/회전
+
+## 2. catalog (요구사항 2)
+
+- [x] 2.1 도메인: `LegoSet`, `RetirementStatus`
+- [x] 2.2 port-in: `FindLegoSetUseCase`, `SearchLegoSetsUseCase`, `ListFeaturedLegoSetsUseCase`, `CreateLegoSetUseCase`, `ListLegoSetsUseCase`
+- [x] 2.3 port-out: `LoadLegoSetPort`
+- [x] 2.4 service: `CatalogService`
+- [x] 2.5 adapter: Mongo persistence + `CatalogController`
+- [x] 2.6 테스트: `CatalogServiceTest`
+
+## 3. listing (요구사항 3)
+
+- [x] 3.1 도메인: `Listing` 상태머신, `Money`, `ConditionDisclosure`, `ItemCondition`, `Completeness`, `ListingStatus`
+- [x] 3.2 port-in: Create/Get/Search/Browse/MarkSold/Delete/Reserve/Release
+- [x] 3.3 port-out: `ListingRepositoryPort`, `ListingIdGeneratorPort`
+- [x] 3.4 query: `ListingSearchQuery`, `ListingSortOrder`
+- [x] 3.5 service: `ListingService`(필터/정렬/상태전이/사진·가격 불변식)
+- [x] 3.6 adapter: Mongo persistence + `ListingController`
+- [x] 3.7 테스트: `ListingServiceTest`
+
+## 4. order (요구사항 4)
+
+- [x] 4.1 도메인: `Order` 상태머신 + 이력 + 낙관적 락 version, `OrderStatus`, `OrderStatusChange`, `Settlement`
+- [x] 4.2 port-in: Place/Pay/Complete/Refund/Get
+- [x] 4.3 port-out: `ListingReservationPort`, `PaymentGatewayPort`, `SettlementPort`, `ExecutedPriceRecorderPort`, `OrderRepositoryPort`, `OrderIdGeneratorPort`
+- [x] 4.4 service: `OrderService`(트랜잭션 경계, 매물 예약/해제/판매, 정산·시세기록 트리거)
+- [x] 4.5 adapter: Mongo persistence(@Version) + Stub 결제/정산 + listing/pricing 연동 어댑터 + `OrderController`
+- [x] 4.6 테스트: `OrderServiceTest`, `OrderConcurrencyIntegrationTest`(Testcontainers)
+- [ ] 4.7 (후속) 실 PG 어댑터(`PaymentGatewayPort` 구현체) 연동
+
+## 5. pricing (요구사항 5)
+
+- [x] 5.1 도메인: `PriceTransaction`, `PriceStatistics`(min/max/avg/median/count)
+- [x] 5.2 port-in: `RecordExecutedPriceUseCase`, `GetPriceInsightsUseCase`
+- [x] 5.3 port-out: `PriceTransactionRepositoryPort`
+- [x] 5.4 service + adapter(Mongo) + `PricingController`(statistics/chart/history)
+- [x] 5.5 테스트: `PricingServiceTest`
+
+## 6. collection (요구사항 6)
+
+- [x] 6.1 도메인: `CollectionItem`, `OwnershipStatus`
+- [x] 6.2 port-in: `ManageCollectionUseCase`, `EstimateCollectionValueUseCase`
+- [x] 6.3 port-out: `CollectionRepositoryPort`, `LatestPriceProviderPort`(→pricing), `CollectionIdGeneratorPort`
+- [x] 6.4 service + adapter(Mongo, pricing 연동) + `CollectionController`
+- [x] 6.5 테스트: `CollectionServiceTest`
+
+## 7. community (요구사항 7)
+
+- [x] 7.1 도메인: `Post`(type/status/likes/이미지 필수), `Comment`, `PostType`, `PostStatus`
+- [x] 7.2 port-in: Publish/Comment/Like/GetFeed/Delete
+- [x] 7.3 port-out: `PostRepositoryPort`, `CommentRepositoryPort`, `CommunityIdGeneratorPort`
+- [x] 7.4 service + adapter(Mongo) + `CommunityController`
+- [x] 7.5 테스트: `CommunityServiceTest`
+
+## 8. discovery (요구사항 8)
+
+- [x] 8.1 도메인: `Follow`, `WishlistEntry`, `WishlistTargetType`
+- [x] 8.2 port-in: FollowSeller/GetSellerShop/GetPersonalizedFeed/ManageWishlist
+- [x] 8.3 port-out: `FollowRepositoryPort`, `WishlistRepositoryPort`, `ListingQueryPort`(→listing)
+- [x] 8.4 service + adapter(Mongo, listing 연동) + `DiscoveryController`
+- [x] 8.5 테스트: `DiscoveryServiceTest`
+
+## 9. review (요구사항 9)
+
+- [x] 9.1 도메인: `Review`, 셀러 평점 집계
+- [x] 9.2 port-in: `WriteReviewUseCase`, `GetSellerReviewsUseCase`
+- [x] 9.3 service + adapter(Mongo) + `ReviewController`
+
+## 10. admin (요구사항 10)
+
+- [x] 10.1 `AdminAuthInterceptor`로 `/api/admin/**` ADMIN 강제
+- [x] 10.2 `AdminController`: overview(컬렉션 집계), 카탈로그 세트 목록/생성(catalog UseCase 위임)
+
+## 11. 프론트엔드 (FSD)
+
+- [x] 11.1 shared: ui kit(button/input/card/badge/select/textarea/field/container/typography), `apiRequest`, `env`, lib(format/class-names)
+- [x] 11.2 entities + api: lego-set, listing, order, user(session-store), pricing, collection, community, discovery
+- [x] 11.3 features: sign-in/up, verify-email, create-listing, purchase, create-post, comment-post, like-post, follow-seller, wishlist-toggle, listing-filter
+- [x] 11.4 widgets: site-header, listing-grid, post-card, price-chart, auth-layout
+- [x] 11.5 views + app routes: home, search, sell, prices, collection, community(+상세/작성), listing-detail, order-detail, seller-shop, sign-in/up, verify
+- [x] 11.6 Playwright E2E 설정
+
+## 12. 인프라 / 배포
+
+- [x] 12.1 docker-compose(mongo rs0, redis)
+- [x] 12.2 `ubuntu-gole` 컨테이너 PM2(`gole-backend`, `gole-frontend`) + `scripts/deploy.sh`
+- [x] 12.3 nginx 리버스 프록시 + `gole.kscold.com` HTTPS(Let's Encrypt)
+- [x] 12.4 SDD 스펙 문서 정식화(`.kiro/specs/lego-marketplace/{requirements,design,tasks}.md`)
+
+## 13. 후속 백로그 (Not started)
+
+- [ ] 13.1 비밀번호 해시 강화(BCrypt/Argon2) + 세션 만료/회전 (1.8)
+- [ ] 13.2 실 결제 PG 연동(`PaymentGatewayPort` 실구현) (4.7)
+- [ ] 13.3 이미지 업로드 MinIO(S3) 연동 — 매물/게시글 사진을 URL 입력 대신 업로드로
+- [ ] 13.4 시세 통계 Redis 캐싱 및 인기 세트 랭킹
+- [ ] 13.5 알림(팔로우 셀러 신규 매물, 위시리스트 가격 변동)
