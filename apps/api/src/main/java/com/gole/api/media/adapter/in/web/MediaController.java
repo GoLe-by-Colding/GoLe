@@ -53,8 +53,8 @@ public class MediaController {
         return new UploadResponse(stored.key(), stored.url());
     }
 
-    /** 키에 슬래시가 포함되므로 나머지 경로 전체를 키로 캡처한다. */
-    @GetMapping("/images/{*key}")
+    /** 키에 슬래시가 포함되므로(예: {@code images/<uuid>.png}) 나머지 경로 전체를 키로 캡처한다. */
+    @GetMapping("/{*key}")
     public ResponseEntity<byte[]> get(@PathVariable String key) {
         String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
         LoadedImage image = loadImageUseCase.load(normalizedKey);
