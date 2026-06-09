@@ -11,15 +11,22 @@ interface AppEnv {
 }
 
 function readApiBaseUrl(): string {
-  const raw = process.env["NEXT_PUBLIC_API_BASE_URL"];
-  if (raw === undefined || raw.length === 0) {
+  // 점 표기(process.env.NEXT_PUBLIC_*)여야 클라이언트 번들에 정적 인라인된다.
+  // (대괄호 표기는 브라우저에서 undefined로 남아 fallback이 적용되는 버그가 있었다.)
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (raw !== undefined && raw.length > 0) {
+    return raw.replace(/\/+$/, "");
+  }
+  // 미설정 시: 서버(SSR)는 절대 URL이 필요하므로 컨테이너 내부 백엔드를 사용하고,
+  // 브라우저는 동일 출처 상대경로(nginx가 /api → 백엔드 프록시)를 사용한다.
+  if (typeof window === "undefined") {
     return "http://localhost:8080";
   }
-  return raw.replace(/\/+$/, "");
+  return "";
 }
 
 function readSiteUrl(): string {
-  const raw = process.env["NEXT_PUBLIC_SITE_URL"];
+  const raw = process.env.NEXT_PUBLIC_SITE_URL;
   if (raw === undefined || raw.length === 0) {
     return "https://gole.kscold.com";
   }
@@ -37,7 +44,7 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
   siteUrl: readSiteUrl(),
-  portOneStoreId: process.env["NEXT_PUBLIC_PORTONE_STORE_ID"] ?? "",
-  portOneChannelKey: process.env["NEXT_PUBLIC_PORTONE_CHANNEL_KEY"] ?? "",
+  portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
+  portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",
   nodeEnv: readNodeEnv(),
 });
