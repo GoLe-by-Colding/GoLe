@@ -35,28 +35,28 @@ export function fetchSocialProviders(signal?: AbortSignal): Promise<readonly str
   });
 }
 
-/** provider 동의 화면 URL을 받아온다. */
+/** provider 동의 화면 URL을 받아온다. state는 서버가 발급한다. */
 export function fetchSocialAuthorizeUrl(
   provider: string,
   redirectUri: string,
-  state: string,
 ): Promise<{ readonly url: string }> {
-  const query = new URLSearchParams({ redirectUri, state }).toString();
+  const query = new URLSearchParams({ redirectUri }).toString();
   return apiRequest<{ readonly url: string }>(
     `${OAUTH_BASE}/${provider}/authorize-url?${query}`,
     { cache: "no-store" },
   );
 }
 
-/** OAuth code를 교환해 세션을 발급받는다. */
+/** OAuth code를 교환해 세션을 발급받는다. state는 서버가 검증한다(CSRF). */
 export function socialCallback(
   provider: string,
   code: string,
   redirectUri: string,
+  state: string,
 ): Promise<Session> {
   return apiRequest<Session>(`${OAUTH_BASE}/${provider}/callback`, {
     method: "POST",
-    body: { code, redirectUri },
+    body: { code, redirectUri, state },
   });
 }
 
