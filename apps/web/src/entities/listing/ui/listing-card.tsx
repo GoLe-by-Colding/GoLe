@@ -1,4 +1,5 @@
 import { Badge, Card } from "@shared/ui";
+import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
 import { completenessLabel, conditionLabel, formatPriceKrw } from "../model/types";
 
@@ -14,7 +15,7 @@ export function ListingCard({ listing }: ListingCardProps) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="w-full aspect-[4/3] object-cover bg-neutral-100"
-        src={cover ?? "https://placehold.co/600x400?text=LEGO"}
+        src={cover === undefined ? "https://placehold.co/600x400?text=LEGO" : thumbnailUrl(cover, 480)}
         alt={listing.title}
         loading="lazy"
       />
