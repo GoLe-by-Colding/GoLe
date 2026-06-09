@@ -24,5 +24,5 @@
 ## 후속 백로그
 - [ ] N1 업로드 인증(세션 토큰) + 사용자별 레이트리밋
 - [x] N2 다중 이미지 업로드 — 배치 엔드포인트 `POST /api/v1/media/images/batch`(최대 10장) + 프론트 다중 선택/미리보기/삭제(create-listing·create-post)
-- [ ] N2a 이미지 리사이즈/썸네일
+- [x] N2a 이미지 썸네일(온더플라이 리사이즈 ?w= + MinIO 캐시); 프론트 카드 thumbnailUrl
 - [ ] N3 presigned URL/CDN 전환(트래픽 확장 시)

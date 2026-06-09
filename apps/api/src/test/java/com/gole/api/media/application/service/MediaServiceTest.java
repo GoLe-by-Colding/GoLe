@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.media.application.port.in.LoadImageUseCase.LoadedImage;
 import com.gole.api.media.application.port.in.UploadImageUseCase.UploadImageCommand;
+import com.gole.api.media.application.port.out.ImageProcessorPort;
 import com.gole.api.media.application.port.out.ObjectStoragePort;
 import com.gole.api.media.domain.exception.ImageNotFoundException;
 import com.gole.api.media.domain.exception.ImageTooLargeException;
@@ -22,12 +23,14 @@ import org.junit.jupiter.api.Test;
 class MediaServiceTest {
 
     private FakeStorage storage;
+    private FakeProcessor processor;
     private MediaService service;
 
     @BeforeEach
     void setUp() {
         storage = new FakeStorage();
-        service = new MediaService(storage, "https://gole.kscold.com", 1_000);
+        processor = new FakeProcessor();
+        service = new MediaService(storage, processor, "https://gole.kscold.com", 1_000);
     }
 
     @Test
@@ -86,6 +89,58 @@ class MediaServiceTest {
     void load_throwsWhenMissing() {
         assertThatThrownBy(() -> service.load("images/none.png"))
                 .isInstanceOf(ImageNotFoundException.class);
+    }
+
+    @Test
+    void loadResized_cachesDerivative_andServesIt() {
+        StoredImage stored = service.upload(
+                new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+        processor.result = "thumb".getBytes();
+
+        LoadedImage first = service.loadResized(stored.key(), 240);
+        assertThat(first.content()).isEqualTo("thumb".getBytes());
+        // 파생물이 캐시에 저장됨
+        assertThat(storage.objects).containsKey("derivatives/w240/" + stored.key());
+
+        // 두 번째 호출은 캐시 사용 → 프로세서 재호출 없음
+        processor.calls = 0;
+        LoadedImage second = service.loadResized(stored.key(), 240);
+        assertThat(second.content()).isEqualTo("thumb".getBytes());
+        assertThat(processor.calls).isZero();
+    }
+
+    @Test
+    void loadResized_servesOriginal_whenProcessorReturnsEmpty() {
+        StoredImage stored = service.upload(
+                new UploadImageCommand("original".getBytes(), "image/webp", "a.webp"));
+        processor.result = null; // 디코딩 불가 시뮬레이션
+
+        LoadedImage result = service.loadResized(stored.key(), 240);
+
+        assertThat(result.content()).isEqualTo("original".getBytes());
+        assertThat(storage.objects).doesNotContainKey("derivatives/w240/" + stored.key());
+    }
+
+    @Test
+    void loadResized_servesOriginal_whenWidthOutOfRange() {
+        StoredImage stored = service.upload(
+                new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+
+        LoadedImage result = service.loadResized(stored.key(), 5); // 범위 밖
+
+        assertThat(result.content()).isEqualTo("original".getBytes());
+        assertThat(processor.calls).isZero();
+    }
+
+    private static final class FakeProcessor implements ImageProcessorPort {
+        private byte[] result;
+        private int calls = 0;
+
+        @Override
+        public Optional<byte[]> resizeToWidth(byte[] source, int targetWidth, String contentType) {
+            calls++;
+            return Optional.ofNullable(result);
+        }
     }
 
     private static final class FakeStorage implements ObjectStoragePort {

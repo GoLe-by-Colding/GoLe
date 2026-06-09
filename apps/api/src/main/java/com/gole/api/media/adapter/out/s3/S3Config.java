@@ -51,7 +51,11 @@ public class S3Config {
     }
 
     @Bean
-    public MediaService mediaService(ObjectStoragePort objectStorage, StorageProperties properties) {
-        return new MediaService(objectStorage, properties.publicBaseUrl(), properties.maxImageBytes());
+    public MediaService mediaService(
+            ObjectStoragePort objectStorage,
+            com.gole.api.media.application.port.out.ImageProcessorPort imageProcessor,
+            StorageProperties properties) {
+        return new MediaService(
+                objectStorage, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
     }
 }
