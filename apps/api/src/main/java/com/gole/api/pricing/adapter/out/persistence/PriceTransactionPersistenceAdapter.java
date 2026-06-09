@@ -64,16 +64,20 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     }
 
     @Override
-    public List<TradeAggregate> findTopTradedSets(int limit) {
-        Aggregation aggregation = Aggregation.newAggregation(
-                Aggregation.group("setNumber")
-                        .count().as("tradeCount")
-                        .avg("price").as("averagePrice"),
-                Aggregation.sort(Sort.Direction.DESC, "tradeCount"),
-                Aggregation.limit(limit));
+    public List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since) {
+        java.util.List<org.springframework.data.mongodb.core.aggregation.AggregationOperation> ops =
+                new java.util.ArrayList<>();
+        if (since != null) {
+            ops.add(Aggregation.match(Criteria.where("executedAt").gte(since)));
+        }
+        ops.add(Aggregation.group("setNumber")
+                .count().as("tradeCount")
+                .avg("price").as("averagePrice"));
+        ops.add(Aggregation.sort(Sort.Direction.DESC, "tradeCount"));
+        ops.add(Aggregation.limit(limit));
 
         AggregationResults<TradeAggregateRow> results = mongoTemplate.aggregate(
-                aggregation, "price_transactions", TradeAggregateRow.class);
+                Aggregation.newAggregation(ops), "price_transactions", TradeAggregateRow.class);
 
         return results.getMappedResults().stream()
                 .map(row -> new TradeAggregate(
