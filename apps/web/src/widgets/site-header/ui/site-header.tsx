@@ -32,9 +32,11 @@ export function SiteHeader() {
         <div className="flex h-16 items-center gap-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xl font-extrabold tracking-tight text-neutral-900"
+            className="inline-flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-neutral-900"
           >
-            <span className="text-brand-500">Go</span>Le
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="" className="h-8 w-8" aria-hidden="true" />
+            <span>Go<span className="text-brand-600">Le</span></span>
           </Link>
           <nav className="flex items-center gap-5 max-sm:hidden">
             {NAV_ITEMS.map((item) => (

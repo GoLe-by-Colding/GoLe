@@ -39,7 +39,7 @@ export async function HomePage() {
               🧱 레고 중고거래
             </span>
             <h1 className="max-w-[18ch] text-[clamp(2.4rem,5.5vw,3.75rem)] font-extrabold leading-[1.08] tracking-[-0.03em] text-neutral-900">
-              레고를 <span className="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">가장 합리적으로</span>
+              레고를 <span className="bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">가장 합리적으로</span>
             </h1>
             <p className="max-w-[44ch] text-lg leading-relaxed text-neutral-500">
               체결가 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션을 한곳에서.
