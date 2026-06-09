@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <!-- 고래 실루엣 (브랜드 블루) -->
+  <path d="M8 26c-1-3 0-7 4-10s9-4 13-3c4 1 7 4 9 7 1 2 1 4-1 5s-5 1-8 0c-2-1-4-1-6 0s-4 2-6 2-4-1-5-1z" fill="#1D4ED8"/>
+  <!-- 브릭 스터드 (고래 등 위) -->
+  <circle cx="18" cy="14" r="2.5" fill="#3B5CF2"/>
+  <circle cx="24" cy="13" r="2.5" fill="#3B5CF2"/>
+  <!-- 꼬리 -->
+  <path d="M6 25c-2 0-3-2-2-4s2-3 3-2" fill="#1D4ED8"/>
+  <!-- 분수 (accent gold) -->
+  <path d="M28 9c0-3 1-5 2-6 0 2 1 3 2 4-1-2 0-4 1-5 0 2 1 4 0 6" stroke="#EAB308" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+</svg>

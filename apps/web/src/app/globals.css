@@ -1,78 +1,92 @@
 @import "tailwindcss";
 
 /**
- * GoLe 디자인 시스템 — Tailwind v4 @theme 토큰(단일 출처).
- * 여기 정의한 변수는 자동으로 유틸리티(bg-brand-500, rounded-lg, font-sans 등)를 생성한다.
+ * GoLe Design System — Tailwind v4 @theme (단일 출처).
+ *
+ * 브랜드 컬러를 바꾸려면 brand-* 값만 교체하면 전체가 리컬러된다.
+ * 현재: GoLe Royal Blue (#1D4ED8) — 레고 클래식 파란색 + 깊은 바다(고래) 톤.
  */
 @theme {
-  /* --- Brand: GoLe Cobalt (퍼스널 컬러 — 신뢰의 코발트 블루) --- */
-  --color-brand-50: #eef3ff;
-  --color-brand-100: #dce6ff;
-  --color-brand-200: #bdd0ff;
-  --color-brand-300: #94b1ff;
-  --color-brand-400: #5c83ff;
-  --color-brand-500: #2f56e6;
-  --color-brand-600: #1f43c8;
-  --color-brand-700: #1c39a0;
-  --color-brand-800: #1d357f;
-  --color-brand-900: #1b2f66;
+  /* ─── Brand: GoLe Royal Blue ─── */
+  --color-brand-50: #eff4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-200: #bfcffe;
+  --color-brand-300: #93aefb;
+  --color-brand-400: #6082f7;
+  --color-brand-500: #3b5cf2;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1a3fc0;
+  --color-brand-800: #1b359c;
+  --color-brand-900: #1c2f7c;
+  --color-brand-950: #131e4f;
 
-  /* --- Accent: Brick Yellow (레고다운 포인트 — 커뮤니티/자랑/MOC에 절제 사용) --- */
-  --color-accent-50: #fff8e1;
-  --color-accent-100: #ffeeb3;
-  --color-accent-200: #ffe080;
-  --color-accent-300: #ffd24d;
-  --color-accent-400: #ffc62a;
-  --color-accent-500: #fbb500;
-  --color-accent-600: #d99700;
-  --color-accent-700: #a66f00;
+  /* ─── Accent: Brick Gold (레고 옐로보다 골드감, 포인트 전용) ─── */
+  --color-accent-50: #fefce8;
+  --color-accent-100: #fef9c3;
+  --color-accent-200: #fef08a;
+  --color-accent-300: #fde047;
+  --color-accent-400: #facc15;
+  --color-accent-500: #eab308;
+  --color-accent-600: #ca8a04;
+  --color-accent-700: #a16207;
 
-  /* --- Neutral (디자인 팔레트로 Tailwind 기본 neutral 재정의) --- */
-  --color-neutral-50: #f7f8fa;
-  --color-neutral-100: #eef0f4;
-  --color-neutral-200: #e1e5ec;
-  --color-neutral-300: #cbd2dd;
-  --color-neutral-400: #9aa4b4;
-  --color-neutral-500: #6b7585;
-  --color-neutral-600: #4b5563;
-  --color-neutral-700: #343b47;
-  --color-neutral-800: #20252e;
-  --color-neutral-900: #12151b;
+  /* ─── Neutral (따뜻한 그레이: 차갑지 않게) ─── */
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f4f4f5;
+  --color-neutral-200: #e4e4e7;
+  --color-neutral-300: #d4d4d8;
+  --color-neutral-400: #a1a1aa;
+  --color-neutral-500: #71717a;
+  --color-neutral-600: #52525b;
+  --color-neutral-700: #3f3f46;
+  --color-neutral-800: #27272a;
+  --color-neutral-900: #18181b;
 
-  /* --- Semantic --- */
-  --color-success: #18a957;
-  --color-success-soft: #e8f7ee;
-  --color-danger: #e23b3b;
-  --color-danger-soft: #fcebeb;
-  --color-warning: #f0a020;
-  --color-warning-soft: #fdf3e2;
-  --color-info: #2f74e0;
-  --color-info-soft: #eaf1fc;
+  /* ─── Semantic ─── */
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-info: #2563eb;
+  --color-info-soft: #dbeafe;
 
-  /* --- Typography --- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Pretendard", "Noto Sans KR", "Segoe UI", Roboto, system-ui, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  /* ─── Typography ─── */
+  --font-sans: "Pretendard Variable", "Pretendard", -apple-system,
+    BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR",
+    "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 
-  /* --- Radius --- */
+  /* ─── Radius ─── */
   --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
 
-  /* --- Elevation (절제된 옅은 깊이) --- */
-  --shadow-soft: 0 1px 2px rgba(18, 21, 27, 0.04),
-    0 1px 3px rgba(18, 21, 27, 0.06);
-  --shadow-lift: 0 2px 6px -2px rgba(18, 21, 27, 0.06),
-    0 10px 24px -12px rgba(18, 21, 27, 0.14);
+  /* ─── Elevation ─── */
+  --shadow-soft: 0 1px 2px rgba(24, 24, 27, 0.04),
+    0 1px 4px rgba(24, 24, 27, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(24, 24, 27, 0.06),
+    0 2px 4px -2px rgba(24, 24, 27, 0.05);
+  --shadow-lift: 0 8px 25px -5px rgba(24, 24, 27, 0.08),
+    0 10px 10px -5px rgba(24, 24, 27, 0.03);
+  --shadow-brand: 0 4px 14px -3px rgba(29, 78, 216, 0.3);
+
+  /* ─── Spacing rhythm (8px 기반) ─── */
+  --space-section: 5rem;
+  --space-card: 1.25rem;
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
     color: var(--color-neutral-900);
-    background-color: #ffffff;
+    background-color: var(--color-neutral-50);
     scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -81,37 +95,36 @@
     text-rendering: optimizeLegibility;
   }
 
-  h1,
-  h2,
-  h3,
-  h4 {
+  h1, h2, h3, h4 {
     line-height: 1.15;
-    letter-spacing: -0.02em;
-    font-weight: 700;
+    letter-spacing: -0.025em;
+    font-weight: 800;
+    color: var(--color-neutral-900);
   }
 
   ::selection {
     background-color: var(--color-brand-200);
+    color: var(--color-brand-900);
   }
 
-  /* 마이크로 인터랙션 기본값: 모든 인터랙티브 요소에 부드러운 전환 */
-  a, button, input, textarea, select {
+  /* 모든 인터랙티브 요소 기본 전환 */
+  a, button, [role="button"], input, textarea, select {
     transition-property: color, background-color, border-color, box-shadow, transform, opacity;
-    transition-duration: 150ms;
+    transition-duration: 180ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* 포커스 링: 브랜드 컬러 + 오프셋 */
+  /* 포커스 링 */
   :focus-visible {
     outline: 2px solid var(--color-brand-400);
     outline-offset: 2px;
   }
 
-  /* 이미지 호버 줌 유틸 */
+  /* 이미지 호버 줌 */
   .img-zoom {
-    transition: transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 450ms cubic-bezier(0.4, 0, 0.2, 1);
   }
-  .group:hover .img-zoom, .peer:hover ~ .img-zoom {
-    transform: scale(1.04);
+  .group:hover .img-zoom {
+    transform: scale(1.05);
   }
 }

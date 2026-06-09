@@ -7,9 +7,9 @@ GoLe만의 퍼스널 컬러. 흔한 중고거래 앱들의 원색(오렌지/레�
 
 | 역할 | 토큰 | 핵심 값 | 용도 |
 |---|---|---|---|
-| Primary (브랜드) | `brand-*` (GoLe Cobalt) | `brand-500 #2f56e6` | 기본 버튼/링크/포커스/식별 요소. 신뢰감. |
-| Accent (포인트) | `accent-*` (Brick Yellow) | `accent-500 #fbb500` | 커뮤니티·자랑·MOC·뱃지 등 "놀이" 포인트에만 **절제** 사용. |
-| Neutral | `neutral-*` | — | 텍스트/보더/배경. 여백 중심. |
+| Primary (브랜드) | `brand-*` (GoLe Royal Blue) | `brand-600 #1D4ED8` | 기본 버튼/링크/포커스/식별 요소. 레고 클래식 블루 + 심해. |
+| Accent (포인트) | `accent-*` (Brick Gold) | `accent-500 #EAB308` | 커뮤니티·자랑·MOC·뱃지 등 "놀이" 포인트에만 **절제** 사용. |
+| Neutral | `neutral-*` (따뜻한 그레이) | — | 텍스트/보더/배경. 여백 중심. |
 | Semantic | `success/danger/warning/info` | — | 상태 표현 전용(브랜드 컬러와 혼동 금지). |
 
 ## 사용 원칙 (미니멀)
