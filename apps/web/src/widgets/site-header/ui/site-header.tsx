@@ -27,21 +27,21 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/85 backdrop-blur-md backdrop-saturate-150">
+    <header className="sticky top-0 z-20 border-b border-neutral-200/50 bg-white/80 backdrop-blur-xl backdrop-saturate-[1.8]">
       <Container width="xl">
-        <div className="flex h-16 items-center gap-6">
+        <div className="flex h-16 items-center gap-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-neutral-900"
+            className="inline-flex items-center gap-2 text-xl font-extrabold tracking-tight text-neutral-900"
           >
-            🧱 GoLe
+            <span className="text-brand-500">Go</span>Le
           </Link>
           <nav className="flex items-center gap-5 max-sm:hidden">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
+                className="text-sm font-medium text-neutral-500 transition-colors hover:text-neutral-900"
               >
                 {item.label}
               </Link>
