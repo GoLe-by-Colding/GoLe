@@ -6,6 +6,9 @@ export type { LinkButtonProps } from "./button";
 export { Card } from "./card";
 export type { CardProps, CardElevation } from "./card";
 
+export { Logo } from "./logo";
+export type { LogoProps } from "./logo";
+
 export { Badge } from "./badge";
 export type { BadgeProps, BadgeTone } from "./badge";
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Container } from "@shared/ui";
+import { Container, Logo } from "@shared/ui";
 
 const NAV: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/search", label: "탐색" },
@@ -17,9 +17,7 @@ export function SiteFooter() {
       <Container width="xl">
         <div className="flex flex-col gap-6 py-10">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <span className="inline-flex items-center gap-2 text-base font-bold text-neutral-900">
-              🧱 GoLe
-            </span>
+            <Logo size={28} className="text-base text-neutral-900" />
             <nav className="flex flex-wrap gap-x-5 gap-y-2">
               {NAV.map((n) => (
                 <Link

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@entities/user";
 import { NotificationBell } from "@features/notification-bell";
-import { Button, Container, LinkButton } from "@shared/ui";
+import { Button, Container, LinkButton, Logo } from "@shared/ui";
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/", label: "홈" },
@@ -32,11 +32,9 @@ export function SiteHeader() {
         <div className="flex h-16 items-center gap-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-neutral-900"
+            className="inline-flex items-center text-xl text-neutral-900"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.svg" alt="" className="h-8 w-8" aria-hidden="true" />
-            <span>Go<span className="text-brand-600">Le</span></span>
+            <Logo size={32} className="text-xl" />
           </Link>
           <nav className="flex items-center gap-5 max-sm:hidden">
             {NAV_ITEMS.map((item) => (
