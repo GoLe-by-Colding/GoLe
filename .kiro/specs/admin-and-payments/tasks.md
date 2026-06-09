@@ -18,6 +18,7 @@
 ## 포트원 결제
 - [x] 10. `PortOnePaymentGatewayAdapter`(검증 REST, 설정 게이트) (R5)
 - [x] 11. `StubPaymentGatewayAdapter` 기본화(matchIfMissing)
+- [x] 11a. `PaymentWebhookController` `POST /api/v1/payments/portone/webhook` — 서버-투-서버 결제 확정(브라우저 미호출 시 누락 방지). `pay()`가 PortOne에 재검증하므로 서명 시크릿 없이도 위조 webhook으로 확정 불가(안전). 이미 처리/대기아님은 ack.
 
 ## 프론트
 - [x] 12. `Session.role` + 헤더 관리자 진입점 (R4.1)
