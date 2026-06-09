@@ -6,9 +6,6 @@ import {
   fetchSocialProviders,
 } from "@entities/user";
 
-/** OAuth state 검증용 sessionStorage 키. 콜백 페이지와 공유한다. */
-export const OAUTH_STATE_KEY = "gole.oauth.state";
-
 interface ProviderMeta {
   readonly key: string;
   readonly label: string;
@@ -56,10 +53,8 @@ export function SocialLoginButtons() {
     setError(undefined);
     setPending(provider);
     try {
-      const state = crypto.randomUUID();
-      window.sessionStorage.setItem(OAUTH_STATE_KEY, state);
       const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
-      const { url } = await fetchSocialAuthorizeUrl(provider, redirectUri, state);
+      const { url } = await fetchSocialAuthorizeUrl(provider, redirectUri);
       window.location.assign(url);
     } catch {
       setError("소셜 로그인을 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.");

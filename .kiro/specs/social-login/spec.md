@@ -49,5 +49,5 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 - [ ] D1 빌드·배포·스모크
 
 ## 보안/후속
-- state는 프론트 sessionStorage로 검증(MVP). 후속: 서버측 state 저장/검증, PKCE, provider별 이메일 미인증 처리, 계정-소셜 연결(provider/providerId 영속) 분리.
+- state는 서버가 발급·Redis 저장·콜백 1회 소비로 검증한다(CSRF). 후속: PKCE, provider별 이메일 미인증 처리, 계정-소셜 연결(provider/providerId 영속) 분리.
 - 이메일 기준 find-or-create는 동일 이메일=동일 사용자로 간주(소셜↔로컬 통합). 후속에 명시적 계정 연결 UX 가능.

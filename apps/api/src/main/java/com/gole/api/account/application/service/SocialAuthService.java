@@ -3,6 +3,7 @@ package com.gole.api.account.application.service;
 import com.gole.api.account.application.port.in.SocialLoginUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
+import com.gole.api.account.application.port.out.OAuthStateStorePort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Service;
 public class SocialAuthService implements SocialLoginUseCase {
 
     private static final Duration SESSION_TTL = Duration.ofDays(7);
+    private static final Duration STATE_TTL = Duration.ofMinutes(10);
 
     private final SocialIdentityProviderPort identityProvider;
     private final AccountRepositoryPort accountRepository;
@@ -34,6 +36,7 @@ public class SocialAuthService implements SocialLoginUseCase {
     private final PasswordHasherPort passwordHasher;
     private final SessionTokenPort sessionToken;
     private final SessionStorePort sessionStore;
+    private final OAuthStateStorePort stateStore;
 
     public SocialAuthService(
             SocialIdentityProviderPort identityProvider,
@@ -41,13 +44,15 @@ public class SocialAuthService implements SocialLoginUseCase {
             IdentifierGeneratorPort identifierGenerator,
             PasswordHasherPort passwordHasher,
             SessionTokenPort sessionToken,
-            SessionStorePort sessionStore) {
+            SessionStorePort sessionStore,
+            OAuthStateStorePort stateStore) {
         this.identityProvider = identityProvider;
         this.accountRepository = accountRepository;
         this.identifierGenerator = identifierGenerator;
         this.passwordHasher = passwordHasher;
         this.sessionToken = sessionToken;
         this.sessionStore = sessionStore;
+        this.stateStore = stateStore;
     }
 
     @Override
@@ -58,14 +63,22 @@ public class SocialAuthService implements SocialLoginUseCase {
     }
 
     @Override
-    public String authorizeUrl(AuthProvider provider, String redirectUri, String state) {
+    public String authorizeUrl(AuthProvider provider, String redirectUri) {
         requireConfigured(provider);
+        // 서버가 state를 발급·저장한다(콜백에서 1회 소비해 CSRF 방지).
+        String state = UUID.randomUUID().toString();
+        stateStore.save(state, provider, STATE_TTL);
         return identityProvider.authorizeUrl(provider, redirectUri, state);
     }
 
     @Override
     public SocialLoginResult login(SocialLoginCommand command) {
         requireConfigured(command.provider());
+
+        // CSRF: 서버가 발급한 state인지 검증(1회 소비).
+        if (!stateStore.consume(command.state(), command.provider())) {
+            throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
+        }
 
         SocialProfile profile = identityProvider.fetchProfile(
                 command.provider(), command.code(), command.redirectUri());

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveSession, socialCallback } from "@entities/user";
-import { OAUTH_STATE_KEY } from "@features/social-login";
 import { ApiError } from "@shared/api";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
@@ -36,21 +35,15 @@ export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
         setError("소셜 로그인이 취소되었거나 거부되었습니다.");
         return;
       }
-      if (code === null) {
-        setError("인증 코드가 없습니다.");
-        return;
-      }
-
-      const savedState = window.sessionStorage.getItem(OAUTH_STATE_KEY);
-      window.sessionStorage.removeItem(OAUTH_STATE_KEY);
-      if (savedState !== null && returnedState !== null && savedState !== returnedState) {
-        setError("보안 검증(state)에 실패했습니다. 다시 시도해 주세요.");
+      if (code === null || returnedState === null) {
+        setError("인증 정보가 올바르지 않습니다.");
         return;
       }
 
       const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
       try {
-        const session = await socialCallback(provider, code, redirectUri);
+        // state는 서버가 발급·검증한다(CSRF). 콜백에서 그대로 전달만 한다.
+        const session = await socialCallback(provider, code, redirectUri, returnedState);
         saveSession(session);
         router.replace("/");
       } catch (cause) {
