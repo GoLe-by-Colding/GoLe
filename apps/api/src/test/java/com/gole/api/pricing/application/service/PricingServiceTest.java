@@ -79,7 +79,7 @@ class PricingServiceTest {
         }
 
         @Override
-        public List<TradeAggregate> findTopTradedSets(int limit) {
+        public List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since) {
             return List.of();
         }
     }

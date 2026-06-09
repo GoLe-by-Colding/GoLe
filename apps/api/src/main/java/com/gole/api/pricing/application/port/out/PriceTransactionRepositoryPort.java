@@ -25,8 +25,9 @@ public interface PriceTransactionRepositoryPort {
      * 체결 건수 기준 상위 세트를 집계한다(인기 랭킹). (백로그 13.4)
      *
      * @param limit 반환할 최대 세트 수
+     * @param since 이 시각 이후의 체결만 집계. {@code null}이면 전체 기간.
      */
-    List<TradeAggregate> findTopTradedSets(int limit);
+    List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since);
 
     /**
      * @param setNumber    세트 번호

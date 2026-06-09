@@ -10,8 +10,10 @@ import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.application.port.out.TrendingCachePort;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +25,8 @@ import org.junit.jupiter.api.Test;
  * 가짜 포트로 트렌딩 유스케이스를 검증한다(집계/캐시/카탈로그 보강). (백로그 13.4)
  */
 class TrendingServiceTest {
+
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
 
     @Test
     void getTrending_aggregatesAndEnrichesWithCatalogName() {
@@ -37,7 +41,7 @@ class TrendingServiceTest {
             }
             throw new RuntimeException("not found");
         };
-        TrendingService service = new TrendingService(repo, cache, catalog);
+        TrendingService service = new TrendingService(repo, cache, catalog, CLOCK);
 
         List<TrendingSet> result = service.getTrending(8);
 
@@ -60,7 +64,7 @@ class TrendingServiceTest {
         cache.stored.put(8, cached);
         TrendingService service = new TrendingService(repo, cache, sn -> {
             throw new RuntimeException("should not be called");
-        });
+        }, CLOCK);
 
         List<TrendingSet> result = service.getTrending(8);
 
@@ -73,7 +77,7 @@ class TrendingServiceTest {
         FakeRepo repo = new FakeRepo(List.of());
         TrendingService service = new TrendingService(repo, new FakeCache(), sn -> {
             throw new RuntimeException();
-        });
+        }, CLOCK);
 
         service.getTrending(0);
 
@@ -100,7 +104,7 @@ class TrendingServiceTest {
         }
 
         @Override
-        public List<TradeAggregate> findTopTradedSets(int limit) {
+        public List<TradeAggregate> findTopTradedSets(int limit, Instant since) {
             called = true;
             lastLimit = limit;
             return aggregates;
