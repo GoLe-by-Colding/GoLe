@@ -27,7 +27,7 @@ class DiscoveryServiceTest {
     void setUp() {
         follows = new InMemoryFollows();
         wishlist = new InMemoryWishlist();
-        service = new DiscoveryService(follows, wishlist, new NoopListingQuery());
+        service = new DiscoveryService(follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> { });
     }
 
     @Test

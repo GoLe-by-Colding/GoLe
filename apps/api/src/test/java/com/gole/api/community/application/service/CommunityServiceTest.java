@@ -32,7 +32,7 @@ class CommunityServiceTest {
     void setUp() {
         posts = new InMemoryPosts();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new CommunityService(posts, new InMemoryComments(), new SeqIds(), clock);
+        service = new CommunityService(posts, new InMemoryComments(), new SeqIds(), (authorId, postId) -> { }, clock);
     }
 
     private String publish() {

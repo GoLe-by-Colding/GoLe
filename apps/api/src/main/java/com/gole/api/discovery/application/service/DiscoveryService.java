@@ -5,6 +5,7 @@ import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
+import com.gole.api.discovery.application.port.out.FollowNotifierPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
 import com.gole.api.discovery.domain.exception.DuplicateFollowException;
@@ -29,14 +30,17 @@ public class DiscoveryService
     private final FollowRepositoryPort followRepository;
     private final WishlistRepositoryPort wishlistRepository;
     private final ListingQueryPort listingQuery;
+    private final FollowNotifierPort followNotifier;
 
     public DiscoveryService(
             FollowRepositoryPort followRepository,
             WishlistRepositoryPort wishlistRepository,
-            ListingQueryPort listingQuery) {
+            ListingQueryPort listingQuery,
+            FollowNotifierPort followNotifier) {
         this.followRepository = followRepository;
         this.wishlistRepository = wishlistRepository;
         this.listingQuery = listingQuery;
+        this.followNotifier = followNotifier;
     }
 
     @Override
@@ -45,6 +49,8 @@ public class DiscoveryService
             throw new DuplicateFollowException(); // 요구사항 16.4
         }
         followRepository.save(new Follow(userId, sellerId));
+        // 알림: 새 팔로워를 셀러에게(best-effort)
+        followNotifier.notifyNewFollower(sellerId, userId);
     }
 
     @Override

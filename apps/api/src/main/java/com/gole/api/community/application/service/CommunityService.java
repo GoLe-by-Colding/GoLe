@@ -9,6 +9,7 @@ import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
 import com.gole.api.community.application.port.out.PostRepositoryPort;
+import com.gole.api.community.application.port.out.PostAuthorNotifierPort;
 import com.gole.api.community.domain.exception.PostNotFoundException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
@@ -31,16 +32,19 @@ public class CommunityService
     private final PostRepositoryPort postRepository;
     private final CommentRepositoryPort commentRepository;
     private final CommunityIdGeneratorPort idGenerator;
+    private final PostAuthorNotifierPort postAuthorNotifier;
     private final Clock clock;
 
     public CommunityService(
             PostRepositoryPort postRepository,
             CommentRepositoryPort commentRepository,
             CommunityIdGeneratorPort idGenerator,
+            PostAuthorNotifierPort postAuthorNotifier,
             Clock clock) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.idGenerator = idGenerator;
+        this.postAuthorNotifier = postAuthorNotifier;
         this.clock = clock;
     }
 
@@ -62,7 +66,12 @@ public class CommunityService
         Comment comment = new Comment(
                 idGenerator.newId(), post.getId(), command.authorId(),
                 command.content(), Instant.now(clock));
-        return commentRepository.save(comment).id();
+        String id = commentRepository.save(comment).id();
+        // 알림: 내 글에 댓글이 달리면 작성자에게(본인 댓글은 제외, best-effort)
+        if (!command.authorId().equals(post.getAuthorId())) {
+            postAuthorNotifier.notifyComment(post.getAuthorId(), post.getId());
+        }
+        return id;
     }
 
     @Override
