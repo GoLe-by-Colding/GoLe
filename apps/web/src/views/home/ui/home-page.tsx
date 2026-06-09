@@ -68,7 +68,7 @@ export async function HomePage() {
           <div className="flex items-baseline justify-between gap-4">
             <Heading level={2}>지금 뜨는 세트</Heading>
             <Text tone="secondary" size="sm">
-              체결 거래량 기준 인기 랭킹
+              최근 거래가 활발한 세트
             </Text>
           </div>
           <TrendingSets items={trending} />
