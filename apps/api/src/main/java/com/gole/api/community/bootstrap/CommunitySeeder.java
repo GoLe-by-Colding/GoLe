@@ -29,8 +29,9 @@ public class CommunitySeeder implements CommandLineRunner {
         this.repository = repository;
     }
 
-    private static List<String> img(String label) {
-        return List.of("https://placehold.co/800x600/fff8e1/a66f00?text=" + label);
+    private static List<String> img(String slug) {
+        // GoLe 오리지널 데모 커버(MediaSeeder가 MinIO에 업로드). 공식 이미지 미사용.
+        return List.of("/api/v1/media/community/" + slug + ".svg");
     }
 
     @Override
@@ -40,15 +41,15 @@ public class CommunitySeeder implements CommandLineRunner {
         }
         List<PublishPostCommand> posts = List.of(
                 new PublishPostCommand("user-collector",
-                        "드디어 에펠탑 완성! 3일 걸렸네요 🗼", img("Eiffel"), false),
+                        "드디어 에펠탑 완성! 3일 걸렸네요 🗼", img("eiffel"), false),
                 new PublishPostCommand("user-builder",
-                        "밀레니엄 팰컨 UCS 디테일 미쳤습니다. 인생 세트 인정?", img("Falcon"), false),
+                        "밀레니엄 팰컨 UCS 디테일 미쳤습니다. 인생 세트 인정?", img("falcon"), false),
                 new PublishPostCommand("user-moc",
-                        "기본 브릭으로 만든 커스텀 등대 MOC 공유합니다. 도면 곧 올릴게요!", img("MOC-Lighthouse"), true),
+                        "기본 브릭으로 만든 커스텀 등대 MOC 공유합니다. 도면 곧 올릴게요!", img("moc-lighthouse"), true),
                 new PublishPostCommand("user-collector",
-                        "타이타닉 진열장에 올렸어요. 길이 실화냐...", img("Titanic"), false),
+                        "타이타닉 진열장에 올렸어요. 길이 실화냐...", img("titanic"), false),
                 new PublishPostCommand("user-moc",
-                        "테크닉 부품으로 동작하는 미니 관람차 MOC 제작기", img("MOC-FerrisWheel"), true));
+                        "테크닉 부품으로 동작하는 미니 관람차 MOC 제작기", img("moc-ferriswheel"), true));
 
         posts.forEach(publishPost::publish);
         log.info("[seed] community: {}개 데모 게시글 발행", posts.size());

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="img" aria-label="타이타닉">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2f66"/>
+      <stop offset="1" stop-color="#2f56e6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.8" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <rect width="1200" height="900" fill="url(#glow)"/>
+  <circle cx="50" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="150" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="250" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="350" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="450" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="550" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="650" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="750" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="850" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="950" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="1050" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="1150" cy="56" r="14" fill="#ffffff" opacity="0.08"/>
+  <g transform="translate(560 470) scale(13)" opacity="0.95">
+    <path d="M8 26c-1-3 0-7 4-10s9-4 13-3c4 1 7 4 9 7 1 2 1 4-1 5s-5 1-8 0c-2-1-4-1-6 0s-4 2-6 2-4-1-5-1z" fill="#ffffff"/>
+    <circle cx="18" cy="14" r="2.5" fill="#fbb500"/>
+    <circle cx="24" cy="13" r="2.5" fill="#fbb500"/>
+    <path d="M6 25c-2 0-3-2-2-4s2-3 3-2" fill="#ffffff"/>
+    <path d="M28 9c0-3 1-5 2-6 0 2 1 3 2 4-1-2 0-4 1-5 0 2 1 4 0 6" stroke="#fbb500" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+  </g>
+  <g font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif">
+    <rect x="64" y="120" rx="22" ry="22" width="290" height="60" fill="#ffffff" opacity="0.16"/>
+    <text x="92" y="160" font-size="34" font-weight="700" fill="#ffffff">Icons</text>
+    <text x="64" y="780" font-size="64" font-weight="800" fill="#ffffff" letter-spacing="-1">타이타닉</text>
+    <text x="64" y="848" font-size="40" font-weight="700" fill="#ffffff" opacity="0.7" font-family="'SF Mono', ui-monospace, monospace">#10294</text>
+  </g>
+</svg>
