@@ -74,11 +74,16 @@ public class MediaController {
         return new UploadResponse(stored.key(), stored.url());
     }
 
-    /** 키에 슬래시가 포함되므로(예: {@code images/<uuid>.png}) 나머지 경로 전체를 키로 캡처한다. */
+    /** 키에 슬래시가 포함되므로(예: {@code images/<uuid>.png}) 나머지 경로 전체를 키로 캡처한다.
+     *  {@code ?w=240} 지정 시 해당 폭 썸네일을 제공한다(없거나 불가 시 원본). (백로그 N2a) */
     @GetMapping("/{*key}")
-    public ResponseEntity<byte[]> get(@PathVariable String key) {
+    public ResponseEntity<byte[]> get(
+            @PathVariable String key,
+            @RequestParam(value = "w", required = false) Integer w) {
         String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
-        LoadedImage image = loadImageUseCase.load(normalizedKey);
+        LoadedImage image = (w == null)
+                ? loadImageUseCase.load(normalizedKey)
+                : loadImageUseCase.loadResized(normalizedKey, w);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePublic())

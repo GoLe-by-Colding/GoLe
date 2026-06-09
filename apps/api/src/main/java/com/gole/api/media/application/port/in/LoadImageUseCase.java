@@ -7,6 +7,9 @@ public interface LoadImageUseCase {
 
     LoadedImage load(String key);
 
+    /** 지정 폭으로 축소된 이미지를 조회한다(캐시된 파생물 우선, 불가 시 원본). (백로그 N2a) */
+    LoadedImage loadResized(String key, int width);
+
     /**
      * @param content     객체 바이트
      * @param contentType MIME 타입
