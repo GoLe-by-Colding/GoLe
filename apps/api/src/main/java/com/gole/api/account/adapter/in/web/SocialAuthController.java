@@ -35,24 +35,22 @@ public class SocialAuthController {
         return socialLoginUseCase.enabledProviders().stream().map(AuthProvider::key).toList();
     }
 
-    /** provider 동의 화면 URL. (S4) */
+    /** provider 동의 화면 URL. 서버가 state를 발급한다. (S4) */
     @GetMapping("/{provider}/authorize-url")
     public AuthorizeUrlResponse authorizeUrl(
             @PathVariable String provider,
-            @RequestParam("redirectUri") String redirectUri,
-            @RequestParam(value = "state", required = false) String state) {
+            @RequestParam("redirectUri") String redirectUri) {
         AuthProvider parsed = parse(provider);
-        return new AuthorizeUrlResponse(
-                socialLoginUseCase.authorizeUrl(parsed, redirectUri, state));
+        return new AuthorizeUrlResponse(socialLoginUseCase.authorizeUrl(parsed, redirectUri));
     }
 
-    /** code 교환 → find-or-create → 세션 발급. (S5, S6) */
+    /** code 교환 → state 검증 → find-or-create → 세션 발급. (S5, S6) */
     @PostMapping("/{provider}/callback")
     public SocialLoginResponse callback(
             @PathVariable String provider, @Valid @RequestBody CallbackRequest request) {
         AuthProvider parsed = parse(provider);
         SocialLoginResult result = socialLoginUseCase.login(
-                new SocialLoginCommand(parsed, request.code(), request.redirectUri()));
+                new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
         return new SocialLoginResponse(
                 result.accountId(), result.sessionToken(), result.role().name());
     }
@@ -66,7 +64,7 @@ public class SocialAuthController {
     public record AuthorizeUrlResponse(String url) {}
 
     public record CallbackRequest(
-            @NotBlank String code, @NotBlank String redirectUri) {}
+            @NotBlank String code, @NotBlank String redirectUri, @NotBlank String state) {}
 
     public record SocialLoginResponse(String accountId, String sessionToken, String role) {}
 }

@@ -7,6 +7,7 @@ import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginCo
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginResult;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
+import com.gole.api.account.application.port.out.OAuthStateStorePort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SocialIdentityProviderPort;
@@ -32,6 +33,7 @@ class SocialAuthServiceTest {
     private FakeProvider provider;
     private InMemoryAccounts accounts;
     private InMemorySessions sessions;
+    private InMemoryStateStore stateStore;
     private SocialAuthService service;
 
     @BeforeEach
@@ -39,6 +41,7 @@ class SocialAuthServiceTest {
         provider = new FakeProvider();
         accounts = new InMemoryAccounts();
         sessions = new InMemorySessions();
+        stateStore = new InMemoryStateStore();
         service = new SocialAuthService(
                 provider,
                 accounts,
@@ -55,7 +58,8 @@ class SocialAuthServiceTest {
                     }
                 },
                 account -> "token-" + account.getId(),
-                sessions);
+                sessions,
+                stateStore);
     }
 
     @Test
@@ -63,9 +67,10 @@ class SocialAuthServiceTest {
         provider.configured = true;
         provider.profile = new SocialIdentityProviderPort.SocialProfile(
                 AuthProvider.GOOGLE, "g-123", "new@example.com");
+        stateStore.save("s1", AuthProvider.GOOGLE, Duration.ofMinutes(10));
 
         SocialLoginResult result = service.login(
-                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb"));
+                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s1"));
 
         assertThat(result.sessionToken()).startsWith("token-");
         assertThat(result.role()).isEqualTo(Role.USER);
@@ -82,9 +87,10 @@ class SocialAuthServiceTest {
                 "acc-existing", new Email("existing@example.com"),
                 new PasswordHash("hash:x"), Role.USER);
         accounts.save(existing);
+        stateStore.save("s2", AuthProvider.KAKAO, Duration.ofMinutes(10));
 
         SocialLoginResult result = service.login(
-                new SocialLoginCommand(AuthProvider.KAKAO, "code", "https://app/cb"));
+                new SocialLoginCommand(AuthProvider.KAKAO, "code", "https://app/cb", "s2"));
 
         assertThat(result.accountId()).isEqualTo("acc-existing");
         assertThat(accounts.saved).isEqualTo(1); // 신규 생성 없음
@@ -94,7 +100,18 @@ class SocialAuthServiceTest {
     void login_rejectsWhenProviderNotConfigured() {
         provider.configured = false;
         assertThatThrownBy(() -> service.login(
-                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb")))
+                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s")))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void login_rejectsWhenStateInvalid() {
+        provider.configured = true;
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(
+                AuthProvider.GOOGLE, "g-1", "x@example.com");
+        // state를 저장하지 않음 → CSRF 검증 실패
+        assertThatThrownBy(() -> service.login(
+                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "bogus")))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -103,8 +120,9 @@ class SocialAuthServiceTest {
         provider.configured = true;
         provider.profile = new SocialIdentityProviderPort.SocialProfile(
                 AuthProvider.NAVER, "n-1", null);
+        stateStore.save("s3", AuthProvider.NAVER, Duration.ofMinutes(10));
         assertThatThrownBy(() -> service.login(
-                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb")))
+                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s3")))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -163,6 +181,21 @@ class SocialAuthServiceTest {
             saved++;
             byEmail.put(account.getEmail().value(), account);
             return account;
+        }
+    }
+
+    private static final class InMemoryStateStore implements OAuthStateStorePort {
+        private final Map<String, String> store = new HashMap<>();
+
+        @Override
+        public void save(String state, AuthProvider provider, Duration ttl) {
+            store.put(state, provider.key());
+        }
+
+        @Override
+        public boolean consume(String state, AuthProvider provider) {
+            String p = store.remove(state);
+            return p != null && p.equals(provider.key());
         }
     }
 
