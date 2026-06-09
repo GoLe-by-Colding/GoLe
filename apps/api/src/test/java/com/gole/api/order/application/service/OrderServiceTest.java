@@ -39,7 +39,8 @@ class OrderServiceTest {
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
                 orders, reservation, new AlwaysApprovePayment(), settlement,
-                (s, p, q, t) -> { }, new SequentialIds(), clock);
+                (s, p, q, t) -> { }, (sellerId, orderId, amount) -> { },
+                new SequentialIds(), clock);
     }
 
     @Test
