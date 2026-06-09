@@ -1,4 +1,5 @@
 import { Badge, Card } from "@shared/ui";
+import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
 
@@ -8,12 +9,24 @@ export interface LegoSetCardProps {
 
 export function LegoSetCard({ set }: LegoSetCardProps) {
   return (
-    <Card interactive padded={false} className="flex flex-col" data-testid="lego-set-card">
-      <div
-        className="aspect-[4/3] flex items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-5xl font-bold text-brand-300"
-        aria-hidden="true"
-      >
-        {set.imageUrl === null ? "🧱" : null}
+    <Card interactive padded={false} className="group flex flex-col" data-testid="lego-set-card">
+      <div className="aspect-[4/3] overflow-hidden bg-neutral-50">
+        {set.imageUrl === null ? (
+          <div
+            className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-5xl font-bold text-brand-300"
+            aria-hidden="true"
+          >
+            🧱
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnailUrl(set.imageUrl, 480)}
+            alt={set.name}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        )}
       </div>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
