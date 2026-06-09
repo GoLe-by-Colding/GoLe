@@ -71,8 +71,8 @@
   html {
     font-family: var(--font-sans);
     color: var(--color-neutral-900);
-    /* 깔끔한 단색 배경 — 색 그라데이션 없이 여백 중심. */
     background-color: #ffffff;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -85,11 +85,33 @@
   h2,
   h3,
   h4 {
-    line-height: 1.2;
-    letter-spacing: -0.01em;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 700;
   }
 
   ::selection {
     background-color: var(--color-brand-200);
+  }
+
+  /* 마이크로 인터랙션 기본값: 모든 인터랙티브 요소에 부드러운 전환 */
+  a, button, input, textarea, select {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* 포커스 링: 브랜드 컬러 + 오프셋 */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-400);
+    outline-offset: 2px;
+  }
+
+  /* 이미지 호버 줌 유틸 */
+  .img-zoom {
+    transition: transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .group:hover .img-zoom, .peer:hover ~ .img-zoom {
+    transform: scale(1.04);
   }
 }

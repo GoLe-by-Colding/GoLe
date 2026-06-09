@@ -5,12 +5,12 @@ export type ButtonVariant = "primary" | "secondary" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold leading-none whitespace-nowrap transition-colors duration-150 active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold leading-none whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-brand-500 text-white hover:bg-brand-600",
+  primary: "bg-brand-500 text-white shadow-[0_1px_3px_rgba(47,86,230,0.3)] hover:bg-brand-600 hover:shadow-[0_3px_12px_rgba(47,86,230,0.25)]",
   secondary:
-    "bg-white text-neutral-900 border border-neutral-200 hover:bg-neutral-50 hover:border-neutral-300",
+    "bg-white text-neutral-900 border border-neutral-200/80 shadow-soft hover:bg-neutral-50 hover:border-neutral-300 hover:shadow-lift",
   ghost: "bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
 };
 

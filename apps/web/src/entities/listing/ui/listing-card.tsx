@@ -12,30 +12,32 @@ export function ListingCard({ listing }: ListingCardProps) {
 
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        className="w-full aspect-[4/3] object-cover bg-neutral-100"
-        src={cover === undefined ? "https://placehold.co/600x400?text=LEGO" : thumbnailUrl(cover, 480)}
-        alt={listing.title}
-        loading="lazy"
-      />
-      <div className="flex flex-col gap-2 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1">
-            <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
-            <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
-            {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
-          </div>
-          {listing.catalogSetNumber !== null ? (
-            <span className="text-xs text-neutral-500">#{listing.catalogSetNumber}</span>
-          ) : null}
+      <div className="overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
+          src={cover === undefined ? "https://placehold.co/600x400?text=LEGO" : thumbnailUrl(cover, 480)}
+          alt={listing.title}
+          loading="lazy"
+        />
+      </div>
+      <div className="flex flex-col gap-2.5 p-4">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
+          <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
+          {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
         </div>
-        <span className="text-base font-semibold leading-tight text-neutral-900 line-clamp-1">
+        <span className="text-[15px] font-semibold leading-snug text-neutral-900 line-clamp-1">
           {listing.title}
         </span>
-        <span className="text-lg font-bold text-neutral-900">
-          {formatPriceKrw(listing.price)}
-        </span>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xl font-extrabold tracking-tight text-neutral-900">
+            {formatPriceKrw(listing.price)}
+          </span>
+          {listing.catalogSetNumber !== null ? (
+            <span className="text-xs font-medium text-neutral-400">#{listing.catalogSetNumber}</span>
+          ) : null}
+        </div>
       </div>
     </Card>
   );
