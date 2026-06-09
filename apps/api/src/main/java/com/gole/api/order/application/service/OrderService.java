@@ -11,6 +11,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort.ReservedLi
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
@@ -39,6 +40,7 @@ public class OrderService
     private final PaymentGatewayPort paymentGateway;
     private final SettlementPort settlement;
     private final ExecutedPriceRecorderPort executedPriceRecorder;
+    private final SellerNotifierPort sellerNotifier;
     private final OrderIdGeneratorPort idGenerator;
     private final Clock clock;
 
@@ -48,6 +50,7 @@ public class OrderService
             PaymentGatewayPort paymentGateway,
             SettlementPort settlement,
             ExecutedPriceRecorderPort executedPriceRecorder,
+            SellerNotifierPort sellerNotifier,
             OrderIdGeneratorPort idGenerator,
             Clock clock) {
         this.orderRepository = orderRepository;
@@ -55,6 +58,7 @@ public class OrderService
         this.paymentGateway = paymentGateway;
         this.settlement = settlement;
         this.executedPriceRecorder = executedPriceRecorder;
+        this.sellerNotifier = sellerNotifier;
         this.idGenerator = idGenerator;
         this.clock = clock;
     }
@@ -74,7 +78,11 @@ public class OrderService
                 reserved.catalogSetNumber(),
                 reserved.price(),
                 Instant.now(clock));
-        return orderRepository.save(order).getId();
+        String orderId = orderRepository.save(order).getId();
+
+        // 알림 N6: 셀러에게 주문 알림(best-effort, 어댑터가 예외 흡수)
+        sellerNotifier.notifyOrderPlaced(reserved.sellerId(), orderId, reserved.price());
+        return orderId;
     }
 
     @Override
