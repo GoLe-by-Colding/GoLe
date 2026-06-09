@@ -28,14 +28,14 @@
   - 헤더에 벨 노출(로그인 시).
 
 ## Tasks
-- [ ] B1 domain + ports + service
-- [ ] B2 Mongo adapter + controller
-- [ ] B3 order 트리거(SellerNotifierPort + adapter + place 연동)
-- [ ] B4 NotificationServiceTest
-- [ ] F1 entities/notification
-- [ ] F2 widgets/notification-bell + 헤더
-- [ ] F3 views/notifications + 라우트
-- [ ] D1 빌드·배포·스모크
+- [x] B1 domain + ports + service
+- [x] B2 Mongo adapter + controller
+- [x] B3 order 트리거(SellerNotifierPort + adapter + place 연동)
+- [x] B4 NotificationServiceTest
+- [x] F1 entities/notification
+- [x] F2 features/notification-bell + 헤더
+- [x] F3 views/notifications + 라우트
+- [x] D1 빌드·배포·스모크
 
 ## 보안/후속
 - 현재 사용자 식별은 path의 userId(기존 컨텍스트와 동일 관례). 후속: 세션 토큰 기반 본인 검증으로 강화.

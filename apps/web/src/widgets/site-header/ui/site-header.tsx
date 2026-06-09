@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@entities/user";
+import { NotificationBell } from "@features/notification-bell";
 import { Button, Container, LinkButton } from "@shared/ui";
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
@@ -58,6 +59,7 @@ export function SiteHeader() {
                 <LinkButton href="/sell" size="sm" variant="secondary">
                   판매하기
                 </LinkButton>
+                <NotificationBell />
                 <Link
                   href="/profile"
                   aria-label="내 정보"
@@ -132,6 +134,9 @@ export function SiteHeader() {
                   </LinkButton>
                   <LinkButton href="/profile" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
                     내 정보
+                  </LinkButton>
+                  <LinkButton href="/notifications" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
+                    알림
                   </LinkButton>
                   <Button fullWidth variant="ghost" onClick={handleSignOut}>
                     로그아웃
