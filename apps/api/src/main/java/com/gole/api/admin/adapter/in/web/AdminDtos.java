@@ -5,13 +5,70 @@ import com.gole.api.catalog.domain.model.RetirementStatus;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
+import org.bson.Document;
 
 public final class AdminDtos {
 
     private AdminDtos() {}
 
-    public record OverviewResponse(Map<String, Long> counts) {}
+    public record OverviewResponse(
+            Map<String, Long> counts,
+            long gmv,
+            Map<String, Long> ordersByStatus,
+            long activeListings) {}
+
+    public record OrderRow(
+            String id,
+            String status,
+            long amount,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            Instant createdAt) {
+
+        public static OrderRow from(Document d) {
+            return new OrderRow(
+                    d.getString("_id"),
+                    d.getString("status"),
+                    num(d.get("amount")),
+                    d.getString("buyerId"),
+                    d.getString("sellerId"),
+                    d.getString("catalogSetNumber"),
+                    instant(d.get("createdAt")));
+        }
+    }
+
+    public record ListingRow(
+            String id,
+            String title,
+            String sellerId,
+            long price,
+            String status,
+            String category,
+            Instant createdAt) {
+
+        public static ListingRow from(Document d) {
+            return new ListingRow(
+                    d.getString("_id"),
+                    d.getString("title"),
+                    d.getString("sellerId"),
+                    num(d.get("priceAmount")),
+                    d.getString("status"),
+                    d.getString("category"),
+                    instant(d.get("createdAt")));
+        }
+    }
+
+    private static long num(Object v) {
+        return v instanceof Number n ? n.longValue() : 0L;
+    }
+
+    private static Instant instant(Object v) {
+        return v instanceof Date date ? date.toInstant() : null;
+    }
 
     public record CreateSetRequest(
             @NotBlank String setNumber,
