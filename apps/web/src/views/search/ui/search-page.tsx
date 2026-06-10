@@ -77,9 +77,14 @@ export async function SearchPage(props: SearchPageProps) {
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>상품 탐색</Heading>
-          <Text tone="secondary">지금 거래 가능한 레고 {listings.length}개</Text>
+          <Text tone="secondary">
+            지금 거래 가능한 레고{" "}
+            <span className="font-bold text-brand-600">{listings.length}</span>개
+          </Text>
         </div>
-        <ListingFilterBar initial={initial} />
+        <div className="sticky top-16 z-10 -mx-2 bg-neutral-50/85 px-2 py-2 backdrop-blur-md">
+          <ListingFilterBar initial={initial} />
+        </div>
         <ListingGrid
           listings={listings}
           emptyMessage="조건에 맞는 상품이 없습니다."

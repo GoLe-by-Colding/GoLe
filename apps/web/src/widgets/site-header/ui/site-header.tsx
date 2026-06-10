@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "@entities/user";
 import { NotificationBell } from "@features/notification-bell";
 import { Button, Container, LinkButton, Logo } from "@shared/ui";
@@ -17,8 +17,13 @@ const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }
 
 export function SiteHeader() {
   const router = useRouter();
+  const pathname = usePathname();
   const { session, signOut } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  function isActive(href: string): boolean {
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  }
 
   function handleSignOut() {
     signOut();
@@ -36,16 +41,30 @@ export function SiteHeader() {
           >
             <Logo size={32} className="text-xl" />
           </Link>
-          <nav className="flex items-center gap-5 max-sm:hidden">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-sm font-medium text-neutral-500 transition-colors hover:text-neutral-900"
-              >
-                {item.label}
-              </Link>
-            ))}
+          <nav className="flex items-center gap-1 max-sm:hidden">
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`relative rounded-lg px-3 py-2 text-sm transition-colors ${
+                    active
+                      ? "font-semibold text-brand-600"
+                      : "font-medium text-neutral-500 hover:text-neutral-900"
+                  }`}
+                >
+                  {item.label}
+                  {active ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand-600"
+                    />
+                  ) : null}
+                </Link>
+              );
+            })}
           </nav>
           <div className="flex-1" />
           <div className="flex items-center gap-2 max-sm:hidden">
@@ -110,16 +129,24 @@ export function SiteHeader() {
         {menuOpen ? (
           <div id="mobile-menu" className="flex flex-col gap-1 pb-4 sm:hidden">
             <nav className="flex flex-col">
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="rounded-lg px-3 py-2.5 text-base font-medium text-neutral-700 hover:bg-neutral-100"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setMenuOpen(false)}
+                    className={`rounded-lg px-3 py-2.5 text-base font-medium ${
+                      active
+                        ? "bg-brand-50 text-brand-700"
+                        : "text-neutral-700 hover:bg-neutral-100"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
             <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3">
               {session ? (

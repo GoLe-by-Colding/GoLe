@@ -9,6 +9,9 @@ export type { CardProps, CardElevation } from "./card";
 export { Logo } from "./logo";
 export type { LogoProps } from "./logo";
 
+export { Skeleton } from "./skeleton";
+export type { SkeletonProps } from "./skeleton";
+
 export { Badge } from "./badge";
 export type { BadgeProps, BadgeTone } from "./badge";
 

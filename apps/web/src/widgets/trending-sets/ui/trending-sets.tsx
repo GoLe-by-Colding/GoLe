@@ -28,9 +28,11 @@ export function TrendingSets({ items }: TrendingSetsProps) {
           >
             <span
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold tabular-nums ${
-                index < 3
-                  ? "bg-brand-600 text-white shadow-brand"
-                  : "bg-neutral-100 text-neutral-500"
+                index === 0
+                  ? "bg-accent-400 text-accent-700 shadow-sm"
+                  : index < 3
+                    ? "bg-brand-600 text-white shadow-brand"
+                    : "bg-neutral-100 text-neutral-500"
               }`}
             >
               {index + 1}

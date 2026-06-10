@@ -9,7 +9,7 @@ import {
 } from "@entities/community";
 import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
-import { Badge, Card, Container, Heading, Text } from "@shared/ui";
+import { Badge, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
 
 export interface CommunityPostPageProps {
   readonly postId: string;
@@ -61,8 +61,14 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   if (post === null) {
     return (
       <Container width="sm">
-        <div className="pt-10">
-          <Text tone="muted">불러오는 중...</Text>
+        <div className="flex flex-col gap-5 pt-8 pb-16">
+          <div className="flex items-center gap-3">
+            <Skeleton circle className="h-9 w-9" />
+            <Skeleton className="h-5 w-32" />
+          </div>
+          <Skeleton className="aspect-square w-full rounded-2xl" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
         </div>
       </Container>
     );
