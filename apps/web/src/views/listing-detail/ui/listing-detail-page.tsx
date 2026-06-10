@@ -14,6 +14,7 @@ import { Badge, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
 import { ChatButton } from "@features/chat-listing";
+import { ReportButton } from "@features/report-content";
 import { SetPriceInsight } from "@widgets/set-price-insight";
 import { ListingQna } from "@widgets/listing-qna";
 
@@ -83,13 +84,14 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
           {listing.catalogSetNumber !== null ? (
             <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
           ) : null}
-          <div className="mt-1 flex flex-col gap-1 border-t border-neutral-200 pt-4">
+          <div className="mt-1 flex items-center justify-between gap-2 border-t border-neutral-200 pt-4">
             <Link
               href={`/shops/${listing.sellerId}`}
               className="text-sm text-neutral-500 hover:text-neutral-900"
             >
               판매자 {listing.sellerId.slice(0, 8)} 님의 샵 →
             </Link>
+            <ReportButton targetType="LISTING" targetId={listing.id} />
           </div>
         </div>
       </div>

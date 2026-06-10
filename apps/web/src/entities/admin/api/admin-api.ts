@@ -146,3 +146,36 @@ export function unlockAdminAccount(token: string, accountId: string): Promise<vo
     headers: auth(token),
   });
 }
+
+export interface AdminReport {
+  readonly id: string;
+  readonly reporterId: string;
+  readonly targetType: "LISTING" | "POST";
+  readonly targetId: string;
+  readonly reason: string;
+  readonly detail: string;
+  readonly status: "PENDING" | "RESOLVED" | "DISMISSED";
+  readonly createdAt: string | null;
+  readonly handledAt: string | null;
+}
+
+export function fetchAdminReports(token: string, limit = 30): Promise<readonly AdminReport[]> {
+  return apiRequest<readonly AdminReport[]>(`/api/admin/reports?limit=${limit}`, {
+    cache: "no-store",
+    headers: auth(token),
+  });
+}
+
+export function resolveAdminReport(token: string, reportId: string): Promise<AdminReport> {
+  return apiRequest<AdminReport>(`/api/admin/reports/${reportId}/resolve`, {
+    method: "POST",
+    headers: auth(token),
+  });
+}
+
+export function dismissAdminReport(token: string, reportId: string): Promise<AdminReport> {
+  return apiRequest<AdminReport>(`/api/admin/reports/${reportId}/dismiss`, {
+    method: "POST",
+    headers: auth(token),
+  });
+}

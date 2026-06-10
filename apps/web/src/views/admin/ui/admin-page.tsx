@@ -14,11 +14,15 @@ import {
   lockAdminAccount,
   unlockAdminAccount,
   takedownListing,
+  fetchAdminReports,
+  resolveAdminReport,
+  dismissAdminReport,
   type AdminListing,
   type AdminLegoSet,
   type AdminOrder,
   type AdminPost,
   type AdminAccount,
+  type AdminReport,
   type CreateSetInput,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
@@ -58,6 +62,26 @@ const LISTING_STATUS_TONE: Record<string, "success" | "warning" | "neutral" | "d
   DELETED: "danger",
 };
 
+const REPORT_REASON_LABEL: Record<string, string> = {
+  COUNTERFEIT: "가품 의심",
+  IP_INFRINGEMENT: "이미지 도용",
+  FRAUD: "사기·허위",
+  INAPPROPRIATE: "부적절",
+  OTHER: "기타",
+};
+
+const REPORT_STATUS_LABEL: Record<string, string> = {
+  PENDING: "접수",
+  RESOLVED: "조치완료",
+  DISMISSED: "기각",
+};
+
+const REPORT_STATUS_TONE: Record<string, "success" | "warning" | "neutral" | "danger"> = {
+  PENDING: "warning",
+  RESOLVED: "success",
+  DISMISSED: "neutral",
+};
+
 const EMPTY_FORM: CreateSetInput = {
   setNumber: "",
   name: "",
@@ -82,6 +106,7 @@ export function AdminPage() {
   const [listings, setListings] = useState<readonly AdminListing[]>([]);
   const [posts, setPosts] = useState<readonly AdminPost[]>([]);
   const [accounts, setAccounts] = useState<readonly AdminAccount[]>([]);
+  const [reports, setReports] = useState<readonly AdminReport[]>([]);
   const [sets, setSets] = useState<readonly AdminLegoSet[]>([]);
   const [form, setForm] = useState<CreateSetInput>(EMPTY_FORM);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -95,14 +120,16 @@ export function AdminPage() {
     let active = true;
     void (async () => {
       try {
-        const [overview, list, orderRows, listingRows, postRows, accountRows] = await Promise.all([
-          fetchAdminOverview(token),
-          fetchAdminSets(token),
-          fetchAdminOrders(token, 30),
-          fetchAdminListings(token, 30),
-          fetchAdminPosts(token, 30),
-          fetchAdminAccounts(token, 30),
-        ]);
+        const [overview, list, orderRows, listingRows, postRows, accountRows, reportRows] =
+          await Promise.all([
+            fetchAdminOverview(token),
+            fetchAdminSets(token),
+            fetchAdminOrders(token, 30),
+            fetchAdminListings(token, 30),
+            fetchAdminPosts(token, 30),
+            fetchAdminAccounts(token, 30),
+            fetchAdminReports(token, 30),
+          ]);
         if (active) {
           setCounts(overview.counts);
           setGmv(overview.gmv);
@@ -113,6 +140,7 @@ export function AdminPage() {
           setListings(listingRows);
           setPosts(postRows);
           setAccounts(accountRows);
+          setReports(reportRows);
         }
       } catch (cause) {
         if (active) {
@@ -156,6 +184,22 @@ export function AdminPage() {
       setReloadKey((k) => k + 1);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "게시글 삭제에 실패했습니다.");
+    }
+  }
+
+  async function handleReport(reportId: string, action: "resolve" | "dismiss") {
+    if (token === null) {
+      return;
+    }
+    setError(undefined);
+    try {
+      const updated =
+        action === "resolve"
+          ? await resolveAdminReport(token, reportId)
+          : await dismissAdminReport(token, reportId);
+      setReports((rows) => rows.map((r) => (r.id === reportId ? updated : r)));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "신고 처리에 실패했습니다.");
     }
   }
 
@@ -323,6 +367,93 @@ export function AdminPage() {
                   <tr>
                     <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                       주문이 없습니다.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+
+        {/* 신고 큐 — notice & takedown (가품·IP 도용·사기) */}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Heading level={3}>신고 큐</Heading>
+            {reports.some((r) => r.status === "PENDING") ? (
+              <Badge tone="warning">
+                미처리 {reports.filter((r) => r.status === "PENDING").length}건
+              </Badge>
+            ) : null}
+          </div>
+          <Card padded={false} className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr className="bg-neutral-50 text-xs text-neutral-500">
+                  <th className="px-3 py-2 text-left font-medium">대상</th>
+                  <th className="px-3 py-2 text-left font-medium">사유</th>
+                  <th className="px-3 py-2 text-left font-medium">상세</th>
+                  <th className="px-3 py-2 text-left font-medium">신고자</th>
+                  <th className="px-3 py-2 text-left font-medium">상태</th>
+                  <th className="px-3 py-2 text-right font-medium">처리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((r) => (
+                  <tr key={r.id} className="border-t border-neutral-100">
+                    <td className="px-3 py-2.5 font-medium text-neutral-900">
+                      <Link
+                        href={
+                          r.targetType === "LISTING"
+                            ? `/listings/${r.targetId}`
+                            : `/community/${r.targetId}`
+                        }
+                        className="hover:text-brand-600"
+                      >
+                        {r.targetType === "LISTING" ? "매물" : "게시글"} {r.targetId.slice(0, 8)} →
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone={r.reason === "COUNTERFEIT" ? "danger" : "neutral"}>
+                        {REPORT_REASON_LABEL[r.reason] ?? r.reason}
+                      </Badge>
+                    </td>
+                    <td className="max-w-[200px] truncate px-3 py-2.5 text-neutral-600">
+                      {r.detail.length > 0 ? r.detail : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-neutral-600">{r.reporterId.slice(0, 8)}</td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone={REPORT_STATUS_TONE[r.status] ?? "neutral"}>
+                        {REPORT_STATUS_LABEL[r.status] ?? r.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {r.status === "PENDING" ? (
+                        <span className="inline-flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleReport(r.id, "resolve")}
+                          >
+                            조치완료
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleReport(r.id, "dismiss")}
+                          >
+                            기각
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-neutral-400">처리됨</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {reports.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                      접수된 신고가 없습니다.
                     </td>
                   </tr>
                 ) : null}

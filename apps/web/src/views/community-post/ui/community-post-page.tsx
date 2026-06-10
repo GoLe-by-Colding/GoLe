@@ -10,6 +10,7 @@ import {
 } from "@entities/community";
 import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
+import { ReportButton } from "@features/report-content";
 import { Badge, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
 
 export interface CommunityPostPageProps {
@@ -93,7 +94,10 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
           </Card>
         ) : null}
         <p className="whitespace-pre-wrap leading-relaxed text-neutral-800">{post.content}</p>
-        <LikeButton postId={post.id} initialLikeCount={post.likeCount} />
+        <div className="flex items-center justify-between">
+          <LikeButton postId={post.id} initialLikeCount={post.likeCount} />
+          <ReportButton targetType="POST" targetId={post.id} />
+        </div>
 
         <div className="flex flex-col gap-3 border-t border-neutral-200 pt-4">
           <Text weight="semibold">댓글 {comments.length}</Text>

@@ -61,6 +61,13 @@ export function SiteFooter() {
             페이지 링크는 외부 사이트로 연결됩니다.
           </p>
 
+          {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
+          <p className="max-w-3xl text-xs leading-relaxed text-brand-300/50">
+            GoLe는 통신판매중개자로서 거래 당사자가 아니며, 판매자가 등록한 상품 정보 및 거래에 대한
+            책임은 각 판매자에게 있습니다. GoLe는 에스크로(결제대금예치)와 분쟁 조정 절차를 통해
+            안전한 거래를 지원합니다.
+          </p>
+
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">
             <span className="text-xs text-brand-300/60">
               © {new Date().getFullYear()} GoLe. 레고 중고거래 · 커뮤니티 플랫폼.

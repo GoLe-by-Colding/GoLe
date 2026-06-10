@@ -6,6 +6,7 @@ export type {
   AdminListing,
   AdminPost,
   AdminAccount,
+  AdminReport,
 } from "./api/admin-api";
 export {
   fetchAdminOverview,
@@ -19,4 +20,7 @@ export {
   fetchAdminAccounts,
   lockAdminAccount,
   unlockAdminAccount,
+  fetchAdminReports,
+  resolveAdminReport,
+  dismissAdminReport,
 } from "./api/admin-api";
