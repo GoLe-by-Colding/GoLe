@@ -34,7 +34,9 @@ public class ListingSeeder implements CommandLineRunner {
     }
 
     private static List<String> photos(String setNumber) {
-        return List.of("https://placehold.co/800x600/eef3ff/1b2f66?text=" + setNumber);
+        // 데모 매물 커버는 카탈로그와 동일한 GoLe 오리지널 커버(MinIO)를 재사용한다.
+        // 실서비스 매물 사진은 판매자가 직접 촬영한 것만 사용한다(ip-safe-content R3).
+        return List.of("/api/v1/media/catalog/" + setNumber + ".svg");
     }
 
     @Override
