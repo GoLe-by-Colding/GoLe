@@ -2,7 +2,12 @@ package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
+import com.gole.api.listing.adapter.out.persistence.ListingDocument;
+import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
 import com.gole.api.listing.domain.model.ListingComment;
+import com.gole.api.notification.application.port.in.NotifyUseCase;
+import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
+import com.gole.api.notification.domain.model.NotificationType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
@@ -18,22 +23,28 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 매물 문의 댓글(Q&A). 기존 ListingController 와 분리해 단일 책임을 유지한다.
- * 직접 리포지토리를 사용한다 — 조회/저장만이라 서비스 계층 불필요.
+ * 매물 문의 댓글(Q&A). 댓글 저장 후 매물 판매자에게 알림을 전송한다(본인 제외, best-effort).
  */
 @RestController
 @RequestMapping("/api/v1/listings/{listingId}/comments")
 public class ListingCommentController {
 
-    private final ListingCommentMongoRepository repository;
+    private final ListingCommentMongoRepository commentRepository;
+    private final ListingMongoRepository listingRepository;
+    private final NotifyUseCase notifyUseCase;
 
-    public ListingCommentController(ListingCommentMongoRepository repository) {
-        this.repository = repository;
+    public ListingCommentController(
+            ListingCommentMongoRepository commentRepository,
+            ListingMongoRepository listingRepository,
+            NotifyUseCase notifyUseCase) {
+        this.commentRepository = commentRepository;
+        this.listingRepository = listingRepository;
+        this.notifyUseCase = notifyUseCase;
     }
 
     @GetMapping
     public List<CommentResponse> list(@PathVariable String listingId) {
-        return repository
+        return commentRepository
                 .findByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId)
                 .stream()
                 .map(CommentResponse::from)
@@ -42,16 +53,37 @@ public class ListingCommentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CommentResponse create(@PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req) {
+    public CommentResponse create(
+            @PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req) {
         ListingCommentDocument doc = new ListingCommentDocument(
                 UUID.randomUUID().toString(), listingId, req.authorId(), req.content(), false, Instant.now());
-        return CommentResponse.from(repository.save(doc));
+        CommentResponse saved = CommentResponse.from(commentRepository.save(doc));
+
+        // 판매자에게 Q&A 알림(본인 댓글 제외, best-effort).
+        listingRepository.findById(listingId).ifPresent(listing -> {
+            if (!listing.getSellerId().equals(req.authorId())) {
+                try {
+                    notifyUseCase.notify(new NotifyCommand(
+                            listing.getSellerId(),
+                            NotificationType.COMMENT,
+                            "매물 '" + truncate(listing.getTitle(), 20) + "'에 문의가 달렸어요.",
+                            "/listings/" + listingId));
+                } catch (RuntimeException ignored) {
+                    // 알림 실패는 댓글 저장을 막지 않는다.
+                }
+            }
+        });
+
+        return saved;
+    }
+
+    private static String truncate(String s, int max) {
+        return s != null && s.length() > max ? s.substring(0, max) + "…" : s;
     }
 
     public record CreateCommentRequest(@NotBlank String authorId, @NotBlank String content) {}
 
-    public record CommentResponse(
-            String id, String authorId, String content, Instant createdAt) {
+    public record CommentResponse(String id, String authorId, String content, Instant createdAt) {
 
         public static CommentResponse from(ListingCommentDocument d) {
             return new CommentResponse(d.getId(), d.getAuthorId(), d.getContent(), d.getCreatedAt());
