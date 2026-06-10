@@ -4,6 +4,7 @@ import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
+import { env } from "@shared/config";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
@@ -30,11 +31,28 @@ async function loadCommunity(): Promise<readonly Post[]> {
   }
 }
 
+async function loadStats(): Promise<{ listings: number; txCount: number }> {
+  try {
+    const res = await fetch(`${env.apiBaseUrl}/api/admin/overview`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) throw new Error();
+    const d = (await res.json()) as {
+      activeListings: number;
+      counts: { price_transactions: number };
+    };
+    return { listings: d.activeListings ?? 0, txCount: d.counts?.price_transactions ?? 0 };
+  } catch {
+    return { listings: 0, txCount: 0 };
+  }
+}
+
 export async function HomePage() {
-  const [featured, trending, community] = await Promise.all([
+  const [featured, trending, community, stats] = await Promise.all([
     loadFeatured(),
     loadTrending(),
     loadCommunity(),
+    loadStats(),
   ]);
 
   return (
@@ -70,7 +88,23 @@ export async function HomePage() {
             </div>
 
             <div className="mt-10 grid grid-cols-3 gap-4 max-sm:grid-cols-1">
-              {HERO_STATS.map((stat) => (
+              {[
+                {
+                  label: "활성 매물",
+                  value:
+                    stats.listings > 0
+                      ? `${stats.listings.toLocaleString("ko-KR")}개`
+                      : "에스크로 보호",
+                },
+                {
+                  label: "체결 시세",
+                  value:
+                    stats.txCount > 0
+                      ? `${stats.txCount.toLocaleString("ko-KR")}건`
+                      : "체결가 기반",
+                },
+                { label: "거래 방식", value: "직거래 · 택배" },
+              ].map((stat) => (
                 <div
                   key={stat.label}
                   className="flex flex-col gap-1 rounded-xl border border-neutral-200/60 bg-white/70 px-5 py-4 backdrop-blur-sm"
@@ -143,9 +177,3 @@ export async function HomePage() {
     </Container>
   );
 }
-
-const HERO_STATS: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
-  { label: "안전결제", value: "에스크로 보호" },
-  { label: "실시간 시세", value: "체결가 기반" },
-  { label: "거래 방식", value: "직거래 · 택배" },
-];
