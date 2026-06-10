@@ -16,6 +16,29 @@ export interface PricePoint {
   readonly executedAt: string;
 }
 
+export type SetCondition = "new_sealed" | "used_complete" | "used_incomplete";
+
+export interface ConditionValuation {
+  readonly condition: SetCondition;
+  readonly depreciationPct: number;
+  readonly fairPrice: number;
+  readonly sellPrice: number;
+  readonly buyPrice: number;
+}
+
+export interface PriceValuation {
+  readonly setNumber: string;
+  readonly hasData: boolean;
+  readonly marketPrice: number | null;
+  readonly conditions: readonly ConditionValuation[];
+}
+
+export const CONDITION_LABEL: Record<SetCondition, string> = {
+  new_sealed: "미개봉 새상품",
+  used_complete: "중고 · 풀세트",
+  used_incomplete: "중고 · 부품빠짐",
+};
+
 export interface TrendingSet {
   readonly setNumber: string;
   readonly name: string;

@@ -1,5 +1,10 @@
 import { apiRequest } from "@shared/api";
-import type { PricePoint, PriceStatistics, TrendingSet } from "../model/types";
+import type {
+  PricePoint,
+  PriceStatistics,
+  PriceValuation,
+  TrendingSet,
+} from "../model/types";
 
 const BASE = "/api/v1/pricing/sets";
 
@@ -28,6 +33,16 @@ export function fetchPriceHistory(
   signal?: AbortSignal,
 ): Promise<readonly PricePoint[]> {
   return apiRequest<readonly PricePoint[]>(`${BASE}/${setNumber}/history`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+export function fetchPriceValuation(
+  setNumber: string,
+  signal?: AbortSignal,
+): Promise<PriceValuation> {
+  return apiRequest<PriceValuation>(`${BASE}/${setNumber}/valuation`, {
     cache: "no-store",
     ...(signal === undefined ? {} : { signal }),
   });

@@ -1,21 +1,14 @@
 import { fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
 import {
   fetchPriceChart,
-  fetchPriceStatistics,
+  fetchPriceValuation,
   type PricePoint,
-  type PriceStatistics,
+  type PriceValuation,
 } from "@entities/pricing";
-import { Card, Container, Heading, Text } from "@shared/ui";
-import { formatKrw } from "@shared/lib";
-import { PriceChart } from "@widgets/price-chart";
+import { Container, Heading, Text } from "@shared/ui";
+import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
 
-interface SetPricing {
-  readonly set: LegoSet;
-  readonly stats: PriceStatistics | null;
-  readonly chart: readonly PricePoint[];
-}
-
-async function loadBoard(): Promise<readonly SetPricing[]> {
+async function loadBoard(): Promise<readonly PriceBoardItem[]> {
   let sets: readonly LegoSet[] = [];
   try {
     sets = await fetchFeaturedLegoSets();
@@ -24,16 +17,25 @@ async function loadBoard(): Promise<readonly SetPricing[]> {
   }
 
   return Promise.all(
-    sets.map(async (set): Promise<SetPricing> => {
+    sets.map(async (set): Promise<PriceBoardItem> => {
+      let points: readonly PricePoint[] = [];
+      let valuation: PriceValuation | null = null;
       try {
-        const [stats, chart] = await Promise.all([
-          fetchPriceStatistics(set.setNumber),
+        [points, valuation] = await Promise.all([
           fetchPriceChart(set.setNumber),
+          fetchPriceValuation(set.setNumber),
         ]);
-        return { set, stats, chart };
       } catch {
-        return { set, stats: null, chart: [] };
+        // 개별 세트 실패는 빈 데이터로 처리한다.
       }
+      return {
+        setNumber: set.setNumber,
+        name: set.name,
+        theme: set.theme,
+        imageUrl: set.imageUrl,
+        points,
+        valuation,
+      };
     }),
   );
 }
@@ -46,44 +48,15 @@ export async function PricesPage() {
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>시세</Heading>
-          <Text tone="secondary">최근 체결가 기준 인기 세트 시세</Text>
+          <Text tone="secondary">
+            체결가 기반 시세 추이와 상태별 감가 · 즉시판매/즉시구매 추정가
+          </Text>
         </div>
 
         {board.length === 0 ? (
           <Text tone="muted">시세 데이터를 불러오지 못했습니다.</Text>
         ) : (
-          <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-            {board.map(({ set, stats, chart }) => (
-              <Card key={set.setNumber} padded className="flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-neutral-900">{set.name}</span>
-                    <span className="font-mono text-xs text-neutral-500">
-                      #{set.setNumber} · {set.theme}
-                    </span>
-                  </div>
-                </div>
-
-                {stats?.hasData && stats.latestPrice !== null ? (
-                  <>
-                    <span className="text-2xl font-bold tracking-tight">
-                      {formatKrw(stats.latestPrice)}
-                    </span>
-                    <PriceChart points={chart} />
-                    <div className="flex gap-4 text-xs text-neutral-500">
-                      <span>최고 {formatKrw(stats.highestPrice ?? 0)}</span>
-                      <span>최저 {formatKrw(stats.lowestPrice ?? 0)}</span>
-                      <span>체결 {stats.transactionCount}건</span>
-                    </div>
-                  </>
-                ) : (
-                  <Text tone="muted" size="sm">
-                    체결 데이터 없음
-                  </Text>
-                )}
-              </Card>
-            ))}
-          </div>
+          <PriceExplorer items={board} />
         )}
       </div>
     </Container>

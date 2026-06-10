@@ -12,6 +12,9 @@ export type { LogoProps } from "./logo";
 export { Skeleton } from "./skeleton";
 export type { SkeletonProps } from "./skeleton";
 
+export { LineChart } from "./line-chart";
+export type { LineChartProps, LineChartPoint } from "./line-chart";
+
 export { Badge } from "./badge";
 export type { BadgeProps, BadgeTone } from "./badge";
 

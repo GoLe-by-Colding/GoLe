@@ -1,7 +1,16 @@
-export type { PriceStatistics, PricePoint, TrendingSet } from "./model/types";
+export type {
+  PriceStatistics,
+  PricePoint,
+  TrendingSet,
+  SetCondition,
+  ConditionValuation,
+  PriceValuation,
+} from "./model/types";
+export { CONDITION_LABEL } from "./model/types";
 export {
   fetchPriceStatistics,
   fetchPriceChart,
   fetchPriceHistory,
+  fetchPriceValuation,
   fetchTrendingSets,
 } from "./api/pricing-api";
