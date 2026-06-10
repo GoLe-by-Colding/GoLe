@@ -7,6 +7,8 @@ export interface LogoProps {
   readonly showWordmark?: boolean;
   /** 래퍼 추가 클래스. 워드마크 색/크기는 여기서 text-* 로 제어한다. */
   readonly className?: string;
+  /** "Le" 포인트 글자색. 기본 brand-600, 다크 배경에선 text-accent-400 권장. */
+  readonly accentClassName?: string;
 }
 
 /**
@@ -16,7 +18,12 @@ export interface LogoProps {
  * 워드마크의 기본 글자색/크기는 부모의 text-* 유틸리티를 상속하므로,
  * 호출부에서 className 으로 색/크기를 지정한다. (예: text-lg text-neutral-900)
  */
-export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
+export function Logo({
+  size = 32,
+  showWordmark = true,
+  className,
+  accentClassName = "text-brand-600",
+}: LogoProps) {
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 font-extrabold tracking-tight", className)}
@@ -83,7 +90,7 @@ export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
       </svg>
       {showWordmark ? (
         <span>
-          Go<span className="text-brand-600">Le</span>
+          Go<span className={accentClassName}>Le</span>
         </span>
       ) : null}
     </span>

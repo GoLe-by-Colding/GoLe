@@ -33,11 +33,11 @@ export function TrendingSets({ items }: TrendingSetsProps) {
             className="flex items-center gap-4 px-5 py-4 transition-all duration-200 hover:bg-brand-50/40 hover:pl-6"
           >
             <span
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold tabular-nums ${
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-bold tabular-nums ${
                 index === 0
-                  ? "bg-accent-400 text-accent-700 shadow-sm"
+                  ? "bg-gradient-to-b from-accent-300 to-accent-400 text-accent-900 shadow-[0_2px_8px_-1px_rgba(234,179,8,0.5)]"
                   : index < 3
-                    ? "bg-brand-600 text-white shadow-brand"
+                    ? "bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-brand"
                     : "bg-neutral-100 text-neutral-500"
               }`}
             >

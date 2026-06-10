@@ -29,7 +29,7 @@ export function Card({
         "group bg-white border border-neutral-200/60 rounded-2xl overflow-hidden",
         ELEVATION[elevation],
         interactive &&
-          "cursor-pointer transition-all duration-300 ease-out hover:border-neutral-300/80 hover:shadow-lift hover:-translate-y-1",
+          "cursor-pointer transition-all duration-300 ease-out hover:border-brand-300/60 hover:shadow-lift hover:-translate-y-1 hover:ring-1 hover:ring-brand-200/50",
         padded && "p-5",
         className,
       )}

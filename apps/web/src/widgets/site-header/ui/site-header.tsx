@@ -55,10 +55,15 @@ export function SiteHeader() {
                 >
                   {item.label}
                   {active ? (
+                    /* 브릭 스터드 3점 인디케이터 */
                     <span
                       aria-hidden="true"
-                      className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand-600"
-                    />
+                      className="absolute inset-x-0 -bottom-[3px] flex justify-center gap-[3px]"
+                    >
+                      <span className="h-1 w-1 rounded-full bg-brand-600" />
+                      <span className="h-1 w-1 rounded-full bg-brand-600" />
+                      <span className="h-1 w-1 rounded-full bg-accent-400" />
+                    </span>
                   ) : null}
                 </Link>
               );
@@ -73,7 +78,7 @@ export function SiteHeader() {
                     관리자
                   </LinkButton>
                 ) : null}
-                <LinkButton href="/sell" size="sm" variant="secondary">
+                <LinkButton href="/sell" size="sm" variant="accent">
                   판매하기
                 </LinkButton>
                 <NotificationBell />
@@ -157,7 +162,7 @@ export function SiteHeader() {
                   <LinkButton
                     href="/sell"
                     fullWidth
-                    variant="secondary"
+                    variant="accent"
                     onClick={() => setMenuOpen(false)}
                   >
                     판매하기
