@@ -1,13 +1,15 @@
 import { test, expect } from "@playwright/test";
 
-// 백엔드(MongoDB 포함)가 떠 있어야 통과하는 풀 플로우 E2E.
-// 세션을 주입한 뒤 /sell에서 상품을 등록하고 상세로 이동하는지 검증한다.
+// 백엔드(MongoDB + MinIO)가 떠 있는 로컬/테스트 환경 전용 풀 플로우 E2E.
+// 데이터를 생성하므로 배포(prod) 대상(E2E_BASE_URL)에서는 건너뛴다.
 test.describe("Create listing", () => {
+  test.skip(!!process.env.E2E_BASE_URL, "로컬 백엔드 전용 플로우(쓰기 발생)");
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",
-        JSON.stringify({ accountId: "e2e-seller", sessionToken: "e2e-token" }),
+        JSON.stringify({ accountId: "e2e-seller", sessionToken: "e2e-token", role: "USER" }),
       );
     });
   });
@@ -19,7 +21,17 @@ test.describe("Create listing", () => {
     await page.getByLabel("제목").fill(title);
     await page.getByLabel("설명").fill("E2E 자동 등록 상품");
     await page.getByLabel("가격 (원)").fill("12345");
-    await page.getByLabel("대표 이미지 URL").fill("https://placehold.co/600x400?text=E2E");
+
+    // 파일 업로드(1x1 PNG) — MinIO 업로드 후 미리보기 표시까지 대기
+    await page.getByLabel("상품 이미지").setInputFiles({
+      name: "e2e.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    await expect(page.getByRole("img", { name: /상품 이미지 1/ })).toBeVisible();
 
     await page.getByRole("button", { name: "상품 등록" }).click();
 

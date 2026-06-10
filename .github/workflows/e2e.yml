@@ -1,0 +1,32 @@
+name: E2E (live UI smoke)
+
+# 배포 사이트 대상 읽기전용 UI/UX 스모크. 쓰기 플로우(purchase/create-listing)는 E2E_BASE_URL 설정 시 자동 skip.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *" # 매일 03:00 KST
+
+jobs:
+  e2e:
+    name: Playwright (desktop + mobile) vs gole.kscold.com
+    runs-on: ubuntu-latest
+    env:
+      E2E_BASE_URL: https://gole.kscold.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm --filter web exec playwright test
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

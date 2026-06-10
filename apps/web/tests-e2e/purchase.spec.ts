@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 
-// 백엔드(MongoDB replica set 포함) 기동 필요. 구매 → 결제 → 구매확정 플로우 검증.
+// 백엔드(MongoDB replica set + MinIO) 기동 필요. 데이터를 생성하므로 배포(prod) 대상에서는 건너뛴다.
 test.describe("Purchase flow", () => {
+  test.skip(!!process.env.E2E_BASE_URL, "로컬 백엔드 전용 플로우(쓰기 발생)");
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",
-        JSON.stringify({ accountId: "e2e-buyer", sessionToken: "t" }),
+        JSON.stringify({ accountId: "e2e-buyer", sessionToken: "t", role: "USER" }),
       );
     });
   });
@@ -18,7 +20,15 @@ test.describe("Purchase flow", () => {
     await page.getByLabel("제목").fill(title);
     await page.getByLabel("설명").fill("E2E");
     await page.getByLabel("가격 (원)").fill("99000");
-    await page.getByLabel("대표 이미지 URL").fill("https://placehold.co/600x400");
+    await page.getByLabel("상품 이미지").setInputFiles({
+      name: "e2e.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    await expect(page.getByRole("img", { name: /상품 이미지 1/ })).toBeVisible();
     await page.getByRole("button", { name: "상품 등록" }).click();
     await expect(page).toHaveURL(/\/listings\/.+/);
 
