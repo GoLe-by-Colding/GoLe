@@ -10,9 +10,10 @@ import {
   type Listing,
 } from "@entities/listing";
 import { ApiError } from "@shared/api";
-import { Badge, Button, Container, Heading } from "@shared/ui";
+import { Badge, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
+import { ChatButton } from "@features/chat-listing";
 import { SetPriceInsight } from "@widgets/set-price-insight";
 import { ListingQna } from "@widgets/listing-qna";
 
@@ -77,10 +78,8 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
           </div>
           <div className="mt-2 flex gap-3">
             <PurchaseButton listingId={listing.id} available={isAvailable} />
-            <Button size="lg" variant="secondary" disabled={!isAvailable}>
-              채팅하기
-            </Button>
           </div>
+          <ChatButton listingId={listing.id} sellerId={listing.sellerId} available={isAvailable} />
           {listing.catalogSetNumber !== null ? (
             <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
           ) : null}

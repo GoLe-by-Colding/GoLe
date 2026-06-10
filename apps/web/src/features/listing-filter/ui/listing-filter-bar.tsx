@@ -9,6 +9,7 @@ import {
   type ListingSort,
   LISTING_CATEGORIES,
 } from "@entities/listing";
+import { SetAutocomplete } from "./set-autocomplete";
 import { Button, Input, Select } from "@shared/ui";
 
 export interface ListingFilterValues {
@@ -74,11 +75,12 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
         <label className="text-sm font-medium text-neutral-600" htmlFor="f-query">
           검색어
         </label>
-        <Input
+        <SetAutocomplete
           id="f-query"
           value={values.query}
           placeholder="제목, 설명, 세트번호"
-          onChange={(e) => update("query", e.target.value)}
+          onChange={(v) => update("query", v)}
+          onSelect={(set) => update("query", set.name)}
         />
       </div>
       <div className="flex flex-col gap-1">
