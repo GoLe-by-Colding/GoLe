@@ -30,13 +30,6 @@ export const metadata: Metadata = {
   keywords: KEYWORDS,
   applicationName: SITE_NAME,
   alternates: { canonical: "/" },
-  icons: {
-    icon: [
-      { url: "/logo.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
-    apple: [{ url: "/logo.svg", type: "image/svg+xml" }],
-  },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
