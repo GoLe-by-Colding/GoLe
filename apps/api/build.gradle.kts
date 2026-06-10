@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.diffplug.spotless") version "7.0.2"
 }
 
 group = "com.gole"
@@ -91,4 +92,15 @@ tasks.register<Test>("integrationTest") {
 
 tasks.withType<JavaCompile> {
     options.compilerArgs.add("-Xlint:deprecation")
+}
+
+// 코드 포맷 일관성(Spotless + Palantir Java Format). CI에서 spotlessCheck로 강제한다.
+spotless {
+    java {
+        target("src/**/*.java")
+        palantirJavaFormat()
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
