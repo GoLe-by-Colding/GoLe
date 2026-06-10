@@ -27,24 +27,43 @@ export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
         aria-hidden="true"
         className="shrink-0"
       >
-        {/* 고래 실루엣 (브랜드 블루) */}
+        {/* 분수(물줄기) — 등 위 스터드에서 솟는 골드 워터젯 */}
+        <g stroke="#eab308" strokeWidth="1.35" strokeLinecap="round" fill="none">
+          <path d="M22.4 9.2C22.1 6.7 21.3 5 20 3.9" />
+          <path d="M23.4 8.9C23.5 6.8 23.6 5.5 23.6 4.3" />
+          <path d="M24.2 9.2C24.8 7 25.7 5.6 26.8 4.7" />
+        </g>
+        <circle cx="19.8" cy="3.5" r="0.75" fill="#eab308" />
+        <circle cx="23.6" cy="3.9" r="0.75" fill="#eab308" />
+        <circle cx="27.1" cy="4.3" r="0.75" fill="#eab308" />
+
+        {/* 꼬리 지느러미 */}
         <path
-          d="M8 26c-1-3 0-7 4-10s9-4 13-3c4 1 7 4 9 7 1 2 1 4-1 5s-5 1-8 0c-2-1-4-1-6 0s-4 2-6 2-4-1-5-1z"
-          fill="#1D4ED8"
+          d="M30.5 20.5C33.4 17.6 37 15.8 38.8 16.4C38.2 19 38.2 21.2 36.2 22.7C38.2 24.7 38.3 27.2 38.8 29.4C36 28.6 32.6 25.8 30.6 23.2Z"
+          fill="#1a3fc0"
         />
-        {/* 브릭 스터드 (고래 등 위) */}
-        <circle cx="18" cy="14" r="2.5" fill="#3B5CF2" />
-        <circle cx="24" cy="13" r="2.5" fill="#3B5CF2" />
-        {/* 꼬리 */}
-        <path d="M6 25c-2 0-3-2-2-4s2-3 3-2" fill="#1D4ED8" />
-        {/* 분수 (accent gold) */}
+
+        {/* 몸통 */}
         <path
-          d="M28 9c0-3 1-5 2-6 0 2 1 3 2 4-1-2 0-4 1-5 0 2 1 4 0 6"
-          stroke="#EAB308"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-          fill="none"
+          d="M4.5 23C4.5 16.4 10.2 12.2 17.4 12.2C24.6 12.2 30.8 15.4 32.2 21.6C32.8 24.3 31.1 27.2 25.8 28.8C18.4 31 4.5 30.3 4.5 23Z"
+          fill="#1d4ed8"
         />
+
+        {/* 가슴 지느러미 */}
+        <path
+          d="M13.5 27.4C15.2 31 18.9 32.1 21.6 30.4C19.9 28.3 16.7 27.2 13.5 27.4Z"
+          fill="#1a3fc0"
+        />
+
+        {/* 등 위 브릭 스터드 */}
+        <ellipse cx="16.8" cy="11.6" rx="2.2" ry="1.9" fill="#3b5cf2" />
+        <ellipse cx="22.6" cy="10.9" rx="2.2" ry="1.9" fill="#3b5cf2" />
+        <ellipse cx="16.8" cy="11.1" rx="2.2" ry="1.1" fill="#6082f7" />
+        <ellipse cx="22.6" cy="10.4" rx="2.2" ry="1.1" fill="#6082f7" />
+
+        {/* 눈 */}
+        <circle cx="10.8" cy="21.6" r="1.45" fill="#ffffff" />
+        <circle cx="10.5" cy="21.3" r="0.55" fill="#1b2f66" />
       </svg>
       {showWordmark ? (
         <span>
