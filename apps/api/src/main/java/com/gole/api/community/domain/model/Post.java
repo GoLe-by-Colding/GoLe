@@ -1,7 +1,6 @@
 package com.gole.api.community.domain.model;
 
 import com.gole.api.community.domain.exception.DuplicateLikeException;
-import com.gole.api.community.domain.exception.PostImageRequiredException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -35,10 +34,8 @@ public final class Post {
         this.id = Objects.requireNonNull(id, "id");
         this.authorId = requireText(authorId, "authorId");
         this.content = Objects.requireNonNull(content, "content");
-        if (imageUrls == null || imageUrls.isEmpty()) {
-            throw new PostImageRequiredException(); // 요구사항 12.1
-        }
-        this.imageUrls = List.copyOf(imageUrls);
+        // 이미지는 선택(질문·토론 등 텍스트 전용 글 허용). 자랑/MOC는 사진 권장.
+        this.imageUrls = imageUrls == null ? List.of() : List.copyOf(imageUrls);
         this.type = Objects.requireNonNull(type, "type");
         this.status = Objects.requireNonNull(status, "status");
         this.likedBy = new LinkedHashSet<>(likedBy);
@@ -48,10 +45,10 @@ public final class Post {
     /** 신규 게시글: 게시 상태로 생성. (요구사항 12.1, 12.2) */
     public static Post publish(
             String id, String authorId, String content, List<String> imageUrls,
-            boolean moc, Instant now) {
+            PostType type, Instant now) {
         return new Post(
                 id, authorId, content, imageUrls,
-                moc ? PostType.MOC : PostType.GENERAL,
+                type == null ? PostType.GENERAL : type,
                 PostStatus.PUBLISHED, Set.of(), now);
     }
 

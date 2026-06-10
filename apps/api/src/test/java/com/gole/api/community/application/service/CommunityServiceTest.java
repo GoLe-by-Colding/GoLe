@@ -36,7 +36,7 @@ class CommunityServiceTest {
     }
 
     private String publish() {
-        return service.publish(new PublishPostCommand("author-1", "내 자랑", List.of("img.jpg"), false));
+        return service.publish(new PublishPostCommand("author-1", "내 자랑", List.of("img.jpg"), "showcase"));
     }
 
     @Test

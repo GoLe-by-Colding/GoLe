@@ -55,7 +55,7 @@ public class CommunityService
                 command.authorId(),
                 command.content(),
                 command.imageUrls(),
-                command.moc(),
+                com.gole.api.community.domain.model.PostType.fromKey(command.topic()),
                 Instant.now(clock));
         return postRepository.save(post).getId();
     }

@@ -60,7 +60,7 @@ public class CommunityController {
     @ResponseStatus(HttpStatus.CREATED)
     public PostResponse publish(@Valid @RequestBody PublishPostRequest request) {
         String id = publishPostUseCase.publish(new PublishPostCommand(
-                request.authorId(), request.content(), request.imageUrls(), request.moc()));
+                request.authorId(), request.content(), request.imageUrls(), request.topic()));
         return PostResponse.from(getFeedUseCase.getPost(id));
     }
 

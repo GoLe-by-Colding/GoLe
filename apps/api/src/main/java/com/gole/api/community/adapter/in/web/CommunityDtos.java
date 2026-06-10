@@ -3,7 +3,6 @@ package com.gole.api.community.adapter.in.web;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,8 +14,13 @@ public final class CommunityDtos {
     public record PublishPostRequest(
             @NotBlank String authorId,
             @NotBlank String content,
-            @NotEmpty List<@NotBlank String> imageUrls,
-            boolean moc) {
+            List<@NotBlank String> imageUrls,
+            String topic) {
+
+        /** 이미지 미지정 시 빈 목록(텍스트 전용 글 허용). */
+        public List<String> imageUrls() {
+            return imageUrls == null ? List.of() : imageUrls;
+        }
     }
 
     public record CommentRequest(@NotBlank String authorId, @NotBlank String content) {
