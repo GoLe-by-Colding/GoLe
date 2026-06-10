@@ -2,6 +2,29 @@ import { apiRequest } from "@shared/api";
 
 export interface AdminOverview {
   readonly counts: Readonly<Record<string, number>>;
+  readonly gmv: number;
+  readonly ordersByStatus: Readonly<Record<string, number>>;
+  readonly activeListings: number;
+}
+
+export interface AdminOrder {
+  readonly id: string;
+  readonly status: string;
+  readonly amount: number;
+  readonly buyerId: string;
+  readonly sellerId: string;
+  readonly catalogSetNumber: string | null;
+  readonly createdAt: string | null;
+}
+
+export interface AdminListing {
+  readonly id: string;
+  readonly title: string;
+  readonly sellerId: string;
+  readonly price: number;
+  readonly status: string;
+  readonly category: string | null;
+  readonly createdAt: string | null;
 }
 
 export interface AdminLegoSet {
@@ -48,5 +71,26 @@ export function createAdminSet(token: string, input: CreateSetInput): Promise<Ad
     method: "POST",
     headers: auth(token),
     body: input,
+  });
+}
+
+export function fetchAdminOrders(token: string, limit = 30): Promise<readonly AdminOrder[]> {
+  return apiRequest<readonly AdminOrder[]>(`/api/admin/orders?limit=${limit}`, {
+    cache: "no-store",
+    headers: auth(token),
+  });
+}
+
+export function fetchAdminListings(token: string, limit = 30): Promise<readonly AdminListing[]> {
+  return apiRequest<readonly AdminListing[]>(`/api/admin/listings?limit=${limit}`, {
+    cache: "no-store",
+    headers: auth(token),
+  });
+}
+
+export function takedownListing(token: string, listingId: string): Promise<void> {
+  return apiRequest<void>(`/api/admin/listings/${listingId}/takedown`, {
+    method: "POST",
+    headers: auth(token),
   });
 }
