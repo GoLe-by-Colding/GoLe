@@ -146,7 +146,3 @@ public class OrderService
         return orderRepository.findByBuyerId(buyerId);
     }
 }
-    public java.util.List<Order> getByBuyerId(String buyerId) {
-        return orderRepository.findByBuyerId(buyerId);
-    }
-}
