@@ -70,8 +70,19 @@ public class OrderController {
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
+    @Operation(summary = "주문 단건 조회")
     @GetMapping("/{orderId}")
     public OrderResponse get(@PathVariable String orderId) {
         return OrderResponse.from(getOrderUseCase.getById(orderId));
+    }
+
+    @Operation(summary = "내 구매 내역", description = "buyerId 기준 주문 목록(최신순). 프로필 내 주문 내역에 사용.")
+    @GetMapping
+    public java.util.List<OrderResponse> listByBuyer(@RequestParam String buyerId) {
+        return getOrderUseCase.getByBuyerId(buyerId).stream()
+                .sorted(java.util.Comparator.comparing(
+                        o -> o.getCreatedAt(), java.util.Comparator.reverseOrder()))
+                .map(OrderResponse::from)
+                .toList();
     }
 }

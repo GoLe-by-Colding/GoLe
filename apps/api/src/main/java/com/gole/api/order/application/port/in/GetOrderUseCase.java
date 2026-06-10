@@ -5,4 +5,6 @@ import com.gole.api.order.domain.model.Order;
 public interface GetOrderUseCase {
 
     Order getById(String orderId);
+
+    java.util.List<Order> getByBuyerId(String buyerId);
 }

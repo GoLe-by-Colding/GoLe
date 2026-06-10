@@ -26,3 +26,10 @@ export function fetchOrder(orderId: string, signal?: AbortSignal): Promise<Order
     ...(signal === undefined ? {} : { signal }),
   });
 }
+
+export function fetchMyOrders(buyerId: string, signal?: AbortSignal): Promise<readonly Order[]> {
+  return apiRequest<readonly Order[]>(`/api/v1/orders?buyerId=${buyerId}`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
