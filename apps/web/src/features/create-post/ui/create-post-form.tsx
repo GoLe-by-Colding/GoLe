@@ -10,7 +10,7 @@ export interface CreatePostFormProps {
   readonly onCreated: (postId: string) => void;
 }
 
-const MAX_IMAGES = 10;
+const MAX_IMAGES = 5;
 
 export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   const [content, setContent] = useState("");

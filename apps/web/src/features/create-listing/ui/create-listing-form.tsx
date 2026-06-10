@@ -41,7 +41,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const MAX_PHOTOS = 10;
+  const MAX_PHOTOS = 5;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []);
@@ -210,7 +210,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         </label>
       </div>
       {hasMissingParts ? (
-        <Field label="누락 부품 상세" hint="어떤 부품이 빠졌는지 구체적으로 적어주세요.">
+        <Field label="누락 부품 상세" hint="어떤 부품이 몇 개 빠졌는지 구체적으로 적어주세요. 누락 부위 사진도 함께 올리면 좋아요.">
           {({ inputId, describedBy }) => (
             <Textarea
               id={inputId}
