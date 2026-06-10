@@ -79,9 +79,7 @@ public class OrderController {
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
-    @Operation(
-            summary = "내 구매 내역",
-            description = "buyerId 기준 주문 목록(최신순). 프로필 내 주문 내역에 사용.")
+    @Operation(summary = "내 구매 내역", description = "buyerId 기준 주문 목록(최신순). 프로필 내 주문 내역에 사용.")
     @GetMapping
     public List<OrderResponse> listByBuyer(@RequestParam String buyerId) {
         return getOrderUseCase.getByBuyerId(buyerId).stream()

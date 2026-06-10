@@ -135,9 +135,7 @@ public class OrderService
     @Override
     @Transactional(readOnly = true)
     public Order getById(String orderId) {
-        return orderRepository
-                .findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        return orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 
     @Override
