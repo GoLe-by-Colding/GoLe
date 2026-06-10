@@ -70,6 +70,37 @@ public final class AdminDtos {
         return v instanceof Date date ? date.toInstant() : null;
     }
 
+    public record PostRow(
+            String id, String authorId, String content, String type, String status, Instant createdAt) {
+
+        public static PostRow from(Document d) {
+            String raw = d.getString("content");
+            return new PostRow(
+                    d.getString("_id"),
+                    d.getString("authorId"),
+                    raw != null && raw.length() > 80 ? raw.substring(0, 80) + "…" : raw,
+                    d.getString("type"),
+                    d.getString("status"),
+                    instant(d.get("createdAt")));
+        }
+    }
+
+    public record AccountRow(
+            String id, String email, String role, String status, Instant lockedUntil) {
+
+        public static AccountRow from(Document d) {
+            Object emailObj = d.get("email");
+            // email 필드는 {address, ...} 임베디드 문서로 저장된다.
+            String emailStr = emailObj instanceof Document emailDoc ? emailDoc.getString("address") : "";
+            return new AccountRow(
+                    d.getString("_id"),
+                    emailStr,
+                    d.getString("role"),
+                    d.getString("status"),
+                    instant(d.get("lockedUntil")));
+        }
+    }
+
     public record CreateSetRequest(
             @NotBlank String setNumber,
             @NotBlank String name,

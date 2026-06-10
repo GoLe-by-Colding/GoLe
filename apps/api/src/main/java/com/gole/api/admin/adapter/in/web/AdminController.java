@@ -5,6 +5,8 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.LegoSetResponse;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ListingRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
+import com.gole.api.admin.adapter.in.web.AdminDtos.AccountRow;
+import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
@@ -110,6 +112,56 @@ public class AdminController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void takedown(@PathVariable String listingId) {
         deleteListingUseCase.delete(listingId);
+    }
+
+    /** 최근 게시글 모더레이션(읽기 전용). */
+    @GetMapping("/posts")
+    public List<PostRow> posts(@RequestParam(value = "limit", defaultValue = "30") int limit) {
+        Query q = new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(clamp(limit));
+        return mongoTemplate.find(q, Document.class, "posts").stream().map(PostRow::from).toList();
+    }
+
+    /** 게시글 강제 삭제(어드민 오버라이드 — 작성자 확인 없이 status=DELETED). */
+    @PostMapping("/posts/{postId}/remove")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removePost(@PathVariable String postId) {
+        mongoTemplate.updateFirst(
+                new org.springframework.data.mongodb.core.query.Query(
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(postId)),
+                new org.springframework.data.mongodb.core.query.Update().set("status", "DELETED"),
+                "posts");
+    }
+
+    /** 회원 목록(최근 가입순). */
+    @GetMapping("/accounts")
+    public List<AccountRow> accounts(@RequestParam(value = "limit", defaultValue = "30") int limit) {
+        Query q = new Query().with(Sort.by(Sort.Direction.DESC, "_id")).limit(clamp(limit));
+        return mongoTemplate.find(q, Document.class, "accounts").stream()
+                .map(AccountRow::from)
+                .toList();
+    }
+
+    /** 회원 잠금 토글(로그인 불가 처리 — lockedUntil 을 far-future 로 설정). */
+    @PostMapping("/accounts/{accountId}/lock")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void lockAccount(@PathVariable String accountId) {
+        mongoTemplate.updateFirst(
+                new org.springframework.data.mongodb.core.query.Query(
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(accountId)),
+                new org.springframework.data.mongodb.core.query.Update()
+                        .set("lockedUntil", java.time.Instant.parse("9999-12-31T00:00:00Z")),
+                "accounts");
+    }
+
+    /** 회원 잠금 해제. */
+    @PostMapping("/accounts/{accountId}/unlock")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unlockAccount(@PathVariable String accountId) {
+        mongoTemplate.updateFirst(
+                new org.springframework.data.mongodb.core.query.Query(
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(accountId)),
+                new org.springframework.data.mongodb.core.query.Update().unset("lockedUntil"),
+                "accounts");
     }
 
     @GetMapping("/catalog/sets")
