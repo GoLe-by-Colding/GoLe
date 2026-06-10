@@ -79,6 +79,7 @@ class ListingServiceTest {
                 "r1", "seller-1", "t", "d",
                 com.gole.api.listing.domain.model.Money.won(1000),
                 ItemCondition.NEW_SEALED, ConditionDisclosure.basic(), List.of("p.jpg"), null,
+                com.gole.api.listing.domain.model.ListingCategory.SET,
                 ListingStatus.RESERVED, Instant.parse("2026-01-01T00:00:00Z"));
         repository.save(reserved);
         assertThatThrownBy(() -> service.delete("r1")).isInstanceOf(ListingStateException.class);
