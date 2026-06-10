@@ -41,7 +41,7 @@ class OrderServiceTest {
                 reservation,
                 new AlwaysApprovePayment(),
                 settlement,
-                (s, p, q, t) -> {},
+                (s, p, q, t, c) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 clock);
