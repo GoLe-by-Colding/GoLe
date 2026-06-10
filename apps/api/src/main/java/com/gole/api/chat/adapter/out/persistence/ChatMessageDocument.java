@@ -1,0 +1,36 @@
+package com.gole.api.chat.adapter.out.persistence;
+
+import java.time.Instant;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document(collection = "chat_messages")
+public class ChatMessageDocument {
+
+    @Id
+    private String id;
+
+    @Indexed
+    private String roomId;
+
+    private String senderId;
+    private String content;
+    private Instant sentAt;
+
+    protected ChatMessageDocument() {}
+
+    public ChatMessageDocument(String id, String roomId, String senderId, String content, Instant sentAt) {
+        this.id = id;
+        this.roomId = roomId;
+        this.senderId = senderId;
+        this.content = content;
+        this.sentAt = sentAt;
+    }
+
+    public String getId() { return id; }
+    public String getRoomId() { return roomId; }
+    public String getSenderId() { return senderId; }
+    public String getContent() { return content; }
+    public Instant getSentAt() { return sentAt; }
+}
