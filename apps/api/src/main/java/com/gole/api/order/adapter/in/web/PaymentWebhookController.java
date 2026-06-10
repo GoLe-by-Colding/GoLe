@@ -1,7 +1,6 @@
-import io.swagger.v3.oas.annotations.tags.Tag;
-
 package com.gole.api.order.adapter.in.web;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import java.util.Map;
 import org.slf4j.Logger;

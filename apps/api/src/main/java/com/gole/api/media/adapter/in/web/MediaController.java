@@ -1,8 +1,7 @@
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 package com.gole.api.media.adapter.in.web;
-
+import io.swagger.v3.oas.annotations.Operation;
 import com.gole.api.media.application.port.in.LoadImageUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase.LoadedImage;
 import com.gole.api.media.application.port.in.UploadImageUseCase;

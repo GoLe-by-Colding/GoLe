@@ -1,7 +1,6 @@
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 package com.gole.api.notification.adapter.in.web;
-
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.gole.api.notification.application.port.in.GetNotificationsUseCase;
 import com.gole.api.notification.domain.model.Notification;
 import java.time.Instant;

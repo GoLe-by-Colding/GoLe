@@ -1,7 +1,6 @@
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 package com.gole.api.catalog.adapter.in.web;
-
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
