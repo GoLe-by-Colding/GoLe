@@ -33,15 +33,16 @@ async function loadCommunity(): Promise<readonly Post[]> {
 
 async function loadStats(): Promise<{ listings: number; txCount: number }> {
   try {
-    const res = await fetch(`${env.apiBaseUrl}/api/admin/overview`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) throw new Error();
-    const d = (await res.json()) as {
-      activeListings: number;
-      counts: { price_transactions: number };
-    };
-    return { listings: d.activeListings ?? 0, txCount: d.counts?.price_transactions ?? 0 };
+    const [listingsRes, trendingRes] = await Promise.all([
+      fetch(`${env.apiBaseUrl}/api/v1/listings`, { next: { revalidate: 300 } }),
+      fetch(`${env.apiBaseUrl}/api/v1/pricing/trending?limit=10`, { next: { revalidate: 300 } }),
+    ]);
+    const listings = listingsRes.ok ? ((await listingsRes.json()) as unknown[]).length : 0;
+    const trending = trendingRes.ok
+      ? ((await trendingRes.json()) as Array<{ tradeCount: number }>)
+      : [];
+    const txCount = trending.reduce((sum, s) => sum + s.tradeCount, 0);
+    return { listings, txCount };
   } catch {
     return { listings: 0, txCount: 0 };
   }
