@@ -52,7 +52,7 @@ public class SocialAuthController {
         SocialLoginResult result = socialLoginUseCase.login(
                 new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
         return new SocialLoginResponse(
-                result.accountId(), result.sessionToken(), result.role().name());
+                result.accountId(), result.sessionToken(), result.role().name(), result.newAccount());
     }
 
     private static AuthProvider parse(String provider) {
@@ -66,5 +66,6 @@ public class SocialAuthController {
     public record CallbackRequest(
             @NotBlank String code, @NotBlank String redirectUri, @NotBlank String state) {}
 
-    public record SocialLoginResponse(String accountId, String sessionToken, String role) {}
+    public record SocialLoginResponse(
+            String accountId, String sessionToken, String role, boolean newAccount) {}
 }

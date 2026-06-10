@@ -89,12 +89,13 @@ public class SocialAuthService implements SocialLoginUseCase {
         }
 
         Email email = new Email(profile.email());
-        Account account = accountRepository.findByEmail(email)
-                .orElseGet(() -> createSocialAccount(email));
+        var existing = accountRepository.findByEmail(email);
+        Account account = existing.orElseGet(() -> createSocialAccount(email));
+        boolean newAccount = existing.isEmpty();
 
         String token = sessionToken.issue(account);
         sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
-        return new SocialLoginResult(account.getId(), token, account.getRole());
+        return new SocialLoginResult(account.getId(), token, account.getRole(), newAccount);
     }
 
     /** 소셜 신규 계정: 인증완료(VERIFIED)·USER·임의 비밀번호(소셜 전용, 암호 로그인 불가). */
