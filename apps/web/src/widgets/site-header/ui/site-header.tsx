@@ -91,14 +91,9 @@ export function SiteHeader() {
                 </Button>
               </div>
             ) : (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => router.push("/login")}>
-                  로그인
-                </Button>
-                <Button size="sm" onClick={() => router.push("/signup")}>
-                  회원가입
-                </Button>
-              </>
+              <Button size="sm" onClick={() => router.push("/login")}>
+                로그인
+              </Button>
             )}
           </div>
 
@@ -170,27 +165,15 @@ export function SiteHeader() {
                   </Button>
                 </>
               ) : (
-                <>
-                  <Button
-                    fullWidth
-                    variant="secondary"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      router.push("/login");
-                    }}
-                  >
-                    로그인
-                  </Button>
-                  <Button
-                    fullWidth
-                    onClick={() => {
-                      setMenuOpen(false);
-                      router.push("/signup");
-                    }}
-                  >
-                    회원가입
-                  </Button>
-                </>
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/login");
+                  }}
+                >
+                  로그인
+                </Button>
               )}
             </div>
           </div>

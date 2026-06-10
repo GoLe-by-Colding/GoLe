@@ -1,24 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { SignInForm } from "@features/sign-in";
 import { SignUpForm } from "@features/sign-up";
 import { SocialLoginButtons } from "@features/social-login";
 import { AuthCard } from "@widgets/auth-layout";
 import { Button } from "@shared/ui";
 
+export interface AuthPageProps {
+  /** 소셜 첫 가입 직후 온보딩 환영 화면 표시 여부(서버에서 ?welcome=1 판별). */
+  readonly welcome?: boolean;
+}
+
 /**
  * 통합 인증 화면. 로그인/회원가입을 탭으로 전환하며(URL `/login`·`/signup` 구동),
  * 로컬(이메일) + 소셜(Google/Kakao/Naver) 4가지 진입을 한 화면에서 제공한다.
- * 소셜 첫 가입(`?welcome=1`)은 온보딩 환영 화면을 보여준다.
  */
-export function AuthPage() {
+export function AuthPage({ welcome = false }: AuthPageProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const params = useSearchParams();
   const mode = pathname === "/signup" ? "signup" : "signin";
-  const welcome = params.get("welcome") === "1";
 
   if (welcome) {
     return (
@@ -36,7 +38,7 @@ export function AuthPage() {
   }
 
   function tabClass(active: boolean): string {
-    return `rounded-lg py-2 text-sm font-semibold transition-colors ${
+    return `block rounded-lg py-2 text-center text-sm font-semibold transition-colors ${
       active ? "bg-white text-brand-700 shadow-soft" : "text-neutral-500 hover:text-neutral-800"
     }`;
   }
@@ -52,20 +54,10 @@ export function AuthPage() {
     >
       <div className="flex flex-col gap-5">
         <div role="tablist" aria-label="인증 방식" className="grid grid-cols-2 gap-1 rounded-xl bg-neutral-100 p-1">
-          <Link
-            href="/login"
-            role="tab"
-            aria-selected={mode === "signin"}
-            className={tabClass(mode === "signin")}
-          >
+          <Link href="/login" role="tab" aria-selected={mode === "signin"} className={tabClass(mode === "signin")}>
             로그인
           </Link>
-          <Link
-            href="/signup"
-            role="tab"
-            aria-selected={mode === "signup"}
-            className={tabClass(mode === "signup")}
-          >
+          <Link href="/signup" role="tab" aria-selected={mode === "signup"} className={tabClass(mode === "signup")}>
             회원가입
           </Link>
         </div>
