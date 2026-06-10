@@ -1,6 +1,7 @@
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 package com.gole.api.pricing.adapter.in.web;
+
+import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.PricePointResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.StatisticsResponse;
