@@ -1,10 +1,7 @@
 import { apiRequest } from "@shared/api";
 import type { Me, RegisterResult, Session } from "../model/types";
 
-export function registerAccount(
-  email: string,
-  password: string,
-): Promise<RegisterResult> {
+export function registerAccount(email: string, password: string): Promise<RegisterResult> {
   return apiRequest<RegisterResult>("/api/v1/accounts", {
     method: "POST",
     body: { email, password },
@@ -41,10 +38,9 @@ export function fetchSocialAuthorizeUrl(
   redirectUri: string,
 ): Promise<{ readonly url: string }> {
   const query = new URLSearchParams({ redirectUri }).toString();
-  return apiRequest<{ readonly url: string }>(
-    `${OAUTH_BASE}/${provider}/authorize-url?${query}`,
-    { cache: "no-store" },
-  );
+  return apiRequest<{ readonly url: string }>(`${OAUTH_BASE}/${provider}/authorize-url?${query}`, {
+    cache: "no-store",
+  });
 }
 
 /** OAuth code를 교환해 세션을 발급받는다. state는 서버가 검증한다(CSRF).
@@ -55,13 +51,10 @@ export async function socialCallback(
   redirectUri: string,
   state: string,
 ): Promise<SocialCallbackResult> {
-  const res = await apiRequest<SocialCallbackResponse>(
-    `${OAUTH_BASE}/${provider}/callback`,
-    {
-      method: "POST",
-      body: { code, redirectUri, state },
-    },
-  );
+  const res = await apiRequest<SocialCallbackResponse>(`${OAUTH_BASE}/${provider}/callback`, {
+    method: "POST",
+    body: { code, redirectUri, state },
+  });
   return {
     session: { accountId: res.accountId, sessionToken: res.sessionToken, role: res.role },
     newAccount: res.newAccount,

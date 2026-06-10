@@ -32,10 +32,10 @@ export function SiteFooter() {
           </div>
 
           <p className="max-w-3xl text-xs leading-relaxed text-neutral-500">
-            LEGO®, 레고®, 미니피겨(Minifigure)는 LEGO Group의 상표입니다. 본 사이트는 LEGO
-            Group이 후원·승인·운영하는 사이트가 아닙니다. 상품 정보의 세트명·번호는 식별 목적의
-            텍스트이며, 상품 사진은 판매자가 직접 촬영해 등록한 이미지입니다. 공식 페이지 링크는
-            외부 사이트로 연결됩니다.
+            LEGO®, 레고®, 미니피겨(Minifigure)는 LEGO Group의 상표입니다. 본 사이트는 LEGO Group이
+            후원·승인·운영하는 사이트가 아닙니다. 상품 정보의 세트명·번호는 식별 목적의 텍스트이며,
+            상품 사진은 판매자가 직접 촬영해 등록한 이미지입니다. 공식 페이지 링크는 외부 사이트로
+            연결됩니다.
           </p>
 
           <span className="text-xs text-neutral-400">

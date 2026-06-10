@@ -1,10 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type {
-  PricePoint,
-  PriceStatistics,
-  PriceValuation,
-  TrendingSet,
-} from "../model/types";
+import type { PricePoint, PriceStatistics, PriceValuation, TrendingSet } from "../model/types";
 
 const BASE = "/api/v1/pricing/sets";
 
@@ -52,11 +47,8 @@ export function fetchTrendingSets(
   limit = 8,
   signal?: AbortSignal,
 ): Promise<readonly TrendingSet[]> {
-  return apiRequest<readonly TrendingSet[]>(
-    `/api/v1/pricing/trending?limit=${limit}`,
-    {
-      cache: "no-store",
-      ...(signal === undefined ? {} : { signal }),
-    },
-  );
+  return apiRequest<readonly TrendingSet[]>(`/api/v1/pricing/trending?limit=${limit}`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
 }

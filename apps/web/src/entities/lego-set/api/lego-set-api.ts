@@ -7,20 +7,11 @@ function withSignal(signal: AbortSignal | undefined): RequestOptions {
   return signal === undefined ? {} : { signal };
 }
 
-export function fetchLegoSetByNumber(
-  setNumber: string,
-  signal?: AbortSignal,
-): Promise<LegoSet> {
-  return apiRequest<LegoSet>(
-    `/api/v1/catalog/sets/${setNumber}`,
-    withSignal(signal),
-  );
+export function fetchLegoSetByNumber(setNumber: string, signal?: AbortSignal): Promise<LegoSet> {
+  return apiRequest<LegoSet>(`/api/v1/catalog/sets/${setNumber}`, withSignal(signal));
 }
 
-export function searchLegoSets(
-  query: string,
-  signal?: AbortSignal,
-): Promise<readonly LegoSet[]> {
+export function searchLegoSets(query: string, signal?: AbortSignal): Promise<readonly LegoSet[]> {
   const encoded = encodeURIComponent(query);
   return apiRequest<readonly LegoSet[]>(
     `/api/v1/catalog/sets?query=${encoded}`,
@@ -29,9 +20,7 @@ export function searchLegoSets(
 }
 
 /** 홈 추천 세트. 항상 최신을 반영하도록 캐시하지 않는다. */
-export function fetchFeaturedLegoSets(
-  signal?: AbortSignal,
-): Promise<readonly LegoSet[]> {
+export function fetchFeaturedLegoSets(signal?: AbortSignal): Promise<readonly LegoSet[]> {
   return apiRequest<readonly LegoSet[]>("/api/v1/catalog/sets/featured", {
     ...withSignal(signal),
     cache: "no-store",

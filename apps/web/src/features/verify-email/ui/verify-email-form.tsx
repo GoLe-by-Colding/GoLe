@@ -24,9 +24,7 @@ export function VerifyEmailForm({ initialEmail = "", onVerified }: VerifyEmailFo
       await verifyEmail(email, code);
       onVerified();
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "인증 중 오류가 발생했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "인증 중 오류가 발생했습니다.");
     } finally {
       setSubmitting(false);
     }

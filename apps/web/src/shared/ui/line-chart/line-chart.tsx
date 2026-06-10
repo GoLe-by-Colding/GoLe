@@ -168,12 +168,7 @@ export function LineChart({
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />
-            <text
-              x={W - PAD_R + 8}
-              y={g.y + 4}
-              fontSize="13"
-              fill="var(--color-neutral-400)"
-            >
+            <text x={W - PAD_R + 8} y={g.y + 4} fontSize="13" fill="var(--color-neutral-400)">
               {formatValue(Math.round(g.v))}
             </text>
           </g>

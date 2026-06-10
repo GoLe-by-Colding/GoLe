@@ -1,7 +1,12 @@
 import { Badge, Card } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
-import { completenessLabel, conditionLabel, formatPriceKrw, LISTING_CATEGORY_LABEL } from "../model/types";
+import {
+  completenessLabel,
+  conditionLabel,
+  formatPriceKrw,
+  LISTING_CATEGORY_LABEL,
+} from "../model/types";
 
 export interface ListingCardProps {
   readonly listing: Listing;
@@ -16,7 +21,11 @@ export function ListingCard({ listing }: ListingCardProps) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
-          src={cover === undefined ? "https://placehold.co/600x400?text=LEGO" : thumbnailUrl(cover, 480)}
+          src={
+            cover === undefined
+              ? "https://placehold.co/600x400?text=LEGO"
+              : thumbnailUrl(cover, 480)
+          }
           alt={listing.title}
           loading="lazy"
         />
@@ -38,7 +47,9 @@ export function ListingCard({ listing }: ListingCardProps) {
             {formatPriceKrw(listing.price)}
           </span>
           {listing.catalogSetNumber !== null ? (
-            <span className="text-xs font-medium text-neutral-400">#{listing.catalogSetNumber}</span>
+            <span className="text-xs font-medium text-neutral-400">
+              #{listing.catalogSetNumber}
+            </span>
           ) : null}
         </div>
       </div>

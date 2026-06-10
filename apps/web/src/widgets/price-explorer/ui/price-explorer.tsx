@@ -1,11 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  CONDITION_LABEL,
-  type PricePoint,
-  type PriceValuation,
-} from "@entities/pricing";
+import { CONDITION_LABEL, type PricePoint, type PriceValuation } from "@entities/pricing";
 import { Badge, Card, LineChart } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
@@ -43,7 +39,11 @@ function lastTime(item: PriceBoardItem): number {
     : 0;
 }
 
-const PERIODS: ReadonlyArray<{ readonly value: Period; readonly label: string; readonly days: number }> = [
+const PERIODS: ReadonlyArray<{
+  readonly value: Period;
+  readonly label: string;
+  readonly days: number;
+}> = [
   { value: "1M", label: "1개월", days: 31 },
   { value: "6M", label: "6개월", days: 183 },
   { value: "1Y", label: "1년", days: 366 },
@@ -136,46 +136,46 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
           </select>
         </div>
         <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-2xl border border-neutral-200/60 bg-white p-2 shadow-soft max-lg:max-h-none">
-        {sorted.map((item) => {
-          const active = item.setNumber === current.setNumber;
-          const itemLatest =
-            item.points.length > 0 ? item.points[item.points.length - 1]!.price : null;
-          return (
-            <li key={item.setNumber}>
-              <button
-                type="button"
-                onClick={() => setSelected(item.setNumber)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                  active ? "bg-brand-50" : "hover:bg-neutral-50"
-                }`}
-              >
-                {item.imageUrl !== null ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl}
-                    alt=""
-                    className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
-                  />
-                ) : (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-lg">
-                    🧱
+          {sorted.map((item) => {
+            const active = item.setNumber === current.setNumber;
+            const itemLatest =
+              item.points.length > 0 ? item.points[item.points.length - 1]!.price : null;
+            return (
+              <li key={item.setNumber}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(item.setNumber)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                    active ? "bg-brand-50" : "hover:bg-neutral-50"
+                  }`}
+                >
+                  {item.imageUrl !== null ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
+                    />
+                  ) : (
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-lg">
+                      🧱
+                    </span>
+                  )}
+                  <span className="flex min-w-0 flex-col">
+                    <span
+                      className={`truncate text-sm font-semibold ${active ? "text-brand-700" : "text-neutral-900"}`}
+                    >
+                      {item.name}
+                    </span>
+                    <span className="text-xs tabular-nums text-neutral-500">
+                      {itemLatest !== null ? formatKrw(itemLatest) : "데이터 없음"}
+                    </span>
                   </span>
-                )}
-                <span className="flex min-w-0 flex-col">
-                  <span
-                    className={`truncate text-sm font-semibold ${active ? "text-brand-700" : "text-neutral-900"}`}
-                  >
-                    {item.name}
-                  </span>
-                  <span className="text-xs tabular-nums text-neutral-500">
-                    {itemLatest !== null ? formatKrw(itemLatest) : "데이터 없음"}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
       </div>
 
       {/* 상세 */}

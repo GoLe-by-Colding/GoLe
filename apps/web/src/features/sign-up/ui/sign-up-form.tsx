@@ -24,9 +24,7 @@ export function SignUpForm({ onRegistered }: SignUpFormProps) {
       await registerAccount(email, password);
       onRegistered(email);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "가입 중 오류가 발생했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "가입 중 오류가 발생했습니다.");
     } finally {
       setSubmitting(false);
     }

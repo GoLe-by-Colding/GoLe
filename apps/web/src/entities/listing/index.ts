@@ -9,6 +9,12 @@ export {
   createListing,
 } from "./api/listing-api";
 export type { CreateListingInput, SearchListingsParams, ListingSort } from "./api/listing-api";
-export type { Listing, ItemCondition, Completeness, ListingStatus, ListingCategory } from "./model/types";
+export type {
+  Listing,
+  ItemCondition,
+  Completeness,
+  ListingStatus,
+  ListingCategory,
+} from "./model/types";
 export { conditionLabel, completenessLabel, formatPriceKrw } from "./model/types";
 export { LISTING_CATEGORIES, LISTING_CATEGORY_LABEL } from "./model/types";

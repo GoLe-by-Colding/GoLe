@@ -36,9 +36,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       const uploaded = await uploadImages(selected.slice(0, remaining));
       setImageUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -110,9 +108,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
               disabled={uploading || submitting || imageUrls.length >= MAX_IMAGES}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
-            {uploading ? (
-              <p className="text-sm text-neutral-500">업로드 중...</p>
-            ) : null}
+            {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
             {imageUrls.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
                 {imageUrls.map((url, index) => (

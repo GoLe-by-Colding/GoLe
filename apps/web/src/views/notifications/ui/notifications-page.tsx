@@ -98,7 +98,10 @@ export function NotificationsPage() {
               const body = (
                 <div className="flex items-start gap-3 px-5 py-4">
                   {!n.read ? (
-                    <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                    <span
+                      aria-hidden="true"
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500"
+                    />
                   ) : (
                     <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0" />
                   )}
@@ -113,11 +116,19 @@ export function NotificationsPage() {
               return (
                 <li key={n.id}>
                   {n.link !== null ? (
-                    <Link href={n.link} onClick={() => handleClickItem(n)} className="block hover:bg-neutral-50">
+                    <Link
+                      href={n.link}
+                      onClick={() => handleClickItem(n)}
+                      className="block hover:bg-neutral-50"
+                    >
                       {body}
                     </Link>
                   ) : (
-                    <button type="button" onClick={() => handleClickItem(n)} className="block w-full text-left hover:bg-neutral-50">
+                    <button
+                      type="button"
+                      onClick={() => handleClickItem(n)}
+                      className="block w-full text-left hover:bg-neutral-50"
+                    >
                       {body}
                     </button>
                   )}

@@ -30,9 +30,7 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
       </div>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-base font-semibold leading-tight text-neutral-900">
-            {set.name}
-          </span>
+          <span className="text-base font-semibold leading-tight text-neutral-900">{set.name}</span>
           {isRetired(set) ? (
             <Badge tone="danger" data-testid="retired-badge">
               단종

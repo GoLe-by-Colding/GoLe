@@ -18,16 +18,18 @@ export function CommunityFeed({ posts }: CommunityFeedProps) {
 
   function tabClass(active: boolean): string {
     return `rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-      active
-        ? "bg-brand-600 text-white"
-        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+      active ? "bg-brand-600 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
     }`;
   }
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => setFilter("all")} className={tabClass(filter === "all")}>
+        <button
+          type="button"
+          onClick={() => setFilter("all")}
+          className={tabClass(filter === "all")}
+        >
           전체
         </button>
         {POST_TOPICS.map((t) => (

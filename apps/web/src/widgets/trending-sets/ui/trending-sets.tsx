@@ -11,9 +11,15 @@ export function TrendingSets({ items }: TrendingSetsProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-14 text-center">
-        <span aria-hidden="true" className="text-4xl">📈</span>
-        <Text tone="secondary" weight="medium">아직 거래 데이터가 충분하지 않아요</Text>
-        <Text tone="muted" size="sm">거래가 쌓이면 인기 세트가 여기에 표시됩니다.</Text>
+        <span aria-hidden="true" className="text-4xl">
+          📈
+        </span>
+        <Text tone="secondary" weight="medium">
+          아직 거래 데이터가 충분하지 않아요
+        </Text>
+        <Text tone="muted" size="sm">
+          거래가 쌓이면 인기 세트가 여기에 표시됩니다.
+        </Text>
       </div>
     );
   }
@@ -53,8 +59,12 @@ export function TrendingSets({ items }: TrendingSetsProps) {
               </span>
             )}
             <div className="flex min-w-0 flex-col gap-0.5">
-              <Text weight="medium" className="truncate">{set.name}</Text>
-              <Text tone="muted" size="sm">#{set.setNumber} · 평균 {formatKrw(set.averagePrice)}</Text>
+              <Text weight="medium" className="truncate">
+                {set.name}
+              </Text>
+              <Text tone="muted" size="sm">
+                #{set.setNumber} · 평균 {formatKrw(set.averagePrice)}
+              </Text>
             </div>
             <Badge tone="brand" className="ml-auto shrink-0">
               {set.tradeCount.toLocaleString("ko-KR")}건

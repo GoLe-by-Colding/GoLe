@@ -1,8 +1,4 @@
-import {
-  LegoSetCard,
-  fetchFeaturedLegoSets,
-  type LegoSet,
-} from "@entities/lego-set";
+import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
@@ -33,13 +29,19 @@ export async function HomePage() {
         {/* Hero */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-50 via-white to-accent-50/30 px-10 py-20 shadow-soft max-sm:px-6 max-sm:py-14">
           {/* subtle decorative circle */}
-          <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-100/40 blur-3xl" />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-100/40 blur-3xl"
+          />
           <div className="relative flex flex-col gap-6">
             <span className="inline-flex items-center gap-2 self-start rounded-full bg-brand-500/10 px-3.5 py-1.5 text-sm font-semibold text-brand-600 backdrop-blur-sm">
               🧱 레고 중고거래
             </span>
             <h1 className="max-w-[18ch] text-[clamp(2.4rem,5.5vw,3.75rem)] font-extrabold leading-[1.08] tracking-[-0.03em] text-neutral-900">
-              레고를 <span className="bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">가장 합리적으로</span>
+              레고를{" "}
+              <span className="bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">
+                가장 합리적으로
+              </span>
             </h1>
             <p className="max-w-[44ch] text-lg leading-relaxed text-neutral-500">
               체결가 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션을 한곳에서.
@@ -75,7 +77,9 @@ export async function HomePage() {
         <section className="flex flex-col gap-6">
           <div className="flex items-baseline justify-between gap-4">
             <Heading level={2}>지금 뜨는 세트</Heading>
-            <Text tone="muted" size="sm">최근 거래 활발</Text>
+            <Text tone="muted" size="sm">
+              최근 거래 활발
+            </Text>
           </div>
           <TrendingSets items={trending} />
         </section>
@@ -84,7 +88,9 @@ export async function HomePage() {
         <section className="flex flex-col gap-6">
           <div className="flex items-baseline justify-between gap-4">
             <Heading level={2}>오늘의 추천</Heading>
-            <Text tone="muted" size="sm">인기 테마 엄선</Text>
+            <Text tone="muted" size="sm">
+              인기 테마 엄선
+            </Text>
           </div>
           {featured.length > 0 ? (
             <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
@@ -94,8 +100,12 @@ export async function HomePage() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-16 text-center">
-              <span aria-hidden="true" className="text-4xl">🧱</span>
-              <Text tone="secondary" weight="medium">표시할 세트가 아직 없어요</Text>
+              <span aria-hidden="true" className="text-4xl">
+                🧱
+              </span>
+              <Text tone="secondary" weight="medium">
+                표시할 세트가 아직 없어요
+              </Text>
             </div>
           )}
         </section>

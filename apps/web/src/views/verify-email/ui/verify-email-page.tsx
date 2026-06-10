@@ -10,9 +10,7 @@ function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
 
-  return (
-    <VerifyEmailForm initialEmail={email} onVerified={() => router.push("/login")} />
-  );
+  return <VerifyEmailForm initialEmail={email} onVerified={() => router.push("/login")} />;
 }
 
 export function VerifyEmailPage() {

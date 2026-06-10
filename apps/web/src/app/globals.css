@@ -53,9 +53,9 @@
   --color-info-soft: #dbeafe;
 
   /* ─── Typography ─── */
-  --font-sans: "Pretendard Variable", "Pretendard", -apple-system,
-    BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR",
-    "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-sans:
+    "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Noto Sans KR", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 
   /* ─── Radius ─── */
@@ -67,12 +67,9 @@
   --radius-full: 9999px;
 
   /* ─── Elevation ─── */
-  --shadow-soft: 0 1px 2px rgba(24, 24, 27, 0.04),
-    0 1px 4px rgba(24, 24, 27, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(24, 24, 27, 0.06),
-    0 2px 4px -2px rgba(24, 24, 27, 0.05);
-  --shadow-lift: 0 8px 25px -5px rgba(24, 24, 27, 0.08),
-    0 10px 10px -5px rgba(24, 24, 27, 0.03);
+  --shadow-soft: 0 1px 2px rgba(24, 24, 27, 0.04), 0 1px 4px rgba(24, 24, 27, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(24, 24, 27, 0.06), 0 2px 4px -2px rgba(24, 24, 27, 0.05);
+  --shadow-lift: 0 8px 25px -5px rgba(24, 24, 27, 0.08), 0 10px 10px -5px rgba(24, 24, 27, 0.03);
   --shadow-brand: 0 4px 14px -3px rgba(29, 78, 216, 0.3);
 
   /* ─── Spacing rhythm (8px 기반) ─── */
@@ -95,7 +92,10 @@
     text-rendering: optimizeLegibility;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     line-height: 1.15;
     letter-spacing: -0.025em;
     font-weight: 800;
@@ -108,7 +108,12 @@
   }
 
   /* 모든 인터랙티브 요소 기본 전환 */
-  a, button, [role="button"], input, textarea, select {
+  a,
+  button,
+  [role="button"],
+  input,
+  textarea,
+  select {
     transition-property: color, background-color, border-color, box-shadow, transform, opacity;
     transition-duration: 180ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);

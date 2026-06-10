@@ -12,10 +12,7 @@ export interface UploadedImage {
  * <p>JSON 클라이언트({@link apiRequest})와 분리한다: multipart/form-data 는
  * 브라우저가 boundary 를 포함한 Content-Type 을 자동 설정해야 하므로 헤더를 지정하지 않는다.
  */
-export async function uploadImage(
-  file: File,
-  signal?: AbortSignal,
-): Promise<UploadedImage> {
+export async function uploadImage(file: File, signal?: AbortSignal): Promise<UploadedImage> {
   const formData = new FormData();
   formData.append("file", file);
 

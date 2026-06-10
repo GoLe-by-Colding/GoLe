@@ -18,7 +18,9 @@ export interface LogoProps {
  */
 export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 font-extrabold tracking-tight", className)}>
+    <span
+      className={cn("inline-flex items-center gap-1.5 font-extrabold tracking-tight", className)}
+    >
       <svg
         width={size}
         height={size}
@@ -40,7 +42,13 @@ export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
         />
 
         {/* 브릭 코스 심(seam) — 브릭으로 쌓은 느낌 */}
-        <path d="M5.5 21H29.5" stroke="#1a3fc0" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
+        <path
+          d="M5.5 21H29.5"
+          stroke="#1a3fc0"
+          strokeWidth="0.9"
+          strokeLinecap="round"
+          opacity="0.4"
+        />
 
         {/* 입(미소) */}
         <path

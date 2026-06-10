@@ -19,7 +19,9 @@ export async function CommunityPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <Heading level={1}>커뮤니티</Heading>
-            <Text tone="secondary">자랑·리뷰·질문·팁·창작(MOC)·이스터에그까지, 레고 이야기를 나눠요</Text>
+            <Text tone="secondary">
+              자랑·리뷰·질문·팁·창작(MOC)·이스터에그까지, 레고 이야기를 나눠요
+            </Text>
           </div>
           <LinkButton href="/community/new">글쓰기</LinkButton>
         </div>

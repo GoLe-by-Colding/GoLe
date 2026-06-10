@@ -50,9 +50,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             {!isAvailable ? <Badge tone="danger">거래완료</Badge> : null}
           </div>
           <Heading level={1}>{listing.title}</Heading>
-          <span className="text-3xl font-bold tracking-tight">
-            {formatPriceKrw(listing.price)}
-          </span>
+          <span className="text-3xl font-bold tracking-tight">{formatPriceKrw(listing.price)}</span>
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-neutral-800">상품 설명</span>
             <p className="whitespace-pre-wrap leading-relaxed text-neutral-600">

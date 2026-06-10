@@ -24,11 +24,7 @@ export interface ListingFilterBarProps {
   readonly initial: ListingFilterValues;
 }
 
-const CONDITIONS: readonly ItemCondition[] = [
-  "new_sealed",
-  "used_complete",
-  "used_incomplete",
-];
+const CONDITIONS: readonly ItemCondition[] = ["new_sealed", "used_complete", "used_incomplete"];
 
 const SORTS: ReadonlyArray<{ readonly value: ListingSort; readonly label: string }> = [
   { value: "newest", label: "최신순" },
@@ -40,10 +36,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   const router = useRouter();
   const [values, setValues] = useState<ListingFilterValues>(initial);
 
-  function update<K extends keyof ListingFilterValues>(
-    key: K,
-    value: ListingFilterValues[K],
-  ) {
+  function update<K extends keyof ListingFilterValues>(key: K, value: ListingFilterValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 

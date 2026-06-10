@@ -24,9 +24,7 @@ export function SignInForm({ onSignedIn }: SignInFormProps) {
       saveSession(session);
       onSignedIn(session);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "로그인 중 오류가 발생했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "로그인 중 오류가 발생했습니다.");
     } finally {
       setSubmitting(false);
     }

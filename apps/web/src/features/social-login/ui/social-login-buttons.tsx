@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  fetchSocialAuthorizeUrl,
-  fetchSocialProviders,
-} from "@entities/user";
+import { fetchSocialAuthorizeUrl, fetchSocialProviders } from "@entities/user";
 
 interface ProviderMeta {
   readonly key: string;

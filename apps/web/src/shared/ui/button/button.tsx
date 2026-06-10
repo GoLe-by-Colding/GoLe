@@ -8,7 +8,8 @@ export const BUTTON_BASE =
   "inline-flex items-center justify-center gap-2 rounded-xl font-semibold leading-none whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-brand-600 text-white shadow-brand hover:bg-brand-700 hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)]",
+  primary:
+    "bg-brand-600 text-white shadow-brand hover:bg-brand-700 hover:shadow-[0_6px_20px_rgba(29,78,216,0.35)]",
   secondary:
     "bg-white text-neutral-900 border border-neutral-200/80 shadow-soft hover:bg-neutral-50 hover:border-neutral-300 hover:shadow-md",
   ghost: "bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",

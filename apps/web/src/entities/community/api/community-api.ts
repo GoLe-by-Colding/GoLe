@@ -17,10 +17,7 @@ export function fetchPost(postId: string, signal?: AbortSignal): Promise<Post> {
   });
 }
 
-export function fetchComments(
-  postId: string,
-  signal?: AbortSignal,
-): Promise<readonly Comment[]> {
+export function fetchComments(postId: string, signal?: AbortSignal): Promise<readonly Comment[]> {
   return apiRequest<readonly Comment[]>(`${BASE}/${postId}/comments`, {
     cache: "no-store",
     ...(signal === undefined ? {} : { signal }),
@@ -45,11 +42,7 @@ export function likePost(postId: string, userId: string): Promise<void> {
   });
 }
 
-export function commentOnPost(
-  postId: string,
-  authorId: string,
-  content: string,
-): Promise<Comment> {
+export function commentOnPost(postId: string, authorId: string, content: string): Promise<Comment> {
   return apiRequest<Comment>(`${BASE}/${postId}/comments`, {
     method: "POST",
     body: { authorId, content },

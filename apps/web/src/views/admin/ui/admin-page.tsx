@@ -63,7 +63,9 @@ export function AdminPage() {
         }
       } catch (cause) {
         if (active) {
-          setError(cause instanceof ApiError ? cause.message : "관리자 데이터를 불러오지 못했습니다.");
+          setError(
+            cause instanceof ApiError ? cause.message : "관리자 데이터를 불러오지 못했습니다.",
+          );
         }
       }
     })();

@@ -8,7 +8,10 @@ export type Completeness = "full_box" | "no_box" | "bulk";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
 export type ListingCategory = "set" | "parts" | "minifig" | "moc";
 
-export const LISTING_CATEGORIES: ReadonlyArray<{ readonly key: ListingCategory; readonly label: string }> = [
+export const LISTING_CATEGORIES: ReadonlyArray<{
+  readonly key: ListingCategory;
+  readonly label: string;
+}> = [
   { key: "set", label: "세트" },
   { key: "parts", label: "부품" },
   { key: "minifig", label: "미니피그" },

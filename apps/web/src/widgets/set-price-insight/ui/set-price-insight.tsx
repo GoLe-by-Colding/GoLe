@@ -77,7 +77,9 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         <span className="text-2xl font-extrabold tracking-tight text-neutral-900">
           {formatKrw(latest)}
         </span>
-        <span className={`mb-1 text-sm font-bold tabular-nums ${up ? "text-success" : "text-danger"}`}>
+        <span
+          className={`mb-1 text-sm font-bold tabular-nums ${up ? "text-success" : "text-danger"}`}
+        >
           {up ? "▲" : "▼"} {Math.abs(ratio * 100).toFixed(1)}%
         </span>
         <span className="mb-1 text-xs text-neutral-400">최근 체결가 기준</span>
@@ -108,7 +110,9 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
                   className={`border-t border-neutral-100 ${isHighlight ? "bg-brand-50/60" : ""}`}
                 >
                   <td className="px-3 py-2.5">
-                    <span className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}>
+                    <span
+                      className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}
+                    >
                       {CONDITION_LABEL[c.condition]}
                     </span>
                     {isHighlight ? (

@@ -29,9 +29,7 @@ export function PurchaseButton({ listingId, available }: PurchaseButtonProps) {
       const order = await placeOrder(listingId, session.accountId);
       router.push(`/orders/${order.id}`);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "주문 생성 중 오류가 발생했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "주문 생성 중 오류가 발생했습니다.");
       setSubmitting(false);
     }
   }

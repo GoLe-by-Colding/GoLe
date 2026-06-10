@@ -35,10 +35,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-20 border-b border-neutral-200/50 bg-white/80 backdrop-blur-xl backdrop-saturate-[1.8]">
       <Container width="xl">
         <div className="flex h-16 items-center gap-8">
-          <Link
-            href="/"
-            className="inline-flex items-center text-xl text-neutral-900"
-          >
+          <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
             <Logo size={32} className="text-xl" />
           </Link>
           <nav className="flex items-center gap-1 max-sm:hidden">
@@ -147,17 +144,37 @@ export function SiteHeader() {
               {session ? (
                 <>
                   {session.role === "ADMIN" ? (
-                    <LinkButton href="/admin" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
+                    <LinkButton
+                      href="/admin"
+                      fullWidth
+                      variant="ghost"
+                      onClick={() => setMenuOpen(false)}
+                    >
                       관리자
                     </LinkButton>
                   ) : null}
-                  <LinkButton href="/sell" fullWidth variant="secondary" onClick={() => setMenuOpen(false)}>
+                  <LinkButton
+                    href="/sell"
+                    fullWidth
+                    variant="secondary"
+                    onClick={() => setMenuOpen(false)}
+                  >
                     판매하기
                   </LinkButton>
-                  <LinkButton href="/profile" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
+                  <LinkButton
+                    href="/profile"
+                    fullWidth
+                    variant="ghost"
+                    onClick={() => setMenuOpen(false)}
+                  >
                     내 정보
                   </LinkButton>
-                  <LinkButton href="/notifications" fullWidth variant="ghost" onClick={() => setMenuOpen(false)}>
+                  <LinkButton
+                    href="/notifications"
+                    fullWidth
+                    variant="ghost"
+                    onClick={() => setMenuOpen(false)}
+                  >
                     알림
                   </LinkButton>
                   <Button fullWidth variant="ghost" onClick={handleSignOut}>

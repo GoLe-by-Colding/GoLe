@@ -13,14 +13,11 @@ export function fetchCollection(
   });
 }
 
-export function fetchOwnedEstimate(
-  userId: string,
-  signal?: AbortSignal,
-): Promise<number> {
-  return apiRequest<{ readonly ownedEstimatedValue: number }>(
-    `${BASE}/${userId}/estimate`,
-    { cache: "no-store", ...(signal === undefined ? {} : { signal }) },
-  ).then((r) => r.ownedEstimatedValue);
+export function fetchOwnedEstimate(userId: string, signal?: AbortSignal): Promise<number> {
+  return apiRequest<{ readonly ownedEstimatedValue: number }>(`${BASE}/${userId}/estimate`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  }).then((r) => r.ownedEstimatedValue);
 }
 
 export function addCollectionItem(

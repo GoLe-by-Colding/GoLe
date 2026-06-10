@@ -13,11 +13,7 @@ import {
 import { ApiError, uploadImages } from "@shared/api";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
-const CONDITIONS: readonly ItemCondition[] = [
-  "new_sealed",
-  "used_complete",
-  "used_incomplete",
-];
+const CONDITIONS: readonly ItemCondition[] = ["new_sealed", "used_complete", "used_incomplete"];
 
 const COMPLETENESS: readonly Completeness[] = ["full_box", "no_box", "bulk"];
 
@@ -63,9 +59,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       const uploaded = await uploadImages(toUpload);
       setPhotoUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
       setUploading(false);
       event.target.value = ""; // 같은 파일 재선택 허용
@@ -107,9 +101,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       });
       onCreated(listing.id);
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "등록 중 오류가 발생했습니다.",
-      );
+      setError(cause instanceof ApiError ? cause.message : "등록 중 오류가 발생했습니다.");
     } finally {
       setSubmitting(false);
     }
@@ -229,7 +221,10 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         </label>
       </div>
       {hasMissingParts ? (
-        <Field label="누락 부품 상세" hint="어떤 부품이 몇 개 빠졌는지 구체적으로 적어주세요. 누락 부위 사진도 함께 올리면 좋아요.">
+        <Field
+          label="누락 부품 상세"
+          hint="어떤 부품이 몇 개 빠졌는지 구체적으로 적어주세요. 누락 부위 사진도 함께 올리면 좋아요."
+        >
           {({ inputId, describedBy }) => (
             <Textarea
               id={inputId}
@@ -269,9 +264,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
               disabled={uploading || submitting || photoUrls.length >= MAX_PHOTOS}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
-            {uploading ? (
-              <p className="text-sm text-neutral-500">업로드 중...</p>
-            ) : null}
+            {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
             {photoUrls.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
                 {photoUrls.map((url, index) => (
@@ -297,7 +290,10 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
           </div>
         )}
       </Field>
-      <Field label="레고 세트 번호 (선택)" hint="해당하는 공식 세트 번호가 있으면 입력하세요. 세트명·번호는 식별용 텍스트로만 표시됩니다.">
+      <Field
+        label="레고 세트 번호 (선택)"
+        hint="해당하는 공식 세트 번호가 있으면 입력하세요. 세트명·번호는 식별용 텍스트로만 표시됩니다."
+      >
         {({ inputId, describedBy }) => (
           <Input
             id={inputId}

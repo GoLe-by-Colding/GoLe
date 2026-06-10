@@ -51,9 +51,7 @@ export async function apiRequest<TResponse>(
       code: "UNKNOWN",
       message: `Request failed with status ${response.status}`,
     };
-    const parsed = (await response
-      .json()
-      .catch(() => fallback)) as ApiErrorBody;
+    const parsed = (await response.json().catch(() => fallback)) as ApiErrorBody;
     throw new ApiError(response.status, parsed);
   }
 
