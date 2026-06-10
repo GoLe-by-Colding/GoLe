@@ -15,6 +15,9 @@ export type { SkeletonProps } from "./skeleton";
 export { LineChart } from "./line-chart";
 export type { LineChartProps, LineChartPoint } from "./line-chart";
 
+export { BackButton } from "./back-button";
+export type { BackButtonProps } from "./back-button";
+
 export { Badge } from "./badge";
 export type { BadgeProps, BadgeTone } from "./badge";
 
