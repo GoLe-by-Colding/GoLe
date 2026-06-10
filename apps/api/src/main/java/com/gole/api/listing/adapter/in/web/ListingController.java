@@ -68,7 +68,8 @@ public class ListingController {
                         request.missingPartsNote(),
                         request.defectsNote()),
                 request.photoUrls(),
-                request.catalogSetNumber()));
+                request.catalogSetNumber(),
+                com.gole.api.listing.domain.model.ListingCategory.fromKey(request.category())));
         return ListingResponse.from(getListingUseCase.getById(id));
     }
 
@@ -79,9 +80,13 @@ public class ListingController {
             @RequestParam(value = "condition", required = false) ItemCondition condition,
             @RequestParam(value = "minPrice", required = false) Long minPrice,
             @RequestParam(value = "maxPrice", required = false) Long maxPrice,
-            @RequestParam(value = "sort", required = false) ListingSortOrder sort) {
-        ListingSearchQuery searchQuery =
-                new ListingSearchQuery(query, condition, minPrice, maxPrice, sort);
+            @RequestParam(value = "sort", required = false) ListingSortOrder sort,
+            @RequestParam(value = "category", required = false) String category) {
+        ListingSearchQuery searchQuery = new ListingSearchQuery(
+                query, condition, minPrice, maxPrice, sort,
+                category == null
+                        ? null
+                        : com.gole.api.listing.domain.model.ListingCategory.fromKey(category));
         return searchListingsUseCase.search(searchQuery).stream()
                 .map(ListingResponse::from)
                 .toList();

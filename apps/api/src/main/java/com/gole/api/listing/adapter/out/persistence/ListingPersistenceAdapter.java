@@ -7,6 +7,7 @@ import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.listing.domain.model.ListingCategory;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.listing.domain.model.Money;
 import java.util.List;
@@ -67,6 +68,10 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
 
         if (query.condition() != null) {
             criteria = criteria.and("condition").is(query.condition().name());
+        }
+
+        if (query.category() != null) {
+            criteria = criteria.and("category").is(query.category().name());
         }
 
         if (query.minPrice() != null || query.maxPrice() != null) {
@@ -149,6 +154,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 d.defectsNote(),
                 listing.getPhotoUrls(),
                 listing.getCatalogSetNumber(),
+                listing.getCategory().name(),
                 listing.getStatus().name(),
                 listing.getCreatedAt());
     }
@@ -164,6 +170,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 toDisclosure(document),
                 document.getPhotoUrls(),
                 document.getCatalogSetNumber(),
+                ListingCategory.fromKey(document.getCategory()),
                 ListingStatus.valueOf(document.getStatus()),
                 document.getCreatedAt());
     }

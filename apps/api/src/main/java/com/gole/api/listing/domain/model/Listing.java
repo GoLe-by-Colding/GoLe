@@ -21,6 +21,7 @@ public final class Listing {
     private final ConditionDisclosure disclosure;
     private final List<String> photoUrls;
     private final String catalogSetNumber; // nullable
+    private final ListingCategory category;
     private final Instant createdAt;
     private ListingStatus status;
 
@@ -34,6 +35,7 @@ public final class Listing {
             ConditionDisclosure disclosure,
             List<String> photoUrls,
             String catalogSetNumber,
+            ListingCategory category,
             ListingStatus status,
             Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
@@ -48,6 +50,7 @@ public final class Listing {
         }
         this.photoUrls = List.copyOf(photoUrls);
         this.catalogSetNumber = catalogSetNumber;
+        this.category = category == null ? ListingCategory.SET : category;
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
     }
@@ -63,10 +66,11 @@ public final class Listing {
             ConditionDisclosure disclosure,
             List<String> photoUrls,
             String catalogSetNumber,
+            ListingCategory category,
             Instant createdAt) {
         return new Listing(
                 id, sellerId, title, description, price, condition, disclosure,
-                photoUrls, catalogSetNumber, ListingStatus.ACTIVE, createdAt);
+                photoUrls, catalogSetNumber, category, ListingStatus.ACTIVE, createdAt);
     }
 
     /** 판매 완료 처리. (요구사항 5.6) */
@@ -138,6 +142,10 @@ public final class Listing {
 
     public String getCatalogSetNumber() {
         return catalogSetNumber;
+    }
+
+    public ListingCategory getCategory() {
+        return category;
     }
 
     public ListingStatus getStatus() {

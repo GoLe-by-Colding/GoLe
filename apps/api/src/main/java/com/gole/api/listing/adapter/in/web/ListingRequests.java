@@ -27,6 +27,7 @@ public final class ListingRequests {
             @Size(max = 1000) String missingPartsNote,
             @Size(max = 1000) String defectsNote,
             @NotEmpty List<@NotBlank String> photoUrls,
-            String catalogSetNumber) {
+            String catalogSetNumber,
+            String category) {
     }
 }

@@ -60,6 +60,7 @@ public class ListingService
                 command.disclosure(),
                 command.photoUrls(),
                 command.catalogSetNumber(),
+                command.category(),
                 Instant.now(clock));
         return listingRepository.save(listing).getId();
     }

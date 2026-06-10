@@ -43,6 +43,10 @@ public class ListingDocument {
 
     private String catalogSetNumber; // nullable
 
+    /** 매물 카테고리(set/parts/minifig/moc). 레거시 문서는 null → SET. */
+    @Indexed
+    private String category;
+
     @Indexed
     private String status;
 
@@ -68,6 +72,7 @@ public class ListingDocument {
             String defectsNote,
             List<String> photoUrls,
             String catalogSetNumber,
+            String category,
             String status,
             Instant createdAt) {
         this.id = id;
@@ -85,6 +90,7 @@ public class ListingDocument {
         this.defectsNote = defectsNote;
         this.photoUrls = photoUrls;
         this.catalogSetNumber = catalogSetNumber;
+        this.category = category;
         this.status = status;
         this.createdAt = createdAt;
     }
@@ -147,6 +153,10 @@ public class ListingDocument {
 
     public String getCatalogSetNumber() {
         return catalogSetNumber;
+    }
+
+    public String getCategory() {
+        return category;
     }
 
     public String getStatus() {

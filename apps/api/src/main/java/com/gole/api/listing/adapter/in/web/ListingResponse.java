@@ -23,6 +23,7 @@ public record ListingResponse(
         String defectsNote,
         List<String> photoUrls,
         String catalogSetNumber,
+        String category,
         String status,
         Instant createdAt) {
 
@@ -43,6 +44,7 @@ public record ListingResponse(
                 d.defectsNote(),
                 listing.getPhotoUrls(),
                 listing.getCatalogSetNumber(),
+                listing.getCategory().key(),
                 listing.getStatus().name().toLowerCase(),
                 listing.getCreatedAt());
     }
