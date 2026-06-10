@@ -30,7 +30,8 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("GoLe LEGO Marketplace API")
                         .version("1.0.0")
-                        .description("""
+                        .description(
+                                """
                                 GoLe — 레고 중고거래 마켓플레이스 백엔드 API.
 
                                 ## 인증
@@ -45,9 +46,7 @@ public class OpenApiConfig {
                                 { "code": "BUSINESS_ERROR_CODE", "message": "설명" }
                                 ```
                                 """)
-                        .contact(new Contact()
-                                .name("GoLe Team")
-                                .url("https://gole.kscold.com"))
+                        .contact(new Contact().name("GoLe Team").url("https://gole.kscold.com"))
                         .license(new License().name("Private")))
                 .servers(List.of(
                         new Server().url("https://gole.kscold.com").description("Production"),

@@ -12,7 +12,6 @@ import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase.PublishPostCommand;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;

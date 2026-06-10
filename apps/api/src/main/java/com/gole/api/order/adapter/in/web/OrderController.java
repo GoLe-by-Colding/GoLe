@@ -7,7 +7,6 @@ import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

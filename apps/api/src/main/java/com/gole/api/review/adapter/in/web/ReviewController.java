@@ -7,7 +7,6 @@ import com.gole.api.review.application.port.in.GetSellerReviewsUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase.WriteReviewCommand;
 import com.gole.api.review.domain.model.Review;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
