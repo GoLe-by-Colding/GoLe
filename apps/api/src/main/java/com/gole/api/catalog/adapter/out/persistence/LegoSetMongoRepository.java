@@ -12,7 +12,11 @@ public interface LegoSetMongoRepository extends MongoRepository<LegoSetDocument,
     /**
      * 이름 또는 테마에 검색어가 (대소문자 무시) 포함된 문서 검색.
      */
-    List<LegoSetDocument> findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(String name, String theme);
+    List<LegoSetDocument> findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(
+            String name, String theme);
+
+    /** 세트번호(id)로 시작하는 문서 — 자동완성 세트번호 검색용. */
+    List<LegoSetDocument> findByIdStartingWith(String prefix);
 
     /**
      * 추천(featured) 플래그가 켜진 문서 목록을 최대 limit 개 조회.
