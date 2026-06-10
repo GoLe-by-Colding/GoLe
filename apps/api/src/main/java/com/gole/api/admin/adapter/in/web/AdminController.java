@@ -7,10 +7,13 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.ListingRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
+import com.gole.api.admin.adapter.in.web.AdminDtos.ReportRow;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
+import com.gole.api.report.application.port.in.ManageReportsUseCase;
+import com.gole.api.report.domain.model.ReportStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -53,16 +56,19 @@ public class AdminController {
     private final CreateLegoSetUseCase createLegoSetUseCase;
     private final ListLegoSetsUseCase listLegoSetsUseCase;
     private final DeleteListingUseCase deleteListingUseCase;
+    private final ManageReportsUseCase manageReportsUseCase;
 
     public AdminController(
             MongoTemplate mongoTemplate,
             CreateLegoSetUseCase createLegoSetUseCase,
             ListLegoSetsUseCase listLegoSetsUseCase,
-            DeleteListingUseCase deleteListingUseCase) {
+            DeleteListingUseCase deleteListingUseCase,
+            ManageReportsUseCase manageReportsUseCase) {
         this.mongoTemplate = mongoTemplate;
         this.createLegoSetUseCase = createLegoSetUseCase;
         this.listLegoSetsUseCase = listLegoSetsUseCase;
         this.deleteListingUseCase = deleteListingUseCase;
+        this.manageReportsUseCase = manageReportsUseCase;
     }
 
     /** 대시보드 집계: 컬렉션 카운트 + 비즈 지표(GMV·주문상태·활성매물). */
@@ -143,6 +149,30 @@ public class AdminController {
                                 .is(postId)),
                 new org.springframework.data.mongodb.core.query.Update().set("status", "DELETED"),
                 "posts");
+    }
+
+    /** 신고 큐(notice & takedown). status 미지정 시 전체, 기본은 PENDING 우선 처리용 조회. */
+    @GetMapping("/reports")
+    public List<ReportRow> reports(
+            @RequestParam(value = "status", required = false) ReportStatus status,
+            @RequestParam(value = "limit", defaultValue = "30") int limit) {
+        return manageReportsUseCase.list(status, clamp(limit)).stream()
+                .map(ReportRow::from)
+                .toList();
+    }
+
+    /** 신고 조치 완료 처리(매물 내림/게시글 삭제 등 조치 후 호출). */
+    @Operation(summary = "신고 조치 완료", description = "신고를 RESOLVED 로 전이합니다(ADMIN 전용).")
+    @PostMapping("/reports/{reportId}/resolve")
+    public ReportRow resolveReport(@PathVariable String reportId) {
+        return ReportRow.from(manageReportsUseCase.resolve(reportId));
+    }
+
+    /** 신고 기각(문제 없음). */
+    @Operation(summary = "신고 기각", description = "신고를 DISMISSED 로 전이합니다(ADMIN 전용).")
+    @PostMapping("/reports/{reportId}/dismiss")
+    public ReportRow dismissReport(@PathVariable String reportId) {
+        return ReportRow.from(manageReportsUseCase.dismiss(reportId));
     }
 
     /** 회원 목록(최근 가입순). */

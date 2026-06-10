@@ -2,6 +2,7 @@ package com.gole.api.admin.adapter.in.web;
 
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.report.domain.model.Report;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -118,6 +119,32 @@ public final class AdminDtos {
                     s.getReleaseYear(),
                     s.getRetirementStatus().name(),
                     s.getImageUrl());
+        }
+    }
+
+    /** 신고 큐 행 — notice & takedown 모더레이션용. */
+    public record ReportRow(
+            String id,
+            String reporterId,
+            String targetType,
+            String targetId,
+            String reason,
+            String detail,
+            String status,
+            Instant createdAt,
+            Instant handledAt) {
+
+        public static ReportRow from(Report r) {
+            return new ReportRow(
+                    r.getId(),
+                    r.getReporterId(),
+                    r.getTargetType().name(),
+                    r.getTargetId(),
+                    r.getReason().name(),
+                    r.getDetail(),
+                    r.getStatus().name(),
+                    r.getCreatedAt(),
+                    r.getHandledAt());
         }
     }
 }
