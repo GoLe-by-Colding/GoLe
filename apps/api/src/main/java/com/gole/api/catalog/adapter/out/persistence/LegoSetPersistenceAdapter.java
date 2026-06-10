@@ -45,7 +45,7 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
         List<String> found = byName.stream().map(LegoSetDocument::getSetNumber).toList();
         List<LegoSet> result = new java.util.ArrayList<>(
                 byName.stream().map(LegoSetDocument::toDomain).toList());
-        repository.findByIdStartingWith(query).stream()
+        repository.findBySetNumberStartingWith(query).stream()
                 .filter(d -> !found.contains(d.getSetNumber()))
                 .map(LegoSetDocument::toDomain)
                 .forEach(result::add);
