@@ -24,6 +24,24 @@ export interface PriceExplorerProps {
 }
 
 type Period = "1M" | "6M" | "1Y" | "ALL";
+type SortKey = "popular" | "recent" | "price_desc" | "price_asc";
+
+const SORTS: ReadonlyArray<{ readonly value: SortKey; readonly label: string }> = [
+  { value: "popular", label: "인기순" },
+  { value: "recent", label: "최신 거래순" },
+  { value: "price_desc", label: "가격 높은순" },
+  { value: "price_asc", label: "가격 낮은순" },
+];
+
+function lastPrice(item: PriceBoardItem): number {
+  return item.points.length > 0 ? item.points[item.points.length - 1]!.price : 0;
+}
+
+function lastTime(item: PriceBoardItem): number {
+  return item.points.length > 0
+    ? new Date(item.points[item.points.length - 1]!.executedAt).getTime()
+    : 0;
+}
 
 const PERIODS: ReadonlyArray<{ readonly value: Period; readonly label: string; readonly days: number }> = [
   { value: "1M", label: "1개월", days: 31 },
@@ -65,10 +83,21 @@ function ChangeBadge({ ratio }: { readonly ratio: number }) {
 }
 
 export function PriceExplorer({ items }: PriceExplorerProps) {
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => b.points.length - a.points.length),
-    [items],
-  );
+  const [sort, setSort] = useState<SortKey>("popular");
+  const sorted = useMemo(() => {
+    const copy = [...items];
+    switch (sort) {
+      case "recent":
+        return copy.sort((a, b) => lastTime(b) - lastTime(a));
+      case "price_desc":
+        return copy.sort((a, b) => lastPrice(b) - lastPrice(a));
+      case "price_asc":
+        return copy.sort((a, b) => lastPrice(a) - lastPrice(b));
+      case "popular":
+      default:
+        return copy.sort((a, b) => b.points.length - a.points.length);
+    }
+  }, [items, sort]);
   const firstWithData = sorted.find((i) => i.points.length >= 2) ?? sorted[0];
   const [selected, setSelected] = useState<string>(firstWithData?.setNumber ?? "");
   const [period, setPeriod] = useState<Period>("6M");
@@ -89,8 +118,24 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-      {/* 세트 목록 */}
-      <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-2xl border border-neutral-200/60 bg-white p-2 shadow-soft max-lg:max-h-none">
+      {/* 세트 목록 + 정렬 */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-sm font-bold text-neutral-900">세트 시세</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            aria-label="정렬"
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 focus-visible:outline-2 focus-visible:outline-brand-400"
+          >
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-2xl border border-neutral-200/60 bg-white p-2 shadow-soft max-lg:max-h-none">
         {sorted.map((item) => {
           const active = item.setNumber === current.setNumber;
           const itemLatest =
@@ -131,6 +176,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
           );
         })}
       </ol>
+      </div>
 
       {/* 상세 */}
       <Card padded className="flex flex-col gap-5">

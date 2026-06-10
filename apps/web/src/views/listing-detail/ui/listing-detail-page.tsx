@@ -11,6 +11,7 @@ import { ApiError } from "@shared/api";
 import { Badge, Button, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
+import { SetPriceInsight } from "@widgets/set-price-insight";
 
 async function loadListing(id: string): Promise<Listing> {
   try {
@@ -34,7 +35,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
 
   return (
     <Container width="lg">
-      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-10 pt-8 pb-16 max-[820px]:grid-cols-1 max-[820px]:gap-6">
+      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-10 pt-8 max-[820px]:grid-cols-1 max-[820px]:gap-6">
         <div className="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="w-full aspect-[4/3] object-cover" src={cover} alt={listing.title} />
@@ -92,6 +93,14 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
           </div>
         </div>
       </div>
+
+      {listing.catalogSetNumber !== null ? (
+        <div className="pb-16">
+          <SetPriceInsight setNumber={listing.catalogSetNumber} highlight={listing.condition} />
+        </div>
+      ) : (
+        <div className="pb-16" />
+      )}
     </Container>
   );
 }
