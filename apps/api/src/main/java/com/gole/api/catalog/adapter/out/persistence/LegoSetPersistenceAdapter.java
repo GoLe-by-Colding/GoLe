@@ -38,9 +38,18 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
 
     @Override
     public List<LegoSet> searchByNameOrTheme(String query) {
-        return repository.findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(query, query).stream()
+        // 이름/테마 검색
+        List<LegoSetDocument> byName = repository
+                .findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(query, query);
+        // 세트번호(id) 시작 검색 — 중복 제거
+        List<String> found = byName.stream().map(LegoSetDocument::getSetNumber).toList();
+        List<LegoSet> result = new java.util.ArrayList<>(
+                byName.stream().map(LegoSetDocument::toDomain).toList());
+        repository.findByIdStartingWith(query).stream()
+                .filter(d -> !found.contains(d.getSetNumber()))
                 .map(LegoSetDocument::toDomain)
-                .toList();
+                .forEach(result::add);
+        return result;
     }
 
     @Override
