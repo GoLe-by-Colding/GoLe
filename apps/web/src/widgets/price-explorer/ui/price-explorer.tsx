@@ -78,6 +78,10 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
   const series = current ? filterByPeriod(current.points, periodDays) : [];
   const latest = series.length > 0 ? series[series.length - 1]!.price : null;
   const ratio = changeRatio(series);
+  const seriesPrices = series.map((p) => p.price);
+  const high = seriesPrices.length > 0 ? Math.max(...seriesPrices) : null;
+  const low = seriesPrices.length > 0 ? Math.min(...seriesPrices) : null;
+  const recent = [...series].slice(-8).reverse();
 
   if (!current) {
     return null;
@@ -185,6 +189,23 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               emptyText="시세 데이터가 부족해요"
             />
 
+            {/* 기간 통계 스트립 */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "거래량", value: `${series.length}건` },
+                { label: "기간 고가", value: high !== null ? formatKrw(high) : "—" },
+                { label: "기간 저가", value: low !== null ? formatKrw(low) : "—" },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  className="flex flex-col gap-0.5 rounded-xl border border-neutral-200/60 bg-neutral-50 px-3 py-2.5"
+                >
+                  <span className="text-xs text-neutral-400">{s.label}</span>
+                  <span className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</span>
+                </div>
+              ))}
+            </div>
+
             {/* 상태별 감가 · 매수/매도 */}
             {current.valuation?.hasData ? (
               <div className="flex flex-col gap-2">
@@ -206,8 +227,17 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                     <tbody>
                       {current.valuation.conditions.map((c) => (
                         <tr key={c.condition} className="border-t border-neutral-100">
-                          <td className="px-3 py-2.5 font-medium text-neutral-900">
-                            {CONDITION_LABEL[c.condition]}
+                          <td className="px-3 py-2.5">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-neutral-900">
+                                {CONDITION_LABEL[c.condition]}
+                              </span>
+                              <span
+                                className={`text-[11px] ${c.basedOnRealData ? "text-success" : "text-neutral-400"}`}
+                              >
+                                {c.basedOnRealData ? `실거래 ${c.sampleCount}건` : "추정"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-2.5 text-right tabular-nums text-neutral-500">
                             {c.depreciationPct === 0 ? "—" : `-${c.depreciationPct}%`}
@@ -230,6 +260,26 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   즉시판매(매도)는 판매자가 바로 받는 가격, 즉시구매(매수)는 구매자가 바로 내는
                   가격이에요. 상태가 낮을수록 감가가 적용됩니다.
                 </p>
+              </div>
+            ) : null}
+
+            {/* 최근 체결 내역 */}
+            {recent.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-bold text-neutral-900">최근 체결 내역</span>
+                <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200/60">
+                  {recent.map((p, i) => (
+                    <li
+                      key={`${p.executedAt}-${i}`}
+                      className="flex items-center justify-between px-3 py-2 text-sm"
+                    >
+                      <span className="text-neutral-500">{formatDate(p.executedAt)}</span>
+                      <span className="font-semibold tabular-nums text-neutral-900">
+                        {formatKrw(p.price)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
           </>

@@ -24,6 +24,8 @@ export interface ConditionValuation {
   readonly fairPrice: number;
   readonly sellPrice: number;
   readonly buyPrice: number;
+  readonly sampleCount: number;
+  readonly basedOnRealData: boolean;
 }
 
 export interface PriceValuation {
