@@ -91,7 +91,11 @@ export async function SearchPage(props: SearchPageProps) {
         <div className="sticky top-16 z-10 -mx-2 bg-neutral-50/85 px-2 py-2 backdrop-blur-md">
           <ListingFilterBar initial={initial} />
         </div>
-        <ListingGrid listings={listings} emptyMessage="조건에 맞는 상품이 없습니다." />
+        <ListingGrid
+          key={JSON.stringify(params)}
+          listings={listings}
+          emptyMessage="조건에 맞는 상품이 없습니다."
+        />
       </div>
     </Container>
   );

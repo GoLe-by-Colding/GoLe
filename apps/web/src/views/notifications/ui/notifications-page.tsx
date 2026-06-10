@@ -9,7 +9,7 @@ import {
   type Notification,
 } from "@entities/notification";
 import { useSession } from "@entities/user";
-import { Button, Card, Container, Heading, LinkButton, Text } from "@shared/ui";
+import { Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
 
 /**
  * 알림 목록. 항목 클릭 시 읽음 처리 후 링크 이동, 전체 읽음 버튼 제공. (알림 스펙 N7)
@@ -82,7 +82,17 @@ export function NotificationsPage() {
         </div>
 
         {loading ? (
-          <Text tone="muted">불러오는 중...</Text>
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 px-1 py-2">
+                <Skeleton circle className="mt-1.5 h-2 w-2 shrink-0" />
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : items.length === 0 ? (
           <Card>
             <div className="flex flex-col items-center gap-2 p-10 text-center">
