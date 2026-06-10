@@ -134,8 +134,6 @@ public class OrderService
 
     @Override
     @Transactional(readOnly = true)
-    @Override
-    @Transactional(readOnly = true)
     public Order getById(String orderId) {
         return orderRepository
                 .findById(orderId)
@@ -144,6 +142,10 @@ public class OrderService
 
     @Override
     @Transactional(readOnly = true)
+    public List<Order> getByBuyerId(String buyerId) {
+        return orderRepository.findByBuyerId(buyerId);
+    }
+}
     public java.util.List<Order> getByBuyerId(String buyerId) {
         return orderRepository.findByBuyerId(buyerId);
     }
