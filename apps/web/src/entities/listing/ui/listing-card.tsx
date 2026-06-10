@@ -1,7 +1,7 @@
 import { Badge, Card } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
-import { completenessLabel, conditionLabel, formatPriceKrw } from "../model/types";
+import { completenessLabel, conditionLabel, formatPriceKrw, LISTING_CATEGORY_LABEL } from "../model/types";
 
 export interface ListingCardProps {
   readonly listing: Listing;
@@ -23,6 +23,9 @@ export function ListingCard({ listing }: ListingCardProps) {
       </div>
       <div className="flex flex-col gap-2.5 p-4">
         <div className="flex items-center gap-1.5 flex-wrap">
+          {listing.category !== "set" ? (
+            <Badge tone="brand">{LISTING_CATEGORY_LABEL[listing.category]}</Badge>
+          ) : null}
           <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
           <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
           {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}

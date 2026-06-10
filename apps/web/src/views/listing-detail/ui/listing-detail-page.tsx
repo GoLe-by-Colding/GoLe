@@ -6,6 +6,7 @@ import {
   fetchListingById,
   formatPriceKrw,
   ListingGallery,
+  LISTING_CATEGORY_LABEL,
   type Listing,
 } from "@entities/listing";
 import { ApiError } from "@shared/api";
@@ -39,6 +40,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
         <ListingGallery photos={listing.photoUrls} alt={listing.title} />
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
+            <Badge tone="brand">{LISTING_CATEGORY_LABEL[listing.category]}</Badge>
             <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
             <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
             {listing.catalogSetNumber !== null ? (

@@ -2,6 +2,7 @@ import {
   searchListings,
   type ItemCondition,
   type Listing,
+  type ListingCategory,
   type ListingSort,
   type SearchListingsParams,
 } from "@entities/listing";
@@ -12,6 +13,7 @@ import { ListingGrid } from "@widgets/listing-grid";
 export interface SearchPageProps {
   readonly query?: string | undefined;
   readonly condition?: string | undefined;
+  readonly category?: string | undefined;
   readonly minPrice?: string | undefined;
   readonly maxPrice?: string | undefined;
   readonly sort?: string | undefined;
@@ -22,10 +24,15 @@ const CONDITIONS: readonly ItemCondition[] = [
   "used_complete",
   "used_incomplete",
 ];
+const CATEGORIES: readonly ListingCategory[] = ["set", "parts", "minifig", "moc"];
 const SORTS: readonly ListingSort[] = ["newest", "price_asc", "price_desc"];
 
 function parseCondition(value: string | undefined): ItemCondition | undefined {
   return CONDITIONS.find((c) => c === value);
+}
+
+function parseCategory(value: string | undefined): ListingCategory | undefined {
+  return CATEGORIES.find((c) => c === value);
 }
 
 function parseSort(value: string | undefined): ListingSort {
@@ -50,6 +57,7 @@ async function loadListings(params: SearchListingsParams): Promise<readonly List
 
 export async function SearchPage(props: SearchPageProps) {
   const condition = parseCondition(props.condition);
+  const category = parseCategory(props.category);
   const sort = parseSort(props.sort);
   const minPrice = parsePrice(props.minPrice);
   const maxPrice = parsePrice(props.maxPrice);
@@ -57,6 +65,7 @@ export async function SearchPage(props: SearchPageProps) {
   const params: SearchListingsParams = {
     ...(props.query ? { query: props.query } : {}),
     ...(condition ? { condition } : {}),
+    ...(category ? { category } : {}),
     ...(minPrice !== undefined ? { minPrice } : {}),
     ...(maxPrice !== undefined ? { maxPrice } : {}),
     sort,
@@ -67,6 +76,7 @@ export async function SearchPage(props: SearchPageProps) {
   const initial: ListingFilterValues = {
     query: props.query ?? "",
     condition: condition ?? "",
+    category: category ?? "",
     minPrice: props.minPrice ?? "",
     maxPrice: props.maxPrice ?? "",
     sort,

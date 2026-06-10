@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import {
   conditionLabel,
   type ItemCondition,
+  type ListingCategory,
   type ListingSort,
+  LISTING_CATEGORIES,
 } from "@entities/listing";
 import { Button, Input, Select } from "@shared/ui";
 
 export interface ListingFilterValues {
   readonly query: string;
   readonly condition: ItemCondition | "";
+  readonly category: ListingCategory | "";
   readonly minPrice: string;
   readonly maxPrice: string;
   readonly sort: ListingSort;
@@ -53,6 +56,9 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
     if (values.condition) {
       qs.set("condition", values.condition);
     }
+    if (values.category) {
+      qs.set("category", values.category);
+    }
     if (values.minPrice.trim()) {
       qs.set("minPrice", values.minPrice.trim());
     }
@@ -81,6 +87,23 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
           placeholder="제목, 설명, 세트번호"
           onChange={(e) => update("query", e.target.value)}
         />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-neutral-600" htmlFor="f-category">
+          카테고리
+        </label>
+        <Select
+          id="f-category"
+          value={values.category}
+          onChange={(e) => update("category", e.target.value as ListingCategory | "")}
+        >
+          <option value="">전체</option>
+          {LISTING_CATEGORIES.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-neutral-600" htmlFor="f-condition">

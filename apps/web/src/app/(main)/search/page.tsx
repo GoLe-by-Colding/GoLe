@@ -24,6 +24,7 @@ export default async function Page({
     <SearchPage
       query={first(sp["query"])}
       condition={first(sp["condition"])}
+      category={first(sp["category"])}
       minPrice={first(sp["minPrice"])}
       maxPrice={first(sp["maxPrice"])}
       sort={first(sp["sort"])}

@@ -5,8 +5,10 @@ import {
   createListing,
   type ItemCondition,
   type Completeness,
+  type ListingCategory,
   conditionLabel,
   completenessLabel,
+  LISTING_CATEGORIES,
 } from "@entities/listing";
 import { ApiError, uploadImages } from "@shared/api";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
@@ -26,6 +28,7 @@ export interface CreateListingFormProps {
 
 export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProps) {
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<ListingCategory>("set");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [condition, setCondition] = useState<ItemCondition>("new_sealed");
@@ -100,6 +103,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         defectsNote: defectsNote.trim(),
         photoUrls: [...photoUrls],
         catalogSetNumber: catalogSetNumber.trim().length > 0 ? catalogSetNumber.trim() : null,
+        category,
       });
       onCreated(listing.id);
     } catch (cause) {
@@ -118,6 +122,21 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
           {error}
         </p>
       ) : null}
+      <Field label="카테고리">
+        {({ inputId }) => (
+          <Select
+            id={inputId}
+            value={category}
+            onChange={(e) => setCategory(e.target.value as ListingCategory)}
+          >
+            {LISTING_CATEGORIES.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
       <Field label="제목">
         {({ inputId, describedBy }) => (
           <Input

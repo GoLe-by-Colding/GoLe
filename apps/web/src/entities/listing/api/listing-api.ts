@@ -1,5 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type { Completeness, ItemCondition, Listing } from "../model/types";
+import type { Completeness, ItemCondition, Listing, ListingCategory } from "../model/types";
 
 export interface CreateListingInput {
   readonly sellerId: string;
@@ -15,6 +15,7 @@ export interface CreateListingInput {
   readonly defectsNote: string;
   readonly photoUrls: readonly string[];
   readonly catalogSetNumber: string | null;
+  readonly category: ListingCategory;
 }
 
 /** 리스팅 생성. 백엔드는 condition/completeness를 대문자 enum으로 받는다. */
@@ -35,6 +36,7 @@ export function createListing(input: CreateListingInput): Promise<Listing> {
       defectsNote: input.defectsNote,
       photoUrls: input.photoUrls,
       catalogSetNumber: input.catalogSetNumber,
+      category: input.category,
     },
   });
 }
@@ -57,6 +59,7 @@ export interface SearchListingsParams {
   readonly minPrice?: number;
   readonly maxPrice?: number;
   readonly sort?: ListingSort;
+  readonly category?: ListingCategory;
 }
 
 /** 활성 리스팅 검색/필터/정렬. 백엔드는 enum을 대문자로 받는다. (요구사항 14) */
@@ -79,6 +82,9 @@ export function searchListings(
   }
   if (params.sort) {
     qs.set("sort", params.sort.toUpperCase());
+  }
+  if (params.category) {
+    qs.set("category", params.category);
   }
   const suffix = qs.toString().length > 0 ? `?${qs.toString()}` : "";
   return apiRequest<readonly Listing[]>(`/api/v1/listings${suffix}`, {

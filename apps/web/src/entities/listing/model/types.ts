@@ -6,6 +6,21 @@ import { formatKrw } from "@shared/lib";
 export type ItemCondition = "new_sealed" | "used_complete" | "used_incomplete";
 export type Completeness = "full_box" | "no_box" | "bulk";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
+export type ListingCategory = "set" | "parts" | "minifig" | "moc";
+
+export const LISTING_CATEGORIES: ReadonlyArray<{ readonly key: ListingCategory; readonly label: string }> = [
+  { key: "set", label: "세트" },
+  { key: "parts", label: "부품" },
+  { key: "minifig", label: "미니피그" },
+  { key: "moc", label: "창작품(MOC)" },
+];
+
+export const LISTING_CATEGORY_LABEL: Record<ListingCategory, string> = {
+  set: "세트",
+  parts: "부품",
+  minifig: "미니피그",
+  moc: "창작품(MOC)",
+};
 
 export interface Listing {
   readonly id: string;
@@ -22,6 +37,7 @@ export interface Listing {
   readonly defectsNote: string;
   readonly photoUrls: readonly string[];
   readonly catalogSetNumber: string | null;
+  readonly category: ListingCategory;
   readonly status: ListingStatus;
   readonly createdAt: string;
 }
