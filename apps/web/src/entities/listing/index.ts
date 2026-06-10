@@ -1,5 +1,7 @@
 export { ListingCard } from "./ui/listing-card";
 export type { ListingCardProps } from "./ui/listing-card";
+export { ListingGallery } from "./ui/listing-gallery";
+export type { ListingGalleryProps } from "./ui/listing-gallery";
 export {
   fetchActiveListings,
   searchListings,
