@@ -259,8 +259,8 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   <span className="text-sm font-bold text-neutral-900">상태별 시세</span>
                   <span className="text-xs text-neutral-400">최근 체결가 기준 추정</span>
                 </div>
-                <div className="overflow-hidden rounded-xl border border-neutral-200/60">
-                  <table className="w-full border-collapse text-sm">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+                  <table className="w-full min-w-[520px] border-collapse text-sm">
                     <thead>
                       <tr className="bg-neutral-50 text-xs text-neutral-500">
                         <th className="px-3 py-2 text-left font-medium">상태</th>

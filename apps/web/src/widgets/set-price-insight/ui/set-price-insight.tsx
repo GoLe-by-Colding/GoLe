@@ -91,8 +91,8 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         emptyText="시세 데이터가 부족해요"
       />
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200/60">
-        <table className="w-full border-collapse text-sm">
+      <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+        <table className="w-full min-w-[460px] border-collapse text-sm">
           <thead>
             <tr className="bg-neutral-50 text-xs text-neutral-500">
               <th className="px-3 py-2 text-left font-medium">상태</th>
