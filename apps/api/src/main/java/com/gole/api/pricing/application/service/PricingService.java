@@ -5,6 +5,7 @@ import com.gole.api.pricing.application.port.in.RecordExecutedPriceUseCase;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import com.gole.api.pricing.domain.model.PriceValuation;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,5 +54,11 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
                 new ArrayList<>(repository.findInRangeAscending(setNumber, null, null));
         Collections.reverse(recentFirst);
         return recentFirst;
+    }
+
+    @Override
+    public Optional<PriceValuation> getValuation(String setNumber) {
+        return getStatistics(setNumber, null, null)
+                .map(stats -> PriceValuation.fromMarketPrice(setNumber, stats.latestPrice()));
     }
 }

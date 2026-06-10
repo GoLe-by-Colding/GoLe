@@ -33,32 +33,48 @@ public class PricingSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (repository.count() > 0) {
-            return;
-        }
-        // setNumber → 기준가(원). 기준가 주변으로 변동시킨다.
+        // setNumber → 기준가(원). 기준가에 추세와 결정적 노이즈를 더해 시계열을 만든다.
         record Seed(String setNumber, long base) {
         }
         List<Seed> seeds = List.of(
                 new Seed("10307", 850_000),
                 new Seed("75192", 1_200_000),
                 new Seed("10294", 800_000),
-                new Seed("10276", 620_000),
-                new Seed("75313", 950_000));
+                new Seed("42143", 480_000),
+                new Seed("71043", 560_000),
+                new Seed("10300", 190_000),
+                new Seed("21330", 360_000),
+                new Seed("75313", 950_000),
+                new Seed("10276", 680_000),
+                new Seed("21318", 520_000),
+                new Seed("92176", 220_000),
+                new Seed("10497", 160_000));
 
         Instant now = Instant.now();
         List<PriceTransactionDocument> docs = new ArrayList<>();
+        int weeks = 30;
         for (Seed s : seeds) {
-            for (int week = 24; week >= 0; week--) {
-                // 결정적 의사난수(±12%) — 시드 재현성을 위해 해시 기반.
-                int wobble = ((s.setNumber().hashCode() + week * 31) % 25) - 12; // -12..+12
-                long price = s.base() + (s.base() * wobble / 100);
+            // 세트별 멱등: 이미 체결 이력이 있으면 건너뛴다(기존 데이터 보존).
+            if (!repository.findBySetNumberOrderByExecutedAtAsc(s.setNumber()).isEmpty()) {
+                continue;
+            }
+            int hash = Math.abs(s.setNumber().hashCode());
+            // 세트별 장기 추세: -12% ~ +24%
+            double trend = ((hash % 37) - 12) / 100.0;
+            for (int week = weeks; week >= 0; week--) {
+                double progress = (double) (weeks - week) / weeks; // 0 → 1
+                // 결정적 단기 변동(±6%).
+                int wobble = ((hash + week * 17) % 13) - 6;
+                double factor = 1.0 + trend * progress + wobble / 100.0;
+                long price = Math.max(1, Math.round(s.base() * factor));
                 Instant executedAt = now.minus(week * 7L, ChronoUnit.DAYS);
                 docs.add(new PriceTransactionDocument(
                         UUID.randomUUID().toString(), s.setNumber(), price, 1, executedAt));
             }
         }
-        repository.saveAll(docs);
-        log.info("[seed] pricing: {}건 체결 이력 적재(세트 {}개)", docs.size(), seeds.size());
+        if (!docs.isEmpty()) {
+            repository.saveAll(docs);
+            log.info("[seed] pricing: {}건 체결 이력 적재", docs.size());
+        }
     }
 }

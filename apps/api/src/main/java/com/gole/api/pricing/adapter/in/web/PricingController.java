@@ -2,6 +2,7 @@ package com.gole.api.pricing.adapter.in.web;
 
 import com.gole.api.pricing.adapter.in.web.PricingResponses.PricePointResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.StatisticsResponse;
+import com.gole.api.pricing.adapter.in.web.PricingResponses.ValuationResponse;
 import com.gole.api.pricing.application.port.in.GetPriceInsightsUseCase;
 import java.time.Instant;
 import java.util.List;
@@ -54,5 +55,12 @@ public class PricingController {
         return getPriceInsightsUseCase.getHistory(setNumber).stream()
                 .map(PricePointResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/valuation")
+    public ValuationResponse valuation(@PathVariable String setNumber) {
+        return getPriceInsightsUseCase.getValuation(setNumber)
+                .map(ValuationResponse::of)
+                .orElseGet(() -> ValuationResponse.noData(setNumber));
     }
 }

@@ -2,7 +2,9 @@ package com.gole.api.pricing.adapter.in.web;
 
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import com.gole.api.pricing.domain.model.PriceValuation;
 import java.time.Instant;
+import java.util.List;
 
 public final class PricingResponses {
 
@@ -36,6 +38,38 @@ public final class PricingResponses {
 
         public static PricePointResponse from(PriceTransaction tx) {
             return new PricePointResponse(tx.price(), tx.quantity(), tx.executedAt());
+        }
+    }
+
+    public record ConditionValuationResponse(
+            String condition,
+            int depreciationPct,
+            long fairPrice,
+            long sellPrice,
+            long buyPrice) {
+
+        public static ConditionValuationResponse from(PriceValuation.ConditionValuation c) {
+            return new ConditionValuationResponse(
+                    c.condition().key(), c.depreciationPct(), c.fairPrice(), c.sellPrice(), c.buyPrice());
+        }
+    }
+
+    public record ValuationResponse(
+            String setNumber,
+            boolean hasData,
+            Long marketPrice,
+            List<ConditionValuationResponse> conditions) {
+
+        public static ValuationResponse noData(String setNumber) {
+            return new ValuationResponse(setNumber, false, null, List.of());
+        }
+
+        public static ValuationResponse of(PriceValuation valuation) {
+            return new ValuationResponse(
+                    valuation.setNumber(),
+                    true,
+                    valuation.marketPrice(),
+                    valuation.conditions().stream().map(ConditionValuationResponse::from).toList());
         }
     }
 }
