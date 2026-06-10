@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 동일 ref의 이전 실행은 취소(최신만 유지)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Frontend (lint · format · typecheck · build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prettier (format check)
+        run: pnpm --filter web format:check
+
+      - name: ESLint (boundaries)
+        run: pnpm --filter web lint
+
+      - name: Typecheck
+        run: pnpm --filter web typecheck
+
+      - name: FSD lint (steiger)
+        run: pnpm --filter web fsd:lint
+
+      - name: Build
+        run: pnpm --filter web build
+
+  api:
+    name: Backend (spotless · test · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Spotless check
+        run: ./gradlew spotlessCheck --no-daemon
+
+      - name: Test & build
+        run: ./gradlew build --no-daemon
