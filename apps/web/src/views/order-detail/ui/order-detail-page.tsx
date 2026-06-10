@@ -11,7 +11,7 @@ import {
 } from "@entities/order";
 import { ApiError } from "@shared/api";
 import { formatKrw, isPortOneEnabled, requestPortOnePayment } from "@shared/lib";
-import { Badge, Button, Card, Container, Heading, Text } from "@shared/ui";
+import { Badge, Button, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
 import { WriteReviewForm } from "@features/write-review";
 
 export interface OrderDetailPageProps {
@@ -98,8 +98,15 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   if (order === null) {
     return (
       <Container width="sm">
-        <div className="pt-10">
-          <Text tone="muted">불러오는 중...</Text>
+        <div className="flex flex-col gap-5 pt-10 pb-16">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+          <Skeleton className="h-28 w-full rounded-2xl" />
+          <div className="flex gap-3">
+            <Skeleton className="h-12 flex-1 rounded-xl" />
+          </div>
         </div>
       </Container>
     );

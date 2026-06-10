@@ -38,6 +38,7 @@ export function ListingCard({ listing }: ListingCardProps) {
           <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
           <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
           {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
+          {listing.status === "reserved" ? <Badge tone="warning">예약중</Badge> : null}
         </div>
         <span className="text-[15px] font-semibold leading-snug text-neutral-900 line-clamp-1">
           {listing.title}
