@@ -7,8 +7,15 @@ export {
   searchListings,
   fetchListingById,
   createListing,
+  fetchListingComments,
+  postListingComment,
 } from "./api/listing-api";
-export type { CreateListingInput, SearchListingsParams, ListingSort } from "./api/listing-api";
+export type {
+  CreateListingInput,
+  SearchListingsParams,
+  ListingSort,
+  ListingCommentItem,
+} from "./api/listing-api";
 export type {
   Listing,
   ItemCondition,

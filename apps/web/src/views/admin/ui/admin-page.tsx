@@ -7,11 +7,18 @@ import {
   fetchAdminListings,
   fetchAdminOrders,
   fetchAdminOverview,
+  fetchAdminPosts,
+  fetchAdminAccounts,
   fetchAdminSets,
+  removeAdminPost,
+  lockAdminAccount,
+  unlockAdminAccount,
   takedownListing,
   type AdminListing,
   type AdminLegoSet,
   type AdminOrder,
+  type AdminPost,
+  type AdminAccount,
   type CreateSetInput,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
@@ -73,6 +80,8 @@ export function AdminPage() {
   const [ordersByStatus, setOrdersByStatus] = useState<Readonly<Record<string, number>>>({});
   const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
   const [listings, setListings] = useState<readonly AdminListing[]>([]);
+  const [posts, setPosts] = useState<readonly AdminPost[]>([]);
+  const [accounts, setAccounts] = useState<readonly AdminAccount[]>([]);
   const [sets, setSets] = useState<readonly AdminLegoSet[]>([]);
   const [form, setForm] = useState<CreateSetInput>(EMPTY_FORM);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -86,11 +95,13 @@ export function AdminPage() {
     let active = true;
     void (async () => {
       try {
-        const [overview, list, orderRows, listingRows] = await Promise.all([
+        const [overview, list, orderRows, listingRows, postRows, accountRows] = await Promise.all([
           fetchAdminOverview(token),
           fetchAdminSets(token),
           fetchAdminOrders(token, 30),
           fetchAdminListings(token, 30),
+          fetchAdminPosts(token, 30),
+          fetchAdminAccounts(token, 30),
         ]);
         if (active) {
           setCounts(overview.counts);
@@ -100,6 +111,8 @@ export function AdminPage() {
           setSets(list);
           setOrders(orderRows);
           setListings(listingRows);
+          setPosts(postRows);
+          setAccounts(accountRows);
         }
       } catch (cause) {
         if (active) {
@@ -127,6 +140,39 @@ export function AdminPage() {
       setReloadKey((k) => k + 1);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "매물 내리기에 실패했습니다.");
+    }
+  }
+
+  async function handleRemovePost(postId: string) {
+    if (token === null) {
+      return;
+    }
+    if (!window.confirm("이 게시글을 삭제할까요?")) {
+      return;
+    }
+    setError(undefined);
+    try {
+      await removeAdminPost(token, postId);
+      setReloadKey((k) => k + 1);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "게시글 삭제에 실패했습니다.");
+    }
+  }
+
+  async function handleLockToggle(accountId: string, locked: boolean) {
+    if (token === null) {
+      return;
+    }
+    setError(undefined);
+    try {
+      if (locked) {
+        await unlockAdminAccount(token, accountId);
+      } else {
+        await lockAdminAccount(token, accountId);
+      }
+      setReloadKey((k) => k + 1);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "계정 잠금 변경에 실패했습니다.");
     }
   }
 
@@ -329,6 +375,105 @@ export function AdminPage() {
                   <tr>
                     <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                       매물이 없습니다.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+
+        {/* 커뮤니티 모더레이션 */}
+        <section className="flex flex-col gap-3">
+          <Heading level={3}>커뮤니티 게시글</Heading>
+          <Card padded={false} className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="bg-neutral-50 text-xs text-neutral-500">
+                  <th className="px-3 py-2 text-left font-medium">내용</th>
+                  <th className="px-3 py-2 text-left font-medium">작성자</th>
+                  <th className="px-3 py-2 text-left font-medium">주제</th>
+                  <th className="px-3 py-2 text-left font-medium">상태</th>
+                  <th className="px-3 py-2 text-right font-medium">관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.map((p) => (
+                  <tr key={p.id} className="border-t border-neutral-100">
+                    <td className="max-w-[200px] truncate px-3 py-2.5 text-neutral-800">
+                      {p.content}
+                    </td>
+                    <td className="px-3 py-2.5 text-neutral-600">{p.authorId.slice(0, 8)}</td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone="neutral">{p.type}</Badge>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Badge tone={p.status === "PUBLISHED" ? "success" : "danger"}>
+                        {p.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {p.status !== "DELETED" ? (
+                        <Button size="sm" variant="ghost" onClick={() => handleRemovePost(p.id)}>
+                          삭제
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-neutral-400">삭제됨</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {posts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                      게시글이 없습니다.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+
+        {/* 회원 관리 */}
+        <section className="flex flex-col gap-3">
+          <Heading level={3}>회원 관리</Heading>
+          <Card padded={false} className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="bg-neutral-50 text-xs text-neutral-500">
+                  <th className="px-3 py-2 text-left font-medium">이메일</th>
+                  <th className="px-3 py-2 text-left font-medium">권한</th>
+                  <th className="px-3 py-2 text-left font-medium">상태</th>
+                  <th className="px-3 py-2 text-right font-medium">잠금</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((a) => {
+                  const locked = !!a.lockedUntil;
+                  return (
+                    <tr key={a.id} className="border-t border-neutral-100">
+                      <td className="px-3 py-2.5 text-neutral-800">{a.email}</td>
+                      <td className="px-3 py-2.5">
+                        <Badge tone={a.role === "ADMIN" ? "brand" : "neutral"}>{a.role}</Badge>
+                      </td>
+                      <td className="px-3 py-2.5 text-neutral-600">{a.status}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleLockToggle(a.id, locked)}
+                        >
+                          {locked ? "잠금 해제" : "잠금"}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {accounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-neutral-400">
+                      회원이 없습니다.
                     </td>
                   </tr>
                 ) : null}

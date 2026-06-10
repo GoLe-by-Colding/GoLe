@@ -96,3 +96,27 @@ export function fetchListingById(listingId: string, signal?: AbortSignal): Promi
     ...(signal === undefined ? {} : { signal }),
   });
 }
+
+export interface ListingCommentItem {
+  readonly id: string;
+  readonly authorId: string;
+  readonly content: string;
+  readonly createdAt: string;
+}
+
+export function fetchListingComments(listingId: string): Promise<readonly ListingCommentItem[]> {
+  return apiRequest<readonly ListingCommentItem[]>(`/api/v1/listings/${listingId}/comments`, {
+    cache: "no-store",
+  });
+}
+
+export function postListingComment(
+  listingId: string,
+  authorId: string,
+  content: string,
+): Promise<ListingCommentItem> {
+  return apiRequest<ListingCommentItem>(`/api/v1/listings/${listingId}/comments`, {
+    method: "POST",
+    body: { authorId, content },
+  });
+}

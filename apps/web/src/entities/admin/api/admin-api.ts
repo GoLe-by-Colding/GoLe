@@ -94,3 +94,55 @@ export function takedownListing(token: string, listingId: string): Promise<void>
     headers: auth(token),
   });
 }
+
+export interface AdminPost {
+  readonly id: string;
+  readonly authorId: string;
+  readonly content: string;
+  readonly type: string;
+  readonly status: string;
+  readonly createdAt: string | null;
+}
+
+export interface AdminAccount {
+  readonly id: string;
+  readonly email: string;
+  readonly role: string;
+  readonly status: string;
+  readonly lockedUntil: string | null;
+}
+
+export function fetchAdminPosts(token: string, limit = 30): Promise<readonly AdminPost[]> {
+  return apiRequest<readonly AdminPost[]>(`/api/admin/posts?limit=${limit}`, {
+    cache: "no-store",
+    headers: auth(token),
+  });
+}
+
+export function removeAdminPost(token: string, postId: string): Promise<void> {
+  return apiRequest<void>(`/api/admin/posts/${postId}/remove`, {
+    method: "POST",
+    headers: auth(token),
+  });
+}
+
+export function fetchAdminAccounts(token: string, limit = 30): Promise<readonly AdminAccount[]> {
+  return apiRequest<readonly AdminAccount[]>(`/api/admin/accounts?limit=${limit}`, {
+    cache: "no-store",
+    headers: auth(token),
+  });
+}
+
+export function lockAdminAccount(token: string, accountId: string): Promise<void> {
+  return apiRequest<void>(`/api/admin/accounts/${accountId}/lock`, {
+    method: "POST",
+    headers: auth(token),
+  });
+}
+
+export function unlockAdminAccount(token: string, accountId: string): Promise<void> {
+  return apiRequest<void>(`/api/admin/accounts/${accountId}/unlock`, {
+    method: "POST",
+    headers: auth(token),
+  });
+}

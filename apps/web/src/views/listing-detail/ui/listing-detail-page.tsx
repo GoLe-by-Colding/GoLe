@@ -14,6 +14,7 @@ import { Badge, Button, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
 import { SetPriceInsight } from "@widgets/set-price-insight";
+import { ListingQna } from "@widgets/listing-qna";
 
 async function loadListing(id: string): Promise<Listing> {
   try {
@@ -95,13 +96,15 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
       </div>
 
       {listing.catalogSetNumber !== null ? (
-        <section className="mt-12 flex flex-col gap-4 border-t border-neutral-200 pt-10 pb-16">
+        <section className="mt-12 flex flex-col gap-4 border-t border-neutral-200 pt-10">
           <Heading level={2}>시세</Heading>
           <SetPriceInsight setNumber={listing.catalogSetNumber} highlight={listing.condition} />
         </section>
-      ) : (
-        <div className="pb-16" />
-      )}
+      ) : null}
+
+      <section className="mt-12 flex flex-col gap-4 border-t border-neutral-200 pt-10 pb-16">
+        <ListingQna listingId={listing.id} />
+      </section>
     </Container>
   );
 }

@@ -4,6 +4,8 @@ export type {
   CreateSetInput,
   AdminOrder,
   AdminListing,
+  AdminPost,
+  AdminAccount,
 } from "./api/admin-api";
 export {
   fetchAdminOverview,
@@ -12,4 +14,9 @@ export {
   fetchAdminOrders,
   fetchAdminListings,
   takedownListing,
+  fetchAdminPosts,
+  removeAdminPost,
+  fetchAdminAccounts,
+  lockAdminAccount,
+  unlockAdminAccount,
 } from "./api/admin-api";
