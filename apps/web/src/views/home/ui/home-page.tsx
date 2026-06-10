@@ -1,13 +1,14 @@
 import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
+import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
+import { PostCard } from "@widgets/post-card";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
     return await fetchFeaturedLegoSets();
   } catch {
-    // 백엔드 미기동 등으로 조회 실패 시 빈 상태로 렌더한다.
     return [];
   }
 }
@@ -20,8 +21,21 @@ async function loadTrending(): Promise<readonly TrendingSet[]> {
   }
 }
 
+async function loadCommunity(): Promise<readonly Post[]> {
+  try {
+    const posts = await fetchFeed();
+    return posts.slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
 export async function HomePage() {
-  const [featured, trending] = await Promise.all([loadFeatured(), loadTrending()]);
+  const [featured, trending, community] = await Promise.all([
+    loadFeatured(),
+    loadTrending(),
+    loadCommunity(),
+  ]);
 
   return (
     <Container width="xl">
@@ -109,6 +123,22 @@ export async function HomePage() {
             </div>
           )}
         </section>
+        {/* Community */}
+        {community.length > 0 ? (
+          <section className="flex flex-col gap-6">
+            <div className="flex items-baseline justify-between gap-4">
+              <Heading level={2}>커뮤니티</Heading>
+              <LinkButton href="/community" variant="ghost" size="sm">
+                전체 보기
+              </LinkButton>
+            </div>
+            <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+              {community.map((post) => (
+                <PostCard key={post.id} post={post} />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </Container>
   );

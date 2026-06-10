@@ -76,7 +76,12 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
               value={values.query}
               placeholder="검색어, 세트번호"
               onChange={(v) => update("query", v)}
-              onSelect={(set) => update("query", set.name)}
+              onSelect={(set) => {
+                update("query", set.name);
+                // 세트 선택 시 즉시 검색
+                router.push(`/search?query=${encodeURIComponent(set.name)}`);
+                setOpen(false);
+              }}
             />
           </div>
           {/* 필터 토글 (모바일 전용) */}
