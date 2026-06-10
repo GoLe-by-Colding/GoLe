@@ -14,4 +14,8 @@ public interface PriceTransactionMongoRepository
 
     /** 특정 세트의 전체 체결 내역을 체결 시각 오름차순으로 조회. */
     List<PriceTransactionDocument> findBySetNumberOrderByExecutedAtAsc(String setNumber);
+
+    /** 특정 세트·상태의 체결 내역을 체결 시각 오름차순으로 조회. */
+    List<PriceTransactionDocument> findBySetNumberAndConditionOrderByExecutedAtAsc(
+            String setNumber, String condition);
 }

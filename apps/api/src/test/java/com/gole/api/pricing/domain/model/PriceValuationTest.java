@@ -7,26 +7,32 @@ import org.junit.jupiter.api.Test;
 class PriceValuationTest {
 
     @Test
-    void appliesConditionDepreciationAndSpreads() {
-        PriceValuation valuation = PriceValuation.fromMarketPrice("10307", 1_000_000);
-
-        assertThat(valuation.conditions()).hasSize(3);
-
-        PriceValuation.ConditionValuation sealed = valuation.conditions().get(0);
-        assertThat(sealed.condition()).isEqualTo(SetCondition.NEW_SEALED);
+    void modelAppliesConditionDepreciationAndSpreads() {
+        PriceValuation.ConditionValuation sealed =
+                PriceValuation.model(SetCondition.NEW_SEALED, 1_000_000);
         assertThat(sealed.depreciationPct()).isZero();
         assertThat(sealed.fairPrice()).isEqualTo(1_000_000);
-        // 즉시판매(매도)는 공정가보다 낮고, 즉시구매(매수)는 높다.
+        assertThat(sealed.basedOnRealData()).isFalse();
         assertThat(sealed.sellPrice()).isLessThan(sealed.fairPrice());
         assertThat(sealed.buyPrice()).isGreaterThan(sealed.fairPrice());
 
-        PriceValuation.ConditionValuation used = valuation.conditions().get(1);
-        assertThat(used.condition()).isEqualTo(SetCondition.USED_COMPLETE);
+        PriceValuation.ConditionValuation used =
+                PriceValuation.model(SetCondition.USED_COMPLETE, 1_000_000);
         assertThat(used.depreciationPct()).isEqualTo(22);
         assertThat(used.fairPrice()).isEqualTo(780_000);
 
-        PriceValuation.ConditionValuation incomplete = valuation.conditions().get(2);
-        assertThat(incomplete.condition()).isEqualTo(SetCondition.USED_INCOMPLETE);
+        PriceValuation.ConditionValuation incomplete =
+                PriceValuation.model(SetCondition.USED_INCOMPLETE, 1_000_000);
         assertThat(incomplete.fairPrice()).isLessThan(used.fairPrice());
+    }
+
+    @Test
+    void realUsesActualFairAndDerivesDepreciation() {
+        PriceValuation.ConditionValuation real =
+                PriceValuation.real(SetCondition.USED_COMPLETE, 1_000_000, 700_000, 5);
+        assertThat(real.basedOnRealData()).isTrue();
+        assertThat(real.sampleCount()).isEqualTo(5);
+        assertThat(real.fairPrice()).isEqualTo(700_000);
+        assertThat(real.depreciationPct()).isEqualTo(30);
     }
 }

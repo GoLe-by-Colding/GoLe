@@ -41,11 +41,11 @@ public class PricingController {
     @GetMapping("/chart")
     public List<PricePointResponse> chart(
             @PathVariable String setNumber,
-            @RequestParam(value = "from", required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(value = "to", required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return getPriceInsightsUseCase.getChart(setNumber, from, to).stream()
+            @RequestParam(value = "condition", required = false) String condition) {
+        // 헤드라인 시장 차트는 미개봉(new_sealed) 기준. condition 지정 시 해당 상태 시계열.
+        com.gole.api.pricing.domain.model.SetCondition c =
+                com.gole.api.pricing.domain.model.SetCondition.fromKey(condition);
+        return getPriceInsightsUseCase.getChart(setNumber, c).stream()
                 .map(PricePointResponse::from)
                 .toList();
     }

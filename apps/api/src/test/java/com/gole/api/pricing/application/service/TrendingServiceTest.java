@@ -104,6 +104,12 @@ class TrendingServiceTest {
         }
 
         @Override
+        public List<PriceTransaction> findByConditionAscending(
+                String setNumber, com.gole.api.pricing.domain.model.SetCondition condition) {
+            return new ArrayList<>();
+        }
+
+        @Override
         public List<TradeAggregate> findTopTradedSets(int limit, Instant since) {
             called = true;
             lastLimit = limit;

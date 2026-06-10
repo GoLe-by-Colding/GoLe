@@ -79,6 +79,16 @@ class PricingServiceTest {
         }
 
         @Override
+        public List<PriceTransaction> findByConditionAscending(
+                String setNumber, com.gole.api.pricing.domain.model.SetCondition condition) {
+            return store.stream()
+                    .filter(t -> t.setNumber().equals(setNumber))
+                    .filter(t -> t.condition() == condition)
+                    .sorted(Comparator.comparing(PriceTransaction::executedAt))
+                    .toList();
+        }
+
+        @Override
         public List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since) {
             return List.of();
         }

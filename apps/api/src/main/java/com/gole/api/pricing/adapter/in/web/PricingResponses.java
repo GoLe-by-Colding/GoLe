@@ -46,11 +46,19 @@ public final class PricingResponses {
             int depreciationPct,
             long fairPrice,
             long sellPrice,
-            long buyPrice) {
+            long buyPrice,
+            int sampleCount,
+            boolean basedOnRealData) {
 
         public static ConditionValuationResponse from(PriceValuation.ConditionValuation c) {
             return new ConditionValuationResponse(
-                    c.condition().key(), c.depreciationPct(), c.fairPrice(), c.sellPrice(), c.buyPrice());
+                    c.condition().key(),
+                    c.depreciationPct(),
+                    c.fairPrice(),
+                    c.sellPrice(),
+                    c.buyPrice(),
+                    c.sampleCount(),
+                    c.basedOnRealData());
         }
     }
 

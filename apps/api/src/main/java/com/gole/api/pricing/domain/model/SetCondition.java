@@ -34,4 +34,17 @@ public enum SetCondition {
     public int depreciationPct() {
         return (int) Math.round((1.0 - factor) * 100);
     }
+
+    /** 상태 키 → enum. null/미지정/미상은 미개봉으로 간주. */
+    public static SetCondition fromKey(String key) {
+        if (key == null) {
+            return NEW_SEALED;
+        }
+        for (SetCondition c : values()) {
+            if (c.key.equalsIgnoreCase(key)) {
+                return c;
+            }
+        }
+        return NEW_SEALED;
+    }
 }

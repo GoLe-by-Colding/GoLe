@@ -33,7 +33,7 @@ public class PricingSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // setNumber → 기준가(원). 기준가에 추세와 결정적 노이즈를 더해 시계열을 만든다.
+        // setNumber → 미개봉 기준가(원).
         record Seed(String setNumber, long base) {
         }
         List<Seed> seeds = List.of(
@@ -50,31 +50,52 @@ public class PricingSeeder implements CommandLineRunner {
                 new Seed("92176", 220_000),
                 new Seed("10497", 160_000));
 
+        // 상태별 감가 계수와 시계열 포인트 수(미개봉이 가장 풍부).
+        record Band(String condition, double factor, int weeks) {
+        }
+        List<Band> bands = List.of(
+                new Band("new_sealed", 1.00, 30),
+                new Band("used_complete", 0.78, 18),
+                new Band("used_incomplete", 0.55, 12));
+
         Instant now = Instant.now();
         List<PriceTransactionDocument> docs = new ArrayList<>();
-        int weeks = 30;
+        int migrated = 0;
+
         for (Seed s : seeds) {
-            // 세트별 멱등: 이미 체결 이력이 있으면 건너뛴다(기존 데이터 보존).
-            if (!repository.findBySetNumberOrderByExecutedAtAsc(s.setNumber()).isEmpty()) {
-                continue;
+            List<PriceTransactionDocument> existing =
+                    repository.findBySetNumberOrderByExecutedAtAsc(s.setNumber());
+            if (!existing.isEmpty()) {
+                boolean tagged = existing.stream().anyMatch(d -> d.getCondition() != null);
+                if (tagged) {
+                    continue; // 이미 상태 태깅된 데이터 → 보존(멱등)
+                }
+                // 레거시(상태 미태깅) 시드 → 제거 후 상태별로 재시드.
+                repository.deleteAll(existing);
+                migrated++;
             }
+
             int hash = Math.abs(s.setNumber().hashCode());
-            // 세트별 장기 추세: -12% ~ +24%
-            double trend = ((hash % 37) - 12) / 100.0;
-            for (int week = weeks; week >= 0; week--) {
-                double progress = (double) (weeks - week) / weeks; // 0 → 1
-                // 결정적 단기 변동(±6%).
-                int wobble = ((hash + week * 17) % 13) - 6;
-                double factor = 1.0 + trend * progress + wobble / 100.0;
-                long price = Math.max(1, Math.round(s.base() * factor));
-                Instant executedAt = now.minus(week * 7L, ChronoUnit.DAYS);
-                docs.add(new PriceTransactionDocument(
-                        UUID.randomUUID().toString(), s.setNumber(), price, 1, executedAt));
+            double trend = ((hash % 37) - 12) / 100.0; // -12% ~ +24% 장기 추세
+            for (Band band : bands) {
+                long bandBase = Math.round(s.base() * band.factor());
+                for (int week = band.weeks(); week >= 0; week--) {
+                    double progress = (double) (band.weeks() - week) / band.weeks();
+                    int wobble = ((hash + week * 17 + band.condition().hashCode()) % 13) - 6; // ±6%
+                    double f = 1.0 + trend * progress + wobble / 100.0;
+                    long price = Math.max(1, Math.round(bandBase * f));
+                    Instant executedAt = now.minus(week * 7L, ChronoUnit.DAYS);
+                    docs.add(new PriceTransactionDocument(
+                            UUID.randomUUID().toString(), s.setNumber(), price, 1, executedAt,
+                            band.condition()));
+                }
             }
         }
+
         if (!docs.isEmpty()) {
             repository.saveAll(docs);
-            log.info("[seed] pricing: {}건 체결 이력 적재", docs.size());
+            log.info("[seed] pricing: {}건 체결 이력 적재(상태별, 레거시 마이그레이션 {}세트)",
+                    docs.size(), migrated);
         }
     }
 }

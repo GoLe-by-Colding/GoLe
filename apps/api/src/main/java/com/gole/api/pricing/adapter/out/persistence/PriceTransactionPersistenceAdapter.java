@@ -64,6 +64,16 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     }
 
     @Override
+    public List<PriceTransaction> findByConditionAscending(
+            String setNumber, com.gole.api.pricing.domain.model.SetCondition condition) {
+        return repository
+                .findBySetNumberAndConditionOrderByExecutedAtAsc(setNumber, condition.key())
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since) {
         java.util.List<org.springframework.data.mongodb.core.aggregation.AggregationOperation> ops =
                 new java.util.ArrayList<>();
@@ -95,7 +105,8 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 transaction.setNumber(),
                 transaction.price(),
                 transaction.quantity(),
-                transaction.executedAt());
+                transaction.executedAt(),
+                transaction.condition().key());
     }
 
     private PriceTransaction toDomain(PriceTransactionDocument document) {
@@ -103,6 +114,7 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 document.getSetNumber(),
                 document.getPrice(),
                 document.getQuantity(),
-                document.getExecutedAt());
+                document.getExecutedAt(),
+                com.gole.api.pricing.domain.model.SetCondition.fromKey(document.getCondition()));
     }
 }

@@ -21,6 +21,10 @@ public interface PriceTransactionRepositoryPort {
      */
     List<PriceTransaction> findInRangeAscending(String setNumber, Instant from, Instant to);
 
+    /** 특정 세트·상태의 체결 거래를 체결 시각 오름차순으로 조회한다(상태별 시세용). */
+    List<PriceTransaction> findByConditionAscending(
+            String setNumber, com.gole.api.pricing.domain.model.SetCondition condition);
+
     /**
      * 체결 건수 기준 상위 세트를 집계한다(인기 랭킹). (백로그 13.4)
      *

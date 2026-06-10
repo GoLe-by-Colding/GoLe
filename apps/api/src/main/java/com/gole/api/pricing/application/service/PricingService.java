@@ -6,6 +6,7 @@ import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import com.gole.api.pricing.domain.model.PriceValuation;
+import com.gole.api.pricing.domain.model.SetCondition;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,7 +30,11 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
     @Override
     public void record(RecordExecutedPriceCommand command) {
         repository.save(new PriceTransaction(
-                command.setNumber(), command.price(), command.quantity(), command.executedAt()));
+                command.setNumber(),
+                command.price(),
+                command.quantity(),
+                command.executedAt(),
+                SetCondition.fromKey(command.condition())));
     }
 
     @Override
@@ -49,6 +54,11 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
     }
 
     @Override
+    public List<PriceTransaction> getChart(String setNumber, SetCondition condition) {
+        return repository.findByConditionAscending(setNumber, condition);
+    }
+
+    @Override
     public List<PriceTransaction> getHistory(String setNumber) {
         List<PriceTransaction> recentFirst =
                 new ArrayList<>(repository.findInRangeAscending(setNumber, null, null));
@@ -58,7 +68,35 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
 
     @Override
     public Optional<PriceValuation> getValuation(String setNumber) {
-        return getStatistics(setNumber, null, null)
-                .map(stats -> PriceValuation.fromMarketPrice(setNumber, stats.latestPrice()));
+        Optional<PriceStatistics> stats = getStatistics(setNumber, null, null);
+        if (stats.isEmpty()) {
+            return Optional.empty();
+        }
+        // 시장 기준가: 미개봉 최근 체결가가 있으면 그 값, 없으면 전체 최근 체결가.
+        List<PriceTransaction> sealed = repository.findByConditionAscending(setNumber, SetCondition.NEW_SEALED);
+        long marketPrice = sealed.isEmpty()
+                ? stats.get().latestPrice()
+                : sealed.get(sealed.size() - 1).price();
+
+        List<PriceValuation.ConditionValuation> conditions = new ArrayList<>();
+        for (SetCondition condition : SetCondition.values()) {
+            List<PriceTransaction> series = repository.findByConditionAscending(setNumber, condition);
+            if (series.size() >= MIN_REAL_SAMPLES) {
+                long fair = medianPrice(series);
+                conditions.add(PriceValuation.real(condition, marketPrice, fair, series.size()));
+            } else {
+                conditions.add(PriceValuation.model(condition, marketPrice));
+            }
+        }
+        return Optional.of(new PriceValuation(setNumber, marketPrice, List.copyOf(conditions)));
+    }
+
+    /** 상태별 실데이터를 신뢰하기 위한 최소 표본 수. */
+    private static final int MIN_REAL_SAMPLES = 3;
+
+    private static long medianPrice(List<PriceTransaction> ascending) {
+        long[] prices = ascending.stream().mapToLong(PriceTransaction::price).sorted().toArray();
+        int n = prices.length;
+        return n % 2 == 1 ? prices[n / 2] : Math.round((prices[n / 2 - 1] + prices[n / 2]) / 2.0);
     }
 }

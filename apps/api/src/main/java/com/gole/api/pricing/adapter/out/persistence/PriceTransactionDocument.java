@@ -22,6 +22,10 @@ public class PriceTransactionDocument {
 
     private int quantity;
 
+    /** 상품 상태 키(new_sealed/used_complete/used_incomplete). 레거시 문서는 null. */
+    @Indexed
+    private String condition;
+
     @Indexed
     private Instant executedAt;
 
@@ -31,11 +35,22 @@ public class PriceTransactionDocument {
 
     public PriceTransactionDocument(
             String id, String setNumber, long price, int quantity, Instant executedAt) {
+        this(id, setNumber, price, quantity, executedAt, null);
+    }
+
+    public PriceTransactionDocument(
+            String id,
+            String setNumber,
+            long price,
+            int quantity,
+            Instant executedAt,
+            String condition) {
         this.id = id;
         this.setNumber = setNumber;
         this.price = price;
         this.quantity = quantity;
         this.executedAt = executedAt;
+        this.condition = condition;
     }
 
     public String getId() {
@@ -52,6 +67,10 @@ public class PriceTransactionDocument {
 
     public int getQuantity() {
         return quantity;
+    }
+
+    public String getCondition() {
+        return condition;
     }
 
     public Instant getExecutedAt() {
