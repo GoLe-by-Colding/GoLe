@@ -31,7 +31,11 @@ export default function PrivacyPage() {
             <ul className="list-disc space-y-1 pl-5">
               <li>회원가입 시: 이메일, 비밀번호(BCrypt 해시 저장)</li>
               <li>소셜 로그인 시: OAuth 프로필 이메일(Google/Kakao/Naver)</li>
-              <li>매물 등록 시: 판매자가 직접 촬영·업로드한 상품 사진</li>
+              <li>
+                <strong>매물·커뮤니티 이미지:</strong> 판매자·이용자가 직접 촬영해 업로드한 상품
+                사진 및 커뮤니티 게시 이미지. 서버(MinIO)에 저장되며, 공개 URL로 서빙됩니다. 본
+                서비스는 LEGO 공식 이미지를 수집·저장하지 않습니다.
+              </li>
               <li>자동 수집: 접속 IP, 서비스 이용 로그, 세션 토큰</li>
             </ul>
           </Section>
@@ -63,7 +67,10 @@ export default function PrivacyPage() {
           <Section title="5. 개인정보 처리 위탁">
             <ul className="list-disc space-y-1 pl-5">
               <li>결제 처리: PortOne(포트원) — 에스크로 결제</li>
-              <li>이미지 저장: MinIO(자체 운영 서버) — 상품 사진 보관</li>
+              <li>
+                이미지 저장: MinIO(자체 운영 서버) — 상품 사진·커뮤니티 이미지 보관. 이용자가
+                업로드한 이미지는 공개 URL로 서빙되며, 매물 삭제·회원 탈퇴 시 함께 파기됩니다.
+              </li>
             </ul>
           </Section>
 
