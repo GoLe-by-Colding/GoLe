@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignUpPage } from "@views/sign-up";
+import { AuthPage } from "@views/auth";
 
 export const metadata: Metadata = {
   title: "회원가입",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <SignUpPage />;
+  return <AuthPage />;
 }

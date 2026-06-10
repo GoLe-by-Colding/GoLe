@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignInPage } from "@views/sign-in";
+import { AuthPage } from "@views/auth";
 
 export const metadata: Metadata = {
   title: "로그인",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <SignInPage />;
+  return <AuthPage />;
 }
