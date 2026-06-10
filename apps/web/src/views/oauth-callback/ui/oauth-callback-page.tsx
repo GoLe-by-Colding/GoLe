@@ -43,9 +43,15 @@ export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
       const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
       try {
         // state는 서버가 발급·검증한다(CSRF). 콜백에서 그대로 전달만 한다.
-        const session = await socialCallback(provider, code, redirectUri, returnedState);
+        const { session, newAccount } = await socialCallback(
+          provider,
+          code,
+          redirectUri,
+          returnedState,
+        );
         saveSession(session);
-        router.replace("/");
+        // 신규(소셜 첫 가입)는 회원가입 온보딩 화면으로, 기존 회원은 홈으로.
+        router.replace(newAccount ? "/signup?welcome=1" : "/");
       } catch (cause) {
         setError(
           cause instanceof ApiError

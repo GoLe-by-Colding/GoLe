@@ -1,20 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SignInForm } from "@features/sign-in";
 import { SignUpForm } from "@features/sign-up";
 import { SocialLoginButtons } from "@features/social-login";
 import { AuthCard } from "@widgets/auth-layout";
+import { Button } from "@shared/ui";
 
 /**
  * 통합 인증 화면. 로그인/회원가입을 탭으로 전환하며(URL `/login`·`/signup` 구동),
  * 로컬(이메일) + 소셜(Google/Kakao/Naver) 4가지 진입을 한 화면에서 제공한다.
+ * 소셜 첫 가입(`?welcome=1`)은 온보딩 환영 화면을 보여준다.
  */
 export function AuthPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const params = useSearchParams();
   const mode = pathname === "/signup" ? "signup" : "signin";
+  const welcome = params.get("welcome") === "1";
+
+  if (welcome) {
+    return (
+      <AuthCard title="환영합니다 🐳" subtitle="소셜 계정으로 가입이 완료됐어요.">
+        <div className="flex flex-col gap-5">
+          <p className="text-sm leading-relaxed text-neutral-600">
+            이제 GoLe에서 레고 시세를 확인하고, 안전하게 거래하고, 컬렉션을 자랑할 수 있어요.
+          </p>
+          <Button size="lg" fullWidth onClick={() => router.replace("/")}>
+            시작하기
+          </Button>
+        </div>
+      </AuthCard>
+    );
+  }
 
   function tabClass(active: boolean): string {
     return `rounded-lg py-2 text-sm font-semibold transition-colors ${

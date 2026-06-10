@@ -8,5 +8,6 @@ export {
   fetchSocialAuthorizeUrl,
   socialCallback,
 } from "./api/user-api";
+export type { SocialCallbackResult } from "./api/user-api";
 export { logout } from "./api/user-api";
 export { fetchMe } from "./api/user-api";

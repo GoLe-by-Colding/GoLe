@@ -47,17 +47,37 @@ export function fetchSocialAuthorizeUrl(
   );
 }
 
-/** OAuth code를 교환해 세션을 발급받는다. state는 서버가 검증한다(CSRF). */
-export function socialCallback(
+/** OAuth code를 교환해 세션을 발급받는다. state는 서버가 검증한다(CSRF).
+ *  신규 계정 여부(newAccount)를 함께 반환해 콜백에서 온보딩 분기에 사용한다. */
+export async function socialCallback(
   provider: string,
   code: string,
   redirectUri: string,
   state: string,
-): Promise<Session> {
-  return apiRequest<Session>(`${OAUTH_BASE}/${provider}/callback`, {
-    method: "POST",
-    body: { code, redirectUri, state },
-  });
+): Promise<SocialCallbackResult> {
+  const res = await apiRequest<SocialCallbackResponse>(
+    `${OAUTH_BASE}/${provider}/callback`,
+    {
+      method: "POST",
+      body: { code, redirectUri, state },
+    },
+  );
+  return {
+    session: { accountId: res.accountId, sessionToken: res.sessionToken, role: res.role },
+    newAccount: res.newAccount,
+  };
+}
+
+interface SocialCallbackResponse {
+  readonly accountId: string;
+  readonly sessionToken: string;
+  readonly role: "USER" | "ADMIN";
+  readonly newAccount: boolean;
+}
+
+export interface SocialCallbackResult {
+  readonly session: Session;
+  readonly newAccount: boolean;
 }
 
 /** 로그아웃: 서버측 세션을 폐기한다(Bearer 토큰). best-effort. */
