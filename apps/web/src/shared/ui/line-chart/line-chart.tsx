@@ -23,6 +23,61 @@ const PAD_L = 6;
 const PAD_R = 64; // 우측 가격 라벨 공간
 const GRID_LINES = 4;
 
+interface Pt {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * 모노톤 큐빅(Fritsch–Carlson) 보간으로 부드러운 라인 path를 만든다.
+ * 데이터 사이에 가짜 봉우리/오버슈트가 생기지 않아 시세 차트에 적합하다.
+ */
+function smoothPath(pts: readonly Pt[]): string {
+  const n = pts.length;
+  if (n < 2) return "";
+  if (n === 2) {
+    return `M${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)} L${pts[1]!.x.toFixed(1)},${pts[1]!.y.toFixed(1)}`;
+  }
+  const dx: number[] = [];
+  const slope: number[] = [];
+  for (let i = 0; i < n - 1; i += 1) {
+    const h = pts[i + 1]!.x - pts[i]!.x;
+    dx.push(h);
+    slope.push((pts[i + 1]!.y - pts[i]!.y) / h);
+  }
+  const m = new Array<number>(n);
+  m[0] = slope[0]!;
+  m[n - 1] = slope[n - 2]!;
+  for (let i = 1; i < n - 1; i += 1) {
+    m[i] = slope[i - 1]! * slope[i]! <= 0 ? 0 : (slope[i - 1]! + slope[i]!) / 2;
+  }
+  for (let i = 0; i < n - 1; i += 1) {
+    if (slope[i] === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+    } else {
+      const a = m[i]! / slope[i]!;
+      const b = m[i + 1]! / slope[i]!;
+      const s = a * a + b * b;
+      if (s > 9) {
+        const t = 3 / Math.sqrt(s);
+        m[i] = t * a * slope[i]!;
+        m[i + 1] = t * b * slope[i]!;
+      }
+    }
+  }
+  let d = `M${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < n - 1; i += 1) {
+    const h = dx[i]!;
+    const cp1x = pts[i]!.x + h / 3;
+    const cp1y = pts[i]!.y + (m[i]! * h) / 3;
+    const cp2x = pts[i + 1]!.x - h / 3;
+    const cp2y = pts[i + 1]!.y - (m[i + 1]! * h) / 3;
+    d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${pts[i + 1]!.x.toFixed(1)},${pts[i + 1]!.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 /**
  * 의존성 없는 인터랙티브 SVG 라인 차트(KREAM 스타일).
  * 균일 스케일(viewBox)로 왜곡 없이 렌더하고, 가로 그리드 + 우측 가격축 + 호버 툴팁을 제공한다.
@@ -59,9 +114,7 @@ export function LineChart({
   const yAt = (v: number) => PAD_T + (1 - (v - min) / span) * innerH;
 
   const coords = points.map((p, i) => ({ x: xAt(i), y: yAt(p.value) }));
-  const line = coords
-    .map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`)
-    .join(" ");
+  const line = smoothPath(coords);
   const area = `${line} L${xAt(n - 1).toFixed(1)},${H - PAD_B} L${PAD_L},${H - PAD_B} Z`;
 
   // 가로 그리드 + 우측 가격 라벨
