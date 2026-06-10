@@ -28,5 +28,6 @@ public interface ListingReservationPort {
      * @param catalogSetNumber 카탈로그 세트 번호(nullable)
      * @param price 선점 시점의 확정 가격(원 단위)
      */
-    record ReservedListing(String listingId, String sellerId, String catalogSetNumber, long price) {}
+    record ReservedListing(
+            String listingId, String sellerId, String catalogSetNumber, long price, String condition) {}
 }

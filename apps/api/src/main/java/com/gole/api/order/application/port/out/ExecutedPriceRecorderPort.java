@@ -8,5 +8,11 @@ import java.time.Instant;
  */
 public interface ExecutedPriceRecorderPort {
 
-    void record(String setNumber, long price, int quantity, Instant executedAt);
+    /** 상품 상태 포함(신규). */
+    void record(String setNumber, long price, int quantity, Instant executedAt, String condition);
+
+    /** 하위호환 — 상태 미지정(미개봉 기본). */
+    default void record(String setNumber, long price, int quantity, Instant executedAt) {
+        record(setNumber, price, quantity, executedAt, null);
+    }
 }

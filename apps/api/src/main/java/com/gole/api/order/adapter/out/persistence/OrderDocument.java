@@ -32,6 +32,8 @@ public class OrderDocument {
 
     private String catalogSetNumber; // nullable
 
+    private String listingCondition; // nullable — 상품 상태 키(시세 기록용)
+
     private long amount;
 
     @Indexed
@@ -56,6 +58,7 @@ public class OrderDocument {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            String listingCondition,
             long amount,
             String status,
             Instant createdAt,
@@ -67,6 +70,7 @@ public class OrderDocument {
         this.buyerId = buyerId;
         this.sellerId = sellerId;
         this.catalogSetNumber = catalogSetNumber;
+        this.listingCondition = listingCondition;
         this.amount = amount;
         this.status = status;
         this.createdAt = createdAt;
@@ -93,6 +97,10 @@ public class OrderDocument {
 
     public String getCatalogSetNumber() {
         return catalogSetNumber;
+    }
+
+    public String getListingCondition() {
+        return listingCondition;
     }
 
     public long getAmount() {

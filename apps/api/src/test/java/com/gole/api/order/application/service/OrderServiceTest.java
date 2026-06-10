@@ -123,7 +123,7 @@ class OrderServiceTest {
         @Override
         public Optional<ReservedListing> reserve(String listingId) {
             return available
-                    ? Optional.of(new ReservedListing(listingId, "seller-1", "10307", 280_000))
+                    ? Optional.of(new ReservedListing(listingId, "seller-1", "10307", 280_000, "new_sealed"))
                     : Optional.empty();
         }
 

@@ -51,6 +51,7 @@ public class ListingReservationAdapter implements ListingReservationPort {
                 listing.getId(),
                 listing.getSellerId(),
                 listing.getCatalogSetNumber(),
-                listing.getPrice().amount());
+                listing.getPrice().amount(),
+                listing.getCondition().name().toLowerCase());
     }
 }

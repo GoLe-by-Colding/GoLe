@@ -19,7 +19,8 @@ public class ExecutedPriceRecorderAdapter implements ExecutedPriceRecorderPort {
     }
 
     @Override
-    public void record(String setNumber, long price, int quantity, Instant executedAt) {
-        recordExecutedPrice.record(new RecordExecutedPriceCommand(setNumber, price, quantity, executedAt));
+    public void record(String setNumber, long price, int quantity, Instant executedAt, String condition) {
+        recordExecutedPrice.record(
+                new RecordExecutedPriceCommand(setNumber, price, quantity, executedAt, condition));
     }
 }

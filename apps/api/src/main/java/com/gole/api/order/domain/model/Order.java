@@ -18,6 +18,8 @@ public final class Order {
     private final String buyerId;
     private final String sellerId;
     private final String catalogSetNumber; // nullable
+    /** 상품 상태 키(new_sealed 등). 시세 condition 기록에 사용. nullable(레거시/미지정). */
+    private final String listingCondition;
     private final long amount;
     private final Instant createdAt;
     private final List<OrderStatusChange> history;
@@ -30,6 +32,7 @@ public final class Order {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            String listingCondition,
             long amount,
             OrderStatus status,
             Instant createdAt,
@@ -40,11 +43,27 @@ public final class Order {
         this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
         this.sellerId = Objects.requireNonNull(sellerId, "sellerId");
         this.catalogSetNumber = catalogSetNumber;
+        this.listingCondition = listingCondition;
         this.amount = amount;
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
         this.version = version;
+    }
+
+    /** 하위호환 생성자(레거시/테스트). */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            long amount,
+            OrderStatus status,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
+        this(id, listingId, buyerId, sellerId, catalogSetNumber, null, amount, status, createdAt, history, version);
     }
 
     /** 신규 주문: 결제 대기 상태로 생성. (요구사항 7.1) */
@@ -54,6 +73,7 @@ public final class Order {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            String listingCondition,
             long amount,
             Instant now) {
         List<OrderStatusChange> history = new ArrayList<>();
@@ -64,6 +84,7 @@ public final class Order {
                 buyerId,
                 sellerId,
                 catalogSetNumber,
+                listingCondition,
                 amount,
                 OrderStatus.PAYMENT_PENDING,
                 now,
@@ -124,6 +145,10 @@ public final class Order {
 
     public String getCatalogSetNumber() {
         return catalogSetNumber;
+    }
+
+    public String getListingCondition() {
+        return listingCondition;
     }
 
     public long getAmount() {
