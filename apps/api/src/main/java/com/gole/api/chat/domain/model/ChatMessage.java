@@ -4,12 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /** 채팅 메시지. 불변 값(이벤트). */
-public record ChatMessage(
-        String id,
-        String roomId,
-        String senderId,
-        String content,
-        Instant sentAt) {
+public record ChatMessage(String id, String roomId, String senderId, String content, Instant sentAt) {
 
     public ChatMessage {
         Objects.requireNonNull(id, "id");

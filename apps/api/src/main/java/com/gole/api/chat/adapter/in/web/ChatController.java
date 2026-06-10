@@ -65,21 +65,24 @@ public class ChatController {
     @PostMapping("/rooms")
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req) {
-        return roomRepo
-                .findByBuyerIdAndSellerIdAndListingId(req.buyerId(), req.sellerId(), req.listingId())
+        return roomRepo.findByBuyerIdAndSellerIdAndListingId(req.buyerId(), req.sellerId(), req.listingId())
                 .map(RoomResponse::from)
                 .orElseGet(() -> {
                     ChatRoomDocument doc = new ChatRoomDocument(
                             UUID.randomUUID().toString(),
-                            req.listingId(), req.buyerId(), req.sellerId(), Instant.now());
+                            req.listingId(),
+                            req.buyerId(),
+                            req.sellerId(),
+                            Instant.now());
                     return RoomResponse.from(roomRepo.save(doc));
                 });
     }
 
     @GetMapping("/rooms")
     public List<RoomResponse> myRooms(@RequestParam String userId) {
-        return roomRepo.findByBuyerIdOrSellerIdOrderByCreatedAtDesc(userId, userId)
-                .stream().map(RoomResponse::from).toList();
+        return roomRepo.findByBuyerIdOrSellerIdOrderByCreatedAtDesc(userId, userId).stream()
+                .map(RoomResponse::from)
+                .toList();
     }
 
     @GetMapping("/rooms/{roomId}/messages")
@@ -91,13 +94,12 @@ public class ChatController {
 
     @PostMapping("/rooms/{roomId}/messages")
     @ResponseStatus(HttpStatus.CREATED)
-    public MessageResponse sendMessage(
-            @PathVariable String roomId, @Valid @RequestBody SendMessageRequest req) {
+    public MessageResponse sendMessage(@PathVariable String roomId, @Valid @RequestBody SendMessageRequest req) {
         ChatMessageDocument doc = new ChatMessageDocument(
                 UUID.randomUUID().toString(), roomId, req.senderId(), req.content(), Instant.now());
         ChatMessageDocument saved = messageRepo.save(doc);
-        publisher.publish(new ChatMessage(
-                saved.getId(), roomId, saved.getSenderId(), saved.getContent(), saved.getSentAt()));
+        publisher.publish(
+                new ChatMessage(saved.getId(), roomId, saved.getSenderId(), saved.getContent(), saved.getSentAt()));
         return MessageResponse.from(saved);
     }
 
@@ -136,25 +138,30 @@ public class ChatController {
         return emitter;
     }
 
-    public record CreateRoomRequest(
-            @NotBlank String listingId, @NotBlank String buyerId, @NotBlank String sellerId) {}
+    public record CreateRoomRequest(@NotBlank String listingId, @NotBlank String buyerId, @NotBlank String sellerId) {}
 
     public record SendMessageRequest(@NotBlank String senderId, @NotBlank String content) {}
 
-    public record RoomResponse(
-            String id, String listingId, String buyerId, String sellerId, String createdAt) {
+    public record RoomResponse(String id, String listingId, String buyerId, String sellerId, String createdAt) {
 
         public static RoomResponse from(ChatRoomDocument d) {
-            return new RoomResponse(d.getId(), d.getListingId(), d.getBuyerId(), d.getSellerId(),
+            return new RoomResponse(
+                    d.getId(),
+                    d.getListingId(),
+                    d.getBuyerId(),
+                    d.getSellerId(),
                     d.getCreatedAt().toString());
         }
     }
 
-    public record MessageResponse(
-            String id, String roomId, String senderId, String content, String sentAt) {
+    public record MessageResponse(String id, String roomId, String senderId, String content, String sentAt) {
 
         public static MessageResponse from(ChatMessageDocument d) {
-            return new MessageResponse(d.getId(), d.getRoomId(), d.getSenderId(), d.getContent(),
+            return new MessageResponse(
+                    d.getId(),
+                    d.getRoomId(),
+                    d.getSenderId(),
+                    d.getContent(),
                     d.getSentAt().toString());
         }
     }

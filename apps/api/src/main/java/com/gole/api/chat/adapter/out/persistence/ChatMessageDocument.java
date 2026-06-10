@@ -28,9 +28,23 @@ public class ChatMessageDocument {
         this.sentAt = sentAt;
     }
 
-    public String getId() { return id; }
-    public String getRoomId() { return roomId; }
-    public String getSenderId() { return senderId; }
-    public String getContent() { return content; }
-    public Instant getSentAt() { return sentAt; }
+    public String getId() {
+        return id;
+    }
+
+    public String getRoomId() {
+        return roomId;
+    }
+
+    public String getSenderId() {
+        return senderId;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public Instant getSentAt() {
+        return sentAt;
+    }
 }

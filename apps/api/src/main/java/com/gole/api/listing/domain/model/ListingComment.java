@@ -8,12 +8,7 @@ import java.util.Objects;
  * 삭제는 "deleted" 상태(소프트 삭제)로 처리한다.
  */
 public record ListingComment(
-        String id,
-        String listingId,
-        String authorId,
-        String content,
-        boolean deleted,
-        Instant createdAt) {
+        String id, String listingId, String authorId, String content, boolean deleted, Instant createdAt) {
 
     public ListingComment {
         Objects.requireNonNull(id, "id");

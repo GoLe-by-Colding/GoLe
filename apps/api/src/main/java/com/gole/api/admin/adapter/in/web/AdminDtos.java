@@ -15,10 +15,7 @@ public final class AdminDtos {
     private AdminDtos() {}
 
     public record OverviewResponse(
-            Map<String, Long> counts,
-            long gmv,
-            Map<String, Long> ordersByStatus,
-            long activeListings) {}
+            Map<String, Long> counts, long gmv, Map<String, Long> ordersByStatus, long activeListings) {}
 
     public record OrderRow(
             String id,
@@ -42,13 +39,7 @@ public final class AdminDtos {
     }
 
     public record ListingRow(
-            String id,
-            String title,
-            String sellerId,
-            long price,
-            String status,
-            String category,
-            Instant createdAt) {
+            String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {
 
         public static ListingRow from(Document d) {
             return new ListingRow(
@@ -70,8 +61,7 @@ public final class AdminDtos {
         return v instanceof Date date ? date.toInstant() : null;
     }
 
-    public record PostRow(
-            String id, String authorId, String content, String type, String status, Instant createdAt) {
+    public record PostRow(String id, String authorId, String content, String type, String status, Instant createdAt) {
 
         public static PostRow from(Document d) {
             String raw = d.getString("content");
@@ -85,8 +75,7 @@ public final class AdminDtos {
         }
     }
 
-    public record AccountRow(
-            String id, String email, String role, String status, Instant lockedUntil) {
+    public record AccountRow(String id, String email, String role, String status, Instant lockedUntil) {
 
         public static AccountRow from(Document d) {
             Object emailObj = d.get("email");

@@ -1,11 +1,11 @@
 package com.gole.api.admin.adapter.in.web;
 
+import com.gole.api.admin.adapter.in.web.AdminDtos.AccountRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.CreateSetRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.LegoSetResponse;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ListingRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
-import com.gole.api.admin.adapter.in.web.AdminDtos.AccountRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
@@ -42,8 +42,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 public class AdminController {
 
-    private static final List<String> COLLECTIONS = List.of(
-            "accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
+    private static final List<String> COLLECTIONS =
+            List.of("accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
     private static final int MAX_ROWS = 100;
 
     private final MongoTemplate mongoTemplate;
@@ -74,8 +74,11 @@ public class AdminController {
         Map<String, Long> ordersByStatus = new LinkedHashMap<>();
         long gmv = 0L;
         AggregationResults<Document> agg = mongoTemplate.aggregate(
-                Aggregation.newAggregation(
-                        Aggregation.group("status").count().as("count").sum("amount").as("sum")),
+                Aggregation.newAggregation(Aggregation.group("status")
+                        .count()
+                        .as("count")
+                        .sum("amount")
+                        .as("sum")),
                 "orders",
                 Document.class);
         for (Document row : agg) {
@@ -87,8 +90,7 @@ public class AdminController {
             }
         }
 
-        long activeListings =
-                mongoTemplate.getCollection("listings").countDocuments(new Document("status", "ACTIVE"));
+        long activeListings = mongoTemplate.getCollection("listings").countDocuments(new Document("status", "ACTIVE"));
 
         return new OverviewResponse(counts, gmv, ordersByStatus, activeListings);
     }
@@ -97,14 +99,18 @@ public class AdminController {
     @GetMapping("/orders")
     public List<OrderRow> orders(@RequestParam(value = "limit", defaultValue = "30") int limit) {
         Query q = new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(clamp(limit));
-        return mongoTemplate.find(q, Document.class, "orders").stream().map(OrderRow::from).toList();
+        return mongoTemplate.find(q, Document.class, "orders").stream()
+                .map(OrderRow::from)
+                .toList();
     }
 
     /** 최근 매물 모니터링(모든 상태, 읽기 전용). */
     @GetMapping("/listings")
     public List<ListingRow> listings(@RequestParam(value = "limit", defaultValue = "30") int limit) {
         Query q = new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(clamp(limit));
-        return mongoTemplate.find(q, Document.class, "listings").stream().map(ListingRow::from).toList();
+        return mongoTemplate.find(q, Document.class, "listings").stream()
+                .map(ListingRow::from)
+                .toList();
     }
 
     /** 매물 강제 내림(모더레이션). 도메인 규칙(진행 중 주문 등)은 유스케이스가 강제한다. */
@@ -118,7 +124,9 @@ public class AdminController {
     @GetMapping("/posts")
     public List<PostRow> posts(@RequestParam(value = "limit", defaultValue = "30") int limit) {
         Query q = new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(clamp(limit));
-        return mongoTemplate.find(q, Document.class, "posts").stream().map(PostRow::from).toList();
+        return mongoTemplate.find(q, Document.class, "posts").stream()
+                .map(PostRow::from)
+                .toList();
     }
 
     /** 게시글 강제 삭제(어드민 오버라이드 — 작성자 확인 없이 status=DELETED). */
@@ -127,7 +135,8 @@ public class AdminController {
     public void removePost(@PathVariable String postId) {
         mongoTemplate.updateFirst(
                 new org.springframework.data.mongodb.core.query.Query(
-                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(postId)),
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id")
+                                .is(postId)),
                 new org.springframework.data.mongodb.core.query.Update().set("status", "DELETED"),
                 "posts");
     }
@@ -147,7 +156,8 @@ public class AdminController {
     public void lockAccount(@PathVariable String accountId) {
         mongoTemplate.updateFirst(
                 new org.springframework.data.mongodb.core.query.Query(
-                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(accountId)),
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id")
+                                .is(accountId)),
                 new org.springframework.data.mongodb.core.query.Update()
                         .set("lockedUntil", java.time.Instant.parse("9999-12-31T00:00:00Z")),
                 "accounts");
@@ -159,7 +169,8 @@ public class AdminController {
     public void unlockAccount(@PathVariable String accountId) {
         mongoTemplate.updateFirst(
                 new org.springframework.data.mongodb.core.query.Query(
-                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(accountId)),
+                        org.springframework.data.mongodb.core.query.Criteria.where("_id")
+                                .is(accountId)),
                 new org.springframework.data.mongodb.core.query.Update().unset("lockedUntil"),
                 "accounts");
     }

@@ -2,9 +2,7 @@ package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
-import com.gole.api.listing.adapter.out.persistence.ListingDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
-import com.gole.api.listing.domain.model.ListingComment;
 import com.gole.api.notification.application.port.in.NotifyUseCase;
 import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
 import com.gole.api.notification.domain.model.NotificationType;
@@ -44,17 +42,14 @@ public class ListingCommentController {
 
     @GetMapping
     public List<CommentResponse> list(@PathVariable String listingId) {
-        return commentRepository
-                .findByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId)
-                .stream()
+        return commentRepository.findByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId).stream()
                 .map(CommentResponse::from)
                 .toList();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CommentResponse create(
-            @PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req) {
+    public CommentResponse create(@PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req) {
         ListingCommentDocument doc = new ListingCommentDocument(
                 UUID.randomUUID().toString(), listingId, req.authorId(), req.content(), false, Instant.now());
         CommentResponse saved = CommentResponse.from(commentRepository.save(doc));

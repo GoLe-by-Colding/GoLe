@@ -27,9 +27,23 @@ public class ChatRoomDocument {
         this.createdAt = createdAt;
     }
 
-    public String getId() { return id; }
-    public String getListingId() { return listingId; }
-    public String getBuyerId() { return buyerId; }
-    public String getSellerId() { return sellerId; }
-    public Instant getCreatedAt() { return createdAt; }
+    public String getId() {
+        return id;
+    }
+
+    public String getListingId() {
+        return listingId;
+    }
+
+    public String getBuyerId() {
+        return buyerId;
+    }
+
+    public String getSellerId() {
+        return sellerId;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

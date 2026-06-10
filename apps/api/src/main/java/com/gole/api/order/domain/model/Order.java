@@ -20,6 +20,7 @@ public final class Order {
     private final String catalogSetNumber; // nullable
     /** 상품 상태 키(new_sealed 등). 시세 condition 기록에 사용. nullable(레거시/미지정). */
     private final String listingCondition;
+
     private final long amount;
     private final Instant createdAt;
     private final List<OrderStatusChange> history;
