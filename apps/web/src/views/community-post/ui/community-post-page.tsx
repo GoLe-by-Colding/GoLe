@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchComments,
   fetchPost,
+  POST_TOPIC_LABEL,
   type Comment,
   type Post,
 } from "@entities/community";
@@ -81,16 +82,16 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
       <div className="flex flex-col gap-5 pt-8 pb-16">
         <div className="flex items-center justify-between">
           <Heading level={2}>{post.authorId.slice(0, 8)}</Heading>
-          {post.type === "moc" ? <Badge tone="brand">MOC</Badge> : null}
+          <Badge tone={post.type === "moc" || post.type === "easter_egg" ? "brand" : "neutral"}>
+            {POST_TOPIC_LABEL[post.type]}
+          </Badge>
         </div>
-        <Card padded={false} className="overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="w-full object-cover bg-neutral-100"
-            src={cover ?? "https://placehold.co/800x800?text=GoLe"}
-            alt=""
-          />
-        </Card>
+        {cover !== undefined ? (
+          <Card padded={false} className="overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="w-full object-cover bg-neutral-100" src={cover} alt="" />
+          </Card>
+        ) : null}
         <p className="whitespace-pre-wrap leading-relaxed text-neutral-800">{post.content}</p>
         <LikeButton postId={post.id} initialLikeCount={post.likeCount} />
 

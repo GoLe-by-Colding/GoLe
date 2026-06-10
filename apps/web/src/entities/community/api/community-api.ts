@@ -31,7 +31,7 @@ export interface PublishPostInput {
   readonly authorId: string;
   readonly content: string;
   readonly imageUrls: readonly string[];
-  readonly moc: boolean;
+  readonly topic: import("../model/types").PostType;
 }
 
 export function publishPost(input: PublishPostInput): Promise<Post> {

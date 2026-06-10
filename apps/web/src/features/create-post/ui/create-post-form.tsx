@@ -1,9 +1,9 @@
 "use client";
 
 import { type FormEvent, type ChangeEvent, useState } from "react";
-import { publishPost } from "@entities/community";
+import { POST_TOPICS, publishPost, type PostType } from "@entities/community";
 import { ApiError, uploadImages } from "@shared/api";
-import { Button, Field, Textarea } from "@shared/ui";
+import { Button, Field, Select, Textarea } from "@shared/ui";
 
 export interface CreatePostFormProps {
   readonly authorId: string;
@@ -15,7 +15,7 @@ const MAX_IMAGES = 10;
 export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   const [content, setContent] = useState("");
   const [imageUrls, setImageUrls] = useState<readonly string[]>([]);
-  const [moc, setMoc] = useState(false);
+  const [topic, setTopic] = useState<PostType>("general");
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -52,17 +52,13 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
-    if (imageUrls.length === 0) {
-      setError("이미지를 한 장 이상 업로드해 주세요.");
-      return;
-    }
     setSubmitting(true);
     try {
       const post = await publishPost({
         authorId,
         content,
         imageUrls: [...imageUrls],
-        moc,
+        topic,
       });
       onCreated(post.id);
     } catch (cause) {
@@ -78,19 +74,30 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
           {error}
         </p>
       ) : null}
+      <Field label="주제">
+        {({ inputId }) => (
+          <Select id={inputId} value={topic} onChange={(e) => setTopic(e.target.value as PostType)}>
+            {POST_TOPICS.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
       <Field label="내용">
         {({ inputId, describedBy }) => (
           <Textarea
             id={inputId}
             value={content}
-            placeholder="레고 자랑, 후기, MOC를 공유하세요."
+            placeholder="자랑·리뷰·질문·팁·창작(MOC)·이스터에그 등 무엇이든 공유해보세요."
             aria-describedby={describedBy}
             onChange={(e) => setContent(e.target.value)}
             required
           />
         )}
       </Field>
-      <Field label="이미지" hint={`최대 ${MAX_IMAGES}장`}>
+      <Field label="이미지 (선택)" hint={`최대 ${MAX_IMAGES}장 · 질문/토론은 사진 없이도 OK`}>
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input
@@ -131,14 +138,6 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
           </div>
         )}
       </Field>
-      <label className="inline-flex items-center gap-2 text-sm text-neutral-700">
-        <input
-          type="checkbox"
-          checked={moc}
-          onChange={(e) => setMoc(e.target.checked)}
-        />
-        MOC(직접 창작물)로 게시
-      </label>
       <Button type="submit" size="lg" fullWidth disabled={submitting || uploading}>
         {submitting ? "게시 중..." : "게시하기"}
       </Button>
