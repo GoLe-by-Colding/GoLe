@@ -88,7 +88,7 @@ export async function SearchPage(props: SearchPageProps) {
             <span className="font-bold text-brand-600">{listings.length}</span>개
           </Text>
         </div>
-        <div className="sticky top-16 z-30 -mx-2 bg-neutral-50 px-2 py-2">
+        <div className="sticky top-16 z-30 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
         </div>
         <ListingGrid

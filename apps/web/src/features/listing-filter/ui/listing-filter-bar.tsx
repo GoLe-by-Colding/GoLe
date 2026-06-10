@@ -10,7 +10,7 @@ import {
   LISTING_CATEGORIES,
 } from "@entities/listing";
 import { SetAutocomplete } from "./set-autocomplete";
-import { Button, Input, Select } from "@shared/ui";
+import { Button, Select } from "@shared/ui";
 
 export interface ListingFilterValues {
   readonly query: string;
@@ -36,6 +36,7 @@ const SORTS: ReadonlyArray<{ readonly value: ListingSort; readonly label: string
 export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   const router = useRouter();
   const [values, setValues] = useState<ListingFilterValues>(initial);
+  const [open, setOpen] = useState(false);
 
   function update<K extends keyof ListingFilterValues>(key: K, value: ListingFilterValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -44,120 +45,165 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const qs = new URLSearchParams();
-    if (values.query.trim()) {
-      qs.set("query", values.query.trim());
-    }
-    if (values.condition) {
-      qs.set("condition", values.condition);
-    }
-    if (values.category) {
-      qs.set("category", values.category);
-    }
-    if (values.minPrice.trim()) {
-      qs.set("minPrice", values.minPrice.trim());
-    }
-    if (values.maxPrice.trim()) {
-      qs.set("maxPrice", values.maxPrice.trim());
-    }
-    if (values.sort !== "newest") {
-      qs.set("sort", values.sort);
-    }
-    const suffix = qs.toString().length > 0 ? `?${qs.toString()}` : "";
+    if (values.query.trim()) qs.set("query", values.query.trim());
+    if (values.condition) qs.set("condition", values.condition);
+    if (values.category) qs.set("category", values.category);
+    if (values.minPrice.trim()) qs.set("minPrice", values.minPrice.trim());
+    if (values.maxPrice.trim()) qs.set("maxPrice", values.maxPrice.trim());
+    if (values.sort !== "newest") qs.set("sort", values.sort);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
     router.push(`/search${suffix}`);
+    setOpen(false);
   }
 
+  // 적용된 필터 수(검색어 제외)
+  const activeCount = [
+    values.condition,
+    values.category,
+    values.minPrice,
+    values.maxPrice,
+    values.sort !== "newest" ? values.sort : "",
+  ].filter(Boolean).length;
+
   return (
-    <form
-      className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-white p-4"
-      onSubmit={handleSubmit}
-    >
-      <div className="flex min-w-[200px] flex-1 flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-query">
-          검색어
-        </label>
-        <SetAutocomplete
-          id="f-query"
-          value={values.query}
-          placeholder="제목, 설명, 세트번호"
-          onChange={(v) => update("query", v)}
-          onSelect={(set) => update("query", set.name)}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-category">
-          카테고리
-        </label>
-        <Select
-          id="f-category"
-          value={values.category}
-          onChange={(e) => update("category", e.target.value as ListingCategory | "")}
+    <div className="rounded-xl border border-neutral-200 bg-white shadow-soft">
+      {/* 상단 바: 검색어 + 토글 버튼 (항상 노출) */}
+      <form onSubmit={handleSubmit}>
+        <div className="flex items-center gap-2 p-3">
+          <div className="relative flex-1">
+            <SetAutocomplete
+              id="f-query"
+              value={values.query}
+              placeholder="검색어, 세트번호"
+              onChange={(v) => update("query", v)}
+              onSelect={(set) => update("query", set.name)}
+            />
+          </div>
+          {/* 필터 토글 (모바일 전용) */}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 sm:hidden"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path
+                d="M1 3h12M3 7h8M5 11h4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            필터
+            {activeCount > 0 ? (
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-600 text-[11px] font-bold text-white">
+                {activeCount}
+              </span>
+            ) : null}
+          </button>
+          {/* 검색 버튼 (모바일 항상, 데스크톱에서도) */}
+          <Button type="submit" size="sm">
+            검색
+          </Button>
+        </div>
+
+        {/* 상세 필터: 모바일은 토글, 데스크톱은 항상 노출 */}
+        <div
+          className={`grid grid-cols-2 gap-2 border-t border-neutral-100 px-3 pb-3 pt-2 sm:flex sm:flex-wrap sm:items-end sm:gap-2 ${
+            open ? "grid" : "hidden sm:flex"
+          }`}
         >
-          <option value="">전체</option>
-          {LISTING_CATEGORIES.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-condition">
-          상태
-        </label>
-        <Select
-          id="f-condition"
-          value={values.condition}
-          onChange={(e) => update("condition", e.target.value as ItemCondition | "")}
-        >
-          <option value="">전체</option>
-          {CONDITIONS.map((c) => (
-            <option key={c} value={c}>
-              {conditionLabel(c)}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <div className="flex w-24 flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-min">
-          최소가
-        </label>
-        <Input
-          id="f-min"
-          type="number"
-          min={0}
-          value={values.minPrice}
-          onChange={(e) => update("minPrice", e.target.value)}
-        />
-      </div>
-      <div className="flex w-24 flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-max">
-          최대가
-        </label>
-        <Input
-          id="f-max"
-          type="number"
-          min={0}
-          value={values.maxPrice}
-          onChange={(e) => update("maxPrice", e.target.value)}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-neutral-600" htmlFor="f-sort">
-          정렬
-        </label>
-        <Select
-          id="f-sort"
-          value={values.sort}
-          onChange={(e) => update("sort", e.target.value as ListingSort)}
-        >
-          {SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <Button type="submit">검색</Button>
-    </form>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-neutral-500" htmlFor="f-category">
+              카테고리
+            </label>
+            <Select
+              id="f-category"
+              value={values.category}
+              onChange={(e) => update("category", e.target.value as ListingCategory | "")}
+            >
+              <option value="">전체</option>
+              {LISTING_CATEGORIES.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-neutral-500" htmlFor="f-condition">
+              상태
+            </label>
+            <Select
+              id="f-condition"
+              value={values.condition}
+              onChange={(e) => update("condition", e.target.value as ItemCondition | "")}
+            >
+              <option value="">전체</option>
+              {CONDITIONS.map((c) => (
+                <option key={c} value={c}>
+                  {conditionLabel(c)}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-neutral-500" htmlFor="f-sort">
+              정렬
+            </label>
+            <Select
+              id="f-sort"
+              value={values.sort}
+              onChange={(e) => update("sort", e.target.value as ListingSort)}
+            >
+              {SORTS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500" htmlFor="f-min">
+                최소가
+              </label>
+              <input
+                id="f-min"
+                type="number"
+                min={0}
+                value={values.minPrice}
+                onChange={(e) => update("minPrice", e.target.value)}
+                placeholder="0"
+                className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500" htmlFor="f-max">
+                최대가
+              </label>
+              <input
+                id="f-max"
+                type="number"
+                min={0}
+                value={values.maxPrice}
+                onChange={(e) => update("maxPrice", e.target.value)}
+                placeholder="∞"
+                className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+              />
+            </div>
+          </div>
+
+          {/* 모바일에서만: 검색 버튼 (필터 영역 안) */}
+          <div className="col-span-2 sm:hidden">
+            <Button type="submit" size="sm" fullWidth>
+              이 조건으로 검색
+            </Button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
