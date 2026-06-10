@@ -27,57 +27,51 @@ export function Logo({ size = 32, showWordmark = true, className }: LogoProps) {
         aria-hidden="true"
         className="shrink-0"
       >
-        {/* 꼬리 플루크 (위로 뻗는 고래 꼬리) */}
+        {/* 꼬리 플루크 (납작한 수평 고래 꼬리) */}
         <path
-          d="M30 20.5C32.5 19 34.5 16.5 36 15C35.6 17.5 35 19.3 34.2 20.8C36 21 37.6 22.2 39 24C36.5 24.2 34 23.2 31.8 21.6C31.2 22 30.6 22.2 30 22Z"
+          d="M28.5 18.6C31.5 17.6 34 17 36.2 16.8C37.3 16.7 37.8 17.3 37.5 18.2C37.2 19.2 36.4 19.7 35.4 20.1C36.4 20.5 37.2 21 37.5 22C37.8 22.9 37.3 23.5 36.2 23.4C34 23.2 31.5 22.6 28.5 21.6Z"
           fill="#1a3fc0"
         />
 
-        {/* 몸통 (납작한 등 = 브릭 윗면) */}
+        {/* 몸통 (둥근 사각형 = 레고 브릭 바디) */}
         <path
-          d="M5 21C5 15.5 9.5 13 16 13L26.5 13C30 13 32.5 15.5 32.5 19.5C32.5 24.5 28 28.5 19.5 28.5C10 28.5 5 26 5 21Z"
+          d="M10 12H24C28 12 30 14 30.5 18C30.8 20 30.8 21 30.5 23C30 26.5 28 28.5 24 28.5H10C6 28.5 4.5 26 4.5 22.5V17.5C4.5 14 6 12 10 12Z"
           fill="#1d4ed8"
         />
 
-        {/* 가슴 지느러미 */}
-        <path
-          d="M14.5 27C16 30.5 19.5 31.5 22 30C20.3 28 17.5 27 14.5 27Z"
-          fill="#1a3fc0"
-        />
-
-        {/* 브릭 코스 심(seam) */}
-        <path d="M6.5 20.6H30" stroke="#1a3fc0" strokeWidth="0.8" strokeLinecap="round" opacity="0.4" />
+        {/* 브릭 코스 심(seam) — 브릭으로 쌓은 느낌 */}
+        <path d="M5.5 21H29.5" stroke="#1a3fc0" strokeWidth="0.9" strokeLinecap="round" opacity="0.4" />
 
         {/* 입(미소) */}
         <path
-          d="M5 22.4C6.6 23.9 8.7 23.9 10.2 22.8"
+          d="M4.8 22.6C6 24 8 24.2 9.6 23.2"
           stroke="#1a3fc0"
           strokeWidth="0.9"
           strokeLinecap="round"
           fill="none"
         />
 
-        {/* 분수(물줄기) — 머리 위 숨구멍에서 솟는 골드 워터젯 */}
+        {/* 분수(물줄기) — 머리 위 숨구멍 */}
         <g stroke="#eab308" strokeWidth="1.3" strokeLinecap="round" fill="none">
-          <path d="M9.6 12.4C9.2 9.4 8.6 7.4 7.6 5.8" />
-          <path d="M10.7 12.4C10.7 9.6 10.7 7.4 10.7 5.6" />
-          <path d="M11.7 12.6C12.3 9.8 13.1 7.8 14 6.4" />
+          <path d="M7.6 11.6C7.2 8.8 6.6 6.9 5.7 5.3" />
+          <path d="M8.7 11.6C8.7 9 8.7 6.8 8.7 5" />
+          <path d="M9.7 11.8C10.3 9 11.1 7 12 5.7" />
         </g>
-        <circle cx="7.4" cy="5.4" r="0.7" fill="#eab308" />
-        <circle cx="10.7" cy="5.2" r="0.7" fill="#eab308" />
-        <circle cx="14.2" cy="6" r="0.7" fill="#eab308" />
+        <circle cx="5.5" cy="4.9" r="0.7" fill="#eab308" />
+        <circle cx="8.7" cy="4.6" r="0.7" fill="#eab308" />
+        <circle cx="12.2" cy="5.4" r="0.7" fill="#eab308" />
 
         {/* 등 위 브릭 스터드 3개 (윗면 하이라이트로 입체) */}
-        <ellipse cx="13" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
-        <ellipse cx="13" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
-        <ellipse cx="18.5" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
-        <ellipse cx="18.5" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
-        <ellipse cx="24" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
-        <ellipse cx="24" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
+        <ellipse cx="10.5" cy="12.1" rx="2.1" ry="1" fill="#3b5cf2" />
+        <ellipse cx="10.5" cy="11.4" rx="2.1" ry="1" fill="#6082f7" />
+        <ellipse cx="16" cy="12.1" rx="2.1" ry="1" fill="#3b5cf2" />
+        <ellipse cx="16" cy="11.4" rx="2.1" ry="1" fill="#6082f7" />
+        <ellipse cx="21.5" cy="12.1" rx="2.1" ry="1" fill="#3b5cf2" />
+        <ellipse cx="21.5" cy="11.4" rx="2.1" ry="1" fill="#6082f7" />
 
         {/* 눈 */}
-        <circle cx="9.5" cy="19.8" r="1.45" fill="#ffffff" />
-        <circle cx="9.2" cy="19.6" r="0.6" fill="#1b2f66" />
+        <circle cx="8.6" cy="19.6" r="1.45" fill="#ffffff" />
+        <circle cx="8.3" cy="19.4" r="0.6" fill="#1b2f66" />
       </svg>
       {showWordmark ? (
         <span>
