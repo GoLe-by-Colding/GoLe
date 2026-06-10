@@ -1,7 +1,5 @@
 package com.gole.api.chat.adapter.out.pubsub;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gole.api.chat.domain.model.ChatMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,9 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Redis Pub/Sub으로 채팅 메시지를 브로드캐스트한다.
- * 채널: {@code chat:<roomId>}.
- * 다중 인스턴스에서도 모든 SSE 구독자에게 전달된다.
+ * Redis Pub/Sub으로 채팅 메시지를 브로드캐스트한다. 채널: {@code chat:<roomId>}.
  */
 @Component
 public class ChatRedisPublisher {
@@ -20,23 +16,28 @@ public class ChatRedisPublisher {
     private static final String CHANNEL_PREFIX = "chat:";
 
     private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
 
-    public ChatRedisPublisher(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public ChatRedisPublisher(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
     }
 
     public void publish(ChatMessage message) {
+        // ObjectMapper 없이 단순 JSON 문자열 조합 (값 이스케이프 적용)
+        String payload = "{"
+                + "\"id\":\"" + esc(message.id()) + "\","
+                + "\"senderId\":\"" + esc(message.senderId()) + "\","
+                + "\"content\":\"" + esc(message.content()) + "\","
+                + "\"sentAt\":\"" + esc(message.sentAt().toString()) + "\""
+                + "}";
         try {
-            String payload = objectMapper.writeValueAsString(
-                    new MessagePayload(message.id(), message.senderId(), message.content(),
-                            message.sentAt().toString()));
             redisTemplate.convertAndSend(CHANNEL_PREFIX + message.roomId(), payload);
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             log.warn("Chat publish failed: {}", e.getMessage());
         }
     }
 
-    public record MessagePayload(String id, String senderId, String content, String sentAt) {}
+    /** 큰따옴표·역슬래시만 이스케이프(채팅 메시지용 최소 이스케이프). */
+    private static String esc(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
 }
