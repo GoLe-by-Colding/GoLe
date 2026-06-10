@@ -17,7 +17,7 @@ export function ListingCard({ listing }: ListingCardProps) {
 
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
-      <div className="overflow-hidden">
+      <div className="overflow-hidden rounded-t-2xl">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
