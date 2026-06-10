@@ -34,8 +34,8 @@ async function loadCommunity(): Promise<readonly Post[]> {
 async function loadStats(): Promise<{ listings: number; txCount: number }> {
   try {
     const [listingsRes, trendingRes] = await Promise.all([
-      fetch(`${env.apiBaseUrl}/api/v1/listings`, { next: { revalidate: 300 } }),
-      fetch(`${env.apiBaseUrl}/api/v1/pricing/trending?limit=10`, { next: { revalidate: 300 } }),
+      fetch(`${env.apiBaseUrl}/api/v1/listings`, { cache: "no-store" }),
+      fetch(`${env.apiBaseUrl}/api/v1/pricing/trending?limit=10`, { cache: "no-store" }),
     ]);
     const listings = listingsRes.ok ? ((await listingsRes.json()) as unknown[]).length : 0;
     const trending = trendingRes.ok
