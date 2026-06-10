@@ -142,12 +142,12 @@ export function LineChart({
     <div className="relative w-full select-none">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        width="100%"
         role="img"
         aria-label="시세 추이 차트"
         onPointerMove={handleMove}
         onPointerLeave={() => setHover(null)}
-        className="block"
+        className="block w-full"
+        style={{ aspectRatio: `${W} / ${H}` }}
       >
         <defs>
           <linearGradient id="line-chart-area" x1="0" y1="0" x2="0" y2="1">
