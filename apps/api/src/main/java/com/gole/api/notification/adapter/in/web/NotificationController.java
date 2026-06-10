@@ -1,8 +1,8 @@
-
 package com.gole.api.notification.adapter.in.web;
-import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.gole.api.notification.application.port.in.GetNotificationsUseCase;
 import com.gole.api.notification.domain.model.Notification;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.http.HttpStatus;

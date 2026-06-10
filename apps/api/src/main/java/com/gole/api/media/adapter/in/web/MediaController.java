@@ -1,14 +1,13 @@
-
 package com.gole.api.media.adapter.in.web;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
 import com.gole.api.media.application.port.in.LoadImageUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase.LoadedImage;
 import com.gole.api.media.application.port.in.UploadImageUseCase;
 import com.gole.api.media.application.port.in.UploadImageUseCase.UploadImageCommand;
 import com.gole.api.media.domain.exception.InvalidImageException;
 import com.gole.api.media.domain.model.StoredImage;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -44,7 +43,9 @@ public class MediaController {
         this.loadImageUseCase = loadImageUseCase;
     }
 
-    @Operation(summary = "이미지 단일 업로드", description = "이미지 파일을 MinIO에 업로드하고 공개 URL을 반환합니다. Content-Type: multipart/form-data")
+    @Operation(
+            summary = "이미지 단일 업로드",
+            description = "이미지 파일을 MinIO에 업로드하고 공개 URL을 반환합니다. Content-Type: multipart/form-data")
     @PostMapping("/images")
     @ResponseStatus(HttpStatus.CREATED)
     public UploadResponse upload(@RequestParam("file") MultipartFile file) {

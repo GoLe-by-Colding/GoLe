@@ -1,8 +1,8 @@
-
 package com.gole.api.pricing.adapter.in.web;
-import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.gole.api.pricing.application.port.in.GetTrendingSetsUseCase;
 import com.gole.api.pricing.application.port.in.GetTrendingSetsUseCase.TrendingSet;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

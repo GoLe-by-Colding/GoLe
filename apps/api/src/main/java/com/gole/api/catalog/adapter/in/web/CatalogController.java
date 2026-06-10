@@ -1,9 +1,9 @@
-
 package com.gole.api.catalog.adapter.in.web;
-import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

@@ -1,12 +1,11 @@
-
 package com.gole.api.pricing.adapter.in.web;
 
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.PricePointResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.StatisticsResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.ValuationResponse;
 import com.gole.api.pricing.application.port.in.GetPriceInsightsUseCase;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
