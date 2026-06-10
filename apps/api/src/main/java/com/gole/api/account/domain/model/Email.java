@@ -7,8 +7,7 @@ import java.util.regex.Pattern;
  */
 public record Email(String value) {
 
-    private static final Pattern PATTERN =
-            Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     public Email {
         if (value == null) {

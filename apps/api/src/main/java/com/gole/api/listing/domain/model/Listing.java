@@ -69,8 +69,18 @@ public final class Listing {
             ListingCategory category,
             Instant createdAt) {
         return new Listing(
-                id, sellerId, title, description, price, condition, disclosure,
-                photoUrls, catalogSetNumber, category, ListingStatus.ACTIVE, createdAt);
+                id,
+                sellerId,
+                title,
+                description,
+                price,
+                condition,
+                disclosure,
+                photoUrls,
+                catalogSetNumber,
+                category,
+                ListingStatus.ACTIVE,
+                createdAt);
     }
 
     /** 판매 완료 처리. (요구사항 5.6) */

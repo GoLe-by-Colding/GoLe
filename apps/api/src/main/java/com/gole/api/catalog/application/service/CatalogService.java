@@ -54,8 +54,7 @@ public class CatalogService
 
     @Override
     public LegoSet findBySetNumber(String setNumber) {
-        return loadLegoSetPort.loadBySetNumber(setNumber)
-                .orElseThrow(() -> new LegoSetNotFoundException(setNumber));
+        return loadLegoSetPort.loadBySetNumber(setNumber).orElseThrow(() -> new LegoSetNotFoundException(setNumber));
     }
 
     @Override

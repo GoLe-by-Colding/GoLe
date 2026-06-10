@@ -26,8 +26,7 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     private final PriceTransactionMongoRepository repository;
     private final MongoTemplate mongoTemplate;
 
-    public PriceTransactionPersistenceAdapter(
-            PriceTransactionMongoRepository repository, MongoTemplate mongoTemplate) {
+    public PriceTransactionPersistenceAdapter(PriceTransactionMongoRepository repository, MongoTemplate mongoTemplate) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
     }
@@ -39,8 +38,7 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     }
 
     @Override
-    public List<PriceTransaction> findInRangeAscending(
-            String setNumber, Instant from, Instant to) {
+    public List<PriceTransaction> findInRangeAscending(String setNumber, Instant from, Instant to) {
         // from/to가 모두 없으면 단순 파생 쿼리로 처리.
         if (from == null && to == null) {
             return repository.findBySetNumberOrderByExecutedAtAsc(setNumber).stream()
@@ -66,9 +64,7 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     @Override
     public List<PriceTransaction> findByConditionAscending(
             String setNumber, com.gole.api.pricing.domain.model.SetCondition condition) {
-        return repository
-                .findBySetNumberAndConditionOrderByExecutedAtAsc(setNumber, condition.key())
-                .stream()
+        return repository.findBySetNumberAndConditionOrderByExecutedAtAsc(setNumber, condition.key()).stream()
                 .map(this::toDomain)
                 .toList();
     }
@@ -81,17 +77,18 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
             ops.add(Aggregation.match(Criteria.where("executedAt").gte(since)));
         }
         ops.add(Aggregation.group("setNumber")
-                .count().as("tradeCount")
-                .avg("price").as("averagePrice"));
+                .count()
+                .as("tradeCount")
+                .avg("price")
+                .as("averagePrice"));
         ops.add(Aggregation.sort(Sort.Direction.DESC, "tradeCount"));
         ops.add(Aggregation.limit(limit));
 
-        AggregationResults<TradeAggregateRow> results = mongoTemplate.aggregate(
-                Aggregation.newAggregation(ops), "price_transactions", TradeAggregateRow.class);
+        AggregationResults<TradeAggregateRow> results =
+                mongoTemplate.aggregate(Aggregation.newAggregation(ops), "price_transactions", TradeAggregateRow.class);
 
         return results.getMappedResults().stream()
-                .map(row -> new TradeAggregate(
-                        row.id(), row.tradeCount(), Math.round(row.averagePrice())))
+                .map(row -> new TradeAggregate(row.id(), row.tradeCount(), Math.round(row.averagePrice())))
                 .toList();
     }
 

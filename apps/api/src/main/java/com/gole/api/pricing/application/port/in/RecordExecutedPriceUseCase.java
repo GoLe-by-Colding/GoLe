@@ -14,8 +14,7 @@ public interface RecordExecutedPriceUseCase {
             String setNumber, long price, int quantity, Instant executedAt, String condition) {
 
         /** 상태 미지정 체결(레거시/주문 기본) — 미개봉으로 간주. */
-        public RecordExecutedPriceCommand(
-                String setNumber, long price, int quantity, Instant executedAt) {
+        public RecordExecutedPriceCommand(String setNumber, long price, int quantity, Instant executedAt) {
             this(setNumber, price, quantity, executedAt, null);
         }
     }

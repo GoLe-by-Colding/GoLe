@@ -27,7 +27,7 @@ class DiscoveryServiceTest {
     void setUp() {
         follows = new InMemoryFollows();
         wishlist = new InMemoryWishlist();
-        service = new DiscoveryService(follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> { });
+        service = new DiscoveryService(follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> {});
     }
 
     @Test
@@ -59,7 +59,8 @@ class DiscoveryServiceTest {
 
         @Override
         public boolean exists(String userId, String sellerId) {
-            return store.stream().anyMatch(f -> f.userId().equals(userId) && f.sellerId().equals(sellerId));
+            return store.stream()
+                    .anyMatch(f -> f.userId().equals(userId) && f.sellerId().equals(sellerId));
         }
 
         @Override
@@ -74,7 +75,10 @@ class DiscoveryServiceTest {
 
         @Override
         public List<String> findSellerIdsByUser(String userId) {
-            return store.stream().filter(f -> f.userId().equals(userId)).map(Follow::sellerId).toList();
+            return store.stream()
+                    .filter(f -> f.userId().equals(userId))
+                    .map(Follow::sellerId)
+                    .toList();
         }
     }
 
@@ -83,8 +87,10 @@ class DiscoveryServiceTest {
 
         @Override
         public boolean exists(String userId, WishlistTargetType type, String targetId) {
-            return store.stream().anyMatch(e ->
-                    e.userId().equals(userId) && e.targetType() == type && e.targetId().equals(targetId));
+            return store.stream()
+                    .anyMatch(e -> e.userId().equals(userId)
+                            && e.targetType() == type
+                            && e.targetId().equals(targetId));
         }
 
         @Override
@@ -94,8 +100,9 @@ class DiscoveryServiceTest {
 
         @Override
         public void delete(String userId, WishlistTargetType type, String targetId) {
-            store.removeIf(e ->
-                    e.userId().equals(userId) && e.targetType() == type && e.targetId().equals(targetId));
+            store.removeIf(e -> e.userId().equals(userId)
+                    && e.targetType() == type
+                    && e.targetId().equals(targetId));
         }
 
         @Override

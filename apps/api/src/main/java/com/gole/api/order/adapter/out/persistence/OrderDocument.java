@@ -162,12 +162,7 @@ public class OrderDocument {
         }
 
         public SettlementDocument(
-                String orderId,
-                String sellerId,
-                long grossAmount,
-                long fee,
-                long payout,
-                Instant settledAt) {
+                String orderId, String sellerId, long grossAmount, long fee, long payout, Instant settledAt) {
             this.orderId = orderId;
             this.sellerId = sellerId;
             this.grossAmount = grossAmount;

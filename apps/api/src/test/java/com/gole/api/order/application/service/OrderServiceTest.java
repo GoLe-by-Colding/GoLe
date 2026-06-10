@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
-import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
@@ -38,9 +37,14 @@ class OrderServiceTest {
         settlement = new CountingSettlement();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
-                orders, reservation, new AlwaysApprovePayment(), settlement,
-                (s, p, q, t) -> { }, (sellerId, orderId, amount) -> { },
-                new SequentialIds(), clock);
+                orders,
+                reservation,
+                new AlwaysApprovePayment(),
+                settlement,
+                (s, p, q, t) -> {},
+                (sellerId, orderId, amount) -> {},
+                new SequentialIds(),
+                clock);
     }
 
     @Test
@@ -98,12 +102,16 @@ class OrderServiceTest {
 
         @Override
         public List<Order> findByBuyerId(String buyerId) {
-            return store.values().stream().filter(o -> o.getBuyerId().equals(buyerId)).toList();
+            return store.values().stream()
+                    .filter(o -> o.getBuyerId().equals(buyerId))
+                    .toList();
         }
 
         @Override
         public List<Order> findBySellerId(String sellerId) {
-            return store.values().stream().filter(o -> o.getSellerId().equals(sellerId)).toList();
+            return store.values().stream()
+                    .filter(o -> o.getSellerId().equals(sellerId))
+                    .toList();
         }
     }
 
@@ -137,8 +145,7 @@ class OrderServiceTest {
         }
 
         @Override
-        public void refund(String orderId, long amount) {
-        }
+        public void refund(String orderId, long amount) {}
     }
 
     private static final class CountingSettlement implements SettlementPort {

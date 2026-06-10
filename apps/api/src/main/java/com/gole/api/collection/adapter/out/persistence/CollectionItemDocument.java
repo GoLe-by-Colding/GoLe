@@ -28,8 +28,7 @@ public class CollectionItemDocument {
         // MongoDB 매핑용
     }
 
-    public CollectionItemDocument(
-            String id, String userId, String setNumber, String status, Instant createdAt) {
+    public CollectionItemDocument(String id, String userId, String setNumber, String status, Instant createdAt) {
         this.id = id;
         this.userId = userId;
         this.setNumber = setNumber;

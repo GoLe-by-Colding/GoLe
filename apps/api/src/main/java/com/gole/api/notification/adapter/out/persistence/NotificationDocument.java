@@ -30,13 +30,7 @@ public class NotificationDocument {
     }
 
     public NotificationDocument(
-            String id,
-            String recipientId,
-            String type,
-            String message,
-            String link,
-            boolean read,
-            Instant createdAt) {
+            String id, String recipientId, String type, String message, String link, boolean read, Instant createdAt) {
         this.id = id;
         this.recipientId = recipientId;
         this.type = type;

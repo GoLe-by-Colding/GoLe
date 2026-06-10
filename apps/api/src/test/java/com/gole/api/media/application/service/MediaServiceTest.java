@@ -35,49 +35,42 @@ class MediaServiceTest {
 
     @Test
     void upload_storesObject_andReturnsPublicUrl() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("hello".getBytes(), "image/png", "photo.PNG"));
+        StoredImage stored = service.upload(new UploadImageCommand("hello".getBytes(), "image/png", "photo.PNG"));
 
         assertThat(stored.key()).startsWith("images/").endsWith(".png");
-        assertThat(stored.url())
-                .isEqualTo("https://gole.kscold.com/api/v1/media/" + stored.key());
+        assertThat(stored.url()).isEqualTo("https://gole.kscold.com/api/v1/media/" + stored.key());
         assertThat(stored.contentType()).isEqualTo("image/png");
         assertThat(storage.objects).containsKey(stored.key());
     }
 
     @Test
     void upload_rejectsNonImage() {
-        assertThatThrownBy(() -> service.upload(
-                new UploadImageCommand("data".getBytes(), "application/pdf", "x.pdf")))
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand("data".getBytes(), "application/pdf", "x.pdf")))
                 .isInstanceOf(InvalidImageException.class);
     }
 
     @Test
     void upload_rejectsEmpty() {
-        assertThatThrownBy(() -> service.upload(
-                new UploadImageCommand(new byte[0], "image/png", "x.png")))
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand(new byte[0], "image/png", "x.png")))
                 .isInstanceOf(InvalidImageException.class);
     }
 
     @Test
     void upload_rejectsTooLarge() {
         byte[] big = new byte[1_001];
-        assertThatThrownBy(() -> service.upload(
-                new UploadImageCommand(big, "image/jpeg", "big.jpg")))
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand(big, "image/jpeg", "big.jpg")))
                 .isInstanceOf(ImageTooLargeException.class);
     }
 
     @Test
     void upload_usesBinExtension_forUnknownImageType() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("x".getBytes(), "image/tiff", "x.tiff"));
+        StoredImage stored = service.upload(new UploadImageCommand("x".getBytes(), "image/tiff", "x.tiff"));
         assertThat(stored.key()).endsWith(".bin");
     }
 
     @Test
     void load_returnsStoredBytes() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("bytes".getBytes(), "image/webp", "a.webp"));
+        StoredImage stored = service.upload(new UploadImageCommand("bytes".getBytes(), "image/webp", "a.webp"));
 
         LoadedImage loaded = service.load(stored.key());
 
@@ -87,14 +80,12 @@ class MediaServiceTest {
 
     @Test
     void load_throwsWhenMissing() {
-        assertThatThrownBy(() -> service.load("images/none.png"))
-                .isInstanceOf(ImageNotFoundException.class);
+        assertThatThrownBy(() -> service.load("images/none.png")).isInstanceOf(ImageNotFoundException.class);
     }
 
     @Test
     void loadResized_cachesDerivative_andServesIt() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
         processor.result = "thumb".getBytes();
 
         LoadedImage first = service.loadResized(stored.key(), 240);
@@ -111,8 +102,7 @@ class MediaServiceTest {
 
     @Test
     void loadResized_servesOriginal_whenProcessorReturnsEmpty() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("original".getBytes(), "image/webp", "a.webp"));
+        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/webp", "a.webp"));
         processor.result = null; // 디코딩 불가 시뮬레이션
 
         LoadedImage result = service.loadResized(stored.key(), 240);
@@ -123,8 +113,7 @@ class MediaServiceTest {
 
     @Test
     void loadResized_servesOriginal_whenWidthOutOfRange() {
-        StoredImage stored = service.upload(
-                new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
 
         LoadedImage result = service.loadResized(stored.key(), 5); // 범위 밖
 

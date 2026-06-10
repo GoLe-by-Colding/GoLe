@@ -8,17 +8,12 @@ import java.time.Instant;
 
 public final class CollectionDtos {
 
-    private CollectionDtos() {
-    }
+    private CollectionDtos() {}
 
     public record AddItemRequest(
-            @NotBlank String userId,
-            @NotBlank String setNumber,
-            @NotNull OwnershipStatus status) {
-    }
+            @NotBlank String userId, @NotBlank String setNumber, @NotNull OwnershipStatus status) {}
 
-    public record CollectionItemResponse(
-            String id, String setNumber, String status, Instant createdAt) {
+    public record CollectionItemResponse(String id, String setNumber, String status, Instant createdAt) {
 
         public static CollectionItemResponse from(CollectionItem item) {
             return new CollectionItemResponse(
@@ -26,6 +21,5 @@ public final class CollectionDtos {
         }
     }
 
-    public record EstimateResponse(long ownedEstimatedValue) {
-    }
+    public record EstimateResponse(long ownedEstimatedValue) {}
 }

@@ -9,11 +9,9 @@ import java.util.Map;
 
 public final class AdminDtos {
 
-    private AdminDtos() {
-    }
+    private AdminDtos() {}
 
-    public record OverviewResponse(Map<String, Long> counts) {
-    }
+    public record OverviewResponse(Map<String, Long> counts) {}
 
     public record CreateSetRequest(
             @NotBlank String setNumber,
@@ -23,8 +21,7 @@ public final class AdminDtos {
             int releaseYear,
             @NotNull RetirementStatus retirementStatus,
             String imageUrl,
-            boolean featured) {
-    }
+            boolean featured) {}
 
     public record LegoSetResponse(
             String setNumber,

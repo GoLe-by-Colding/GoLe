@@ -28,10 +28,11 @@ public class S3Config {
         return S3Client.builder()
                 .endpointOverride(URI.create(s3.endpoint()))
                 .region(Region.of(s3.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(s3.accessKey(), s3.secretKey())))
+                .credentialsProvider(
+                        StaticCredentialsProvider.create(AwsBasicCredentials.create(s3.accessKey(), s3.secretKey())))
                 // MinIO는 path-style 접근 필수
-                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .serviceConfiguration(
+                        S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
     }
 
@@ -44,8 +45,7 @@ public class S3Config {
         } catch (RuntimeException e) {
             // 스토리지 일시 장애가 전체 앱 부팅을 막지 않도록 한다(다른 도메인과 디커플링).
             // 버킷은 첫 업로드 시 지연 보장된다(S3ObjectStorageAdapter.put).
-            log.warn("Object storage bucket ensure failed at startup; will retry lazily: {}",
-                    e.getMessage());
+            log.warn("Object storage bucket ensure failed at startup; will retry lazily: {}", e.getMessage());
         }
         return adapter;
     }
@@ -55,7 +55,6 @@ public class S3Config {
             ObjectStoragePort objectStorage,
             com.gole.api.media.application.port.out.ImageProcessorPort imageProcessor,
             StorageProperties properties) {
-        return new MediaService(
-                objectStorage, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
+        return new MediaService(objectStorage, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
     }
 }

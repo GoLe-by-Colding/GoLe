@@ -12,7 +12,7 @@ import java.util.Objects;
  */
 public final class Account {
 
-    private static final int MAX_FAILED_ATTEMPTS = 5;     // 요구사항 1.8
+    private static final int MAX_FAILED_ATTEMPTS = 5; // 요구사항 1.8
     private static final Duration FAILURE_WINDOW = Duration.ofMinutes(15);
     private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
 
@@ -24,7 +24,7 @@ public final class Account {
     private VerificationCode verificationCode; // nullable (검증 완료 시 제거)
     private int failedAttempts;
     private Instant failureWindowStartedAt; // nullable
-    private Instant lockedUntil;            // nullable
+    private Instant lockedUntil; // nullable
 
     /** 영속성 복원용 전체 생성자. */
     public Account(
@@ -49,17 +49,13 @@ public final class Account {
     }
 
     /** 신규 가입: 미인증 + 일반(USER) 권한 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
-    public static Account register(
-            String id, Email email, PasswordHash passwordHash, VerificationCode code) {
-        return new Account(
-                id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, code, 0, null, null);
+    public static Account register(String id, Email email, PasswordHash passwordHash, VerificationCode code) {
+        return new Account(id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, code, 0, null, null);
     }
 
     /** 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다. */
-    public static Account provisioned(
-            String id, Email email, PasswordHash passwordHash, Role role) {
-        return new Account(
-                id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
+    public static Account provisioned(String id, Email email, PasswordHash passwordHash, Role role) {
+        return new Account(id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
     }
 
     /** 이메일 인증. 만료(1.5)/불일치 시 예외, 성공 시 VERIFIED 전이(1.4). */
@@ -93,8 +89,7 @@ public final class Account {
 
     /** 로그인 실패 기록. 15분 창 내 5회 누적 시 15분 잠금. (요구사항 1.8) */
     public void recordFailedSignIn(Instant now) {
-        if (failureWindowStartedAt == null
-                || now.isAfter(failureWindowStartedAt.plus(FAILURE_WINDOW))) {
+        if (failureWindowStartedAt == null || now.isAfter(failureWindowStartedAt.plus(FAILURE_WINDOW))) {
             failureWindowStartedAt = now;
             failedAttempts = 1;
         } else {

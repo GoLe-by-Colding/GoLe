@@ -22,9 +22,7 @@ public class NotificationService implements NotifyUseCase, GetNotificationsUseCa
     private final Clock clock;
 
     public NotificationService(
-            NotificationRepositoryPort repository,
-            NotificationIdGeneratorPort idGenerator,
-            Clock clock) {
+            NotificationRepositoryPort repository, NotificationIdGeneratorPort idGenerator, Clock clock) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.clock = clock;
@@ -54,7 +52,8 @@ public class NotificationService implements NotifyUseCase, GetNotificationsUseCa
 
     @Override
     public void markRead(String notificationId, String recipientId) {
-        repository.findById(notificationId)
+        repository
+                .findById(notificationId)
                 // 소유자 검증: 타인 알림이면 무시(N4)
                 .filter(n -> n.getRecipientId().equals(recipientId))
                 .ifPresent(n -> {

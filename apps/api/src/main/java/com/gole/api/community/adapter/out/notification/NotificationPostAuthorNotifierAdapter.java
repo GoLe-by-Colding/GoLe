@@ -15,8 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class NotificationPostAuthorNotifierAdapter implements PostAuthorNotifierPort {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(NotificationPostAuthorNotifierAdapter.class);
+    private static final Logger log = LoggerFactory.getLogger(NotificationPostAuthorNotifierAdapter.class);
 
     private final NotifyUseCase notifyUseCase;
 
@@ -27,11 +26,8 @@ public class NotificationPostAuthorNotifierAdapter implements PostAuthorNotifier
     @Override
     public void notifyComment(String authorId, String postId) {
         try {
-            notifyUseCase.notify(new NotifyCommand(
-                    authorId,
-                    NotificationType.COMMENT,
-                    "내 글에 새 댓글이 달렸어요",
-                    "/community/" + postId));
+            notifyUseCase.notify(
+                    new NotifyCommand(authorId, NotificationType.COMMENT, "내 글에 새 댓글이 달렸어요", "/community/" + postId));
         } catch (RuntimeException e) {
             log.warn("댓글 알림 발송 실패 authorId={} postId={}: {}", authorId, postId, e.getMessage());
         }

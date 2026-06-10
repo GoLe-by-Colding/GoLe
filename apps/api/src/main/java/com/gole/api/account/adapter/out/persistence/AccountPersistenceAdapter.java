@@ -59,12 +59,9 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     }
 
     private Account toDomain(AccountDocument document) {
-        VerificationCode code =
-                document.getVerificationCode() == null
-                        ? null
-                        : new VerificationCode(
-                                document.getVerificationCode(),
-                                document.getVerificationCodeIssuedAt());
+        VerificationCode code = document.getVerificationCode() == null
+                ? null
+                : new VerificationCode(document.getVerificationCode(), document.getVerificationCodeIssuedAt());
         return new Account(
                 document.getId(),
                 new Email(document.getEmail()),

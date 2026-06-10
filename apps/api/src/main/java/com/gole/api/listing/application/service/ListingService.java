@@ -39,10 +39,7 @@ public class ListingService
     private final ListingIdGeneratorPort idGenerator;
     private final Clock clock;
 
-    public ListingService(
-            ListingRepositoryPort listingRepository,
-            ListingIdGeneratorPort idGenerator,
-            Clock clock) {
+    public ListingService(ListingRepositoryPort listingRepository, ListingIdGeneratorPort idGenerator, Clock clock) {
         this.listingRepository = listingRepository;
         this.idGenerator = idGenerator;
         this.clock = clock;
@@ -67,8 +64,7 @@ public class ListingService
 
     @Override
     public Listing getById(String listingId) {
-        return listingRepository.findById(listingId)
-                .orElseThrow(() -> new ListingNotFoundException(listingId));
+        return listingRepository.findById(listingId).orElseThrow(() -> new ListingNotFoundException(listingId));
     }
 
     @Override

@@ -33,18 +33,12 @@ public class PriceTransactionDocument {
         // MongoDB 매핑용
     }
 
-    public PriceTransactionDocument(
-            String id, String setNumber, long price, int quantity, Instant executedAt) {
+    public PriceTransactionDocument(String id, String setNumber, long price, int quantity, Instant executedAt) {
         this(id, setNumber, price, quantity, executedAt, null);
     }
 
     public PriceTransactionDocument(
-            String id,
-            String setNumber,
-            long price,
-            int quantity,
-            Instant executedAt,
-            String condition) {
+            String id, String setNumber, long price, int quantity, Instant executedAt, String condition) {
         this.id = id;
         this.setNumber = setNumber;
         this.price = price;

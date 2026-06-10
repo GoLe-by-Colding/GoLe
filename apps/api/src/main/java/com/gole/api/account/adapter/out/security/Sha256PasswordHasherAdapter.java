@@ -28,12 +28,11 @@ public class Sha256PasswordHasherAdapter implements PasswordHasherPort {
         byte[] salt = new byte[SALT_BYTES];
         secureRandom.nextBytes(salt);
         byte[] digest = digest(rawPassword, salt);
-        String encoded =
-                ALGORITHM
-                        + "$"
-                        + Base64.getEncoder().encodeToString(salt)
-                        + "$"
-                        + Base64.getEncoder().encodeToString(digest);
+        String encoded = ALGORITHM
+                + "$"
+                + Base64.getEncoder().encodeToString(salt)
+                + "$"
+                + Base64.getEncoder().encodeToString(digest);
         return new PasswordHash(encoded);
     }
 

@@ -1,8 +1,8 @@
 package com.gole.api.order.adapter.out.pricing;
 
+import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.pricing.application.port.in.RecordExecutedPriceUseCase;
 import com.gole.api.pricing.application.port.in.RecordExecutedPriceUseCase.RecordExecutedPriceCommand;
-import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +20,6 @@ public class ExecutedPriceRecorderAdapter implements ExecutedPriceRecorderPort {
 
     @Override
     public void record(String setNumber, long price, int quantity, Instant executedAt) {
-        recordExecutedPrice.record(
-                new RecordExecutedPriceCommand(setNumber, price, quantity, executedAt));
+        recordExecutedPrice.record(new RecordExecutedPriceCommand(setNumber, price, quantity, executedAt));
     }
 }

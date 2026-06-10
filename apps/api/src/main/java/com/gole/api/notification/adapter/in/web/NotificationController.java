@@ -27,7 +27,9 @@ public class NotificationController {
 
     @GetMapping
     public List<NotificationResponse> list(@PathVariable String userId) {
-        return getNotifications.list(userId).stream().map(NotificationResponse::from).toList();
+        return getNotifications.list(userId).stream()
+                .map(NotificationResponse::from)
+                .toList();
     }
 
     @GetMapping("/unread-count")
@@ -52,8 +54,7 @@ public class NotificationController {
 
         static NotificationResponse from(Notification n) {
             return new NotificationResponse(
-                    n.getId(), n.getType().name(), n.getMessage(), n.getLink(),
-                    n.isRead(), n.getCreatedAt());
+                    n.getId(), n.getType().name(), n.getMessage(), n.getLink(), n.isRead(), n.getCreatedAt());
         }
     }
 

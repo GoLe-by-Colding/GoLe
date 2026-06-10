@@ -36,9 +36,7 @@ public class WishlistPersistenceAdapter implements WishlistRepositoryPort {
 
     @Override
     public List<WishlistEntry> findByUser(String userId) {
-        return repository.findByUserId(userId).stream()
-                .map(this::toDomain)
-                .toList();
+        return repository.findByUserId(userId).stream().map(this::toDomain).toList();
     }
 
     private WishlistEntryDocument toDocument(WishlistEntry entry) {
@@ -49,8 +47,6 @@ public class WishlistPersistenceAdapter implements WishlistRepositoryPort {
 
     private WishlistEntry toDomain(WishlistEntryDocument document) {
         return new WishlistEntry(
-                document.getUserId(),
-                WishlistTargetType.valueOf(document.getTargetType()),
-                document.getTargetId());
+                document.getUserId(), WishlistTargetType.valueOf(document.getTargetType()), document.getTargetId());
     }
 }

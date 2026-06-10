@@ -8,23 +8,22 @@ import jakarta.validation.constraints.NotNull;
 
 public final class DiscoveryDtos {
 
-    private DiscoveryDtos() {
-    }
+    private DiscoveryDtos() {}
 
-    public record FollowRequest(@NotBlank String sellerId) {
-    }
+    public record FollowRequest(@NotBlank String sellerId) {}
 
-    public record WishlistRequest(
-            @NotNull WishlistTargetType targetType, @NotBlank String targetId) {
-    }
+    public record WishlistRequest(@NotNull WishlistTargetType targetType, @NotBlank String targetId) {}
 
     public record ListingSummaryResponse(
             String id, String title, long price, String condition, String catalogSetNumber) {
 
         public static ListingSummaryResponse from(Listing l) {
             return new ListingSummaryResponse(
-                    l.getId(), l.getTitle(), l.getPrice().amount(),
-                    l.getCondition().name().toLowerCase(), l.getCatalogSetNumber());
+                    l.getId(),
+                    l.getTitle(),
+                    l.getPrice().amount(),
+                    l.getCondition().name().toLowerCase(),
+                    l.getCatalogSetNumber());
         }
     }
 

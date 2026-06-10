@@ -68,14 +68,7 @@ public class LegoSetDocument {
      * 문서 → 도메인 모델.
      */
     public LegoSet toDomain() {
-        return new LegoSet(
-                setNumber,
-                name,
-                theme,
-                pieceCount,
-                releaseYear,
-                retirementStatus,
-                imageUrl);
+        return new LegoSet(setNumber, name, theme, pieceCount, releaseYear, retirementStatus, imageUrl);
     }
 
     public String getSetNumber() {

@@ -15,6 +15,5 @@ public interface ManageCollectionUseCase {
 
     void remove(String itemId, String userId);
 
-    record AddCommand(String userId, String setNumber, OwnershipStatus status) {
-    }
+    record AddCommand(String userId, String setNumber, OwnershipStatus status) {}
 }

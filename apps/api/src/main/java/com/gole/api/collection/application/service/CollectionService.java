@@ -17,8 +17,7 @@ import org.springframework.stereotype.Service;
  * 컬렉션 유스케이스 구현. inbound port를 구현하고 outbound port에만 의존한다.
  */
 @Service
-public class CollectionService
-        implements ManageCollectionUseCase, EstimateCollectionValueUseCase {
+public class CollectionService implements ManageCollectionUseCase, EstimateCollectionValueUseCase {
 
     private final CollectionRepositoryPort repository;
     private final LatestPriceProviderPort latestPriceProvider;
@@ -39,11 +38,7 @@ public class CollectionService
     @Override
     public String add(AddCommand command) {
         CollectionItem item = new CollectionItem(
-                idGenerator.newId(),
-                command.userId(),
-                command.setNumber(),
-                command.status(),
-                Instant.now(clock));
+                idGenerator.newId(), command.userId(), command.setNumber(), command.status(), Instant.now(clock));
         return repository.save(item).id();
     }
 
@@ -54,8 +49,8 @@ public class CollectionService
 
     @Override
     public void remove(String itemId, String userId) {
-        CollectionItem item = repository.findById(itemId)
-                .orElseThrow(() -> new CollectionItemNotFoundException(itemId));
+        CollectionItem item =
+                repository.findById(itemId).orElseThrow(() -> new CollectionItemNotFoundException(itemId));
         if (!item.userId().equals(userId)) {
             throw new ForbiddenException("NOT_COLLECTION_OWNER", "Only the owner can remove this item");
         }
@@ -67,7 +62,8 @@ public class CollectionService
         // 요구사항 11.5: 보유 항목의 최근 체결가 합산(가격 없는 세트는 0).
         return repository.findByUser(userId).stream()
                 .filter(CollectionItem::isOwned)
-                .mapToLong(item -> latestPriceProvider.latestPrice(item.setNumber()).orElse(0L))
+                .mapToLong(item ->
+                        latestPriceProvider.latestPrice(item.setNumber()).orElse(0L))
                 .sum();
     }
 }

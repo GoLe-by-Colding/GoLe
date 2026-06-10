@@ -8,6 +8,5 @@ public interface RegisterAccountUseCase {
     /** 생성된 계정 식별자를 반환한다(계정은 미인증 상태). */
     String register(RegisterAccountCommand command);
 
-    record RegisterAccountCommand(String email, String rawPassword) {
-    }
+    record RegisterAccountCommand(String email, String rawPassword) {}
 }

@@ -5,15 +5,11 @@ package com.gole.api.account.adapter.in.web;
  */
 public final class AccountResponses {
 
-    private AccountResponses() {
-    }
+    private AccountResponses() {}
 
-    public record RegisterResponse(String accountId) {
-    }
+    public record RegisterResponse(String accountId) {}
 
-    public record SignInResponse(String accountId, String sessionToken, String role) {
-    }
+    public record SignInResponse(String accountId, String sessionToken, String role) {}
 
-    public record MeResponse(String accountId, String email, String role) {
-    }
+    public record MeResponse(String accountId, String email, String role) {}
 }

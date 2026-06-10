@@ -24,8 +24,7 @@ public class MongoTransactionConfig {
 
     @Bean
     public MongoDatabaseFactory mongoDatabaseFactory(
-            MongoClient mongoClient,
-            @Value("${spring.data.mongodb.database:gole}") String database) {
+            MongoClient mongoClient, @Value("${spring.data.mongodb.database:gole}") String database) {
         return new SimpleMongoClientDatabaseFactory(mongoClient, database);
     }
 

@@ -10,6 +10,5 @@ public interface WriteReviewUseCase {
     /** 후기를 작성하고 영속된 후기를 반환한다. */
     Review write(WriteReviewCommand command);
 
-    record WriteReviewCommand(String orderId, String reviewerId, int rating, String content) {
-    }
+    record WriteReviewCommand(String orderId, String reviewerId, int rating, String content) {}
 }

@@ -28,9 +28,7 @@ public class ReviewController {
     private final WriteReviewUseCase writeReviewUseCase;
     private final GetSellerReviewsUseCase getSellerReviewsUseCase;
 
-    public ReviewController(
-            WriteReviewUseCase writeReviewUseCase,
-            GetSellerReviewsUseCase getSellerReviewsUseCase) {
+    public ReviewController(WriteReviewUseCase writeReviewUseCase, GetSellerReviewsUseCase getSellerReviewsUseCase) {
         this.writeReviewUseCase = writeReviewUseCase;
         this.getSellerReviewsUseCase = getSellerReviewsUseCase;
     }
@@ -38,8 +36,8 @@ public class ReviewController {
     @PostMapping("/reviews")
     @ResponseStatus(HttpStatus.CREATED)
     public ReviewResponse write(@Valid @RequestBody WriteReviewRequest request) {
-        Review review = writeReviewUseCase.write(new WriteReviewCommand(
-                request.orderId(), request.reviewerId(), request.rating(), request.content()));
+        Review review = writeReviewUseCase.write(
+                new WriteReviewCommand(request.orderId(), request.reviewerId(), request.rating(), request.content()));
         return ReviewResponse.from(review);
     }
 

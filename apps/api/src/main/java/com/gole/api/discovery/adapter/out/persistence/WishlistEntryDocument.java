@@ -12,10 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * <p>{@code targetType}은 enum 이름(문자열)으로 저장한다.
  */
 @Document(collection = "wishlist_entries")
-@CompoundIndex(
-        name = "uq_user_target",
-        def = "{'userId': 1, 'targetType': 1, 'targetId': 1}",
-        unique = true)
+@CompoundIndex(name = "uq_user_target", def = "{'userId': 1, 'targetType': 1, 'targetId': 1}", unique = true)
 public class WishlistEntryDocument {
 
     @Id

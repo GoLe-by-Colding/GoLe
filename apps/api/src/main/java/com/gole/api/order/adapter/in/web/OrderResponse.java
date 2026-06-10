@@ -15,8 +15,7 @@ public record OrderResponse(
         Instant createdAt,
         List<StatusChange> history) {
 
-    public record StatusChange(String status, Instant occurredAt) {
-    }
+    public record StatusChange(String status, Instant occurredAt) {}
 
     public static OrderResponse from(Order order) {
         List<StatusChange> history = order.getHistory().stream()

@@ -27,8 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 public class AdminController {
 
-    private static final List<String> COLLECTIONS = List.of(
-            "accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
+    private static final List<String> COLLECTIONS =
+            List.of("accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
 
     private final MongoTemplate mongoTemplate;
     private final CreateLegoSetUseCase createLegoSetUseCase;

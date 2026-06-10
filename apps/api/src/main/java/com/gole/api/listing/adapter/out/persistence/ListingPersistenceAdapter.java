@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -35,8 +35,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     private final ListingMongoRepository repository;
     private final MongoTemplate mongoTemplate;
 
-    public ListingPersistenceAdapter(
-            ListingMongoRepository repository, MongoTemplate mongoTemplate) {
+    public ListingPersistenceAdapter(ListingMongoRepository repository, MongoTemplate mongoTemplate) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
     }
@@ -94,31 +93,24 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     @Override
     public Optional<Listing> reserveIfActive(String listingId) {
         // ACTIVE → RESERVED 원자적 전이. 활성이 아니면 매칭 없음 → 비어있음.
-        Query query = new Query(
-                Criteria.where("_id").is(listingId).and("status").is(ListingStatus.ACTIVE.name()));
+        Query query =
+                new Query(Criteria.where("_id").is(listingId).and("status").is(ListingStatus.ACTIVE.name()));
         Update update = Update.update("status", ListingStatus.RESERVED.name());
         ListingDocument updated = mongoTemplate.findAndModify(
-                query,
-                update,
-                FindAndModifyOptions.options().returnNew(true),
-                ListingDocument.class);
+                query, update, FindAndModifyOptions.options().returnNew(true), ListingDocument.class);
         return Optional.ofNullable(updated).map(this::toDomain);
     }
 
     @Override
     public List<Listing> findActiveBySeller(String sellerId) {
-        return repository
-                .findBySellerIdAndStatus(sellerId, ListingStatus.ACTIVE.name())
-                .stream()
+        return repository.findBySellerIdAndStatus(sellerId, ListingStatus.ACTIVE.name()).stream()
                 .map(this::toDomain)
                 .toList();
     }
 
     @Override
     public List<Listing> findActiveBySellers(List<String> sellerIds) {
-        return repository
-                .findBySellerIdInAndStatus(sellerIds, ListingStatus.ACTIVE.name())
-                .stream()
+        return repository.findBySellerIdInAndStatus(sellerIds, ListingStatus.ACTIVE.name()).stream()
                 .map(this::toDomain)
                 .toList();
     }

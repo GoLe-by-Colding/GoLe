@@ -20,6 +20,5 @@ public interface SocialLoginUseCase {
 
     record SocialLoginCommand(AuthProvider provider, String code, String redirectUri, String state) {}
 
-    record SocialLoginResult(
-            String accountId, String sessionToken, Role role, boolean newAccount) {}
+    record SocialLoginResult(String accountId, String sessionToken, Role role, boolean newAccount) {}
 }

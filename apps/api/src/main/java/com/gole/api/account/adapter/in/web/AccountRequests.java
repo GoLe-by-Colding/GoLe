@@ -8,21 +8,11 @@ import jakarta.validation.constraints.NotBlank;
  */
 public final class AccountRequests {
 
-    private AccountRequests() {
-    }
+    private AccountRequests() {}
 
-    public record RegisterRequest(
-            @Email @NotBlank String email,
-            @NotBlank String password) {
-    }
+    public record RegisterRequest(@Email @NotBlank String email, @NotBlank String password) {}
 
-    public record VerifyEmailRequest(
-            @Email @NotBlank String email,
-            @NotBlank String code) {
-    }
+    public record VerifyEmailRequest(@Email @NotBlank String email, @NotBlank String code) {}
 
-    public record SignInRequest(
-            @Email @NotBlank String email,
-            @NotBlank String password) {
-    }
+    public record SignInRequest(@Email @NotBlank String email, @NotBlank String password) {}
 }

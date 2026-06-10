@@ -83,10 +83,12 @@ public class ListingController {
             @RequestParam(value = "sort", required = false) ListingSortOrder sort,
             @RequestParam(value = "category", required = false) String category) {
         ListingSearchQuery searchQuery = new ListingSearchQuery(
-                query, condition, minPrice, maxPrice, sort,
-                category == null
-                        ? null
-                        : com.gole.api.listing.domain.model.ListingCategory.fromKey(category));
+                query,
+                condition,
+                minPrice,
+                maxPrice,
+                sort,
+                category == null ? null : com.gole.api.listing.domain.model.ListingCategory.fromKey(category));
         return searchListingsUseCase.search(searchQuery).stream()
                 .map(ListingResponse::from)
                 .toList();

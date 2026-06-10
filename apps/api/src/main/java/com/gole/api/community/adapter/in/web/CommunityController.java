@@ -59,8 +59,8 @@ public class CommunityController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PostResponse publish(@Valid @RequestBody PublishPostRequest request) {
-        String id = publishPostUseCase.publish(new PublishPostCommand(
-                request.authorId(), request.content(), request.imageUrls(), request.topic()));
+        String id = publishPostUseCase.publish(
+                new PublishPostCommand(request.authorId(), request.content(), request.imageUrls(), request.topic()));
         return PostResponse.from(getFeedUseCase.getPost(id));
     }
 
@@ -77,15 +77,15 @@ public class CommunityController {
 
     @GetMapping("/{postId}/comments")
     public List<CommentResponse> comments(@PathVariable String postId) {
-        return getFeedUseCase.comments(postId).stream().map(CommentResponse::from).toList();
+        return getFeedUseCase.comments(postId).stream()
+                .map(CommentResponse::from)
+                .toList();
     }
 
     @PostMapping("/{postId}/comments")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommentResponse comment(
-            @PathVariable String postId, @Valid @RequestBody CommentRequest request) {
-        commentOnPostUseCase.comment(
-                new CommentCommand(postId, request.authorId(), request.content()));
+    public CommentResponse comment(@PathVariable String postId, @Valid @RequestBody CommentRequest request) {
+        commentOnPostUseCase.comment(new CommentCommand(postId, request.authorId(), request.content()));
         return getFeedUseCase.comments(postId).stream()
                 .reduce((first, second) -> second)
                 .map(CommentResponse::from)

@@ -41,13 +41,7 @@ public final class Review {
 
     /** 신규 후기 작성. revieweeId(판매자)는 주문에서 파생되어 전달된다. (요구사항 R1.1, R1.4) */
     public static Review write(
-            String id,
-            String orderId,
-            String reviewerId,
-            String revieweeId,
-            int rating,
-            String content,
-            Instant now) {
+            String id, String orderId, String reviewerId, String revieweeId, int rating, String content, Instant now) {
         return new Review(id, orderId, reviewerId, revieweeId, rating, content, now);
     }
 

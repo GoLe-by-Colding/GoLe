@@ -33,9 +33,7 @@ public class PostPersistenceAdapter implements PostRepositoryPort {
 
     @Override
     public List<Post> findPublishedRecentFirst() {
-        return repository
-                .findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED.name())
-                .stream()
+        return repository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED.name()).stream()
                 .map(this::toDomain)
                 .toList();
     }

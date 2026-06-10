@@ -7,6 +7,8 @@ import com.gole.api.media.application.port.in.UploadImageUseCase.UploadImageComm
 import com.gole.api.media.domain.exception.InvalidImageException;
 import com.gole.api.media.domain.model.StoredImage;
 import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,8 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import java.time.Duration;
-import java.util.List;
 
 /**
  * Inbound 어댑터(REST): 이미지 업로드 및 공개 스트리밍 조회. (요구사항 M1, M2)
@@ -78,12 +78,10 @@ public class MediaController {
      *  {@code ?w=240} 지정 시 해당 폭 썸네일을 제공한다(없거나 불가 시 원본). (백로그 N2a) */
     @GetMapping("/{*key}")
     public ResponseEntity<byte[]> get(
-            @PathVariable String key,
-            @RequestParam(value = "w", required = false) Integer w) {
+            @PathVariable String key, @RequestParam(value = "w", required = false) Integer w) {
         String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
-        LoadedImage image = (w == null)
-                ? loadImageUseCase.load(normalizedKey)
-                : loadImageUseCase.loadResized(normalizedKey, w);
+        LoadedImage image =
+                (w == null) ? loadImageUseCase.load(normalizedKey) : loadImageUseCase.loadResized(normalizedKey, w);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePublic())

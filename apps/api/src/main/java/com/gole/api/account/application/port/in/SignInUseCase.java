@@ -9,9 +9,7 @@ public interface SignInUseCase {
 
     SignInResult signIn(SignInCommand command);
 
-    record SignInCommand(String email, String rawPassword) {
-    }
+    record SignInCommand(String email, String rawPassword) {}
 
-    record SignInResult(String accountId, String sessionToken, Role role) {
-    }
+    record SignInResult(String accountId, String sessionToken, Role role) {}
 }

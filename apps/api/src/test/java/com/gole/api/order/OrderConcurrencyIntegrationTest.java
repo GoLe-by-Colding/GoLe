@@ -50,17 +50,31 @@ class OrderConcurrencyIntegrationTest {
         registry.add("gole.community.seed-on-empty", () -> "false");
     }
 
-    @Autowired CreateListingUseCase createListing;
-    @Autowired GetListingUseCase getListing;
-    @Autowired PlaceOrderUseCase placeOrder;
-    @Autowired PayOrderUseCase payOrder;
-    @Autowired CompleteOrderUseCase completeOrder;
+    @Autowired
+    CreateListingUseCase createListing;
+
+    @Autowired
+    GetListingUseCase getListing;
+
+    @Autowired
+    PlaceOrderUseCase placeOrder;
+
+    @Autowired
+    PayOrderUseCase payOrder;
+
+    @Autowired
+    CompleteOrderUseCase completeOrder;
 
     private String createActiveListing() {
         return createListing.create(new CreateListingCommand(
-                "seller-x", "동시성 테스트 세트", "설명", 100_000,
-                ItemCondition.NEW_SEALED, com.gole.api.listing.domain.model.ConditionDisclosure.basic(),
-                List.of("p.jpg"), "10307"));
+                "seller-x",
+                "동시성 테스트 세트",
+                "설명",
+                100_000,
+                ItemCondition.NEW_SEALED,
+                com.gole.api.listing.domain.model.ConditionDisclosure.basic(),
+                List.of("p.jpg"),
+                "10307"));
     }
 
     @Test
@@ -107,7 +121,6 @@ class OrderConcurrencyIntegrationTest {
 
         completeOrder.complete(orderId);
         // Property 2: 두 번째 완료는 거부되어 중복 정산이 발생하지 않는다.
-        assertThatThrownBy(() -> completeOrder.complete(orderId))
-                .isInstanceOf(OrderStateException.class);
+        assertThatThrownBy(() -> completeOrder.complete(orderId)).isInstanceOf(OrderStateException.class);
     }
 }

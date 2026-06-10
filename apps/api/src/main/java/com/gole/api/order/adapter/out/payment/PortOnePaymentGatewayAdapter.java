@@ -51,8 +51,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             long paidTotal = extractPaidTotal(payment);
             boolean ok = "PAID".equals(status) && paidTotal == amount;
             if (!ok) {
-                log.warn("[PortOne] 검증 실패 orderId={} status={} paid={} expected={}",
-                        orderId, status, paidTotal, amount);
+                log.warn(
+                        "[PortOne] 검증 실패 orderId={} status={} paid={} expected={}", orderId, status, paidTotal, amount);
             }
             return ok;
         } catch (Exception ex) {

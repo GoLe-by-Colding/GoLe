@@ -38,11 +38,10 @@ class NotificationServiceTest {
 
         assertThat(id).isEqualTo("noti-1");
         assertThat(service.unreadCount("u1")).isEqualTo(1);
-        assertThat(service.list("u1")).singleElement()
-                .satisfies(n -> {
-                    assertThat(n.getMessage()).isEqualTo("주문!");
-                    assertThat(n.isRead()).isFalse();
-                });
+        assertThat(service.list("u1")).singleElement().satisfies(n -> {
+            assertThat(n.getMessage()).isEqualTo("주문!");
+            assertThat(n.isRead()).isFalse();
+        });
     }
 
     @Test
@@ -103,9 +102,7 @@ class NotificationServiceTest {
 
         @Override
         public void markAllRead(String recipientId) {
-            store.stream()
-                    .filter(n -> n.getRecipientId().equals(recipientId))
-                    .forEach(Notification::markRead);
+            store.stream().filter(n -> n.getRecipientId().equals(recipientId)).forEach(Notification::markRead);
         }
     }
 

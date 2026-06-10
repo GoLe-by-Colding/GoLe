@@ -15,8 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class NotificationFollowNotifierAdapter implements FollowNotifierPort {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(NotificationFollowNotifierAdapter.class);
+    private static final Logger log = LoggerFactory.getLogger(NotificationFollowNotifierAdapter.class);
 
     private final NotifyUseCase notifyUseCase;
 
@@ -27,14 +26,10 @@ public class NotificationFollowNotifierAdapter implements FollowNotifierPort {
     @Override
     public void notifyNewFollower(String sellerId, String followerId) {
         try {
-            notifyUseCase.notify(new NotifyCommand(
-                    sellerId,
-                    NotificationType.FOLLOW,
-                    "새 팔로워가 생겼어요",
-                    "/shops/" + sellerId));
+            notifyUseCase.notify(
+                    new NotifyCommand(sellerId, NotificationType.FOLLOW, "새 팔로워가 생겼어요", "/shops/" + sellerId));
         } catch (RuntimeException e) {
-            log.warn("팔로우 알림 발송 실패 sellerId={} followerId={}: {}",
-                    sellerId, followerId, e.getMessage());
+            log.warn("팔로우 알림 발송 실패 sellerId={} followerId={}: {}", sellerId, followerId, e.getMessage());
         }
     }
 }

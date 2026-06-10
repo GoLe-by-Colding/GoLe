@@ -33,8 +33,16 @@ public interface CreateListingUseCase {
                 ConditionDisclosure disclosure,
                 List<String> photoUrls,
                 String catalogSetNumber) {
-            this(sellerId, title, description, price, condition, disclosure,
-                    photoUrls, catalogSetNumber, ListingCategory.SET);
+            this(
+                    sellerId,
+                    title,
+                    description,
+                    price,
+                    condition,
+                    disclosure,
+                    photoUrls,
+                    catalogSetNumber,
+                    ListingCategory.SET);
         }
     }
 }

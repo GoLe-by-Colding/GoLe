@@ -30,7 +30,8 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String token = extractBearer(request.getHeader("Authorization"));
-        CurrentSession session = getCurrentSession.resolve(token)
+        CurrentSession session = getCurrentSession
+                .resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "로그인이 필요합니다"));
         if (session.role() != Role.ADMIN) {
             throw new ForbiddenException("ADMIN_ONLY", "관리자 권한이 필요합니다");

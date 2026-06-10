@@ -19,7 +19,6 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,12 +64,12 @@ class SocialAuthServiceTest {
     @Test
     void login_createsAccount_whenEmailUnknown() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(
-                AuthProvider.GOOGLE, "g-123", "new@example.com");
+        provider.profile =
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-123", "new@example.com");
         stateStore.save("s1", AuthProvider.GOOGLE, Duration.ofMinutes(10));
 
-        SocialLoginResult result = service.login(
-                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s1"));
+        SocialLoginResult result =
+                service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s1"));
 
         assertThat(result.sessionToken()).startsWith("token-");
         assertThat(result.role()).isEqualTo(Role.USER);
@@ -81,16 +80,15 @@ class SocialAuthServiceTest {
     @Test
     void login_reusesAccount_whenEmailExists() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(
-                AuthProvider.KAKAO, "k-1", "existing@example.com");
+        provider.profile =
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.KAKAO, "k-1", "existing@example.com");
         Account existing = Account.provisioned(
-                "acc-existing", new Email("existing@example.com"),
-                new PasswordHash("hash:x"), Role.USER);
+                "acc-existing", new Email("existing@example.com"), new PasswordHash("hash:x"), Role.USER);
         accounts.save(existing);
         stateStore.save("s2", AuthProvider.KAKAO, Duration.ofMinutes(10));
 
-        SocialLoginResult result = service.login(
-                new SocialLoginCommand(AuthProvider.KAKAO, "code", "https://app/cb", "s2"));
+        SocialLoginResult result =
+                service.login(new SocialLoginCommand(AuthProvider.KAKAO, "code", "https://app/cb", "s2"));
 
         assertThat(result.accountId()).isEqualTo("acc-existing");
         assertThat(accounts.saved).isEqualTo(1); // 신규 생성 없음
@@ -99,38 +97,36 @@ class SocialAuthServiceTest {
     @Test
     void login_rejectsWhenProviderNotConfigured() {
         provider.configured = false;
-        assertThatThrownBy(() -> service.login(
-                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s")))
+        assertThatThrownBy(
+                        () -> service.login(new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s")))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void login_rejectsWhenStateInvalid() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(
-                AuthProvider.GOOGLE, "g-1", "x@example.com");
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-1", "x@example.com");
         // state를 저장하지 않음 → CSRF 검증 실패
-        assertThatThrownBy(() -> service.login(
-                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "bogus")))
+        assertThatThrownBy(() ->
+                        service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "bogus")))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void login_rejectsWhenEmailMissing() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(
-                AuthProvider.NAVER, "n-1", null);
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(AuthProvider.NAVER, "n-1", null);
         stateStore.save("s3", AuthProvider.NAVER, Duration.ofMinutes(10));
-        assertThatThrownBy(() -> service.login(
-                new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s3")))
+        assertThatThrownBy(
+                        () -> service.login(new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s3")))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void enabledProviders_reflectsConfiguration() {
         provider.configured = true;
-        assertThat(service.enabledProviders()).containsExactly(
-                AuthProvider.GOOGLE, AuthProvider.KAKAO, AuthProvider.NAVER);
+        assertThat(service.enabledProviders())
+                .containsExactly(AuthProvider.GOOGLE, AuthProvider.KAKAO, AuthProvider.NAVER);
         provider.configured = false;
         assertThat(service.enabledProviders()).isEmpty();
     }

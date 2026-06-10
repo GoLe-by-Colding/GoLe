@@ -61,7 +61,6 @@ public class CatalogSeeder implements CommandLineRunner {
         // 공식 레고 이미지는 호스팅하지 않는다(IP 안전). 카탈로그 커버는 MediaSeeder가 MinIO에
         // 올린 GoLe 오리지널 커버 아트(고래+브릭)를 가리킨다. 매물 사진은 판매자 직접 촬영만 사용.
         String imageUrl = "/api/v1/media/catalog/" + setNumber + ".svg";
-        return new LegoSetDocument(
-                setNumber, name, theme, pieceCount, releaseYear, status, imageUrl, featured);
+        return new LegoSetDocument(setNumber, name, theme, pieceCount, releaseYear, status, imageUrl, featured);
     }
 }

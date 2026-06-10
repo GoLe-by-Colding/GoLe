@@ -19,9 +19,9 @@ import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCo
 import com.gole.api.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,8 +57,8 @@ public class AccountController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
-        String accountId = registerAccountUseCase.register(
-                new RegisterAccountCommand(request.email(), request.password()));
+        String accountId =
+                registerAccountUseCase.register(new RegisterAccountCommand(request.email(), request.password()));
         return new RegisterResponse(accountId);
     }
 
@@ -70,18 +70,20 @@ public class AccountController {
 
     @PostMapping("/sessions")
     public SignInResponse signIn(@Valid @RequestBody SignInRequest request) {
-        SignInResult result =
-                signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
-        return new SignInResponse(result.accountId(), result.sessionToken(), result.role().name());
+        SignInResult result = signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
+        return new SignInResponse(
+                result.accountId(), result.sessionToken(), result.role().name());
     }
 
     /** 현재 세션 해석. Authorization: Bearer <token> 필요. 프론트의 역할(권한) 확인에 사용. */
     @GetMapping("/me")
     public MeResponse me(@RequestHeader(value = "Authorization", required = false) String authorization) {
         String token = extractBearer(authorization);
-        CurrentSession session = getCurrentSessionUseCase.resolve(token)
+        CurrentSession session = getCurrentSessionUseCase
+                .resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
-        return new MeResponse(session.accountId(), session.email(), session.role().name());
+        return new MeResponse(
+                session.accountId(), session.email(), session.role().name());
     }
 
     /** 로그아웃: 서버측 세션을 폐기한다. Authorization: Bearer <token>. */

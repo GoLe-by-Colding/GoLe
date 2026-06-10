@@ -8,8 +8,7 @@ import java.util.List;
 
 public final class PricingResponses {
 
-    private PricingResponses() {
-    }
+    private PricingResponses() {}
 
     public record StatisticsResponse(
             String setNumber,
@@ -63,10 +62,7 @@ public final class PricingResponses {
     }
 
     public record ValuationResponse(
-            String setNumber,
-            boolean hasData,
-            Long marketPrice,
-            List<ConditionValuationResponse> conditions) {
+            String setNumber, boolean hasData, Long marketPrice, List<ConditionValuationResponse> conditions) {
 
         public static ValuationResponse noData(String setNumber) {
             return new ValuationResponse(setNumber, false, null, List.of());
@@ -77,7 +73,9 @@ public final class PricingResponses {
                     valuation.setNumber(),
                     true,
                     valuation.marketPrice(),
-                    valuation.conditions().stream().map(ConditionValuationResponse::from).toList());
+                    valuation.conditions().stream()
+                            .map(ConditionValuationResponse::from)
+                            .toList());
         }
     }
 }

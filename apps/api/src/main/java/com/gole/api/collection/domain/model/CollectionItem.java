@@ -6,8 +6,7 @@ import java.util.Objects;
 /**
  * 컬렉션 항목: 사용자-카탈로그세트 보유 관계. (요구사항 11.1)
  */
-public record CollectionItem(
-        String id, String userId, String setNumber, OwnershipStatus status, Instant createdAt) {
+public record CollectionItem(String id, String userId, String setNumber, OwnershipStatus status, Instant createdAt) {
 
     public CollectionItem {
         Objects.requireNonNull(id, "id");

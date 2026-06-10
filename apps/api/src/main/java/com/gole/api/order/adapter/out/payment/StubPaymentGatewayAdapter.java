@@ -22,11 +22,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     public boolean authorize(String orderId, long amount) {
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
-        log.info(
-                "[STUB-PG] authorize success orderId={} amount={} transactionId={}",
-                orderId,
-                amount,
-                transactionId);
+        log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
         return true;
     }
 
@@ -34,11 +30,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     public void refund(String orderId, long amount) {
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
-        log.info(
-                "[STUB-PG] refund success orderId={} amount={} transactionId={}",
-                orderId,
-                amount,
-                transactionId);
+        log.info("[STUB-PG] refund success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
     }
 
     /** 주문 식별자 기반의 결정론적 거래 식별자. */

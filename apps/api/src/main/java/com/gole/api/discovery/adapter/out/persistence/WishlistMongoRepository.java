@@ -8,11 +8,9 @@ import org.springframework.data.mongodb.repository.MongoRepository;
  */
 public interface WishlistMongoRepository extends MongoRepository<WishlistEntryDocument, String> {
 
-    boolean existsByUserIdAndTargetTypeAndTargetId(
-            String userId, String targetType, String targetId);
+    boolean existsByUserIdAndTargetTypeAndTargetId(String userId, String targetType, String targetId);
 
-    void deleteByUserIdAndTargetTypeAndTargetId(
-            String userId, String targetType, String targetId);
+    void deleteByUserIdAndTargetTypeAndTargetId(String userId, String targetType, String targetId);
 
     List<WishlistEntryDocument> findByUserId(String userId);
 }

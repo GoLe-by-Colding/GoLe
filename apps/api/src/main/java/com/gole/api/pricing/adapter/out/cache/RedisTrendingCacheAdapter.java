@@ -64,10 +64,14 @@ public class RedisTrendingCacheAdapter implements TrendingCachePort {
             if (sb.length() > 0) {
                 sb.append('\n');
             }
-            sb.append(b64(s.setNumber())).append('|')
-                    .append(b64(s.name())).append('|')
-                    .append(b64(s.imageUrl() == null ? "" : s.imageUrl())).append('|')
-                    .append(s.tradeCount()).append('|')
+            sb.append(b64(s.setNumber()))
+                    .append('|')
+                    .append(b64(s.name()))
+                    .append('|')
+                    .append(b64(s.imageUrl() == null ? "" : s.imageUrl()))
+                    .append('|')
+                    .append(s.tradeCount())
+                    .append('|')
                     .append(s.averagePrice());
         }
         return sb.toString();

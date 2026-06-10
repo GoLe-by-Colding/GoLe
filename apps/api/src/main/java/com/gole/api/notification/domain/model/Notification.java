@@ -35,12 +35,7 @@ public final class Notification {
 
     /** 신규 알림: 읽지 않음 상태로 생성. */
     public static Notification create(
-            String id,
-            String recipientId,
-            NotificationType type,
-            String message,
-            String link,
-            Instant now) {
+            String id, String recipientId, NotificationType type, String message, String link, Instant now) {
         return new Notification(id, recipientId, type, message, link, false, now);
     }
 

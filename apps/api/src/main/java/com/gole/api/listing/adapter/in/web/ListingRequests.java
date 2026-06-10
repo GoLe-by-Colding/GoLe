@@ -11,8 +11,7 @@ import java.util.List;
 
 public final class ListingRequests {
 
-    private ListingRequests() {
-    }
+    private ListingRequests() {}
 
     public record CreateListingRequest(
             @NotBlank String sellerId,
@@ -28,6 +27,5 @@ public final class ListingRequests {
             @Size(max = 1000) String defectsNote,
             @NotEmpty List<@NotBlank String> photoUrls,
             String catalogSetNumber,
-            String category) {
-    }
+            String category) {}
 }

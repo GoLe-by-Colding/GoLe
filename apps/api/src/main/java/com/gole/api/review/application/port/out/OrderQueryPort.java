@@ -14,6 +14,5 @@ public interface OrderQueryPort {
     Optional<OrderSnapshot> findById(String orderId);
 
     /** 후기 자격 판단에 필요한 주문 최소 정보. */
-    record OrderSnapshot(String orderId, String buyerId, String sellerId, boolean completed) {
-    }
+    record OrderSnapshot(String orderId, String buyerId, String sellerId, boolean completed) {}
 }

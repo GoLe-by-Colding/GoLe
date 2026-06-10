@@ -35,6 +35,7 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
 
     /** 썸네일 허용 폭 범위(캐시 변형 폭주 방지). (백로그 N2a) */
     private static final int MIN_THUMB_WIDTH = 32;
+
     private static final int MAX_THUMB_WIDTH = 1600;
 
     private final ObjectStoragePort objectStorage;
@@ -101,8 +102,7 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         }
 
         StoredObject original = objectStorage.get(key).orElseThrow(() -> new ImageNotFoundException(key));
-        Optional<byte[]> resized =
-                imageProcessor.resizeToWidth(original.content(), width, original.contentType());
+        Optional<byte[]> resized = imageProcessor.resizeToWidth(original.content(), width, original.contentType());
         if (resized.isEmpty()) {
             // 디코딩 불가/업스케일 불필요 → 원본 제공(캐시하지 않음).
             return new LoadedImage(original.content(), original.contentType());

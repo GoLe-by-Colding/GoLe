@@ -10,7 +10,5 @@ public interface PublishPostUseCase {
     String publish(PublishPostCommand command);
 
     /** topic: 주제 키(general/showcase/moc/review/question/tip/easter_egg). null이면 자유(general). */
-    record PublishPostCommand(
-            String authorId, String content, List<String> imageUrls, String topic) {
-    }
+    record PublishPostCommand(String authorId, String content, List<String> imageUrls, String topic) {}
 }

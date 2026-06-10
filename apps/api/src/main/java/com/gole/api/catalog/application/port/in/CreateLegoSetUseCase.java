@@ -17,6 +17,5 @@ public interface CreateLegoSetUseCase {
             int releaseYear,
             RetirementStatus retirementStatus,
             String imageUrl,
-            boolean featured) {
-    }
+            boolean featured) {}
 }

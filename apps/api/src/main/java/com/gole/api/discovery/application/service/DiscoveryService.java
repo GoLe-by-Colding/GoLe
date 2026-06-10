@@ -4,8 +4,8 @@ import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
-import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.FollowNotifierPort;
+import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
 import com.gole.api.discovery.domain.exception.DuplicateFollowException;
@@ -22,10 +22,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class DiscoveryService
-        implements FollowSellerUseCase,
-                GetSellerShopUseCase,
-                GetPersonalizedFeedUseCase,
-                ManageWishlistUseCase {
+        implements FollowSellerUseCase, GetSellerShopUseCase, GetPersonalizedFeedUseCase, ManageWishlistUseCase {
 
     private final FollowRepositoryPort followRepository;
     private final WishlistRepositoryPort wishlistRepository;

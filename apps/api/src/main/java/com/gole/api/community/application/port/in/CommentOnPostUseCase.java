@@ -7,6 +7,5 @@ public interface CommentOnPostUseCase {
 
     String comment(CommentCommand command);
 
-    record CommentCommand(String postId, String authorId, String content) {
-    }
+    record CommentCommand(String postId, String authorId, String content) {}
 }

@@ -21,8 +21,7 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
     private final NotificationMongoRepository repository;
     private final MongoTemplate mongoTemplate;
 
-    public NotificationPersistenceAdapter(
-            NotificationMongoRepository repository, MongoTemplate mongoTemplate) {
+    public NotificationPersistenceAdapter(NotificationMongoRepository repository, MongoTemplate mongoTemplate) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
     }
@@ -52,20 +51,33 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
     @Override
     public void markAllRead(String recipientId) {
         mongoTemplate.updateMulti(
-                new Query(Criteria.where("recipientId").is(recipientId).and("read").is(false)),
+                new Query(Criteria.where("recipientId")
+                        .is(recipientId)
+                        .and("read")
+                        .is(false)),
                 new Update().set("read", true),
                 NotificationDocument.class);
     }
 
     private NotificationDocument toDocument(Notification n) {
         return new NotificationDocument(
-                n.getId(), n.getRecipientId(), n.getType().name(),
-                n.getMessage(), n.getLink(), n.isRead(), n.getCreatedAt());
+                n.getId(),
+                n.getRecipientId(),
+                n.getType().name(),
+                n.getMessage(),
+                n.getLink(),
+                n.isRead(),
+                n.getCreatedAt());
     }
 
     private Notification toDomain(NotificationDocument d) {
         return new Notification(
-                d.getId(), d.getRecipientId(), NotificationType.valueOf(d.getType()),
-                d.getMessage(), d.getLink(), d.isRead(), d.getCreatedAt());
+                d.getId(),
+                d.getRecipientId(),
+                NotificationType.valueOf(d.getType()),
+                d.getMessage(),
+                d.getLink(),
+                d.isRead(),
+                d.getCreatedAt());
     }
 }

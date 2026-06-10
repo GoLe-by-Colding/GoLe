@@ -6,10 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 객체 스토리지/공개 URL 설정. (설계: storage.*)
  */
 @ConfigurationProperties(prefix = "storage")
-public record StorageProperties(
-        S3 s3,
-        String publicBaseUrl,
-        long maxImageBytes) {
+public record StorageProperties(S3 s3, String publicBaseUrl, long maxImageBytes) {
 
     public StorageProperties {
         if (maxImageBytes <= 0) {
@@ -17,10 +14,5 @@ public record StorageProperties(
         }
     }
 
-    public record S3(
-            String endpoint,
-            String accessKey,
-            String secretKey,
-            String region,
-            String bucket) {}
+    public record S3(String endpoint, String accessKey, String secretKey, String region, String bucket) {}
 }

@@ -20,8 +20,7 @@ public class UseCaseLoggingAspect {
 
     // 각 bounded context의 application.service 패키지 내 모든 public 메서드
     @Pointcut("execution(public * com.gole.api..application.service..*(..))")
-    void applicationServiceMethods() {
-    }
+    void applicationServiceMethods() {}
 
     @Around("applicationServiceMethods()")
     public Object logExecution(ProceedingJoinPoint joinPoint) throws Throwable {

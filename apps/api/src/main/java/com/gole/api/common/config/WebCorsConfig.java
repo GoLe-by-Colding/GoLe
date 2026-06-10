@@ -14,8 +14,7 @@ public class WebCorsConfig implements WebMvcConfigurer {
 
     private final String[] allowedOrigins;
 
-    public WebCorsConfig(
-            @Value("${gole.web.allowed-origins:http://localhost:3000}") String[] allowedOrigins) {
+    public WebCorsConfig(@Value("${gole.web.allowed-origins:http://localhost:3000}") String[] allowedOrigins) {
         this.allowedOrigins = allowedOrigins;
     }
 

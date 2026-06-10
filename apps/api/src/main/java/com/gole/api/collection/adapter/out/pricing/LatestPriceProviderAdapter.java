@@ -25,8 +25,6 @@ public class LatestPriceProviderAdapter implements LatestPriceProviderPort {
 
     @Override
     public Optional<Long> latestPrice(String setNumber) {
-        return getPriceInsights
-                .getStatistics(setNumber, null, null)
-                .map(PriceStatistics::latestPrice);
+        return getPriceInsights.getStatistics(setNumber, null, null).map(PriceStatistics::latestPrice);
     }
 }

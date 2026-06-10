@@ -9,12 +9,12 @@ import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderComman
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -46,8 +46,7 @@ public class OrderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request) {
-        String id = placeOrderUseCase.place(
-                new PlaceOrderCommand(request.listingId(), request.buyerId()));
+        String id = placeOrderUseCase.place(new PlaceOrderCommand(request.listingId(), request.buyerId()));
         return OrderResponse.from(getOrderUseCase.getById(id));
     }
 

@@ -12,7 +12,8 @@ public record SellerRatingSummary(String sellerId, double average, long count) {
         if (reviews == null || reviews.isEmpty()) {
             return new SellerRatingSummary(sellerId, 0.0, 0);
         }
-        double rawAverage = reviews.stream().mapToInt(Review::getRating).average().orElse(0.0);
+        double rawAverage =
+                reviews.stream().mapToInt(Review::getRating).average().orElse(0.0);
         double rounded = Math.round(rawAverage * 10.0) / 10.0;
         return new SellerRatingSummary(sellerId, rounded, reviews.size());
     }

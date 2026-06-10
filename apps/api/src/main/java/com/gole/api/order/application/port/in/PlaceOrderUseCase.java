@@ -7,6 +7,5 @@ public interface PlaceOrderUseCase {
 
     String place(PlaceOrderCommand command);
 
-    record PlaceOrderCommand(String listingId, String buyerId) {
-    }
+    record PlaceOrderCommand(String listingId, String buyerId) {}
 }

@@ -30,14 +30,13 @@ class TrendingServiceTest {
 
     @Test
     void getTrending_aggregatesAndEnrichesWithCatalogName() {
-        FakeRepo repo = new FakeRepo(List.of(
-                new TradeAggregate("10307", 3, 250_000),
-                new TradeAggregate("99999", 1, 10_000)));
+        FakeRepo repo =
+                new FakeRepo(List.of(new TradeAggregate("10307", 3, 250_000), new TradeAggregate("99999", 1, 10_000)));
         FakeCache cache = new FakeCache();
         FindLegoSetUseCase catalog = setNumber -> {
             if ("10307".equals(setNumber)) {
-                return new LegoSet("10307", "에펠탑", "Icons", 10001, 2023,
-                        RetirementStatus.ACTIVE, "http://img/10307.png");
+                return new LegoSet(
+                        "10307", "에펠탑", "Icons", 10001, 2023, RetirementStatus.ACTIVE, "http://img/10307.png");
             }
             throw new RuntimeException("not found");
         };
@@ -62,9 +61,13 @@ class TrendingServiceTest {
         FakeCache cache = new FakeCache();
         List<TrendingSet> cached = List.of(new TrendingSet("42100", "리브헬", null, 9, 500_000));
         cache.stored.put(8, cached);
-        TrendingService service = new TrendingService(repo, cache, sn -> {
-            throw new RuntimeException("should not be called");
-        }, CLOCK);
+        TrendingService service = new TrendingService(
+                repo,
+                cache,
+                sn -> {
+                    throw new RuntimeException("should not be called");
+                },
+                CLOCK);
 
         List<TrendingSet> result = service.getTrending(8);
 
@@ -75,9 +78,13 @@ class TrendingServiceTest {
     @Test
     void getTrending_clampsLimitToAtLeastOne() {
         FakeRepo repo = new FakeRepo(List.of());
-        TrendingService service = new TrendingService(repo, new FakeCache(), sn -> {
-            throw new RuntimeException();
-        }, CLOCK);
+        TrendingService service = new TrendingService(
+                repo,
+                new FakeCache(),
+                sn -> {
+                    throw new RuntimeException();
+                },
+                CLOCK);
 
         service.getTrending(0);
 

@@ -68,7 +68,8 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
         form.add("redirect_uri", redirectUri);
         try {
             @SuppressWarnings("unchecked")
-            Map<String, Object> token = restClient.post()
+            Map<String, Object> token = restClient
+                    .post()
                     .uri(reg.tokenUri())
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .accept(MediaType.APPLICATION_JSON)
@@ -87,7 +88,8 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
     private Map<String, Object> fetchUserInfo(Registration reg, String accessToken) {
         try {
             @SuppressWarnings("unchecked")
-            Map<String, Object> body = restClient.get()
+            Map<String, Object> body = restClient
+                    .get()
                     .uri(reg.userInfoUri())
                     .header("Authorization", "Bearer " + accessToken)
                     .accept(MediaType.APPLICATION_JSON)
@@ -105,8 +107,7 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
     /** provider별 응답 스키마에서 providerId/email을 추출한다. */
     private SocialProfile parseProfile(AuthProvider provider, Map<String, Object> info) {
         return switch (provider) {
-            case GOOGLE -> new SocialProfile(
-                    provider, str(info.get("sub")), str(info.get("email")));
+            case GOOGLE -> new SocialProfile(provider, str(info.get("sub")), str(info.get("email")));
             case KAKAO -> {
                 Map<String, Object> account = asMap(info.get("kakao_account"));
                 yield new SocialProfile(
@@ -124,8 +125,7 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
     private Registration require(AuthProvider provider) {
         Registration reg = properties.registration(provider.key());
         if (reg == null || !reg.isConfigured()) {
-            throw new BadRequestException(
-                    "OAUTH_PROVIDER_NOT_CONFIGURED", provider.key() + " is not configured");
+            throw new BadRequestException("OAUTH_PROVIDER_NOT_CONFIGURED", provider.key() + " is not configured");
         }
         return reg;
     }

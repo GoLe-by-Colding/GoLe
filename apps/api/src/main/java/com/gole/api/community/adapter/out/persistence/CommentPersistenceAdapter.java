@@ -32,11 +32,7 @@ public class CommentPersistenceAdapter implements CommentRepositoryPort {
 
     private CommentDocument toDocument(Comment comment) {
         return new CommentDocument(
-                comment.id(),
-                comment.postId(),
-                comment.authorId(),
-                comment.content(),
-                comment.createdAt());
+                comment.id(), comment.postId(), comment.authorId(), comment.content(), comment.createdAt());
     }
 
     private Comment toDomain(CommentDocument document) {

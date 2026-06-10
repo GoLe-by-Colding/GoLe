@@ -13,8 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class LoggingVerificationCodeSenderAdapter implements VerificationCodeSenderPort {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(LoggingVerificationCodeSenderAdapter.class);
+    private static final Logger log = LoggerFactory.getLogger(LoggingVerificationCodeSenderAdapter.class);
 
     @Override
     public void send(Email email, VerificationCode code) {

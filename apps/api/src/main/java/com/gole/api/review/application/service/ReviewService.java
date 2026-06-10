@@ -43,21 +43,19 @@ public class ReviewService implements WriteReviewUseCase, GetSellerReviewsUseCas
     @Override
     public Review write(WriteReviewCommand command) {
         // R2.1: 주문 존재 확인
-        OrderSnapshot order = orderQuery.findById(command.orderId())
-                .orElseThrow(() -> new NotFoundException(
-                        "ORDER_NOT_FOUND", "Order not found: " + command.orderId()));
+        OrderSnapshot order = orderQuery
+                .findById(command.orderId())
+                .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order not found: " + command.orderId()));
 
         // R2.2: 완료된 주문만 후기 가능
         if (!order.completed()) {
             throw new ConflictException(
-                    "REVIEW_ORDER_NOT_COMPLETED",
-                    "Reviews can only be written for completed orders");
+                    "REVIEW_ORDER_NOT_COMPLETED", "Reviews can only be written for completed orders");
         }
 
         // R2.3: 요청자가 주문의 구매자여야 함
         if (!order.buyerId().equals(command.reviewerId())) {
-            throw new ForbiddenException(
-                    "NOT_ORDER_BUYER", "Only the buyer of the order can write a review");
+            throw new ForbiddenException("NOT_ORDER_BUYER", "Only the buyer of the order can write a review");
         }
 
         // R2.4: 주문당 1회

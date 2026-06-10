@@ -44,20 +44,22 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
     public void put(String key, byte[] content, String contentType) {
         ensureBucket(); // 지연 보장: 스토리지 일시 장애 후에도 첫 업로드 시 복구
         s3Client.putObject(
-                PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType).build(),
+                PutObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .contentType(contentType)
+                        .build(),
                 RequestBody.fromBytes(content));
     }
 
     @Override
     public Optional<StoredObject> get(String key) {
         try {
-            ResponseBytes<GetObjectResponse> object =
-                    s3Client.getObjectAsBytes(
-                            GetObjectRequest.builder().bucket(bucket).key(key).build());
+            ResponseBytes<GetObjectResponse> object = s3Client.getObjectAsBytes(
+                    GetObjectRequest.builder().bucket(bucket).key(key).build());
             String contentType = object.response().contentType();
             return Optional.of(new StoredObject(
-                    object.asByteArray(),
-                    contentType == null ? "application/octet-stream" : contentType));
+                    object.asByteArray(), contentType == null ? "application/octet-stream" : contentType));
         } catch (NoSuchKeyException | NoSuchBucketException e) {
             return Optional.empty();
         }

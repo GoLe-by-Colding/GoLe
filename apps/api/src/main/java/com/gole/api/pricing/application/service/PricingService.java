@@ -60,8 +60,7 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
 
     @Override
     public List<PriceTransaction> getHistory(String setNumber) {
-        List<PriceTransaction> recentFirst =
-                new ArrayList<>(repository.findInRangeAscending(setNumber, null, null));
+        List<PriceTransaction> recentFirst = new ArrayList<>(repository.findInRangeAscending(setNumber, null, null));
         Collections.reverse(recentFirst);
         return recentFirst;
     }
@@ -95,7 +94,8 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
     private static final int MIN_REAL_SAMPLES = 3;
 
     private static long medianPrice(List<PriceTransaction> ascending) {
-        long[] prices = ascending.stream().mapToLong(PriceTransaction::price).sorted().toArray();
+        long[] prices =
+                ascending.stream().mapToLong(PriceTransaction::price).sorted().toArray();
         int n = prices.length;
         return n % 2 == 1 ? prices[n / 2] : Math.round((prices[n / 2 - 1] + prices[n / 2]) / 2.0);
     }

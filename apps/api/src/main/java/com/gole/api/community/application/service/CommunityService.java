@@ -8,8 +8,8 @@ import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
-import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.application.port.out.PostAuthorNotifierPort;
+import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.domain.exception.PostNotFoundException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
@@ -23,11 +23,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CommunityService
-        implements PublishPostUseCase,
-                CommentOnPostUseCase,
-                LikePostUseCase,
-                GetFeedUseCase,
-                DeletePostUseCase {
+        implements PublishPostUseCase, CommentOnPostUseCase, LikePostUseCase, GetFeedUseCase, DeletePostUseCase {
 
     private final PostRepositoryPort postRepository;
     private final CommentRepositoryPort commentRepository;
@@ -64,8 +60,7 @@ public class CommunityService
     public String comment(CommentCommand command) {
         Post post = requirePublished(command.postId());
         Comment comment = new Comment(
-                idGenerator.newId(), post.getId(), command.authorId(),
-                command.content(), Instant.now(clock));
+                idGenerator.newId(), post.getId(), command.authorId(), command.content(), Instant.now(clock));
         String id = commentRepository.save(comment).id();
         // 알림: 내 글에 댓글이 달리면 작성자에게(본인 댓글은 제외, best-effort)
         if (!command.authorId().equals(post.getAuthorId())) {
@@ -98,8 +93,7 @@ public class CommunityService
 
     @Override
     public void delete(String postId, String requesterId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new PostNotFoundException(postId));
+        Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         if (!post.getAuthorId().equals(requesterId)) {
             throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can delete this post");
         }
@@ -108,8 +102,7 @@ public class CommunityService
     }
 
     private Post requirePublished(String postId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new PostNotFoundException(postId));
+        Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         if (!post.isPublished()) {
             throw new PostNotFoundException(postId);
         }

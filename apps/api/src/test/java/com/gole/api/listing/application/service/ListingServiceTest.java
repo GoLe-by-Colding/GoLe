@@ -37,8 +37,14 @@ class ListingServiceTest {
 
     private CreateListingCommand validCommand() {
         return new CreateListingCommand(
-                "seller-1", "에펠탑 10307", "미개봉", 280_000,
-                ItemCondition.NEW_SEALED, ConditionDisclosure.basic(), List.of("photo-1.jpg"), "10307");
+                "seller-1",
+                "에펠탑 10307",
+                "미개봉",
+                280_000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "10307");
     }
 
     @Test
@@ -52,16 +58,28 @@ class ListingServiceTest {
     @Test
     void create_rejectsMissingPhoto() {
         CreateListingCommand cmd = new CreateListingCommand(
-                "seller-1", "title", "desc", 1000, ItemCondition.NEW_SEALED,
-                ConditionDisclosure.basic(), List.of(), "10307");
+                "seller-1",
+                "title",
+                "desc",
+                1000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of(),
+                "10307");
         assertThatThrownBy(() -> service.create(cmd)).isInstanceOf(MissingPhotoException.class);
     }
 
     @Test
     void create_rejectsNegativePrice() {
         CreateListingCommand cmd = new CreateListingCommand(
-                "seller-1", "title", "desc", -1, ItemCondition.NEW_SEALED,
-                ConditionDisclosure.basic(), List.of("p.jpg"), null);
+                "seller-1",
+                "title",
+                "desc",
+                -1,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("p.jpg"),
+                null);
         assertThatThrownBy(() -> service.create(cmd)).isInstanceOf(InvalidPriceException.class);
     }
 
@@ -76,11 +94,18 @@ class ListingServiceTest {
     @Test
     void delete_rejectedWhenReserved() {
         Listing reserved = new Listing(
-                "r1", "seller-1", "t", "d",
+                "r1",
+                "seller-1",
+                "t",
+                "d",
                 com.gole.api.listing.domain.model.Money.won(1000),
-                ItemCondition.NEW_SEALED, ConditionDisclosure.basic(), List.of("p.jpg"), null,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("p.jpg"),
+                null,
                 com.gole.api.listing.domain.model.ListingCategory.SET,
-                ListingStatus.RESERVED, Instant.parse("2026-01-01T00:00:00Z"));
+                ListingStatus.RESERVED,
+                Instant.parse("2026-01-01T00:00:00Z"));
         repository.save(reserved);
         assertThatThrownBy(() -> service.delete("r1")).isInstanceOf(ListingStateException.class);
     }

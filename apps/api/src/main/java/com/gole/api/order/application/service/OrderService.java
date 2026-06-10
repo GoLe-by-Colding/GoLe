@@ -29,11 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class OrderService
-        implements PlaceOrderUseCase,
-                PayOrderUseCase,
-                CompleteOrderUseCase,
-                RefundOrderUseCase,
-                GetOrderUseCase {
+        implements PlaceOrderUseCase, PayOrderUseCase, CompleteOrderUseCase, RefundOrderUseCase, GetOrderUseCase {
 
     private final OrderRepositoryPort orderRepository;
     private final ListingReservationPort listingReservation;
@@ -67,7 +63,8 @@ public class OrderService
     public String place(PlaceOrderCommand command) {
         // 요구사항 13.1: 단일 문서 원자 갱신(findAndModify)이 단일 낙찰을 보장한다.
         // 트랜잭션 밖에서 수행해 동시 요청 시 패자는 write-conflict 대신 깔끔히 빈 결과를 받는다.
-        ReservedListing reserved = listingReservation.reserve(command.listingId())
+        ReservedListing reserved = listingReservation
+                .reserve(command.listingId())
                 .orElseThrow(() -> new ItemUnavailableException(command.listingId()));
 
         Order order = Order.place(
@@ -136,7 +133,6 @@ public class OrderService
     @Override
     @Transactional(readOnly = true)
     public Order getById(String orderId) {
-        return orderRepository.findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        return orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 }

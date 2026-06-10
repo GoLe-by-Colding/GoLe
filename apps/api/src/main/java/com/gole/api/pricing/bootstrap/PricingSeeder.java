@@ -34,8 +34,7 @@ public class PricingSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         // setNumber → 미개봉 기준가(원).
-        record Seed(String setNumber, long base) {
-        }
+        record Seed(String setNumber, long base) {}
         List<Seed> seeds = List.of(
                 new Seed("10307", 850_000),
                 new Seed("75192", 1_200_000),
@@ -51,8 +50,7 @@ public class PricingSeeder implements CommandLineRunner {
                 new Seed("10497", 160_000));
 
         // 상태별 감가 계수와 시계열 포인트 수(미개봉이 가장 풍부).
-        record Band(String condition, double factor, int weeks) {
-        }
+        record Band(String condition, double factor, int weeks) {}
         List<Band> bands = List.of(
                 new Band("new_sealed", 1.00, 30),
                 new Band("used_complete", 0.78, 18),
@@ -63,8 +61,7 @@ public class PricingSeeder implements CommandLineRunner {
         int migrated = 0;
 
         for (Seed s : seeds) {
-            List<PriceTransactionDocument> existing =
-                    repository.findBySetNumberOrderByExecutedAtAsc(s.setNumber());
+            List<PriceTransactionDocument> existing = repository.findBySetNumberOrderByExecutedAtAsc(s.setNumber());
             if (!existing.isEmpty()) {
                 boolean tagged = existing.stream().anyMatch(d -> d.getCondition() != null);
                 if (tagged) {
@@ -86,16 +83,14 @@ public class PricingSeeder implements CommandLineRunner {
                     long price = Math.max(1, Math.round(bandBase * f));
                     Instant executedAt = now.minus(week * 7L, ChronoUnit.DAYS);
                     docs.add(new PriceTransactionDocument(
-                            UUID.randomUUID().toString(), s.setNumber(), price, 1, executedAt,
-                            band.condition()));
+                            UUID.randomUUID().toString(), s.setNumber(), price, 1, executedAt, band.condition()));
                 }
             }
         }
 
         if (!docs.isEmpty()) {
             repository.saveAll(docs);
-            log.info("[seed] pricing: {}건 체결 이력 적재(상태별, 레거시 마이그레이션 {}세트)",
-                    docs.size(), migrated);
+            log.info("[seed] pricing: {}건 체결 이력 적재(상태별, 레거시 마이그레이션 {}세트)", docs.size(), migrated);
         }
     }
 }

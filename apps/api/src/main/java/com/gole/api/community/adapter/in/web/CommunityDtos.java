@@ -8,14 +8,10 @@ import java.util.List;
 
 public final class CommunityDtos {
 
-    private CommunityDtos() {
-    }
+    private CommunityDtos() {}
 
     public record PublishPostRequest(
-            @NotBlank String authorId,
-            @NotBlank String content,
-            List<@NotBlank String> imageUrls,
-            String topic) {
+            @NotBlank String authorId, @NotBlank String content, List<@NotBlank String> imageUrls, String topic) {
 
         /** 이미지 미지정 시 빈 목록(텍스트 전용 글 허용). */
         public List<String> imageUrls() {
@@ -23,11 +19,9 @@ public final class CommunityDtos {
         }
     }
 
-    public record CommentRequest(@NotBlank String authorId, @NotBlank String content) {
-    }
+    public record CommentRequest(@NotBlank String authorId, @NotBlank String content) {}
 
-    public record LikeRequest(@NotBlank String userId) {
-    }
+    public record LikeRequest(@NotBlank String userId) {}
 
     public record PostResponse(
             String id,

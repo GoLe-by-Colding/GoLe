@@ -64,9 +64,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
 
     private Order toDomain(OrderDocument document) {
         List<OrderStatusChange> history = document.getStatusHistory().stream()
-                .map(change ->
-                        new OrderStatusChange(
-                                OrderStatus.valueOf(change.getStatus()), change.getOccurredAt()))
+                .map(change -> new OrderStatusChange(OrderStatus.valueOf(change.getStatus()), change.getOccurredAt()))
                 .toList();
         return new Order(
                 document.getId(),

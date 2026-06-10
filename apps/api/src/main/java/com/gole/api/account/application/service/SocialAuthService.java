@@ -80,12 +80,11 @@ public class SocialAuthService implements SocialLoginUseCase {
             throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
         }
 
-        SocialProfile profile = identityProvider.fetchProfile(
-                command.provider(), command.code(), command.redirectUri());
+        SocialProfile profile =
+                identityProvider.fetchProfile(command.provider(), command.code(), command.redirectUri());
 
         if (profile.email() == null || profile.email().isBlank()) {
-            throw new BadRequestException(
-                    "OAUTH_EMAIL_UNAVAILABLE", "Provider did not return an email address");
+            throw new BadRequestException("OAUTH_EMAIL_UNAVAILABLE", "Provider did not return an email address");
         }
 
         Email email = new Email(profile.email());
@@ -109,9 +108,7 @@ public class SocialAuthService implements SocialLoginUseCase {
 
     private void requireConfigured(AuthProvider provider) {
         if (!identityProvider.isConfigured(provider)) {
-            throw new BadRequestException(
-                    "OAUTH_PROVIDER_NOT_CONFIGURED",
-                    provider.key() + " 로그인이 아직 설정되지 않았습니다");
+            throw new BadRequestException("OAUTH_PROVIDER_NOT_CONFIGURED", provider.key() + " 로그인이 아직 설정되지 않았습니다");
         }
     }
 }

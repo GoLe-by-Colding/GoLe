@@ -10,15 +10,13 @@ import java.time.Instant;
 
 public final class ReviewDtos {
 
-    private ReviewDtos() {
-    }
+    private ReviewDtos() {}
 
     public record WriteReviewRequest(
             @NotBlank String orderId,
             @NotBlank String reviewerId,
             @Min(1) @Max(5) int rating,
-            @NotBlank @Size(max = 1000) String content) {
-    }
+            @NotBlank @Size(max = 1000) String content) {}
 
     public record ReviewResponse(
             String id,

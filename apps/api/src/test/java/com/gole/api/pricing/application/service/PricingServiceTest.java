@@ -54,9 +54,11 @@ class PricingServiceTest {
         service.record(new RecordExecutedPriceCommand("10307", 200, 1, base.plus(1, ChronoUnit.DAYS)));
 
         assertThat(service.getChart("10307", null, null))
-                .extracting(PriceTransaction::price).containsExactly(100L, 200L);
+                .extracting(PriceTransaction::price)
+                .containsExactly(100L, 200L);
         assertThat(service.getHistory("10307"))
-                .extracting(PriceTransaction::price).containsExactly(200L, 100L);
+                .extracting(PriceTransaction::price)
+                .containsExactly(200L, 100L);
     }
 
     private static final class InMemoryRepo implements PriceTransactionRepositoryPort {

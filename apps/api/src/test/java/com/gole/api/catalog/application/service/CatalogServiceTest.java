@@ -18,12 +18,13 @@ import org.junit.jupiter.api.Test;
  */
 class CatalogServiceTest {
 
-    private final LegoSet eiffel = new LegoSet(
-            "10307", "Eiffel Tower", "Icons", 10001, 2022, RetirementStatus.ACTIVE, null);
+    private final LegoSet eiffel =
+            new LegoSet("10307", "Eiffel Tower", "Icons", 10001, 2022, RetirementStatus.ACTIVE, null);
 
     @Test
     void findBySetNumber_returnsSet_whenPresent() {
-        CatalogService service = new CatalogService(new FakeLoadPort(Optional.of(eiffel), List.of()), new FakeAdminPort());
+        CatalogService service =
+                new CatalogService(new FakeLoadPort(Optional.of(eiffel), List.of()), new FakeAdminPort());
 
         LegoSet result = service.findBySetNumber("10307");
 
@@ -35,19 +36,18 @@ class CatalogServiceTest {
     void findBySetNumber_throws_whenMissing() {
         CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of()), new FakeAdminPort());
 
-        assertThatThrownBy(() -> service.findBySetNumber("99999"))
-                .isInstanceOf(LegoSetNotFoundException.class);
+        assertThatThrownBy(() -> service.findBySetNumber("99999")).isInstanceOf(LegoSetNotFoundException.class);
     }
 
     @Test
     void search_returnsEmpty_forBlankQuery() {
-        CatalogService service = new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)), new FakeAdminPort());
+        CatalogService service =
+                new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)), new FakeAdminPort());
 
         assertThat(service.search("  ")).isEmpty();
     }
 
-    private record FakeLoadPort(Optional<LegoSet> byNumber, List<LegoSet> bySearch)
-            implements LoadLegoSetPort {
+    private record FakeLoadPort(Optional<LegoSet> byNumber, List<LegoSet> bySearch) implements LoadLegoSetPort {
 
         @Override
         public Optional<LegoSet> loadBySetNumber(String setNumber) {

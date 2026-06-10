@@ -20,8 +20,7 @@ public interface GetPriceInsightsUseCase {
     List<PriceTransaction> getChart(String setNumber, Instant from, Instant to);
 
     /** 상태별 차트 시계열(시간 오름차순). 헤드라인 시장 차트는 미개봉 기준. */
-    List<PriceTransaction> getChart(
-            String setNumber, com.gole.api.pricing.domain.model.SetCondition condition);
+    List<PriceTransaction> getChart(String setNumber, com.gole.api.pricing.domain.model.SetCondition condition);
 
     /** 체결 내역(최신→오래된 순). (요구사항 9.4) */
     List<PriceTransaction> getHistory(String setNumber);

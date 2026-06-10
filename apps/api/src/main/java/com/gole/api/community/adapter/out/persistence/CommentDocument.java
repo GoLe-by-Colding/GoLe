@@ -28,8 +28,7 @@ public class CommentDocument {
         // MongoDB 매핑용
     }
 
-    public CommentDocument(
-            String id, String postId, String authorId, String content, Instant createdAt) {
+    public CommentDocument(String id, String postId, String authorId, String content, Instant createdAt) {
         this.id = id;
         this.postId = postId;
         this.authorId = authorId;

@@ -42,11 +42,7 @@ public class CollectionItemPersistenceAdapter implements CollectionRepositoryPor
 
     private CollectionItemDocument toDocument(CollectionItem item) {
         return new CollectionItemDocument(
-                item.id(),
-                item.userId(),
-                item.setNumber(),
-                item.status().name(),
-                item.createdAt());
+                item.id(), item.userId(), item.setNumber(), item.status().name(), item.createdAt());
     }
 
     private CollectionItem toDomain(CollectionItemDocument document) {

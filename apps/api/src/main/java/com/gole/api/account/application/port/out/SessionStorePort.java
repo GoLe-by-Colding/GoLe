@@ -20,6 +20,5 @@ public interface SessionStorePort {
     void revoke(String token);
 
     /** 인증된 호출자 식별 정보. */
-    record SessionPrincipal(String accountId, Role role) {
-    }
+    record SessionPrincipal(String accountId, Role role) {}
 }

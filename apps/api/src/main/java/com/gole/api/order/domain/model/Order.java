@@ -59,8 +59,16 @@ public final class Order {
         List<OrderStatusChange> history = new ArrayList<>();
         history.add(new OrderStatusChange(OrderStatus.PAYMENT_PENDING, now));
         return new Order(
-                id, listingId, buyerId, sellerId, catalogSetNumber, amount,
-                OrderStatus.PAYMENT_PENDING, now, history, null);
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                amount,
+                OrderStatus.PAYMENT_PENDING,
+                now,
+                history,
+                null);
     }
 
     /** 결제 승인 → 자금 보유. (요구사항 7.2, 13.2) */
@@ -89,8 +97,7 @@ public final class Order {
 
     private void requireStatus(OrderStatus expected, String target) {
         if (status != expected) {
-            throw new OrderStateException(
-                    "Cannot transition to " + target + " from " + status);
+            throw new OrderStateException("Cannot transition to " + target + " from " + status);
         }
     }
 

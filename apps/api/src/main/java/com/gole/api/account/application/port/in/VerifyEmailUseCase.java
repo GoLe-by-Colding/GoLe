@@ -7,6 +7,5 @@ public interface VerifyEmailUseCase {
 
     void verify(VerifyEmailCommand command);
 
-    record VerifyEmailCommand(String email, String code) {
-    }
+    record VerifyEmailCommand(String email, String code) {}
 }

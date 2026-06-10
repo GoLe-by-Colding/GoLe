@@ -32,11 +32,8 @@ public record PriceValuation(String setNumber, long marketPrice, List<ConditionV
     }
 
     /** 실제 상태별 체결가 기반. */
-    public static ConditionValuation real(
-            SetCondition condition, long marketPrice, long fairPrice, int sampleCount) {
-        int dep = marketPrice <= 0
-                ? 0
-                : Math.max(0, (int) Math.round((1.0 - (double) fairPrice / marketPrice) * 100));
+    public static ConditionValuation real(SetCondition condition, long marketPrice, long fairPrice, int sampleCount) {
+        int dep = marketPrice <= 0 ? 0 : Math.max(0, (int) Math.round((1.0 - (double) fairPrice / marketPrice) * 100));
         return spread(condition, fairPrice, dep, sampleCount, true);
     }
 

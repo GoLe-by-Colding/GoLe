@@ -44,12 +44,16 @@ public final class Post {
 
     /** 신규 게시글: 게시 상태로 생성. (요구사항 12.1, 12.2) */
     public static Post publish(
-            String id, String authorId, String content, List<String> imageUrls,
-            PostType type, Instant now) {
+            String id, String authorId, String content, List<String> imageUrls, PostType type, Instant now) {
         return new Post(
-                id, authorId, content, imageUrls,
+                id,
+                authorId,
+                content,
+                imageUrls,
                 type == null ? PostType.GENERAL : type,
-                PostStatus.PUBLISHED, Set.of(), now);
+                PostStatus.PUBLISHED,
+                Set.of(),
+                now);
     }
 
     /** 좋아요. 중복 시 예외(요구사항 12.4, 12.5). */

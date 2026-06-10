@@ -76,11 +76,6 @@ public class TrendingService implements GetTrendingSetsUseCase {
         } catch (RuntimeException ignored) {
             // 카탈로그에 없거나 조회 실패해도 랭킹 자체는 제공한다.
         }
-        return new TrendingSet(
-                aggregate.setNumber(),
-                name,
-                imageUrl,
-                aggregate.tradeCount(),
-                aggregate.averagePrice());
+        return new TrendingSet(aggregate.setNumber(), name, imageUrl, aggregate.tradeCount(), aggregate.averagePrice());
     }
 }

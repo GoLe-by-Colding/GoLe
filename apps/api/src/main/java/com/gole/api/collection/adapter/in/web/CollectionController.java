@@ -46,8 +46,8 @@ public class CollectionController {
     @PostMapping("/items")
     @ResponseStatus(HttpStatus.CREATED)
     public CollectionItemResponse add(@Valid @RequestBody AddItemRequest request) {
-        String id = manageCollectionUseCase.add(
-                new AddCommand(request.userId(), request.setNumber(), request.status()));
+        String id =
+                manageCollectionUseCase.add(new AddCommand(request.userId(), request.setNumber(), request.status()));
         return manageCollectionUseCase.getCollection(request.userId()).stream()
                 .filter(i -> i.id().equals(id))
                 .findFirst()

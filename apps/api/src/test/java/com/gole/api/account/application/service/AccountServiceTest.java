@@ -12,9 +12,6 @@ import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort.SessionPrincipal;
-import com.gole.api.account.application.port.out.SessionTokenPort;
-import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
-import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
 import com.gole.api.account.domain.exception.AccountLockedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
@@ -49,7 +46,9 @@ class AccountServiceTest {
         service = new AccountService(
                 repository,
                 new PlainHasher(),
-                (email, code) -> { /* no-op */ },
+                (email, code) -> {
+                    /* no-op */
+                },
                 () -> "123456",
                 new SequentialIdGenerator(),
                 account -> "token-" + account.getId(),
@@ -59,16 +58,14 @@ class AccountServiceTest {
 
     @Test
     void register_rejectsShortPassword() {
-        assertThatThrownBy(() ->
-                service.register(new RegisterAccountCommand("a@b.com", "short")))
+        assertThatThrownBy(() -> service.register(new RegisterAccountCommand("a@b.com", "short")))
                 .isInstanceOf(WeakPasswordException.class);
     }
 
     @Test
     void register_rejectsDuplicateEmail() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
-        assertThatThrownBy(() ->
-                service.register(new RegisterAccountCommand("A@b.com", "password2")))
+        assertThatThrownBy(() -> service.register(new RegisterAccountCommand("A@b.com", "password2")))
                 .isInstanceOf(EmailAlreadyRegisteredException.class);
     }
 
@@ -76,7 +73,8 @@ class AccountServiceTest {
     void verify_succeeds_withValidCodeInTime() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
         service.verify(new VerifyEmailCommand("a@b.com", "123456"));
-        assertThat(repository.findByEmail(new Email("a@b.com")).orElseThrow().isVerified()).isTrue();
+        assertThat(repository.findByEmail(new Email("a@b.com")).orElseThrow().isVerified())
+                .isTrue();
     }
 
     @Test
@@ -123,7 +121,9 @@ class AccountServiceTest {
         AccountService upgradingService = new AccountService(
                 repository,
                 new UpgradingHasher(),
-                (email, code) -> { /* no-op */ },
+                (email, code) -> {
+                    /* no-op */
+                },
                 () -> "123456",
                 new SequentialIdGenerator(),
                 account -> "token-" + account.getId(),
@@ -191,8 +191,7 @@ class AccountServiceTest {
 
         @Override
         public boolean matches(String rawPassword, PasswordHash hash) {
-            return hash.value().equals("bcrypt:" + rawPassword)
-                    || hash.value().equals("legacy:" + rawPassword);
+            return hash.value().equals("bcrypt:" + rawPassword) || hash.value().equals("legacy:" + rawPassword);
         }
 
         @Override

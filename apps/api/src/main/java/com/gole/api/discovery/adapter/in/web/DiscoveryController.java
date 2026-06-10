@@ -77,8 +77,7 @@ public class DiscoveryController {
 
     @PostMapping("/users/{userId}/wishlist")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void addWishlist(
-            @PathVariable String userId, @Valid @RequestBody WishlistRequest request) {
+    public void addWishlist(@PathVariable String userId, @Valid @RequestBody WishlistRequest request) {
         manageWishlistUseCase.add(userId, request.targetType(), request.targetId());
     }
 

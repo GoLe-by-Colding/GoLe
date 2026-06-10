@@ -4,9 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public final class OrderRequests {
 
-    private OrderRequests() {
-    }
+    private OrderRequests() {}
 
-    public record PlaceOrderRequest(@NotBlank String listingId, @NotBlank String buyerId) {
-    }
+    public record PlaceOrderRequest(@NotBlank String listingId, @NotBlank String buyerId) {}
 }

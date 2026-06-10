@@ -18,6 +18,5 @@ public interface GetTrendingSetsUseCase {
      * @param tradeCount   체결 건수
      * @param averagePrice 평균 체결가(KRW)
      */
-    record TrendingSet(
-            String setNumber, String name, String imageUrl, long tradeCount, long averagePrice) {}
+    record TrendingSet(String setNumber, String name, String imageUrl, long tradeCount, long averagePrice) {}
 }

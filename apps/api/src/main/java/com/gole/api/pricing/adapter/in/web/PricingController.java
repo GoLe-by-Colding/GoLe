@@ -29,19 +29,19 @@ public class PricingController {
     @GetMapping("/statistics")
     public StatisticsResponse statistics(
             @PathVariable String setNumber,
-            @RequestParam(value = "from", required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(value = "to", required = false)
-                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return getPriceInsightsUseCase.getStatistics(setNumber, from, to)
+            @RequestParam(value = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    Instant from,
+            @RequestParam(value = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    Instant to) {
+        return getPriceInsightsUseCase
+                .getStatistics(setNumber, from, to)
                 .map(StatisticsResponse::of)
                 .orElseGet(() -> StatisticsResponse.noData(setNumber));
     }
 
     @GetMapping("/chart")
     public List<PricePointResponse> chart(
-            @PathVariable String setNumber,
-            @RequestParam(value = "condition", required = false) String condition) {
+            @PathVariable String setNumber, @RequestParam(value = "condition", required = false) String condition) {
         // 헤드라인 시장 차트는 미개봉(new_sealed) 기준. condition 지정 시 해당 상태 시계열.
         com.gole.api.pricing.domain.model.SetCondition c =
                 com.gole.api.pricing.domain.model.SetCondition.fromKey(condition);
@@ -59,7 +59,8 @@ public class PricingController {
 
     @GetMapping("/valuation")
     public ValuationResponse valuation(@PathVariable String setNumber) {
-        return getPriceInsightsUseCase.getValuation(setNumber)
+        return getPriceInsightsUseCase
+                .getValuation(setNumber)
                 .map(ValuationResponse::of)
                 .orElseGet(() -> ValuationResponse.noData(setNumber));
     }
