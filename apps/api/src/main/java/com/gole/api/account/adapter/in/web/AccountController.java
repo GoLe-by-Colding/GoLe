@@ -17,6 +17,10 @@ import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
 import com.gole.api.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -31,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST). use case 인터페이스에만 의존한다.
  */
+@Tag(name = "Account", description = "회원가입·인증·로그인·로그아웃·내정보")
 @RestController
 @RequestMapping("/api/v1/accounts")
 public class AccountController {
@@ -54,6 +59,11 @@ public class AccountController {
         this.logoutUseCase = logoutUseCase;
     }
 
+    @Operation(summary = "회원가입", description = "이메일·비밀번호로 계정을 생성합니다. 이메일 인증 코드가 발송됩니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "가입 성공 — accountId 반환"),
+        @ApiResponse(responseCode = "409", description = "이메일 중복")
+    })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
@@ -62,12 +72,19 @@ public class AccountController {
         return new RegisterResponse(accountId);
     }
 
+    @Operation(summary = "이메일 인증", description = "가입 시 발송된 인증 코드로 계정을 활성화합니다.")
     @PostMapping("/verification")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void verify(@Valid @RequestBody VerifyEmailRequest request) {
         verifyEmailUseCase.verify(new VerifyEmailCommand(request.email(), request.code()));
     }
 
+    @Operation(summary = "로그인", description = "이메일·비밀번호로 인증하고 Bearer 세션 토큰을 반환합니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "로그인 성공 — sessionToken 반환"),
+        @ApiResponse(responseCode = "401", description = "이메일/비밀번호 불일치"),
+        @ApiResponse(responseCode = "423", description = "로그인 잠금(5회 실패)")
+    })
     @PostMapping("/sessions")
     public SignInResponse signIn(@Valid @RequestBody SignInRequest request) {
         SignInResult result = signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
@@ -75,7 +92,7 @@ public class AccountController {
                 result.accountId(), result.sessionToken(), result.role().name());
     }
 
-    /** 현재 세션 해석. Authorization: Bearer <token> 필요. 프론트의 역할(권한) 확인에 사용. */
+    @Operation(summary = "내 정보 조회", description = "현재 세션의 계정 ID·이메일·권한을 반환합니다. Authorization: Bearer {token} 필요.")
     @GetMapping("/me")
     public MeResponse me(@RequestHeader(value = "Authorization", required = false) String authorization) {
         String token = extractBearer(authorization);
@@ -86,7 +103,7 @@ public class AccountController {
                 session.accountId(), session.email(), session.role().name());
     }
 
-    /** 로그아웃: 서버측 세션을 폐기한다. Authorization: Bearer <token>. */
+    @Operation(summary = "로그아웃", description = "서버 세션을 폐기합니다. Authorization: Bearer {token} 필요.")
     @DeleteMapping("/sessions")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(@RequestHeader(value = "Authorization", required = false) String authorization) {

@@ -1,3 +1,6 @@
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 package com.gole.api.pricing.adapter.in.web;
 
 import com.gole.api.pricing.adapter.in.web.PricingResponses.PricePointResponse;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 카탈로그 세트 시세 조회. (요구사항 9)
  */
+@Tag(name = "Pricing", description = "세트 시세 통계·차트·체결내역·밸류에이션")
 @RestController
 @RequestMapping("/api/v1/pricing/sets/{setNumber}")
 public class PricingController {
@@ -57,6 +61,11 @@ public class PricingController {
                 .toList();
     }
 
+    @Operation(
+            summary = "상태별 시세 밸류에이션",
+            description = "최근 체결가 기준으로 미개봉·중고풀세트·부품빠짐 상태별 "
+                    + "공정 시세·즉시판매(매도)·즉시구매(매수)를 반환합니다. "
+                    + "실거래 3건 이상이면 실데이터, 아니면 감가 모델로 산출합니다.")
     @GetMapping("/valuation")
     public ValuationResponse valuation(@PathVariable String setNumber) {
         return getPriceInsightsUseCase

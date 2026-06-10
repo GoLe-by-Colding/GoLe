@@ -12,6 +12,8 @@ import com.gole.api.listing.application.query.ListingSortOrder;
 import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST). use case 인터페이스에만 의존한다.
  */
+@Tag(name = "Listing", description = "매물 등록·검색·조회·완료·삭제")
 @RestController
 @RequestMapping("/api/v1/listings")
 public class ListingController {
@@ -51,6 +54,7 @@ public class ListingController {
         this.deleteListingUseCase = deleteListingUseCase;
     }
 
+    @Operation(summary = "매물 등록", description = "판매할 레고 상품을 등록합니다. sellerId는 로그인 계정 ID.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ListingResponse create(@Valid @RequestBody CreateListingRequest request) {
@@ -73,7 +77,13 @@ public class ListingController {
         return ListingResponse.from(getListingUseCase.getById(id));
     }
 
-    /** 활성 리스팅 검색/필터/정렬. 파라미터가 없으면 최신순 전체. (요구사항 14) */
+    @Operation(
+            summary = "매물 검색",
+            description = "활성 매물을 검색합니다. 파라미터 없으면 최신순 전체 반환.\n\n"
+                    + "- `query`: 제목·설명 텍스트 검색\n"
+                    + "- `condition`: new_sealed | used_complete | used_incomplete\n"
+                    + "- `category`: set | parts | minifig | moc\n"
+                    + "- `sort`: NEWEST | PRICE_ASC | PRICE_DESC")
     @GetMapping
     public List<ListingResponse> search(
             @RequestParam(value = "query", required = false) String query,

@@ -7,6 +7,8 @@ import com.gole.api.review.application.port.in.GetSellerReviewsUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase.WriteReviewCommand;
 import com.gole.api.review.domain.model.Review;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 거래 후기 작성 및 셀러 후기/평점 조회. (요구사항 R1, R3, R4)
  */
+@Tag(name = "Review", description = "거래 후기 작성·셀러 후기·평점 조회")
 @RestController
 @RequestMapping("/api/v1")
 public class ReviewController {

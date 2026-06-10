@@ -8,6 +8,7 @@ import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 셀러 샵/팔로우/위시리스트/개인화 피드. (요구사항 16, 17)
  */
+@Tag(name = "Discovery", description = "셀러 샵·팔로우·위시리스트·피드")
 @RestController
 @RequestMapping("/api/v1")
 public class DiscoveryController {

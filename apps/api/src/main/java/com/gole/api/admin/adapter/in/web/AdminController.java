@@ -11,6 +11,8 @@ import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>읽기 전용 운영 뷰는 컬렉션을 직접 집계(read model)하고, 상태 변경(takedown)은
  * 해당 컨텍스트의 인바운드 유스케이스를 통해 도메인 규칙을 거친다.
  */
+@Tag(name = "Admin", description = "관리자 전용 — 대시보드·주문·매물·커뮤니티·회원 관리")
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
@@ -114,6 +117,7 @@ public class AdminController {
     }
 
     /** 매물 강제 내림(모더레이션). 도메인 규칙(진행 중 주문 등)은 유스케이스가 강제한다. */
+    @Operation(summary = "매물 강제 내림", description = "관리자가 매물을 강제 삭제 처리합니다(ADMIN 전용). 진행 중 주문이 있으면 예외.")
     @PostMapping("/listings/{listingId}/takedown")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void takedown(@PathVariable String listingId) {
@@ -151,6 +155,7 @@ public class AdminController {
     }
 
     /** 회원 잠금 토글(로그인 불가 처리 — lockedUntil 을 far-future 로 설정). */
+    @Operation(summary = "회원 잠금", description = "로그인을 indefinitely 차단합니다(ADMIN 전용).")
     @PostMapping("/accounts/{accountId}/lock")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void lockAccount(@PathVariable String accountId) {
@@ -164,6 +169,7 @@ public class AdminController {
     }
 
     /** 회원 잠금 해제. */
+    @Operation(summary = "회원 잠금 해제", description = "잠금 상태인 계정을 복구합니다(ADMIN 전용).")
     @PostMapping("/accounts/{accountId}/unlock")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void unlockAccount(@PathVariable String accountId) {

@@ -1,3 +1,5 @@
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 package com.gole.api.order.adapter.in.web;
 
 import com.gole.api.order.application.port.in.PayOrderUseCase;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <b>재검증</b>하므로, 서명 시크릿 없이도 위조 webhook으로 결제가 확정되지 않는다(안전).
  * 이미 처리됐거나 결제 대기가 아니면 무시하고 200으로 ack한다(PortOne 재시도 방지).
  */
+@Tag(name = "Webhook", description = "결제 웹훅(포트원)")
 @RestController
 @RequestMapping("/api/v1/payments/portone")
 public class PaymentWebhookController {

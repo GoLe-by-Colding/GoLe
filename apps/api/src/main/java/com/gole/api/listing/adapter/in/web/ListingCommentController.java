@@ -6,6 +6,7 @@ import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
 import com.gole.api.notification.application.port.in.NotifyUseCase;
 import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
 import com.gole.api.notification.domain.model.NotificationType;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 매물 문의 댓글(Q&A). 댓글 저장 후 매물 판매자에게 알림을 전송한다(본인 제외, best-effort).
  */
+@Tag(name = "Listing Q@RestControllerA", description = "매물 문의 댓글 조회·작성")
 @RestController
 @RequestMapping("/api/v1/listings/{listingId}/comments")
 public class ListingCommentController {

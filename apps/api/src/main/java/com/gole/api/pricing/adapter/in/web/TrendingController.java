@@ -1,3 +1,5 @@
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 package com.gole.api.pricing.adapter.in.web;
 
 import com.gole.api.pricing.application.port.in.GetTrendingSetsUseCase;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 인기(트렌딩) 세트 랭킹. (백로그 13.4)
  */
+@Tag(name = "Trending", description = "인기 세트 랭킹(Redis 캐싱)")
 @RestController
 @RequestMapping("/api/v1/pricing/trending")
 public class TrendingController {

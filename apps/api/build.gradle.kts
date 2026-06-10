@@ -52,6 +52,9 @@ dependencies {
     // 객체 스토리지(MinIO, S3 호환). AWS SDK v2 S3 클라이언트.
     implementation("software.amazon.awssdk:s3")
 
+    // Swagger / OpenAPI 문서. /swagger-ui.html, /v3/api-docs
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

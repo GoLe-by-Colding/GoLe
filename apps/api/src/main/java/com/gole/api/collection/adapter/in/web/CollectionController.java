@@ -6,6 +6,7 @@ import com.gole.api.collection.adapter.in.web.CollectionDtos.EstimateResponse;
 import com.gole.api.collection.application.port.in.EstimateCollectionValueUseCase;
 import com.gole.api.collection.application.port.in.ManageCollectionUseCase;
 import com.gole.api.collection.application.port.in.ManageCollectionUseCase.AddCommand;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 사용자 컬렉션 관리/추정가. (요구사항 11)
  */
+@Tag(name = "Collection", description = "보유·희망 컬렉션 관리")
 @RestController
 @RequestMapping("/api/v1/collections")
 public class CollectionController {

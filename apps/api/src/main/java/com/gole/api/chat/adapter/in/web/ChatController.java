@@ -6,6 +6,8 @@ import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
 import com.gole.api.chat.domain.model.ChatMessage;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
@@ -36,6 +38,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /**
  * 채팅 REST API. 방 생성/조회 + 메시지 전송 + SSE 스트림(Redis Pub/Sub).
  */
+@Tag(name = "Chat", description = "실시간 채팅(SSE) — 방 관리·메시지 송수신")
 @RestController
 @RequestMapping("/api/v1/chat")
 public class ChatController {
@@ -62,6 +65,7 @@ public class ChatController {
         this.listenerContainer = listenerContainer;
     }
 
+    @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
     @PostMapping("/rooms")
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req) {
@@ -103,6 +107,10 @@ public class ChatController {
         return MessageResponse.from(saved);
     }
 
+    @Operation(
+            summary = "실시간 메시지 SSE 스트림",
+            description = "Server-Sent Events로 채팅방의 새 메시지를 실시간 수신합니다. "
+                    + "이벤트 이름: `message`, 데이터: JSON `{id, senderId, content, sentAt}`")
     @GetMapping(value = "/rooms/{roomId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String roomId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);

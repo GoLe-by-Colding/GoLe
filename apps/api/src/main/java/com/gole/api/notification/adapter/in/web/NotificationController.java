@@ -1,3 +1,5 @@
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 package com.gole.api.notification.adapter.in.web;
 
 import com.gole.api.notification.application.port.in.GetNotificationsUseCase;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 사용자 알림 조회/읽음. (알림 스펙 N2~N5)
  */
+@Tag(name = "Notification", description = "알림 목록·읽음 처리")
 @RestController
 @RequestMapping("/api/v1/users/{userId}/notifications")
 public class NotificationController {

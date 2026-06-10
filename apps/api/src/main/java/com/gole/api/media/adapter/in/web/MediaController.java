@@ -1,3 +1,6 @@
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 package com.gole.api.media.adapter.in.web;
 
 import com.gole.api.media.application.port.in.LoadImageUseCase;
@@ -25,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * Inbound 어댑터(REST): 이미지 업로드 및 공개 스트리밍 조회. (요구사항 M1, M2)
  */
+@Tag(name = "Media", description = "이미지 업로드(MinIO)·스트리밍 조회")
 @RestController
 @RequestMapping("/api/v1/media")
 public class MediaController {
@@ -40,6 +44,7 @@ public class MediaController {
         this.loadImageUseCase = loadImageUseCase;
     }
 
+    @Operation(summary = "이미지 단일 업로드", description = "이미지 파일을 MinIO에 업로드하고 공개 URL을 반환합니다. Content-Type: multipart/form-data")
     @PostMapping("/images")
     @ResponseStatus(HttpStatus.CREATED)
     public UploadResponse upload(@RequestParam("file") MultipartFile file) {

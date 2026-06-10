@@ -12,6 +12,8 @@ import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase.PublishPostCommand;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 커뮤니티 피드/게시글/댓글/좋아요. (요구사항 12)
  */
+@Tag(name = "Community", description = "커뮤니티 피드·게시글·댓글·좋아요")
 @RestController
 @RequestMapping("/api/v1/community/posts")
 public class CommunityController {

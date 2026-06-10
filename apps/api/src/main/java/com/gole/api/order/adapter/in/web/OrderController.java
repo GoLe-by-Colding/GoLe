@@ -7,6 +7,8 @@ import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST): 주문 라이프사이클. (요구사항 7, 13)
  */
+@Tag(name = "Order", description = "주문 생성·결제·구매확정·환불·조회")
 @RestController
 @RequestMapping("/api/v1/orders")
 public class OrderController {
