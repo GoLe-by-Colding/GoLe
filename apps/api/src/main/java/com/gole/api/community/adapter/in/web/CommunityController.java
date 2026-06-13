@@ -2,10 +2,10 @@ package com.gole.api.community.adapter.in.web;
 
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentResponse;
+import com.gole.api.community.adapter.in.web.CommunityDtos.EditPostRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.LikeRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.PostResponse;
 import com.gole.api.community.adapter.in.web.CommunityDtos.PublishPostRequest;
-import com.gole.api.community.adapter.in.web.CommunityDtos.EditPostRequest;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase.CommentCommand;
 import com.gole.api.community.application.port.in.DeletePostUseCase;
