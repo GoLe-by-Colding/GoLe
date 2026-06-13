@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "@entities/user";
 import { NotificationBell } from "@features/notification-bell";
 import { Button, Container, LinkButton, Logo } from "@shared/ui";
+import { HeaderSearch } from "./header-search";
 
 const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/", label: "홈" },
@@ -69,7 +70,9 @@ export function SiteHeader() {
               );
             })}
           </nav>
-          <div className="flex-1" />
+          <div className="flex flex-1 justify-center px-4 max-md:hidden">
+            <HeaderSearch />
+          </div>
           <div className="flex items-center gap-2 max-sm:hidden">
             {session ? (
               <div className="inline-flex items-center gap-2">
@@ -126,6 +129,9 @@ export function SiteHeader() {
         {/* 모바일 메뉴 패널 */}
         {menuOpen ? (
           <div id="mobile-menu" className="flex flex-col gap-1 pb-4 sm:hidden">
+            <div className="px-1 pb-3">
+              <HeaderSearch fullWidth onSubmitted={() => setMenuOpen(false)} />
+            </div>
             <nav className="flex flex-col">
               {NAV_ITEMS.map((item) => {
                 const active = isActive(item.href);
