@@ -43,5 +43,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // 백엔드 미기동 시 정적 경로만 반환
   }
 
-  return [...staticRoutes, ...listingRoutes];
+  // 공개 커뮤니티 게시글 상세 URL(최대 100개, 실패 시 생략).
+  let communityRoutes: MetadataRoute.Sitemap = [];
+  try {
+    const res = await fetch(`${env.apiBaseUrl}/api/v1/community/posts`, {
+      next: { revalidate: 3600 },
+    });
+    if (res.ok) {
+      const posts = (await res.json()) as ReadonlyArray<{ id: string; createdAt?: string }>;
+      communityRoutes = posts.slice(0, 100).map((p) => ({
+        url: `${env.siteUrl}/community/${p.id}`,
+        lastModified: p.createdAt ? new Date(p.createdAt) : now,
+        changeFrequency: "weekly" as const,
+        priority: 0.5,
+      }));
+    }
+  } catch {
+    // 백엔드 미기동 시 생략
+  }
+
+  return [...staticRoutes, ...listingRoutes, ...communityRoutes];
 }

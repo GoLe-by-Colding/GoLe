@@ -15,8 +15,8 @@ public final class Post {
 
     private final String id;
     private final String authorId;
-    private final String content;
-    private final List<String> imageUrls;
+    private String content;
+    private List<String> imageUrls;
     private final PostType type;
     private final Instant createdAt;
     private final Set<String> likedBy;
@@ -62,6 +62,12 @@ public final class Post {
             throw new DuplicateLikeException();
         }
         likedBy.add(userId);
+    }
+
+    /** 본문/이미지 수정(작성자). 권한 검증은 애플리케이션 서비스에서 수행한다. */
+    public void edit(String newContent, List<String> newImageUrls) {
+        this.content = Objects.requireNonNull(newContent, "content");
+        this.imageUrls = newImageUrls == null ? List.of() : List.copyOf(newImageUrls);
     }
 
     /** 삭제(요구사항 12.7). */

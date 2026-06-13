@@ -11,6 +11,7 @@ import {
 import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
+import { PostAuthorActions } from "@features/manage-post";
 import { Badge, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
 
 export interface CommunityPostPageProps {
@@ -87,6 +88,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
             {POST_TOPIC_LABEL[post.type]}
           </Badge>
         </div>
+        <PostAuthorActions post={post} onUpdated={setPost} />
         {cover !== undefined ? (
           <Card padded={false} className="overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}

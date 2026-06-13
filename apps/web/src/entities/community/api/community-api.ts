@@ -48,3 +48,21 @@ export function commentOnPost(postId: string, authorId: string, content: string)
     body: { authorId, content },
   });
 }
+
+export interface EditPostInput {
+  readonly requesterId: string;
+  readonly content: string;
+  readonly imageUrls: readonly string[];
+}
+
+/** 게시글 본문/이미지 수정(작성자 본인). */
+export function editPost(postId: string, input: EditPostInput): Promise<Post> {
+  return apiRequest<Post>(`${BASE}/${postId}`, { method: "PUT", body: input });
+}
+
+/** 게시글 삭제(작성자 본인). */
+export function deletePost(postId: string, requesterId: string): Promise<void> {
+  return apiRequest<void>(`${BASE}/${postId}?requesterId=${encodeURIComponent(requesterId)}`, {
+    method: "DELETE",
+  });
+}

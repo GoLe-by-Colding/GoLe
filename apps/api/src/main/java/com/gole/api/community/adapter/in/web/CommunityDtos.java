@@ -23,6 +23,14 @@ public final class CommunityDtos {
 
     public record LikeRequest(@NotBlank String userId) {}
 
+    public record EditPostRequest(
+            @NotBlank String requesterId, @NotBlank String content, List<@NotBlank String> imageUrls) {
+
+        public List<String> imageUrls() {
+            return imageUrls == null ? List.of() : imageUrls;
+        }
+    }
+
     public record PostResponse(
             String id,
             String authorId,

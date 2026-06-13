@@ -7,5 +7,7 @@ export {
   publishPost,
   likePost,
   commentOnPost,
+  editPost,
+  deletePost,
 } from "./api/community-api";
-export type { PublishPostInput } from "./api/community-api";
+export type { PublishPostInput, EditPostInput } from "./api/community-api";

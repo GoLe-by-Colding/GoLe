@@ -5,9 +5,12 @@ import com.gole.api.community.adapter.in.web.CommunityDtos.CommentResponse;
 import com.gole.api.community.adapter.in.web.CommunityDtos.LikeRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.PostResponse;
 import com.gole.api.community.adapter.in.web.CommunityDtos.PublishPostRequest;
+import com.gole.api.community.adapter.in.web.CommunityDtos.EditPostRequest;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase.CommentCommand;
 import com.gole.api.community.application.port.in.DeletePostUseCase;
+import com.gole.api.community.application.port.in.EditPostUseCase;
+import com.gole.api.community.application.port.in.EditPostUseCase.EditPostCommand;
 import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,18 +43,21 @@ public class CommunityController {
     private final LikePostUseCase likePostUseCase;
     private final GetFeedUseCase getFeedUseCase;
     private final DeletePostUseCase deletePostUseCase;
+    private final EditPostUseCase editPostUseCase;
 
     public CommunityController(
             PublishPostUseCase publishPostUseCase,
             CommentOnPostUseCase commentOnPostUseCase,
             LikePostUseCase likePostUseCase,
             GetFeedUseCase getFeedUseCase,
-            DeletePostUseCase deletePostUseCase) {
+            DeletePostUseCase deletePostUseCase,
+            EditPostUseCase editPostUseCase) {
         this.publishPostUseCase = publishPostUseCase;
         this.commentOnPostUseCase = commentOnPostUseCase;
         this.likePostUseCase = likePostUseCase;
         this.getFeedUseCase = getFeedUseCase;
         this.deletePostUseCase = deletePostUseCase;
+        this.editPostUseCase = editPostUseCase;
     }
 
     @GetMapping
@@ -92,6 +99,13 @@ public class CommunityController {
                 .reduce((first, second) -> second)
                 .map(CommentResponse::from)
                 .orElseThrow();
+    }
+
+    @PutMapping("/{postId}")
+    public PostResponse edit(@PathVariable String postId, @Valid @RequestBody EditPostRequest request) {
+        editPostUseCase.edit(
+                new EditPostCommand(postId, request.requesterId(), request.content(), request.imageUrls()));
+        return PostResponse.from(getFeedUseCase.getPost(postId));
     }
 
     @DeleteMapping("/{postId}")

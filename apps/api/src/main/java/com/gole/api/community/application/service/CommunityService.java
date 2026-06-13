@@ -3,6 +3,7 @@ package com.gole.api.community.application.service;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase;
 import com.gole.api.community.application.port.in.DeletePostUseCase;
+import com.gole.api.community.application.port.in.EditPostUseCase;
 import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
@@ -23,7 +24,12 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CommunityService
-        implements PublishPostUseCase, CommentOnPostUseCase, LikePostUseCase, GetFeedUseCase, DeletePostUseCase {
+        implements PublishPostUseCase,
+                CommentOnPostUseCase,
+                LikePostUseCase,
+                GetFeedUseCase,
+                DeletePostUseCase,
+                EditPostUseCase {
 
     private final PostRepositoryPort postRepository;
     private final CommentRepositoryPort commentRepository;
@@ -98,6 +104,16 @@ public class CommunityService
             throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can delete this post");
         }
         post.delete();
+        postRepository.save(post);
+    }
+
+    @Override
+    public void edit(EditPostCommand command) {
+        Post post = requirePublished(command.postId());
+        if (!post.getAuthorId().equals(command.requesterId())) {
+            throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
+        }
+        post.edit(command.content(), command.imageUrls());
         postRepository.save(post);
     }
 
