@@ -28,7 +28,8 @@ class PaymentWebhookControllerTest {
         when(payments.pay("order-1"))
                 .thenThrow(new PaymentGatewayUnavailableException("order-1", new IllegalStateException("timeout")));
 
-        assertThatThrownBy(() -> controller.webhook(Map.of("data", Map.of("paymentId", "order-1"))))
+        assertThatThrownBy(() ->
+                        controller.webhook(Map.of("type", "Transaction.Paid", "data", Map.of("paymentId", "order-1"))))
                 .isInstanceOf(PaymentGatewayUnavailableException.class);
 
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
@@ -39,7 +40,7 @@ class PaymentWebhookControllerTest {
     void verifiesPaymentByPaymentId() {
         when(payments.pay("order-2")).thenReturn(OrderStatus.FUNDS_HELD);
 
-        controller.webhook(Map.of("data", Map.of("paymentId", "order-2")));
+        controller.webhook(Map.of("type", "Transaction.Paid", "data", Map.of("paymentId", "order-2")));
 
         verify(payments).pay("order-2");
     }
@@ -51,5 +52,14 @@ class PaymentWebhookControllerTest {
 
         verify(refunds).confirmRefund("order-3");
         verify(payments, never()).pay("order-3");
+    }
+
+    @Test
+    @DisplayName("알 수 없는 이벤트는 PG 조회 없이 ack한다")
+    void ignoresUnsupportedEvent() {
+        controller.webhook(Map.of("type", "Unknown.Event", "data", Map.of("paymentId", "order-4")));
+
+        verify(payments, never()).pay("order-4");
+        verify(refunds, never()).confirmRefund("order-4");
     }
 }

@@ -53,7 +53,7 @@ public class PaymentWebhookController {
     @ResponseStatus(HttpStatus.OK)
     public void webhook(@RequestBody(required = false) Map<String, Object> payload) {
         String paymentId = extractPaymentId(payload);
-        if (paymentId == null || paymentId.isBlank()) {
+        if (paymentId == null || paymentId.isBlank() || paymentId.length() > 100) {
             log.warn("[PortOne webhook] paymentId 없음 payloadKeys={}", payload == null ? "[]" : payload.keySet());
             operationalEventPublisher.publish(new OperationalEvent(
                     Category.PAYMENT,
@@ -72,9 +72,11 @@ public class PaymentWebhookController {
             } else if ("Transaction.PartialCancelled".equals(eventType)
                     || "Transaction.CancelPending".equals(eventType)) {
                 log.info("[PortOne webhook] 환불 진행 이벤트 ack orderId={} type={}", paymentId, eventType);
-            } else {
+            } else if ("Transaction.Paid".equals(eventType) || "Transaction.Failed".equals(eventType)) {
                 payOrderUseCase.pay(paymentId); // PortOne에 재검증 후 funds-held 전이
                 log.info("[PortOne webhook] 결제 반영 완료 orderId={} type={}", paymentId, eventType);
+            } else {
+                log.info("[PortOne webhook] 지원하지 않는 이벤트 ack orderId={} type={}", paymentId, eventType);
             }
         } catch (PaymentGatewayUnavailableException ex) {
             // 503으로 응답해야 PortOne이 웹훅을 재시도한다. 주문/매물 상태는 pay()에서 변경되기 전이다.
