@@ -16,6 +16,7 @@ import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
 import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
+import com.gole.api.account.domain.exception.PasswordTooLongException;
 import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
@@ -25,6 +26,7 @@ import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.VerificationCode;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalSignal;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -45,6 +47,7 @@ public class AccountService
                 GetCurrentSessionUseCase {
 
     private static final int MIN_PASSWORD_LENGTH = 8; // 요구사항 1.3
+    private static final int MAX_PASSWORD_BYTES = 72; // BCrypt 입력 한계
     private static final Duration SESSION_TTL = Duration.ofDays(7);
 
     private final AccountRepositoryPort accountRepository;
@@ -87,6 +90,9 @@ public class AccountService
         // 요구사항 1.3: 비밀번호 길이 검증
         if (command.rawPassword() == null || command.rawPassword().length() < MIN_PASSWORD_LENGTH) {
             throw new WeakPasswordException();
+        }
+        if (utf8Length(command.rawPassword()) > MAX_PASSWORD_BYTES) {
+            throw new PasswordTooLongException();
         }
         // 요구사항 1.2: 이메일 중복 거부
         if (accountRepository.existsByEmail(email)) {
@@ -138,6 +144,9 @@ public class AccountService
     @Override
     public SignInResult signIn(SignInCommand command) {
         Email email = new Email(command.email());
+        if (command.rawPassword() == null || utf8Length(command.rawPassword()) > MAX_PASSWORD_BYTES) {
+            throw new InvalidCredentialsException();
+        }
         Account account = accountRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
         Instant now = Instant.now(clock);
@@ -189,5 +198,9 @@ public class AccountService
                 .filter(account -> !account.isSuspended())
                 .map(account ->
                         new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
+    }
+
+    private static int utf8Length(String value) {
+        return value.getBytes(StandardCharsets.UTF_8).length;
     }
 }

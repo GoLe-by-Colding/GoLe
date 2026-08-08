@@ -14,7 +14,7 @@ public record Email(String value) {
             throw new IllegalArgumentException("email must not be null");
         }
         value = value.trim().toLowerCase();
-        if (!PATTERN.matcher(value).matches()) {
+        if (value.length() > 254 || !PATTERN.matcher(value).matches()) {
             throw new IllegalArgumentException("invalid email format");
         }
     }

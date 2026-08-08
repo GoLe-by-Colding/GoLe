@@ -18,6 +18,7 @@ import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.AccountSuspendedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
+import com.gole.api.account.domain.exception.PasswordTooLongException;
 import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
@@ -108,6 +109,20 @@ class AccountServiceTest {
     void register_rejectsShortPassword() {
         assertThatThrownBy(() -> service.register(new RegisterAccountCommand("a@b.com", "short")))
                 .isInstanceOf(WeakPasswordException.class);
+    }
+
+    @Test
+    void register_rejectsPasswordBeyondBcryptByteLimit() {
+        assertThatThrownBy(() -> service.register(new RegisterAccountCommand("a@b.com", "가".repeat(25))))
+                .isInstanceOf(PasswordTooLongException.class);
+    }
+
+    @Test
+    void signIn_rejectsOversizedPasswordAsInvalidCredentials() {
+        service.register(new RegisterAccountCommand("a@b.com", "password1"));
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("a@b.com", "x".repeat(73))))
+                .isInstanceOf(InvalidCredentialsException.class);
     }
 
     @Test
