@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { TrendingSet } from "@entities/pricing";
 import { Badge, ResilientImage, Text } from "@shared/ui";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, thumbnailUrl } from "@shared/lib";
 
 export interface TrendingSetsProps {
   readonly items: readonly TrendingSet[];
@@ -45,7 +45,7 @@ export function TrendingSets({ items }: TrendingSetsProps) {
             </span>
             {set.imageUrl !== null ? (
               <ResilientImage
-                src={set.imageUrl}
+                src={thumbnailUrl(set.imageUrl, 160)}
                 alt={set.name}
                 className="h-12 w-12 shrink-0 rounded-xl border border-neutral-200/60 object-cover"
               />

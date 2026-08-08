@@ -5,9 +5,11 @@
  * 그대로 반환한다. 서버는 미지원 포맷이면 원본을 제공하므로 안전하다.
  */
 export function thumbnailUrl(url: string, width: number): string {
-  if (!url.includes("/api/v1/media/")) {
-    return url;
+  const resolvedUrl = url.startsWith("/api/") ? `${env.apiBaseUrl}${url}` : url;
+  if (!resolvedUrl.includes("/api/v1/media/")) {
+    return resolvedUrl;
   }
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}w=${width}`;
+  const separator = resolvedUrl.includes("?") ? "&" : "?";
+  return `${resolvedUrl}${separator}w=${width}`;
 }
+import { env } from "@shared/config";
