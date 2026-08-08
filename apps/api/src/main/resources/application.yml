@@ -88,7 +88,7 @@ management:
 
 logging:
   level:
-    com.gole.api: DEBUG
+    com.gole.api: ${GOLE_LOG_LEVEL:INFO}
 
 # 시드 데이터: 각 컬렉션이 비어 있을 때만 1회 적재(멱등). 테스트에서는 false로 비활성화한다.
 gole:
