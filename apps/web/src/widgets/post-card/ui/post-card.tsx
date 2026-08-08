@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { POST_TOPIC_LABEL, type Post } from "@entities/community";
 import { LikeButton } from "@features/like-post";
-import { Card } from "@shared/ui";
+import { Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface PostCardProps {
@@ -17,12 +17,12 @@ export function PostCard({ post }: PostCardProps) {
     <Card padded={false} className="flex flex-col">
       {cover !== undefined ? (
         <Link href={`/community/${post.id}`} className="relative block overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <MediaImage
             className="aspect-square w-full bg-neutral-100 object-cover"
             src={thumbnailUrl(cover, 480)}
             alt=""
             loading="lazy"
+            fallback="이미지 준비 중"
           />
           <span
             className={`absolute right-3 top-3 rounded-md border px-2.5 py-1 text-xs font-bold ${

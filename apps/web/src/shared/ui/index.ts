@@ -15,6 +15,9 @@ export type { SkeletonProps } from "./skeleton";
 export { LineChart } from "./line-chart";
 export type { LineChartProps, LineChartPoint } from "./line-chart";
 
+export { MediaImage } from "./media-image";
+export type { MediaImageProps } from "./media-image";
+
 export { BackButton } from "./back-button";
 export type { BackButtonProps } from "./back-button";
 

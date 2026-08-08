@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TrendingSet } from "@entities/pricing";
-import { Badge, Text } from "@shared/ui";
+import { Badge, MediaImage, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
 export interface TrendingSetsProps {
@@ -40,21 +40,13 @@ export function TrendingSets({ items }: TrendingSetsProps) {
             >
               {index + 1}
             </span>
-            {set.imageUrl !== null ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={set.imageUrl}
-                alt={set.name}
-                className="h-12 w-12 shrink-0 rounded-md border border-neutral-200 object-cover"
-              />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-neutral-200 bg-neutral-50 text-[10px] font-bold tracking-wide text-neutral-400"
-              >
-                SET
-              </span>
-            )}
+            <MediaImage
+              src={set.imageUrl}
+              alt={set.name}
+              className="h-12 w-12 shrink-0 rounded-md border border-neutral-200 object-cover"
+              fallback="SET"
+              fallbackClassName="text-[10px] tracking-wide"
+            />
             <div className="flex min-w-0 flex-col gap-0.5">
               <Text weight="medium" className="truncate">
                 {set.name}

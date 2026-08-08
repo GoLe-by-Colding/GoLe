@@ -1,4 +1,4 @@
-import { Badge, Card } from "@shared/ui";
+import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
@@ -11,23 +11,19 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="lego-set-card">
       <div className="aspect-[4/3] overflow-hidden bg-neutral-50">
-        {set.imageUrl === null ? (
-          <div
-            className="flex h-full w-full flex-col items-center justify-center gap-2 bg-neutral-50 font-bold text-neutral-400"
-            aria-hidden="true"
-          >
-            <span className="text-sm tracking-[0.2em]">SET</span>
-            <span className="font-mono text-xs font-medium">#{set.setNumber}</span>
-          </div>
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbnailUrl(set.imageUrl, 480)}
-            alt={set.name}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        )}
+        <MediaImage
+          src={set.imageUrl === null ? null : thumbnailUrl(set.imageUrl, 480)}
+          alt={set.name}
+          loading="lazy"
+          className="h-full w-full object-cover"
+          fallback={
+            <>
+              <span className="text-sm tracking-[0.2em]">SET</span>
+              <span className="font-mono text-xs font-medium">#{set.setNumber}</span>
+            </>
+          }
+          fallbackClassName="flex-col gap-2 font-bold"
+        />
       </div>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">

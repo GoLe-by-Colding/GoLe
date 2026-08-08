@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export interface LineChartPoint {
   readonly value: number;
@@ -20,7 +20,7 @@ const H = 280;
 const PAD_T = 18;
 const PAD_B = 26;
 const PAD_L = 6;
-const PAD_R = 64; // 우측 가격 라벨 공간
+const PAD_R = 96; // 원화 단위가 잘리지 않는 우측 가격 라벨 공간
 const GRID_LINES = 4;
 
 interface Pt {
@@ -90,6 +90,7 @@ export function LineChart({
   emptyText = "데이터가 부족해요",
 }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
+  const gradientId = useId().replaceAll(":", "");
 
   if (points.length < 2) {
     return (
@@ -104,9 +105,14 @@ export function LineChart({
 
   const n = points.length;
   const values = points.map((p) => p.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const rawSpan = rawMax - rawMin;
+  const domainPadding =
+    rawSpan === 0 ? Math.max(Math.abs(rawMax) * 0.05, 1) : Math.max(rawSpan * 0.08, 1);
+  const min = rawMin - domainPadding;
+  const max = rawMax + domainPadding;
+  const span = max - min;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
@@ -133,24 +139,47 @@ export function LineChart({
 
   function handleMove(event: React.PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = (event.clientX - rect.left) / rect.width;
+    const viewX = ((event.clientX - rect.left) / rect.width) * W;
+    const ratio = (viewX - PAD_L) / innerW;
     const i = Math.max(0, Math.min(n - 1, Math.round(ratio * (n - 1))));
     setHover(i);
   }
+
+  function handleKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Home") {
+      setHover(0);
+      return;
+    }
+    if (event.key === "End") {
+      setHover(n - 1);
+      return;
+    }
+    const current = hover ?? n - 1;
+    setHover(event.key === "ArrowLeft" ? Math.max(0, current - 1) : Math.min(n - 1, current + 1));
+  }
+
+  const xLabelIndexes = Array.from(new Set([0, Math.floor((n - 1) / 2), n - 1]));
 
   return (
     <div className="relative w-full select-none">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label="시세 추이 차트"
+        aria-label="시세 추이 차트. 좌우 방향키로 날짜별 가격을 확인할 수 있습니다."
+        tabIndex={0}
         onPointerMove={handleMove}
         onPointerLeave={() => setHover(null)}
-        className="block w-full"
+        onFocus={() => setHover(n - 1)}
+        onBlur={() => setHover(null)}
+        onKeyDown={handleKeyDown}
+        className="block w-full touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-brand-100"
         style={{ aspectRatio: `${W} / ${H}` }}
       >
+        <title>날짜별 체결가 추이</title>
         <defs>
-          <linearGradient id="line-chart-area" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
@@ -174,7 +203,7 @@ export function LineChart({
           </g>
         ))}
 
-        <path d={area} fill="url(#line-chart-area)" />
+        <path d={area} fill={`url(#${gradientId})`} />
         <path
           d={line}
           fill="none"
@@ -204,16 +233,26 @@ export function LineChart({
       </svg>
 
       {/* X축 기간 라벨 */}
-      <div className="mt-1 flex justify-between pr-14 text-[11px] text-neutral-400">
-        <span>{points[0]!.label}</span>
-        <span>{points[n - 1]!.label}</span>
+      <div
+        className="mt-1 flex justify-between text-[11px] tabular-nums text-neutral-400"
+        style={{
+          paddingLeft: `${(PAD_L / W) * 100}%`,
+          paddingRight: `${(PAD_R / W) * 100}%`,
+        }}
+      >
+        {xLabelIndexes.map((index) => (
+          <span key={index}>{points[index]!.label}</span>
+        ))}
       </div>
 
       {/* 호버 툴팁 */}
       {hp ? (
         <div
-          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift"
-          style={{ left: `${(hover! / (n - 1)) * ((innerW / W) * 100) + (PAD_L / W) * 100}%` }}
+          className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift"
+          style={{
+            left: `clamp(56px, ${(hc!.x / W) * 100}%, calc(100% - 56px))`,
+            top: `${Math.max(0, (hc!.y / H) * 100 - 16)}%`,
+          }}
         >
           <div className="whitespace-nowrap text-sm font-bold text-white">
             {formatValue(hp.value)}
@@ -221,6 +260,9 @@ export function LineChart({
           <div className="whitespace-nowrap text-[11px] text-neutral-400">{hp.label}</div>
         </div>
       ) : null}
+      <span className="sr-only" aria-live="polite">
+        {hp ? `${hp.label}, ${formatValue(hp.value)}` : ""}
+      </span>
     </div>
   );
 }

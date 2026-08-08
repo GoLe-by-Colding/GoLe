@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CONDITION_LABEL, type PricePoint, type PriceValuation } from "@entities/pricing";
-import { Badge, Card, LineChart } from "@shared/ui";
+import { Badge, Card, LineChart, MediaImage } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
 export interface PriceBoardItem {
@@ -126,7 +126,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
             aria-label="정렬"
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 focus-visible:outline-2 focus-visible:outline-brand-400"
+            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 focus-visible:outline-2 focus-visible:outline-brand-400"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -145,22 +145,18 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                 <button
                   type="button"
                   onClick={() => setSelected(item.setNumber)}
+                  aria-pressed={active}
                   className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors ${
                     active ? "bg-brand-50" : "hover:bg-neutral-50"
                   }`}
                 >
-                  {item.imageUrl !== null ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imageUrl}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
-                    />
-                  ) : (
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-neutral-200 bg-neutral-50 text-[9px] font-bold tracking-wide text-neutral-400">
-                      SET
-                    </span>
-                  )}
+                  <MediaImage
+                    src={item.imageUrl}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-md border border-neutral-200 object-cover"
+                    fallback="SET"
+                    fallbackClassName="text-[9px] tracking-wide"
+                  />
                   <span className="flex min-w-0 flex-col">
                     <span
                       className={`truncate text-sm font-semibold ${active ? "text-brand-700" : "text-neutral-900"}`}
@@ -181,14 +177,13 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
       {/* 상세 */}
       <Card padded className="flex flex-col gap-5">
         <div className="flex items-center gap-3">
-          {current.imageUrl !== null ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={current.imageUrl}
-              alt=""
-              className="h-14 w-14 shrink-0 rounded-md border border-neutral-200 object-cover"
-            />
-          ) : null}
+          <MediaImage
+            src={current.imageUrl}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-md border border-neutral-200 object-cover"
+            fallback="SET"
+            fallbackClassName="text-[10px] tracking-wide"
+          />
           <div className="flex flex-col">
             <span className="text-lg font-bold text-neutral-900">{current.name}</span>
             <span className="font-mono text-xs text-neutral-500">
@@ -199,14 +194,14 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
 
         {latest !== null ? (
           <>
-            <div className="flex items-end gap-3">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-3xl font-extrabold tracking-tight text-neutral-900">
                 {formatKrw(latest)}
               </span>
-              <span className="mb-1">
+              <span>
                 <ChangeBadge ratio={ratio} />
               </span>
-              <span className="mb-1 text-xs text-neutral-400">
+              <span className="text-xs text-neutral-400">
                 {PERIODS.find((p) => p.value === period)!.label} 기준
               </span>
             </div>
@@ -218,6 +213,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   key={p.value}
                   type="button"
                   onClick={() => setPeriod(p.value)}
+                  aria-pressed={period === p.value}
                   className={`flex-1 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
                     period === p.value
                       ? "border-brand-600 text-brand-700"
@@ -229,28 +225,31 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               ))}
             </div>
 
-            <LineChart
-              points={series.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
-              formatValue={formatKrw}
-              emptyText="시세 데이터가 부족해요"
-            />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-neutral-900">체결가 추이</span>
+                <span className="text-xs text-neutral-400">차트를 가리켜 날짜별 가격 확인</span>
+              </div>
+              <LineChart
+                points={series.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
+                formatValue={formatKrw}
+                emptyText="시세 데이터가 부족해요"
+              />
+            </div>
 
             {/* 기간 통계 스트립 */}
-            <div className="grid grid-cols-3 gap-3">
+            <dl className="grid grid-cols-3 divide-x divide-neutral-200 border-y border-neutral-200">
               {[
                 { label: "거래량", value: `${series.length}건` },
                 { label: "기간 고가", value: high !== null ? formatKrw(high) : "—" },
                 { label: "기간 저가", value: low !== null ? formatKrw(low) : "—" },
               ].map((s) => (
-                <div
-                  key={s.label}
-                  className="flex flex-col gap-0.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5"
-                >
-                  <span className="text-xs text-neutral-400">{s.label}</span>
-                  <span className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</span>
+                <div key={s.label} className="flex flex-col gap-0.5 px-3 py-3">
+                  <dt className="text-xs text-neutral-400">{s.label}</dt>
+                  <dd className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
 
             {/* 상태별 감가 · 매수/매도 */}
             {current.valuation?.hasData ? (
@@ -272,7 +271,10 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                     </thead>
                     <tbody>
                       {current.valuation.conditions.map((c) => (
-                        <tr key={c.condition} className="border-t border-neutral-100">
+                        <tr
+                          key={c.condition}
+                          className="border-t border-neutral-100 hover:bg-neutral-50"
+                        >
                           <td className="px-3 py-2.5">
                             <div className="flex flex-col gap-0.5">
                               <span className="font-medium text-neutral-900">

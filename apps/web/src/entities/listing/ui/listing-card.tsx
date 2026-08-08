@@ -1,4 +1,4 @@
-import { Badge, Card } from "@shared/ui";
+import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
 import {
@@ -18,16 +18,12 @@ export function ListingCard({ listing }: ListingCardProps) {
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
       <div className="overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <MediaImage
           className="aspect-[4/3] w-full bg-neutral-100 object-cover"
-          src={
-            cover === undefined
-              ? "https://placehold.co/600x400?text=LEGO"
-              : thumbnailUrl(cover, 480)
-          }
+          src={cover === undefined ? null : thumbnailUrl(cover, 480)}
           alt={listing.title}
           loading="lazy"
+          fallback="이미지 준비 중"
         />
       </div>
       <div className="flex flex-col gap-2.5 p-4">
