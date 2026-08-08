@@ -53,7 +53,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
     return (
       <Card padded className="flex flex-col gap-3">
         <Skeleton className="h-5 w-28" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       </Card>
     );
   }
@@ -91,7 +91,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         emptyText="시세 데이터가 부족해요"
       />
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+      <div className="overflow-x-auto rounded-lg border border-neutral-200">
         <table className="w-full min-w-[460px] border-collapse text-sm">
           <thead>
             <tr className="bg-neutral-50 text-xs text-neutral-500">

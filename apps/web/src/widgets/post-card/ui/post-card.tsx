@@ -19,14 +19,16 @@ export function PostCard({ post }: PostCardProps) {
         <Link href={`/community/${post.id}`} className="relative block overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            className="img-zoom w-full aspect-square object-cover bg-neutral-100"
+            className="aspect-square w-full bg-neutral-100 object-cover"
             src={thumbnailUrl(cover, 480)}
             alt=""
             loading="lazy"
           />
           <span
-            className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-bold shadow-sm ${
-              accentTopic ? "bg-accent-500 text-white" : "bg-white/90 text-neutral-800"
+            className={`absolute right-3 top-3 rounded-md border px-2.5 py-1 text-xs font-bold ${
+              accentTopic
+                ? "border-accent-500 bg-accent-500 text-white"
+                : "border-neutral-200 bg-white text-neutral-800"
             }`}
           >
             {topicLabel}
@@ -45,7 +47,7 @@ export function PostCard({ post }: PostCardProps) {
           </div>
           {cover === undefined ? (
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+              className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${
                 accentTopic ? "bg-accent-100 text-accent-700" : "bg-neutral-100 text-neutral-600"
               }`}
             >

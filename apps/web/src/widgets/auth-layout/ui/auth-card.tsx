@@ -10,7 +10,7 @@ export interface AuthCardProps {
 
 export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
   return (
-    <div className="min-h-dvh grid place-items-center px-5 py-8 bg-[radial-gradient(1200px_400px_at_50%_-10%,var(--color-brand-50),transparent)]">
+    <div className="grid min-h-dvh place-items-center bg-brand-50 px-5 py-8">
       <Card padded={false} className="w-full max-w-[420px] p-8 flex flex-col gap-6">
         <BackButton fallbackHref="/" />
         <div className="flex flex-col gap-2 text-center">

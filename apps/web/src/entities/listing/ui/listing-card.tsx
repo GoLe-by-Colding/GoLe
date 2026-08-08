@@ -17,10 +17,10 @@ export function ListingCard({ listing }: ListingCardProps) {
 
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
-      <div className="overflow-hidden rounded-t-2xl">
+      <div className="overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
+          className="aspect-[4/3] w-full bg-neutral-100 object-cover"
           src={
             cover === undefined
               ? "https://placehold.co/600x400?text=LEGO"

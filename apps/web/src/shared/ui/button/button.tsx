@@ -5,20 +5,17 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "accent" | "inve
 export type ButtonSize = "sm" | "md" | "lg";
 
 export const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold leading-none whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
+  "inline-flex items-center justify-center gap-2 rounded-md font-semibold leading-none whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary:
-    "bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-brand hover:from-brand-600 hover:to-brand-800 hover:shadow-[0_6px_20px_rgba(29,78,216,0.4)] hover:-translate-y-px",
+  primary: "bg-brand-600 text-white hover:bg-brand-700",
   secondary:
-    "bg-white text-neutral-900 border border-neutral-200/80 shadow-soft hover:bg-neutral-50 hover:border-neutral-300 hover:shadow-md",
+    "border border-neutral-300 bg-white text-neutral-900 hover:border-neutral-400 hover:bg-neutral-50",
   ghost: "bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
   /* 브릭 골드 — 핵심 CTA 전용 (판매하기, 다크 히어로 위) */
-  accent:
-    "bg-gradient-to-b from-accent-300 to-accent-400 text-neutral-900 shadow-[0_4px_14px_-3px_rgba(234,179,8,0.5)] hover:from-accent-200 hover:to-accent-300 hover:shadow-[0_6px_20px_-3px_rgba(234,179,8,0.6)] hover:-translate-y-px",
+  accent: "bg-accent-400 text-neutral-900 hover:bg-accent-500",
   /* 딥 오션(다크) 배경 위 보조 버튼 */
-  inverse:
-    "bg-white/10 text-white border border-white/20 backdrop-blur-sm hover:bg-white/15 hover:border-white/30",
+  inverse: "border border-white/50 bg-transparent text-white hover:border-white hover:bg-white/10",
 };
 
 export const BUTTON_SIZE: Record<ButtonSize, string> = {

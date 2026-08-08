@@ -5,7 +5,7 @@ import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
-import { Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
+import { Container, Heading, LinkButton, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
 
@@ -51,16 +51,12 @@ async function loadStats(): Promise<{ listings: number; txCount: number }> {
   }
 }
 
-/** 브릭 스터드 3점 + 제목 — GoLe 섹션 헤더 시그니처 */
+/** 절제된 골드 라인과 제목으로 구성한 섹션 헤더. */
 function SectionHeader({ title, aside }: { readonly title: string; readonly aside?: ReactNode }) {
   return (
     <div className="flex items-end justify-between gap-4">
-      <div className="flex flex-col gap-2.5">
-        <span aria-hidden="true" className="flex gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-brand-600" />
-          <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-          <span className="h-1.5 w-1.5 rounded-full bg-accent-400" />
-        </span>
+      <div className="flex flex-col gap-2">
+        <span aria-hidden="true" className="h-0.5 w-8 bg-accent-400" />
         <Heading level={2}>{title}</Heading>
       </div>
       {aside}
@@ -68,32 +64,31 @@ function SectionHeader({ title, aside }: { readonly title: string; readonly asid
   );
 }
 
-/** 시세 마퀴 티커 — 트렌딩 세트의 평균 체결가가 흐른다 (hover 시 일시정지) */
+/** 트렌딩 세트의 평균 체결가를 정적인 가로 목록으로 보여준다. */
 function PriceTicker({ items }: { readonly items: readonly TrendingSet[] }) {
   if (items.length === 0) return null;
-  const doubled = [...items, ...items];
   return (
-    <div className="group relative overflow-hidden border-t border-white/10 bg-brand-950/70 py-3 backdrop-blur-sm">
-      <div className="flex w-max animate-marquee items-center gap-10 pl-10 group-hover:[animation-play-state:paused] motion-reduce:animate-none">
-        {doubled.map((set, i) => (
-          <Link
-            key={`${set.setNumber}-${i}`}
-            href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
-            aria-hidden={i >= items.length ? "true" : undefined}
-            tabIndex={i >= items.length ? -1 : undefined}
-            className="flex items-center gap-2.5 whitespace-nowrap text-sm transition-opacity hover:opacity-80"
-          >
-            <span className="font-mono font-bold text-accent-400">#{set.setNumber}</span>
-            <span className="max-w-[18ch] truncate text-white/70">{set.name}</span>
-            <span className="font-semibold tabular-nums text-white">
-              {formatKrw(set.averagePrice)}
-            </span>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-brand-200">
-              {set.tradeCount.toLocaleString("ko-KR")}건 체결
-            </span>
-          </Link>
-        ))}
-      </div>
+    <div className="overflow-x-auto border-y border-neutral-200 bg-neutral-50 py-3">
+      <Container width="xl">
+        <div className="flex min-w-max items-center gap-8">
+          {items.map((set) => (
+            <Link
+              key={set.setNumber}
+              href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
+              className="flex items-center gap-2.5 whitespace-nowrap text-sm hover:text-brand-700"
+            >
+              <span className="font-mono font-bold text-brand-700">#{set.setNumber}</span>
+              <span className="max-w-[18ch] truncate text-neutral-600">{set.name}</span>
+              <span className="font-semibold tabular-nums text-neutral-900">
+                {formatKrw(set.averagePrice)}
+              </span>
+              <span className="text-xs text-neutral-500">
+                {set.tradeCount.toLocaleString("ko-KR")}건 체결
+              </span>
+            </Link>
+          ))}
+        </div>
+      </Container>
     </div>
   );
 }
@@ -108,48 +103,32 @@ export async function HomePage() {
 
   return (
     <div className="flex flex-col">
-      {/* ── Hero: 딥 오션 (고래가 사는 깊은 바다 + 떠오르는 브릭 골드) ── */}
-      <section className="ocean-surface relative overflow-hidden">
-        {/* 브릭 스터드 패턴 */}
-        <div
-          aria-hidden="true"
-          className="stud-pattern pointer-events-none absolute inset-0 text-white/[0.05]"
-        />
-        {/* 부유하는 고래 브릭 마크 */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-6 top-1/2 -translate-y-[58%] opacity-[0.1] max-lg:hidden motion-safe:animate-float"
-        >
-          <Logo size={400} showWordmark={false} />
-        </div>
-
-        <Container width="xl" className="relative">
-          <div className="flex flex-col gap-7 py-24 max-sm:py-14">
-            <span className="animate-rise inline-flex items-center gap-2 self-start rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-accent-300 backdrop-blur-sm">
-              🐋 깊은 바다에서 건져 올린 브릭
-            </span>
-            <h1 className="animate-rise max-w-[18ch] text-[clamp(2.6rem,6vw,4.25rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white [animation-delay:60ms]">
-              레고를{" "}
-              <span className="bg-gradient-to-r from-accent-300 via-accent-400 to-accent-300 bg-clip-text text-transparent">
-                가장 합리적으로
+      <section className="border-b border-brand-900 bg-brand-950 text-white">
+        <Container width="xl">
+          <div className="grid gap-12 py-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] lg:items-end max-sm:py-14">
+            <div className="flex flex-col gap-7">
+              <span className="self-start border-l-2 border-accent-400 pl-3 text-sm font-semibold text-accent-300">
+                깊은 바다에서 건져 올린 브릭
               </span>
-            </h1>
-            <p className="animate-rise max-w-[44ch] text-lg leading-relaxed text-brand-100/80 [animation-delay:120ms]">
-              체결가 기반 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션.
-              <br className="max-sm:hidden" />
-              흩어져 있던 레고 거래를 한곳에서.
-            </p>
-            <div className="animate-rise mt-3 flex flex-wrap gap-3 [animation-delay:180ms]">
-              <LinkButton href="/search" variant="accent" size="lg">
-                상품 둘러보기
-              </LinkButton>
-              <LinkButton href="/prices" variant="inverse" size="lg">
-                시세 확인하기
-              </LinkButton>
+              <h1 className="max-w-[18ch] text-[clamp(2.6rem,6vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
+                레고를 <span className="text-accent-300">가장 합리적으로</span>
+              </h1>
+              <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
+                체결가 기반 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션.
+                <br className="max-sm:hidden" />
+                흩어져 있던 레고 거래를 한곳에서.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <LinkButton href="/search" variant="accent" size="lg">
+                  상품 둘러보기
+                </LinkButton>
+                <LinkButton href="/prices" variant="inverse" size="lg">
+                  시세 확인하기
+                </LinkButton>
+              </div>
             </div>
 
-            {/* 글래스 스탯 카드 */}
-            <div className="animate-rise mt-8 grid max-w-2xl grid-cols-3 gap-3 [animation-delay:240ms] max-sm:grid-cols-1">
+            <div className="divide-y divide-white/15 border-y border-white/20">
               {[
                 {
                   label: "활성 매물",
@@ -167,11 +146,8 @@ export async function HomePage() {
                 },
                 { label: "거래 방식", value: "직거래 · 택배" },
               ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.07] px-5 py-4 backdrop-blur-md"
-                >
-                  <span className="text-xs font-medium uppercase tracking-wide text-brand-200/70">
+                <div key={stat.label} className="flex items-baseline justify-between gap-4 py-4">
+                  <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
                     {stat.label}
                   </span>
                   <span className="text-lg font-bold tracking-tight text-white">{stat.value}</span>
@@ -181,7 +157,6 @@ export async function HomePage() {
           </div>
         </Container>
 
-        {/* 시세 티커 */}
         <PriceTicker items={trending} />
       </section>
 
@@ -217,10 +192,7 @@ export async function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-16 text-center">
-                <span aria-hidden="true" className="text-4xl">
-                  🧱
-                </span>
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 px-6 py-16 text-center">
                 <Text tone="secondary" weight="medium">
                   표시할 세트가 아직 없어요
                 </Text>
@@ -247,22 +219,17 @@ export async function HomePage() {
             </section>
           ) : null}
 
-          {/* 판매 유도 CTA 밴드 */}
-          <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-600 to-brand-800 px-10 py-12 max-sm:px-6">
-            <div
-              aria-hidden="true"
-              className="stud-pattern pointer-events-none absolute inset-0 text-white/[0.06]"
-            />
-            <div className="relative flex flex-wrap items-center justify-between gap-6">
+          <section className="rounded-lg border border-brand-200 bg-brand-50 px-10 py-12 max-sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-6">
               <div className="flex flex-col gap-2">
-                <h2 className="text-2xl font-extrabold tracking-tight text-white">
+                <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
                   잠자는 브릭, 바다로 보내세요
                 </h2>
-                <p className="text-brand-100/80">
+                <p className="text-neutral-600">
                   사진 5장이면 등록 끝 — 시세 기반 추천가로 빠르게 판매됩니다.
                 </p>
               </div>
-              <LinkButton href="/sell" variant="accent" size="lg">
+              <LinkButton href="/sell" variant="primary" size="lg">
                 판매 시작하기
               </LinkButton>
             </div>

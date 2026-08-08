@@ -6,25 +6,29 @@ import { fetchSocialAuthorizeUrl, fetchSocialProviders } from "@entities/user";
 interface ProviderMeta {
   readonly key: string;
   readonly label: string;
-  readonly className: string;
+  readonly mark: string;
+  readonly markClassName: string;
 }
 
-/** 노출 순서·라벨·브랜드 스타일. 항상 3개를 보여준다(미설정은 비활성). */
+/** 노출 순서와 제공자 식별 마크. 항상 3개를 보여준다(미설정은 비활성). */
 const PROVIDERS: readonly ProviderMeta[] = [
   {
     key: "google",
     label: "Google로 계속하기",
-    className: "bg-white text-neutral-800 border border-neutral-300 hover:bg-neutral-50",
+    mark: "G",
+    markClassName: "border border-neutral-300 bg-white text-neutral-700",
   },
   {
     key: "kakao",
     label: "카카오로 계속하기",
-    className: "bg-[#FEE500] text-[#191600] hover:brightness-95",
+    mark: "K",
+    markClassName: "bg-[#FEE500] text-[#191600]",
   },
   {
     key: "naver",
     label: "네이버로 계속하기",
-    className: "bg-[#03C75A] text-white hover:brightness-95",
+    mark: "N",
+    markClassName: "bg-[#03C75A] text-white",
   },
 ];
 
@@ -80,8 +84,14 @@ export function SocialLoginButtons() {
             disabled={!isEnabled || pending !== undefined}
             onClick={() => start(provider.key)}
             aria-label={isEnabled ? provider.label : `${provider.label} (준비 중)`}
-            className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${provider.className}`}
+            className="relative inline-flex h-12 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-12 text-sm font-semibold text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            <span
+              aria-hidden="true"
+              className={`absolute left-4 grid h-6 w-6 place-items-center rounded-sm text-xs font-bold ${provider.markClassName}`}
+            >
+              {provider.mark}
+            </span>
             {pending === provider.key
               ? "이동 중..."
               : isEnabled

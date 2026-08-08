@@ -14,25 +14,13 @@ const LEGAL: ReadonlyArray<{ readonly href: string; readonly label: string }> = 
 ];
 
 /**
- * 전역 푸터 — 딥 오션(고래가 사는 깊은 바다) 다크 네이비.
- * 브릭 스터드 패턴 + 골드 분수 스트립으로 브랜드 컨셉을 마무리한다.
+ * 전역 푸터 — 브랜드 다크 네이비 단색 표면.
  * 레고 상표 고지(비후원/비승인) + 이용약관/개인정보처리방침 링크 포함.
  */
 export function SiteFooter() {
   return (
-    <footer className="ocean-surface relative mt-20 overflow-hidden text-white">
-      {/* 브릭 코스 스트립 — 수면 위 골드 라인 */}
-      <div
-        aria-hidden="true"
-        className="h-1 bg-gradient-to-r from-brand-500 via-accent-400 to-brand-500"
-      />
-      {/* 스터드 패턴 오버레이 */}
-      <div
-        aria-hidden="true"
-        className="stud-pattern pointer-events-none absolute inset-0 text-white/[0.04]"
-      />
-
-      <Container width="xl" className="relative">
+    <footer className="mt-20 border-t border-brand-800 bg-brand-950 text-white">
+      <Container width="xl">
         <div className="flex flex-col gap-7 py-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <Logo size={30} className="text-lg text-white" accentClassName="text-accent-400" />

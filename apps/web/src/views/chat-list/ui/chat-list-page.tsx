@@ -64,9 +64,9 @@ export function ChatListPage() {
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="flex items-center gap-3 rounded-2xl border border-neutral-100 p-4"
+                className="flex items-center gap-3 rounded-lg border border-neutral-100 p-4"
               >
-                <Skeleton className="h-10 w-10 rounded-xl" />
+                <Skeleton circle className="h-10 w-10" />
                 <div className="flex flex-1 flex-col gap-1.5">
                   <Skeleton className="h-4 w-1/2" />
                   <Skeleton className="h-3 w-1/3" />
@@ -75,10 +75,7 @@ export function ChatListPage() {
             ))}
           </div>
         ) : rooms.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-            <span aria-hidden="true" className="text-3xl">
-              💬
-            </span>
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
             <Text tone="secondary" weight="medium">
               아직 채팅이 없어요
             </Text>
@@ -90,7 +87,7 @@ export function ChatListPage() {
           <div className="grid gap-4 md:grid-cols-[320px_1fr] md:items-start">
             {/* 방 목록 — 모바일에서 방 선택 시 숨김 */}
             <ul
-              className={`flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-200/60 bg-white ${
+              className={`flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white ${
                 selected !== null ? "max-md:hidden" : ""
               }`}
             >
@@ -108,7 +105,7 @@ export function ChatListPage() {
                         active ? "bg-brand-50/60" : ""
                       }`}
                     >
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold text-brand-700">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700">
                         {partnerId.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="flex min-w-0 flex-col gap-0.5">
@@ -130,7 +127,7 @@ export function ChatListPage() {
 
             {/* 대화 — 선택된 방의 ChatPanel */}
             {selected !== null ? (
-              <div className="flex h-[640px] flex-col overflow-hidden rounded-2xl border border-neutral-200/60 bg-white max-md:h-[70vh]">
+              <div className="flex h-[640px] flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white max-md:h-[70vh]">
                 <div className="flex items-center justify-between gap-2 border-b border-neutral-100 px-4 py-3">
                   <button
                     type="button"
@@ -155,7 +152,7 @@ export function ChatListPage() {
                 </div>
               </div>
             ) : (
-              <div className="hidden place-items-center rounded-2xl border border-dashed border-neutral-200 text-center text-sm text-neutral-400 md:grid md:h-[640px]">
+              <div className="hidden place-items-center rounded-lg border border-dashed border-neutral-300 text-center text-sm text-neutral-400 md:grid md:h-[640px]">
                 왼쪽에서 대화를 선택하세요
               </div>
             )}

@@ -9,14 +9,15 @@ export interface LegoSetCardProps {
 
 export function LegoSetCard({ set }: LegoSetCardProps) {
   return (
-    <Card interactive padded={false} className="group flex flex-col" data-testid="lego-set-card">
+    <Card interactive padded={false} className="flex flex-col" data-testid="lego-set-card">
       <div className="aspect-[4/3] overflow-hidden bg-neutral-50">
         {set.imageUrl === null ? (
           <div
-            className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-5xl font-bold text-brand-300"
+            className="flex h-full w-full flex-col items-center justify-center gap-2 bg-neutral-50 font-bold text-neutral-400"
             aria-hidden="true"
           >
-            🧱
+            <span className="text-sm tracking-[0.2em]">SET</span>
+            <span className="font-mono text-xs font-medium">#{set.setNumber}</span>
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
@@ -24,7 +25,7 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
             src={thumbnailUrl(set.imageUrl, 480)}
             alt={set.name}
             loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            className="h-full w-full object-cover"
           />
         )}
       </div>

@@ -94,7 +94,7 @@ export function LineChart({
   if (points.length < 2) {
     return (
       <div
-        className="flex items-center justify-center rounded-xl bg-neutral-50 text-sm text-neutral-400"
+        className="flex items-center justify-center rounded-lg bg-neutral-50 text-sm text-neutral-400"
         style={{ height }}
       >
         {emptyText}

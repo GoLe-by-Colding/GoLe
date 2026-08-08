@@ -10,10 +10,7 @@ export interface TrendingSetsProps {
 export function TrendingSets({ items }: TrendingSetsProps) {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-14 text-center">
-        <span aria-hidden="true" className="text-4xl">
-          📈
-        </span>
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 px-6 py-14 text-center">
         <Text tone="secondary" weight="medium">
           아직 거래 데이터가 충분하지 않아요
         </Text>
@@ -25,19 +22,19 @@ export function TrendingSets({ items }: TrendingSetsProps) {
   }
 
   return (
-    <ol className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200/60 bg-white shadow-soft">
+    <ol className="flex flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">
       {items.map((set, index) => (
         <li key={set.setNumber} className={index > 0 ? "border-t border-neutral-100" : ""}>
           <Link
             href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
-            className="flex items-center gap-4 px-5 py-4 transition-all duration-200 hover:bg-brand-50/40 hover:pl-6"
+            className="flex items-center gap-4 px-5 py-4 hover:bg-neutral-50"
           >
             <span
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-bold tabular-nums ${
                 index === 0
-                  ? "bg-gradient-to-b from-accent-300 to-accent-400 text-accent-900 shadow-[0_2px_8px_-1px_rgba(234,179,8,0.5)]"
+                  ? "bg-accent-100 text-accent-700"
                   : index < 3
-                    ? "bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-brand"
+                    ? "bg-brand-50 text-brand-700"
                     : "bg-neutral-100 text-neutral-500"
               }`}
             >
@@ -48,14 +45,14 @@ export function TrendingSets({ items }: TrendingSetsProps) {
               <img
                 src={set.imageUrl}
                 alt={set.name}
-                className="h-12 w-12 shrink-0 rounded-xl border border-neutral-200/60 object-cover"
+                className="h-12 w-12 shrink-0 rounded-md border border-neutral-200 object-cover"
               />
             ) : (
               <span
                 aria-hidden="true"
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-neutral-50 text-xl"
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-neutral-200 bg-neutral-50 text-[10px] font-bold tracking-wide text-neutral-400"
               >
-                🧱
+                SET
               </span>
             )}
             <div className="flex min-w-0 flex-col gap-0.5">

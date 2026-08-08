@@ -12,7 +12,7 @@ export default function Loading() {
         <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-3">
-              <Skeleton className="aspect-[4/3] w-full rounded-2xl" />
+              <Skeleton className="aspect-[4/3] w-full rounded-lg" />
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-5 w-1/2" />
             </div>

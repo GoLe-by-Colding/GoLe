@@ -38,7 +38,7 @@ export function ChatButton({ listingId, sellerId, available }: ChatButtonProps) 
       </Button>
       {open ? (
         <div
-          className="overflow-hidden rounded-2xl border border-neutral-200/60 bg-white shadow-soft"
+          className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
           style={{ height: 420 }}
         >
           <InlineChatPanel listingId={listingId} myId={session.accountId} sellerId={sellerId} />
@@ -84,8 +84,8 @@ function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
   if (loading) {
     return (
       <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-8 w-3/4 rounded-xl" />
-        <Skeleton className="h-8 w-1/2 rounded-xl" />
+        <Skeleton className="h-8 w-3/4 rounded-lg" />
+        <Skeleton className="h-8 w-1/2 rounded-lg" />
       </div>
     );
   }
@@ -133,7 +133,7 @@ function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
           }}
           placeholder="메시지 입력… (Enter 전송)"
           rows={1}
-          className="flex-1 resize-none rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus-visible:border-brand-400"
+          className="flex-1 resize-none rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus-visible:border-brand-400"
         />
         <Button type="submit" size="sm" disabled={sending || !input.trim()} className="shrink-0">
           전송

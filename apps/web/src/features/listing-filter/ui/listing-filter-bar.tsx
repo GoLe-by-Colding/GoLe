@@ -66,7 +66,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   ].filter(Boolean).length;
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white shadow-soft">
+    <div className="rounded-lg border border-neutral-200 bg-white">
       {/* 상단 바: 검색어 + 토글 버튼 (항상 노출) */}
       <form onSubmit={handleSubmit}>
         <div className="flex items-center gap-2 p-3">
@@ -88,7 +88,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 sm:hidden"
+            className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 sm:hidden"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path
@@ -182,7 +182,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
                 value={values.minPrice}
                 onChange={(e) => update("minPrice", e.target.value)}
                 placeholder="0"
-                className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+                className="h-9 w-full rounded-md border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
               />
             </div>
             <div className="flex flex-1 flex-col gap-1">
@@ -196,7 +196,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
                 value={values.maxPrice}
                 onChange={(e) => update("maxPrice", e.target.value)}
                 placeholder="∞"
-                className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+                className="h-9 w-full rounded-md border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
               />
             </div>
           </div>

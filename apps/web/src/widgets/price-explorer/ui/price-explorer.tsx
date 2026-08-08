@@ -135,7 +135,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             ))}
           </select>
         </div>
-        <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-2xl border border-neutral-200/60 bg-white p-2 shadow-soft max-lg:max-h-none">
+        <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 max-lg:max-h-none">
           {sorted.map((item) => {
             const active = item.setNumber === current.setNumber;
             const itemLatest =
@@ -145,7 +145,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                 <button
                   type="button"
                   onClick={() => setSelected(item.setNumber)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors ${
                     active ? "bg-brand-50" : "hover:bg-neutral-50"
                   }`}
                 >
@@ -157,8 +157,8 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                       className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
                     />
                   ) : (
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-lg">
-                      🧱
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-neutral-200 bg-neutral-50 text-[9px] font-bold tracking-wide text-neutral-400">
+                      SET
                     </span>
                   )}
                   <span className="flex min-w-0 flex-col">
@@ -186,7 +186,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             <img
               src={current.imageUrl}
               alt=""
-              className="h-14 w-14 shrink-0 rounded-xl border border-neutral-200/60 object-cover"
+              className="h-14 w-14 shrink-0 rounded-md border border-neutral-200 object-cover"
             />
           ) : null}
           <div className="flex flex-col">
@@ -212,16 +212,16 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             </div>
 
             {/* 기간 탭 */}
-            <div className="flex gap-1 rounded-xl bg-neutral-100 p-1">
+            <div className="flex border-b border-neutral-200">
               {PERIODS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => setPeriod(p.value)}
-                  className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  className={`flex-1 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
                     period === p.value
-                      ? "bg-white text-brand-700 shadow-soft"
-                      : "text-neutral-500 hover:text-neutral-800"
+                      ? "border-brand-600 text-brand-700"
+                      : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
                   }`}
                 >
                   {p.label}
@@ -244,7 +244,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               ].map((s) => (
                 <div
                   key={s.label}
-                  className="flex flex-col gap-0.5 rounded-xl border border-neutral-200/60 bg-neutral-50 px-3 py-2.5"
+                  className="flex flex-col gap-0.5 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5"
                 >
                   <span className="text-xs text-neutral-400">{s.label}</span>
                   <span className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</span>
@@ -259,7 +259,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   <span className="text-sm font-bold text-neutral-900">상태별 시세</span>
                   <span className="text-xs text-neutral-400">최근 체결가 기준 추정</span>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+                <div className="overflow-x-auto rounded-lg border border-neutral-200">
                   <table className="w-full min-w-[520px] border-collapse text-sm">
                     <thead>
                       <tr className="bg-neutral-50 text-xs text-neutral-500">
@@ -313,7 +313,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             {recent.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-bold text-neutral-900">최근 체결 내역</span>
-                <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200/60">
+                <ul className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
                   {recent.map((p, i) => (
                     <li
                       key={`${p.executedAt}-${i}`}

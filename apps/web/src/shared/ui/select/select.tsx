@@ -10,7 +10,7 @@ export function Select({ invalid = false, className, children, ...rest }: Select
     <select
       aria-invalid={invalid}
       className={cn(
-        "w-full h-11 px-3 rounded-md bg-white text-neutral-900 text-base border transition",
+        "w-full h-11 px-3 rounded-md bg-white text-neutral-900 text-base border transition-colors",
         "hover:border-neutral-400 focus:outline-none focus:ring-2",
         invalid
           ? "border-danger focus:border-danger focus:ring-danger-soft"

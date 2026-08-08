@@ -40,7 +40,7 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
   return (
     <Link
       href={`/shops/${sellerId}`}
-      className="group flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+      className="group flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/40"
     >
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-base font-bold text-brand-700">
         {sellerId.slice(0, 1).toUpperCase()}

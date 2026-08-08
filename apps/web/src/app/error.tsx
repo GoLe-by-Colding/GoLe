@@ -19,7 +19,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[radial-gradient(1200px_500px_at_50%_-10%,var(--color-brand-50),transparent)] px-6">
+    <main className="grid min-h-dvh place-items-center bg-neutral-50 px-6">
       <div className="flex flex-col items-center gap-6 text-center">
         <Logo size={48} showWordmark={false} />
         <div className="flex flex-col gap-2">

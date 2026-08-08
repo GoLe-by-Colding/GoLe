@@ -17,8 +17,10 @@ export function CommunityFeed({ posts }: CommunityFeedProps) {
   const filtered = filter === "all" ? posts : posts.filter((p) => p.type === filter);
 
   function tabClass(active: boolean): string {
-    return `rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-      active ? "bg-brand-600 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+    return `rounded-md border px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+      active
+        ? "border-brand-600 bg-brand-600 text-white"
+        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
     }`;
   }
 
