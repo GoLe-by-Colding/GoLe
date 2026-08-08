@@ -14,6 +14,10 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,9 +27,11 @@ import org.springframework.stereotype.Component;
 public class AccountPersistenceAdapter implements AccountRepositoryPort {
 
     private final AccountMongoRepository repository;
+    private final MongoTemplate mongoTemplate;
 
-    public AccountPersistenceAdapter(AccountMongoRepository repository) {
+    public AccountPersistenceAdapter(AccountMongoRepository repository, MongoTemplate mongoTemplate) {
         this.repository = repository;
+        this.mongoTemplate = mongoTemplate;
     }
 
     @Override
@@ -65,6 +71,14 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     @Override
     public long countByRole(Role role) {
         return repository.countByRole(role.name());
+    }
+
+    @Override
+    public void fenceAdminMutation() {
+        mongoTemplate.upsert(
+                Query.query(Criteria.where("_id").is("admin-role-fence")),
+                new Update().inc("version", 1),
+                "account_admin_fences");
     }
 
     private AccountDocument toDocument(Account account) {

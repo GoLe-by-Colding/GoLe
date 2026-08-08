@@ -29,4 +29,7 @@ public interface AccountRepositoryPort {
 
     /** 해당 권한을 가진 계정 수. 마지막 관리자 보호에 사용한다. (요구사항 6.9) */
     long countByRole(Role role);
+
+    /** 관리자 정지·강등 판단을 다중 인스턴스에서도 직렬화하는 영속성 fence. */
+    default void fenceAdminMutation() {}
 }

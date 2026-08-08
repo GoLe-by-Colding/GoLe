@@ -37,7 +37,7 @@ class AccountAdminServiceTest {
     void setUp() {
         accounts = new InMemoryAccounts();
         sessions = new RecordingSessionStore();
-        service = new AccountAdminService(accounts, sessions);
+        service = new AccountAdminService(accounts, sessions, new AccountAdminTransitionService(accounts));
     }
 
     private Account seed(String id, String email, Role role) {
