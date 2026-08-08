@@ -1,9 +1,11 @@
 package com.gole.api.discovery.adapter.out.persistence;
 
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
+import com.gole.api.discovery.domain.exception.DuplicateWishlistException;
 import com.gole.api.discovery.domain.model.WishlistEntry;
 import com.gole.api.discovery.domain.model.WishlistTargetType;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,7 +28,11 @@ public class WishlistPersistenceAdapter implements WishlistRepositoryPort {
 
     @Override
     public void save(WishlistEntry entry) {
-        repository.save(toDocument(entry));
+        try {
+            repository.save(toDocument(entry));
+        } catch (DuplicateKeyException ex) {
+            throw new DuplicateWishlistException();
+        }
     }
 
     @Override

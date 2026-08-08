@@ -2,6 +2,7 @@ package com.gole.api.report.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -9,6 +10,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 신고 MongoDB 도큐먼트.
  */
 @Document(collection = "reports")
+@CompoundIndex(
+        name = "uq_pending_reporter_target",
+        def = "{'reporterId': 1, 'targetType': 1, 'targetId': 1}",
+        unique = true,
+        partialFilter = "{'status': 'PENDING'}")
 public class ReportDocument {
 
     @Id

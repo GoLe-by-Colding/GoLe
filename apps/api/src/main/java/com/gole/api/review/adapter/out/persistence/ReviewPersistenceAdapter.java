@@ -1,8 +1,10 @@
 package com.gole.api.review.adapter.out.persistence;
 
 import com.gole.api.review.application.port.out.ReviewRepositoryPort;
+import com.gole.api.review.domain.exception.DuplicateReviewException;
 import com.gole.api.review.domain.model.Review;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,8 +21,12 @@ public class ReviewPersistenceAdapter implements ReviewRepositoryPort {
 
     @Override
     public Review save(Review review) {
-        ReviewDocument saved = repository.save(toDocument(review));
-        return toDomain(saved);
+        try {
+            ReviewDocument saved = repository.save(toDocument(review));
+            return toDomain(saved);
+        } catch (DuplicateKeyException ex) {
+            throw new DuplicateReviewException(review.getOrderId());
+        }
     }
 
     @Override

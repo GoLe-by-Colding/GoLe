@@ -1,8 +1,10 @@
 package com.gole.api.discovery.adapter.out.persistence;
 
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
+import com.gole.api.discovery.domain.exception.DuplicateFollowException;
 import com.gole.api.discovery.domain.model.Follow;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,7 +26,11 @@ public class FollowPersistenceAdapter implements FollowRepositoryPort {
 
     @Override
     public void save(Follow follow) {
-        repository.save(toDocument(follow));
+        try {
+            repository.save(toDocument(follow));
+        } catch (DuplicateKeyException ex) {
+            throw new DuplicateFollowException();
+        }
     }
 
     @Override

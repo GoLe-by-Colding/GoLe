@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.out.persistence;
 
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
+import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
@@ -9,6 +10,7 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.VerificationCode;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -33,8 +35,12 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
 
     @Override
     public Account save(Account account) {
-        AccountDocument saved = repository.save(toDocument(account));
-        return toDomain(saved);
+        try {
+            AccountDocument saved = repository.save(toDocument(account));
+            return toDomain(saved);
+        } catch (DuplicateKeyException ex) {
+            throw new EmailAlreadyRegisteredException(account.getEmail().value());
+        }
     }
 
     @Override

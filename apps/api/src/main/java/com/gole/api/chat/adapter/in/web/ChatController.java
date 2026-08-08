@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -86,7 +87,13 @@ public class ChatController {
                 .orElseGet(() -> {
                     ChatRoomDocument doc = new ChatRoomDocument(
                             UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
-                    return RoomResponse.from(roomRepo.save(doc));
+                    try {
+                        return RoomResponse.from(roomRepo.save(doc));
+                    } catch (DuplicateKeyException concurrentCreation) {
+                        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
+                                .map(RoomResponse::from)
+                                .orElseThrow(() -> concurrentCreation);
+                    }
                 });
     }
 

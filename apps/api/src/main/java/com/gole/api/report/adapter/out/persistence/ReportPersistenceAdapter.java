@@ -1,12 +1,14 @@
 package com.gole.api.report.adapter.out.persistence;
 
 import com.gole.api.report.application.port.out.ReportRepositoryPort;
+import com.gole.api.report.domain.exception.DuplicateReportException;
 import com.gole.api.report.domain.model.Report;
 import com.gole.api.report.domain.model.ReportReason;
 import com.gole.api.report.domain.model.ReportStatus;
 import com.gole.api.report.domain.model.ReportTargetType;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -24,8 +26,12 @@ public class ReportPersistenceAdapter implements ReportRepositoryPort {
 
     @Override
     public Report save(Report report) {
-        ReportDocument saved = repository.save(toDocument(report));
-        return toDomain(saved);
+        try {
+            ReportDocument saved = repository.save(toDocument(report));
+            return toDomain(saved);
+        } catch (DuplicateKeyException ex) {
+            throw new DuplicateReportException(report.getTargetId());
+        }
     }
 
     @Override

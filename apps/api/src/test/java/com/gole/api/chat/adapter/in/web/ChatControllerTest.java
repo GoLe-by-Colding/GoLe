@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -68,6 +69,21 @@ class ChatControllerTest {
         assertThatThrownBy(() -> controller.createOrGetRoom(
                         new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("same-user")))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void createRoom_returnsConcurrentWinnerWhenUniqueIndexWinsRace() {
+        ChatRoomDocument winner =
+                new ChatRoomDocument("winner", "listing-1", "real-buyer", "real-seller", Instant.now());
+        when(listings.getById("listing-1")).thenReturn(listing("real-seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1"))
+                .thenReturn(Optional.empty(), Optional.of(winner));
+        when(rooms.save(any(ChatRoomDocument.class))).thenThrow(new DuplicateKeyException("duplicate"));
+
+        var response = controller.createOrGetRoom(
+                new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("real-buyer"));
+
+        assertThat(response.id()).isEqualTo("winner");
     }
 
     @Test
