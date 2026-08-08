@@ -35,7 +35,7 @@ class MediaServiceTest {
 
     @Test
     void upload_storesObject_andReturnsPublicUrl() {
-        StoredImage stored = service.upload(new UploadImageCommand("hello".getBytes(), "image/png", "photo.PNG"));
+        StoredImage stored = service.upload(new UploadImageCommand(pngBytes(), "image/png", "photo.PNG"));
 
         assertThat(stored.key()).startsWith("images/").endsWith(".png");
         assertThat(stored.url()).isEqualTo("https://gole.kscold.com/api/v1/media/" + stored.key());
@@ -58,23 +58,32 @@ class MediaServiceTest {
     @Test
     void upload_rejectsTooLarge() {
         byte[] big = new byte[1_001];
+        big[0] = (byte) 0xFF;
+        big[1] = (byte) 0xD8;
+        big[2] = (byte) 0xFF;
         assertThatThrownBy(() -> service.upload(new UploadImageCommand(big, "image/jpeg", "big.jpg")))
                 .isInstanceOf(ImageTooLargeException.class);
     }
 
     @Test
-    void upload_usesBinExtension_forUnknownImageType() {
-        StoredImage stored = service.upload(new UploadImageCommand("x".getBytes(), "image/tiff", "x.tiff"));
-        assertThat(stored.key()).endsWith(".bin");
+    void upload_rejectsUnknownImageType() {
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand("x".getBytes(), "image/tiff", "x.tiff")))
+                .isInstanceOf(InvalidImageException.class);
+    }
+
+    @Test
+    void upload_rejectsClaimedTypeThatDoesNotMatchBytes() {
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand(pngBytes(), "image/jpeg", "fake.jpg")))
+                .isInstanceOf(InvalidImageException.class);
     }
 
     @Test
     void load_returnsStoredBytes() {
-        StoredImage stored = service.upload(new UploadImageCommand("bytes".getBytes(), "image/webp", "a.webp"));
+        StoredImage stored = service.upload(new UploadImageCommand(webpBytes(), "image/webp", "a.webp"));
 
         LoadedImage loaded = service.load(stored.key());
 
-        assertThat(loaded.content()).isEqualTo("bytes".getBytes());
+        assertThat(loaded.content()).isEqualTo(webpBytes());
         assertThat(loaded.contentType()).isEqualTo("image/webp");
     }
 
@@ -85,7 +94,7 @@ class MediaServiceTest {
 
     @Test
     void loadResized_cachesDerivative_andServesIt() {
-        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+        StoredImage stored = service.upload(new UploadImageCommand(jpegBytes(), "image/jpeg", "a.jpg"));
         processor.result = "thumb".getBytes();
 
         LoadedImage first = service.loadResized(stored.key(), 240);
@@ -102,22 +111,22 @@ class MediaServiceTest {
 
     @Test
     void loadResized_servesOriginal_whenProcessorReturnsEmpty() {
-        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/webp", "a.webp"));
+        StoredImage stored = service.upload(new UploadImageCommand(webpBytes(), "image/webp", "a.webp"));
         processor.result = null; // 디코딩 불가 시뮬레이션
 
         LoadedImage result = service.loadResized(stored.key(), 240);
 
-        assertThat(result.content()).isEqualTo("original".getBytes());
+        assertThat(result.content()).isEqualTo(webpBytes());
         assertThat(storage.objects).doesNotContainKey("derivatives/w240/" + stored.key());
     }
 
     @Test
     void loadResized_servesOriginal_whenWidthOutOfRange() {
-        StoredImage stored = service.upload(new UploadImageCommand("original".getBytes(), "image/jpeg", "a.jpg"));
+        StoredImage stored = service.upload(new UploadImageCommand(jpegBytes(), "image/jpeg", "a.jpg"));
 
         LoadedImage result = service.loadResized(stored.key(), 5); // 범위 밖
 
-        assertThat(result.content()).isEqualTo("original".getBytes());
+        assertThat(result.content()).isEqualTo(jpegBytes());
         assertThat(processor.calls).isZero();
     }
 
@@ -130,6 +139,18 @@ class MediaServiceTest {
             calls++;
             return Optional.ofNullable(result);
         }
+    }
+
+    private static byte[] pngBytes() {
+        return new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01};
+    }
+
+    private static byte[] jpegBytes() {
+        return new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01};
+    }
+
+    private static byte[] webpBytes() {
+        return new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P', 0x01};
     }
 
     private static final class FakeStorage implements ObjectStoragePort {

@@ -64,17 +64,23 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         if (content == null || content.length == 0) {
             throw new InvalidImageException("Uploaded file is empty");
         }
-        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
-            throw new InvalidImageException("Only image content types are allowed");
-        }
         // M1.3: 크기 한도
         if (content.length > maxImageBytes) {
             throw new ImageTooLargeException(maxImageBytes);
         }
 
+        // 브라우저가 보낸 MIME 문자열은 위조할 수 있다. 공개 제공해도 안전한 래스터 형식만
+        // 파일 시그니처로 판별하고, 선언 형식과 실제 형식이 다르면 거부한다.
+        String detectedType = detectContentType(content)
+                .orElseThrow(() -> new InvalidImageException("Only JPEG, PNG, GIF, and WebP images are allowed"));
+        String declaredType = normalizeDeclaredType(contentType);
+        if (!detectedType.equals(declaredType)) {
+            throw new InvalidImageException("Declared image type does not match file content");
+        }
+
         // M1.4: 원본 파일명 미신뢰, 충돌 없는 키 생성
-        String normalizedType = contentType.toLowerCase();
-        String extension = EXTENSION_BY_TYPE.getOrDefault(normalizedType, "bin");
+        String normalizedType = detectedType;
+        String extension = EXTENSION_BY_TYPE.get(normalizedType);
         String key = "images/" + UUID.randomUUID() + "." + extension;
 
         objectStorage.put(key, content, normalizedType);
@@ -114,5 +120,53 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
 
     private String publicUrl(String key) {
         return publicBaseUrl + PUBLIC_PATH_PREFIX + key;
+    }
+
+    private static String normalizeDeclaredType(String contentType) {
+        if (contentType == null) {
+            return "";
+        }
+        String normalized = contentType.toLowerCase().split(";", 2)[0].trim();
+        return "image/jpg".equals(normalized) ? "image/jpeg" : normalized;
+    }
+
+    private static Optional<String> detectContentType(byte[] bytes) {
+        if (startsWith(bytes, 0xFF, 0xD8, 0xFF)) {
+            return Optional.of("image/jpeg");
+        }
+        if (startsWith(bytes, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) {
+            return Optional.of("image/png");
+        }
+        if (asciiAt(bytes, 0, "GIF87a") || asciiAt(bytes, 0, "GIF89a")) {
+            return Optional.of("image/gif");
+        }
+        if (asciiAt(bytes, 0, "RIFF") && asciiAt(bytes, 8, "WEBP")) {
+            return Optional.of("image/webp");
+        }
+        return Optional.empty();
+    }
+
+    private static boolean startsWith(byte[] bytes, int... signature) {
+        if (bytes.length < signature.length) {
+            return false;
+        }
+        for (int i = 0; i < signature.length; i++) {
+            if ((bytes[i] & 0xFF) != signature[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean asciiAt(byte[] bytes, int offset, String signature) {
+        if (bytes.length < offset + signature.length()) {
+            return false;
+        }
+        for (int i = 0; i < signature.length(); i++) {
+            if (bytes[offset + i] != (byte) signature.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

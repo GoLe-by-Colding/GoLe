@@ -101,7 +101,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
             <input
               id={inputId}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp"
               multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
