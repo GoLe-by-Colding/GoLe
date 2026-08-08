@@ -97,7 +97,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition",
+                        "flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                         active
                           ? "bg-brand-50 text-brand-700"
                           : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",

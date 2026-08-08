@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } from "react";
+import { env } from "@shared/config";
 import { cn } from "@shared/lib";
 
 export interface MediaImageProps extends Omit<
@@ -26,15 +27,19 @@ export function MediaImage({
 }: MediaImageProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const unavailable = !src || failedSrc === src;
+  const resolvedSrc =
+    src?.startsWith("/api/") === true && env.publicApiBaseUrl.length > 0
+      ? `${env.publicApiBaseUrl}${src}`
+      : src;
+  const unavailable = !resolvedSrc || failedSrc === resolvedSrc;
 
   useEffect(() => {
     const image = imageRef.current;
-    if (src && image?.complete && image.naturalWidth === 0) {
+    if (resolvedSrc && image?.complete && image.naturalWidth === 0) {
       // SSR 이미지가 hydration 전에 실패하면 error 이벤트가 재생되지 않을 수 있다.
-      setFailedSrc(src);
+      setFailedSrc(resolvedSrc);
     }
-  }, [src]);
+  }, [resolvedSrc]);
 
   if (unavailable) {
     return (
@@ -58,10 +63,10 @@ export function MediaImage({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       ref={imageRef}
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       className={className}
-      onError={() => setFailedSrc(src)}
+      onError={() => setFailedSrc(resolvedSrc)}
       {...rest}
     />
   );

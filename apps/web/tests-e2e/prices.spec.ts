@@ -9,6 +9,11 @@ test.describe("Prices (KREAM-style)", () => {
     // 인터랙티브 차트
     await expect(page.getByRole("img", { name: "시세 추이 차트" }).first()).toBeVisible();
 
+    // API가 주는 상대 미디어 URL도 로컬/운영 환경의 공개 원점에서 정상 로드되어야 한다.
+    const catalogImages = page.locator('img[src*="/api/v1/media/catalog/"]');
+    await expect(catalogImages.first()).toBeVisible();
+    await expect(page.locator('[data-image-fallback="true"]')).toHaveCount(0);
+
     // 상태별 시세(즉시판매/즉시구매) 헤더
     await expect(page.getByText("즉시판매").first()).toBeVisible();
     await expect(page.getByText("즉시구매").first()).toBeVisible();

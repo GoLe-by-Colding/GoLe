@@ -119,7 +119,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       {/* 세트 목록 + 정렬 */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 lg:sticky lg:top-20 lg:self-start">
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-bold text-neutral-900">세트 시세</span>
           <select
@@ -135,7 +135,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             ))}
           </select>
         </div>
-        <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 max-lg:max-h-none">
+        <ol className="flex max-h-[360px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 lg:max-h-[560px]">
           {sorted.map((item) => {
             const active = item.setNumber === current.setNumber;
             const itemLatest =
@@ -146,8 +146,10 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   type="button"
                   onClick={() => setSelected(item.setNumber)}
                   aria-pressed={active}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors ${
-                    active ? "bg-brand-50" : "hover:bg-neutral-50"
+                  className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? "border-brand-200 bg-brand-50"
+                      : "border-transparent hover:bg-neutral-50"
                   }`}
                 >
                   <MediaImage

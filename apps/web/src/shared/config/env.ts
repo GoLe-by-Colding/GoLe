@@ -4,10 +4,20 @@
  */
 interface AppEnv {
   readonly apiBaseUrl: string;
+  /** 브라우저가 이미지처럼 직접 요청하는 공개 API 원점. 운영의 동일 출처는 빈 문자열이다. */
+  readonly publicApiBaseUrl: string;
   readonly siteUrl: string;
   readonly portOneStoreId: string;
   readonly portOneChannelKey: string;
   readonly nodeEnv: "development" | "production" | "test";
+}
+
+function readPublicApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (raw !== undefined && raw.length > 0) {
+    return raw.replace(/\/+$/, "");
+  }
+  return process.env.NODE_ENV === "production" ? "" : "http://localhost:8080";
 }
 
 function readApiBaseUrl(): string {
@@ -50,6 +60,7 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
+  publicApiBaseUrl: readPublicApiBaseUrl(),
   siteUrl: readSiteUrl(),
   portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
   portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",

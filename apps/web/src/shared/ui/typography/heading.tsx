@@ -4,7 +4,7 @@ import { cn } from "@shared/lib";
 export type HeadingLevel = 1 | 2 | 3;
 
 const LEVEL: Record<HeadingLevel, string> = {
-  1: "text-5xl font-bold leading-tight tracking-tight max-sm:text-4xl",
+  1: "text-4xl font-bold leading-tight tracking-tight max-sm:text-3xl",
   2: "text-3xl font-bold leading-tight tracking-tight",
   3: "text-xl font-semibold leading-tight",
 };
