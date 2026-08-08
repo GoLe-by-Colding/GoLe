@@ -4,15 +4,16 @@
   "private": true,
   "description": "GoLe - LEGO Marketplace monorepo",
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
+    "dev:web": "pnpm --filter web dev -p ${GOLE_WEB_PORT:-3010}",
     "build:web": "pnpm --filter web build",
     "test:web": "pnpm --filter web test",
     "e2e:web": "pnpm --filter web e2e",
-    "dev:api": "cd apps/api && ./gradlew bootRun",
+    "dev:api": "cd apps/api && SERVER_PORT=${GOLE_API_PORT:-8090} STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-http://localhost:9000} GOLE_ADMIN_EMAIL=${GOLE_ADMIN_EMAIL:-admin@gole.local} GOLE_ADMIN_PASSWORD=${GOLE_ADMIN_PASSWORD:-gole-admin-1234} ./gradlew bootRun",
     "build:api": "cd apps/api && ./gradlew build",
     "test:api": "cd apps/api && ./gradlew test",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d"
   },
   "engines": {
     "node": ">=22"
