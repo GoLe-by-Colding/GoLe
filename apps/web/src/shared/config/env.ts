@@ -17,7 +17,12 @@ function readApiBaseUrl(): string {
   if (raw !== undefined && raw.length > 0) {
     return raw.replace(/\/+$/, "");
   }
-  // 미설정 시: 서버(SSR)는 절대 URL이 필요하므로 컨테이너 내부 백엔드를 사용하고,
+  // 로컬 개발에서는 브라우저와 SSR 모두 8080의 Spring Boot를 직접 사용한다.
+  // 이 기본값 덕분에 개인 환경 파일이 없어도 요청이 Next.js(3000)의 404로 빠지지 않는다.
+  if (process.env.NODE_ENV !== "production") {
+    return "http://localhost:8080";
+  }
+  // 운영 미설정 시: 서버(SSR)는 동일 컨테이너의 백엔드를 사용하고,
   // 브라우저는 동일 출처 상대경로(nginx가 /api → 백엔드 프록시)를 사용한다.
   if (typeof window === "undefined") {
     return "http://localhost:8080";
@@ -27,10 +32,12 @@ function readApiBaseUrl(): string {
 
 function readSiteUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL;
-  if (raw === undefined || raw.length === 0) {
-    return "https://gole.kscold.com";
+  if (raw !== undefined && raw.length > 0) {
+    return raw.replace(/\/+$/, "");
   }
-  return raw.replace(/\/+$/, "");
+  return process.env.NODE_ENV === "production"
+    ? "https://gole.kscold.com"
+    : "http://localhost:3000";
 }
 
 function readNodeEnv(): AppEnv["nodeEnv"] {
