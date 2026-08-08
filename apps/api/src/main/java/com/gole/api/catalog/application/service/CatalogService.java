@@ -11,6 +11,7 @@ import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
 import com.gole.api.catalog.domain.model.LegoSet;
+import com.gole.api.common.exception.BadRequestException;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +30,7 @@ public class CatalogService
 
     private static final int FEATURED_LIMIT = 12;
     private static final int ADMIN_LIST_LIMIT = 200;
+    private static final int SEARCH_QUERY_MAX_LENGTH = 100;
 
     private final LoadLegoSetPort loadLegoSetPort;
     private final CatalogAdminPort catalogAdminPort;
@@ -68,7 +70,11 @@ public class CatalogService
         if (query == null || query.isBlank()) {
             return List.of();
         }
-        return loadLegoSetPort.searchByNameOrTheme(query.trim());
+        String normalized = query.trim();
+        if (normalized.length() > SEARCH_QUERY_MAX_LENGTH) {
+            throw new BadRequestException("CATALOG_QUERY_TOO_LONG", "검색어는 100자 이하여야 합니다");
+        }
+        return loadLegoSetPort.searchByNameOrTheme(normalized);
     }
 
     @Override

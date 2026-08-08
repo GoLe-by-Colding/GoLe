@@ -9,6 +9,7 @@ import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.common.exception.BadRequestException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,16 @@ class CatalogServiceTest {
                 new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)), new FakeAdminPort());
 
         assertThat(service.search("  ")).isEmpty();
+    }
+
+    @Test
+    void search_rejectsOversizedQueryBeforeRepositoryAccess() {
+        CatalogService service =
+                new CatalogService(new FakeLoadPort(Optional.empty(), List.of(eiffel)), new FakeAdminPort());
+
+        assertThatThrownBy(() -> service.search("x".repeat(101)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("100자");
     }
 
     @Test
