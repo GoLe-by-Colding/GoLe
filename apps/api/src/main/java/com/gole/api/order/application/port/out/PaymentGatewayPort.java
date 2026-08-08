@@ -6,13 +6,20 @@ package com.gole.api.order.application.port.out;
  */
 public interface PaymentGatewayPort {
 
+    enum PaymentVerificationResult {
+        PAID,
+        PENDING,
+        FAILED,
+        REVIEW_REQUIRED
+    }
+
     enum RefundResult {
         SUCCEEDED,
         REQUESTED
     }
 
-    /** 결제 승인(자금 보유). 성공 시 true. */
-    boolean authorize(String orderId, long amount);
+    /** PG 원장을 조회해 결제의 최종/진행 상태를 검증한다. */
+    PaymentVerificationResult verifyPayment(String orderId, long amount);
 
     /** 환불 처리. PG가 비동기 접수만 한 경우 REQUESTED를 반환한다. */
     RefundResult refund(String orderId, long amount);

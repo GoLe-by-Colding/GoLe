@@ -3,6 +3,7 @@ package com.gole.api.admin.adapter.in.web;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ListingRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.MarkSettlementPaidRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
+import com.gole.api.admin.adapter.in.web.AdminDtos.PaymentReconciliationResponse;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReportRow;
@@ -16,6 +17,7 @@ import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
+import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.exception.ReportAlreadyHandledException;
 import com.gole.api.report.domain.model.ReportStatus;
@@ -55,6 +57,7 @@ public class AdminModerationController {
     private final ModeratePostUseCase moderatePost;
     private final ManageReportsUseCase manageReports;
     private final ManageSettlementsUseCase manageSettlements;
+    private final PayOrderUseCase payOrders;
     private final RecordAdminActionUseCase audit;
 
     public AdminModerationController(
@@ -63,12 +66,14 @@ public class AdminModerationController {
             ModeratePostUseCase moderatePost,
             ManageReportsUseCase manageReports,
             ManageSettlementsUseCase manageSettlements,
+            PayOrderUseCase payOrders,
             RecordAdminActionUseCase audit) {
         this.readModel = readModel;
         this.moderateListing = moderateListing;
         this.moderatePost = moderatePost;
         this.manageReports = manageReports;
         this.manageSettlements = manageSettlements;
+        this.payOrders = payOrders;
         this.audit = audit;
     }
 
@@ -83,6 +88,14 @@ public class AdminModerationController {
         return readModel.recentOrders(status, query, clamp(limit)).stream()
                 .map(OrderRow::from)
                 .toList();
+    }
+
+    @Operation(summary = "결제 상태 재조정", description = "PortOne 원장을 다시 조회해 결제 대기 주문을 승인·실패·대기 상태로 안전하게 재조정합니다.")
+    @PostMapping("/orders/{orderId}/reconcile-payment")
+    public PaymentReconciliationResponse reconcilePayment(@PathVariable String orderId, HttpServletRequest http) {
+        String status = payOrders.pay(orderId).name();
+        record(http, AdminActionType.ORDER_PAYMENT_RECONCILE, AdminTargetType.ORDER, orderId, status);
+        return new PaymentReconciliationResponse(orderId, status);
     }
 
     @Operation(summary = "정산 원장", description = "판매자 정산 대기·지급 완료 내역을 조회합니다.")

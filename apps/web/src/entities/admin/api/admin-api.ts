@@ -21,6 +21,11 @@ export interface AdminOrder {
   readonly createdAt: string | null;
 }
 
+export interface PaymentReconciliation {
+  readonly orderId: string;
+  readonly status: string;
+}
+
 export interface AdminSettlement {
   readonly orderId: string;
   readonly sellerId: string;
@@ -150,6 +155,13 @@ export function fetchAdminOrders(
   if (status) params.set("status", status);
   if (query?.trim()) params.set("q", query.trim());
   return get<readonly AdminOrder[]>(token, `/api/admin/orders?${params}`);
+}
+
+export function reconcileAdminOrderPayment(
+  token: string,
+  orderId: string,
+): Promise<PaymentReconciliation> {
+  return post<PaymentReconciliation>(token, `/api/admin/orders/${orderId}/reconcile-payment`);
 }
 
 export function fetchAdminSettlements(

@@ -173,6 +173,37 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect.poll(() => markedPaid).toBe(true);
     await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();
   });
+
+  test("결제 대기 주문을 PG 원장과 재조정한다", async ({ page }) => {
+    await page.route("**/api/admin/orders**", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ orderId: "order-payment-1", status: "FUNDS_HELD" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "order-payment-1",
+            status: "PAYMENT_PENDING",
+            amount: 280_000,
+            buyerId: "buyer-1",
+            sellerId: "seller-1",
+            catalogSetNumber: "10307",
+            createdAt: "2026-08-09T01:00:00Z",
+          },
+        ]),
+      });
+    });
+
+    await page.goto("/admin/orders");
+    await expect(page.getByRole("table").getByText("결제대기", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "PG 재확인" }).click();
+    await expect(page.getByRole("table").getByText("자금보유", { exact: true })).toBeVisible();
+  });
 });
 
 test.describe("관리자 API 가드", () => {

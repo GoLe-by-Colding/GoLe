@@ -9,6 +9,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
@@ -146,6 +147,26 @@ class OrderServiceTest {
         assertThat(reservation.released).isFalse();
     }
 
+    @Test
+    void pendingPayment_keepsOrderAndReservationUntilPgFinalizes() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.PENDING));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(reservation.released).isFalse();
+    }
+
+    @Test
+    void finalPaymentFailure_releasesReservation() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.FAILED));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_FAILED);
+        assertThat(reservation.released).isTrue();
+    }
+
     private OrderService serviceWith(PaymentGatewayPort paymentGateway) {
         return new OrderService(
                 orders,
@@ -218,8 +239,25 @@ class OrderServiceTest {
 
     private static final class AlwaysApprovePayment implements PaymentGatewayPort {
         @Override
-        public boolean authorize(String orderId, long amount) {
+        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
+            return PaymentVerificationResult.PAID;
+        }
+
+        @Override
+        public RefundResult refund(String orderId, long amount) {
+            return RefundResult.SUCCEEDED;
+        }
+
+        @Override
+        public boolean isFullyRefunded(String orderId, long amount) {
             return true;
+        }
+    }
+
+    private record FixedVerificationPayment(PaymentVerificationResult result) implements PaymentGatewayPort {
+        @Override
+        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
+            return result;
         }
 
         @Override
@@ -235,7 +273,7 @@ class OrderServiceTest {
 
     private static final class UnavailablePayment implements PaymentGatewayPort {
         @Override
-        public boolean authorize(String orderId, long amount) {
+        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
             throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
         }
 
@@ -254,8 +292,8 @@ class OrderServiceTest {
         private boolean fullyRefunded;
 
         @Override
-        public boolean authorize(String orderId, long amount) {
-            return true;
+        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
+            return PaymentVerificationResult.PAID;
         }
 
         @Override

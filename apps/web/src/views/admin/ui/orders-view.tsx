@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchAdminOrders, type AdminOrder } from "@entities/admin";
+import {
+  fetchAdminOrders,
+  reconcileAdminOrderPayment,
+  type AdminOrder,
+} from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
-import { Badge, Heading, Input, Select, Text } from "@shared/ui";
+import { Badge, Button, Heading, Input, Select, Text } from "@shared/ui";
 import { ORDER_STATUS_LABEL, formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
@@ -29,6 +33,7 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
   // null = 아직 불러오지 않음. 로딩 상태를 파생시켜 effect 안에서 setState를 동기 호출하지 않는다.
   const [rows, setRows] = useState<readonly AdminOrder[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [busyOrder, setBusyOrder] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (token === null) {
@@ -47,6 +52,24 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
     const timer = window.setTimeout(load, 250);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  async function reconcilePayment(orderId: string) {
+    if (token === null) return;
+    setBusyOrder(orderId);
+    setError(undefined);
+    try {
+      const result = await reconcileAdminOrderPayment(token, orderId);
+      setRows((current) =>
+        (current ?? []).map((row) =>
+          row.id === orderId ? { ...row, status: result.status } : row,
+        ),
+      );
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "결제 상태를 다시 확인하지 못했습니다.");
+    } finally {
+      setBusyOrder(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -75,14 +98,15 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
       </div>
 
       <Text tone="muted" size="sm">
-        읽기 전용입니다. 분쟁 환불은 구매자·판매자 흐름에서 처리합니다.
+        결제 대기 주문은 PG 원장을 다시 조회해 안전하게 재조정할 수 있습니다. 분쟁 환불은
+        구매자·판매자 흐름에서 처리합니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
         caption="거래 주문 모니터링 목록"
-        headers={["주문", "상태", "금액", "세트", "구매자", "판매자", "생성"]}
+        headers={["주문", "상태", "금액", "세트", "구매자", "판매자", "생성", "운영"]}
         alignRight={[2]}
         minWidth={780}
         empty="주문이 없습니다."
@@ -107,6 +131,20 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.buyerId)}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.sellerId)}</td>
             <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(o.createdAt)}</td>
+            <td className="px-3 py-2.5 text-right">
+              {o.status === "PAYMENT_PENDING" ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busyOrder === o.id}
+                  onClick={() => void reconcilePayment(o.id)}
+                >
+                  {busyOrder === o.id ? "확인 중" : "PG 재확인"}
+                </Button>
+              ) : (
+                <span className="text-xs text-neutral-400">—</span>
+              )}
+            </td>
           </tr>
         ))}
       </AdminTable>

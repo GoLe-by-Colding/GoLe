@@ -1,6 +1,7 @@
 export type {
   AdminOverview,
   AdminOrder,
+  PaymentReconciliation,
   AdminSettlement,
   AdminListing,
   AdminPost,
@@ -18,6 +19,7 @@ export {
   fetchAdminOverview,
   fetchAdminAudit,
   fetchAdminOrders,
+  reconcileAdminOrderPayment,
   fetchAdminSettlements,
   markAdminSettlementPaid,
   fetchAdminListings,

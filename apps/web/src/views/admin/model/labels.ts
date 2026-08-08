@@ -77,6 +77,8 @@ export const AUDIT_TYPE_LABEL: Readonly<Record<string, string>> = {
   CATALOG_SET_CREATE: "세트 등록",
   CATALOG_SET_UPDATE: "세트 수정",
   CATALOG_SET_FEATURE: "추천 토글",
+  ORDER_PAYMENT_RECONCILE: "결제 재조정",
+  SETTLEMENT_MARK_PAID: "정산 지급완료",
 };
 
 export const AUDIT_TYPE_TONE: Readonly<Record<string, BadgeTone>> = {
@@ -90,6 +92,8 @@ export const AUDIT_TYPE_TONE: Readonly<Record<string, BadgeTone>> = {
   CATALOG_SET_CREATE: "brand",
   CATALOG_SET_UPDATE: "brand",
   CATALOG_SET_FEATURE: "brand",
+  ORDER_PAYMENT_RECONCILE: "warning",
+  SETTLEMENT_MARK_PAID: "success",
 };
 
 /** ISO 문자열을 목록에서 읽기 좋은 짧은 형식으로. */

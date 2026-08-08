@@ -19,11 +19,11 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     private static final Logger log = LoggerFactory.getLogger(StubPaymentGatewayAdapter.class);
 
     @Override
-    public boolean authorize(String orderId, long amount) {
+    public PaymentVerificationResult verifyPayment(String orderId, long amount) {
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
         log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
-        return true;
+        return PaymentVerificationResult.PAID;
     }
 
     @Override

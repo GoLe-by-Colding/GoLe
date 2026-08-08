@@ -9,5 +9,6 @@ public enum AdminTargetType {
     ACCOUNT,
     REPORT,
     CATALOG_SET,
+    ORDER,
     SETTLEMENT
 }

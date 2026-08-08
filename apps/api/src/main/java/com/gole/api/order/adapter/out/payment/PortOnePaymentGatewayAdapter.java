@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
  * 포트원(PortOne) V2 결제 게이트웨이 어댑터.
  *
  * <p>결제는 프론트의 브라우저 SDK가 수행하고, 서버는 결과를 <b>검증</b>한다(verify-on-server).
- * 우리 주문 id를 포트원 {@code paymentId}로 사용하므로 {@code authorize(orderId, amount)}에서
+ * 우리 주문 id를 포트원 {@code paymentId}로 사용하므로 {@code verifyPayment(orderId, amount)}에서
  * {@code GET /payments/{orderId}} 로 결제 상태(PAID)와 금액 일치를 확인한다.
  *
  * <p>활성화: {@code portone.enabled=true} + {@code portone.api-secret} 설정 필요.
@@ -39,20 +39,26 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public boolean authorize(String orderId, long amount) {
+    public PaymentVerificationResult verifyPayment(String orderId, long amount) {
         try {
             Map<?, ?> payment = fetchPayment(orderId);
-            if (payment == null) {
-                return false;
-            }
             String status = String.valueOf(payment.get("status"));
             long paidTotal = extractPaidTotal(payment);
-            boolean ok = "PAID".equals(status) && paidTotal == amount;
-            if (!ok) {
-                log.warn(
-                        "[PortOne] 검증 실패 orderId={} status={} paid={} expected={}", orderId, status, paidTotal, amount);
+            if ("PAID".equals(status)) {
+                if (paidTotal == amount) {
+                    return PaymentVerificationResult.PAID;
+                }
+                log.error("[PortOne] 결제 금액 불일치 orderId={} paid={} expected={}", orderId, paidTotal, amount);
+                return PaymentVerificationResult.REVIEW_REQUIRED;
             }
-            return ok;
+            return switch (status) {
+                case "FAILED", "CANCELLED" -> PaymentVerificationResult.FAILED;
+                case "READY", "PENDING" -> PaymentVerificationResult.PENDING;
+                default -> {
+                    log.warn("[PortOne] 알 수 없는 결제 상태 orderId={} status={}", orderId, status);
+                    yield PaymentVerificationResult.REVIEW_REQUIRED;
+                }
+            };
         } catch (Exception ex) {
             log.error("[PortOne] 결제 조회 실패 orderId={}: {}", orderId, ex.getMessage());
             // 조회 실패는 결제 거절이 아니다. false를 반환하면 매물 선점이 잘못 풀리므로 재시도 가능한 예외로 분리한다.

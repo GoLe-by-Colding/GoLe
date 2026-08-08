@@ -16,6 +16,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort.ReservedLi
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
@@ -129,12 +130,18 @@ public class OrderService
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
 
-        boolean authorized = paymentGateway.authorize(orderId, order.getAmount());
-        if (authorized) {
-            order.confirmFundsHeld(now); // 요구사항 13.2
-        } else {
-            order.failPayment(now); // 요구사항 13.3: 자금 미보유
-            listingReservation.release(order.getListingId());
+        PaymentVerificationResult verification = paymentGateway.verifyPayment(orderId, order.getAmount());
+        switch (verification) {
+            case PAID -> order.confirmFundsHeld(now); // 요구사항 13.2
+            case FAILED -> {
+                order.failPayment(now); // 요구사항 13.3: PG가 최종 실패한 경우에만 선점 해제
+                listingReservation.release(order.getListingId());
+            }
+            case PENDING, REVIEW_REQUIRED -> {
+                // READY/PENDING은 아직 실패가 아니다. 금액 불일치·미지 상태도 운영 확인 전에는
+                // 주문과 매물 선점을 보존해 이중 판매 및 결제 유실을 막는다.
+                return order.getStatus();
+            }
         }
         orderRepository.save(order);
         return order.getStatus();

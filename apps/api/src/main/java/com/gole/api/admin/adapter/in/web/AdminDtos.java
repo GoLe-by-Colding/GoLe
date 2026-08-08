@@ -142,6 +142,8 @@ public final class AdminDtos {
         }
     }
 
+    public record PaymentReconciliationResponse(String orderId, String status) {}
+
     // ── 카탈로그 ───────────────────────────────────────────────
 
     public record CreateSetRequest(
