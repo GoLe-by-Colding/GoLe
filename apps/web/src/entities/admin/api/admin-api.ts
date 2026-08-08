@@ -8,6 +8,7 @@ export interface AdminOverview {
   readonly ordersByStatus: Readonly<Record<string, number>>;
   readonly activeListings: number;
   readonly pendingReports: number;
+  readonly pendingSettlements: number;
 }
 
 export interface AdminOrder {

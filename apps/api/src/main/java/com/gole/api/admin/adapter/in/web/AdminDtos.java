@@ -35,7 +35,8 @@ public final class AdminDtos {
             long gmv,
             Map<String, Long> ordersByStatus,
             long activeListings,
-            long pendingReports) {}
+            long pendingReports,
+            long pendingSettlements) {}
 
     // ── 모니터링 행 ────────────────────────────────────────────
 

@@ -30,6 +30,7 @@ export function AdminDashboardView() {
   const [pendingReports, setPendingReports] = useState(0);
   const [failedPayments, setFailedPayments] = useState(0);
   const [pendingPayments, setPendingPayments] = useState(0);
+  const [pendingSettlements, setPendingSettlements] = useState(0);
   const [audit, setAudit] = useState<readonly AdminAuditEntry[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -50,6 +51,7 @@ export function AdminDashboardView() {
           setPendingReports(data.pendingReports ?? 0);
           setFailedPayments(data.ordersByStatus.PAYMENT_FAILED ?? 0);
           setPendingPayments(data.ordersByStatus.PAYMENT_PENDING ?? 0);
+          setPendingSettlements(data.pendingSettlements ?? 0);
           setAudit(actions);
         }
       } catch (cause) {
@@ -76,7 +78,7 @@ export function AdminDashboardView() {
             </Text>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Link href="/admin/reports">
             <Card
               padded
@@ -123,6 +125,26 @@ export function AdminDashboardView() {
               </div>
               <Text tone="muted" size="sm" className="mt-2">
                 장기 대기 여부 확인 →
+              </Text>
+            </Card>
+          </Link>
+          <Link href="/admin/settlements?status=PENDING">
+            <Card
+              padded
+              className={
+                pendingSettlements > 0
+                  ? "h-full border-warning/40 bg-warning-soft"
+                  : "h-full transition-colors hover:border-neutral-300"
+              }
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">지급 대기 정산</Text>
+                <Badge tone={pendingSettlements > 0 ? "warning" : "success"}>
+                  {pendingSettlements}건
+                </Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                송금 및 증빙 기록 →
               </Text>
             </Card>
           </Link>

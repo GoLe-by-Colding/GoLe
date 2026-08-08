@@ -80,6 +80,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
           gmv: 1_248_000,
           ordersByStatus: { PAYMENT_PENDING: 2, PAYMENT_FAILED: 1, COMPLETED: 12 },
           pendingReports: 3,
+          pendingSettlements: 2,
         }),
       });
     });
@@ -99,6 +100,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     );
     await expect(page.getByText("미처리 신고").locator("..").getByText("3건")).toBeVisible();
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
+    await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
   });
 
   test("좁은 화면에서 콘솔 셸이 페이지 전체 가로 스크롤을 만들지 않는다", async ({ page }) => {

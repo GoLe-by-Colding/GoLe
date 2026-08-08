@@ -68,6 +68,14 @@ public class MongoSettlementAdapter implements SettlementPort, ManageSettlements
     }
 
     @Override
+    public long count(SettlementStatus status) {
+        Query query = status == null
+                ? new Query()
+                : Query.query(Criteria.where("status").is(status.name()));
+        return mongoTemplate.count(query, SettlementDocument.class);
+    }
+
+    @Override
     public SettlementSummary markPaid(String orderId, String paymentReference) {
         if (paymentReference == null || paymentReference.isBlank()) {
             throw new ConflictException("SETTLEMENT_REFERENCE_REQUIRED", "지급 증빙 번호를 입력해야 합니다");

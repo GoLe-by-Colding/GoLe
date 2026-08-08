@@ -8,6 +8,8 @@ public interface ManageSettlementsUseCase {
 
     List<SettlementSummary> list(SettlementStatus status, int limit);
 
+    long count(SettlementStatus status);
+
     SettlementSummary markPaid(String orderId, String paymentReference);
 
     enum SettlementStatus {

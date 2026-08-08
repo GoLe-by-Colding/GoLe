@@ -49,4 +49,13 @@ class MongoSettlementAdapterTest {
         assertThat(result.payout()).isEqualTo(95_000);
         assertThat(result.paymentReference()).isEqualTo("bank-42");
     }
+
+    @Test
+    void count_filtersBySettlementStatus() {
+        when(mongo.count(any(Query.class), eq(SettlementDocument.class))).thenReturn(7L);
+
+        assertThat(adapter.count(SettlementStatus.PENDING)).isEqualTo(7L);
+
+        verify(mongo).count(any(Query.class), eq(SettlementDocument.class));
+    }
 }

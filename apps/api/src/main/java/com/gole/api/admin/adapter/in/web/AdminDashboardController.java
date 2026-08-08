@@ -5,6 +5,8 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,14 +34,17 @@ public class AdminDashboardController {
     private final AdminReadModelPort readModel;
     private final ListAdminActionsUseCase listAdminActions;
     private final ManageReportsUseCase manageReports;
+    private final ManageSettlementsUseCase manageSettlements;
 
     public AdminDashboardController(
             AdminReadModelPort readModel,
             ListAdminActionsUseCase listAdminActions,
-            ManageReportsUseCase manageReports) {
+            ManageReportsUseCase manageReports,
+            ManageSettlementsUseCase manageSettlements) {
         this.readModel = readModel;
         this.listAdminActions = listAdminActions;
         this.manageReports = manageReports;
+        this.manageSettlements = manageSettlements;
     }
 
     @Operation(summary = "대시보드 집계", description = "컬렉션 카운트 + GMV·주문상태·활성매물")
@@ -51,7 +56,8 @@ public class AdminDashboardController {
                 stats.completedGmv(),
                 stats.countByStatus(),
                 readModel.activeListingCount(),
-                manageReports.count(ReportStatus.PENDING));
+                manageReports.count(ReportStatus.PENDING),
+                manageSettlements.count(SettlementStatus.PENDING));
     }
 
     @Operation(summary = "감사 로그", description = "관리자 조치 이력을 최근순으로 조회합니다(ADMIN 전용).")
