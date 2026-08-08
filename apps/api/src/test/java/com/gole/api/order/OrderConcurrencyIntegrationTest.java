@@ -3,12 +3,14 @@ package com.gole.api.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.common.exception.ConflictException;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
@@ -64,6 +66,9 @@ class OrderConcurrencyIntegrationTest {
 
     @Autowired
     CompleteOrderUseCase completeOrder;
+
+    @Autowired
+    ManageSettlementsUseCase settlements;
 
     private String createActiveListing() {
         return createListing.create(new CreateListingCommand(
@@ -122,5 +127,21 @@ class OrderConcurrencyIntegrationTest {
         completeOrder.complete(orderId);
         // Property 2: 두 번째 완료는 거부되어 중복 정산이 발생하지 않는다.
         assertThatThrownBy(() -> completeOrder.complete(orderId)).isInstanceOf(OrderStateException.class);
+    }
+
+    @Test
+    void paymentEvidenceCannotBeReusedAcrossSettlements() {
+        String firstOrder = placeOrder.place(new PlaceOrderCommand(createActiveListing(), "buyer-1"));
+        payOrder.pay(firstOrder);
+        completeOrder.complete(firstOrder);
+        String secondOrder = placeOrder.place(new PlaceOrderCommand(createActiveListing(), "buyer-2"));
+        payOrder.pay(secondOrder);
+        completeOrder.complete(secondOrder);
+
+        settlements.markPaid(firstOrder, "BANK-UNIQUE-001");
+
+        assertThatThrownBy(() -> settlements.markPaid(secondOrder, "BANK-UNIQUE-001"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("이미 다른 정산");
     }
 }

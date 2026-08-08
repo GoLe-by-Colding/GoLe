@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -87,8 +88,13 @@ public class MongoSettlementAdapter implements SettlementPort, ManageSettlements
                 .set("status", SettlementStatus.PAID.name())
                 .set("paymentReference", paymentReference.trim())
                 .set("paidAt", now);
-        SettlementDocument updated = mongoTemplate.findAndModify(
-                pending, paid, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
+        SettlementDocument updated;
+        try {
+            updated = mongoTemplate.findAndModify(
+                    pending, paid, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
+        } catch (DuplicateKeyException duplicateReference) {
+            throw new ConflictException("SETTLEMENT_REFERENCE_DUPLICATE", "이미 다른 정산에 사용된 지급 증빙 번호입니다");
+        }
         if (updated != null) {
             return toSummary(updated);
         }
@@ -97,7 +103,10 @@ public class MongoSettlementAdapter implements SettlementPort, ManageSettlements
             throw new NotFoundException("SETTLEMENT_NOT_FOUND", "정산 원장을 찾을 수 없습니다");
         }
         if (SettlementStatus.PAID.name().equals(existing.getStatus())) {
-            return toSummary(existing);
+            if (paymentReference.trim().equals(existing.getPaymentReference())) {
+                return toSummary(existing);
+            }
+            throw new ConflictException("SETTLEMENT_ALREADY_PAID", "이미 다른 지급 증빙 번호로 완료된 정산입니다");
         }
         throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "정산 상태가 변경되어 다시 확인해야 합니다");
     }

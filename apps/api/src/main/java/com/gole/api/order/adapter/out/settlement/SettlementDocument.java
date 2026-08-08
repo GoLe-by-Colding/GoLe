@@ -23,7 +23,9 @@ public class SettlementDocument {
     @Indexed
     private String status;
 
+    @Indexed(unique = true, sparse = true)
     private String paymentReference;
+
     private Instant createdAt;
     private Instant paidAt;
 
