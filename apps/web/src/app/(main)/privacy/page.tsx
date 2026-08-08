@@ -98,8 +98,10 @@ export default function PrivacyPage() {
 
           <Section title="8. 쿠키 및 세션">
             <p>
-              로그인 상태 유지를 위해 세션 토큰을 localStorage에 저장합니다. 브라우저 설정에서
-              저장을 거부할 수 있으나, 이 경우 로그인 기반 기능 이용이 불가합니다.
+              로그인 상태 유지를 위해 세션 토큰을 HttpOnly·SameSite 쿠키에 저장합니다. 이 쿠키는
+              페이지의 JavaScript에서 읽을 수 없으며, 브라우저 설정에서 저장을 거부하면 로그인 기반
+              기능을 이용할 수 없습니다. 화면 표시를 위한 계정 ID와 권한 정보만 브라우저 로컬 저장소에
+              보관합니다.
             </p>
           </Section>
 

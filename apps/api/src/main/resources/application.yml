@@ -113,6 +113,8 @@ gole:
     email:
       enabled: ${GOLE_VERIFICATION_EMAIL_ENABLED:false}
       from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.kscold.com}
+  session:
+    cookie-secure: ${GOLE_SESSION_COOKIE_SECURE:auto}
   # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
   discord:
     enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}

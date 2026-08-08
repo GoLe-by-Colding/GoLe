@@ -1,7 +1,8 @@
 import type { Session } from "./types";
 
 /**
- * 클라이언트 세션 저장소(localStorage 기반, 추후 httpOnly 쿠키로 강화 가능).
+ * 클라이언트에는 계정 ID·권한 등 화면 상태만 저장한다.
+ * 인증 토큰은 서버가 발급한 HttpOnly 쿠키에만 보관해 JavaScript에서 읽을 수 없게 한다.
  * useSyncExternalStore와 연동되도록 subscribe/getSnapshot을 제공하고,
  * 같은 탭에서도 변경이 전파되도록 커스텀 이벤트를 발행한다.
  */
@@ -20,7 +21,8 @@ export function saveSession(session: Session): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  // 인증 토큰은 HttpOnly 쿠키에만 보관한다. 로컬 저장소에는 화면 복원에 필요한 비민감 메타데이터만 둔다.
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...session, sessionToken: "" }));
   emitChange();
 }
 

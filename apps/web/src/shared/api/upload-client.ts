@@ -19,6 +19,7 @@ export async function uploadImage(file: File, signal?: AbortSignal): Promise<Upl
 
   const response = await fetch(`${env.apiBaseUrl}/api/v1/media/images`, {
     method: "POST",
+    credentials: "include",
     headers: readSessionAuthorization(),
     body: formData,
     signal: signal ?? null,
@@ -50,6 +51,7 @@ export async function uploadImages(
 
   const response = await fetch(`${env.apiBaseUrl}/api/v1/media/images/batch`, {
     method: "POST",
+    credentials: "include",
     headers: readSessionAuthorization(),
     body: formData,
     signal: signal ?? null,

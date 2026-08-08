@@ -17,7 +17,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class UserAuthInterceptorTest {
 
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
-    private final UserAuthInterceptor interceptor = new UserAuthInterceptor(sessions);
+    private final UserAuthInterceptor interceptor = new UserAuthInterceptor(sessions, new SessionCookie("false"));
 
     @Test
     void publicGetDoesNotRequireSession() {

@@ -80,11 +80,11 @@ export interface SocialCallbackResult {
   readonly newAccount: boolean;
 }
 
-/** 로그아웃: 서버측 세션을 폐기한다(Bearer 토큰). best-effort. */
+/** 로그아웃: HttpOnly 쿠키 또는 외부 API용 Bearer 세션을 서버에서 폐기한다. */
 export function logout(sessionToken: string): Promise<void> {
   return apiRequest<void>("/api/v1/accounts/sessions", {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${sessionToken}` },
+    headers: sessionToken.length > 0 ? { Authorization: `Bearer ${sessionToken}` } : {},
   });
 }
 
@@ -92,6 +92,6 @@ export function logout(sessionToken: string): Promise<void> {
 export function fetchMe(sessionToken: string): Promise<Me> {
   return apiRequest<Me>("/api/v1/accounts/me", {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${sessionToken}` },
+    headers: sessionToken.length > 0 ? { Authorization: `Bearer ${sessionToken}` } : {},
   });
 }

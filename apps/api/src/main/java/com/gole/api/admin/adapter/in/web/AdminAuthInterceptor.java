@@ -1,5 +1,6 @@
 package com.gole.api.admin.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
@@ -28,9 +29,11 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     public static final String ATTR_ACCOUNT_EMAIL = "gole.admin.accountEmail";
 
     private final GetCurrentSessionUseCase getCurrentSession;
+    private final SessionCookie sessionCookie;
 
-    public AdminAuthInterceptor(GetCurrentSessionUseCase getCurrentSession) {
+    public AdminAuthInterceptor(GetCurrentSessionUseCase getCurrentSession, SessionCookie sessionCookie) {
         this.getCurrentSession = getCurrentSession;
+        this.sessionCookie = sessionCookie;
     }
 
     @Override
@@ -40,7 +43,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         if (CorsUtils.isPreFlightRequest(request)) {
             return true;
         }
-        String token = extractBearer(request.getHeader("Authorization"));
+        String token = sessionCookie.resolve(request);
         CurrentSession session = getCurrentSession.resolve(token).orElseThrow(() -> {
             // 토큰·이메일·IP는 남기지 않는다. 운영 분석에 필요한 요청 경로와 거부 사유만 기록한다.
             log.warn(
@@ -62,12 +65,5 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         request.setAttribute(ATTR_ACCOUNT_ID, session.accountId());
         request.setAttribute(ATTR_ACCOUNT_EMAIL, session.email());
         return true;
-    }
-
-    private static String extractBearer(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return "";
-        }
-        return authorization.substring("Bearer ".length()).trim();
     }
 }

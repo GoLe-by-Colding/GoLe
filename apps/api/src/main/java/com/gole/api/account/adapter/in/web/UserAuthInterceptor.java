@@ -15,9 +15,11 @@ public class UserAuthInterceptor implements HandlerInterceptor {
 
     public static final String ATTR_ACCOUNT_ID = "gole.user.accountId";
     private final GetCurrentSessionUseCase sessions;
+    private final SessionCookie sessionCookie;
 
-    public UserAuthInterceptor(GetCurrentSessionUseCase sessions) {
+    public UserAuthInterceptor(GetCurrentSessionUseCase sessions, SessionCookie sessionCookie) {
         this.sessions = sessions;
+        this.sessionCookie = sessionCookie;
     }
 
     @Override
@@ -25,7 +27,7 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         if (HttpMethod.OPTIONS.matches(request.getMethod()) || isPublicRead(request)) {
             return true;
         }
-        String token = extractBearer(request.getHeader("Authorization"));
+        String token = sessionCookie.resolve(request);
         CurrentSession session =
                 sessions.resolve(token).orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "로그인이 필요합니다"));
         request.setAttribute(ATTR_ACCOUNT_ID, session.accountId());
@@ -40,13 +42,7 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         boolean privateRead = uri.startsWith("/api/v1/orders")
                 || uri.startsWith("/api/v1/collections")
                 || uri.startsWith("/api/v1/users/")
-                || (uri.startsWith("/api/v1/chat") && !uri.endsWith("/stream"));
+                || uri.startsWith("/api/v1/chat");
         return !privateRead;
-    }
-
-    private static String extractBearer(String authorization) {
-        return authorization != null && authorization.startsWith("Bearer ")
-                ? authorization.substring("Bearer ".length()).trim()
-                : "";
     }
 }

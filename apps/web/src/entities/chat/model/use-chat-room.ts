@@ -75,7 +75,8 @@ export function useChatRoom({
         ? window.location.origin
         : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
     const url = `${base}/api/v1/chat/rooms/${room.id}/stream`;
-    const es = new EventSource(url);
+    // HttpOnly 세션 쿠키로 스트림 참여자를 검증한다. URL에 토큰을 넣어 로그·히스토리에 노출하지 않는다.
+    const es = new EventSource(url, { withCredentials: true });
     sseRef.current = es;
 
     es.addEventListener("message", (ev: MessageEvent<string>) => {

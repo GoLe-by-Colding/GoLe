@@ -5,6 +5,8 @@ import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginCo
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginResult;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.common.exception.BadRequestException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -24,9 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class SocialAuthController {
 
     private final SocialLoginUseCase socialLoginUseCase;
+    private final SessionCookie sessionCookie;
 
-    public SocialAuthController(SocialLoginUseCase socialLoginUseCase) {
+    public SocialAuthController(SocialLoginUseCase socialLoginUseCase, SessionCookie sessionCookie) {
         this.socialLoginUseCase = socialLoginUseCase;
+        this.sessionCookie = sessionCookie;
     }
 
     /** 활성(설정된) provider 목록. 프론트가 버튼 노출 여부를 결정한다. (S3) */
@@ -47,10 +51,15 @@ public class SocialAuthController {
 
     /** code 교환 → state 검증 → find-or-create → 세션 발급. (S5, S6) */
     @PostMapping("/{provider}/callback")
-    public SocialLoginResponse callback(@PathVariable String provider, @Valid @RequestBody CallbackRequest request) {
+    public SocialLoginResponse callback(
+            @PathVariable String provider,
+            @Valid @RequestBody CallbackRequest request,
+            HttpServletRequest http,
+            HttpServletResponse response) {
         AuthProvider parsed = parse(provider);
         SocialLoginResult result = socialLoginUseCase.login(
                 new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
+        sessionCookie.issue(http, response, result.sessionToken());
         return new SocialLoginResponse(
                 result.accountId(), result.sessionToken(), result.role().name(), result.newAccount());
     }

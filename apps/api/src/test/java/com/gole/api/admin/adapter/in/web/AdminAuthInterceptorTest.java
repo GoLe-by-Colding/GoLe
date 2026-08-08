@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
@@ -21,7 +22,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class AdminAuthInterceptorTest {
 
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
-    private final AdminAuthInterceptor interceptor = new AdminAuthInterceptor(sessions);
+    private final AdminAuthInterceptor interceptor = new AdminAuthInterceptor(sessions, new SessionCookie("false"));
     private final MockHttpServletResponse response = new MockHttpServletResponse();
 
     @Test

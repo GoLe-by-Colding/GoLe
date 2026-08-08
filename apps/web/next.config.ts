@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const isDevelopment = process.env.NODE_ENV === "development";
+const isHttpsDeployment = (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://");
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""} https://cdn.portone.io`,
@@ -13,7 +14,7 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
+  ...(isHttpsDeployment ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
 
 const nextConfig: NextConfig = {

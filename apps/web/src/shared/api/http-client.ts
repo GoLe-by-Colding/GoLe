@@ -44,6 +44,7 @@ export async function apiRequest<TResponse>(
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     method,
+    credentials: "include",
     signal: signal ?? null,
     ...(cache === undefined ? {} : { cache }),
     ...(next === undefined

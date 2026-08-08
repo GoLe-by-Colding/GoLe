@@ -102,7 +102,7 @@ export interface AdminAuditEntry {
 // ── 공통 ─────────────────────────────────────────────────────
 
 function auth(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}` };
+  return token.length > 0 ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /** 운영 목록은 항상 조회 시점 데이터여야 한다(요구사항 2.5). */

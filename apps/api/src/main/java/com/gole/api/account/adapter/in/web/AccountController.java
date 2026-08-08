@@ -24,13 +24,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,6 +50,7 @@ public class AccountController {
     private final SignInUseCase signInUseCase;
     private final GetCurrentSessionUseCase getCurrentSessionUseCase;
     private final LogoutUseCase logoutUseCase;
+    private final SessionCookie sessionCookie;
 
     public AccountController(
             RegisterAccountUseCase registerAccountUseCase,
@@ -56,13 +58,15 @@ public class AccountController {
             VerifyEmailUseCase verifyEmailUseCase,
             SignInUseCase signInUseCase,
             GetCurrentSessionUseCase getCurrentSessionUseCase,
-            LogoutUseCase logoutUseCase) {
+            LogoutUseCase logoutUseCase,
+            SessionCookie sessionCookie) {
         this.registerAccountUseCase = registerAccountUseCase;
         this.resendVerificationUseCase = resendVerificationUseCase;
         this.verifyEmailUseCase = verifyEmailUseCase;
         this.signInUseCase = signInUseCase;
         this.getCurrentSessionUseCase = getCurrentSessionUseCase;
         this.logoutUseCase = logoutUseCase;
+        this.sessionCookie = sessionCookie;
     }
 
     @Operation(summary = "회원가입", description = "이메일·비밀번호로 계정을 생성합니다. 이메일 인증 코드가 발송됩니다.")
@@ -92,23 +96,27 @@ public class AccountController {
         resendVerificationUseCase.resend(new ResendVerificationCommand(request.email()));
     }
 
-    @Operation(summary = "로그인", description = "이메일·비밀번호로 인증하고 Bearer 세션 토큰을 반환합니다.")
+    @Operation(summary = "로그인", description = "이메일·비밀번호로 인증하고 브라우저용 HttpOnly 쿠키와 외부 API용 Bearer 세션 토큰을 발급합니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "로그인 성공 — sessionToken 반환"),
         @ApiResponse(responseCode = "401", description = "이메일/비밀번호 불일치"),
         @ApiResponse(responseCode = "423", description = "로그인 잠금(5회 실패)")
     })
     @PostMapping("/sessions")
-    public SignInResponse signIn(@Valid @RequestBody SignInRequest request) {
+    public SignInResponse signIn(
+            @Valid @RequestBody SignInRequest request, HttpServletRequest http, HttpServletResponse response) {
         SignInResult result = signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
+        sessionCookie.issue(http, response, result.sessionToken());
         return new SignInResponse(
                 result.accountId(), result.sessionToken(), result.role().name());
     }
 
-    @Operation(summary = "내 정보 조회", description = "현재 세션의 계정 ID·이메일·권한을 반환합니다. Authorization: Bearer {token} 필요.")
+    @Operation(
+            summary = "내 정보 조회",
+            description = "현재 세션의 계정 ID·이메일·권한을 반환합니다. 브라우저 쿠키 또는 Authorization: Bearer {token}이 필요합니다.")
     @GetMapping("/me")
-    public MeResponse me(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        String token = extractBearer(authorization);
+    public MeResponse me(HttpServletRequest request) {
+        String token = sessionCookie.resolve(request);
         CurrentSession session = getCurrentSessionUseCase
                 .resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
@@ -116,17 +124,11 @@ public class AccountController {
                 session.accountId(), session.email(), session.role().name());
     }
 
-    @Operation(summary = "로그아웃", description = "서버 세션을 폐기합니다. Authorization: Bearer {token} 필요.")
+    @Operation(summary = "로그아웃", description = "브라우저 쿠키 또는 Bearer 토큰에 연결된 서버 세션을 폐기하고 쿠키를 삭제합니다.")
     @DeleteMapping("/sessions")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        logoutUseCase.logout(extractBearer(authorization));
-    }
-
-    private static String extractBearer(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return "";
-        }
-        return authorization.substring("Bearer ".length()).trim();
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        logoutUseCase.logout(sessionCookie.resolve(request));
+        sessionCookie.clear(request, response);
     }
 }
