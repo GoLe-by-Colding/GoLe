@@ -25,7 +25,7 @@ public class OrderPaymentTransitionService {
     @Transactional
     public OrderStatus applyPaymentVerification(String orderId, PaymentVerificationResult verification, Instant now) {
         Order order = load(orderId);
-        if (order.getStatus() != OrderStatus.PAYMENT_PENDING) {
+        if (order.getStatus() != OrderStatus.PAYMENT_PENDING && order.getStatus() != OrderStatus.PAYMENT_REVIEW) {
             return order.getStatus();
         }
         switch (verification) {
@@ -34,7 +34,14 @@ public class OrderPaymentTransitionService {
                 order.failPayment(now);
                 listings.release(order.getListingId());
             }
-            case PENDING, REVIEW_REQUIRED -> {
+            case REVIEW_REQUIRED -> {
+                if (order.getStatus() == OrderStatus.PAYMENT_PENDING) {
+                    order.flagPaymentReview(now);
+                    return orders.save(order).getStatus();
+                }
+                return order.getStatus();
+            }
+            case PENDING -> {
                 return order.getStatus();
             }
         }

@@ -1,5 +1,6 @@
 package com.gole.api.order.adapter.out.persistence;
 
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
@@ -13,4 +14,7 @@ public interface OrderMongoRepository extends MongoRepository<OrderDocument, Str
 
     /** 판매자별 주문. */
     List<OrderDocument> findBySellerId(String sellerId);
+
+    /** 자동 재조정 한 번에 최대 100건만 가져와 PG와 DB에 부하가 몰리지 않게 한다. */
+    List<OrderDocument> findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(String status, Instant cutoff);
 }

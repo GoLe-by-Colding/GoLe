@@ -1,6 +1,7 @@
 package com.gole.api.order.application.port.out;
 
 import com.gole.api.order.domain.model.Order;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,4 +18,9 @@ public interface OrderRepositoryPort {
     List<Order> findByBuyerId(String buyerId);
 
     List<Order> findBySellerId(String sellerId);
+
+    /** 오래된 결제 대기 주문을 생성 시각 순으로 제한 조회한다. */
+    default List<Order> findPaymentPendingCreatedBefore(Instant cutoff) {
+        return List.of();
+    }
 }

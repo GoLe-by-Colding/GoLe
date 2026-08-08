@@ -118,7 +118,15 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         <div className="flex items-center justify-between">
           <Heading level={1}>주문</Heading>
           <Badge
-            tone={order.status === "completed" ? "success" : "brand"}
+            tone={
+              order.status === "completed"
+                ? "success"
+                : order.status === "payment_review" || order.status === "refund_pending"
+                  ? "warning"
+                  : order.status === "payment_failed" || order.status === "refunded"
+                    ? "danger"
+                    : "brand"
+            }
             data-testid="order-status"
           >
             {orderStatusLabel(order.status)}
@@ -137,6 +145,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         </Card>
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
+
+        {order.status === "payment_review" ? (
+          <p className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-neutral-700">
+            결제 금액 또는 PG 상태를 운영자가 확인하고 있습니다. 주문과 매물은 안전하게 보존되며,
+            확인 후 상태가 자동으로 갱신됩니다.
+          </p>
+        ) : null}
 
         <div className="flex gap-3">
           {order.status === "payment_pending" ? (

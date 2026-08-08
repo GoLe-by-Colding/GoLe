@@ -157,6 +157,8 @@ export function ProfilePage() {
                     tone={
                       o.status === "completed"
                         ? "success"
+                        : o.status === "payment_review" || o.status === "refund_pending"
+                          ? "warning"
                         : o.status === "refunded" || o.status === "payment_failed"
                           ? "danger"
                           : "brand"

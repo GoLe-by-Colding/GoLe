@@ -16,6 +16,7 @@ import { AdminStatus, AdminTable } from "./table";
 
 const STATUSES = [
   "PAYMENT_PENDING",
+  "PAYMENT_REVIEW",
   "FUNDS_HELD",
   "REFUND_PENDING",
   "COMPLETED",
@@ -23,7 +24,7 @@ const STATUSES = [
   "PAYMENT_FAILED",
 ];
 
-/** 주문 모니터링 — 읽기 전용. 운영자 개입 환불은 비범위(후속). (요구사항 7.1) */
+/** 주문 모니터링과 결제 원장 재조정. 운영자 개입 환불은 구매자·판매자 흐름에서 처리한다. */
 export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus?: string }) {
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
@@ -98,8 +99,8 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
       </div>
 
       <Text tone="muted" size="sm">
-        결제 대기 주문은 PG 원장을 다시 조회해 안전하게 재조정할 수 있습니다. 분쟁 환불은
-        구매자·판매자 흐름에서 처리합니다.
+        결제 대기·확인 필요 주문은 PG 원장을 다시 조회해 안전하게 재조정할 수 있습니다. 분쟁
+        환불은 구매자·판매자 흐름에서 처리합니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />
@@ -120,7 +121,15 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
               </Link>
             </td>
             <td className="px-3 py-2.5">
-              <Badge tone={o.status === "COMPLETED" ? "success" : "neutral"}>
+              <Badge
+                tone={
+                  o.status === "COMPLETED"
+                    ? "success"
+                    : o.status === "PAYMENT_REVIEW"
+                      ? "danger"
+                      : "neutral"
+                }
+              >
                 {ORDER_STATUS_LABEL[o.status] ?? o.status}
               </Badge>
             </td>
@@ -132,7 +141,7 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.sellerId)}</td>
             <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(o.createdAt)}</td>
             <td className="px-3 py-2.5 text-right">
-              {o.status === "PAYMENT_PENDING" ? (
+              {o.status === "PAYMENT_PENDING" || o.status === "PAYMENT_REVIEW" ? (
                 <Button
                   size="sm"
                   variant="secondary"

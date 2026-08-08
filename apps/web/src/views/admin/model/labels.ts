@@ -2,6 +2,7 @@ import type { BadgeTone } from "@shared/ui";
 
 export const ORDER_STATUS_LABEL: Readonly<Record<string, string>> = {
   PAYMENT_PENDING: "결제대기",
+  PAYMENT_REVIEW: "결제확인필요",
   FUNDS_HELD: "자금보유",
   REFUND_PENDING: "환불처리중",
   COMPLETED: "완료",

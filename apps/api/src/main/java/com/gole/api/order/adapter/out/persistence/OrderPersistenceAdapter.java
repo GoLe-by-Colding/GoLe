@@ -5,6 +5,7 @@ import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -42,6 +43,15 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
     @Override
     public List<Order> findBySellerId(String sellerId) {
         return repository.findBySellerId(sellerId).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<Order> findPaymentPendingCreatedBefore(Instant cutoff) {
+        return repository
+                .findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(OrderStatus.PAYMENT_PENDING.name(), cutoff)
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     private OrderDocument toDocument(Order order) {

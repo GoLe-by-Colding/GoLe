@@ -30,6 +30,7 @@ export function AdminDashboardView() {
   const [pendingReports, setPendingReports] = useState(0);
   const [failedPayments, setFailedPayments] = useState(0);
   const [pendingPayments, setPendingPayments] = useState(0);
+  const [reviewPayments, setReviewPayments] = useState(0);
   const [pendingSettlements, setPendingSettlements] = useState(0);
   const [audit, setAudit] = useState<readonly AdminAuditEntry[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -51,6 +52,7 @@ export function AdminDashboardView() {
           setPendingReports(data.pendingReports ?? 0);
           setFailedPayments(data.ordersByStatus.PAYMENT_FAILED ?? 0);
           setPendingPayments(data.ordersByStatus.PAYMENT_PENDING ?? 0);
+          setReviewPayments(data.ordersByStatus.PAYMENT_REVIEW ?? 0);
           setPendingSettlements(data.pendingSettlements ?? 0);
           setAudit(actions);
         }
@@ -78,7 +80,7 @@ export function AdminDashboardView() {
             </Text>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Link href="/admin/reports">
             <Card
               padded
@@ -125,6 +127,26 @@ export function AdminDashboardView() {
               </div>
               <Text tone="muted" size="sm" className="mt-2">
                 장기 대기 여부 확인 →
+              </Text>
+            </Card>
+          </Link>
+          <Link href="/admin/orders?status=PAYMENT_REVIEW">
+            <Card
+              padded
+              className={
+                reviewPayments > 0
+                  ? "h-full border-danger/30 bg-danger-soft"
+                  : "h-full transition-colors hover:border-neutral-300"
+              }
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">결제 확인 필요</Text>
+                <Badge tone={reviewPayments > 0 ? "danger" : "success"}>
+                  {reviewPayments}건
+                </Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                금액·PG 상태 수동 확인 →
               </Text>
             </Card>
           </Link>

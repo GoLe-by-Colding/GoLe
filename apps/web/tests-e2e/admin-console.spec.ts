@@ -78,7 +78,12 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
           counts: { accounts: 42, listings: 9, orders: 15, posts: 6 },
           activeListings: 9,
           gmv: 1_248_000,
-          ordersByStatus: { PAYMENT_PENDING: 2, PAYMENT_FAILED: 1, COMPLETED: 12 },
+          ordersByStatus: {
+            PAYMENT_PENDING: 2,
+            PAYMENT_REVIEW: 1,
+            PAYMENT_FAILED: 1,
+            COMPLETED: 12,
+          },
           pendingReports: 3,
           pendingSettlements: 2,
         }),
@@ -100,6 +105,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     );
     await expect(page.getByText("미처리 신고").locator("..").getByText("3건")).toBeVisible();
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
+    await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
   });
 
@@ -174,7 +180,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();
   });
 
-  test("결제 대기 주문을 PG 원장과 재조정한다", async ({ page }) => {
+  test("결제 확인 필요 주문을 PG 원장과 재조정한다", async ({ page }) => {
     await page.route("**/api/admin/orders**", async (route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
@@ -188,7 +194,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
         body: JSON.stringify([
           {
             id: "order-payment-1",
-            status: "PAYMENT_PENDING",
+            status: "PAYMENT_REVIEW",
             amount: 280_000,
             buyerId: "buyer-1",
             sellerId: "seller-1",
@@ -200,7 +206,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     });
 
     await page.goto("/admin/orders");
-    await expect(page.getByRole("table").getByText("결제대기", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").getByText("결제확인필요", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "PG 재확인" }).click();
     await expect(page.getByRole("table").getByText("자금보유", { exact: true })).toBeVisible();
   });

@@ -169,6 +169,19 @@ class OrderServiceTest {
         assertThat(reservation.released).isTrue();
     }
 
+    @Test
+    void suspiciousPayment_movesToReviewAndCanBeReconciledLater() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.REVIEW_REQUIRED));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_REVIEW);
+        assertThat(reservation.released).isFalse();
+
+        service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.PAID));
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.FUNDS_HELD);
+    }
+
     private OrderService serviceWith(PaymentGatewayPort paymentGateway) {
         return new OrderService(
                 orders,

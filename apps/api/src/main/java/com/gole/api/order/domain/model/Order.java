@@ -95,14 +95,20 @@ public final class Order {
 
     /** 결제 승인 → 자금 보유. (요구사항 7.2, 13.2) */
     public void confirmFundsHeld(Instant now) {
-        requireStatus(OrderStatus.PAYMENT_PENDING, "funds-held");
+        requirePaymentDecisionStatus("funds-held");
         transitionTo(OrderStatus.FUNDS_HELD, now);
     }
 
     /** 결제 실패. (요구사항 13.3) */
     public void failPayment(Instant now) {
-        requireStatus(OrderStatus.PAYMENT_PENDING, "payment-failed");
+        requirePaymentDecisionStatus("payment-failed");
         transitionTo(OrderStatus.PAYMENT_FAILED, now);
+    }
+
+    /** 금액 불일치·알 수 없는 PG 상태를 자동 실패 처리하지 않고 운영 검토함으로 보낸다. */
+    public void flagPaymentReview(Instant now) {
+        requireStatus(OrderStatus.PAYMENT_PENDING, "payment-review");
+        transitionTo(OrderStatus.PAYMENT_REVIEW, now);
     }
 
     /** 구매 확정 → 완료(정산 권한). (요구사항 7.4, 13.4) */
@@ -130,6 +136,12 @@ public final class Order {
 
     private void requireStatus(OrderStatus expected, String target) {
         if (status != expected) {
+            throw new OrderStateException("Cannot transition to " + target + " from " + status);
+        }
+    }
+
+    private void requirePaymentDecisionStatus(String target) {
+        if (status != OrderStatus.PAYMENT_PENDING && status != OrderStatus.PAYMENT_REVIEW) {
             throw new OrderStateException("Cannot transition to " + target + " from " + status);
         }
     }
