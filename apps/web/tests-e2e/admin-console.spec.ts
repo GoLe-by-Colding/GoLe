@@ -120,6 +120,47 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(hasPageOverflow).toBe(false);
   });
 
+  test("카탈로그를 번호·이름·테마로 즉시 찾는다", async ({ page }) => {
+    await page.route("**/api/admin/catalog/sets**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            setNumber: "10307",
+            name: "Eiffel Tower",
+            theme: "Icons",
+            pieceCount: 10001,
+            releaseYear: 2022,
+            retirementStatus: "ACTIVE",
+            imageUrl: null,
+            featured: true,
+          },
+          {
+            setNumber: "42143",
+            name: "Ferrari Daytona SP3",
+            theme: "Technic",
+            pieceCount: 3778,
+            releaseYear: 2022,
+            retirementStatus: "ACTIVE",
+            imageUrl: null,
+            featured: false,
+          },
+        ]),
+      });
+    });
+
+    await page.goto("/admin/catalog");
+    const search = page.getByRole("searchbox", { name: "번호·이름·테마 검색" });
+    await expect(page.getByRole("table").getByText("Eiffel Tower")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Ferrari Daytona SP3")).toBeVisible();
+
+    await search.fill("technic");
+
+    await expect(page.getByRole("table").getByText("Ferrari Daytona SP3")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Eiffel Tower")).toHaveCount(0);
+    await expect(page.getByText("검색 결과 1개 / 조회 2개")).toBeVisible();
+  });
+
   test("정산 원장에서 지급 증빙을 입력해 완료 처리한다", async ({ page }) => {
     let markedPaid = false;
     await page.route("**/api/admin/settlements**", async (route) => {
