@@ -1,10 +1,12 @@
 package com.gole.api.admin.adapter.in.web;
 
 import com.gole.api.admin.adapter.in.web.AdminDtos.ListingRow;
+import com.gole.api.admin.adapter.in.web.AdminDtos.MarkSettlementPaidRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReportRow;
+import com.gole.api.admin.adapter.in.web.AdminDtos.SettlementRow;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
@@ -12,6 +14,8 @@ import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.exception.ReportAlreadyHandledException;
 import com.gole.api.report.domain.model.ReportStatus;
@@ -50,6 +54,7 @@ public class AdminModerationController {
     private final ModerateListingUseCase moderateListing;
     private final ModeratePostUseCase moderatePost;
     private final ManageReportsUseCase manageReports;
+    private final ManageSettlementsUseCase manageSettlements;
     private final RecordAdminActionUseCase audit;
 
     public AdminModerationController(
@@ -57,11 +62,13 @@ public class AdminModerationController {
             ModerateListingUseCase moderateListing,
             ModeratePostUseCase moderatePost,
             ManageReportsUseCase manageReports,
+            ManageSettlementsUseCase manageSettlements,
             RecordAdminActionUseCase audit) {
         this.readModel = readModel;
         this.moderateListing = moderateListing;
         this.moderatePost = moderatePost;
         this.manageReports = manageReports;
+        this.manageSettlements = manageSettlements;
         this.audit = audit;
     }
 
@@ -76,6 +83,32 @@ public class AdminModerationController {
         return readModel.recentOrders(status, query, clamp(limit)).stream()
                 .map(OrderRow::from)
                 .toList();
+    }
+
+    @Operation(summary = "정산 원장", description = "판매자 정산 대기·지급 완료 내역을 조회합니다.")
+    @GetMapping("/settlements")
+    public List<SettlementRow> settlements(
+            @RequestParam(value = "status", required = false) SettlementStatus status,
+            @RequestParam(value = "limit", defaultValue = "30") int limit) {
+        return manageSettlements.list(status, clamp(limit)).stream()
+                .map(SettlementRow::from)
+                .toList();
+    }
+
+    @Operation(summary = "정산 지급 완료", description = "외부 송금 증빙 번호와 함께 정산을 지급 완료 처리합니다.")
+    @PostMapping("/settlements/{orderId}/paid")
+    public SettlementRow markSettlementPaid(
+            @PathVariable String orderId,
+            @Valid @RequestBody MarkSettlementPaidRequest request,
+            HttpServletRequest http) {
+        SettlementRow row = SettlementRow.from(manageSettlements.markPaid(orderId, request.paymentReference()));
+        record(
+                http,
+                AdminActionType.SETTLEMENT_MARK_PAID,
+                AdminTargetType.SETTLEMENT,
+                orderId,
+                request.paymentReference());
+        return row;
     }
 
     // ── 매물 ──────────────────────────────────────────────────

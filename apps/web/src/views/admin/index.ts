@@ -2,6 +2,7 @@ export { AdminDashboardView } from "./ui/dashboard-view";
 export { AdminReportsView } from "./ui/reports-view";
 export { AdminListingsView } from "./ui/listings-view";
 export { AdminOrdersView } from "./ui/orders-view";
+export { AdminSettlementsView } from "./ui/settlements-view";
 export { AdminCommunityView } from "./ui/community-view";
 export { AdminAccountsView } from "./ui/accounts-view";
 export { AdminCatalogView } from "./ui/catalog-view";

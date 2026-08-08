@@ -19,6 +19,7 @@ const NAV: readonly NavItem[] = [
   { href: "/admin/reports", label: "신고" },
   { href: "/admin/listings", label: "매물" },
   { href: "/admin/orders", label: "주문" },
+  { href: "/admin/settlements", label: "정산" },
   { href: "/admin/community", label: "커뮤니티" },
   { href: "/admin/accounts", label: "회원" },
   { href: "/admin/catalog", label: "카탈로그" },

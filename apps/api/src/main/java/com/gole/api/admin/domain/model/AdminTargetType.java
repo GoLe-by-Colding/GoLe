@@ -8,5 +8,6 @@ public enum AdminTargetType {
     POST,
     ACCOUNT,
     REPORT,
-    CATALOG_SET
+    CATALOG_SET,
+    SETTLEMENT
 }

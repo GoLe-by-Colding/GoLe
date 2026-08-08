@@ -7,10 +7,12 @@ import com.gole.api.admin.domain.model.AdminAction;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.report.domain.model.Report;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.Map;
 
@@ -108,6 +110,36 @@ public final class AdminDtos {
     public record ChangeRoleRequest(@NotNull Role role) {}
 
     public record FeaturedRequest(boolean featured) {}
+
+    public record MarkSettlementPaidRequest(
+            @NotBlank(message = "지급 증빙 번호를 입력해야 합니다") @Size(max = 120) String paymentReference) {}
+
+    public record SettlementRow(
+            String orderId,
+            String sellerId,
+            long grossAmount,
+            long fee,
+            long payout,
+            double feeRate,
+            String status,
+            String paymentReference,
+            Instant createdAt,
+            Instant paidAt) {
+
+        public static SettlementRow from(SettlementSummary summary) {
+            return new SettlementRow(
+                    summary.orderId(),
+                    summary.sellerId(),
+                    summary.grossAmount(),
+                    summary.fee(),
+                    summary.payout(),
+                    summary.feeRate(),
+                    summary.status().name(),
+                    summary.paymentReference(),
+                    summary.createdAt(),
+                    summary.paidAt());
+        }
+    }
 
     // ── 카탈로그 ───────────────────────────────────────────────
 

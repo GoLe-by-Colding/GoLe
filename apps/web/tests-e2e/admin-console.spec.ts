@@ -19,7 +19,7 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
   });
 
   test("비로그인 사용자에게 콘솔 하위 경로도 동일하게 차단된다 (R1.3)", async ({ page }) => {
-    for (const path of ["/admin/reports", "/admin/accounts", "/admin/audit"]) {
+    for (const path of ["/admin/reports", "/admin/accounts", "/admin/settlements", "/admin/audit"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
     }
@@ -110,6 +110,66 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
+  });
+
+  test("정산 원장에서 지급 증빙을 입력해 완료 처리한다", async ({ page }) => {
+    let markedPaid = false;
+    await page.route("**/api/admin/settlements**", async (route) => {
+      const request = route.request();
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as { paymentReference?: string };
+        expect(body.paymentReference).toBe("BANK-20260809-001");
+        markedPaid = true;
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            orderId: "order-settlement-1",
+            sellerId: "seller-1",
+            grossAmount: 125_000,
+            fee: 6_250,
+            payout: 118_750,
+            feeRate: 0.05,
+            status: "PAID",
+            paymentReference: body.paymentReference,
+            createdAt: "2026-08-09T01:00:00Z",
+            paidAt: "2026-08-09T02:00:00Z",
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(
+          markedPaid
+            ? []
+            : [
+                {
+                  orderId: "order-settlement-1",
+                  sellerId: "seller-1",
+                  grossAmount: 125_000,
+                  fee: 6_250,
+                  payout: 118_750,
+                  feeRate: 0.05,
+                  status: "PENDING",
+                  paymentReference: null,
+                  createdAt: "2026-08-09T01:00:00Z",
+                  paidAt: null,
+                },
+              ],
+        ),
+      });
+    });
+
+    await page.goto("/admin/settlements");
+    await expect(page.getByRole("heading", { name: "판매자 정산" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "정산" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByText("₩118,750")).toBeVisible();
+
+    await page.getByRole("textbox", { name: /지급 증빙 번호/ }).fill("BANK-20260809-001");
+    await page.getByRole("button", { name: "지급 완료" }).click();
+
+    await expect.poll(() => markedPaid).toBe(true);
+    await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();
   });
 });
 

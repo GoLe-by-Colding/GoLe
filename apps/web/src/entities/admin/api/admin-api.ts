@@ -20,6 +20,19 @@ export interface AdminOrder {
   readonly createdAt: string | null;
 }
 
+export interface AdminSettlement {
+  readonly orderId: string;
+  readonly sellerId: string;
+  readonly grossAmount: number;
+  readonly fee: number;
+  readonly payout: number;
+  readonly feeRate: number;
+  readonly status: "PENDING" | "PAID";
+  readonly paymentReference: string | null;
+  readonly createdAt: string | null;
+  readonly paidAt: string | null;
+}
+
 export interface AdminListing {
   readonly id: string;
   readonly title: string;
@@ -136,6 +149,25 @@ export function fetchAdminOrders(
   if (status) params.set("status", status);
   if (query?.trim()) params.set("q", query.trim());
   return get<readonly AdminOrder[]>(token, `/api/admin/orders?${params}`);
+}
+
+export function fetchAdminSettlements(
+  token: string,
+  limit = 30,
+  status?: AdminSettlement["status"],
+): Promise<readonly AdminSettlement[]> {
+  const query = status ? `&status=${status}` : "";
+  return get<readonly AdminSettlement[]>(token, `/api/admin/settlements?limit=${limit}${query}`);
+}
+
+export function markAdminSettlementPaid(
+  token: string,
+  orderId: string,
+  paymentReference: string,
+): Promise<AdminSettlement> {
+  return post<AdminSettlement>(token, `/api/admin/settlements/${orderId}/paid`, {
+    paymentReference,
+  });
 }
 
 // ── 매물 ─────────────────────────────────────────────────────
