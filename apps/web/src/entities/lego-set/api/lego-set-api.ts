@@ -11,6 +11,16 @@ export function fetchLegoSetByNumber(setNumber: string, signal?: AbortSignal): P
   return apiRequest<LegoSet>(`/api/v1/catalog/sets/${setNumber}`, withSignal(signal));
 }
 
+/**
+ * 세트 상세(SSR·색인 대상)용 조회. 크롤러 요청마다 백엔드를 때리지 않도록 짧게 캐시한다.
+ * 카탈로그는 거의 변하지 않으므로 1시간이면 충분하다.
+ */
+export function fetchLegoSetForPage(setNumber: string): Promise<LegoSet> {
+  return apiRequest<LegoSet>(`/api/v1/catalog/sets/${encodeURIComponent(setNumber)}`, {
+    next: { revalidate: 3600 },
+  });
+}
+
 export function searchLegoSets(query: string, signal?: AbortSignal): Promise<readonly LegoSet[]> {
   const encoded = encodeURIComponent(query);
   return apiRequest<readonly LegoSet[]>(

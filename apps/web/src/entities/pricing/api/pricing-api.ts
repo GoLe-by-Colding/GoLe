@@ -13,6 +13,14 @@ export function fetchPriceStatistics(
   });
 }
 
+/** 세트 상세(SSR·색인 대상)용 시세 통계. 체결 이력은 자주 바뀌므로 5분 캐시. */
+export function fetchPriceStatisticsForPage(setNumber: string): Promise<PriceStatistics> {
+  return apiRequest<PriceStatistics>(
+    `${BASE}/${encodeURIComponent(setNumber)}/statistics`,
+    { next: { revalidate: 300 } },
+  );
+}
+
 export function fetchPriceChart(
   setNumber: string,
   signal?: AbortSignal,

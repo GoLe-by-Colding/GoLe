@@ -110,6 +110,49 @@ class ListingServiceTest {
         assertThatThrownBy(() -> service.delete("r1")).isInstanceOf(ListingStateException.class);
     }
 
+    @Test
+    void search_bySetNumber_returnsOnlyThatSet() {
+        service.create(validCommand()); // catalogSetNumber = 10307
+        service.create(new CreateListingCommand(
+                "seller-2",
+                "밀레니엄 팰컨 75192",
+                "중고",
+                900_000,
+                ItemCondition.USED_COMPLETE,
+                ConditionDisclosure.basic(),
+                List.of("photo-2.jpg"),
+                "75192"));
+
+        List<Listing> found = service.search(ListingSearchQuery.forSet("10307"));
+
+        assertThat(found).hasSize(1);
+        assertThat(found.getFirst().getCatalogSetNumber()).isEqualTo("10307");
+    }
+
+    @Test
+    void search_withoutSetNumber_returnsAllActive() {
+        service.create(validCommand());
+        service.create(new CreateListingCommand(
+                "seller-2",
+                "밀레니엄 팰컨 75192",
+                "중고",
+                900_000,
+                ItemCondition.USED_COMPLETE,
+                ConditionDisclosure.basic(),
+                List.of("photo-2.jpg"),
+                "75192"));
+
+        assertThat(service.search(ListingSearchQuery.newestAll())).hasSize(2);
+    }
+
+    /** 빈 문자열 setNumber는 "필터 없음"으로 정규화된다(쿼리스트링 `?setNumber=` 대응). */
+    @Test
+    void searchQuery_blankSetNumber_normalizesToNoFilter() {
+        assertThat(ListingSearchQuery.forSet("  ").setNumber()).isNull();
+        assertThat(new ListingSearchQuery(null, null, null, null, null, null, "").setNumber())
+                .isNull();
+    }
+
     private static final class InMemoryListingRepository implements ListingRepositoryPort {
         private final List<Listing> store = new ArrayList<>();
 
@@ -127,7 +170,10 @@ class ListingServiceTest {
 
         @Override
         public List<Listing> search(ListingSearchQuery query) {
-            return store.stream().filter(Listing::isActive).toList();
+            return store.stream()
+                    .filter(Listing::isActive)
+                    .filter(l -> query.setNumber() == null || query.setNumber().equals(l.getCatalogSetNumber()))
+                    .toList();
         }
 
         @Override

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { env } from "@shared/config";
+import { JsonLd } from "@shared/ui";
 import "./globals.css";
 
 const SITE_NAME = "GoLe";
@@ -81,13 +82,7 @@ function StructuredData() {
       },
     ],
   };
-  return (
-    <script
-      type="application/ld+json"
-      // 구조화 데이터는 신뢰된 정적 콘텐츠다.
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(json) }}
-    />
-  );
+  return <JsonLd data={json} />;
 }
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
