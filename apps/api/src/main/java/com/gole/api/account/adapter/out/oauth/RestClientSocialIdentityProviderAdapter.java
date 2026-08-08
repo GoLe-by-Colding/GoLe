@@ -105,19 +105,25 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
     }
 
     /** provider별 응답 스키마에서 providerId/email을 추출한다. */
-    private SocialProfile parseProfile(AuthProvider provider, Map<String, Object> info) {
+    static SocialProfile parseProfile(AuthProvider provider, Map<String, Object> info) {
         return switch (provider) {
-            case GOOGLE -> new SocialProfile(provider, str(info.get("sub")), str(info.get("email")));
+            case GOOGLE -> new SocialProfile(
+                    provider, str(info.get("sub")), str(info.get("email")), bool(info.get("email_verified")));
             case KAKAO -> {
                 Map<String, Object> account = asMap(info.get("kakao_account"));
                 yield new SocialProfile(
-                        provider, str(info.get("id")), account == null ? null : str(account.get("email")));
+                        provider,
+                        str(info.get("id")),
+                        account == null ? null : str(account.get("email")),
+                        account != null
+                                && bool(account.get("is_email_valid"))
+                                && bool(account.get("is_email_verified")));
             }
             case NAVER -> {
                 Map<String, Object> resp = asMap(info.get("response"));
                 yield resp == null
-                        ? new SocialProfile(provider, null, null)
-                        : new SocialProfile(provider, str(resp.get("id")), str(resp.get("email")));
+                        ? new SocialProfile(provider, null, null, false)
+                        : new SocialProfile(provider, str(resp.get("id")), str(resp.get("email")), true);
             }
         };
     }
@@ -137,5 +143,9 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
 
     private static String str(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static boolean bool(Object value) {
+        return value instanceof Boolean b ? b : Boolean.parseBoolean(str(value));
     }
 }

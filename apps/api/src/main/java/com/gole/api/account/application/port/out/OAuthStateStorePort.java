@@ -9,9 +9,9 @@ import java.time.Duration;
  */
 public interface OAuthStateStorePort {
 
-    /** state→provider 매핑을 TTL과 함께 저장한다. */
-    void save(String state, AuthProvider provider, Duration ttl);
+    /** state→provider+redirectUri 매핑을 TTL과 함께 저장한다. */
+    void save(String state, AuthProvider provider, String redirectUri, Duration ttl);
 
-    /** state를 1회 소비한다. 존재하고 provider가 일치하면 true(소비 후 삭제), 아니면 false. */
-    boolean consume(String state, AuthProvider provider);
+    /** state를 1회 소비한다. provider와 redirectUri가 모두 일치하면 true, 아니면 false. */
+    boolean consume(String state, AuthProvider provider, String redirectUri);
 }

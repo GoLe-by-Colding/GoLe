@@ -22,20 +22,24 @@ public class RedisOAuthStateStoreAdapter implements OAuthStateStorePort {
     }
 
     @Override
-    public void save(String state, AuthProvider provider, Duration ttl) {
-        redisTemplate.opsForValue().set(key(state), provider.key(), ttl);
+    public void save(String state, AuthProvider provider, String redirectUri, Duration ttl) {
+        redisTemplate.opsForValue().set(key(state), value(provider, redirectUri), ttl);
     }
 
     @Override
-    public boolean consume(String state, AuthProvider provider) {
+    public boolean consume(String state, AuthProvider provider, String redirectUri) {
         if (state == null || state.isBlank()) {
             return false;
         }
         String storedProvider = redisTemplate.opsForValue().getAndDelete(key(state));
-        return storedProvider != null && storedProvider.equals(provider.key());
+        return storedProvider != null && storedProvider.equals(value(provider, redirectUri));
     }
 
     private static String key(String state) {
         return KEY_PREFIX + state;
+    }
+
+    private static String value(AuthProvider provider, String redirectUri) {
+        return provider.key() + "\n" + redirectUri;
     }
 }

@@ -9,6 +9,7 @@ import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.SocialIdentityProviderPort;
 import com.gole.api.account.application.port.out.SocialIdentityProviderPort.SocialProfile;
+import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
@@ -76,7 +77,7 @@ public class SocialAuthService implements SocialLoginUseCase {
         requireConfigured(provider);
         // 서버가 state를 발급·저장한다(콜백에서 1회 소비해 CSRF 방지).
         String state = UUID.randomUUID().toString();
-        stateStore.save(state, provider, STATE_TTL);
+        stateStore.save(state, provider, redirectUri, STATE_TTL);
         return identityProvider.authorizeUrl(provider, redirectUri, state);
     }
 
@@ -85,7 +86,7 @@ public class SocialAuthService implements SocialLoginUseCase {
         requireConfigured(command.provider());
 
         // CSRF: 서버가 발급한 state인지 검증(1회 소비).
-        if (!stateStore.consume(command.state(), command.provider())) {
+        if (!stateStore.consume(command.state(), command.provider(), command.redirectUri())) {
             throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
         }
 
@@ -95,11 +96,26 @@ public class SocialAuthService implements SocialLoginUseCase {
         if (profile.email() == null || profile.email().isBlank()) {
             throw new BadRequestException("OAUTH_EMAIL_UNAVAILABLE", "Provider did not return an email address");
         }
+        if (!profile.emailVerified()) {
+            throw new BadRequestException("OAUTH_EMAIL_UNVERIFIED", "Provider email address is not verified");
+        }
 
         Email email = new Email(profile.email());
         var existing = accountRepository.findByEmail(email);
-        Account account = existing.orElseGet(() -> createSocialAccount(email));
-        boolean newAccount = existing.isEmpty();
+        Account account;
+        boolean newAccount;
+        if (existing.isPresent()) {
+            account = existing.get();
+            newAccount = false;
+        } else {
+            try {
+                account = createSocialAccount(email);
+                newAccount = true;
+            } catch (EmailAlreadyRegisteredException concurrentSignup) {
+                account = accountRepository.findByEmail(email).orElseThrow(() -> concurrentSignup);
+                newAccount = false;
+            }
+        }
 
         if (newAccount) {
             operationalEventPublisher.publish(new OperationalEvent(

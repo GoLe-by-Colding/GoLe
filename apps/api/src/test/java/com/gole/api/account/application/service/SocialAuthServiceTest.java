@@ -66,8 +66,8 @@ class SocialAuthServiceTest {
     void login_createsAccount_whenEmailUnknown() {
         provider.configured = true;
         provider.profile =
-                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-123", "new@example.com");
-        stateStore.save("s1", AuthProvider.GOOGLE, Duration.ofMinutes(10));
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-123", "new@example.com", true);
+        stateStore.save("s1", AuthProvider.GOOGLE, "https://app/cb", Duration.ofMinutes(10));
 
         SocialLoginResult result =
                 service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s1"));
@@ -82,11 +82,11 @@ class SocialAuthServiceTest {
     void login_reusesAccount_whenEmailExists() {
         provider.configured = true;
         provider.profile =
-                new SocialIdentityProviderPort.SocialProfile(AuthProvider.KAKAO, "k-1", "existing@example.com");
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.KAKAO, "k-1", "existing@example.com", true);
         Account existing = Account.provisioned(
                 "acc-existing", new Email("existing@example.com"), new PasswordHash("hash:x"), Role.USER);
         accounts.save(existing);
-        stateStore.save("s2", AuthProvider.KAKAO, Duration.ofMinutes(10));
+        stateStore.save("s2", AuthProvider.KAKAO, "https://app/cb", Duration.ofMinutes(10));
 
         SocialLoginResult result =
                 service.login(new SocialLoginCommand(AuthProvider.KAKAO, "code", "https://app/cb", "s2"));
@@ -106,7 +106,8 @@ class SocialAuthServiceTest {
     @Test
     void login_rejectsWhenStateInvalid() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-1", "x@example.com");
+        provider.profile =
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-1", "x@example.com", true);
         // state를 저장하지 않음 → CSRF 검증 실패
         assertThatThrownBy(() ->
                         service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "bogus")))
@@ -116,10 +117,35 @@ class SocialAuthServiceTest {
     @Test
     void login_rejectsWhenEmailMissing() {
         provider.configured = true;
-        provider.profile = new SocialIdentityProviderPort.SocialProfile(AuthProvider.NAVER, "n-1", null);
-        stateStore.save("s3", AuthProvider.NAVER, Duration.ofMinutes(10));
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(AuthProvider.NAVER, "n-1", null, false);
+        stateStore.save("s3", AuthProvider.NAVER, "https://app/cb", Duration.ofMinutes(10));
         assertThatThrownBy(
                         () -> service.login(new SocialLoginCommand(AuthProvider.NAVER, "code", "https://app/cb", "s3")))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void login_rejectsUnverifiedProviderEmail() {
+        provider.configured = true;
+        provider.profile =
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-2", "x@example.com", false);
+        stateStore.save("s4", AuthProvider.GOOGLE, "https://app/cb", Duration.ofMinutes(10));
+
+        assertThatThrownBy(() ->
+                        service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s4")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not verified");
+    }
+
+    @Test
+    void login_rejectsStateWhenRedirectUriChanged() {
+        provider.configured = true;
+        provider.profile =
+                new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-3", "x@example.com", true);
+        stateStore.save("s5", AuthProvider.GOOGLE, "https://app/cb", Duration.ofMinutes(10));
+
+        assertThatThrownBy(() ->
+                        service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://evil/cb", "s5")))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -200,14 +226,14 @@ class SocialAuthServiceTest {
         private final Map<String, String> store = new HashMap<>();
 
         @Override
-        public void save(String state, AuthProvider provider, Duration ttl) {
-            store.put(state, provider.key());
+        public void save(String state, AuthProvider provider, String redirectUri, Duration ttl) {
+            store.put(state, provider.key() + "\n" + redirectUri);
         }
 
         @Override
-        public boolean consume(String state, AuthProvider provider) {
+        public boolean consume(String state, AuthProvider provider, String redirectUri) {
             String p = store.remove(state);
-            return p != null && p.equals(provider.key());
+            return p != null && p.equals(provider.key() + "\n" + redirectUri);
         }
     }
 

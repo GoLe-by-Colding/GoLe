@@ -21,6 +21,7 @@ public interface SocialIdentityProviderPort {
      * @param provider   제공자
      * @param providerId 제공자 측 고유 사용자 ID
      * @param email      이메일(없을 수 있음 → 서비스에서 거부)
+     * @param emailVerified 제공자가 이메일 인증을 확인했는지
      */
-    record SocialProfile(AuthProvider provider, String providerId, String email) {}
+    record SocialProfile(AuthProvider provider, String providerId, String email, boolean emailVerified) {}
 }
