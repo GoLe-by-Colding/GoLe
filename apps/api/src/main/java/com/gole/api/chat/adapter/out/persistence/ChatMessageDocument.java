@@ -2,16 +2,16 @@ package com.gole.api.chat.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "chat_messages")
+@CompoundIndex(name = "room_sent_at_idx", def = "{'roomId': 1, 'sentAt': -1}")
 public class ChatMessageDocument {
 
     @Id
     private String id;
 
-    @Indexed
     private String roomId;
 
     private String senderId;

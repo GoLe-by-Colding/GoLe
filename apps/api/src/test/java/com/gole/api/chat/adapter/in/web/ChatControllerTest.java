@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
+import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
@@ -36,15 +37,11 @@ import tools.jackson.databind.ObjectMapper;
 class ChatControllerTest {
 
     private final ChatRoomMongoRepository rooms = mock(ChatRoomMongoRepository.class);
+    private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
     private final RedisMessageListenerContainer listeners = mock(RedisMessageListenerContainer.class);
     private final ChatController controller = new ChatController(
-            rooms,
-            mock(ChatMessageMongoRepository.class),
-            mock(ChatRedisPublisher.class),
-            listeners,
-            listings,
-            new ObjectMapper());
+            rooms, messages, mock(ChatRedisPublisher.class), listeners, listings, new ObjectMapper());
 
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
@@ -84,6 +81,33 @@ class ChatControllerTest {
                 new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("real-buyer"));
 
         assertThat(response.id()).isEqualTo("winner");
+    }
+
+    @Test
+    void myRooms_usesAuthenticatedUserAndAppliesRepositoryLimit() {
+        when(rooms.findTop100ByBuyerIdOrSellerIdOrderByCreatedAtDesc("account-1", "account-1"))
+                .thenReturn(List.of());
+
+        assertThat(controller.myRooms(authenticated("account-1"))).isEmpty();
+
+        verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByCreatedAtDesc("account-1", "account-1");
+    }
+
+    @Test
+    void messages_readsOnlyRecentBatchAndReturnsChronologicalOrder() {
+        when(rooms.findById("room-1"))
+                .thenReturn(Optional.of(new ChatRoomDocument(
+                        "room-1", "listing-1", "buyer", "seller", Instant.parse("2026-08-09T00:00:00Z"))));
+        ChatMessageDocument newest =
+                new ChatMessageDocument("message-2", "room-1", "seller", "new", Instant.parse("2026-08-09T00:02:00Z"));
+        ChatMessageDocument older =
+                new ChatMessageDocument("message-1", "room-1", "buyer", "old", Instant.parse("2026-08-09T00:01:00Z"));
+        when(messages.findTop60ByRoomIdOrderBySentAtDesc("room-1")).thenReturn(List.of(newest, older));
+
+        var response = controller.messages("room-1", authenticated("buyer"));
+
+        assertThat(response).extracting(ChatController.MessageResponse::id).containsExactly("message-1", "message-2");
+        verify(messages).findTop60ByRoomIdOrderBySentAtDesc("room-1");
     }
 
     @Test

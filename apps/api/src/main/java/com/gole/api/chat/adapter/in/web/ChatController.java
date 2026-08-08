@@ -17,6 +17,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -34,7 +36,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -98,9 +99,9 @@ public class ChatController {
     }
 
     @GetMapping("/rooms")
-    public List<RoomResponse> myRooms(@RequestParam String userId, HttpServletRequest http) {
+    public List<RoomResponse> myRooms(HttpServletRequest http) {
         String actorId = AuthenticatedUser.id(http);
-        return roomRepo.findByBuyerIdOrSellerIdOrderByCreatedAtDesc(actorId, actorId).stream()
+        return roomRepo.findTop100ByBuyerIdOrSellerIdOrderByCreatedAtDesc(actorId, actorId).stream()
                 .map(RoomResponse::from)
                 .toList();
     }
@@ -108,9 +109,9 @@ public class ChatController {
     @GetMapping("/rooms/{roomId}/messages")
     public List<MessageResponse> messages(@PathVariable String roomId, HttpServletRequest http) {
         requireParticipant(roomId, http);
-        List<ChatMessageDocument> all = messageRepo.findByRoomIdOrderBySentAtAsc(roomId);
-        int from = Math.max(0, all.size() - 60);
-        return all.subList(from, all.size()).stream().map(MessageResponse::from).toList();
+        List<ChatMessageDocument> recent = new ArrayList<>(messageRepo.findTop60ByRoomIdOrderBySentAtDesc(roomId));
+        Collections.reverse(recent);
+        return recent.stream().map(MessageResponse::from).toList();
     }
 
     @PostMapping("/rooms/{roomId}/messages")

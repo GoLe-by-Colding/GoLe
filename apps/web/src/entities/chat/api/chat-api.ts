@@ -14,8 +14,8 @@ export function createOrGetRoom(
   });
 }
 
-export function fetchMyRooms(userId: string): Promise<readonly ChatRoom[]> {
-  return apiRequest<readonly ChatRoom[]>(`${BASE}/rooms?userId=${userId}`, {
+export function fetchMyRooms(): Promise<readonly ChatRoom[]> {
+  return apiRequest<readonly ChatRoom[]>(`${BASE}/rooms`, {
     cache: "no-store",
   });
 }

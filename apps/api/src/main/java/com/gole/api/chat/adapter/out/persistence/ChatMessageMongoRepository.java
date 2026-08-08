@@ -5,5 +5,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface ChatMessageMongoRepository extends MongoRepository<ChatMessageDocument, String> {
 
-    List<ChatMessageDocument> findByRoomIdOrderBySentAtAsc(String roomId);
+    List<ChatMessageDocument> findTop60ByRoomIdOrderBySentAtDesc(String roomId);
 }
