@@ -32,6 +32,9 @@ public class AccountDocument {
     private Instant failureWindowStartedAt;
     private Instant lockedUntil;
 
+    // 운영자 정지 사유(SUSPENDED일 때만 의미 있음). admin-console 요구사항 6.2
+    private String suspendedReason;
+
     protected AccountDocument() {
         // MongoDB 매핑용
     }
@@ -46,7 +49,8 @@ public class AccountDocument {
             Instant verificationCodeIssuedAt,
             int failedAttempts,
             Instant failureWindowStartedAt,
-            Instant lockedUntil) {
+            Instant lockedUntil,
+            String suspendedReason) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
@@ -57,6 +61,7 @@ public class AccountDocument {
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
+        this.suspendedReason = suspendedReason;
     }
 
     public String getId() {
@@ -97,5 +102,9 @@ public class AccountDocument {
 
     public Instant getLockedUntil() {
         return lockedUntil;
+    }
+
+    public String getSuspendedReason() {
+        return suspendedReason;
     }
 }

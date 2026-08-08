@@ -6,6 +6,7 @@ import com.gole.api.community.application.port.in.DeletePostUseCase;
 import com.gole.api.community.application.port.in.EditPostUseCase;
 import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
+import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
@@ -29,7 +30,8 @@ public class CommunityService
                 LikePostUseCase,
                 GetFeedUseCase,
                 DeletePostUseCase,
-                EditPostUseCase {
+                EditPostUseCase,
+                ModeratePostUseCase {
 
     private final PostRepositoryPort postRepository;
     private final CommentRepositoryPort commentRepository;
@@ -103,6 +105,17 @@ public class CommunityService
         if (!post.getAuthorId().equals(requesterId)) {
             throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can delete this post");
         }
+        post.delete();
+        postRepository.save(post);
+    }
+
+    /**
+     * 운영자 강제 삭제. 작성자 검증을 생략하는 것이 이 유스케이스의 존재 이유다.
+     * 사유는 관리자 컨텍스트의 감사 로그가 보관한다. (admin-console 요구사항 5.2)
+     */
+    @Override
+    public void removeByModerator(String postId, String reason) {
+        Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         post.delete();
         postRepository.save(post);
     }

@@ -103,6 +103,7 @@ public class AccountService
         Account account = accountRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
         Instant now = Instant.now(clock);
+        account.ensureNotSuspended(); // admin-console 요구사항 6.4
         account.ensureNotLocked(now); // 요구사항 1.8
 
         if (!passwordHasher.matches(command.rawPassword(), account.getPasswordHash())) {
@@ -132,11 +133,20 @@ public class AccountService
         }
     }
 
+    /**
+     * 세션 해석. 권한(role)은 저장된 토큰 값이 아니라 <b>계정의 현재 상태</b>에서 읽는다.
+     *
+     * <p>정지된 계정은 이미 발급된 토큰이 남아 있어도 해석에 실패시켜 401이 되게 한다.
+     * 세션 일괄 폐기(요구사항 6.3)가 어떤 이유로 누락돼도 정지가 실효되는 최종 방어선이다.
+     * (admin-console 요구사항 6.5, 6.7)
+     */
     @Override
     public Optional<CurrentSession> resolve(String token) {
-        return sessionStore.resolve(token).flatMap(p -> accountRepository
-                .findById(p.accountId())
+        return sessionStore
+                .resolve(token)
+                .flatMap(p -> accountRepository.findById(p.accountId()))
+                .filter(account -> !account.isSuspended())
                 .map(account ->
-                        new CurrentSession(account.getId(), account.getEmail().value(), account.getRole())));
+                        new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
     }
 }

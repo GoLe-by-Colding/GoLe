@@ -19,6 +19,13 @@ public interface SessionStorePort {
     /** 토큰을 폐기한다(로그아웃). */
     void revoke(String token);
 
+    /**
+     * 해당 계정의 모든 활성 세션을 폐기한다. (admin-console 요구사항 6.3, 6.7)
+     *
+     * <p>정지·권한 변경이 이미 발급된 토큰에도 즉시 반영되게 한다.
+     */
+    void revokeAllForAccount(String accountId);
+
     /** 인증된 호출자 식별 정보. */
     record SessionPrincipal(String accountId, Role role) {}
 }
