@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import { AdminPage } from "@views/admin";
+import { AdminDashboardView } from "@views/admin";
 
-export const metadata: Metadata = {
-  title: "관리자",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = { title: "대시보드" };
 
 export default function Page() {
-  return <AdminPage />;
+  return <AdminDashboardView />;
 }

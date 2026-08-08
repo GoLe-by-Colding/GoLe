@@ -115,12 +115,12 @@ export async function HomePage() {
           aria-hidden="true"
           className="stud-pattern pointer-events-none absolute inset-0 text-white/[0.05]"
         />
-        {/* 부유하는 고래 브릭 마크 */}
+        {/* 부유하는 고래 브릭 마스코트 — 워터마크가 아니라 실제로 보이는 일러스트로 둔다. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-6 top-1/2 -translate-y-[58%] opacity-[0.1] max-lg:hidden motion-safe:animate-float"
+          className="pointer-events-none absolute right-6 top-1/2 -translate-y-[54%] opacity-60 max-lg:hidden motion-safe:animate-float xl:right-16"
         >
-          <Logo size={400} showWordmark={false} />
+          <Logo size={380} showWordmark={false} spout />
         </div>
 
         <Container width="xl" className="relative">
