@@ -1,7 +1,12 @@
 package com.gole.api.order.adapter.out.payment;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
+import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,14 +33,17 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     private static final Logger log = LoggerFactory.getLogger(PortOnePaymentGatewayAdapter.class);
 
     private final RestClient client;
+    private final OperationalEventPublisher operationalEvents;
 
     public PortOnePaymentGatewayAdapter(
             @Value("${portone.api-base:https://api.portone.io}") String apiBase,
-            @Value("${portone.api-secret}") String apiSecret) {
+            @Value("${portone.api-secret}") String apiSecret,
+            OperationalEventPublisher operationalEvents) {
         this.client = RestClient.builder()
                 .baseUrl(apiBase)
                 .defaultHeader("Authorization", "PortOne " + apiSecret)
                 .build();
+        this.operationalEvents = operationalEvents;
     }
 
     @Override
@@ -49,6 +57,7 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                     return PaymentVerificationResult.PAID;
                 }
                 log.error("[PortOne] 결제 금액 불일치 orderId={} paid={} expected={}", orderId, paidTotal, amount);
+                publishReviewRequired(orderId, "결제 금액 불일치", status);
                 return PaymentVerificationResult.REVIEW_REQUIRED;
             }
             return switch (status) {
@@ -56,6 +65,7 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 case "READY", "PENDING" -> PaymentVerificationResult.PENDING;
                 default -> {
                     log.warn("[PortOne] 알 수 없는 결제 상태 orderId={} status={}", orderId, status);
+                    publishReviewRequired(orderId, "알 수 없는 PG 상태", status);
                     yield PaymentVerificationResult.REVIEW_REQUIRED;
                 }
             };
@@ -136,5 +146,15 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             }
         }
         return -1;
+    }
+
+    private void publishReviewRequired(String orderId, String reason, String pgStatus) {
+        operationalEvents.publish(new OperationalEvent(
+                Category.PAYMENT,
+                Level.ERROR,
+                "결제 수동 확인 필요",
+                "주문 상태를 변경하지 않고 보존했습니다. PortOne 대시보드와 관리자 주문 화면에서 확인하세요.",
+                Map.of("주문 ID", orderId, "사유", reason, "PG 상태", pgStatus),
+                Instant.now()));
     }
 }
