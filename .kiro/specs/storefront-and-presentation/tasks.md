@@ -22,8 +22,15 @@
 - [x] 9. Playwright Chromium 구동 + 깨진 home 스펙 수정 (R5.1)
 - [x] 10. 모바일 프로젝트(Pixel 5) + mobile.spec (R5.2)
 
-## 후속 (TODO)
-- [ ] 실제 제품 이미지 정책/호스팅
+## 후속 (TODO) — 2026-08-03 실측 감사 반영
+- [x] 실제 제품 이미지 정책/호스팅 — `ip-safe-content` R1.3(오리지널 커버 아트) +
+      `image-upload`(MinIO 호스팅)로 해소
+- [x] 동적 sitemap(상세 URL) — `app/sitemap.ts`가 `/api/v1/listings`·`/api/v1/community/posts`를
+      fetch해 각 100건까지 상세 URL 생성(`sitemap.ts:29-65`, `revalidate: 3600`)
 - [ ] 상품상세/시세/관리자 화면 모바일 정교화
-- [ ] 동적 sitemap(상세 URL)
-- [ ] e2e 전용 테스트 DB 분리(현재 운영 DB에 기록)
+- [ ] **e2e 전용 테스트 DB 분리 — 실제 오염 확인됨(우선순위 상향).**
+      로컬 `gole` DB에서 테스트 잔여 데이터 발견:
+      `{title: "환불검증", price: 0, sellerId: "s", photoUrls: ["a.jpg"]}` 등이
+      `listings` 컬렉션에 남아 실제 매물 목록에 섞여 노출된다.
+      `t`/`t2`/`txncheck` 같은 테스트 컬렉션도 잔존.
+      `playwright.config.ts`에 DB 격리 설정이 없어 e2e가 개발 DB에 직접 쓴다.
