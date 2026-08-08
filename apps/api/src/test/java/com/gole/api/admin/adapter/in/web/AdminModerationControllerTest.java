@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
+import com.gole.api.admin.application.service.ResolveReportTargetService;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
@@ -38,8 +39,9 @@ class AdminModerationControllerTest {
     private final ManageSettlementsUseCase settlements = mock(ManageSettlementsUseCase.class);
     private final PayOrderUseCase payments = mock(PayOrderUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
+    private final ResolveReportTargetService resolveTarget = new ResolveReportTargetService(reports, listings, posts);
     private final AdminModerationController controller = new AdminModerationController(
-            mock(AdminReadModelPort.class), listings, posts, reports, settlements, payments, audit);
+            mock(AdminReadModelPort.class), listings, posts, reports, settlements, payments, audit, resolveTarget);
 
     @Test
     @DisplayName("결제 재조정 성공 상태와 감사 로그를 반환한다")

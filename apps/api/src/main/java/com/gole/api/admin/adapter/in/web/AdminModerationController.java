@@ -11,6 +11,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.SettlementRow;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
+import com.gole.api.admin.application.service.ResolveReportTargetService;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
@@ -19,7 +20,6 @@ import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
-import com.gole.api.report.domain.exception.ReportAlreadyHandledException;
 import com.gole.api.report.domain.model.ReportStatus;
 import com.gole.api.report.domain.model.ReportTargetType;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,6 +59,7 @@ public class AdminModerationController {
     private final ManageSettlementsUseCase manageSettlements;
     private final PayOrderUseCase payOrders;
     private final RecordAdminActionUseCase audit;
+    private final ResolveReportTargetService resolveReportTarget;
 
     public AdminModerationController(
             AdminReadModelPort readModel,
@@ -67,7 +68,8 @@ public class AdminModerationController {
             ManageReportsUseCase manageReports,
             ManageSettlementsUseCase manageSettlements,
             PayOrderUseCase payOrders,
-            RecordAdminActionUseCase audit) {
+            RecordAdminActionUseCase audit,
+            ResolveReportTargetService resolveReportTarget) {
         this.readModel = readModel;
         this.moderateListing = moderateListing;
         this.moderatePost = moderatePost;
@@ -75,6 +77,7 @@ public class AdminModerationController {
         this.manageSettlements = manageSettlements;
         this.payOrders = payOrders;
         this.audit = audit;
+        this.resolveReportTarget = resolveReportTarget;
     }
 
     // ── 주문 (읽기 전용) ────────────────────────────────────────
@@ -192,12 +195,8 @@ public class AdminModerationController {
     @PostMapping("/reports/{reportId}/resolve-target")
     public ReportRow resolveReportTarget(
             @PathVariable String reportId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
-        var report = manageReports.get(reportId);
-        if (report.getStatus() != ReportStatus.PENDING) {
-            throw new ReportAlreadyHandledException(reportId);
-        }
+        var report = resolveReportTarget.resolve(reportId, request.reason());
         if (report.getTargetType() == ReportTargetType.LISTING) {
-            moderateListing.takedown(report.getTargetId(), request.reason());
             record(
                     http,
                     AdminActionType.LISTING_TAKEDOWN,
@@ -205,11 +204,9 @@ public class AdminModerationController {
                     report.getTargetId(),
                     request.reason());
         } else {
-            moderatePost.removeByModerator(report.getTargetId(), request.reason());
             record(http, AdminActionType.POST_REMOVE, AdminTargetType.POST, report.getTargetId(), request.reason());
         }
-
-        ReportRow row = ReportRow.from(manageReports.resolve(reportId));
+        ReportRow row = ReportRow.from(report);
         record(http, AdminActionType.REPORT_RESOLVE, AdminTargetType.REPORT, reportId, request.reason());
         return row;
     }
