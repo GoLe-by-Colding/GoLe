@@ -1,7 +1,8 @@
 # MinIO 오브젝트 스토리지
 
 GoLe에서 이미지/파일 업로드가 필요할 때 사용하는 S3 호환 스토리지.
-Mac Mini 호스트에서 Homebrew로 직접 실행 중 (Docker 컨테이너 아님).
+로컬 개발은 루트 `docker-compose.yml`의 MinIO를 사용하고, 운영 환경은 Mac Mini 호스트의
+Homebrew MinIO를 사용한다.
 
 ## 접속 정보
 
@@ -9,11 +10,12 @@ Mac Mini 호스트에서 Homebrew로 직접 실행 중 (Docker 컨테이너 아�
 |---|---|
 | Access Key | `minioadmin` |
 | Secret Key | `minioadmin` |
-| S3 API (컨테이너 내부) | `http://host.docker.internal:9000` |
-| S3 API (호스트 내부) | `http://localhost:9000` |
-| 콘솔 UI | `https://minio.kscold.com` |
-| 데이터 경로 | `/opt/homebrew/var/minio` |
-| 로그 | `/opt/homebrew/var/log/minio.log` |
+| 로컬 Spring Boot → Docker MinIO | `http://localhost:9000` |
+| 운영 컨테이너 → 호스트 MinIO | `http://host.docker.internal:9000` |
+| 로컬 콘솔 UI | `http://localhost:9001` |
+| 운영 콘솔 UI | `https://minio.kscold.com` |
+| 운영 데이터 경로 | `/opt/homebrew/var/minio` |
+| 운영 로그 | `/opt/homebrew/var/log/minio.log` |
 
 ## 현재 버킷 목록
 
@@ -67,7 +69,22 @@ mc mb local/gole
 mc ls local/gole
 ```
 
-## 서비스 관리 (Mac 호스트에서)
+## 로컬 개발 서비스 관리
+
+```bash
+pnpm infra:up
+pnpm infra:down
+```
+
+로컬 MinIO 데이터는 Docker 볼륨 `minio_data`에 보존된다. 백엔드의 local 프로필은
+`STORAGE_S3_ENDPOINT=http://localhost:9000`을 기본으로 사용하며, `gole` 버킷은 백엔드가
+시작할 때 자동 생성한다.
+
+포트 충돌이 있으면 루트 `.env.example`을 `.env`로 복사해 `MINIO_API_PORT`와
+`MINIO_CONSOLE_PORT`를 변경한다. 사용자/비밀번호를 변경하는 경우 같은 `.env`의
+`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`를 백엔드 local 프로필도 함께 사용한다.
+
+## 운영 서비스 관리 (Mac 호스트에서)
 
 ```bash
 # 상태 확인
@@ -82,7 +99,8 @@ tail -f /opt/homebrew/var/log/minio.log
 
 ## 주의사항
 
-- MinIO는 Docker 컨테이너가 아니라 Mac 호스트 프로세스임.
-- 컨테이너(ubuntu-gole)에서 접근 시 반드시 `host.docker.internal:9000` 사용.
+- 운영 MinIO는 Docker 컨테이너가 아니라 Mac 호스트 프로세스임.
+- 운영 컨테이너(ubuntu-gole)에서 접근 시 반드시 `host.docker.internal:9000` 사용.
+- 로컬 Compose 이미지는 팀원 간 재현성을 위해 digest로 고정한다.
 - `minio.kscold.com`은 콘솔 UI(9001)만 프록시 — S3 API(9000)는 직접 접근 불가.
 - S3 API를 외부에 열어야 할 경우 별도 nginx 설정 필요.

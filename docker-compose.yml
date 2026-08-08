@@ -1,17 +1,25 @@
 services:
   mongo:
     image: mongo:7
-    container_name: gole-mongo
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "${MONGODB_PORT:-27017}:${MONGODB_PORT:-27017}"
     # 단일 노드 replica set: 멀티 도큐먼트 트랜잭션(주문/결제/정산 정합성)에 필요.
     # 로컬 개발 단순화를 위해 auth는 비활성. 운영에서는 keyfile + auth 적용 필요.
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    command: ["--port", "${MONGODB_PORT:-27017}", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--port",
+          "${MONGODB_PORT:-27017}",
+          "--eval",
+          "db.adminCommand('ping').ok",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,17 +35,16 @@ services:
       - bash
       - -c
       - |
-        mongosh --host mongo:27017 --quiet --eval '
+        mongosh --host mongo:${MONGODB_PORT:-27017} --quiet --eval '
           try { rs.status().ok }
-          catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]}) }
+          catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:${MONGODB_PORT:-27017}"}]}) }
         '
 
   redis:
     image: redis:7-alpine
-    container_name: gole-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -47,6 +54,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # 로컬 이미지 업로드용 S3 호환 스토리지.
+  # Spring Boot는 local 프로필에서 http://localhost:9000으로 접근한다.
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
 volumes:
   mongo_data:
   redis_data:
+  minio_data:

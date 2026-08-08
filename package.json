@@ -8,10 +8,10 @@
     "build:web": "pnpm --filter web build",
     "test:web": "pnpm --filter web test",
     "e2e:web": "pnpm --filter web e2e",
-    "dev:api": "cd apps/api && ./gradlew bootRun",
-    "build:api": "cd apps/api && ./gradlew build",
-    "test:api": "cd apps/api && ./gradlew test",
-    "infra:up": "docker compose up -d",
+    "dev:api": "node scripts/gradle.mjs --local bootRun",
+    "build:api": "node scripts/gradle.mjs build",
+    "test:api": "node scripts/gradle.mjs test",
+    "infra:up": "docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init",
     "infra:down": "docker compose down"
   },
   "engines": {
