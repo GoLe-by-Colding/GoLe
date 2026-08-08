@@ -49,7 +49,8 @@ class DiscordOperationalEventPublisherTest {
             assertThat(received.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(body.get())
                     .contains("결제 완료", "order-1", "GoLe · test")
-                    .contains("\"allowed_mentions\":{\"parse\":[]}");
+                    .contains("\"allowed_mentions\":{\"parse\":[]}")
+                    .doesNotContain("\"username\"");
         } finally {
             server.stop(0);
         }

@@ -83,7 +83,6 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         embed.put("fields", fields);
 
         return Map.of(
-                "username", properties.getUsername(),
                 "allowed_mentions", Map.of("parse", List.of()),
                 "embeds", List.of(embed));
     }

@@ -10,7 +10,6 @@ public class DiscordOperationsProperties {
 
     private boolean enabled;
     private String environment = "local";
-    private String username = "GoLe Watcher";
     private String webhookUrl = "";
     private String accountWebhookUrl = "";
     private String paymentWebhookUrl = "";
@@ -30,14 +29,6 @@ public class DiscordOperationsProperties {
 
     public void setEnvironment(String environment) {
         this.environment = environment;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
     }
 
     public String getWebhookUrl() {

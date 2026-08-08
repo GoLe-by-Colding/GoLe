@@ -102,7 +102,6 @@ gole:
   discord:
     enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}
     environment: ${GOLE_ENVIRONMENT:local}
-    username: ${GOLE_DISCORD_ALERT_USERNAME:GoLe Watcher}
     webhook-url: ${DISCORD_WEBHOOK_URL:}
     account-webhook-url: ${DISCORD_ACCOUNT_WEBHOOK_URL:}
     payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
