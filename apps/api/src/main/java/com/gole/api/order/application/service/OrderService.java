@@ -33,8 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 주문/결제/정산 유스케이스. 정합성 핵심.
- * 모든 변경은 트랜잭션 내에서 수행되며, 리스팅 조건부 선점 + 주문 낙관적 락으로
- * 단일 낙찰/자금 보존/멱등 정산을 보장한다. (설계 Property 1~4)
+ * 외부 PG 호출은 트랜잭션 밖에서 수행하고, DB 상태 전이는 짧은 트랜잭션으로 반영한다.
+ * 리스팅 조건부 선점 + 주문 낙관적 락으로 단일 낙찰/자금 보존/멱등 정산을 보장한다.
+ * (설계 Property 1~4)
  */
 @Service
 public class OrderService
@@ -140,6 +141,7 @@ public class OrderService
             title = "거래 완료",
             description = "구매 확정과 정산 처리가 완료되었습니다.",
             includeArguments = 0)
+    @Transactional
     public void complete(String orderId) {
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
@@ -159,7 +161,6 @@ public class OrderService
     }
 
     @Override
-    @Transactional
     @OperationalSignal(
             category = Category.PAYMENT,
             level = Level.WARNING,
