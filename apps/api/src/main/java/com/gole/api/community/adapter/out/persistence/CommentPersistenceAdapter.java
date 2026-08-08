@@ -3,6 +3,7 @@ package com.gole.api.community.adapter.out.persistence;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.domain.model.Comment;
 import java.util.List;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,8 +25,8 @@ public class CommentPersistenceAdapter implements CommentRepositoryPort {
     }
 
     @Override
-    public List<Comment> findByPostId(String postId) {
-        return repository.findByPostIdOrderByCreatedAtAsc(postId).stream()
+    public List<Comment> findByPostId(String postId, int limit) {
+        return repository.findByPostIdOrderByCreatedAtAsc(postId, PageRequest.of(0, limit)).stream()
                 .map(this::toDomain)
                 .toList();
     }

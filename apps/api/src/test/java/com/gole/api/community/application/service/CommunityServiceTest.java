@@ -42,7 +42,7 @@ class CommunityServiceTest {
     @Test
     void publish_appearsInFeed() {
         publish();
-        assertThat(service.feed()).hasSize(1);
+        assertThat(service.feed(30)).hasSize(1);
     }
 
     @Test
@@ -59,7 +59,7 @@ class CommunityServiceTest {
         String id = publish();
         assertThatThrownBy(() -> service.delete(id, "intruder")).isInstanceOf(ForbiddenException.class);
         service.delete(id, "author-1");
-        assertThat(service.feed()).isEmpty();
+        assertThat(service.feed(30)).isEmpty();
     }
 
     @Test
@@ -68,7 +68,7 @@ class CommunityServiceTest {
         Comment created = service.comment(new CommentCommand(id, "user-2", "멋져요"));
         assertThat(created.id()).isEqualTo("id-2");
         assertThat(created.authorId()).isEqualTo("user-2");
-        assertThat(service.comments(id)).hasSize(1);
+        assertThat(service.comments(id, 100)).hasSize(1);
     }
 
     private static final class InMemoryPosts implements PostRepositoryPort {
@@ -87,10 +87,11 @@ class CommunityServiceTest {
         }
 
         @Override
-        public List<Post> findPublishedRecentFirst() {
+        public List<Post> findPublishedRecentFirst(int limit) {
             return store.stream()
                     .filter(Post::isPublished)
                     .sorted(Comparator.comparing(Post::getCreatedAt).reversed())
+                    .limit(limit)
                     .toList();
         }
     }
@@ -105,8 +106,11 @@ class CommunityServiceTest {
         }
 
         @Override
-        public List<Comment> findByPostId(String postId) {
-            return store.stream().filter(c -> c.postId().equals(postId)).toList();
+        public List<Comment> findByPostId(String postId, int limit) {
+            return store.stream()
+                    .filter(c -> c.postId().equals(postId))
+                    .limit(limit)
+                    .toList();
         }
     }
 

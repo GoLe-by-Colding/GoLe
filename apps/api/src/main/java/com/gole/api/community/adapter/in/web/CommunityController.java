@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -62,8 +63,8 @@ public class CommunityController {
     }
 
     @GetMapping
-    public List<PostResponse> feed() {
-        return getFeedUseCase.feed().stream().map(PostResponse::from).toList();
+    public List<PostResponse> feed(@RequestParam(defaultValue = "30") int limit) {
+        return getFeedUseCase.feed(limit).stream().map(PostResponse::from).toList();
     }
 
     @PostMapping
@@ -86,8 +87,8 @@ public class CommunityController {
     }
 
     @GetMapping("/{postId}/comments")
-    public List<CommentResponse> comments(@PathVariable String postId) {
-        return getFeedUseCase.comments(postId).stream()
+    public List<CommentResponse> comments(@PathVariable String postId, @RequestParam(defaultValue = "100") int limit) {
+        return getFeedUseCase.comments(postId, limit).stream()
                 .map(CommentResponse::from)
                 .toList();
     }

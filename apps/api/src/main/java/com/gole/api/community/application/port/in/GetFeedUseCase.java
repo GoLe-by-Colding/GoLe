@@ -10,9 +10,9 @@ import java.util.List;
 public interface GetFeedUseCase {
 
     /** 게시된 글을 최신→오래된 순으로. */
-    List<Post> feed();
+    List<Post> feed(int limit);
 
     Post getPost(String postId);
 
-    List<Comment> comments(String postId);
+    List<Comment> comments(String postId, int limit);
 }

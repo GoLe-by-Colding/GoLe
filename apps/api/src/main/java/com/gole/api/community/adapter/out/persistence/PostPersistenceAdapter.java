@@ -6,6 +6,7 @@ import com.gole.api.community.domain.model.PostStatus;
 import com.gole.api.community.domain.model.PostType;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,8 +33,10 @@ public class PostPersistenceAdapter implements PostRepositoryPort {
     }
 
     @Override
-    public List<Post> findPublishedRecentFirst() {
-        return repository.findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED.name()).stream()
+    public List<Post> findPublishedRecentFirst(int limit) {
+        return repository
+                .findByStatusOrderByCreatedAtDesc(PostStatus.PUBLISHED.name(), PageRequest.of(0, limit))
+                .stream()
                 .map(this::toDomain)
                 .toList();
     }

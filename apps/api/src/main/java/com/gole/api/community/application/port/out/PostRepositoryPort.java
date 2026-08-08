@@ -16,5 +16,5 @@ public interface PostRepositoryPort {
     Optional<Post> findById(String postId);
 
     /** 게시된(PUBLISHED) 글을 최신→오래된 순으로 조회한다. (요구사항 12.6) */
-    List<Post> findPublishedRecentFirst();
+    List<Post> findPublishedRecentFirst(int limit);
 }

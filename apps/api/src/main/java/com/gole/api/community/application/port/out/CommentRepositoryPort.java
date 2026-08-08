@@ -12,5 +12,5 @@ public interface CommentRepositoryPort {
     Comment save(Comment comment);
 
     /** 특정 게시글의 댓글 목록을 조회한다. (요구사항 12.3) */
-    List<Comment> findByPostId(String postId);
+    List<Comment> findByPostId(String postId, int limit);
 }

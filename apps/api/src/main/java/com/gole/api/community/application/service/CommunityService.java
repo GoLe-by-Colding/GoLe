@@ -33,6 +33,9 @@ public class CommunityService
                 EditPostUseCase,
                 ModeratePostUseCase {
 
+    private static final int MAX_FEED_ROWS = 100;
+    private static final int MAX_COMMENT_ROWS = 200;
+
     private final PostRepositoryPort postRepository;
     private final CommentRepositoryPort commentRepository;
     private final CommunityIdGeneratorPort idGenerator;
@@ -85,8 +88,8 @@ public class CommunityService
     }
 
     @Override
-    public List<Post> feed() {
-        return postRepository.findPublishedRecentFirst();
+    public List<Post> feed(int limit) {
+        return postRepository.findPublishedRecentFirst(clamp(limit, MAX_FEED_ROWS));
     }
 
     @Override
@@ -95,8 +98,9 @@ public class CommunityService
     }
 
     @Override
-    public List<Comment> comments(String postId) {
-        return commentRepository.findByPostId(postId);
+    public List<Comment> comments(String postId, int limit) {
+        requirePublished(postId);
+        return commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS));
     }
 
     @Override
@@ -136,5 +140,9 @@ public class CommunityService
             throw new PostNotFoundException(postId);
         }
         return post;
+    }
+
+    private static int clamp(int requested, int maximum) {
+        return Math.max(1, Math.min(requested, maximum));
     }
 }
