@@ -53,7 +53,7 @@ class CatalogServiceTest {
         CatalogService service =
                 new CatalogService(new FakeLoadPort(Optional.empty(), List.of()), new FakeAdminPort(eiffel));
 
-        assertThat(service.all()).singleElement().satisfies(summary -> {
+        assertThat(service.all(200)).singleElement().satisfies(summary -> {
             assertThat(summary.set()).isEqualTo(eiffel);
             assertThat(summary.featured()).isTrue();
         });
@@ -94,7 +94,7 @@ class CatalogServiceTest {
         }
 
         @Override
-        public List<StoredLegoSet> findAll() {
+        public List<StoredLegoSet> findAll(int limit) {
             return stored == null ? List.of() : List.of(new StoredLegoSet(stored, true));
         }
     }

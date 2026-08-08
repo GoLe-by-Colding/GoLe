@@ -50,9 +50,17 @@ export function AdminCatalogView() {
   const [form, setForm] = useState<CreateSetInput>(EMPTY_FORM);
   /** 값이 있으면 수정 모드(해당 setNumber를 갱신), 없으면 신규 등록. */
   const [editing, setEditing] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const validationError = validateCatalogForm(form, editing);
+  const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
+  const visibleSets = (sets ?? []).filter((set) => {
+    if (normalizedQuery === "") return true;
+    return [set.setNumber, set.name, set.theme].some((value) =>
+      value.toLocaleLowerCase("ko-KR").includes(normalizedQuery),
+    );
+  });
 
   const load = useCallback(() => {
     if (token === null) {
@@ -244,18 +252,33 @@ export function AdminCatalogView() {
         </Card>
 
         <div className="flex flex-col gap-3">
-          <Text tone="muted" size="sm">
-            등록된 세트 {(sets ?? []).length}개
-          </Text>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Field label="번호·이름·테마 검색">
+              {({ inputId }) => (
+                <Input
+                  id={inputId}
+                  type="search"
+                  value={query}
+                  placeholder="예: 10307, Eiffel, Icons"
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              )}
+            </Field>
+            <Text tone="muted" size="sm">
+              {normalizedQuery === ""
+                ? `최근 등록 세트 ${visibleSets.length}개`
+                : `검색 결과 ${visibleSets.length}개 / 조회 ${(sets ?? []).length}개`}
+            </Text>
+          </div>
           <AdminTable
             caption="레고 세트 카탈로그 목록"
             headers={["번호", "이름", "테마", "피스", "상태", "관리"]}
             alignRight={[3, 5]}
             minWidth={640}
             empty="등록된 세트가 없습니다."
-            rowCount={(sets ?? []).length}
+            rowCount={visibleSets.length}
           >
-            {(sets ?? []).map((s) => (
+            {visibleSets.map((s) => (
               <tr key={s.setNumber} className="border-t border-neutral-100">
                 <td className="px-3 py-2.5 font-mono text-neutral-500">#{s.setNumber}</td>
                 <td className="max-w-[220px] truncate px-3 py-2.5 font-medium">{s.name}</td>

@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,8 +34,8 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
     }
 
     @Override
-    public List<StoredLegoSet> findAll() {
-        return repository.findAll().stream()
+    public List<StoredLegoSet> findAll(int limit) {
+        return repository.findAll(PageRequest.of(0, limit)).getContent().stream()
                 .map(document -> new StoredLegoSet(document.toDomain(), document.isFeatured()))
                 .toList();
     }

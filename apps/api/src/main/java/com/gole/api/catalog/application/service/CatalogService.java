@@ -28,6 +28,7 @@ public class CatalogService
                 ListLegoSetsUseCase {
 
     private static final int FEATURED_LIMIT = 12;
+    private static final int ADMIN_LIST_LIMIT = 200;
 
     private final LoadLegoSetPort loadLegoSetPort;
     private final CatalogAdminPort catalogAdminPort;
@@ -51,8 +52,8 @@ public class CatalogService
     }
 
     @Override
-    public List<LegoSetSummary> all() {
-        return catalogAdminPort.findAll().stream()
+    public List<LegoSetSummary> all(int limit) {
+        return catalogAdminPort.findAll(Math.max(1, Math.min(limit, ADMIN_LIST_LIMIT))).stream()
                 .map(stored -> new LegoSetSummary(stored.set(), stored.featured()))
                 .toList();
     }

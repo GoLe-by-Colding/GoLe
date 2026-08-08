@@ -14,5 +14,5 @@ public interface CatalogAdminPort {
     LegoSet save(LegoSet set, boolean featured);
 
     /** 전체 세트 목록(관리자 대시보드용). */
-    List<StoredLegoSet> findAll();
+    List<StoredLegoSet> findAll(int limit);
 }

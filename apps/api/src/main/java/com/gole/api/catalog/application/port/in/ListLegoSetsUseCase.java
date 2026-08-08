@@ -11,5 +11,5 @@ public interface ListLegoSetsUseCase {
     /** 관리자 화면은 도메인 정보와 홈 추천 여부를 함께 편집하므로 플래그를 잃지 않는다. */
     record LegoSetSummary(LegoSet set, boolean featured) {}
 
-    List<LegoSetSummary> all();
+    List<LegoSetSummary> all(int limit);
 }
