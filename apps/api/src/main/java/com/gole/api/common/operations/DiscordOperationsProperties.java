@@ -14,6 +14,7 @@ public class DiscordOperationsProperties {
     private String accountWebhookUrl = "";
     private String paymentWebhookUrl = "";
     private String operationsWebhookUrl = "";
+    private String avatarUrl = "";
 
     public boolean isEnabled() {
         return enabled;
@@ -61,6 +62,14 @@ public class DiscordOperationsProperties {
 
     public void setOperationsWebhookUrl(String operationsWebhookUrl) {
         this.operationsWebhookUrl = operationsWebhookUrl;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 
     public String webhookFor(OperationalEvent.Category category) {

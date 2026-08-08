@@ -35,6 +35,7 @@ class DiscordOperationalEventPublisherTest {
             properties.setEnabled(true);
             properties.setEnvironment("test");
             properties.setWebhookUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/webhook");
+            properties.setAvatarUrl("https://gole.example/icon.svg");
             DiscordOperationalEventPublisher publisher =
                     new DiscordOperationalEventPublisher(properties, new ObjectMapper());
 
@@ -49,6 +50,7 @@ class DiscordOperationalEventPublisherTest {
             assertThat(received.await(2, TimeUnit.SECONDS)).isTrue();
             assertThat(body.get())
                     .contains("결제 완료", "order-1", "GoLe · test")
+                    .contains("\"avatar_url\":\"https://gole.example/icon.svg\"")
                     .contains("\"allowed_mentions\":{\"parse\":[]}")
                     .doesNotContain("\"username\"");
         } finally {

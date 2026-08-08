@@ -1,6 +1,7 @@
 package com.gole.api.order.adapter.out.payment;
 
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +58,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             return ok;
         } catch (Exception ex) {
             log.error("[PortOne] 결제 조회 실패 orderId={}: {}", orderId, ex.getMessage());
-            return false;
+            // 조회 실패는 결제 거절이 아니다. false를 반환하면 매물 선점이 잘못 풀리므로 재시도 가능한 예외로 분리한다.
+            throw new PaymentGatewayUnavailableException(orderId, ex);
         }
     }
 

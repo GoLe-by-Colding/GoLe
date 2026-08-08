@@ -10,6 +10,7 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Map;
@@ -73,6 +74,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDomain(DomainException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(PaymentGatewayUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentGatewayUnavailable(
+            PaymentGatewayUnavailableException ex, HttpServletRequest request) {
+        log.warn("결제 검증 일시 장애 path={}", request.getRequestURI(), ex);
+        operationalEventPublisher.publish(new OperationalEvent(
+                Category.PAYMENT,
+                Level.ERROR,
+                "결제 검증 일시 장애",
+                "PG 결제 상태를 확인하지 못해 주문 상태를 보존하고 재시도를 요청했습니다.",
+                Map.of("요청 경로", request.getRequestURI()),
+                Instant.now()));
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse("PAYMENT_GATEWAY_UNAVAILABLE", "결제 상태 확인이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

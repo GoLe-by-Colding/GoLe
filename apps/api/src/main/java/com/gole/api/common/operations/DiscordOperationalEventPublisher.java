@@ -82,9 +82,13 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
                         "inline", true)));
         embed.put("fields", fields);
 
-        return Map.of(
-                "allowed_mentions", Map.of("parse", List.of()),
-                "embeds", List.of(embed));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("allowed_mentions", Map.of("parse", List.of()));
+        if (properties.getAvatarUrl() != null && !properties.getAvatarUrl().isBlank()) {
+            payload.put("avatar_url", properties.getAvatarUrl());
+        }
+        payload.put("embeds", List.of(embed));
+        return payload;
     }
 
     private static int color(OperationalEvent.Level level) {

@@ -106,6 +106,8 @@ gole:
     account-webhook-url: ${DISCORD_ACCOUNT_WEBHOOK_URL:}
     payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
     operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
+    # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
+    avatar-url: ${DISCORD_AVATAR_URL:https://gole.kscold.com/icon.svg}
 
 # 포트원(PortOne) V2 결제. enabled=true + api-secret 설정 시 실제 검증, 아니면 스텁 사용.
 portone:

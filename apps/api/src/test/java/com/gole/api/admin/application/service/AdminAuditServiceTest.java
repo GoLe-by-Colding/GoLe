@@ -88,6 +88,26 @@ class AdminAuditServiceTest {
     }
 
     @Test
+    @DisplayName("운영 알림 발행이 실패해도 저장된 감사 로그는 유지하고 예외를 전파하지 않는다")
+    void swallowsNotificationFailureAfterAuditIsStored() {
+        RecordingPort port = new RecordingPort();
+        AdminAuditService service = new AdminAuditService(port, FIXED, event -> {
+            throw new IllegalStateException("discord down");
+        });
+
+        assertThatCode(() -> service.record(new RecordAdminActionCommand(
+                        "admin-1",
+                        "admin@gole.io",
+                        AdminActionType.REPORT_RESOLVE,
+                        AdminTargetType.REPORT,
+                        "r-1",
+                        "처리 완료")))
+                .doesNotThrowAnyException();
+
+        assertThat(port.appended).hasSize(1);
+    }
+
+    @Test
     @DisplayName("8.3 조회 limit은 1~200으로 클램프된다")
     void clampsLimit() {
         RecordingPort port = new RecordingPort();

@@ -8,6 +8,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.model.Order;
@@ -84,6 +85,25 @@ class OrderServiceTest {
         assertThat(reservation.released).isTrue();
     }
 
+    @Test
+    void paymentGatewayOutage_keepsOrderPending_andDoesNotReleaseListing() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service = new OrderService(
+                orders,
+                reservation,
+                new UnavailablePayment(),
+                settlement,
+                (s, p, q, t, c) -> {},
+                (sellerId, orderId, amount) -> {},
+                new SequentialIds(),
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> service.pay(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(reservation.released).isFalse();
+    }
+
     // --- fakes ---
 
     private static final class InMemoryOrders implements OrderRepositoryPort {
@@ -142,6 +162,16 @@ class OrderServiceTest {
         @Override
         public boolean authorize(String orderId, long amount) {
             return true;
+        }
+
+        @Override
+        public void refund(String orderId, long amount) {}
+    }
+
+    private static final class UnavailablePayment implements PaymentGatewayPort {
+        @Override
+        public boolean authorize(String orderId, long amount) {
+            throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
         }
 
         @Override

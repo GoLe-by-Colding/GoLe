@@ -5,6 +5,7 @@ import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.Map;
@@ -47,7 +48,7 @@ public class PaymentWebhookController {
     public void webhook(@RequestBody(required = false) Map<String, Object> payload) {
         String paymentId = extractPaymentId(payload);
         if (paymentId == null || paymentId.isBlank()) {
-            log.warn("[PortOne webhook] paymentId 없음 payload={}", payload);
+            log.warn("[PortOne webhook] paymentId 없음 payloadKeys={}", payload == null ? "[]" : payload.keySet());
             operationalEventPublisher.publish(new OperationalEvent(
                     Category.PAYMENT,
                     Level.WARNING,
@@ -60,6 +61,10 @@ public class PaymentWebhookController {
         try {
             payOrderUseCase.pay(paymentId); // PortOne에 재검증 후 funds-held 전이
             log.info("[PortOne webhook] 결제 반영 완료 orderId={}", paymentId);
+        } catch (PaymentGatewayUnavailableException ex) {
+            // 503으로 응답해야 PortOne이 웹훅을 재시도한다. 주문/매물 상태는 pay()에서 변경되기 전이다.
+            log.warn("[PortOne webhook] 결제 검증 일시 장애 orderId={}", paymentId);
+            throw ex;
         } catch (RuntimeException ex) {
             // 이미 처리됨/결제대기 아님/주문 없음/검증 실패 등 → ack(재시도 방지). 상세는 로깅.
             log.info("[PortOne webhook] 무시 orderId={} reason={}", paymentId, ex.getMessage());
