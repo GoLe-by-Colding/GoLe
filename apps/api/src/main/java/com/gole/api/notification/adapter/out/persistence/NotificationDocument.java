@@ -2,6 +2,7 @@ package com.gole.api.notification.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -9,6 +10,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 알림 MongoDB 영속 모델. 도메인 {@code Notification}과 분리, 매핑은 어댑터가 담당.
  */
 @Document(collection = "notifications")
+@CompoundIndex(name = "recipient_created_at_idx", def = "{'recipientId': 1, 'createdAt': -1}")
 public class NotificationDocument {
 
     @Id

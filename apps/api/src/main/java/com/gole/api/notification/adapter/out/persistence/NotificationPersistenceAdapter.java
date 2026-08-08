@@ -33,7 +33,7 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
 
     @Override
     public List<Notification> findByRecipientNewestFirst(String recipientId) {
-        return repository.findByRecipientIdOrderByCreatedAtDesc(recipientId).stream()
+        return repository.findTop100ByRecipientIdOrderByCreatedAtDesc(recipientId).stream()
                 .map(this::toDomain)
                 .toList();
     }

@@ -8,7 +8,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
  */
 public interface NotificationMongoRepository extends MongoRepository<NotificationDocument, String> {
 
-    List<NotificationDocument> findByRecipientIdOrderByCreatedAtDesc(String recipientId);
+    List<NotificationDocument> findTop100ByRecipientIdOrderByCreatedAtDesc(String recipientId);
 
     long countByRecipientIdAndReadIsFalse(String recipientId);
 }
