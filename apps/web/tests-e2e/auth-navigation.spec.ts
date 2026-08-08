@@ -24,8 +24,11 @@ test.describe("Auth navigation", () => {
   });
 
   test("인증 화면에서 뒤로가기 버튼이 보인다", async ({ page }) => {
-    await page.goto("/login");
+    const response = await page.goto("/login");
     await expect(page.getByRole("button", { name: "뒤로 가기" })).toBeVisible();
+    expect(response?.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(response?.headers()["x-frame-options"]).toBe("DENY");
+    expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
   });
 
   test("이메일 인증 화면이 렌더된다", async ({ page }) => {
