@@ -1,5 +1,8 @@
 package com.gole.api.order.adapter.in.web;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
@@ -15,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,19 +43,32 @@ public class PaymentWebhookController {
     private final PayOrderUseCase payOrderUseCase;
     private final ConfirmRefundUseCase confirmRefundUseCase;
     private final OperationalEventPublisher operationalEventPublisher;
+    private final PortOneWebhookVerifier webhookVerifier;
+    private final ObjectMapper objectMapper;
 
     public PaymentWebhookController(
             PayOrderUseCase payOrderUseCase,
             ConfirmRefundUseCase confirmRefundUseCase,
-            OperationalEventPublisher operationalEventPublisher) {
+            OperationalEventPublisher operationalEventPublisher,
+            PortOneWebhookVerifier webhookVerifier,
+            ObjectMapper objectMapper) {
         this.payOrderUseCase = payOrderUseCase;
         this.confirmRefundUseCase = confirmRefundUseCase;
         this.operationalEventPublisher = operationalEventPublisher;
+        this.webhookVerifier = webhookVerifier;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/webhook")
     @ResponseStatus(HttpStatus.OK)
-    public void webhook(@RequestBody(required = false) Map<String, Object> payload) {
+    public void webhook(
+            @RequestBody(required = false) String body,
+            @RequestHeader(name = "webhook-id", required = false) String messageId,
+            @RequestHeader(name = "webhook-signature", required = false) String signature,
+            @RequestHeader(name = "webhook-timestamp", required = false) String timestamp) {
+        String rawBody = body == null ? "" : body;
+        webhookVerifier.verify(rawBody, messageId, signature, timestamp);
+        Map<String, Object> payload = parsePayload(rawBody);
         String paymentId = extractPaymentId(payload);
         if (paymentId == null || paymentId.isBlank() || paymentId.length() > 100) {
             log.warn("[PortOne webhook] paymentId 없음 payloadKeys={}", payload == null ? "[]" : payload.keySet());
@@ -92,6 +109,18 @@ public class PaymentWebhookController {
                     "결제 웹훅이 승인 상태로 반영되지 않았습니다. 서버 로그를 확인하세요.",
                     Map.of("주문 ID", paymentId, "예외 종류", ex.getClass().getSimpleName()),
                     Instant.now()));
+        }
+    }
+
+    private Map<String, Object> parsePayload(String body) {
+        if (body.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(body, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            log.warn("[PortOne webhook] invalid JSON body");
+            return Map.of();
         }
     }
 

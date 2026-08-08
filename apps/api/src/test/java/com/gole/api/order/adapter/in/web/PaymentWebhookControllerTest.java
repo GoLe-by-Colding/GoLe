@@ -6,12 +6,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.domain.model.OrderStatus;
-import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +20,9 @@ class PaymentWebhookControllerTest {
     private final PayOrderUseCase payments = mock(PayOrderUseCase.class);
     private final ConfirmRefundUseCase refunds = mock(ConfirmRefundUseCase.class);
     private final OperationalEventPublisher events = mock(OperationalEventPublisher.class);
-    private final PaymentWebhookController controller = new PaymentWebhookController(payments, refunds, events);
+    private final PortOneWebhookVerifier verifier = mock(PortOneWebhookVerifier.class);
+    private final PaymentWebhookController controller =
+            new PaymentWebhookController(payments, refunds, events, verifier, new ObjectMapper());
 
     @Test
     @DisplayName("PG 조회 일시 장애는 200으로 삼키지 않고 재시도 가능한 예외를 전파한다")
@@ -28,8 +30,11 @@ class PaymentWebhookControllerTest {
         when(payments.pay("order-1"))
                 .thenThrow(new PaymentGatewayUnavailableException("order-1", new IllegalStateException("timeout")));
 
-        assertThatThrownBy(() ->
-                        controller.webhook(Map.of("type", "Transaction.Paid", "data", Map.of("paymentId", "order-1"))))
+        assertThatThrownBy(() -> controller.webhook(
+                        "{\"type\":\"Transaction.Paid\",\"data\":{\"paymentId\":\"order-1\"}}",
+                        "message-1",
+                        "signature",
+                        "timestamp"))
                 .isInstanceOf(PaymentGatewayUnavailableException.class);
 
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
@@ -40,7 +45,11 @@ class PaymentWebhookControllerTest {
     void verifiesPaymentByPaymentId() {
         when(payments.pay("order-2")).thenReturn(OrderStatus.FUNDS_HELD);
 
-        controller.webhook(Map.of("type", "Transaction.Paid", "data", Map.of("paymentId", "order-2")));
+        controller.webhook(
+                "{\"type\":\"Transaction.Paid\",\"data\":{\"paymentId\":\"order-2\"}}",
+                "message-2",
+                "signature",
+                "timestamp");
 
         verify(payments).pay("order-2");
     }
@@ -48,7 +57,11 @@ class PaymentWebhookControllerTest {
     @Test
     @DisplayName("최종 취소 웹훅은 PG 원장 재조회 기반의 환불 확정을 수행한다")
     void confirmsRefundByPaymentId() {
-        controller.webhook(Map.of("type", "Transaction.Cancelled", "data", Map.of("paymentId", "order-3")));
+        controller.webhook(
+                "{\"type\":\"Transaction.Cancelled\",\"data\":{\"paymentId\":\"order-3\"}}",
+                "message-3",
+                "signature",
+                "timestamp");
 
         verify(refunds).confirmRefund("order-3");
         verify(payments, never()).pay("order-3");
@@ -57,7 +70,11 @@ class PaymentWebhookControllerTest {
     @Test
     @DisplayName("알 수 없는 이벤트는 PG 조회 없이 ack한다")
     void ignoresUnsupportedEvent() {
-        controller.webhook(Map.of("type", "Unknown.Event", "data", Map.of("paymentId", "order-4")));
+        controller.webhook(
+                "{\"type\":\"Unknown.Event\",\"data\":{\"paymentId\":\"order-4\"}}",
+                "message-4",
+                "signature",
+                "timestamp");
 
         verify(payments, never()).pay("order-4");
         verify(refunds, never()).confirmRefund("order-4");

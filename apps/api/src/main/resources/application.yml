@@ -138,3 +138,4 @@ portone:
   enabled: ${PORTONE_ENABLED:false}
   api-base: ${PORTONE_API_BASE:https://api.portone.io}
   api-secret: ${PORTONE_API_SECRET:}
+  webhook-secret: ${PORTONE_WEBHOOK_SECRET:}

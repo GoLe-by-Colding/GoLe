@@ -37,6 +37,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
+    // PortOne Standard Webhooks signature verification (HMAC-SHA256 + replay-window validation).
+    implementation("io.portone:server-sdk:0.24.0")
+
     // AOP (클린코드: 로깅/트랜잭션/감사 등 횡단 관심사 분리)
     // Spring Boot 4에는 starter-aop가 없어 aspectjweaver를 직접 사용한다.
     // spring-aop는 spring-context를 통해 전이 포함되고, AopAutoConfiguration이 기본 활성.

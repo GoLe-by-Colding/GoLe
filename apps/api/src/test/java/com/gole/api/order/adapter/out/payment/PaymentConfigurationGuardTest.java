@@ -12,7 +12,7 @@ class PaymentConfigurationGuardTest {
 
     @Test
     void productionRejectsStubGateway() {
-        PaymentConfigurationGuard guard = new PaymentConfigurationGuard("production", false, "");
+        PaymentConfigurationGuard guard = new PaymentConfigurationGuard("production", false, "", "");
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -21,7 +21,7 @@ class PaymentConfigurationGuardTest {
 
     @Test
     void enabledPortOneRequiresSecret() {
-        PaymentConfigurationGuard guard = new PaymentConfigurationGuard("local", true, " ");
+        PaymentConfigurationGuard guard = new PaymentConfigurationGuard("local", true, " ", "webhook-secret");
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -29,10 +29,19 @@ class PaymentConfigurationGuardTest {
     }
 
     @Test
+    void enabledPortOneRequiresWebhookSecret() {
+        PaymentConfigurationGuard guard = new PaymentConfigurationGuard("local", true, "api-secret", " ");
+
+        assertThatThrownBy(() -> guard.run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PORTONE_WEBHOOK_SECRET");
+    }
+
+    @Test
     void localStubAndConfiguredProductionAreAllowed() {
-        assertThatCode(() -> new PaymentConfigurationGuard("local", false, "").run(NO_ARGS))
+        assertThatCode(() -> new PaymentConfigurationGuard("local", false, "", "").run(NO_ARGS))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> new PaymentConfigurationGuard("prod", true, "secret").run(NO_ARGS))
+        assertThatCode(() -> new PaymentConfigurationGuard("prod", true, "api-secret", "webhook-secret").run(NO_ARGS))
                 .doesNotThrowAnyException();
     }
 }

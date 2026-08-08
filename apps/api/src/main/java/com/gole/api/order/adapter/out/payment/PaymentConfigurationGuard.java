@@ -12,20 +12,26 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
     private final String environment;
     private final boolean portOneEnabled;
     private final String apiSecret;
+    private final String webhookSecret;
 
     public PaymentConfigurationGuard(
             @Value("${gole.environment:local}") String environment,
             @Value("${portone.enabled:false}") boolean portOneEnabled,
-            @Value("${portone.api-secret:}") String apiSecret) {
+            @Value("${portone.api-secret:}") String apiSecret,
+            @Value("${portone.webhook-secret:}") String webhookSecret) {
         this.environment = environment;
         this.portOneEnabled = portOneEnabled;
         this.apiSecret = apiSecret;
+        this.webhookSecret = webhookSecret;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         if (portOneEnabled && apiSecret.isBlank()) {
             throw new IllegalStateException("PORTONE_ENABLED=true requires PORTONE_API_SECRET");
+        }
+        if (portOneEnabled && webhookSecret.isBlank()) {
+            throw new IllegalStateException("PORTONE_ENABLED=true requires PORTONE_WEBHOOK_SECRET");
         }
         if (isProduction(environment) && !portOneEnabled) {
             throw new IllegalStateException(
