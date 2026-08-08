@@ -37,12 +37,16 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
 
     @Override
     public List<Order> findByBuyerId(String buyerId) {
-        return repository.findByBuyerId(buyerId).stream().map(this::toDomain).toList();
+        return repository.findTop100ByBuyerIdOrderByCreatedAtDesc(buyerId).stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override
     public List<Order> findBySellerId(String sellerId) {
-        return repository.findBySellerId(sellerId).stream().map(this::toDomain).toList();
+        return repository.findTop100BySellerIdOrderByCreatedAtDesc(sellerId).stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

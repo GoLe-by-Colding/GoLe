@@ -10,10 +10,10 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 public interface OrderMongoRepository extends MongoRepository<OrderDocument, String> {
 
     /** 구매자별 주문. */
-    List<OrderDocument> findByBuyerId(String buyerId);
+    List<OrderDocument> findTop100ByBuyerIdOrderByCreatedAtDesc(String buyerId);
 
     /** 판매자별 주문. */
-    List<OrderDocument> findBySellerId(String sellerId);
+    List<OrderDocument> findTop100BySellerIdOrderByCreatedAtDesc(String sellerId);
 
     /** 자동 재조정 한 번에 최대 100건만 가져와 PG와 DB에 부하가 몰리지 않게 한다. */
     List<OrderDocument> findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(String status, Instant cutoff);

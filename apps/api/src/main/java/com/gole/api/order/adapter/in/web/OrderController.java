@@ -89,7 +89,6 @@ public class OrderController {
     @GetMapping
     public List<OrderResponse> listByBuyer(HttpServletRequest http) {
         return getOrderUseCase.getByBuyerId(AuthenticatedUser.id(http)).stream()
-                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .map(OrderResponse::from)
                 .toList();
     }

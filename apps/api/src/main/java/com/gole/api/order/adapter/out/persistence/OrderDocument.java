@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -16,6 +18,10 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 상태 이력({@link StatusChangeDocument})과 정산({@link SettlementDocument})은 임베디드 문서로 저장한다.
  */
 @Document(collection = "orders")
+@CompoundIndexes({
+    @CompoundIndex(name = "buyer_created_at_idx", def = "{'buyerId': 1, 'createdAt': -1}"),
+    @CompoundIndex(name = "seller_created_at_idx", def = "{'sellerId': 1, 'createdAt': -1}")
+})
 public class OrderDocument {
 
     @Id
