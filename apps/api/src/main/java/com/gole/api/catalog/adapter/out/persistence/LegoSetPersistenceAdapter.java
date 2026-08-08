@@ -4,8 +4,11 @@ import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort.StoredLegoSet;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.model.LegoSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +17,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminPort {
+
+    private static final int SEARCH_LIMIT = 30;
 
     private final LegoSetMongoRepository repository;
 
@@ -42,15 +47,17 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
     @Override
     public List<LegoSet> searchByNameOrTheme(String query) {
         // 이름/테마 검색
-        List<LegoSetDocument> byName =
-                repository.findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(query, query);
+        List<LegoSetDocument> byName = repository.findByNameContainingIgnoreCaseOrThemeContainingIgnoreCase(
+                query, query, Limit.of(SEARCH_LIMIT));
         // 세트번호(id) 시작 검색 — 중복 제거
-        List<String> found = byName.stream().map(LegoSetDocument::getSetNumber).toList();
+        Set<String> found =
+                new HashSet<>(byName.stream().map(LegoSetDocument::getSetNumber).toList());
         List<LegoSet> result = new java.util.ArrayList<>(
                 byName.stream().map(LegoSetDocument::toDomain).toList());
-        repository.findBySetNumberStartingWith(query).stream()
+        repository.findBySetNumberStartingWith(Pattern.quote(query), Limit.of(SEARCH_LIMIT)).stream()
                 .filter(d -> !found.contains(d.getSetNumber()))
                 .map(LegoSetDocument::toDomain)
+                .limit(Math.max(0, SEARCH_LIMIT - result.size()))
                 .forEach(result::add);
         return result;
     }
