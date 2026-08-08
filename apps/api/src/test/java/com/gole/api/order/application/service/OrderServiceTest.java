@@ -47,7 +47,8 @@ class OrderServiceTest {
                 (s, p, q, t, c) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
-                clock);
+                clock,
+                new OrderPaymentTransitionService(orders, reservation));
     }
 
     @Test
@@ -140,7 +141,8 @@ class OrderServiceTest {
                 (s, p, q, t, c) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
-                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
+                new OrderPaymentTransitionService(orders, reservation));
 
         assertThatThrownBy(() -> service.pay(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
@@ -176,7 +178,8 @@ class OrderServiceTest {
                 (s, p, q, t, c) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
-                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
+                new OrderPaymentTransitionService(orders, reservation));
     }
 
     // --- fakes ---

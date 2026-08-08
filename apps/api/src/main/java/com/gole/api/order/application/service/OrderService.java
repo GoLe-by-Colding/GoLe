@@ -53,6 +53,7 @@ public class OrderService
     private final SellerNotifierPort sellerNotifier;
     private final OrderIdGeneratorPort idGenerator;
     private final Clock clock;
+    private final OrderPaymentTransitionService paymentTransitions;
 
     public OrderService(
             OrderRepositoryPort orderRepository,
@@ -62,7 +63,8 @@ public class OrderService
             ExecutedPriceRecorderPort executedPriceRecorder,
             SellerNotifierPort sellerNotifier,
             OrderIdGeneratorPort idGenerator,
-            Clock clock) {
+            Clock clock,
+            OrderPaymentTransitionService paymentTransitions) {
         this.orderRepository = orderRepository;
         this.listingReservation = listingReservation;
         this.paymentGateway = paymentGateway;
@@ -71,6 +73,7 @@ public class OrderService
         this.sellerNotifier = sellerNotifier;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.paymentTransitions = paymentTransitions;
     }
 
     @Override
@@ -119,7 +122,6 @@ public class OrderService
     }
 
     @Override
-    @Transactional
     @OperationalSignal(
             category = Category.PAYMENT,
             title = "결제 상태 변경",
@@ -128,27 +130,11 @@ public class OrderService
             includeResult = true)
     public OrderStatus pay(String orderId) {
         Order order = getById(orderId);
-        Instant now = Instant.now(clock);
-
         PaymentVerificationResult verification = paymentGateway.verifyPayment(orderId, order.getAmount());
-        switch (verification) {
-            case PAID -> order.confirmFundsHeld(now); // 요구사항 13.2
-            case FAILED -> {
-                order.failPayment(now); // 요구사항 13.3: PG가 최종 실패한 경우에만 선점 해제
-                listingReservation.release(order.getListingId());
-            }
-            case PENDING, REVIEW_REQUIRED -> {
-                // READY/PENDING은 아직 실패가 아니다. 금액 불일치·미지 상태도 운영 확인 전에는
-                // 주문과 매물 선점을 보존해 이중 판매 및 결제 유실을 막는다.
-                return order.getStatus();
-            }
-        }
-        orderRepository.save(order);
-        return order.getStatus();
+        return paymentTransitions.applyPaymentVerification(orderId, verification, Instant.now(clock));
     }
 
     @Override
-    @Transactional
     @OperationalSignal(
             category = Category.PAYMENT,
             title = "거래 완료",
@@ -189,23 +175,21 @@ public class OrderService
 
         if (order.getStatus() == OrderStatus.REFUND_PENDING) {
             if (paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
-                finalizeRefund(order, now);
+                paymentTransitions.finalizeRefund(orderId, now);
             }
             return;
         }
 
         RefundResult result = paymentGateway.refund(orderId, order.getAmount());
         if (result == RefundResult.REQUESTED) {
-            order.requestRefund(now);
-            orderRepository.save(order);
+            paymentTransitions.markRefundPending(orderId, now);
             return;
         }
 
-        finalizeRefund(order, now);
+        paymentTransitions.finalizeRefund(orderId, now);
     }
 
     @Override
-    @Transactional
     public void confirmRefund(String orderId) {
         Order order = getById(orderId);
         if (order.getStatus() == OrderStatus.REFUNDED) {
@@ -215,13 +199,7 @@ public class OrderService
             throw new PaymentGatewayUnavailableException(
                     orderId, new IllegalStateException("PG refund is not final yet"));
         }
-        finalizeRefund(order, Instant.now(clock));
-    }
-
-    private void finalizeRefund(Order order, Instant now) {
-        order.refund(now);
-        listingReservation.release(order.getListingId());
-        orderRepository.save(order);
+        paymentTransitions.finalizeRefund(orderId, Instant.now(clock));
     }
 
     @Override
