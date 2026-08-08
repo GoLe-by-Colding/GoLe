@@ -123,6 +123,32 @@ cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 2. 백엔드 컨테이너 환경변수 주입: `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (카카오·네이버는 `KAKAO_*`/`NAVER_*`).
 3. `pm2 restart gole-backend --update-env` → 해당 버튼 자동 활성화. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
 
+### Discord 고래방
+
+사이트의 고래방 버튼은 만료되지 않는 GoLe Discord 초대 링크로 연결된다. 배포 환경에서
+`NEXT_PUBLIC_DISCORD_INVITE_URL`로 다른 초대 링크를 지정할 수 있다.
+
+#### Discord 운영 관제
+
+백엔드는 회원가입, 주문·결제·환불, PortOne 웹훅 이상, 애플리케이션 기동, 처리되지 않은 500 오류를
+구조화된 Discord embed로 전송한다. 비밀번호·세션 토큰·이메일·결제 비밀값은 전송하지 않는다.
+앱이 완전히 내려간 경우에는 `.github/workflows/production-health.yml`이 5분마다 readiness를 외부에서 확인한다.
+
+```bash
+# 백엔드/PM2 환경변수
+GOLE_DISCORD_ALERTS_ENABLED=true
+GOLE_ENVIRONMENT=production
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...             # 공통 fallback
+DISCORD_ACCOUNT_WEBHOOK_URL=https://discord.com/api/webhooks/...     # 선택: 가입
+DISCORD_PAYMENT_WEBHOOK_URL=https://discord.com/api/webhooks/...     # 선택: 결제
+DISCORD_OPERATIONS_WEBHOOK_URL=https://discord.com/api/webhooks/...  # 선택: 오류/기동/배포
+```
+
+- GitHub Actions secret `DISCORD_CI_WEBHOOK_URL`: main CI 결과 알림
+- GitHub Actions secret `DISCORD_OPERATIONS_WEBHOOK_URL`: 운영 헬스체크 실패 알림
+- 서버 환경변수 `DISCORD_DEPLOY_WEBHOOK_URL`: 배포 스크립트 알림(미설정 시 operations URL 사용)
+- webhook URL은 Discord 채널 설정 → 연동 → 웹후크에서 만들며 저장소나 채팅에 붙여 넣지 않는다.
+
 ---
 
 ## Specs (SDD)

@@ -6,6 +6,16 @@ import com.gole.api.common.exception.DomainException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +28,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private final OperationalEventPublisher operationalEventPublisher;
+
+    public GlobalExceptionHandler(OperationalEventPublisher operationalEventPublisher) {
+        this.operationalEventPublisher = operationalEventPublisher;
+    }
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
@@ -64,5 +82,24 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("VALIDATION_ERROR", message));
+    }
+
+    /** 예상하지 못한 500 오류는 사용자에게 내부 정보를 숨기고 운영 채널에는 추적 ID를 남긴다. */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+        String errorReference = UUID.randomUUID().toString();
+        log.error("[{}] 처리되지 않은 오류 path={}", errorReference, request.getRequestURI(), ex);
+        operationalEventPublisher.publish(new OperationalEvent(
+                Category.APPLICATION,
+                Level.ERROR,
+                "처리되지 않은 API 오류",
+                "서버에서 예상하지 못한 예외가 발생했습니다. 로그의 오류 참조값으로 추적하세요.",
+                Map.of(
+                        "오류 참조", errorReference,
+                        "요청 경로", request.getRequestURI(),
+                        "예외 종류", ex.getClass().getSimpleName()),
+                Instant.now()));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_SERVER_ERROR", "일시적인 오류가 발생했습니다. 참조: " + errorReference));
     }
 }

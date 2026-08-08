@@ -19,6 +19,8 @@ import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.VerificationCode;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalSignal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -65,6 +67,11 @@ public class AccountService
     }
 
     @Override
+    @OperationalSignal(
+            category = Category.ACCOUNT,
+            title = "새 이메일 회원가입",
+            description = "이메일 인증 대기 계정이 생성되었습니다.",
+            includeResult = true)
     public String register(RegisterAccountCommand command) {
         Email email = new Email(command.email());
 

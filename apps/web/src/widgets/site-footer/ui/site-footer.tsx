@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { env } from "@shared/config";
 import { Container, Logo } from "@shared/ui";
 
 const NAV: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
@@ -46,6 +47,14 @@ export function SiteFooter() {
                   {n.label}
                 </Link>
               ))}
+              <a
+                href={env.discordInviteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-semibold text-[#AEB4FF] transition-colors hover:text-white"
+              >
+                Discord 고래방 ↗
+              </a>
             </nav>
           </div>
 

@@ -98,6 +98,15 @@ gole:
   admin:
     email: ${GOLE_ADMIN_EMAIL:}
     password: ${GOLE_ADMIN_PASSWORD:}
+  # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
+  discord:
+    enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}
+    environment: ${GOLE_ENVIRONMENT:local}
+    username: ${GOLE_DISCORD_ALERT_USERNAME:GoLe Watcher}
+    webhook-url: ${DISCORD_WEBHOOK_URL:}
+    account-webhook-url: ${DISCORD_ACCOUNT_WEBHOOK_URL:}
+    payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
+    operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
 
 # 포트원(PortOne) V2 결제. enabled=true + api-secret 설정 시 실제 검증, 아니면 스텁 사용.
 portone:

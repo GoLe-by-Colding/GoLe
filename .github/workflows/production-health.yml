@@ -1,0 +1,38 @@
+name: Production health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: gole.kscold.com readiness
+    runs-on: ubuntu-latest
+    env:
+      HEALTH_URL: https://gole.kscold.com/actuator/health/readiness
+      DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+    steps:
+      - name: Check production API
+        id: check
+        continue-on-error: true
+        run: curl -fsS --max-time 10 --retry 2 --retry-delay 2 "$HEALTH_URL"
+
+      - name: Notify outage
+        if: ${{ steps.check.outcome == 'failure' && env.DISCORD_OPERATIONS_WEBHOOK_URL != '' }}
+        run: |
+          payload=$(jq -n \
+            --arg content "🚨 GoLe 운영 API 응답 실패 · $HEALTH_URL · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{content: $content, allowed_mentions: {parse: []}}')
+          curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_OPERATIONS_WEBHOOK_URL"
+
+      - name: Fail workflow when unhealthy
+        if: ${{ steps.check.outcome == 'failure' }}
+        run: exit 1

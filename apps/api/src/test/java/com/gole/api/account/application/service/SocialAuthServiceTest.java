@@ -58,7 +58,8 @@ class SocialAuthServiceTest {
                 },
                 account -> "token-" + account.getId(),
                 sessions,
-                stateStore);
+                stateStore,
+                event -> {});
     }
 
     @Test

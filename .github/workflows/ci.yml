@@ -87,3 +87,28 @@ jobs:
 
       - name: Test & build
         run: ./gradlew build --no-daemon
+
+  notify:
+    name: Discord CI result
+    if: ${{ always() && github.event_name == 'push' }}
+    needs: [web, api]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DISCORD_CI_WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK_URL }}
+      WEB_RESULT: ${{ needs.web.result }}
+      API_RESULT: ${{ needs.api.result }}
+    steps:
+      - name: Notify GoLe operations channel
+        if: ${{ env.DISCORD_CI_WEBHOOK_URL != '' }}
+        run: |
+          if [ "$WEB_RESULT" = success ] && [ "$API_RESULT" = success ]; then
+            status="✅ CI 통과"
+          else
+            status="❌ CI 실패"
+          fi
+          payload=$(jq -n \
+            --arg content "$status · web=$WEB_RESULT · api=$API_RESULT · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{content: $content, allowed_mentions: {parse: []}}')
+          curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_CI_WEBHOOK_URL"
