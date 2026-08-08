@@ -1,5 +1,6 @@
 package com.gole.api.discovery.application.service;
 
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
@@ -42,6 +43,9 @@ public class DiscoveryService
 
     @Override
     public void follow(String userId, String sellerId) {
+        if (userId.equals(sellerId)) {
+            throw new ForbiddenException("FOLLOW_SELF_NOT_ALLOWED", "자기 자신은 팔로우할 수 없습니다");
+        }
         if (followRepository.exists(userId, sellerId)) {
             throw new DuplicateFollowException(); // 요구사항 16.4
         }

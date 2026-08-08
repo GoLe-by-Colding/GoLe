@@ -3,6 +3,7 @@ package com.gole.api.discovery.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
@@ -35,6 +36,14 @@ class DiscoveryServiceTest {
         service.follow("u1", "s1");
         assertThat(service.following("u1")).containsExactly("s1");
         assertThatThrownBy(() -> service.follow("u1", "s1")).isInstanceOf(DuplicateFollowException.class);
+    }
+
+    @Test
+    void follow_rejectsSelfFollow() {
+        assertThatThrownBy(() -> service.follow("same-user", "same-user"))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("자기 자신");
+        assertThat(service.following("same-user")).isEmpty();
     }
 
     @Test
