@@ -93,6 +93,7 @@ export function AdminReportsView() {
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="신고 처리 목록"
         headers={["대상", "사유", "상세", "신고자", "접수", "상태", "처리"]}
         alignRight={[6]}
         minWidth={820}

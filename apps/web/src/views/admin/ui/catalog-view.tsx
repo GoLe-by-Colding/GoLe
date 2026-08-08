@@ -248,6 +248,7 @@ export function AdminCatalogView() {
             등록된 세트 {(sets ?? []).length}개
           </Text>
           <AdminTable
+            caption="레고 세트 카탈로그 목록"
             headers={["번호", "이름", "테마", "피스", "상태", "관리"]}
             alignRight={[3, 5]}
             minWidth={640}

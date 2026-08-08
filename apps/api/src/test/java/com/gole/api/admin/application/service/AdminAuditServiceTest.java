@@ -8,6 +8,8 @@ import com.gole.api.admin.application.port.out.AdminAuditPort;
 import com.gole.api.admin.domain.model.AdminAction;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -28,7 +30,8 @@ class AdminAuditServiceTest {
     @DisplayName("8.1 조치 정보를 시각과 함께 append 한다")
     void recordsAction() {
         RecordingPort port = new RecordingPort();
-        AdminAuditService service = new AdminAuditService(port, FIXED);
+        RecordingPublisher publisher = new RecordingPublisher();
+        AdminAuditService service = new AdminAuditService(port, FIXED, publisher);
 
         service.record(new RecordAdminActionCommand(
                 "admin-1",
@@ -46,13 +49,20 @@ class AdminAuditServiceTest {
         assertThat(saved.getTargetId()).isEqualTo("listing-9");
         assertThat(saved.getReason()).isEqualTo("가품 의심");
         assertThat(saved.getOccurredAt()).isEqualTo(NOW);
+        assertThat(publisher.events).singleElement().satisfies(event -> {
+            assertThat(event.category()).isEqualTo(OperationalEvent.Category.ADMIN);
+            assertThat(event.fields())
+                    .containsEntry("조치", AdminActionType.LISTING_TAKEDOWN.name())
+                    .doesNotContainKey("사유")
+                    .doesNotContainValue("admin@gole.io");
+        });
     }
 
     @Test
     @DisplayName("공백 사유는 null로 정규화된다")
     void blankReasonBecomesNull() {
         RecordingPort port = new RecordingPort();
-        AdminAuditService service = new AdminAuditService(port, FIXED);
+        AdminAuditService service = new AdminAuditService(port, FIXED, event -> {});
 
         service.record(new RecordAdminActionCommand(
                 "admin-1", "admin@gole.io", AdminActionType.REPORT_RESOLVE, AdminTargetType.REPORT, "r-1", "   "));
@@ -63,7 +73,8 @@ class AdminAuditServiceTest {
     @Test
     @DisplayName("8.5 저장소가 실패해도 예외를 전파하지 않는다 — 이미 성공한 조치를 되돌리지 않기 위해")
     void swallowsStorageFailure() {
-        AdminAuditService service = new AdminAuditService(new FailingPort(), FIXED);
+        RecordingPublisher publisher = new RecordingPublisher();
+        AdminAuditService service = new AdminAuditService(new FailingPort(), FIXED, publisher);
 
         assertThatCode(() -> service.record(new RecordAdminActionCommand(
                         "admin-1",
@@ -73,13 +84,14 @@ class AdminAuditServiceTest {
                         "u-1",
                         "사유")))
                 .doesNotThrowAnyException();
+        assertThat(publisher.events).isEmpty();
     }
 
     @Test
     @DisplayName("8.3 조회 limit은 1~200으로 클램프된다")
     void clampsLimit() {
         RecordingPort port = new RecordingPort();
-        AdminAuditService service = new AdminAuditService(port, FIXED);
+        AdminAuditService service = new AdminAuditService(port, FIXED, event -> {});
 
         service.recent(0);
         assertThat(port.lastLimit).isEqualTo(1);
@@ -113,6 +125,15 @@ class AdminAuditServiceTest {
         @Override
         public List<AdminAction> findRecent(int limit) {
             return List.of();
+        }
+    }
+
+    private static final class RecordingPublisher implements OperationalEventPublisher {
+        private final List<OperationalEvent> events = new ArrayList<>();
+
+        @Override
+        public void publish(OperationalEvent event) {
+            events.add(event);
         }
     }
 }

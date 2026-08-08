@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { Card, Text } from "@shared/ui";
 
 export interface AdminTableProps {
+  /** 표의 목적을 설명하는 접근 가능한 제목. 화면에는 노출하지 않는다. */
+  readonly caption: string;
   readonly headers: readonly string[];
   /** 우측 정렬할 컬럼 인덱스. 금액·조치 버튼 열에 사용한다. */
   readonly alignRight?: readonly number[];
@@ -18,6 +20,7 @@ export interface AdminTableProps {
  * 행은 각 섹션이 도메인에 맞게 직접 그린다.
  */
 export function AdminTable({
+  caption,
   headers,
   alignRight = [],
   minWidth = 640,
@@ -28,6 +31,9 @@ export function AdminTable({
   return (
     <Card padded={false} className="overflow-x-auto">
       <table className="w-full border-collapse text-sm" style={{ minWidth }}>
+        <caption className="sr-only">
+          {caption} · {rowCount.toLocaleString("ko-KR")}개 결과
+        </caption>
         <thead>
           <tr className="bg-neutral-50 text-xs text-neutral-500">
             {headers.map((header, index) => (
@@ -66,11 +72,15 @@ export function AdminStatus({
   readonly loading: boolean;
 }) {
   if (error !== undefined) {
-    return <p className="text-sm text-danger">{error}</p>;
+    return (
+      <p className="text-sm text-danger" role="alert" aria-atomic="true">
+        {error}
+      </p>
+    );
   }
   if (loading) {
     return (
-      <Text tone="muted" size="sm">
+      <Text tone="muted" size="sm" role="status" aria-live="polite" aria-atomic="true">
         불러오는 중...
       </Text>
     );

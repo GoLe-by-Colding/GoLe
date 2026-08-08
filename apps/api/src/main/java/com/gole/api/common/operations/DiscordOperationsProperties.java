@@ -68,6 +68,7 @@ public class DiscordOperationsProperties {
                 switch (category) {
                     case ACCOUNT -> accountWebhookUrl;
                     case PAYMENT -> paymentWebhookUrl;
+                    case ADMIN -> operationsWebhookUrl;
                     case APPLICATION -> operationsWebhookUrl;
                 };
         return hasText(categoryUrl) ? categoryUrl : webhookUrl;

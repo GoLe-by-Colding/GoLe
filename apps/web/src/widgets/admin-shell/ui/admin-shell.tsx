@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { fetchAdminReports } from "@entities/admin";
+import { fetchAdminOverview } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { cn } from "@shared/lib";
 import { Badge, Button, Container, Heading, Text } from "@shared/ui";
@@ -43,10 +43,10 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       return;
     }
     let active = true;
-    void fetchAdminReports(token, 100, "PENDING")
-      .then((rows) => {
+    void fetchAdminOverview(token)
+      .then((overview) => {
         if (active) {
-          setPendingReports(rows.length);
+          setPendingReports(overview.pendingReports ?? 0);
         }
       })
       .catch(() => undefined);
@@ -78,8 +78,11 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           <Badge tone="brand">ADMIN</Badge>
         </div>
 
-        <div className="grid gap-8 lg:[grid-template-columns:200px_1fr]">
-          <nav aria-label="운영자 메뉴" className="max-lg:overflow-x-auto">
+        <div className="grid overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:220px_1fr]">
+          <nav
+            aria-label="운영자 메뉴"
+            className="border-b border-neutral-200/70 bg-white p-3 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
+          >
             <ul className="flex gap-1 lg:sticky lg:top-20 lg:flex-col">
               {NAV.map((item) => {
                 const active =
@@ -90,9 +93,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition",
+                        "flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium transition",
                         active
-                          ? "bg-brand-50 text-brand-700"
+                          ? "bg-brand-600 text-white shadow-brand"
                           : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
                       )}
                     >
@@ -107,7 +110,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
             </ul>
           </nav>
 
-          <div className="min-w-0">{children}</div>
+          <div className="min-w-0 p-4 sm:p-6 lg:p-8">{children}</div>
         </div>
       </div>
     </Container>

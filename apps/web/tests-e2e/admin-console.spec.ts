@@ -58,6 +58,61 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
   });
 });
 
+test.describe("운영자 콘솔 — 대시보드 셸", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "gole.session",
+        JSON.stringify({
+          accountId: "admin-1",
+          email: "admin@gole.test",
+          sessionToken: "admin-test-token",
+          role: "ADMIN",
+        }),
+      );
+    });
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          counts: { accounts: 42, listings: 9, orders: 15, posts: 6 },
+          activeListings: 9,
+          gmv: 1_248_000,
+          ordersByStatus: { PAYMENT_PENDING: 2, PAYMENT_FAILED: 1, COMPLETED: 12 },
+          pendingReports: 3,
+        }),
+      });
+    });
+    await page.route("**/api/admin/audit**", async (route) => {
+      await route.fulfill({ contentType: "application/json", body: "[]" });
+    });
+  });
+
+  test("우선 작업과 현재 메뉴를 실제 집계로 표시한다", async ({ page }) => {
+    await page.goto("/admin");
+
+    await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "대시보드" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(page.getByText("미처리 신고").locator("..").getByText("3건")).toBeVisible();
+    await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
+  });
+
+  test("좁은 화면에서 콘솔 셸이 페이지 전체 가로 스크롤을 만들지 않는다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/admin");
+
+    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+    const hasPageOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(hasPageOverflow).toBe(false);
+  });
+});
+
 test.describe("관리자 API 가드", () => {
   test.skip(() => !process.env.E2E_WITH_BACKEND, "백엔드 대상 테스트는 E2E_WITH_BACKEND=1 에서만 실행");
 

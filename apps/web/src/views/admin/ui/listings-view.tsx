@@ -75,6 +75,7 @@ export function AdminListingsView() {
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="중고 매물 관리 목록"
         headers={["제목", "판매자", "가격", "상태", "등록", "관리"]}
         alignRight={[2, 5]}
         minWidth={720}

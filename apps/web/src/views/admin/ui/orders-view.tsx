@@ -74,6 +74,7 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="거래 주문 모니터링 목록"
         headers={["주문", "상태", "금액", "세트", "구매자", "판매자", "생성"]}
         alignRight={[2]}
         minWidth={780}

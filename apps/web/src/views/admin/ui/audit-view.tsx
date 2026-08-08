@@ -92,6 +92,7 @@ export function AdminAuditView() {
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="관리자 조치 감사 로그"
         headers={["시각", "조치", "조치자", "대상", "사유"]}
         minWidth={780}
         empty="기록된 조치가 없습니다."

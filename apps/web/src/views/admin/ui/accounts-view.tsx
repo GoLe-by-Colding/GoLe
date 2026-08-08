@@ -77,6 +77,7 @@ export function AdminAccountsView() {
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="회원 및 관리자 권한 목록"
         headers={["이메일", "권한", "상태", "정지 사유", "관리"]}
         alignRight={[4]}
         minWidth={780}

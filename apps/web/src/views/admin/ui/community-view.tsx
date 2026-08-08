@@ -70,6 +70,7 @@ export function AdminCommunityView() {
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
+        caption="커뮤니티 게시글 관리 목록"
         headers={["내용", "작성자", "주제", "상태", "작성", "관리"]}
         alignRight={[5]}
         minWidth={720}

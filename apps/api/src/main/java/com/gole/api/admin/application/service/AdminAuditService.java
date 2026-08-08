@@ -4,9 +4,14 @@ import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.out.AdminAuditPort;
 import com.gole.api.admin.domain.model.AdminAction;
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,16 +32,19 @@ public class AdminAuditService implements RecordAdminActionUseCase, ListAdminAct
 
     private final AdminAuditPort auditPort;
     private final Clock clock;
+    private final OperationalEventPublisher operationalEventPublisher;
 
-    public AdminAuditService(AdminAuditPort auditPort, Clock clock) {
+    public AdminAuditService(
+            AdminAuditPort auditPort, Clock clock, OperationalEventPublisher operationalEventPublisher) {
         this.auditPort = auditPort;
         this.clock = clock;
+        this.operationalEventPublisher = operationalEventPublisher;
     }
 
     @Override
     public void record(RecordAdminActionCommand command) {
         try {
-            auditPort.append(new AdminAction(
+            AdminAction action = new AdminAction(
                     UUID.randomUUID().toString(),
                     command.actorId(),
                     command.actorEmail(),
@@ -44,7 +52,20 @@ public class AdminAuditService implements RecordAdminActionUseCase, ListAdminAct
                     command.targetType(),
                     command.targetId(),
                     normalize(command.reason()),
-                    Instant.now(clock)));
+                    Instant.now(clock));
+            auditPort.append(action);
+            // 운영 채널에는 이메일·사유를 제외한 최소 식별자만 전달한다.
+            operationalEventPublisher.publish(new OperationalEvent(
+                    Category.ADMIN,
+                    levelFor(command.type()),
+                    "관리자 조치 완료",
+                    "관리자 콘솔에서 운영 조치가 실행되었습니다.",
+                    Map.of(
+                            "조치", command.type().name(),
+                            "대상", command.targetType().name(),
+                            "대상 ID", command.targetId(),
+                            "관리자 ID", command.actorId()),
+                    action.getOccurredAt()));
         } catch (RuntimeException ex) {
             // 요구사항 8.5: 감사 기록 실패로 이미 성공한 조치를 되돌리지 않는다.
             log.error(
@@ -64,5 +85,12 @@ public class AdminAuditService implements RecordAdminActionUseCase, ListAdminAct
 
     private static String normalize(String reason) {
         return reason == null || reason.isBlank() ? null : reason.trim();
+    }
+
+    private static Level levelFor(com.gole.api.admin.domain.model.AdminActionType type) {
+        return switch (type) {
+            case LISTING_TAKEDOWN, POST_REMOVE, ACCOUNT_SUSPEND -> Level.WARNING;
+            default -> Level.INFO;
+        };
     }
 }
