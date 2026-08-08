@@ -65,7 +65,9 @@ class CommunityServiceTest {
     @Test
     void comment_isAttachedToPost() {
         String id = publish();
-        service.comment(new CommentCommand(id, "user-2", "멋져요"));
+        Comment created = service.comment(new CommentCommand(id, "user-2", "멋져요"));
+        assertThat(created.id()).isEqualTo("id-2");
+        assertThat(created.authorId()).isEqualTo("user-2");
         assertThat(service.comments(id)).hasSize(1);
     }
 

@@ -96,11 +96,8 @@ public class CommunityController {
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse comment(
             @PathVariable String postId, @Valid @RequestBody CommentRequest request, HttpServletRequest http) {
-        commentOnPostUseCase.comment(new CommentCommand(postId, AuthenticatedUser.id(http), request.content()));
-        return getFeedUseCase.comments(postId).stream()
-                .reduce((first, second) -> second)
-                .map(CommentResponse::from)
-                .orElseThrow();
+        return CommentResponse.from(commentOnPostUseCase.comment(
+                new CommentCommand(postId, AuthenticatedUser.id(http), request.content())));
     }
 
     @PutMapping("/{postId}")

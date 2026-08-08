@@ -65,16 +65,16 @@ public class CommunityService
     }
 
     @Override
-    public String comment(CommentCommand command) {
+    public Comment comment(CommentCommand command) {
         Post post = requirePublished(command.postId());
         Comment comment = new Comment(
                 idGenerator.newId(), post.getId(), command.authorId(), command.content(), Instant.now(clock));
-        String id = commentRepository.save(comment).id();
+        Comment saved = commentRepository.save(comment);
         // 알림: 내 글에 댓글이 달리면 작성자에게(본인 댓글은 제외, best-effort)
         if (!command.authorId().equals(post.getAuthorId())) {
             postAuthorNotifier.notifyComment(post.getAuthorId(), post.getId());
         }
-        return id;
+        return saved;
     }
 
     @Override
