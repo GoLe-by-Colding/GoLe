@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TrendingSet } from "@entities/pricing";
-import { Badge, Text } from "@shared/ui";
+import { Badge, ResilientImage, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
 export interface TrendingSetsProps {
@@ -44,8 +44,7 @@ export function TrendingSets({ items }: TrendingSetsProps) {
               {index + 1}
             </span>
             {set.imageUrl !== null ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ResilientImage
                 src={set.imageUrl}
                 alt={set.name}
                 className="h-12 w-12 shrink-0 rounded-xl border border-neutral-200/60 object-cover"

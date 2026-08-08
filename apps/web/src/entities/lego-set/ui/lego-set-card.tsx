@@ -1,4 +1,4 @@
-import { Badge, Card } from "@shared/ui";
+import { Badge, Card, ResilientImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
@@ -19,8 +19,7 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
             🧱
           </div>
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <ResilientImage
             src={thumbnailUrl(set.imageUrl, 480)}
             alt={set.name}
             loading="lazy"

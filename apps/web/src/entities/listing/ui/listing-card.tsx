@@ -1,4 +1,4 @@
-import { Badge, Card } from "@shared/ui";
+import { Badge, Card, ResilientImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
 import {
@@ -18,13 +18,10 @@ export function ListingCard({ listing }: ListingCardProps) {
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
       <div className="overflow-hidden rounded-t-2xl">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ResilientImage
           className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
           src={
-            cover === undefined
-              ? "https://placehold.co/600x400?text=LEGO"
-              : thumbnailUrl(cover, 480)
+            cover === undefined ? "/icon.svg" : thumbnailUrl(cover, 480)
           }
           alt={listing.title}
           loading="lazy"

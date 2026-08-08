@@ -9,6 +9,9 @@ export type { CardProps, CardElevation } from "./card";
 export { Logo } from "./logo";
 export type { LogoProps } from "./logo";
 
+export { ResilientImage } from "./resilient-image";
+export type { ResilientImageProps } from "./resilient-image";
+
 export { Skeleton } from "./skeleton";
 export type { SkeletonProps } from "./skeleton";
 

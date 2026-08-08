@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { POST_TOPIC_LABEL, type Post } from "@entities/community";
 import { LikeButton } from "@features/like-post";
-import { Card } from "@shared/ui";
+import { Card, ResilientImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface PostCardProps {
@@ -17,8 +17,7 @@ export function PostCard({ post }: PostCardProps) {
     <Card padded={false} className="flex flex-col">
       {cover !== undefined ? (
         <Link href={`/community/${post.id}`} className="relative block overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ResilientImage
             className="img-zoom w-full aspect-square object-cover bg-neutral-100"
             src={thumbnailUrl(cover, 480)}
             alt=""
