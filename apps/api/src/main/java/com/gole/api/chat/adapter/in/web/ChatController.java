@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.connection.Message;
@@ -138,8 +138,7 @@ public class ChatController {
         requireParticipant(roomId, http);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         String channel = "chat:" + roomId;
-        CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();
-        emitters.add(emitter);
+        AtomicReference<Runnable> cleanupRef = new AtomicReference<>(() -> {});
 
         MessageListener listener = (Message rawMsg, byte[] pattern) -> {
             try {
@@ -147,24 +146,26 @@ public class ChatController {
                 emitter.send(SseEmitter.event().name("message").data(payload, MediaType.APPLICATION_JSON));
             } catch (IOException | RuntimeException e) {
                 log.warn("Chat SSE payload handling failed roomId={}: {}", roomId, e.getMessage());
-                emitters.remove(emitter);
+                cleanupRef.get().run();
+                emitter.completeWithError(e);
             }
         };
 
         ChannelTopic topic = new ChannelTopic(channel);
-        listenerContainer.addMessageListener(listener, topic);
-
         Runnable cleanup = () -> listenerContainer.removeMessageListener(listener, topic);
+        cleanupRef.set(cleanup);
         emitter.onCompletion(cleanup);
         emitter.onTimeout(cleanup);
         emitter.onError((e) -> cleanup.run());
+        listenerContainer.addMessageListener(listener, topic);
         return emitter;
     }
 
     /** buyerId/sellerId는 구버전 클라이언트 호환 필드이며 서버는 신뢰하지 않는다. */
     public record CreateRoomRequest(@NotBlank String listingId, String buyerId, String sellerId) {}
 
-    public record SendMessageRequest(@NotBlank String senderId, @NotBlank String content) {}
+    public record SendMessageRequest(
+            String senderId, @NotBlank @jakarta.validation.constraints.Size(max = 2000) String content) {}
 
     private record PubSubMessage(String id, String senderId, String content, String sentAt) {}
 

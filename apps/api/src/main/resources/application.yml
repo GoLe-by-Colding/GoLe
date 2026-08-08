@@ -77,7 +77,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        # 운영 기본값은 로드밸런서 헬스체크만 공개한다. 추가 엔드포인트는 명시적으로 환경변수에 지정한다.
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health}
   endpoint:
     health:
       probes:

@@ -6,5 +6,6 @@ public final class OrderRequests {
 
     private OrderRequests() {}
 
-    public record PlaceOrderRequest(@NotBlank String listingId, @NotBlank String buyerId) {}
+    public record PlaceOrderRequest(
+            @NotBlank @jakarta.validation.constraints.Size(max = 100) String listingId, String buyerId) {}
 }

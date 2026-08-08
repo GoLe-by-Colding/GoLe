@@ -14,9 +14,9 @@ public final class ListingRequests {
     private ListingRequests() {}
 
     public record CreateListingRequest(
-            @NotBlank String sellerId,
-            @NotBlank String title,
-            @NotNull String description,
+            String sellerId,
+            @NotBlank @Size(max = 120) String title,
+            @NotNull @Size(max = 5000) String description,
             @PositiveOrZero long price,
             @NotNull ItemCondition condition,
             Completeness completeness,
@@ -25,7 +25,7 @@ public final class ListingRequests {
             boolean hasMissingParts,
             @Size(max = 1000) String missingPartsNote,
             @Size(max = 1000) String defectsNote,
-            @NotEmpty List<@NotBlank String> photoUrls,
-            String catalogSetNumber,
-            String category) {}
+            @NotEmpty @Size(max = 10) List<@NotBlank @Size(max = 2048) String> photoUrls,
+            @Size(max = 100) String catalogSetNumber,
+            @Size(max = 100) String category) {}
 }

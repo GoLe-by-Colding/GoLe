@@ -17,9 +17,9 @@ public final class ReportDtos {
     private ReportDtos() {}
 
     public record SubmitReportRequest(
-            @NotBlank String reporterId,
+            String reporterId,
             @NotNull ReportTargetType targetType,
-            @NotBlank String targetId,
+            @NotBlank @Size(max = 100) String targetId,
             @NotNull ReportReason reason,
             @Size(max = 1000) String detail) {}
 

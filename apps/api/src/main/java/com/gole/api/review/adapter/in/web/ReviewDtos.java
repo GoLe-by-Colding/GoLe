@@ -13,8 +13,8 @@ public final class ReviewDtos {
     private ReviewDtos() {}
 
     public record WriteReviewRequest(
-            @NotBlank String orderId,
-            @NotBlank String reviewerId,
+            @NotBlank @Size(max = 100) String orderId,
+            String reviewerId,
             @Min(1) @Max(5) int rating,
             @NotBlank @Size(max = 1000) String content) {}
 

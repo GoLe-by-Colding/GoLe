@@ -82,7 +82,8 @@ public class ListingCommentController {
         return s != null && s.length() > max ? s.substring(0, max) + "…" : s;
     }
 
-    public record CreateCommentRequest(@NotBlank String authorId, @NotBlank String content) {}
+    public record CreateCommentRequest(
+            String authorId, @NotBlank @jakarta.validation.constraints.Size(max = 1000) String content) {}
 
     public record CommentResponse(String id, String authorId, String content, Instant createdAt) {
 

@@ -24,6 +24,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.mock.web.MockHttpServletRequest;
 import tools.jackson.databind.ObjectMapper;
@@ -32,11 +36,12 @@ class ChatControllerTest {
 
     private final ChatRoomMongoRepository rooms = mock(ChatRoomMongoRepository.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
+    private final RedisMessageListenerContainer listeners = mock(RedisMessageListenerContainer.class);
     private final ChatController controller = new ChatController(
             rooms,
             mock(ChatMessageMongoRepository.class),
             mock(ChatRedisPublisher.class),
-            mock(RedisMessageListenerContainer.class),
+            listeners,
             listings,
             new ObjectMapper());
 
@@ -63,6 +68,23 @@ class ChatControllerTest {
         assertThatThrownBy(() -> controller.createOrGetRoom(
                         new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("same-user")))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void stream_removesRedisListenerWhenPayloadHandlingFails() {
+        when(rooms.findById("room-1"))
+                .thenReturn(Optional.of(new ChatRoomDocument("room-1", "listing-1", "buyer", "seller", Instant.now())));
+        controller.stream("room-1", authenticated("buyer"));
+
+        ArgumentCaptor<MessageListener> listener = ArgumentCaptor.forClass(MessageListener.class);
+        ArgumentCaptor<ChannelTopic> topic = ArgumentCaptor.forClass(ChannelTopic.class);
+        verify(listeners).addMessageListener(listener.capture(), topic.capture());
+        Message invalid = mock(Message.class);
+        when(invalid.getBody()).thenReturn("not-json".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        listener.getValue().onMessage(invalid, null);
+
+        verify(listeners).removeMessageListener(listener.getValue(), topic.getValue());
     }
 
     private static MockHttpServletRequest authenticated(String accountId) {
