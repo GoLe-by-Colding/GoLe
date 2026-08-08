@@ -64,31 +64,32 @@ function SectionHeader({ title, aside }: { readonly title: string; readonly asid
   );
 }
 
-/** 트렌딩 세트의 평균 체결가를 정적인 가로 목록으로 보여준다. */
+/** 트렌딩 세트의 평균 체결가를 연속해서 보여주는 시세 티커. */
 function PriceTicker({ items }: { readonly items: readonly TrendingSet[] }) {
   if (items.length === 0) return null;
+  const doubled = [...items, ...items];
   return (
-    <div className="overflow-x-auto border-y border-neutral-200 bg-neutral-50 py-3">
-      <Container width="xl">
-        <div className="flex min-w-max items-center gap-8">
-          {items.map((set) => (
-            <Link
-              key={set.setNumber}
-              href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
-              className="flex items-center gap-2.5 whitespace-nowrap text-sm hover:text-brand-700"
-            >
-              <span className="font-mono font-bold text-brand-700">#{set.setNumber}</span>
-              <span className="max-w-[18ch] truncate text-neutral-600">{set.name}</span>
-              <span className="font-semibold tabular-nums text-neutral-900">
-                {formatKrw(set.averagePrice)}
-              </span>
-              <span className="text-xs text-neutral-500">
-                {set.tradeCount.toLocaleString("ko-KR")}건 체결
-              </span>
-            </Link>
-          ))}
-        </div>
-      </Container>
+    <div className="group overflow-hidden border-y border-neutral-200 bg-neutral-50 py-3">
+      <div className="flex w-max animate-market-ticker items-center gap-10 pl-10 group-hover:[animation-play-state:paused] motion-reduce:animate-none">
+        {doubled.map((set, index) => (
+          <Link
+            key={`${set.setNumber}-${index}`}
+            href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
+            aria-hidden={index >= items.length ? "true" : undefined}
+            tabIndex={index >= items.length ? -1 : undefined}
+            className="flex items-center gap-2.5 whitespace-nowrap text-sm hover:text-brand-700"
+          >
+            <span className="font-mono font-bold text-brand-700">#{set.setNumber}</span>
+            <span className="max-w-[18ch] truncate text-neutral-600">{set.name}</span>
+            <span className="font-semibold tabular-nums text-neutral-900">
+              {formatKrw(set.averagePrice)}
+            </span>
+            <span className="text-xs text-neutral-500">
+              {set.tradeCount.toLocaleString("ko-KR")}건 체결
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

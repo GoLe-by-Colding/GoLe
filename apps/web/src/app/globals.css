@@ -74,6 +74,18 @@
   /* ─── Spacing rhythm (8px 기반) ─── */
   --space-section: 5rem;
   --space-card: 1.25rem;
+
+  /* 거래 정보의 연속성을 보여주는 홈 시세 티커 전용 모션. */
+  --animate-market-ticker: market-ticker 40s linear infinite;
+
+  @keyframes market-ticker {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @layer base {
