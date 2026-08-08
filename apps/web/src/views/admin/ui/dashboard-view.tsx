@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   fetchAdminAudit,
   fetchAdminOverview,
-  fetchAdminReports,
   type AdminAuditEntry,
   type AdminOverview,
 } from "@entities/admin";
@@ -29,6 +28,8 @@ export function AdminDashboardView() {
 
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [pendingReports, setPendingReports] = useState(0);
+  const [failedPayments, setFailedPayments] = useState(0);
+  const [pendingPayments, setPendingPayments] = useState(0);
   const [audit, setAudit] = useState<readonly AdminAuditEntry[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -39,14 +40,16 @@ export function AdminDashboardView() {
     let active = true;
     void (async () => {
       try {
-        const [data, reports, actions] = await Promise.all([
+        const [data, actions] = await Promise.all([
           fetchAdminOverview(token),
-          fetchAdminReports(token, 100, "PENDING"),
           fetchAdminAudit(token, 8),
         ]);
         if (active) {
           setOverview(data);
-          setPendingReports(reports.length);
+          // 롤링 배포 중 구버전 API가 이 필드를 아직 주지 않아도 숫자가 비어 보이지 않게 한다.
+          setPendingReports(data.pendingReports ?? 0);
+          setFailedPayments(data.ordersByStatus.PAYMENT_FAILED ?? 0);
+          setPendingPayments(data.ordersByStatus.PAYMENT_PENDING ?? 0);
           setAudit(actions);
         }
       } catch (cause) {
@@ -64,14 +67,67 @@ export function AdminDashboardView() {
     <div className="flex flex-col gap-8">
       <AdminStatus error={error} loading={overview === null && error === undefined} />
 
-      {pendingReports > 0 ? (
-        <Link href="/admin/reports">
-          <Card padded className="flex items-center gap-3 border-warning/40 bg-warning-soft">
-            <Badge tone="warning">처리 필요</Badge>
-            <Text weight="medium">미처리 신고 {pendingReports}건이 대기 중입니다 →</Text>
-          </Card>
-        </Link>
-      ) : null}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <Heading level={3}>운영 작업함</Heading>
+            <Text tone="muted" size="sm">
+              지금 확인하거나 조치해야 할 항목입니다.
+            </Text>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Link href="/admin/reports">
+            <Card
+              padded
+              className={
+                pendingReports > 0
+                  ? "h-full border-warning/40 bg-warning-soft"
+                  : "h-full transition-colors hover:border-neutral-300"
+              }
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">미처리 신고</Text>
+                <Badge tone={pendingReports > 0 ? "warning" : "success"}>{pendingReports}건</Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                대상 확인 및 내림·삭제 →
+              </Text>
+            </Card>
+          </Link>
+          <Link href="/admin/orders?status=PAYMENT_FAILED">
+            <Card
+              padded
+              className={
+                failedPayments > 0
+                  ? "h-full border-danger/30 bg-danger-soft"
+                  : "h-full transition-colors hover:border-neutral-300"
+              }
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">결제 실패 주문</Text>
+                <Badge tone={failedPayments > 0 ? "danger" : "success"}>{failedPayments}건</Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                오류 주문 추적 →
+              </Text>
+            </Card>
+          </Link>
+          <Link href="/admin/orders?status=PAYMENT_PENDING">
+            <Card padded className="h-full transition-colors hover:border-neutral-300">
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">결제 대기 주문</Text>
+                <Badge tone={pendingPayments > 0 ? "warning" : "success"}>
+                  {pendingPayments}건
+                </Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                장기 대기 여부 확인 →
+              </Text>
+            </Card>
+          </Link>
+        </div>
+      </section>
 
       {overview !== null ? (
         <>

@@ -8,9 +8,11 @@ import java.util.List;
  */
 public interface CatalogAdminPort {
 
+    record StoredLegoSet(LegoSet set, boolean featured) {}
+
     /** 세트를 저장(신규/갱신)한다. featured 는 홈 추천 노출 여부. */
     LegoSet save(LegoSet set, boolean featured);
 
     /** 전체 세트 목록(관리자 대시보드용). */
-    List<LegoSet> findAll();
+    List<StoredLegoSet> findAll();
 }

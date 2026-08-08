@@ -101,26 +101,46 @@
   }
   @keyframes brick-spout {
     0%,
-    18% {
+    8% {
       opacity: 0;
-      transform: translate(20px, 24px) scale(0.82);
+      transform: translate(18px, 22px) scale(0.82);
     }
-    28% {
+    15% {
       opacity: 1;
-      transform: translate(0, -5px) scale(1);
+      transform: translate(6px, 5px) scale(0.95);
     }
-    48% {
+    30% {
       opacity: 1;
-      transform: translate(16px, 0) rotate(3deg);
+      transform: translate(0, -8px) scale(1);
     }
-    72% {
+    52% {
       opacity: 1;
-      transform: translate(72px, 72px) rotate(7deg) scale(0.93);
+      transform: translate(18px, -2px) rotate(3deg);
     }
-    78%,
+    76% {
+      opacity: 1;
+      transform: translate(72px, 70px) rotate(7deg) scale(0.94);
+    }
+    84%,
     100% {
       opacity: 0;
       transform: translate(76px, 77px) rotate(7deg) scale(1);
+    }
+  }
+  @keyframes spout-stream {
+    0%,
+    100% {
+      opacity: 0.25;
+      stroke-dashoffset: 52;
+    }
+    16%,
+    62% {
+      opacity: 0.9;
+      stroke-dashoffset: 0;
+    }
+    86% {
+      opacity: 0.35;
+      stroke-dashoffset: -32;
     }
   }
   @keyframes rise {
@@ -140,18 +160,29 @@
     transform-box: fill-box;
     transform-origin: center;
     animation: brick-spout 3.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    animation-fill-mode: both;
+  }
+
+  .gole-spout-brick-a {
+    animation-delay: -200ms;
   }
 
   .gole-spout-brick-b {
-    animation-delay: 80ms;
+    animation-delay: -120ms;
   }
 
   .gole-spout-brick-c {
-    animation-delay: 160ms;
+    animation-delay: -40ms;
+  }
+
+  .gole-spout-stream {
+    stroke-dasharray: 42 10;
+    animation: spout-stream 3.2s ease-in-out infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .gole-spout-brick {
+    .gole-spout-brick,
+    .gole-spout-stream {
       animation: none;
       opacity: 1;
     }

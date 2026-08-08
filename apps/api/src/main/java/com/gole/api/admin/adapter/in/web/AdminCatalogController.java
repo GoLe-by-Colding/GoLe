@@ -74,7 +74,7 @@ public class AdminCatalogController {
                 request.imageUrl(),
                 request.featured()));
         record(http, AdminActionType.CATALOG_SET_CREATE, setNumber, null);
-        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber));
+        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber), request.featured());
     }
 
     @Operation(summary = "세트 수정", description = "존재하지 않는 세트면 404 LEGO_SET_NOT_FOUND.")
@@ -91,7 +91,7 @@ public class AdminCatalogController {
                 request.imageUrl(),
                 request.featured()));
         record(http, AdminActionType.CATALOG_SET_UPDATE, setNumber, null);
-        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber));
+        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber), request.featured());
     }
 
     @Operation(summary = "홈 추천 토글", description = "featured 플래그만 갱신합니다.")
@@ -100,7 +100,7 @@ public class AdminCatalogController {
             @PathVariable String setNumber, @RequestBody FeaturedRequest request, HttpServletRequest http) {
         updateLegoSet.setFeatured(setNumber, request.featured());
         record(http, AdminActionType.CATALOG_SET_FEATURE, setNumber, String.valueOf(request.featured()));
-        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber));
+        return LegoSetResponse.from(findLegoSet.findBySetNumber(setNumber), request.featured());
     }
 
     private void record(HttpServletRequest http, AdminActionType type, String setNumber, String reason) {

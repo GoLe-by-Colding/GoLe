@@ -11,6 +11,10 @@ public interface ManageReportsUseCase {
 
     List<Report> list(ReportStatus status, int limit);
 
+    long count(ReportStatus status);
+
+    Report get(String reportId);
+
     Report resolve(String reportId);
 
     Report dismiss(String reportId);

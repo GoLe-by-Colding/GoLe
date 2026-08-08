@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
+import com.gole.api.catalog.application.port.out.CatalogAdminPort.StoredLegoSet;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
 import com.gole.api.catalog.domain.model.LegoSet;
@@ -47,6 +48,17 @@ class CatalogServiceTest {
         assertThat(service.search("  ")).isEmpty();
     }
 
+    @Test
+    void all_preservesFeaturedFlag_forAdminEditing() {
+        CatalogService service =
+                new CatalogService(new FakeLoadPort(Optional.empty(), List.of()), new FakeAdminPort(eiffel));
+
+        assertThat(service.all()).singleElement().satisfies(summary -> {
+            assertThat(summary.set()).isEqualTo(eiffel);
+            assertThat(summary.featured()).isTrue();
+        });
+    }
+
     private record FakeLoadPort(Optional<LegoSet> byNumber, List<LegoSet> bySearch) implements LoadLegoSetPort {
 
         @Override
@@ -66,14 +78,24 @@ class CatalogServiceTest {
     }
 
     private static final class FakeAdminPort implements CatalogAdminPort {
+        private final LegoSet stored;
+
+        private FakeAdminPort() {
+            this(null);
+        }
+
+        private FakeAdminPort(LegoSet stored) {
+            this.stored = stored;
+        }
+
         @Override
         public LegoSet save(LegoSet set, boolean featured) {
             return set;
         }
 
         @Override
-        public List<LegoSet> findAll() {
-            return List.of();
+        public List<StoredLegoSet> findAll() {
+            return stored == null ? List.of() : List.of(new StoredLegoSet(stored, true));
         }
     }
 }

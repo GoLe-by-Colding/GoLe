@@ -1,7 +1,5 @@
 package com.gole.api.common.operations;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,6 +12,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /** Discord webhook 출력 어댑터. 비동기 best-effort로 동작해 사용자 요청을 지연시키지 않는다. */
 @Component
@@ -58,7 +58,7 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
                         log.warn("Discord 운영 알림 전송 오류: {}", ex.getMessage());
                         return null;
                     });
-        } catch (IllegalArgumentException | JsonProcessingException ex) {
+        } catch (IllegalArgumentException | JacksonException ex) {
             log.warn("Discord 운영 알림 구성 오류: {}", ex.getMessage());
         }
     }

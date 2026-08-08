@@ -23,6 +23,7 @@ export {
   removeAdminPost,
   fetchAdminReports,
   resolveAdminReport,
+  resolveAdminReportTarget,
   dismissAdminReport,
   fetchAdminAccounts,
   suspendAdminAccount,

@@ -13,7 +13,9 @@ import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
+import com.gole.api.report.domain.exception.ReportAlreadyHandledException;
 import com.gole.api.report.domain.model.ReportStatus;
+import com.gole.api.report.domain.model.ReportTargetType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -69,8 +71,9 @@ public class AdminModerationController {
     @GetMapping("/orders")
     public List<OrderRow> orders(
             @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "q", required = false) String query,
             @RequestParam(value = "limit", defaultValue = "30") int limit) {
-        return readModel.recentOrders(status, clamp(limit)).stream()
+        return readModel.recentOrders(status, query, clamp(limit)).stream()
                 .map(OrderRow::from)
                 .toList();
     }
@@ -79,8 +82,11 @@ public class AdminModerationController {
 
     @Operation(summary = "매물 목록", description = "DELETED 를 포함한 전체 상태의 최근 매물을 조회합니다.")
     @GetMapping("/listings")
-    public List<ListingRow> listings(@RequestParam(value = "limit", defaultValue = "30") int limit) {
-        return readModel.recentListings(clamp(limit)).stream()
+    public List<ListingRow> listings(
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "q", required = false) String query,
+            @RequestParam(value = "limit", defaultValue = "30") int limit) {
+        return readModel.recentListings(status, query, clamp(limit)).stream()
                 .map(ListingRow::from)
                 .toList();
     }
@@ -98,8 +104,13 @@ public class AdminModerationController {
 
     @Operation(summary = "게시글 목록", description = "전체 상태의 최근 게시글을 조회합니다.")
     @GetMapping("/posts")
-    public List<PostRow> posts(@RequestParam(value = "limit", defaultValue = "30") int limit) {
-        return readModel.recentPosts(clamp(limit)).stream().map(PostRow::from).toList();
+    public List<PostRow> posts(
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "q", required = false) String query,
+            @RequestParam(value = "limit", defaultValue = "30") int limit) {
+        return readModel.recentPosts(status, query, clamp(limit)).stream()
+                .map(PostRow::from)
+                .toList();
     }
 
     @Operation(summary = "게시글 강제 삭제", description = "작성자 확인 없이 게시글을 내립니다(운영자 오버라이드).")
@@ -128,6 +139,32 @@ public class AdminModerationController {
     public ReportRow resolveReport(@PathVariable String reportId, HttpServletRequest http) {
         ReportRow row = ReportRow.from(manageReports.resolve(reportId));
         record(http, AdminActionType.REPORT_RESOLVE, AdminTargetType.REPORT, reportId, null);
+        return row;
+    }
+
+    @Operation(summary = "신고 대상 조치 후 완료", description = "신고 대상이 매물이면 내리고 게시글이면 삭제한 뒤 신고를 RESOLVED로 전이합니다.")
+    @PostMapping("/reports/{reportId}/resolve-target")
+    public ReportRow resolveReportTarget(
+            @PathVariable String reportId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
+        var report = manageReports.get(reportId);
+        if (report.getStatus() != ReportStatus.PENDING) {
+            throw new ReportAlreadyHandledException(reportId);
+        }
+        if (report.getTargetType() == ReportTargetType.LISTING) {
+            moderateListing.takedown(report.getTargetId(), request.reason());
+            record(
+                    http,
+                    AdminActionType.LISTING_TAKEDOWN,
+                    AdminTargetType.LISTING,
+                    report.getTargetId(),
+                    request.reason());
+        } else {
+            moderatePost.removeByModerator(report.getTargetId(), request.reason());
+            record(http, AdminActionType.POST_REMOVE, AdminTargetType.POST, report.getTargetId(), request.reason());
+        }
+
+        ReportRow row = ReportRow.from(manageReports.resolve(reportId));
+        record(http, AdminActionType.REPORT_RESOLVE, AdminTargetType.REPORT, reportId, request.reason());
         return row;
     }
 

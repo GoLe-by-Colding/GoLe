@@ -4,6 +4,7 @@ import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
+import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
 import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
@@ -50,8 +51,10 @@ public class CatalogService
     }
 
     @Override
-    public List<LegoSet> all() {
-        return catalogAdminPort.findAll();
+    public List<LegoSetSummary> all() {
+        return catalogAdminPort.findAll().stream()
+                .map(stored -> new LegoSetSummary(stored.set(), stored.featured()))
+                .toList();
     }
 
     @Override

@@ -1,64 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchAdminOrders, type AdminOrder } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
-import { Badge, Heading, Select, Text } from "@shared/ui";
+import { Badge, Heading, Input, Select, Text } from "@shared/ui";
 import { ORDER_STATUS_LABEL, formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
 const STATUSES = ["PAYMENT_PENDING", "FUNDS_HELD", "COMPLETED", "REFUNDED", "PAYMENT_FAILED"];
 
 /** 주문 모니터링 — 읽기 전용. 운영자 개입 환불은 비범위(후속). (요구사항 7.1) */
-export function AdminOrdersView() {
+export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus?: string }) {
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
 
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
+  const [query, setQuery] = useState("");
   // null = 아직 불러오지 않음. 로딩 상태를 파생시켜 effect 안에서 setState를 동기 호출하지 않는다.
   const [rows, setRows] = useState<readonly AdminOrder[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (token === null) {
       return;
     }
-    let active = true;
-    void fetchAdminOrders(token, 50, status === "" ? undefined : status)
-      .then((data) => {
-        if (active) {
-          setRows(data);
-        }
-      })
+    setError(undefined);
+    void fetchAdminOrders(token, 100, status === "" ? undefined : status, query)
+      .then(setRows)
       .catch((cause: unknown) => {
-        if (active) {
-          setRows([]);
-          setError(cause instanceof ApiError ? cause.message : "주문을 불러오지 못했습니다.");
-        }
+        setRows([]);
+        setError(cause instanceof ApiError ? cause.message : "주문을 불러오지 못했습니다.");
       });
-    return () => {
-      active = false;
-    };
-  }, [token, status]);
+  }, [query, status, token]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(load, 250);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Heading level={2}>주문 모니터링</Heading>
-        <label className="flex items-center gap-2 text-sm text-neutral-600">
-          상태
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">전체</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {ORDER_STATUS_LABEL[s] ?? s}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="주문·회원·세트번호 검색"
+            aria-label="주문 검색"
+            className="w-56"
+          />
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            상태
+            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">전체</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {ORDER_STATUS_LABEL[s] ?? s}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
       </div>
 
       <Text tone="muted" size="sm">

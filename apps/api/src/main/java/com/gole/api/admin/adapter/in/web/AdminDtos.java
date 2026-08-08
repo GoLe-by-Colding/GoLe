@@ -4,6 +4,7 @@ import com.gole.api.account.application.port.in.ManageAccountsUseCase.AccountSum
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.domain.model.AdminAction;
+import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
 import com.gole.api.report.domain.model.Report;
@@ -28,7 +29,11 @@ public final class AdminDtos {
     // ── 대시보드 ──────────────────────────────────────────────
 
     public record OverviewResponse(
-            Map<String, Long> counts, long gmv, Map<String, Long> ordersByStatus, long activeListings) {}
+            Map<String, Long> counts,
+            long gmv,
+            Map<String, Long> ordersByStatus,
+            long activeListings,
+            long pendingReports) {}
 
     // ── 모니터링 행 ────────────────────────────────────────────
 
@@ -132,9 +137,14 @@ public final class AdminDtos {
             int pieceCount,
             int releaseYear,
             String retirementStatus,
-            String imageUrl) {
+            String imageUrl,
+            boolean featured) {
 
-        public static LegoSetResponse from(LegoSet s) {
+        public static LegoSetResponse from(LegoSetSummary summary) {
+            return from(summary.set(), summary.featured());
+        }
+
+        public static LegoSetResponse from(LegoSet s, boolean featured) {
             return new LegoSetResponse(
                     s.getSetNumber(),
                     s.getName(),
@@ -142,7 +152,8 @@ public final class AdminDtos {
                     s.getPieceCount(),
                     s.getReleaseYear(),
                     s.getRetirementStatus().name(),
-                    s.getImageUrl());
+                    s.getImageUrl(),
+                    featured);
         }
     }
 

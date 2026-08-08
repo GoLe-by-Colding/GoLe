@@ -7,6 +7,7 @@ export interface AdminOverview {
   readonly gmv: number;
   readonly ordersByStatus: Readonly<Record<string, number>>;
   readonly activeListings: number;
+  readonly pendingReports: number;
 }
 
 export interface AdminOrder {
@@ -70,6 +71,7 @@ export interface AdminLegoSet {
   readonly releaseYear: number;
   readonly retirementStatus: string;
   readonly imageUrl: string | null;
+  readonly featured: boolean;
 }
 
 export interface CreateSetInput {
@@ -128,15 +130,26 @@ export function fetchAdminOrders(
   token: string,
   limit = 30,
   status?: string,
+  query?: string,
 ): Promise<readonly AdminOrder[]> {
-  const query = status ? `&status=${encodeURIComponent(status)}` : "";
-  return get<readonly AdminOrder[]>(token, `/api/admin/orders?limit=${limit}${query}`);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  if (query?.trim()) params.set("q", query.trim());
+  return get<readonly AdminOrder[]>(token, `/api/admin/orders?${params}`);
 }
 
 // ── 매물 ─────────────────────────────────────────────────────
 
-export function fetchAdminListings(token: string, limit = 30): Promise<readonly AdminListing[]> {
-  return get<readonly AdminListing[]>(token, `/api/admin/listings?limit=${limit}`);
+export function fetchAdminListings(
+  token: string,
+  limit = 30,
+  status?: string,
+  query?: string,
+): Promise<readonly AdminListing[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  if (query?.trim()) params.set("q", query.trim());
+  return get<readonly AdminListing[]>(token, `/api/admin/listings?${params}`);
 }
 
 export function takedownListing(token: string, listingId: string, reason: string): Promise<void> {
@@ -145,8 +158,16 @@ export function takedownListing(token: string, listingId: string, reason: string
 
 // ── 커뮤니티 ─────────────────────────────────────────────────
 
-export function fetchAdminPosts(token: string, limit = 30): Promise<readonly AdminPost[]> {
-  return get<readonly AdminPost[]>(token, `/api/admin/posts?limit=${limit}`);
+export function fetchAdminPosts(
+  token: string,
+  limit = 30,
+  status?: string,
+  query?: string,
+): Promise<readonly AdminPost[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  if (query?.trim()) params.set("q", query.trim());
+  return get<readonly AdminPost[]>(token, `/api/admin/posts?${params}`);
 }
 
 export function removeAdminPost(token: string, postId: string, reason: string): Promise<void> {
@@ -166,6 +187,14 @@ export function fetchAdminReports(
 
 export function resolveAdminReport(token: string, reportId: string): Promise<AdminReport> {
   return post<AdminReport>(token, `/api/admin/reports/${reportId}/resolve`);
+}
+
+export function resolveAdminReportTarget(
+  token: string,
+  reportId: string,
+  reason: string,
+): Promise<AdminReport> {
+  return post<AdminReport>(token, `/api/admin/reports/${reportId}/resolve-target`, { reason });
 }
 
 export function dismissAdminReport(token: string, reportId: string): Promise<AdminReport> {

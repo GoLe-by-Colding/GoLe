@@ -6,7 +6,7 @@ import { fetchAdminPosts, removeAdminPost, type AdminPost } from "@entities/admi
 import { useSession } from "@entities/user";
 import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { ApiError } from "@shared/api";
-import { Badge, Button, Heading, Text } from "@shared/ui";
+import { Badge, Button, Heading, Input, Select, Text } from "@shared/ui";
 import { formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
@@ -15,6 +15,8 @@ export function AdminCommunityView() {
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
 
+  const [status, setStatus] = useState("");
+  const [query, setQuery] = useState("");
   // null = 아직 불러오지 않음. 로딩 상태를 파생시켜 effect 안에서 setState를 동기 호출하지 않는다.
   const [rows, setRows] = useState<readonly AdminPost[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -23,20 +25,44 @@ export function AdminCommunityView() {
     if (token === null) {
       return;
     }
-    void fetchAdminPosts(token, 50)
+    setError(undefined);
+    void fetchAdminPosts(token, 100, status === "" ? undefined : status, query)
       .then(setRows)
       .catch((cause: unknown) => {
         setRows([]);
         setError(cause instanceof ApiError ? cause.message : "게시글을 불러오지 못했습니다.");
       });
-  }, [token]);
+  }, [query, status, token]);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 250);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const action = useModerationAction(load);
 
   return (
     <div className="flex flex-col gap-4">
-      <Heading level={2}>커뮤니티 모더레이션</Heading>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Heading level={2}>커뮤니티 모더레이션</Heading>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="내용·작성자·주제 검색"
+            aria-label="게시글 검색"
+            className="w-60"
+          />
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            aria-label="게시글 상태"
+          >
+            <option value="">전체 상태</option>
+            <option value="PUBLISHED">게시중</option>
+            <option value="DELETED">삭제됨</option>
+          </Select>
+        </div>
+      </div>
       <Text tone="muted" size="sm">
         운영자 삭제는 작성자 확인을 거치지 않습니다. 사유는 감사 로그에 남습니다.
       </Text>

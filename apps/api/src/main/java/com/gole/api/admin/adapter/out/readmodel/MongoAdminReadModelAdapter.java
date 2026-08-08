@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -71,10 +72,19 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<OrderRow> recentOrders(String status, int limit) {
+    public List<OrderRow> recentOrders(String status, String search, int limit) {
         Query query = new Query();
         if (status != null && !status.isBlank()) {
             query.addCriteria(Criteria.where("status").is(status));
+        }
+        if (search != null && !search.isBlank()) {
+            Pattern term = contains(search);
+            query.addCriteria(new Criteria()
+                    .orOperator(
+                            Criteria.where("_id").regex(term),
+                            Criteria.where("buyerId").regex(term),
+                            Criteria.where("sellerId").regex(term),
+                            Criteria.where("catalogSetNumber").regex(term)));
         }
         query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "orders").stream()
@@ -90,9 +100,21 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<ListingRow> recentListings(int limit) {
-        Query query =
-                new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
+    public List<ListingRow> recentListings(String status, String search, int limit) {
+        Query query = new Query();
+        if (status != null && !status.isBlank()) {
+            query.addCriteria(Criteria.where("status").is(status));
+        }
+        if (search != null && !search.isBlank()) {
+            Pattern term = contains(search);
+            query.addCriteria(new Criteria()
+                    .orOperator(
+                            Criteria.where("_id").regex(term),
+                            Criteria.where("title").regex(term),
+                            Criteria.where("sellerId").regex(term),
+                            Criteria.where("category").regex(term)));
+        }
+        query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "listings").stream()
                 .map(d -> new ListingRow(
                         str(d.get("_id")),
@@ -106,9 +128,21 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<PostRow> recentPosts(int limit) {
-        Query query =
-                new Query().with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
+    public List<PostRow> recentPosts(String status, String search, int limit) {
+        Query query = new Query();
+        if (status != null && !status.isBlank()) {
+            query.addCriteria(Criteria.where("status").is(status));
+        }
+        if (search != null && !search.isBlank()) {
+            Pattern term = contains(search);
+            query.addCriteria(new Criteria()
+                    .orOperator(
+                            Criteria.where("_id").regex(term),
+                            Criteria.where("content").regex(term),
+                            Criteria.where("authorId").regex(term),
+                            Criteria.where("type").regex(term)));
+        }
+        query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "posts").stream()
                 .map(d -> new PostRow(
                         str(d.get("_id")),
@@ -122,6 +156,10 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
 
     private static long toLong(Object value) {
         return value instanceof Number n ? n.longValue() : 0L;
+    }
+
+    private static Pattern contains(String value) {
+        return Pattern.compile(Pattern.quote(value.trim()), Pattern.CASE_INSENSITIVE);
     }
 
     private static String str(Object value) {

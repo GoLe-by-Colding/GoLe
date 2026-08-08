@@ -41,6 +41,7 @@ export function Logo({
               strokeWidth="4"
               strokeLinecap="round"
               opacity="0.82"
+              className="gole-spout-stream"
             />
             <g className="gole-spout-brick gole-spout-brick-a">
               <rect x="107" y="-14" width="31" height="18" rx="4" fill="#F7BE2C" />

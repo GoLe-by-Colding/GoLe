@@ -25,6 +25,21 @@ const EMPTY_FORM: CreateSetInput = {
   featured: false,
 };
 
+function validateCatalogForm(form: CreateSetInput, editing: string | null): string | undefined {
+  if (editing === null && form.setNumber.trim() === "") return "세트 번호를 입력해 주세요.";
+  if (form.name.trim() === "") return "세트 이름을 입력해 주세요.";
+  if (form.theme.trim() === "") return "테마를 입력해 주세요.";
+  if (!Number.isInteger(form.pieceCount) || form.pieceCount < 0)
+    return "피스 수는 0 이상의 정수여야 합니다.";
+  const maxYear = new Date().getFullYear() + 1;
+  if (!Number.isInteger(form.releaseYear) || form.releaseYear < 1949 || form.releaseYear > maxYear)
+    return `출시 연도는 1949~${maxYear} 사이여야 합니다.`;
+  const imageUrl = form.imageUrl.trim();
+  if (imageUrl !== "" && !imageUrl.startsWith("/") && !/^https?:\/\//i.test(imageUrl))
+    return "이미지 URL은 /로 시작하는 내부 경로 또는 http(s) 주소여야 합니다.";
+  return undefined;
+}
+
 /** 카탈로그 관리 — 세트 등록/수정/추천 토글. (요구사항 7.2~7.4) */
 export function AdminCatalogView() {
   const { session } = useSession();
@@ -35,9 +50,9 @@ export function AdminCatalogView() {
   const [form, setForm] = useState<CreateSetInput>(EMPTY_FORM);
   /** 값이 있으면 수정 모드(해당 setNumber를 갱신), 없으면 신규 등록. */
   const [editing, setEditing] = useState<string | null>(null);
-  const [featured, setFeatured] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const validationError = validateCatalogForm(form, editing);
 
   const load = useCallback(() => {
     if (token === null) {
@@ -63,7 +78,7 @@ export function AdminCatalogView() {
       releaseYear: set.releaseYear,
       retirementStatus: set.retirementStatus === "RETIRED" ? "RETIRED" : "ACTIVE",
       imageUrl: set.imageUrl ?? "",
-      featured: featured.has(set.setNumber),
+      featured: set.featured,
     });
   }
 
@@ -73,7 +88,7 @@ export function AdminCatalogView() {
   }
 
   async function submit() {
-    if (token === null) {
+    if (token === null || validationError !== undefined) {
       return;
     }
     setError(undefined);
@@ -106,19 +121,17 @@ export function AdminCatalogView() {
     if (token === null) {
       return;
     }
-    const next = !featured.has(setNumber);
+    const target = sets?.find((set) => set.setNumber === setNumber);
+    if (target === undefined) {
+      return;
+    }
+    const next = !target.featured;
     setError(undefined);
     try {
-      await setAdminSetFeatured(token, setNumber, next);
-      setFeatured((prev) => {
-        const copy = new Set(prev);
-        if (next) {
-          copy.add(setNumber);
-        } else {
-          copy.delete(setNumber);
-        }
-        return copy;
-      });
+      const updated = await setAdminSetFeatured(token, setNumber, next);
+      setSets((current) =>
+        current?.map((set) => (set.setNumber === updated.setNumber ? updated : set)) ?? null,
+      );
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "추천 설정에 실패했습니다.");
     }
@@ -214,7 +227,7 @@ export function AdminCatalogView() {
             홈 추천(featured)으로 노출
           </label>
           <div className="flex gap-2">
-            <Button disabled={busy} onClick={submit} fullWidth>
+            <Button disabled={busy || validationError !== undefined} onClick={submit} fullWidth>
               {busy ? "저장 중..." : editing !== null ? "수정 저장" : "세트 등록"}
             </Button>
             {editing !== null ? (
@@ -223,6 +236,11 @@ export function AdminCatalogView() {
               </Button>
             ) : null}
           </div>
+          {validationError !== undefined ? (
+            <Text size="sm" className="text-danger" role="status">
+              {validationError}
+            </Text>
+          ) : null}
         </Card>
 
         <div className="flex flex-col gap-3">
@@ -258,9 +276,9 @@ export function AdminCatalogView() {
                       size="sm"
                       variant="ghost"
                       onClick={() => toggleFeatured(s.setNumber)}
-                      aria-pressed={featured.has(s.setNumber)}
+                      aria-pressed={s.featured}
                     >
-                      {featured.has(s.setNumber) ? "추천 해제" : "추천"}
+                      {s.featured ? "추천 해제" : "추천"}
                     </Button>
                   </span>
                 </td>

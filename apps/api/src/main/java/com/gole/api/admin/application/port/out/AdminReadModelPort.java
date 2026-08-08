@@ -25,13 +25,13 @@ public interface AdminReadModelPort {
     long activeListingCount();
 
     /** 최근 주문. status가 null이면 전체. (요구사항 7.1) */
-    List<OrderRow> recentOrders(String status, int limit);
+    List<OrderRow> recentOrders(String status, String query, int limit);
 
     /** 최근 매물 — 일반 검색과 달리 DELETED 포함 전체 상태. (요구사항 4.1) */
-    List<ListingRow> recentListings(int limit);
+    List<ListingRow> recentListings(String status, String query, int limit);
 
     /** 최근 게시글 — 전체 상태. (요구사항 5.1) */
-    List<PostRow> recentPosts(int limit);
+    List<PostRow> recentPosts(String status, String query, int limit);
 
     record OrderStats(Map<String, Long> countByStatus, long completedGmv) {}
 

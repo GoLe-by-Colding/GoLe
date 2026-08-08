@@ -6,9 +6,11 @@ import {
   dismissAdminReport,
   fetchAdminReports,
   resolveAdminReport,
+  resolveAdminReportTarget,
   type AdminReport,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
+import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { ApiError } from "@shared/api";
 import { Badge, Button, Heading, Select, Text } from "@shared/ui";
 import {
@@ -45,6 +47,7 @@ export function AdminReportsView() {
   }, [token, status]);
 
   useEffect(load, [load]);
+  const targetAction = useModerationAction(load);
 
   async function handle(reportId: string, action: "resolve" | "dismiss") {
     if (token === null) {
@@ -83,8 +86,8 @@ export function AdminReportsView() {
       </div>
 
       <Text tone="muted" size="sm">
-        신고 대상을 열어 확인한 뒤 조치하세요. 실제 내림·삭제는 대상 화면이나 매물·커뮤니티 탭에서
-        사유와 함께 수행합니다.
+        대상을 확인한 뒤 바로 내림·삭제와 신고 완료를 한 번에 처리할 수 있습니다. 모든 조치와 사유는
+        감사 로그에 남습니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />
@@ -101,7 +104,9 @@ export function AdminReportsView() {
             <td className="px-3 py-2.5 font-medium">
               <Link
                 href={
-                  r.targetType === "LISTING" ? `/listings/${r.targetId}` : `/community/${r.targetId}`
+                  r.targetType === "LISTING"
+                    ? `/listings/${r.targetId}`
+                    : `/community/${r.targetId}`
                 }
                 className="text-neutral-900 hover:text-brand-600"
               >
@@ -126,10 +131,30 @@ export function AdminReportsView() {
             <td className="px-3 py-2.5 text-right">
               {r.status === "PENDING" ? (
                 <span className="inline-flex gap-1">
-                  <Button size="sm" variant="secondary" onClick={() => handle(r.id, "resolve")}>
-                    조치완료
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() =>
+                      targetAction.ask({
+                        title: r.targetType === "LISTING" ? "신고 매물 내리기" : "신고 게시글 삭제",
+                        target: `${r.targetType === "LISTING" ? "매물" : "게시글"} ${shortId(r.targetId)}`,
+                        confirmLabel: r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료",
+                        run: async (reason) => {
+                          await resolveAdminReportTarget(token ?? "", r.id, reason);
+                        },
+                      })
+                    }
+                  >
+                    {r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료"}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handle(r.id, "dismiss")}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handle(r.id, "resolve")}
+                  >
+                    이미 조치됨
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => void handle(r.id, "dismiss")}>
                     기각
                   </Button>
                 </span>
@@ -142,6 +167,18 @@ export function AdminReportsView() {
           </tr>
         ))}
       </AdminTable>
+
+      {targetAction.pending !== null ? (
+        <ReasonPrompt
+          title={targetAction.pending.title}
+          target={targetAction.pending.target}
+          confirmLabel={targetAction.pending.confirmLabel}
+          busy={targetAction.busy}
+          error={targetAction.error}
+          onConfirm={targetAction.confirm}
+          onCancel={targetAction.cancel}
+        />
+      ) : null}
     </div>
   );
 }

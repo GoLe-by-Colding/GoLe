@@ -53,6 +53,16 @@ public class ReportService implements SubmitReportUseCase, ManageReportsUseCase 
     }
 
     @Override
+    public long count(ReportStatus status) {
+        return reportRepository.countByStatus(status);
+    }
+
+    @Override
+    public Report get(String reportId) {
+        return getOrThrow(reportId);
+    }
+
+    @Override
     public Report resolve(String reportId) {
         Report report = getOrThrow(reportId);
         report.resolve(Instant.now(clock));

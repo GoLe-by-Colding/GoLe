@@ -1,6 +1,7 @@
 package com.gole.api.catalog.adapter.out.persistence;
 
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
+import com.gole.api.catalog.application.port.out.CatalogAdminPort.StoredLegoSet;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.model.LegoSet;
 import java.util.List;
@@ -27,8 +28,10 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
     }
 
     @Override
-    public List<LegoSet> findAll() {
-        return repository.findAll().stream().map(LegoSetDocument::toDomain).toList();
+    public List<StoredLegoSet> findAll() {
+        return repository.findAll().stream()
+                .map(document -> new StoredLegoSet(document.toDomain(), document.isFeatured()))
+                .toList();
     }
 
     @Override
