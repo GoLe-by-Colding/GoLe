@@ -1,8 +1,10 @@
 package com.gole.api.notification.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.notification.application.port.in.GetNotificationsUseCase;
 import com.gole.api.notification.domain.model.Notification;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -28,27 +30,27 @@ public class NotificationController {
     }
 
     @GetMapping
-    public List<NotificationResponse> list(@PathVariable String userId) {
-        return getNotifications.list(userId).stream()
+    public List<NotificationResponse> list(@PathVariable String userId, HttpServletRequest http) {
+        return getNotifications.list(AuthenticatedUser.id(http)).stream()
                 .map(NotificationResponse::from)
                 .toList();
     }
 
     @GetMapping("/unread-count")
-    public UnreadCountResponse unreadCount(@PathVariable String userId) {
-        return new UnreadCountResponse(getNotifications.unreadCount(userId));
+    public UnreadCountResponse unreadCount(@PathVariable String userId, HttpServletRequest http) {
+        return new UnreadCountResponse(getNotifications.unreadCount(AuthenticatedUser.id(http)));
     }
 
     @PostMapping("/{notificationId}/read")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markRead(@PathVariable String userId, @PathVariable String notificationId) {
-        getNotifications.markRead(notificationId, userId);
+    public void markRead(@PathVariable String userId, @PathVariable String notificationId, HttpServletRequest http) {
+        getNotifications.markRead(notificationId, AuthenticatedUser.id(http));
     }
 
     @PostMapping("/read-all")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markAllRead(@PathVariable String userId) {
-        getNotifications.markAllRead(userId);
+    public void markAllRead(@PathVariable String userId, HttpServletRequest http) {
+        getNotifications.markAllRead(AuthenticatedUser.id(http));
     }
 
     public record NotificationResponse(

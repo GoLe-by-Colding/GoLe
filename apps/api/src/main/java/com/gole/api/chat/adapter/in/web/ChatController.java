@@ -1,13 +1,17 @@
 package com.gole.api.chat.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
@@ -68,29 +72,28 @@ public class ChatController {
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
     @PostMapping("/rooms")
     @ResponseStatus(HttpStatus.OK)
-    public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req) {
-        return roomRepo.findByBuyerIdAndSellerIdAndListingId(req.buyerId(), req.sellerId(), req.listingId())
+    public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req, HttpServletRequest http) {
+        String buyerId = AuthenticatedUser.id(http);
+        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, req.sellerId(), req.listingId())
                 .map(RoomResponse::from)
                 .orElseGet(() -> {
                     ChatRoomDocument doc = new ChatRoomDocument(
-                            UUID.randomUUID().toString(),
-                            req.listingId(),
-                            req.buyerId(),
-                            req.sellerId(),
-                            Instant.now());
+                            UUID.randomUUID().toString(), req.listingId(), buyerId, req.sellerId(), Instant.now());
                     return RoomResponse.from(roomRepo.save(doc));
                 });
     }
 
     @GetMapping("/rooms")
-    public List<RoomResponse> myRooms(@RequestParam String userId) {
-        return roomRepo.findByBuyerIdOrSellerIdOrderByCreatedAtDesc(userId, userId).stream()
+    public List<RoomResponse> myRooms(@RequestParam String userId, HttpServletRequest http) {
+        String actorId = AuthenticatedUser.id(http);
+        return roomRepo.findByBuyerIdOrSellerIdOrderByCreatedAtDesc(actorId, actorId).stream()
                 .map(RoomResponse::from)
                 .toList();
     }
 
     @GetMapping("/rooms/{roomId}/messages")
-    public List<MessageResponse> messages(@PathVariable String roomId) {
+    public List<MessageResponse> messages(@PathVariable String roomId, HttpServletRequest http) {
+        requireParticipant(roomId, http);
         List<ChatMessageDocument> all = messageRepo.findByRoomIdOrderBySentAtAsc(roomId);
         int from = Math.max(0, all.size() - 60);
         return all.subList(from, all.size()).stream().map(MessageResponse::from).toList();
@@ -98,13 +101,25 @@ public class ChatController {
 
     @PostMapping("/rooms/{roomId}/messages")
     @ResponseStatus(HttpStatus.CREATED)
-    public MessageResponse sendMessage(@PathVariable String roomId, @Valid @RequestBody SendMessageRequest req) {
-        ChatMessageDocument doc = new ChatMessageDocument(
-                UUID.randomUUID().toString(), roomId, req.senderId(), req.content(), Instant.now());
+    public MessageResponse sendMessage(
+            @PathVariable String roomId, @Valid @RequestBody SendMessageRequest req, HttpServletRequest http) {
+        String senderId = requireParticipant(roomId, http);
+        ChatMessageDocument doc =
+                new ChatMessageDocument(UUID.randomUUID().toString(), roomId, senderId, req.content(), Instant.now());
         ChatMessageDocument saved = messageRepo.save(doc);
         publisher.publish(
                 new ChatMessage(saved.getId(), roomId, saved.getSenderId(), saved.getContent(), saved.getSentAt()));
         return MessageResponse.from(saved);
+    }
+
+    private String requireParticipant(String roomId, HttpServletRequest http) {
+        String actorId = AuthenticatedUser.id(http);
+        ChatRoomDocument room = roomRepo.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
+        if (!actorId.equals(room.getBuyerId()) && !actorId.equals(room.getSellerId())) {
+            throw new ForbiddenException("CHAT_ROOM_ACCESS_DENIED", "참여 중인 채팅방만 볼 수 있습니다");
+        }
+        return actorId;
     }
 
     @Operation(

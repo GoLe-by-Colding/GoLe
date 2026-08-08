@@ -1,5 +1,7 @@
 package com.gole.api.listing.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.adapter.in.web.ListingRequests.CreateListingRequest;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
@@ -14,6 +16,7 @@ import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -57,9 +60,9 @@ public class ListingController {
     @Operation(summary = "매물 등록", description = "판매할 레고 상품을 등록합니다. sellerId는 로그인 계정 ID.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ListingResponse create(@Valid @RequestBody CreateListingRequest request) {
+    public ListingResponse create(@Valid @RequestBody CreateListingRequest request, HttpServletRequest http) {
         String id = createListingUseCase.create(new CreateListingCommand(
-                request.sellerId(),
+                AuthenticatedUser.id(http),
                 request.title(),
                 request.description(),
                 request.price(),
@@ -114,13 +117,21 @@ public class ListingController {
 
     @PostMapping("/{listingId}/sold")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markSold(@PathVariable String listingId) {
+    public void markSold(@PathVariable String listingId, HttpServletRequest http) {
+        requireSeller(listingId, http);
         markListingSoldUseCase.markSold(listingId);
     }
 
     @DeleteMapping("/{listingId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable String listingId) {
+    public void delete(@PathVariable String listingId, HttpServletRequest http) {
+        requireSeller(listingId, http);
         deleteListingUseCase.delete(listingId);
+    }
+
+    private void requireSeller(String listingId, HttpServletRequest http) {
+        if (!getListingUseCase.getById(listingId).getSellerId().equals(AuthenticatedUser.id(http))) {
+            throw new ForbiddenException("LISTING_ACCESS_DENIED", "본인의 매물만 처리할 수 있습니다");
+        }
     }
 }

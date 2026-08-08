@@ -1,5 +1,6 @@
 package com.gole.api.community.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentResponse;
 import com.gole.api.community.adapter.in.web.CommunityDtos.EditPostRequest;
@@ -16,6 +17,7 @@ import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase.PublishPostCommand;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -26,7 +28,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -67,9 +68,9 @@ public class CommunityController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PostResponse publish(@Valid @RequestBody PublishPostRequest request) {
-        String id = publishPostUseCase.publish(
-                new PublishPostCommand(request.authorId(), request.content(), request.imageUrls(), request.topic()));
+    public PostResponse publish(@Valid @RequestBody PublishPostRequest request, HttpServletRequest http) {
+        String id = publishPostUseCase.publish(new PublishPostCommand(
+                AuthenticatedUser.id(http), request.content(), request.imageUrls(), request.topic()));
         return PostResponse.from(getFeedUseCase.getPost(id));
     }
 
@@ -80,8 +81,8 @@ public class CommunityController {
 
     @PostMapping("/{postId}/likes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void like(@PathVariable String postId, @Valid @RequestBody LikeRequest request) {
-        likePostUseCase.like(postId, request.userId());
+    public void like(@PathVariable String postId, @Valid @RequestBody LikeRequest request, HttpServletRequest http) {
+        likePostUseCase.like(postId, AuthenticatedUser.id(http));
     }
 
     @GetMapping("/{postId}/comments")
@@ -93,8 +94,9 @@ public class CommunityController {
 
     @PostMapping("/{postId}/comments")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommentResponse comment(@PathVariable String postId, @Valid @RequestBody CommentRequest request) {
-        commentOnPostUseCase.comment(new CommentCommand(postId, request.authorId(), request.content()));
+    public CommentResponse comment(
+            @PathVariable String postId, @Valid @RequestBody CommentRequest request, HttpServletRequest http) {
+        commentOnPostUseCase.comment(new CommentCommand(postId, AuthenticatedUser.id(http), request.content()));
         return getFeedUseCase.comments(postId).stream()
                 .reduce((first, second) -> second)
                 .map(CommentResponse::from)
@@ -102,15 +104,16 @@ public class CommunityController {
     }
 
     @PutMapping("/{postId}")
-    public PostResponse edit(@PathVariable String postId, @Valid @RequestBody EditPostRequest request) {
+    public PostResponse edit(
+            @PathVariable String postId, @Valid @RequestBody EditPostRequest request, HttpServletRequest http) {
         editPostUseCase.edit(
-                new EditPostCommand(postId, request.requesterId(), request.content(), request.imageUrls()));
+                new EditPostCommand(postId, AuthenticatedUser.id(http), request.content(), request.imageUrls()));
         return PostResponse.from(getFeedUseCase.getPost(postId));
     }
 
     @DeleteMapping("/{postId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable String postId, @RequestParam("requesterId") String requesterId) {
-        deletePostUseCase.delete(postId, requesterId);
+    public void delete(@PathVariable String postId, HttpServletRequest http) {
+        deletePostUseCase.delete(postId, AuthenticatedUser.id(http));
     }
 }

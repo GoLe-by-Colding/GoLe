@@ -1,4 +1,5 @@
 import { env } from "@shared/config";
+import { readSessionAuthorization } from "./session-auth";
 
 export interface ApiErrorBody {
   readonly code: string;
@@ -39,6 +40,7 @@ export async function apiRequest<TResponse>(
   options: RequestOptions = {},
 ): Promise<TResponse> {
   const { method = "GET", body, signal, headers, cache, next } = options;
+  const sessionHeader = readSessionAuthorization();
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     method,
@@ -54,6 +56,7 @@ export async function apiRequest<TResponse>(
         }),
     headers: {
       "Content-Type": "application/json",
+      ...sessionHeader,
       ...headers,
     },
     body: body === undefined ? null : JSON.stringify(body),

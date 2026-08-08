@@ -1,5 +1,7 @@
 package com.gole.api.order.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.order.adapter.in.web.OrderRequests.PlaceOrderRequest;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
@@ -9,6 +11,7 @@ import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderComman
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -17,7 +20,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -50,41 +52,51 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request) {
-        String id = placeOrderUseCase.place(new PlaceOrderCommand(request.listingId(), request.buyerId()));
+    public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request, HttpServletRequest http) {
+        String id = placeOrderUseCase.place(new PlaceOrderCommand(request.listingId(), AuthenticatedUser.id(http)));
         return OrderResponse.from(getOrderUseCase.getById(id));
     }
 
     @PostMapping("/{orderId}/payment")
-    public OrderResponse pay(@PathVariable String orderId) {
+    public OrderResponse pay(@PathVariable String orderId, HttpServletRequest http) {
+        requireBuyer(orderId, http);
         payOrderUseCase.pay(orderId);
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
     @PostMapping("/{orderId}/completion")
-    public OrderResponse complete(@PathVariable String orderId) {
+    public OrderResponse complete(@PathVariable String orderId, HttpServletRequest http) {
+        requireBuyer(orderId, http);
         completeOrderUseCase.complete(orderId);
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
     @PostMapping("/{orderId}/refund")
-    public OrderResponse refund(@PathVariable String orderId) {
+    public OrderResponse refund(@PathVariable String orderId, HttpServletRequest http) {
+        requireBuyer(orderId, http);
         refundOrderUseCase.refund(orderId);
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
     @Operation(summary = "주문 단건 조회")
     @GetMapping("/{orderId}")
-    public OrderResponse get(@PathVariable String orderId) {
+    public OrderResponse get(@PathVariable String orderId, HttpServletRequest http) {
+        requireBuyer(orderId, http);
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
     @Operation(summary = "내 구매 내역", description = "buyerId 기준 주문 목록(최신순). 프로필 내 주문 내역에 사용.")
     @GetMapping
-    public List<OrderResponse> listByBuyer(@RequestParam String buyerId) {
-        return getOrderUseCase.getByBuyerId(buyerId).stream()
+    public List<OrderResponse> listByBuyer(HttpServletRequest http) {
+        return getOrderUseCase.getByBuyerId(AuthenticatedUser.id(http)).stream()
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .map(OrderResponse::from)
                 .toList();
+    }
+
+    private void requireBuyer(String orderId, HttpServletRequest http) {
+        if (!getOrderUseCase.getById(orderId).getBuyerId().equals(AuthenticatedUser.id(http))) {
+            throw new ForbiddenException("ORDER_ACCESS_DENIED", "본인의 주문만 처리할 수 있습니다");
+        }
     }
 }

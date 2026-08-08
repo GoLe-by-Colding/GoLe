@@ -1,5 +1,6 @@
 import { env } from "@shared/config";
 import { ApiError, type ApiErrorBody } from "./http-client";
+import { readSessionAuthorization } from "./session-auth";
 
 export interface UploadedImage {
   readonly key: string;
@@ -18,6 +19,7 @@ export async function uploadImage(file: File, signal?: AbortSignal): Promise<Upl
 
   const response = await fetch(`${env.apiBaseUrl}/api/v1/media/images`, {
     method: "POST",
+    headers: readSessionAuthorization(),
     body: formData,
     signal: signal ?? null,
   });
@@ -48,6 +50,7 @@ export async function uploadImages(
 
   const response = await fetch(`${env.apiBaseUrl}/api/v1/media/images/batch`, {
     method: "POST",
+    headers: readSessionAuthorization(),
     body: formData,
     signal: signal ?? null,
   });
