@@ -5,6 +5,7 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
+import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
 import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
@@ -33,7 +34,8 @@ public class ListingService
                 ReserveListingUseCase,
                 ReleaseListingUseCase,
                 BrowseListingsUseCase,
-                DeleteListingUseCase {
+                DeleteListingUseCase,
+                ModerateListingUseCase {
 
     private final ListingRepositoryPort listingRepository;
     private final ListingIdGeneratorPort idGenerator;
@@ -110,6 +112,17 @@ public class ListingService
     public void delete(String listingId) {
         Listing listing = getById(listingId);
         listing.delete();
+        listingRepository.save(listing);
+    }
+
+    /**
+     * 운영자 강제 내림. 사유는 관리자 컨텍스트의 감사 로그가 보관하므로 여기서는 상태 전이만 책임진다.
+     * (admin-console 요구사항 4.2)
+     */
+    @Override
+    public void takedown(String listingId, String reason) {
+        Listing listing = getById(listingId);
+        listing.takedown();
         listingRepository.save(listing);
     }
 }

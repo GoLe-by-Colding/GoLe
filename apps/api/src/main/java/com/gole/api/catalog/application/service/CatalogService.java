@@ -5,6 +5,7 @@ import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
+import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
@@ -22,6 +23,7 @@ public class CatalogService
                 SearchLegoSetsUseCase,
                 ListFeaturedLegoSetsUseCase,
                 CreateLegoSetUseCase,
+                UpdateLegoSetUseCase,
                 ListLegoSetsUseCase {
 
     private static final int FEATURED_LIMIT = 12;
@@ -68,5 +70,30 @@ public class CatalogService
     @Override
     public List<LegoSet> findFeatured() {
         return loadLegoSetPort.loadFeatured(FEATURED_LIMIT);
+    }
+
+    /** 세트 수정(관리자). 존재하지 않으면 404. (admin-console 요구사항 7.3) */
+    @Override
+    public void update(UpdateLegoSetCommand command) {
+        requireExisting(command.setNumber());
+        LegoSet updated = new LegoSet(
+                command.setNumber(),
+                command.name(),
+                command.theme(),
+                command.pieceCount(),
+                command.releaseYear(),
+                command.retirementStatus(),
+                command.imageUrl());
+        catalogAdminPort.save(updated, command.featured());
+    }
+
+    /** 홈 추천 토글(관리자). 다른 필드는 그대로 두고 플래그만 바꾼다. (요구사항 7.4) */
+    @Override
+    public void setFeatured(String setNumber, boolean featured) {
+        catalogAdminPort.save(requireExisting(setNumber), featured);
+    }
+
+    private LegoSet requireExisting(String setNumber) {
+        return loadLegoSetPort.loadBySetNumber(setNumber).orElseThrow(() -> new LegoSetNotFoundException(setNumber));
     }
 }

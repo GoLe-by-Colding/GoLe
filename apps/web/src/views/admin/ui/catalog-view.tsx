@@ -1,0 +1,274 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  createAdminSet,
+  fetchAdminSets,
+  setAdminSetFeatured,
+  updateAdminSet,
+  type AdminLegoSet,
+  type CreateSetInput,
+} from "@entities/admin";
+import { useSession } from "@entities/user";
+import { ApiError } from "@shared/api";
+import { Badge, Button, Card, Field, Heading, Input, Select, Text } from "@shared/ui";
+import { AdminStatus, AdminTable } from "./table";
+
+const EMPTY_FORM: CreateSetInput = {
+  setNumber: "",
+  name: "",
+  theme: "",
+  pieceCount: 0,
+  releaseYear: new Date().getFullYear(),
+  retirementStatus: "ACTIVE",
+  imageUrl: "",
+  featured: false,
+};
+
+/** 카탈로그 관리 — 세트 등록/수정/추천 토글. (요구사항 7.2~7.4) */
+export function AdminCatalogView() {
+  const { session } = useSession();
+  const token = session?.sessionToken ?? null;
+
+  // null = 아직 불러오지 않음. 로딩 상태를 파생시켜 effect 안에서 setState를 동기 호출하지 않는다.
+  const [sets, setSets] = useState<readonly AdminLegoSet[] | null>(null);
+  const [form, setForm] = useState<CreateSetInput>(EMPTY_FORM);
+  /** 값이 있으면 수정 모드(해당 setNumber를 갱신), 없으면 신규 등록. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const [featured, setFeatured] = useState<ReadonlySet<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const load = useCallback(() => {
+    if (token === null) {
+      return;
+    }
+    void fetchAdminSets(token)
+      .then(setSets)
+      .catch((cause: unknown) => {
+        setSets([]);
+        setError(cause instanceof ApiError ? cause.message : "카탈로그를 불러오지 못했습니다.");
+      });
+  }, [token]);
+
+  useEffect(load, [load]);
+
+  function startEdit(set: AdminLegoSet) {
+    setEditing(set.setNumber);
+    setForm({
+      setNumber: set.setNumber,
+      name: set.name,
+      theme: set.theme,
+      pieceCount: set.pieceCount,
+      releaseYear: set.releaseYear,
+      retirementStatus: set.retirementStatus === "RETIRED" ? "RETIRED" : "ACTIVE",
+      imageUrl: set.imageUrl ?? "",
+      featured: featured.has(set.setNumber),
+    });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+  }
+
+  async function submit() {
+    if (token === null) {
+      return;
+    }
+    setError(undefined);
+    setBusy(true);
+    try {
+      const payload = { ...form, pieceCount: Number(form.pieceCount) };
+      if (editing !== null) {
+        await updateAdminSet(token, editing, {
+          name: payload.name,
+          theme: payload.theme,
+          pieceCount: payload.pieceCount,
+          releaseYear: payload.releaseYear,
+          retirementStatus: payload.retirementStatus,
+          imageUrl: payload.imageUrl,
+          featured: payload.featured,
+        });
+      } else {
+        await createAdminSet(token, payload);
+      }
+      cancelEdit();
+      load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "저장에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleFeatured(setNumber: string) {
+    if (token === null) {
+      return;
+    }
+    const next = !featured.has(setNumber);
+    setError(undefined);
+    try {
+      await setAdminSetFeatured(token, setNumber, next);
+      setFeatured((prev) => {
+        const copy = new Set(prev);
+        if (next) {
+          copy.add(setNumber);
+        } else {
+          copy.delete(setNumber);
+        }
+        return copy;
+      });
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "추천 설정에 실패했습니다.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Heading level={2}>카탈로그 관리</Heading>
+      <AdminStatus error={error} loading={sets === null} />
+
+      <div className="grid gap-6 xl:[grid-template-columns:320px_1fr]">
+        <Card padded className="flex h-fit flex-col gap-4">
+          <Heading level={3}>{editing !== null ? `세트 수정 · #${editing}` : "세트 등록"}</Heading>
+          <Field label="세트 번호">
+            {({ inputId }) => (
+              <Input
+                id={inputId}
+                value={form.setNumber}
+                disabled={editing !== null}
+                onChange={(e) => setForm({ ...form, setNumber: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="이름">
+            {({ inputId }) => (
+              <Input
+                id={inputId}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="테마">
+            {({ inputId }) => (
+              <Input
+                id={inputId}
+                value={form.theme}
+                onChange={(e) => setForm({ ...form, theme: e.target.value })}
+              />
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="피스 수">
+              {({ inputId }) => (
+                <Input
+                  id={inputId}
+                  type="number"
+                  value={form.pieceCount}
+                  onChange={(e) => setForm({ ...form, pieceCount: Number(e.target.value) })}
+                />
+              )}
+            </Field>
+            <Field label="출시 연도">
+              {({ inputId }) => (
+                <Input
+                  id={inputId}
+                  type="number"
+                  value={form.releaseYear}
+                  onChange={(e) => setForm({ ...form, releaseYear: Number(e.target.value) })}
+                />
+              )}
+            </Field>
+          </div>
+          <Field label="단종 상태">
+            {({ inputId }) => (
+              <Select
+                id={inputId}
+                value={form.retirementStatus}
+                onChange={(e) =>
+                  setForm({ ...form, retirementStatus: e.target.value as "ACTIVE" | "RETIRED" })
+                }
+              >
+                <option value="ACTIVE">판매중(ACTIVE)</option>
+                <option value="RETIRED">단종(RETIRED)</option>
+              </Select>
+            )}
+          </Field>
+          <Field label="이미지 URL">
+            {({ inputId }) => (
+              <Input
+                id={inputId}
+                value={form.imageUrl}
+                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+              />
+            )}
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            <input
+              type="checkbox"
+              checked={form.featured}
+              onChange={(e) => setForm({ ...form, featured: e.target.checked })}
+            />
+            홈 추천(featured)으로 노출
+          </label>
+          <div className="flex gap-2">
+            <Button disabled={busy} onClick={submit} fullWidth>
+              {busy ? "저장 중..." : editing !== null ? "수정 저장" : "세트 등록"}
+            </Button>
+            {editing !== null ? (
+              <Button variant="secondary" onClick={cancelEdit} disabled={busy}>
+                취소
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+
+        <div className="flex flex-col gap-3">
+          <Text tone="muted" size="sm">
+            등록된 세트 {(sets ?? []).length}개
+          </Text>
+          <AdminTable
+            headers={["번호", "이름", "테마", "피스", "상태", "관리"]}
+            alignRight={[3, 5]}
+            minWidth={640}
+            empty="등록된 세트가 없습니다."
+            rowCount={(sets ?? []).length}
+          >
+            {(sets ?? []).map((s) => (
+              <tr key={s.setNumber} className="border-t border-neutral-100">
+                <td className="px-3 py-2.5 font-mono text-neutral-500">#{s.setNumber}</td>
+                <td className="max-w-[220px] truncate px-3 py-2.5 font-medium">{s.name}</td>
+                <td className="px-3 py-2.5 text-neutral-600">{s.theme}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {s.pieceCount.toLocaleString("ko-KR")}
+                </td>
+                <td className="px-3 py-2.5">
+                  <Badge tone={s.retirementStatus === "RETIRED" ? "warning" : "success"}>
+                    {s.retirementStatus === "RETIRED" ? "단종" : "판매중"}
+                  </Badge>
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  <span className="inline-flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => startEdit(s)}>
+                      수정
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => toggleFeatured(s.setNumber)}
+                      aria-pressed={featured.has(s.setNumber)}
+                    >
+                      {featured.has(s.setNumber) ? "추천 해제" : "추천"}
+                    </Button>
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </AdminTable>
+        </div>
+      </div>
+    </div>
+  );
+}

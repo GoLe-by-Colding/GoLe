@@ -9,6 +9,7 @@ export type {
 export { CONDITION_LABEL } from "./model/types";
 export {
   fetchPriceStatistics,
+  fetchPriceStatisticsForPage,
   fetchPriceChart,
   fetchPriceHistory,
   fetchPriceValuation,

@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@shared/lib";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "accent" | "inverse";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "accent" | "inverse" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export const BUTTON_BASE =
@@ -16,6 +16,8 @@ export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   accent: "bg-accent-400 text-neutral-900 hover:bg-accent-500",
   /* 딥 오션(다크) 배경 위 보조 버튼 */
   inverse: "border border-white/50 bg-transparent text-white hover:border-white hover:bg-white/10",
+  /* 파괴적 조치 — 매물 내림·게시글 삭제·계정 정지 등 되돌리기 어려운 운영 액션 전용 */
+  danger: "bg-danger text-white hover:brightness-110",
 };
 
 export const BUTTON_SIZE: Record<ButtonSize, string> = {

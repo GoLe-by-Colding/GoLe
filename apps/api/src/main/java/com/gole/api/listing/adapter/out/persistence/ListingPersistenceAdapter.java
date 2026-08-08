@@ -73,6 +73,10 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
             criteria = criteria.and("category").is(query.category().name());
         }
 
+        if (query.setNumber() != null) {
+            criteria = criteria.and("catalogSetNumber").is(query.setNumber());
+        }
+
         if (query.minPrice() != null || query.maxPrice() != null) {
             Criteria priceCriteria = Criteria.where("priceAmount");
             if (query.minPrice() != null) {

@@ -39,6 +39,9 @@ export type { SelectProps } from "./select";
 export { Textarea } from "./textarea";
 export type { TextareaProps } from "./textarea";
 
+export { JsonLd } from "./json-ld";
+export type { JsonLdProps } from "./json-ld";
+
 export { Heading, Text } from "./typography";
 export type {
   HeadingProps,

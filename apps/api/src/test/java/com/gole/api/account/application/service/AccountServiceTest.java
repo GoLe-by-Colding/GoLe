@@ -13,6 +13,7 @@ import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort.SessionPrincipal;
 import com.gole.api.account.domain.exception.AccountLockedException;
+import com.gole.api.account.domain.exception.AccountSuspendedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
 import com.gole.api.account.domain.exception.VerificationException;
@@ -36,12 +37,14 @@ import org.junit.jupiter.api.Test;
 class AccountServiceTest {
 
     private InMemoryAccountRepository repository;
+    private InMemorySessionStore sessionStore;
     private MutableClock clock;
     private AccountService service;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryAccountRepository();
+        sessionStore = new InMemorySessionStore();
         clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
         service = new AccountService(
                 repository,
@@ -52,8 +55,51 @@ class AccountServiceTest {
                 () -> "123456",
                 new SequentialIdGenerator(),
                 account -> "token-" + account.getId(),
-                new InMemorySessionStore(),
+                sessionStore,
                 clock);
+    }
+
+    // --- admin-console 요구사항 6.4 / 6.5: 정지 계정 차단 ---
+
+    @Test
+    void signIn_rejectsSuspendedAccount() {
+        service.register(new RegisterAccountCommand("s@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("s@b.com", "123456"));
+        Account account = repository.findByEmail(new Email("s@b.com")).orElseThrow();
+        account.suspend("사기 신고 다발");
+        repository.save(account);
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("s@b.com", "password1")))
+                .isInstanceOf(AccountSuspendedException.class)
+                .hasMessageContaining("사기 신고 다발");
+    }
+
+    @Test
+    void resolve_returnsEmptyForSuspendedAccount() {
+        service.register(new RegisterAccountCommand("s2@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("s2@b.com", "123456"));
+        SignInResult signedIn = service.signIn(new SignInCommand("s2@b.com", "password1"));
+        assertThat(service.resolve(signedIn.sessionToken())).isPresent();
+
+        // 세션 토큰은 그대로 살아 있어도(폐기 누락 시나리오) 정지되면 해석에 실패해야 한다.
+        Account account = repository.findByEmail(new Email("s2@b.com")).orElseThrow();
+        account.suspend("정지");
+        repository.save(account);
+
+        assertThat(service.resolve(signedIn.sessionToken())).isEmpty();
+    }
+
+    @Test
+    void reinstate_allowsSignInAgain() {
+        service.register(new RegisterAccountCommand("s3@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("s3@b.com", "123456"));
+        Account account = repository.findByEmail(new Email("s3@b.com")).orElseThrow();
+        account.suspend("정지");
+        account.reinstate();
+        repository.save(account);
+
+        assertThat(service.signIn(new SignInCommand("s3@b.com", "password1")).sessionToken())
+                .isNotBlank();
     }
 
     @Test
@@ -168,6 +214,21 @@ class AccountServiceTest {
             byEmail.put(account.getEmail().value(), account);
             return account;
         }
+
+        @Override
+        public java.util.List<Account> findRecent(String emailQuery, int limit) {
+            return byEmail.values().stream()
+                    .filter(a -> emailQuery == null
+                            || emailQuery.isBlank()
+                            || a.getEmail().value().contains(emailQuery))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public long countByRole(com.gole.api.account.domain.model.Role role) {
+            return byEmail.values().stream().filter(a -> a.getRole() == role).count();
+        }
     }
 
     private static final class PlainHasher implements PasswordHasherPort {
@@ -225,6 +286,11 @@ class AccountServiceTest {
         @Override
         public void revoke(String token) {
             store.remove(token);
+        }
+
+        @Override
+        public void revokeAllForAccount(String accountId) {
+            store.entrySet().removeIf(e -> e.getValue().accountId().equals(accountId));
         }
     }
 

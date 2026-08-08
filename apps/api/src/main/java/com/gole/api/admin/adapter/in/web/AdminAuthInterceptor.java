@@ -8,6 +8,7 @@ import com.gole.api.common.exception.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
@@ -20,6 +21,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
     public static final String ATTR_ACCOUNT_ID = "gole.admin.accountId";
+    public static final String ATTR_ACCOUNT_EMAIL = "gole.admin.accountEmail";
 
     private final GetCurrentSessionUseCase getCurrentSession;
 
@@ -29,6 +31,11 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        // CORS 프리플라이트(OPTIONS)는 브라우저가 Authorization 헤더 없이 보낸다.
+        // 여기서 막으면 본 요청이 시작조차 못 해, 브라우저에서만 조용히 실패한다.
+        if (CorsUtils.isPreFlightRequest(request)) {
+            return true;
+        }
         String token = extractBearer(request.getHeader("Authorization"));
         CurrentSession session = getCurrentSession
                 .resolve(token)
@@ -36,7 +43,9 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         if (session.role() != Role.ADMIN) {
             throw new ForbiddenException("ADMIN_ONLY", "관리자 권한이 필요합니다");
         }
+        // 감사 로그의 조치자 스냅샷으로 쓰이도록 id와 이메일을 함께 전달한다. (요구사항 8.1)
         request.setAttribute(ATTR_ACCOUNT_ID, session.accountId());
+        request.setAttribute(ATTR_ACCOUNT_EMAIL, session.email());
         return true;
     }
 

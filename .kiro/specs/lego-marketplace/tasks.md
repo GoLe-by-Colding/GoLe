@@ -116,6 +116,13 @@
 - [x] 13.1 비밀번호 해시 강화(BCrypt) + 레거시 호환 + 로그인 시 자동 승격 (요구사항 1.12)
 - [ ] 13.1a (후속) 세션 만료/회전 정책 강화
 - [ ] 13.2 실 결제 PG 연동(`PaymentGatewayPort` 실구현) (4.7)
-- [ ] 13.3 이미지 업로드 MinIO(S3) 연동 — 매물/게시글 사진을 URL 입력 대신 업로드로
+- [x] 13.3 이미지 업로드 MinIO(S3) 연동 — 완료. `media` 컨텍스트(`MediaService`/`S3ObjectStorageAdapter`),
+      배치 업로드 + 온더플라이 썸네일까지 구현. 프론트 `create-listing-form`/`create-post-form` 연동.
+      스펙: `.kiro/specs/image-upload/` (2026-08-03 실측 감사로 소급 체크)
 - [x] 13.4 시세 인기 세트 랭킹(체결 거래량) + Redis 캐싱 — `GetTrendingSetsUseCase`/`TrendingService`/`RedisTrendingCacheAdapter`, 프론트 `widgets/trending-sets`(홈). 스펙: `.kiro/specs/trending-sets/`
-- [ ] 13.5 알림(팔로우 셀러 신규 매물, 위시리스트 가격 변동)
+- [~] 13.5 알림 — **기반만 완료, 지정 트리거 미구현.** `notification` 컨텍스트와
+      헤더 벨·`/notifications` 화면은 동작하나(스펙 `.kiro/specs/notifications/`),
+      실제 트리거는 주문 생성(`ORDER_PLACED`) **1종뿐**이다.
+      본 항목이 요구한 **팔로우 셀러 신규 매물**·**위시리스트 가격 변동** 트리거는 둘 다 없다.
+- [x] 13.6 거래 후기/평점 — 스펙 `.kiro/specs/review/` 전 항목 완료·배포 검증
+      (프로덕션 `seller-aurora` 평점 4.7/3건). 감사 시점에 백로그에 누락되어 있어 추가.

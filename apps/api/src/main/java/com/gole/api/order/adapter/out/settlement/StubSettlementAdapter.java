@@ -1,6 +1,7 @@
 package com.gole.api.order.adapter.out.settlement;
 
 import com.gole.api.order.application.port.out.SettlementPort;
+import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.Settlement;
 import java.time.Clock;
 import java.time.Instant;
@@ -20,21 +21,24 @@ public class StubSettlementAdapter implements SettlementPort {
     private static final Logger log = LoggerFactory.getLogger(StubSettlementAdapter.class);
 
     private final Clock clock;
+    private final FeePolicy feePolicy;
 
-    public StubSettlementAdapter(Clock clock) {
+    public StubSettlementAdapter(Clock clock, FeePolicy feePolicy) {
         this.clock = clock;
+        this.feePolicy = feePolicy;
     }
 
     @Override
     public void settleOnce(String orderId, String sellerId, long amount) {
-        Settlement settlement = Settlement.compute(orderId, sellerId, amount, Instant.now(clock));
+        Settlement settlement = Settlement.compute(orderId, sellerId, amount, feePolicy, Instant.now(clock));
         // TODO: real settlement
         log.info(
-                "[STUB-SETTLEMENT] settled orderId={} sellerId={} gross={} fee={} payout={}",
+                "[STUB-SETTLEMENT] settled orderId={} sellerId={} gross={} fee={} rate={} payout={}",
                 settlement.orderId(),
                 settlement.sellerId(),
                 settlement.grossAmount(),
                 settlement.fee(),
+                settlement.feeRate(),
                 settlement.payout());
     }
 }

@@ -1,6 +1,7 @@
 package com.gole.api.account.domain.model;
 
 import com.gole.api.account.domain.exception.AccountLockedException;
+import com.gole.api.account.domain.exception.AccountSuspendedException;
 import com.gole.api.account.domain.exception.VerificationException;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,13 +21,14 @@ public final class Account {
     private final Email email;
     private PasswordHash passwordHash;
     private AccountStatus status;
-    private final Role role;
+    private Role role;
     private VerificationCode verificationCode; // nullable (검증 완료 시 제거)
     private int failedAttempts;
     private Instant failureWindowStartedAt; // nullable
     private Instant lockedUntil; // nullable
+    private String suspendedReason; // nullable (SUSPENDED일 때만 의미 있음)
 
-    /** 영속성 복원용 전체 생성자. */
+    /** 영속성 복원용 생성자. */
     public Account(
             String id,
             Email email,
@@ -37,6 +39,31 @@ public final class Account {
             int failedAttempts,
             Instant failureWindowStartedAt,
             Instant lockedUntil) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationCode,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                null);
+    }
+
+    /** 영속성 복원용 전체 생성자(정지 사유 포함). */
+    public Account(
+            String id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Role role,
+            VerificationCode verificationCode,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason) {
         this.id = Objects.requireNonNull(id, "id");
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
@@ -46,6 +73,7 @@ public final class Account {
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
+        this.suspendedReason = suspendedReason;
     }
 
     /** 신규 가입: 미인증 + 일반(USER) 권한 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
@@ -74,6 +102,46 @@ public final class Account {
         }
         this.status = AccountStatus.VERIFIED;
         this.verificationCode = null;
+    }
+
+    /**
+     * 운영자 정지. (admin-console 요구사항 6.2)
+     *
+     * <p>일시 잠금(연속 실패)과 달리 시간 경과로 해제되지 않는다. 사유는 필수로 보관해 분쟁에 대응한다.
+     */
+    public void suspend(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("reason must not be blank");
+        }
+        this.status = AccountStatus.SUSPENDED;
+        this.suspendedReason = reason;
+    }
+
+    /**
+     * 정지 해제. (admin-console 요구사항 6.6)
+     *
+     * <p>정지 해제 즉시 로그인할 수 있어야 하므로 실패 카운터·일시 잠금도 함께 초기화한다.
+     */
+    public void reinstate() {
+        this.status = AccountStatus.VERIFIED;
+        this.suspendedReason = null;
+        recordSuccessfulSignIn();
+    }
+
+    /** 권한 변경. (admin-console 요구사항 6.7) */
+    public void changeRole(Role newRole) {
+        this.role = Objects.requireNonNull(newRole, "newRole");
+    }
+
+    public boolean isSuspended() {
+        return status == AccountStatus.SUSPENDED;
+    }
+
+    /** 로그인 시도 전 정지 확인. (admin-console 요구사항 6.4) */
+    public void ensureNotSuspended() {
+        if (isSuspended()) {
+            throw new AccountSuspendedException(suspendedReason);
+        }
     }
 
     public boolean isLocked(Instant now) {
@@ -159,5 +227,9 @@ public final class Account {
 
     public Instant getLockedUntil() {
         return lockedUntil;
+    }
+
+    public String getSuspendedReason() {
+        return suspendedReason;
     }
 }

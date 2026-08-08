@@ -54,14 +54,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # 로컬 이미지 업로드용 S3 호환 스토리지.
-  # Spring Boot는 local 프로필에서 http://localhost:9000으로 접근한다.
+  # 오브젝트 스토리지(S3 호환). media 컨텍스트가 매물/게시글 사진과
+  # 시드 커버 아트를 여기에 올린다. 이게 없으면 MediaSeeder가 전부 실패하고
+  # 로컬은 이미지가 깨진 채로 뜬다.
   minio:
     image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_API_PORT:-9000}:9000" # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # 웹 콘솔
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -74,6 +75,24 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+  # `gole` 버킷 생성 + 익명 읽기 허용(멱등).
+  # 애플리케이션도 ensureBucket()으로 버킷을 만들지만, 인프라만 띄운 상태에서
+  # 콘솔로 확인하거나 mc로 다룰 수 있도록 여기서 미리 준비한다.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 \
+          "${MINIO_ROOT_USER:-minioadmin}" "${MINIO_ROOT_PASSWORD:-minioadmin}"
+        mc mb --ignore-existing local/${STORAGE_S3_BUCKET:-gole}
+        mc anonymous set download local/${STORAGE_S3_BUCKET:-gole}
 
 volumes:
   mongo_data:

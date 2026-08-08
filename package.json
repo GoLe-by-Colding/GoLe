@@ -12,7 +12,8 @@
     "build:api": "node scripts/gradle.mjs build",
     "test:api": "node scripts/gradle.mjs test",
     "infra:up": "docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init"
   },
   "engines": {
     "node": ">=22"

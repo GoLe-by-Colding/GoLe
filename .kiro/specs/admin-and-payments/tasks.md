@@ -30,7 +30,20 @@
 - [x] 16. E2E: admin 200 / no-token 401 / USER 403 / 세트 등록 201
 - [x] 17. 표준 deploy.sh 배포 + 관리자 부트스트랩
 
-## 후속 (TODO)
-- [ ] 매물/주문/회원/게시글 모더레이션 API + UI
-- [ ] 비밀번호 변경/재설정
+## 후속 (TODO) — 2026-08-03 실측 감사 반영
+- [x] 매물/주문/회원/게시글 모더레이션 API + UI — **1차 완료 후 `admin-console` 스펙으로 재설계·이관.**
+- [ ] 비밀번호 변경/재설정 — 미구현 확인(`changePassword`/`resetPassword` 심볼 0건).
+      `Account.java`의 `upgradePasswordHash`는 해시 표현 교체용 마이그레이션이지 사용자 비밀번호 변경이 아니다.
 - [ ] 포트원 라이브 자격증명 주입 및 실결제 검증
+
+## admin-console 스펙에서 대체된 항목 (2026-08-04)
+
+본 문서는 최초 도입 이력으로만 남긴다. 현재 기준은 `.kiro/specs/admin-console/` 이다.
+
+| 본 스펙에서 만든 것 | 대체된 이유 | 대체물 |
+|---|---|---|
+| 단일 `AdminController` (`MongoTemplate` 직접 사용) | 웹 계층이 저장소를 직접 알아 NFR-3 위반 | 도메인별 4개 컨트롤러 + `AdminReadModelPort` |
+| 게시글 삭제·회원 잠금의 컬렉션 직접 수정 | 도메인 불변식 우회 | `ModeratePostUseCase` / `ManageAccountsUseCase` |
+| `/accounts/{id}/lock`·`/unlock` (`lockedUntil`=9999 편법) | 기존 세션(TTL 7일)이 살아 있어 정지가 실효되지 않음 | `/suspend`·`/reinstate` + `AccountStatus.SUSPENDED` + 세션 일괄 폐기 |
+| 단일 `/admin` 한 화면 | 운영 동선 없음 | `/admin/**` 8개 섹션 콘솔 + 온사이트 어드민 바 |
+| 감사 추적 없음 | 분쟁 시 근거 부재 | `admin_actions` append-only 감사 로그 |

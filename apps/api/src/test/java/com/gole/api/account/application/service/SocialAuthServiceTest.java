@@ -178,6 +178,21 @@ class SocialAuthServiceTest {
             byEmail.put(account.getEmail().value(), account);
             return account;
         }
+
+        @Override
+        public java.util.List<Account> findRecent(String emailQuery, int limit) {
+            return byEmail.values().stream()
+                    .filter(a -> emailQuery == null
+                            || emailQuery.isBlank()
+                            || a.getEmail().value().contains(emailQuery))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public long countByRole(com.gole.api.account.domain.model.Role role) {
+            return byEmail.values().stream().filter(a -> a.getRole() == role).count();
+        }
     }
 
     private static final class InMemoryStateStore implements OAuthStateStorePort {
@@ -220,6 +235,11 @@ class SocialAuthServiceTest {
         @Override
         public void revoke(String token) {
             store.remove(token);
+        }
+
+        @Override
+        public void revokeAllForAccount(String accountId) {
+            store.entrySet().removeIf(e -> e.getValue().accountId().equals(accountId));
         }
     }
 }

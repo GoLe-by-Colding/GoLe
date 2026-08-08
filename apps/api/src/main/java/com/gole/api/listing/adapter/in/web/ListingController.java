@@ -83,6 +83,7 @@ public class ListingController {
                     + "- `query`: 제목·설명 텍스트 검색\n"
                     + "- `condition`: new_sealed | used_complete | used_incomplete\n"
                     + "- `category`: set | parts | minifig | moc\n"
+                    + "- `setNumber`: 카탈로그 세트번호(예: 10307) — 세트 상세 페이지용\n"
                     + "- `sort`: NEWEST | PRICE_ASC | PRICE_DESC")
     @GetMapping
     public List<ListingResponse> search(
@@ -91,14 +92,16 @@ public class ListingController {
             @RequestParam(value = "minPrice", required = false) Long minPrice,
             @RequestParam(value = "maxPrice", required = false) Long maxPrice,
             @RequestParam(value = "sort", required = false) ListingSortOrder sort,
-            @RequestParam(value = "category", required = false) String category) {
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(value = "setNumber", required = false) String setNumber) {
         ListingSearchQuery searchQuery = new ListingSearchQuery(
                 query,
                 condition,
                 minPrice,
                 maxPrice,
                 sort,
-                category == null ? null : com.gole.api.listing.domain.model.ListingCategory.fromKey(category));
+                category == null ? null : com.gole.api.listing.domain.model.ListingCategory.fromKey(category),
+                setNumber);
         return searchListingsUseCase.search(searchQuery).stream()
                 .map(ListingResponse::from)
                 .toList();

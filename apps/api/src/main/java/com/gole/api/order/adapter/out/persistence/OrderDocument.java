@@ -163,6 +163,7 @@ public class OrderDocument {
         private long grossAmount;
         private long fee;
         private long payout;
+        private Double feeRate; // nullable — feeRate 도입 이전 레거시 문서
         private Instant settledAt;
 
         protected SettlementDocument() {
@@ -170,12 +171,19 @@ public class OrderDocument {
         }
 
         public SettlementDocument(
-                String orderId, String sellerId, long grossAmount, long fee, long payout, Instant settledAt) {
+                String orderId,
+                String sellerId,
+                long grossAmount,
+                long fee,
+                long payout,
+                double feeRate,
+                Instant settledAt) {
             this.orderId = orderId;
             this.sellerId = sellerId;
             this.grossAmount = grossAmount;
             this.fee = fee;
             this.payout = payout;
+            this.feeRate = feeRate;
             this.settledAt = settledAt;
         }
 
@@ -197,6 +205,15 @@ public class OrderDocument {
 
         public long getPayout() {
             return payout;
+        }
+
+        /**
+         * 정산에 적용된 수수료율. feeRate 도입 이전 문서는 값이 없으므로 당시 상수(5%)로 보정한다.
+         * (ListingPersistenceAdapter가 레거시 필드를 보정하는 것과 같은 방식)
+         */
+        @SuppressWarnings("deprecation")
+        public double getFeeRate() {
+            return feeRate == null ? com.gole.api.order.domain.model.Settlement.PLATFORM_FEE_RATE : feeRate;
         }
 
         public Instant getSettledAt() {

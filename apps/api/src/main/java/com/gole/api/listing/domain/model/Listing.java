@@ -100,6 +100,17 @@ public final class Listing {
         this.status = ListingStatus.DELETED;
     }
 
+    /**
+     * 운영자 강제 내림. (admin-console 요구사항 4.3, 4.4)
+     *
+     * <p>{@link #delete()}와 달리 진행 중 주문(RESERVED)이어도 내린다. 가품·도용 신고 대응은
+     * 거래 진행 여부보다 우선하기 때문이다. 진행 중이던 주문의 환불/정산은 주문 컨텍스트가 별도로 처리한다.
+     * 이미 내려간 매물이면 아무 일도 하지 않는다(멱등).
+     */
+    public void takedown() {
+        this.status = ListingStatus.DELETED;
+    }
+
     /** 선점 해제(RESERVED → ACTIVE). 결제 실패/환불 시. 이미 활성이면 무시(멱등). */
     public void release() {
         if (status == ListingStatus.RESERVED) {

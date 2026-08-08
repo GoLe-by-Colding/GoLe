@@ -86,6 +86,14 @@ gole:
     seed-on-empty: ${GOLE_PRICING_SEED:true}
   community:
     seed-on-empty: ${GOLE_COMMUNITY_SEED:true}
+  report:
+    seed-on-empty: ${GOLE_REPORT_SEED:true}
+  # 플랫폼 수수료 정책(shipping-and-fees R5). 요율 변경이 배포 없이 가능해야 한다.
+  # min/max 가 0이면 하한/상한 없음.
+  fee:
+    rate: ${GOLE_FEE_RATE:0.05}
+    min-fee: ${GOLE_FEE_MIN:0}
+    max-fee: ${GOLE_FEE_MAX:0}
   # 관리자 부트스트랩: 둘 다 설정되고 계정이 없을 때만 ADMIN 계정 1회 생성(멱등)
   admin:
     email: ${GOLE_ADMIN_EMAIL:}

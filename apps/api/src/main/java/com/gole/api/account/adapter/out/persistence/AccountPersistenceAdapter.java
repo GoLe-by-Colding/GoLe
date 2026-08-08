@@ -7,7 +7,11 @@ import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.VerificationCode;
+import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 /**
@@ -43,6 +47,20 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
         return repository.findById(id).map(this::toDomain);
     }
 
+    @Override
+    public List<Account> findRecent(String emailQuery, int limit) {
+        Pageable page = PageRequest.of(0, Math.max(1, limit), Sort.by(Sort.Direction.DESC, "_id"));
+        List<AccountDocument> rows = emailQuery == null || emailQuery.isBlank()
+                ? repository.findBy(page)
+                : repository.findByEmailContainingIgnoreCase(emailQuery.trim(), page);
+        return rows.stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countByRole(Role role) {
+        return repository.countByRole(role.name());
+    }
+
     private AccountDocument toDocument(Account account) {
         VerificationCode code = account.getVerificationCode();
         return new AccountDocument(
@@ -55,7 +73,8 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 code == null ? null : code.issuedAt(),
                 account.getFailedAttempts(),
                 account.getFailureWindowStartedAt(),
-                account.getLockedUntil());
+                account.getLockedUntil(),
+                account.getSuspendedReason());
     }
 
     private Account toDomain(AccountDocument document) {
@@ -71,6 +90,7 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 code,
                 document.getFailedAttempts(),
                 document.getFailureWindowStartedAt(),
-                document.getLockedUntil());
+                document.getLockedUntil(),
+                document.getSuspendedReason());
     }
 }

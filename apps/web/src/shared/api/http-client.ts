@@ -23,6 +23,11 @@ export interface RequestOptions {
   readonly signal?: AbortSignal;
   readonly headers?: Readonly<Record<string, string>>;
   readonly cache?: RequestCache;
+  /**
+   * Next.js fetch 확장. 서버 컴포넌트에서 ISR 캐시를 쓸 때 지정한다.
+   * 색인 대상 페이지(세트 상세 등)가 크롤러 요청마다 백엔드를 때리지 않게 하는 용도다.
+   */
+  readonly next?: { readonly revalidate?: number | false; readonly tags?: readonly string[] };
 }
 
 /**
@@ -33,12 +38,20 @@ export async function apiRequest<TResponse>(
   path: string,
   options: RequestOptions = {},
 ): Promise<TResponse> {
-  const { method = "GET", body, signal, headers, cache } = options;
+  const { method = "GET", body, signal, headers, cache, next } = options;
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     method,
     signal: signal ?? null,
     ...(cache === undefined ? {} : { cache }),
+    ...(next === undefined
+      ? {}
+      : {
+          next: {
+            ...(next.revalidate === undefined ? {} : { revalidate: next.revalidate }),
+            ...(next.tags === undefined ? {} : { tags: [...next.tags] }),
+          },
+        }),
     headers: {
       "Content-Type": "application/json",
       ...headers,

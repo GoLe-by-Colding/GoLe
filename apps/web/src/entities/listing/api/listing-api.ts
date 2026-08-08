@@ -58,6 +58,8 @@ export interface SearchListingsParams {
   readonly maxPrice?: number;
   readonly sort?: ListingSort;
   readonly category?: ListingCategory;
+  /** 카탈로그 세트번호. 세트 상세 페이지에서 해당 세트 매물만 모을 때 쓴다. */
+  readonly setNumber?: string;
 }
 
 /** 활성 리스팅 검색/필터/정렬. 백엔드는 enum을 대문자로 받는다. (요구사항 14) */
@@ -84,11 +86,25 @@ export function searchListings(
   if (params.category) {
     qs.set("category", params.category);
   }
+  if (params.setNumber) {
+    qs.set("setNumber", params.setNumber);
+  }
   const suffix = qs.toString().length > 0 ? `?${qs.toString()}` : "";
   return apiRequest<readonly Listing[]>(`/api/v1/listings${suffix}`, {
     cache: "no-store",
     ...(signal === undefined ? {} : { signal }),
   });
+}
+
+/**
+ * 특정 카탈로그 세트의 활성 매물. 세트 상세 페이지(SSR)용.
+ * 색인 대상 페이지라 짧게 캐시해 크롤러 트래픽에 매번 DB를 때리지 않게 한다.
+ */
+export function fetchListingsBySet(setNumber: string): Promise<readonly Listing[]> {
+  return apiRequest<readonly Listing[]>(
+    `/api/v1/listings?setNumber=${encodeURIComponent(setNumber)}`,
+    { next: { revalidate: 300 } },
+  );
 }
 
 export function fetchListingById(listingId: string, signal?: AbortSignal): Promise<Listing> {
