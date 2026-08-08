@@ -3,6 +3,7 @@ package com.gole.api.order.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
@@ -65,6 +66,27 @@ class OrderServiceTest {
     }
 
     @Test
+    void place_rejectsSelfPurchaseAndReleasesReservation() {
+        reservation.available = true;
+
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "seller-1")))
+                .isInstanceOf(ForbiddenException.class);
+        assertThat(reservation.released).isTrue();
+        assertThat(orders.store).isEmpty();
+    }
+
+    @Test
+    void place_releasesReservationWhenOrderPersistenceFails() {
+        reservation.available = true;
+        orders.failSave = true;
+
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "buyer-1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("mongo unavailable");
+        assertThat(reservation.released).isTrue();
+    }
+
+    @Test
     void fullFlow_completes_andSettlesOnce() {
         reservation.available = true;
         String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
@@ -108,9 +130,13 @@ class OrderServiceTest {
 
     private static final class InMemoryOrders implements OrderRepositoryPort {
         private final Map<String, Order> store = new HashMap<>();
+        private boolean failSave;
 
         @Override
         public Order save(Order order) {
+            if (failSave) {
+                throw new IllegalStateException("mongo unavailable");
+            }
             store.put(order.getId(), order);
             return order;
         }

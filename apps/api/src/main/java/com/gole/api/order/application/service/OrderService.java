@@ -1,5 +1,6 @@
 package com.gole.api.order.application.service;
 
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalSignal;
@@ -76,16 +77,32 @@ public class OrderService
                 .reserve(command.listingId())
                 .orElseThrow(() -> new ItemUnavailableException(command.listingId()));
 
-        Order order = Order.place(
-                idGenerator.newOrderId(),
-                command.listingId(),
-                command.buyerId(),
-                reserved.sellerId(),
-                reserved.catalogSetNumber(),
-                reserved.condition(),
-                reserved.price(),
-                Instant.now(clock));
-        String orderId = orderRepository.save(order).getId();
+        if (reserved.sellerId().equals(command.buyerId())) {
+            listingReservation.release(command.listingId());
+            throw new ForbiddenException("SELF_PURCHASE_NOT_ALLOWED", "자신의 매물은 구매할 수 없습니다");
+        }
+
+        String orderId;
+        try {
+            Order order = Order.place(
+                    idGenerator.newOrderId(),
+                    command.listingId(),
+                    command.buyerId(),
+                    reserved.sellerId(),
+                    reserved.catalogSetNumber(),
+                    reserved.condition(),
+                    reserved.price(),
+                    Instant.now(clock));
+            orderId = orderRepository.save(order).getId();
+        } catch (RuntimeException failure) {
+            // 선점은 Mongo 원자 갱신으로 트랜잭션 밖에서 수행하므로 주문 저장 전 실패는 직접 보상한다.
+            try {
+                listingReservation.release(command.listingId());
+            } catch (RuntimeException releaseFailure) {
+                failure.addSuppressed(releaseFailure);
+            }
+            throw failure;
+        }
 
         // 알림 N6: 셀러에게 주문 알림(best-effort, 어댑터가 예외 흡수)
         sellerNotifier.notifyOrderPlaced(reserved.sellerId(), orderId, reserved.price());
