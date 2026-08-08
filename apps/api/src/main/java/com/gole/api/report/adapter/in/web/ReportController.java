@@ -1,9 +1,11 @@
 package com.gole.api.report.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.report.adapter.in.web.ReportDtos.SubmitReportRequest;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
 import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -29,9 +31,13 @@ public class ReportController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, String> submit(@Valid @RequestBody SubmitReportRequest request) {
+    public Map<String, String> submit(@Valid @RequestBody SubmitReportRequest request, HttpServletRequest http) {
         String id = submitReportUseCase.submit(new SubmitReportCommand(
-                request.reporterId(), request.targetType(), request.targetId(), request.reason(), request.detail()));
+                AuthenticatedUser.id(http),
+                request.targetType(),
+                request.targetId(),
+                request.reason(),
+                request.detail()));
         return Map.of("id", id);
     }
 }

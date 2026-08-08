@@ -9,6 +9,7 @@ import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.listing.application.port.in.GetListingUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,8 +20,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.connection.Message;
@@ -38,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 채팅 REST API. 방 생성/조회 + 메시지 전송 + SSE 스트림(Redis Pub/Sub).
@@ -50,23 +50,26 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private static final long SSE_TIMEOUT_MS = 5 * 60 * 1000L;
 
-    // 간단한 JSON 값 추출 패턴 (채팅 메시지 페이로드 전용)
-    private static final Pattern JSON_VAL = Pattern.compile("\"(\\w+)\"\\s*:\\s*\"([^\"]*)\"");
-
     private final ChatRoomMongoRepository roomRepo;
     private final ChatMessageMongoRepository messageRepo;
     private final ChatRedisPublisher publisher;
     private final RedisMessageListenerContainer listenerContainer;
+    private final GetListingUseCase getListingUseCase;
+    private final ObjectMapper objectMapper;
 
     public ChatController(
             ChatRoomMongoRepository roomRepo,
             ChatMessageMongoRepository messageRepo,
             ChatRedisPublisher publisher,
-            RedisMessageListenerContainer listenerContainer) {
+            RedisMessageListenerContainer listenerContainer,
+            GetListingUseCase getListingUseCase,
+            ObjectMapper objectMapper) {
         this.roomRepo = roomRepo;
         this.messageRepo = messageRepo;
         this.publisher = publisher;
         this.listenerContainer = listenerContainer;
+        this.getListingUseCase = getListingUseCase;
+        this.objectMapper = objectMapper;
     }
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
@@ -74,11 +77,15 @@ public class ChatController {
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req, HttpServletRequest http) {
         String buyerId = AuthenticatedUser.id(http);
-        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, req.sellerId(), req.listingId())
+        String sellerId = getListingUseCase.getById(req.listingId()).getSellerId();
+        if (buyerId.equals(sellerId)) {
+            throw new ForbiddenException("CHAT_SELF_ROOM_NOT_ALLOWED", "자신의 매물에는 채팅을 시작할 수 없습니다");
+        }
+        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
                 .map(RoomResponse::from)
                 .orElseGet(() -> {
                     ChatRoomDocument doc = new ChatRoomDocument(
-                            UUID.randomUUID().toString(), req.listingId(), buyerId, req.sellerId(), Instant.now());
+                            UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
                     return RoomResponse.from(roomRepo.save(doc));
                 });
     }
@@ -127,7 +134,8 @@ public class ChatController {
             description = "Server-Sent Events로 채팅방의 새 메시지를 실시간 수신합니다. "
                     + "이벤트 이름: `message`, 데이터: JSON `{id, senderId, content, sentAt}`")
     @GetMapping(value = "/rooms/{roomId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@PathVariable String roomId) {
+    public SseEmitter stream(@PathVariable String roomId, HttpServletRequest http) {
+        requireParticipant(roomId, http);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         String channel = "chat:" + roomId;
         CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();
@@ -135,18 +143,10 @@ public class ChatController {
 
         MessageListener listener = (Message rawMsg, byte[] pattern) -> {
             try {
-                String json = new String(rawMsg.getBody());
-                // 최소 JSON 파싱: {"id":"...","senderId":"...","content":"...","sentAt":"..."}
-                java.util.Map<String, String> vals = new java.util.HashMap<>();
-                Matcher m = JSON_VAL.matcher(json);
-                while (m.find()) vals.put(m.group(1), m.group(2));
-
-                String ssePayload = "{\"id\":\"" + vals.getOrDefault("id", "") + "\","
-                        + "\"senderId\":\"" + vals.getOrDefault("senderId", "") + "\","
-                        + "\"content\":\"" + vals.getOrDefault("content", "") + "\","
-                        + "\"sentAt\":\"" + vals.getOrDefault("sentAt", "") + "\"}";
-                emitter.send(SseEmitter.event().name("message").data(ssePayload));
-            } catch (IOException e) {
+                PubSubMessage payload = objectMapper.readValue(rawMsg.getBody(), PubSubMessage.class);
+                emitter.send(SseEmitter.event().name("message").data(payload, MediaType.APPLICATION_JSON));
+            } catch (IOException | RuntimeException e) {
+                log.warn("Chat SSE payload handling failed roomId={}: {}", roomId, e.getMessage());
                 emitters.remove(emitter);
             }
         };
@@ -161,9 +161,12 @@ public class ChatController {
         return emitter;
     }
 
-    public record CreateRoomRequest(@NotBlank String listingId, @NotBlank String buyerId, @NotBlank String sellerId) {}
+    /** buyerId/sellerId는 구버전 클라이언트 호환 필드이며 서버는 신뢰하지 않는다. */
+    public record CreateRoomRequest(@NotBlank String listingId, String buyerId, String sellerId) {}
 
     public record SendMessageRequest(@NotBlank String senderId, @NotBlank String content) {}
+
+    private record PubSubMessage(String id, String senderId, String content, String sentAt) {}
 
     public record RoomResponse(String id, String listingId, String buyerId, String sellerId, String createdAt) {
 

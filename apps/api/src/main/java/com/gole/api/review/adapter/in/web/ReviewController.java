@@ -1,5 +1,6 @@
 package com.gole.api.review.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.review.adapter.in.web.ReviewDtos.ReviewResponse;
 import com.gole.api.review.adapter.in.web.ReviewDtos.SellerRatingResponse;
 import com.gole.api.review.adapter.in.web.ReviewDtos.WriteReviewRequest;
@@ -8,6 +9,7 @@ import com.gole.api.review.application.port.in.WriteReviewUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase.WriteReviewCommand;
 import com.gole.api.review.domain.model.Review;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -37,9 +39,9 @@ public class ReviewController {
 
     @PostMapping("/reviews")
     @ResponseStatus(HttpStatus.CREATED)
-    public ReviewResponse write(@Valid @RequestBody WriteReviewRequest request) {
-        Review review = writeReviewUseCase.write(
-                new WriteReviewCommand(request.orderId(), request.reviewerId(), request.rating(), request.content()));
+    public ReviewResponse write(@Valid @RequestBody WriteReviewRequest request, HttpServletRequest http) {
+        Review review = writeReviewUseCase.write(new WriteReviewCommand(
+                request.orderId(), AuthenticatedUser.id(http), request.rating(), request.content()));
         return ReviewResponse.from(review);
     }
 

@@ -1,5 +1,6 @@
 package com.gole.api.listing.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
 import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
@@ -7,6 +8,7 @@ import com.gole.api.notification.application.port.in.NotifyUseCase;
 import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
 import com.gole.api.notification.domain.model.NotificationType;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
@@ -51,14 +53,16 @@ public class ListingCommentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CommentResponse create(@PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req) {
+    public CommentResponse create(
+            @PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req, HttpServletRequest http) {
+        String authorId = AuthenticatedUser.id(http);
         ListingCommentDocument doc = new ListingCommentDocument(
-                UUID.randomUUID().toString(), listingId, req.authorId(), req.content(), false, Instant.now());
+                UUID.randomUUID().toString(), listingId, authorId, req.content(), false, Instant.now());
         CommentResponse saved = CommentResponse.from(commentRepository.save(doc));
 
         // 판매자에게 Q&A 알림(본인 댓글 제외, best-effort).
         listingRepository.findById(listingId).ifPresent(listing -> {
-            if (!listing.getSellerId().equals(req.authorId())) {
+            if (!listing.getSellerId().equals(authorId)) {
                 try {
                     notifyUseCase.notify(new NotifyCommand(
                             listing.getSellerId(),

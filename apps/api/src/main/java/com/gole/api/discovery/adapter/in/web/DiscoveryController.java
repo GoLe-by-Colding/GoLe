@@ -1,5 +1,6 @@
 package com.gole.api.discovery.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.FollowRequest;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.ListingSummaryResponse;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.WishlistEntryResponse;
@@ -9,6 +10,7 @@ import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -55,32 +57,34 @@ public class DiscoveryController {
 
     @PostMapping("/users/{userId}/following")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void follow(@PathVariable String userId, @Valid @RequestBody FollowRequest request) {
-        followSellerUseCase.follow(userId, request.sellerId());
+    public void follow(
+            @PathVariable String userId, @Valid @RequestBody FollowRequest request, HttpServletRequest http) {
+        followSellerUseCase.follow(AuthenticatedUser.id(http), request.sellerId());
     }
 
     @DeleteMapping("/users/{userId}/following/{sellerId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void unfollow(@PathVariable String userId, @PathVariable String sellerId) {
-        followSellerUseCase.unfollow(userId, sellerId);
+    public void unfollow(@PathVariable String userId, @PathVariable String sellerId, HttpServletRequest http) {
+        followSellerUseCase.unfollow(AuthenticatedUser.id(http), sellerId);
     }
 
     @GetMapping("/users/{userId}/following")
-    public List<String> following(@PathVariable String userId) {
-        return followSellerUseCase.following(userId);
+    public List<String> following(@PathVariable String userId, HttpServletRequest http) {
+        return followSellerUseCase.following(AuthenticatedUser.id(http));
     }
 
     @GetMapping("/users/{userId}/feed")
-    public List<ListingSummaryResponse> feed(@PathVariable String userId) {
-        return getPersonalizedFeedUseCase.feed(userId).stream()
+    public List<ListingSummaryResponse> feed(@PathVariable String userId, HttpServletRequest http) {
+        return getPersonalizedFeedUseCase.feed(AuthenticatedUser.id(http)).stream()
                 .map(ListingSummaryResponse::from)
                 .toList();
     }
 
     @PostMapping("/users/{userId}/wishlist")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void addWishlist(@PathVariable String userId, @Valid @RequestBody WishlistRequest request) {
-        manageWishlistUseCase.add(userId, request.targetType(), request.targetId());
+    public void addWishlist(
+            @PathVariable String userId, @Valid @RequestBody WishlistRequest request, HttpServletRequest http) {
+        manageWishlistUseCase.add(AuthenticatedUser.id(http), request.targetType(), request.targetId());
     }
 
     @DeleteMapping("/users/{userId}/wishlist")
@@ -88,13 +92,14 @@ public class DiscoveryController {
     public void removeWishlist(
             @PathVariable String userId,
             @RequestParam("targetType") com.gole.api.discovery.domain.model.WishlistTargetType targetType,
-            @RequestParam("targetId") String targetId) {
-        manageWishlistUseCase.remove(userId, targetType, targetId);
+            @RequestParam("targetId") String targetId,
+            HttpServletRequest http) {
+        manageWishlistUseCase.remove(AuthenticatedUser.id(http), targetType, targetId);
     }
 
     @GetMapping("/users/{userId}/wishlist")
-    public List<WishlistEntryResponse> wishlist(@PathVariable String userId) {
-        return manageWishlistUseCase.list(userId).stream()
+    public List<WishlistEntryResponse> wishlist(@PathVariable String userId, HttpServletRequest http) {
+        return manageWishlistUseCase.list(AuthenticatedUser.id(http)).stream()
                 .map(WishlistEntryResponse::from)
                 .toList();
     }
