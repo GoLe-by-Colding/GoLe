@@ -5,5 +5,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface ListingCommentMongoRepository extends MongoRepository<ListingCommentDocument, String> {
 
-    List<ListingCommentDocument> findByListingIdAndDeletedFalseOrderByCreatedAtAsc(String listingId);
+    List<ListingCommentDocument> findTop200ByListingIdAndDeletedFalseOrderByCreatedAtAsc(String listingId);
 }

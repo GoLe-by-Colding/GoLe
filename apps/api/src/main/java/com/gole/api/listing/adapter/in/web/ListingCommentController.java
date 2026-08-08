@@ -46,7 +46,7 @@ public class ListingCommentController {
 
     @GetMapping
     public List<CommentResponse> list(@PathVariable String listingId) {
-        return commentRepository.findByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId).stream()
+        return commentRepository.findTop200ByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId).stream()
                 .map(CommentResponse::from)
                 .toList();
     }

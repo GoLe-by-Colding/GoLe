@@ -2,6 +2,7 @@ package com.gole.api.review.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -12,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * <p>{@code orderId}는 주문당 1회 작성을 보장하기 위해 유니크 인덱스를 둔다. (요구사항 R2.4)
  */
 @Document(collection = "reviews")
+@CompoundIndex(name = "reviewee_created_at_idx", def = "{'revieweeId': 1, 'createdAt': -1}")
 public class ReviewDocument {
 
     @Id

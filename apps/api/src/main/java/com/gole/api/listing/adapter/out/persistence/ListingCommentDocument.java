@@ -2,10 +2,12 @@ package com.gole.api.listing.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "listing_comments")
+@CompoundIndex(name = "listing_active_created_at_idx", def = "{'listingId': 1, 'deleted': 1, 'createdAt': 1}")
 public class ListingCommentDocument {
 
     @Id

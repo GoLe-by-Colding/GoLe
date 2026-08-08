@@ -36,7 +36,7 @@ public class ReviewPersistenceAdapter implements ReviewRepositoryPort {
 
     @Override
     public List<Review> findByRevieweeIdRecentFirst(String revieweeId) {
-        return repository.findByRevieweeIdOrderByCreatedAtDesc(revieweeId).stream()
+        return repository.findTop100ByRevieweeIdOrderByCreatedAtDesc(revieweeId).stream()
                 .map(this::toDomain)
                 .toList();
     }
