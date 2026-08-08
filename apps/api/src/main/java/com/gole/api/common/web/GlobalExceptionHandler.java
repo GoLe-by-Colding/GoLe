@@ -20,9 +20,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * inbound 웹 어댑터 공통 예외 변환. 도메인 예외를 HTTP 상태/표준 바디로 매핑한다.
@@ -98,6 +105,48 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("VALIDATION_ERROR", message));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("INVALID_PARAMETER", "올바르지 않은 요청 값입니다: " + ex.getName()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("MALFORMED_JSON", "요청 본문의 JSON 형식을 확인해 주세요"));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("MISSING_PARAMETER", "필수 요청 값이 없습니다: " + ex.getParameterName()));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("ENDPOINT_NOT_FOUND", "요청한 API 경로를 찾을 수 없습니다"));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(new ErrorResponse("METHOD_NOT_ALLOWED", "지원하지 않는 HTTP 메서드입니다"));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(new ErrorResponse("UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 Content-Type입니다"));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(new ErrorResponse("UPLOAD_TOO_LARGE", "업로드 파일 크기 제한을 초과했습니다"));
     }
 
     /** 예상하지 못한 500 오류는 사용자에게 내부 정보를 숨기고 운영 채널에는 추적 ID를 남긴다. */
