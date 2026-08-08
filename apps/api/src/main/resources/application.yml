@@ -89,6 +89,7 @@ logging:
 
 # 시드 데이터: 각 컬렉션이 비어 있을 때만 1회 적재(멱등). 테스트에서는 false로 비활성화한다.
 gole:
+  environment: ${GOLE_ENVIRONMENT:local}
   catalog:
     seed-on-empty: ${GOLE_CATALOG_SEED:true}
   listing:
@@ -126,7 +127,8 @@ gole:
     # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
     avatar-url: ${DISCORD_AVATAR_URL:https://gole.kscold.com/icon.svg}
 
-# 포트원(PortOne) V2 결제. enabled=true + api-secret 설정 시 실제 검증, 아니면 스텁 사용.
+# 포트원(PortOne) V2 결제. 로컬은 스텁을 허용하지만 GOLE_ENVIRONMENT=production에서는
+# enabled=true + api-secret이 아니면 안전하게 부팅을 중단한다.
 portone:
   enabled: ${PORTONE_ENABLED:false}
   api-base: ${PORTONE_API_BASE:https://api.portone.io}
