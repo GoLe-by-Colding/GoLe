@@ -41,10 +41,7 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     @Override
     public boolean authorize(String orderId, long amount) {
         try {
-            Map<?, ?> payment = client.get()
-                    .uri("/payments/{paymentId}", orderId)
-                    .retrieve()
-                    .body(Map.class);
+            Map<?, ?> payment = fetchPayment(orderId);
             if (payment == null) {
                 return false;
             }
@@ -64,21 +61,64 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public void refund(String orderId, long amount) {
+    public RefundResult refund(String orderId, long amount) {
         try {
-            client.post()
+            Map<?, ?> payment = fetchPayment(orderId);
+            if ("CANCELLED".equals(String.valueOf(payment.get("status")))) {
+                return RefundResult.SUCCEEDED;
+            }
+
+            Map<?, ?> response = client.post()
                     .uri("/payments/{paymentId}/cancel", orderId)
-                    .body(Map.of("reason", "주문 환불"))
+                    .body(Map.of(
+                            "reason", "주문 환불",
+                            "amount", amount,
+                            "currentCancellableAmount", amount))
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {
                         throw new IllegalStateException("PortOne cancel failed: " + res.getStatusCode());
                     })
-                    .toBodilessEntity();
-            log.info("[PortOne] 환불 요청 완료 orderId={} amount={}", orderId, amount);
+                    .body(Map.class);
+            String cancellationStatus = extractCancellationStatus(response);
+            RefundResult result =
+                    switch (cancellationStatus) {
+                        case "SUCCEEDED" -> RefundResult.SUCCEEDED;
+                        case "REQUESTED" -> RefundResult.REQUESTED;
+                        default -> throw new IllegalStateException(
+                                "Unexpected cancellation status: " + cancellationStatus);
+                    };
+            log.info("[PortOne] 환불 응답 orderId={} amount={} status={}", orderId, amount, cancellationStatus);
+            return result;
         } catch (Exception ex) {
             log.error("[PortOne] 환불 실패 orderId={}: {}", orderId, ex.getMessage());
-            throw new IllegalStateException("PortOne refund failed for order " + orderId, ex);
+            throw new PaymentGatewayUnavailableException(orderId, ex);
         }
+    }
+
+    @Override
+    public boolean isFullyRefunded(String orderId, long amount) {
+        try {
+            Map<?, ?> payment = fetchPayment(orderId);
+            return "CANCELLED".equals(String.valueOf(payment.get("status"))) && extractPaidTotal(payment) == amount;
+        } catch (Exception ex) {
+            throw new PaymentGatewayUnavailableException(orderId, ex);
+        }
+    }
+
+    private Map<?, ?> fetchPayment(String orderId) {
+        Map<?, ?> payment =
+                client.get().uri("/payments/{paymentId}", orderId).retrieve().body(Map.class);
+        if (payment == null) {
+            throw new IllegalStateException("PortOne payment response is empty");
+        }
+        return payment;
+    }
+
+    private static String extractCancellationStatus(Map<?, ?> response) {
+        if (response != null && response.get("cancellation") instanceof Map<?, ?> cancellation) {
+            return String.valueOf(cancellation.get("status"));
+        }
+        return "UNKNOWN";
     }
 
     private static long extractPaidTotal(Map<?, ?> payment) {

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -17,8 +18,9 @@ import org.junit.jupiter.api.Test;
 class PaymentWebhookControllerTest {
 
     private final PayOrderUseCase payments = mock(PayOrderUseCase.class);
+    private final ConfirmRefundUseCase refunds = mock(ConfirmRefundUseCase.class);
     private final OperationalEventPublisher events = mock(OperationalEventPublisher.class);
-    private final PaymentWebhookController controller = new PaymentWebhookController(payments, events);
+    private final PaymentWebhookController controller = new PaymentWebhookController(payments, refunds, events);
 
     @Test
     @DisplayName("PG 조회 일시 장애는 200으로 삼키지 않고 재시도 가능한 예외를 전파한다")
@@ -40,5 +42,14 @@ class PaymentWebhookControllerTest {
         controller.webhook(Map.of("data", Map.of("paymentId", "order-2")));
 
         verify(payments).pay("order-2");
+    }
+
+    @Test
+    @DisplayName("최종 취소 웹훅은 PG 원장 재조회 기반의 환불 확정을 수행한다")
+    void confirmsRefundByPaymentId() {
+        controller.webhook(Map.of("type", "Transaction.Cancelled", "data", Map.of("paymentId", "order-3")));
+
+        verify(refunds).confirmRefund("order-3");
+        verify(payments, never()).pay("order-3");
     }
 }

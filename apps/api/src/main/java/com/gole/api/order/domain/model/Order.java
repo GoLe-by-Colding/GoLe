@@ -111,9 +111,20 @@ public final class Order {
         transitionTo(OrderStatus.COMPLETED, now);
     }
 
-    /** 환불. funds-held 에서만 가능. (요구사항 13.6) */
+    /** 비동기 환불 접수. funds-held 에서만 가능. */
+    public void requestRefund(Instant now) {
+        requireStatus(OrderStatus.FUNDS_HELD, "refund-pending");
+        transitionTo(OrderStatus.REFUND_PENDING, now);
+    }
+
+    /** PG에서 확인된 환불 완료. 재전송 웹훅을 위해 멱등이다. (요구사항 13.6) */
     public void refund(Instant now) {
-        requireStatus(OrderStatus.FUNDS_HELD, "refunded");
+        if (status == OrderStatus.REFUNDED) {
+            return;
+        }
+        if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.REFUND_PENDING) {
+            throw new OrderStateException("Cannot transition to refunded from " + status);
+        }
         transitionTo(OrderStatus.REFUNDED, now);
     }
 

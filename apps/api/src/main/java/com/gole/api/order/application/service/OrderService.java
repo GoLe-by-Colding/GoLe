@@ -5,6 +5,7 @@ import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalSignal;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
+import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
@@ -15,6 +16,8 @@ import com.gole.api.order.application.port.out.ListingReservationPort.ReservedLi
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
@@ -34,7 +37,12 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class OrderService
-        implements PlaceOrderUseCase, PayOrderUseCase, CompleteOrderUseCase, RefundOrderUseCase, GetOrderUseCase {
+        implements PlaceOrderUseCase,
+                PayOrderUseCase,
+                CompleteOrderUseCase,
+                RefundOrderUseCase,
+                ConfirmRefundUseCase,
+                GetOrderUseCase {
 
     private final OrderRepositoryPort orderRepository;
     private final ListingReservationPort listingReservation;
@@ -167,10 +175,44 @@ public class OrderService
             includeArguments = 0)
     public void refund(String orderId) {
         Order order = getById(orderId);
+        if (order.getStatus() == OrderStatus.REFUNDED) {
+            return;
+        }
         Instant now = Instant.now(clock);
 
-        order.refund(now); // FUNDS_HELD → REFUNDED (불가 시 예외)
-        paymentGateway.refund(orderId, order.getAmount());
+        if (order.getStatus() == OrderStatus.REFUND_PENDING) {
+            if (paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
+                finalizeRefund(order, now);
+            }
+            return;
+        }
+
+        RefundResult result = paymentGateway.refund(orderId, order.getAmount());
+        if (result == RefundResult.REQUESTED) {
+            order.requestRefund(now);
+            orderRepository.save(order);
+            return;
+        }
+
+        finalizeRefund(order, now);
+    }
+
+    @Override
+    @Transactional
+    public void confirmRefund(String orderId) {
+        Order order = getById(orderId);
+        if (order.getStatus() == OrderStatus.REFUNDED) {
+            return;
+        }
+        if (!paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
+            throw new PaymentGatewayUnavailableException(
+                    orderId, new IllegalStateException("PG refund is not final yet"));
+        }
+        finalizeRefund(order, Instant.now(clock));
+    }
+
+    private void finalizeRefund(Order order, Instant now) {
+        order.refund(now);
         listingReservation.release(order.getListingId());
         orderRepository.save(order);
     }

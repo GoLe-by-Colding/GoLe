@@ -10,7 +10,14 @@ import { Badge, Heading, Input, Select, Text } from "@shared/ui";
 import { ORDER_STATUS_LABEL, formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
-const STATUSES = ["PAYMENT_PENDING", "FUNDS_HELD", "COMPLETED", "REFUNDED", "PAYMENT_FAILED"];
+const STATUSES = [
+  "PAYMENT_PENDING",
+  "FUNDS_HELD",
+  "REFUND_PENDING",
+  "COMPLETED",
+  "REFUNDED",
+  "PAYMENT_FAILED",
+];
 
 /** 주문 모니터링 — 읽기 전용. 운영자 개입 환불은 비범위(후속). (요구사항 7.1) */
 export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus?: string }) {

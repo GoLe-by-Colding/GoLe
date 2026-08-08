@@ -27,10 +27,15 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public void refund(String orderId, long amount) {
+    public RefundResult refund(String orderId, long amount) {
         String transactionId = newTransactionId(orderId);
-        // TODO: integrate real PG (Toss/PortOne)
         log.info("[STUB-PG] refund success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
+        return RefundResult.SUCCEEDED;
+    }
+
+    @Override
+    public boolean isFullyRefunded(String orderId, long amount) {
+        return true;
     }
 
     /** 주문 식별자 기반의 결정론적 거래 식별자. */

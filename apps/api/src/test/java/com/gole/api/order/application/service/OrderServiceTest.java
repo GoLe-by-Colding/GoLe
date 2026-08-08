@@ -108,6 +108,26 @@ class OrderServiceTest {
     }
 
     @Test
+    void asynchronousRefund_releasesListingOnlyAfterPgConfirmation() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        AsyncRefundPayment payment = new AsyncRefundPayment();
+        service = serviceWith(payment);
+
+        service.refund(id);
+
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+        assertThat(reservation.released).isFalse();
+
+        payment.fullyRefunded = true;
+        service.confirmRefund(id);
+
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(reservation.released).isTrue();
+    }
+
+    @Test
     void paymentGatewayOutage_keepsOrderPending_andDoesNotReleaseListing() {
         reservation.available = true;
         String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
@@ -124,6 +144,18 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.pay(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
         assertThat(reservation.released).isFalse();
+    }
+
+    private OrderService serviceWith(PaymentGatewayPort paymentGateway) {
+        return new OrderService(
+                orders,
+                reservation,
+                paymentGateway,
+                settlement,
+                (s, p, q, t, c) -> {},
+                (sellerId, orderId, amount) -> {},
+                new SequentialIds(),
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
     }
 
     // --- fakes ---
@@ -191,7 +223,14 @@ class OrderServiceTest {
         }
 
         @Override
-        public void refund(String orderId, long amount) {}
+        public RefundResult refund(String orderId, long amount) {
+            return RefundResult.SUCCEEDED;
+        }
+
+        @Override
+        public boolean isFullyRefunded(String orderId, long amount) {
+            return true;
+        }
     }
 
     private static final class UnavailablePayment implements PaymentGatewayPort {
@@ -201,7 +240,33 @@ class OrderServiceTest {
         }
 
         @Override
-        public void refund(String orderId, long amount) {}
+        public RefundResult refund(String orderId, long amount) {
+            throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
+        }
+
+        @Override
+        public boolean isFullyRefunded(String orderId, long amount) {
+            throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
+        }
+    }
+
+    private static final class AsyncRefundPayment implements PaymentGatewayPort {
+        private boolean fullyRefunded;
+
+        @Override
+        public boolean authorize(String orderId, long amount) {
+            return true;
+        }
+
+        @Override
+        public RefundResult refund(String orderId, long amount) {
+            return RefundResult.REQUESTED;
+        }
+
+        @Override
+        public boolean isFullyRefunded(String orderId, long amount) {
+            return fullyRefunded;
+        }
     }
 
     private static final class CountingSettlement implements SettlementPort {

@@ -6,6 +6,7 @@ export const metadata: Metadata = { title: "주문" };
 const STATUSES = new Set([
   "PAYMENT_PENDING",
   "FUNDS_HELD",
+  "REFUND_PENDING",
   "COMPLETED",
   "REFUNDED",
   "PAYMENT_FAILED",
