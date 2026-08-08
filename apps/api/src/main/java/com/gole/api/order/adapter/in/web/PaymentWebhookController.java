@@ -1,8 +1,5 @@
 package com.gole.api.order.adapter.in.web;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
@@ -22,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 포트원(PortOne) V2 결제 웹훅. 결제 상태 변경을 서버-투-서버로 수신해 주문에 반영한다.
@@ -118,7 +118,7 @@ public class PaymentWebhookController {
         }
         try {
             return objectMapper.readValue(body, new TypeReference<>() {});
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             log.warn("[PortOne webhook] invalid JSON body");
             return Map.of();
         }

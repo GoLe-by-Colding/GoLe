@@ -27,7 +27,7 @@ repositories {
     mavenCentral()
 }
 
-extra["testcontainersVersion"] = "1.20.6"
+extra["testcontainersVersion"] = "1.21.4"
 extra["awsSdkVersion"] = "2.31.6"
 
 dependencies {
