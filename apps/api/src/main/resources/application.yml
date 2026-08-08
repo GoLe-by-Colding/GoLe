@@ -13,6 +13,17 @@ spring:
     multipart:
       max-file-size: ${STORAGE_MAX_IMAGE_BYTES:5242880}
       max-request-size: ${STORAGE_MAX_REQUEST_BYTES:55000000}
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": ${SMTP_AUTH:true}
+      "[mail.smtp.starttls.enable]": ${SMTP_STARTTLS:true}
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
 
 storage:
   s3:
@@ -98,6 +109,10 @@ gole:
   admin:
     email: ${GOLE_ADMIN_EMAIL:}
     password: ${GOLE_ADMIN_PASSWORD:}
+  verification:
+    email:
+      enabled: ${GOLE_VERIFICATION_EMAIL_ENABLED:false}
+      from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.kscold.com}
   # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
   discord:
     enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}

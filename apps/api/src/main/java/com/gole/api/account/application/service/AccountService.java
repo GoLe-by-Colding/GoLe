@@ -3,6 +3,7 @@ package com.gole.api.account.application.service;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.LogoutUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
+import com.gole.api.account.application.port.in.ResendVerificationUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
@@ -12,10 +13,13 @@ import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
+import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
+import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.VerificationCode;
@@ -33,7 +37,12 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AccountService
-        implements RegisterAccountUseCase, VerifyEmailUseCase, SignInUseCase, LogoutUseCase, GetCurrentSessionUseCase {
+        implements RegisterAccountUseCase,
+                ResendVerificationUseCase,
+                VerifyEmailUseCase,
+                SignInUseCase,
+                LogoutUseCase,
+                GetCurrentSessionUseCase {
 
     private static final int MIN_PASSWORD_LENGTH = 8; // 요구사항 1.3
     private static final Duration SESSION_TTL = Duration.ofDays(7);
@@ -100,8 +109,30 @@ public class AccountService
         Email email = new Email(command.email());
         Account account = accountRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
-        account.verify(command.code(), Instant.now(clock)); // 1.4 성공 / 1.5 만료
+        try {
+            account.verify(command.code(), Instant.now(clock)); // 1.4 성공 / 1.5 만료
+            accountRepository.save(account);
+        } catch (VerificationException ex) {
+            // 코드 불일치 횟수도 보안 상태이므로 실패 응답 전에 영속화한다.
+            accountRepository.save(account);
+            throw ex;
+        }
+    }
+
+    @Override
+    public void resend(ResendVerificationCommand command) {
+        Email email = new Email(command.email());
+        Optional<Account> found = accountRepository.findByEmail(email);
+        // 계정 존재 여부를 노출하지 않는다. 미가입·인증완료·정지 계정 모두 동일하게 204로 응답한다.
+        if (found.isEmpty() || found.get().getStatus() != AccountStatus.UNVERIFIED) {
+            return;
+        }
+        Account account = found.get();
+        Instant now = Instant.now(clock);
+        VerificationCode code = new VerificationCode(verificationCodeGenerator.generateCode(), now);
+        account.reissueVerificationCode(code, now);
         accountRepository.save(account);
+        verificationCodeSender.send(email, code);
     }
 
     @Override
@@ -117,6 +148,9 @@ public class AccountService
             account.recordFailedSignIn(now); // 1.7 + 1.8 누적
             accountRepository.save(account);
             throw new InvalidCredentialsException();
+        }
+        if (!account.isVerified()) {
+            throw new AccountNotVerifiedException();
         }
 
         account.recordSuccessfulSignIn();

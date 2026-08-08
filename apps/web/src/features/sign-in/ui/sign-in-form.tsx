@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { saveSession, signIn, type Session } from "@entities/user";
 import { ApiError } from "@shared/api";
@@ -13,17 +14,20 @@ export function SignInForm({ onSignedIn }: SignInFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
+    setNeedsVerification(false);
     setSubmitting(true);
     try {
       const session = await signIn(email, password);
       saveSession(session);
       onSignedIn(session);
     } catch (cause) {
+      setNeedsVerification(cause instanceof ApiError && cause.code === "ACCOUNT_NOT_VERIFIED");
       setError(cause instanceof ApiError ? cause.message : "로그인 중 오류가 발생했습니다.");
     } finally {
       setSubmitting(false);
@@ -33,9 +37,17 @@ export function SignInForm({ onSignedIn }: SignInFormProps) {
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       {error ? (
-        <p className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
-          {error}
-        </p>
+        <div className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
+          <p>{error}</p>
+          {needsVerification ? (
+            <Link
+              className="mt-2 inline-flex font-semibold underline underline-offset-4"
+              href={`/verify?email=${encodeURIComponent(email)}`}
+            >
+              이메일 인증하러 가기
+            </Link>
+          ) : null}
+        </div>
       ) : null}
       <Field label="이메일">
         {({ inputId, describedBy }) => (

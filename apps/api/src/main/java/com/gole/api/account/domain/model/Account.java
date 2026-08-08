@@ -16,6 +16,7 @@ public final class Account {
     private static final int MAX_FAILED_ATTEMPTS = 5; // 요구사항 1.8
     private static final Duration FAILURE_WINDOW = Duration.ofMinutes(15);
     private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
+    private static final int MAX_VERIFICATION_ATTEMPTS = 5;
 
     private final String id;
     private final Email email;
@@ -23,6 +24,7 @@ public final class Account {
     private AccountStatus status;
     private Role role;
     private VerificationCode verificationCode; // nullable (검증 완료 시 제거)
+    private int verificationFailedAttempts;
     private int failedAttempts;
     private Instant failureWindowStartedAt; // nullable
     private Instant lockedUntil; // nullable
@@ -64,12 +66,40 @@ public final class Account {
             Instant failureWindowStartedAt,
             Instant lockedUntil,
             String suspendedReason) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationCode,
+                0,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                suspendedReason);
+    }
+
+    /** 영속성 복원용 전체 생성자(인증 실패 횟수 포함). */
+    public Account(
+            String id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Role role,
+            VerificationCode verificationCode,
+            int verificationFailedAttempts,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason) {
         this.id = Objects.requireNonNull(id, "id");
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
         this.status = Objects.requireNonNull(status, "status");
         this.role = Objects.requireNonNull(role, "role");
         this.verificationCode = verificationCode;
+        this.verificationFailedAttempts = verificationFailedAttempts;
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
@@ -97,11 +127,31 @@ public final class Account {
         if (verificationCode.isExpired(now)) {
             throw new VerificationException("VERIFICATION_CODE_EXPIRED", "Verification code has expired");
         }
+        if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+            throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
+        }
         if (!verificationCode.matches(candidateCode)) {
+            verificationFailedAttempts++;
+            if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
+            }
             throw new VerificationException("VERIFICATION_CODE_MISMATCH", "Verification code does not match");
         }
         this.status = AccountStatus.VERIFIED;
         this.verificationCode = null;
+        this.verificationFailedAttempts = 0;
+    }
+
+    /** 인증 대기 계정에 새 코드를 발급한다. 과도한 재요청은 60초 동안 차단한다. */
+    public void reissueVerificationCode(VerificationCode code, Instant now) {
+        if (status != AccountStatus.UNVERIFIED) {
+            throw new VerificationException("ALREADY_VERIFIED", "Email is already verified");
+        }
+        if (verificationCode != null && now.isBefore(verificationCode.issuedAt().plusSeconds(60))) {
+            throw new VerificationException("VERIFICATION_RESEND_TOO_SOON", "인증 코드는 60초 후 다시 요청할 수 있습니다");
+        }
+        this.verificationCode = Objects.requireNonNull(code, "code");
+        this.verificationFailedAttempts = 0;
     }
 
     /**
@@ -215,6 +265,10 @@ public final class Account {
 
     public VerificationCode getVerificationCode() {
         return verificationCode;
+    }
+
+    public int getVerificationFailedAttempts() {
+        return verificationFailedAttempts;
     }
 
     public int getFailedAttempts() {

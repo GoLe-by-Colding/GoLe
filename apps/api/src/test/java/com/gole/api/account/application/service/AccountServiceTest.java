@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
+import com.gole.api.account.application.port.in.ResendVerificationUseCase.ResendVerificationCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
@@ -13,6 +14,7 @@ import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort.SessionPrincipal;
 import com.gole.api.account.domain.exception.AccountLockedException;
+import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.AccountSuspendedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
@@ -132,15 +134,80 @@ class AccountServiceTest {
     }
 
     @Test
+    void verify_invalidatesCodeAfterFiveMismatches() {
+        service.register(new RegisterAccountCommand("a@b.com", "password1"));
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            assertThatThrownBy(() -> service.verify(new VerifyEmailCommand("a@b.com", "000000")))
+                    .isInstanceOf(VerificationException.class);
+        }
+        assertThatThrownBy(() -> service.verify(new VerifyEmailCommand("a@b.com", "000000")))
+                .isInstanceOf(VerificationException.class)
+                .hasMessageContaining("초과");
+
+        Account account = repository.findByEmail(new Email("a@b.com")).orElseThrow();
+        assertThat(account.getVerificationCode()).isNotNull();
+        assertThat(account.getVerificationFailedAttempts()).isEqualTo(5);
+        assertThatThrownBy(() -> service.verify(new VerifyEmailCommand("a@b.com", "123456")))
+                .isInstanceOf(VerificationException.class);
+    }
+
+    @Test
     void signIn_succeeds_withCorrectPassword() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("a@b.com", "123456"));
         SignInResult result = service.signIn(new SignInCommand("a@b.com", "password1"));
         assertThat(result.sessionToken()).startsWith("token-");
     }
 
     @Test
+    void signIn_rejectsUnverifiedAccount() {
+        service.register(new RegisterAccountCommand("pending@b.com", "password1"));
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("pending@b.com", "password1")))
+                .isInstanceOf(AccountNotVerifiedException.class);
+    }
+
+    @Test
+    void signIn_doesNotRevealUnverifiedAccountWhenPasswordIsWrong() {
+        service.register(new RegisterAccountCommand("pending@b.com", "password1"));
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("pending@b.com", "wrong-password")))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void resend_reissuesCodeAfterCooldown() {
+        service.register(new RegisterAccountCommand("pending@b.com", "password1"));
+        clock.advance(Duration.ofSeconds(61));
+
+        service.resend(new ResendVerificationCommand("pending@b.com"));
+
+        Account account = repository.findByEmail(new Email("pending@b.com")).orElseThrow();
+        assertThat(account.getVerificationCode()).isNotNull();
+        assertThat(account.getVerificationCode().issuedAt()).isEqualTo(clock.instant());
+    }
+
+    @Test
+    void resend_rejectsRapidRepeat() {
+        service.register(new RegisterAccountCommand("pending@b.com", "password1"));
+
+        assertThatThrownBy(() -> service.resend(new ResendVerificationCommand("pending@b.com")))
+                .isInstanceOf(VerificationException.class)
+                .hasMessageContaining("60초");
+    }
+
+    @Test
+    void resend_doesNotRevealUnknownEmail() {
+        service.resend(new ResendVerificationCommand("unknown@b.com"));
+
+        assertThat(repository.findByEmail(new Email("unknown@b.com"))).isEmpty();
+    }
+
+    @Test
     void logout_revokesSession() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("a@b.com", "123456"));
         SignInResult result = service.signIn(new SignInCommand("a@b.com", "password1"));
         assertThat(service.resolve(result.sessionToken())).isPresent();
 
@@ -152,6 +219,7 @@ class AccountServiceTest {
     @Test
     void signIn_locksAccount_afterFiveFailures() {
         service.register(new RegisterAccountCommand("a@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("a@b.com", "123456"));
         for (int i = 0; i < 5; i++) {
             assertThatThrownBy(() -> service.signIn(new SignInCommand("a@b.com", "wrong")))
                     .isInstanceOf(InvalidCredentialsException.class);

@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AccountRequests.RegisterRequest;
+import com.gole.api.account.adapter.in.web.AccountRequests.ResendVerificationRequest;
 import com.gole.api.account.adapter.in.web.AccountRequests.SignInRequest;
 import com.gole.api.account.adapter.in.web.AccountRequests.VerifyEmailRequest;
 import com.gole.api.account.adapter.in.web.AccountResponses.MeResponse;
@@ -11,6 +12,8 @@ import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.Current
 import com.gole.api.account.application.port.in.LogoutUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
+import com.gole.api.account.application.port.in.ResendVerificationUseCase;
+import com.gole.api.account.application.port.in.ResendVerificationUseCase.ResendVerificationCommand;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
@@ -41,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AccountController {
 
     private final RegisterAccountUseCase registerAccountUseCase;
+    private final ResendVerificationUseCase resendVerificationUseCase;
     private final VerifyEmailUseCase verifyEmailUseCase;
     private final SignInUseCase signInUseCase;
     private final GetCurrentSessionUseCase getCurrentSessionUseCase;
@@ -48,11 +52,13 @@ public class AccountController {
 
     public AccountController(
             RegisterAccountUseCase registerAccountUseCase,
+            ResendVerificationUseCase resendVerificationUseCase,
             VerifyEmailUseCase verifyEmailUseCase,
             SignInUseCase signInUseCase,
             GetCurrentSessionUseCase getCurrentSessionUseCase,
             LogoutUseCase logoutUseCase) {
         this.registerAccountUseCase = registerAccountUseCase;
+        this.resendVerificationUseCase = resendVerificationUseCase;
         this.verifyEmailUseCase = verifyEmailUseCase;
         this.signInUseCase = signInUseCase;
         this.getCurrentSessionUseCase = getCurrentSessionUseCase;
@@ -77,6 +83,13 @@ public class AccountController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void verify(@Valid @RequestBody VerifyEmailRequest request) {
         verifyEmailUseCase.verify(new VerifyEmailCommand(request.email(), request.code()));
+    }
+
+    @Operation(summary = "이메일 인증 코드 재발급", description = "인증 대기 계정에 새 인증 코드를 발송합니다. 60초 재요청 제한이 적용됩니다.")
+    @PostMapping("/verification/resend")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        resendVerificationUseCase.resend(new ResendVerificationCommand(request.email()));
     }
 
     @Operation(summary = "로그인", description = "이메일·비밀번호로 인증하고 Bearer 세션 토큰을 반환합니다.")

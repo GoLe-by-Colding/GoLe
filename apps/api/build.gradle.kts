@@ -35,6 +35,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-mail")
 
     // AOP (클린코드: 로깅/트랜잭션/감사 등 횡단 관심사 분리)
     // Spring Boot 4에는 starter-aop가 없어 aspectjweaver를 직접 사용한다.

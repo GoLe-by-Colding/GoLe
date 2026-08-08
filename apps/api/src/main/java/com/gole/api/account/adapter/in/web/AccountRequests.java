@@ -14,5 +14,7 @@ public final class AccountRequests {
 
     public record VerifyEmailRequest(@Email @NotBlank String email, @NotBlank String code) {}
 
+    public record ResendVerificationRequest(@Email @NotBlank String email) {}
+
     public record SignInRequest(@Email @NotBlank String email, @NotBlank String password) {}
 }

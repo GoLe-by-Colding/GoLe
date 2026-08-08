@@ -27,6 +27,7 @@ public class AccountDocument {
     // 인증 코드(검증 완료 시 null)
     private String verificationCode;
     private Instant verificationCodeIssuedAt;
+    private int verificationFailedAttempts;
 
     private int failedAttempts;
     private Instant failureWindowStartedAt;
@@ -47,6 +48,7 @@ public class AccountDocument {
             String role,
             String verificationCode,
             Instant verificationCodeIssuedAt,
+            int verificationFailedAttempts,
             int failedAttempts,
             Instant failureWindowStartedAt,
             Instant lockedUntil,
@@ -58,6 +60,7 @@ public class AccountDocument {
         this.role = role;
         this.verificationCode = verificationCode;
         this.verificationCodeIssuedAt = verificationCodeIssuedAt;
+        this.verificationFailedAttempts = verificationFailedAttempts;
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
@@ -90,6 +93,10 @@ public class AccountDocument {
 
     public Instant getVerificationCodeIssuedAt() {
         return verificationCodeIssuedAt;
+    }
+
+    public int getVerificationFailedAttempts() {
+        return verificationFailedAttempts;
     }
 
     public int getFailedAttempts() {

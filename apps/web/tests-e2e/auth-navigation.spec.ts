@@ -32,5 +32,27 @@ test.describe("Auth navigation", () => {
     await page.goto("/verify?email=tester@gole.com");
     await expect(page.getByRole("heading", { name: "이메일 인증" })).toBeVisible();
     await expect(page.getByRole("button", { name: "인증하기" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /인증 코드 다시 받기/ })).toBeDisabled();
+  });
+
+  test("미인증 로그인은 이메일 인증 화면으로 복구할 수 있다", async ({ page }) => {
+    await page.route("**/api/v1/accounts/sessions", async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "ACCOUNT_NOT_VERIFIED",
+          message: "이메일 인증을 완료해 주세요",
+        }),
+      });
+    });
+    await page.goto("/login");
+    await page.getByLabel("이메일").fill("pending@gole.com");
+    await page.getByLabel("비밀번호").fill("password1");
+    await page.getByRole("button", { name: "로그인" }).click();
+
+    const recovery = page.getByRole("link", { name: "이메일 인증하러 가기" });
+    await expect(recovery).toBeVisible();
+    await expect(recovery).toHaveAttribute("href", "/verify?email=pending%40gole.com");
   });
 });

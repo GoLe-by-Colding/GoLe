@@ -15,6 +15,13 @@ export function verifyEmail(email: string, code: string): Promise<void> {
   });
 }
 
+export function resendVerificationEmail(email: string): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/verification/resend", {
+    method: "POST",
+    body: { email },
+  });
+}
+
 export function signIn(email: string, password: string): Promise<Session> {
   return apiRequest<Session>("/api/v1/accounts/sessions", {
     method: "POST",
