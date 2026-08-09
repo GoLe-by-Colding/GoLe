@@ -5,7 +5,7 @@ import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
 import type { PriceStatistics } from "@entities/pricing";
 import { ListingGrid } from "@widgets/listing-grid";
-import { Badge, Card, Container, Heading, Text } from "@shared/ui";
+import { Badge, BrickIcon, Card, Container, Heading, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface SetDetailPageProps {
@@ -49,10 +49,10 @@ export function SetDetailPage({ set, listings, statistics }: SetDetailPageProps)
         <div className="w-full shrink-0 overflow-hidden rounded-xl border border-neutral-200/70 bg-neutral-50 md:w-72">
           {set.imageUrl === null ? (
             <div
-              className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-6xl font-bold text-brand-300"
+              className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-brand-300"
               aria-hidden="true"
             >
-              🧱
+              <BrickIcon className="h-16 w-16" strokeWidth={1.35} />
             </div>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element

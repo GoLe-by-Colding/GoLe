@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { addWishlist, type WishlistTargetType } from "@entities/discovery";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button } from "@shared/ui";
+import { Button, HeartIcon } from "@shared/ui";
 
 export interface WishlistButtonProps {
   readonly targetType: WishlistTargetType;
@@ -40,8 +40,9 @@ export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
   }
 
   return (
-    <Button variant="secondary" disabled={busy} onClick={handleSave}>
-      {saved ? "♥ 위시 담음" : "♡ 위시 담기"}
+    <Button variant="secondary" disabled={busy} aria-pressed={saved} onClick={handleSave}>
+      <HeartIcon className="h-4 w-4" filled={saved} />
+      {saved ? "위시 담음" : "위시 담기"}
     </Button>
   );
 }

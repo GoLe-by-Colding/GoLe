@@ -4,7 +4,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { payOrder } from "@entities/order";
 import { ApiError } from "@shared/api";
-import { Button, Card, Container, Heading, Text } from "@shared/ui";
+import {
+  AlertCircleIcon,
+  Button,
+  Card,
+  CheckCircleIcon,
+  Container,
+  Heading,
+  LoaderIcon,
+  Text,
+  UndoIcon,
+} from "@shared/ui";
 
 export interface PaymentReturnPageProps {
   readonly paymentId: string | undefined;
@@ -73,17 +83,19 @@ export function PaymentReturnPage({ paymentId, code, message, pgMessage }: Payme
         <Card padded className="flex w-full flex-col items-center gap-5 text-center">
           <div
             aria-hidden="true"
-            className="grid size-14 place-items-center rounded-2xl bg-brand-50 text-2xl"
+            className="grid size-14 place-items-center rounded-2xl bg-brand-50"
           >
-            {state === "checking"
-              ? "…"
-              : state === "verified"
-                ? "✓"
-                : state === "cancelled"
-                  ? "↩"
-                  : "!"}
+            {state === "checking" ? (
+              <LoaderIcon className="h-7 w-7 animate-spin text-brand-600" />
+            ) : state === "verified" ? (
+              <CheckCircleIcon className="h-7 w-7 text-success" />
+            ) : state === "cancelled" ? (
+              <UndoIcon className="h-7 w-7 text-neutral-500" />
+            ) : (
+              <AlertCircleIcon className="h-7 w-7 text-danger" />
+            )}
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2" role="status" aria-live="polite">
             <Heading level={1}>
               {state === "checking"
                 ? "결제 확인 중"

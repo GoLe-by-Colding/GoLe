@@ -1,4 +1,4 @@
-import { Badge, Card, ResilientImage } from "@shared/ui";
+import { Badge, BrickIcon, Card, ResilientImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
@@ -13,10 +13,10 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
       <div className="aspect-[4/3] overflow-hidden bg-neutral-50">
         {set.imageUrl === null ? (
           <div
-            className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-5xl font-bold text-brand-300"
+            className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-brand-300"
             aria-hidden="true"
           >
-            🧱
+            <BrickIcon className="h-12 w-12" strokeWidth={1.4} />
           </div>
         ) : (
           <ResilientImage

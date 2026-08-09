@@ -57,7 +57,7 @@ export function WriteReviewForm({ orderId, reviewerId, onSubmitted }: WriteRevie
           >
             {RATINGS.map((r) => (
               <option key={r} value={r}>
-                {"★".repeat(r)} ({r}점)
+                {r}점
               </option>
             ))}
           </Select>

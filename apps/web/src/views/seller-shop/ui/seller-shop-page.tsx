@@ -11,7 +11,7 @@ import {
 } from "@entities/review";
 import { FollowButton } from "@features/follow-seller";
 import { formatKrw } from "@shared/lib";
-import { Badge, Card, Container, Heading, Text } from "@shared/ui";
+import { Badge, Card, Container, Heading, StarIcon, Text } from "@shared/ui";
 
 export interface SellerShopPageProps {
   readonly sellerId: string;
@@ -55,7 +55,15 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
               <Text tone="secondary">판매 중인 상품 {listings.length}개</Text>
               {rating !== null && rating.count > 0 ? (
                 <Badge tone="warning" data-testid="seller-rating">
-                  ★ {rating.average.toFixed(1)} ({rating.count})
+                  <span
+                    className="inline-flex items-center gap-1"
+                    aria-label={`평점 ${rating.average.toFixed(1)}점, 후기 ${rating.count}개`}
+                  >
+                    <StarIcon className="h-3.5 w-3.5" filled />
+                    <span aria-hidden="true">
+                      {rating.average.toFixed(1)} ({rating.count})
+                    </span>
+                  </span>
                 </Badge>
               ) : (
                 <Text tone="muted">후기 없음</Text>
@@ -97,9 +105,17 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                 <li key={r.id}>
                   <Card padded className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-warning text-sm font-semibold">
-                        {"★".repeat(r.rating)}
-                        <span className="text-neutral-300">{"★".repeat(5 - r.rating)}</span>
+                      <span
+                        className="inline-flex items-center gap-0.5 text-warning"
+                        aria-label={`5점 만점에 ${r.rating}점`}
+                      >
+                        {Array.from({ length: 5 }, (_, index) => (
+                          <StarIcon
+                            key={index}
+                            className={`h-4 w-4 ${index < r.rating ? "" : "text-neutral-300"}`}
+                            filled={index < r.rating}
+                          />
+                        ))}
                       </span>
                       <span className="text-xs text-neutral-400">
                         {new Date(r.createdAt).toLocaleDateString("ko-KR")}

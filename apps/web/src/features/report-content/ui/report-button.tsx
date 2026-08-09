@@ -11,7 +11,7 @@ import {
 } from "@entities/report";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button, Textarea } from "@shared/ui";
+import { Button, FlagIcon, Textarea } from "@shared/ui";
 
 export interface ReportButtonProps {
   readonly targetType: ReportTargetType;
@@ -78,9 +78,10 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex w-fit items-center gap-1 text-xs font-medium text-neutral-400 transition-colors hover:text-danger"
+        className="inline-flex min-h-11 w-fit items-center gap-1.5 text-xs font-medium text-neutral-400 transition-colors hover:text-danger"
       >
-        <span aria-hidden="true">🚩</span> 신고하기
+        <FlagIcon className="h-4 w-4" />
+        신고하기
       </button>
 
       {open ? (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TrendingSet } from "@entities/pricing";
-import { Badge, ResilientImage, Text } from "@shared/ui";
+import { Badge, BrickIcon, ResilientImage, Text, TrendingUpIcon } from "@shared/ui";
 import { formatKrw, thumbnailUrl } from "@shared/lib";
 
 export interface TrendingSetsProps {
@@ -11,9 +11,7 @@ export function TrendingSets({ items }: TrendingSetsProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-14 text-center">
-        <span aria-hidden="true" className="text-4xl">
-          📈
-        </span>
+        <TrendingUpIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />
         <Text tone="secondary" weight="medium">
           아직 거래 데이터가 충분하지 않아요
         </Text>
@@ -52,9 +50,9 @@ export function TrendingSets({ items }: TrendingSetsProps) {
             ) : (
               <span
                 aria-hidden="true"
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-neutral-50 text-xl"
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-neutral-50 text-neutral-400"
               >
-                🧱
+                <BrickIcon className="h-6 w-6" />
               </span>
             )}
             <div className="flex min-w-0 flex-col gap-0.5">

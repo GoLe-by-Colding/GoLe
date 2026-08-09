@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CONDITION_LABEL, type PricePoint, type PriceValuation } from "@entities/pricing";
-import { Badge, Card, LineChart } from "@shared/ui";
+import { Badge, BrickIcon, Card, LineChart } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
 export interface PriceBoardItem {
@@ -157,8 +157,11 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                       className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
                     />
                   ) : (
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-lg">
-                      🧱
+                    <span
+                      aria-hidden="true"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-neutral-400"
+                    >
+                      <BrickIcon className="h-5 w-5" />
                     </span>
                   )}
                   <span className="flex min-w-0 flex-col">

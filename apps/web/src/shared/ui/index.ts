@@ -42,6 +42,23 @@ export type { TextareaProps } from "./textarea";
 export { JsonLd } from "./json-ld";
 export type { JsonLdProps } from "./json-ld";
 
+export {
+  AlertCircleIcon,
+  BellIcon,
+  BrickIcon,
+  CheckCircleIcon,
+  FlagIcon,
+  HeartIcon,
+  LoaderIcon,
+  MessageCircleIcon,
+  PackageIcon,
+  ShoppingBagIcon,
+  StarIcon,
+  TrendingUpIcon,
+  UndoIcon,
+} from "./icon";
+export type { BellIconProps, HeartIconProps, StarIconProps } from "./icon";
+
 export { Heading, Text } from "./typography";
 export type {
   HeadingProps,

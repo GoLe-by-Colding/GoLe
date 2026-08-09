@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchSellerShop } from "@entities/discovery";
 import { fetchSellerRating, type SellerRating } from "@entities/review";
+import { StarIcon } from "@shared/ui";
 
 export interface SellerMiniCardProps {
   readonly sellerId: string;
@@ -11,7 +12,7 @@ export interface SellerMiniCardProps {
 
 /**
  * 판매자 미니 프로필 — 매물 상세에서 신뢰 신호로 노출.
- * 아바타(이니셜) + 평점(★평균·후기수) + 판매 중 매물 수 + 샵 링크.
+ * 아바타(이니셜) + 평균 평점·후기수 + 판매 중 매물 수 + 샵 링크.
  */
 export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
   const [rating, setRating] = useState<SellerRating | null>(null);
@@ -51,8 +52,12 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500">
           {hasRating ? (
-            <span className="font-semibold text-warning">
-              ★ {rating.average.toFixed(1)}
+            <span
+              className="inline-flex items-center gap-1 font-semibold text-warning"
+              aria-label={`평점 ${rating.average.toFixed(1)}점, 후기 ${rating.count}개`}
+            >
+              <StarIcon className="h-3.5 w-3.5" filled />
+              <span aria-hidden="true">{rating.average.toFixed(1)}</span>
               <span className="ml-0.5 font-normal text-neutral-400">({rating.count})</span>
             </span>
           ) : (

@@ -9,7 +9,7 @@ import {
   type Notification,
 } from "@entities/notification";
 import { useSession } from "@entities/user";
-import { Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import { BellIcon, Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
 
 /**
  * 알림 목록. 항목 클릭 시 읽음 처리 후 링크 이동, 전체 읽음 버튼 제공. (알림 스펙 N7)
@@ -96,9 +96,7 @@ export function NotificationsPage() {
         ) : items.length === 0 ? (
           <Card>
             <div className="flex flex-col items-center gap-2 p-10 text-center">
-              <span aria-hidden="true" className="text-3xl">
-                🔔
-              </span>
+              <BellIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
               <Text tone="secondary">아직 알림이 없어요.</Text>
             </div>
           </Card>

@@ -24,7 +24,7 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
 
   if (welcome) {
     return (
-      <AuthCard title="환영합니다 🐳" subtitle="소셜 계정으로 가입이 완료됐어요.">
+      <AuthCard title="환영합니다" subtitle="소셜 계정으로 가입이 완료됐어요.">
         <div className="flex flex-col gap-5">
           <p className="text-sm leading-relaxed text-neutral-600">
             이제 GoLe에서 레고 시세를 확인하고, 안전하게 거래하고, 컬렉션을 자랑할 수 있어요.

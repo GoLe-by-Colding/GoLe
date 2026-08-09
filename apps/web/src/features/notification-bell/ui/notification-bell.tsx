@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchUnreadCount } from "@entities/notification";
 import { useSession } from "@entities/user";
+import { BellIcon } from "@shared/ui";
 
 const POLL_MS = 30_000;
 
@@ -49,9 +50,7 @@ export function NotificationBell() {
       aria-label={count > 0 ? `알림 ${count}건` : "알림"}
       className="relative grid h-8 w-8 place-items-center rounded-full text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
     >
-      <span aria-hidden="true" className="text-lg">
-        🔔
-      </span>
+      <BellIcon className="h-5 w-5" />
       {count > 0 ? (
         <span className="absolute -right-0.5 -top-0.5 grid min-w-[16px] place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-4 text-white">
           {count > 99 ? "99+" : count}

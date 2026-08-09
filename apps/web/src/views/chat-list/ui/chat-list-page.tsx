@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchMyRooms, type ChatRoom } from "@entities/chat";
 import { useSession } from "@entities/user";
 import { ChatPanel } from "@widgets/chat-panel";
-import { Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import { Container, Heading, LinkButton, MessageCircleIcon, Skeleton, Text } from "@shared/ui";
 
 export function ChatListPage() {
   const { session } = useSession();
@@ -76,9 +76,7 @@ export function ChatListPage() {
           </div>
         ) : rooms.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-            <span aria-hidden="true" className="text-3xl">
-              💬
-            </span>
+            <MessageCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
             <Text tone="secondary" weight="medium">
               아직 채팅이 없어요
             </Text>

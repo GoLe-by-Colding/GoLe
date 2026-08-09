@@ -6,6 +6,7 @@ import { likePost } from "@entities/community";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { cn } from "@shared/lib";
+import { HeartIcon } from "@shared/ui";
 
 export interface LikeButtonProps {
   readonly postId: string;
@@ -47,12 +48,13 @@ export function LikeButton({ postId, initialLikeCount }: LikeButtonProps) {
       type="button"
       onClick={handleLike}
       aria-pressed={liked}
+      aria-label={`${liked ? "좋아요 취소" : "좋아요"}, ${count}개`}
       className={cn(
         "inline-flex items-center gap-1 text-sm font-medium transition-colors",
         liked ? "text-brand-500" : "text-neutral-500 hover:text-neutral-900",
       )}
     >
-      <span aria-hidden="true">{liked ? "♥" : "♡"}</span>
+      <HeartIcon className="h-4 w-4" filled={liked} />
       {count}
     </button>
   );

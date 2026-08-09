@@ -7,7 +7,18 @@ import { fetchMyOrders, orderStatusLabel, type Order } from "@entities/order";
 import { searchListings, type Listing } from "@entities/listing";
 import { fetchMe, useSession, type Me } from "@entities/user";
 import { formatKrw } from "@shared/lib";
-import { Badge, Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Container,
+  Heading,
+  LinkButton,
+  PackageIcon,
+  ShoppingBagIcon,
+  Skeleton,
+  Text,
+} from "@shared/ui";
 
 type Tab = "info" | "orders" | "listings";
 
@@ -133,9 +144,7 @@ export function ProfilePage() {
               [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
             ) : orders.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-                <span aria-hidden="true" className="text-3xl">
-                  🛒
-                </span>
+                <ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
                 <Text tone="secondary" weight="medium">
                   구매 내역이 없어요
                 </Text>
@@ -184,9 +193,7 @@ export function ProfilePage() {
               [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
             ) : listings.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-                <span aria-hidden="true" className="text-3xl">
-                  📦
-                </span>
+                <PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
                 <Text tone="secondary" weight="medium">
                   등록한 매물이 없어요
                 </Text>

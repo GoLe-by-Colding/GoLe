@@ -5,7 +5,7 @@ import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
-import { Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
+import { BrickIcon, Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
 
@@ -126,7 +126,8 @@ export async function HomePage() {
         <Container width="xl" className="relative">
           <div className="flex flex-col gap-7 py-24 max-sm:py-14">
             <span className="animate-rise inline-flex items-center gap-2 self-start rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-accent-300 backdrop-blur-sm">
-              🐋 깊은 바다에서 건져 올린 브릭
+              <Logo size={18} showWordmark={false} />
+              깊은 바다에서 건져 올린 브릭
             </span>
             <h1 className="animate-rise max-w-[18ch] text-[clamp(2.6rem,6vw,4.25rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white [animation-delay:60ms]">
               레고를{" "}
@@ -218,9 +219,7 @@ export async function HomePage() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-200 px-6 py-16 text-center">
-                <span aria-hidden="true" className="text-4xl">
-                  🧱
-                </span>
+                <BrickIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />
                 <Text tone="secondary" weight="medium">
                   표시할 세트가 아직 없어요
                 </Text>
