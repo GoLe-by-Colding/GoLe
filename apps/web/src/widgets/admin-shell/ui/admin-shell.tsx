@@ -57,7 +57,14 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   }, [token, isAdmin, pathname]);
 
   if (session === null) {
-    return <Gate title="관리자 로그인이 필요합니다" body="관리자 계정으로 로그인해 주세요." href="/login" cta="로그인" />;
+    return (
+      <Gate
+        title="관리자 로그인이 필요합니다"
+        body="관리자 계정으로 로그인해 주세요."
+        href="/login"
+        cta="로그인"
+      />
+    );
   }
 
   if (!isAdmin) {

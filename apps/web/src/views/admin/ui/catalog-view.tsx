@@ -137,8 +137,9 @@ export function AdminCatalogView() {
     setError(undefined);
     try {
       const updated = await setAdminSetFeatured(token, setNumber, next);
-      setSets((current) =>
-        current?.map((set) => (set.setNumber === updated.setNumber ? updated : set)) ?? null,
+      setSets(
+        (current) =>
+          current?.map((set) => (set.setNumber === updated.setNumber ? updated : set)) ?? null,
       );
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "추천 설정에 실패했습니다.");

@@ -159,9 +159,9 @@ export function ProfilePage() {
                         ? "success"
                         : o.status === "payment_review" || o.status === "refund_pending"
                           ? "warning"
-                        : o.status === "refunded" || o.status === "payment_failed"
-                          ? "danger"
-                          : "brand"
+                          : o.status === "refunded" || o.status === "payment_failed"
+                            ? "danger"
+                            : "brand"
                     }
                   >
                     {orderStatusLabel(o.status)}

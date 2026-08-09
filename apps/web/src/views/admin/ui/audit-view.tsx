@@ -19,17 +19,21 @@ export function AdminAuditView() {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
 
-  const types = useMemo(
-    () => [...new Set((rows ?? []).map((entry) => entry.type))].sort(),
-    [rows],
-  );
+  const types = useMemo(() => [...new Set((rows ?? []).map((entry) => entry.type))].sort(), [rows]);
   const filteredRows = useMemo(() => {
     const term = query.trim().toLocaleLowerCase("ko-KR");
     return (rows ?? []).filter((entry) => {
       if (type !== "" && entry.type !== type) return false;
       if (term === "") return true;
       const label = AUDIT_TYPE_LABEL[entry.type] ?? entry.type;
-      return [label, entry.type, entry.actorEmail, entry.targetType, entry.targetId, entry.reason ?? ""]
+      return [
+        label,
+        entry.type,
+        entry.actorEmail,
+        entry.targetType,
+        entry.targetId,
+        entry.reason ?? "",
+      ]
         .join(" ")
         .toLocaleLowerCase("ko-KR")
         .includes(term);
@@ -74,7 +78,11 @@ export function AdminAuditView() {
           aria-label="감사 로그 검색"
           className="w-64 max-w-full"
         />
-        <Select value={type} onChange={(event) => setType(event.target.value)} aria-label="조치 유형">
+        <Select
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+          aria-label="조치 유형"
+        >
           <option value="">전체 조치</option>
           {types.map((value) => (
             <option key={value} value={value}>

@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  fetchAdminOrders,
-  reconcileAdminOrderPayment,
-  type AdminOrder,
-} from "@entities/admin";
+import { fetchAdminOrders, reconcileAdminOrderPayment, type AdminOrder } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
@@ -99,8 +95,8 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
       </div>
 
       <Text tone="muted" size="sm">
-        결제 대기·확인 필요 주문은 PG 원장을 다시 조회해 안전하게 재조정할 수 있습니다. 분쟁
-        환불은 구매자·판매자 흐름에서 처리합니다.
+        결제 대기·확인 필요 주문은 PG 원장을 다시 조회해 안전하게 재조정할 수 있습니다. 분쟁 환불은
+        구매자·판매자 흐름에서 처리합니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />

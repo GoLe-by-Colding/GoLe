@@ -20,9 +20,7 @@ export function ListingCard({ listing }: ListingCardProps) {
       <div className="overflow-hidden rounded-t-2xl">
         <ResilientImage
           className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
-          src={
-            cover === undefined ? "/icon.svg" : thumbnailUrl(cover, 480)
-          }
+          src={cover === undefined ? "/icon.svg" : thumbnailUrl(cover, 480)}
           alt={listing.title}
           loading="lazy"
         />

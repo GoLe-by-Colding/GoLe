@@ -54,7 +54,10 @@ export function AdminSettlementsView() {
     try {
       const updated = await markAdminSettlementPaid(token, orderId, paymentReference);
       if (status === "PENDING") load();
-      else setRows((current) => (current ?? []).map((row) => (row.orderId === orderId ? updated : row)));
+      else
+        setRows((current) =>
+          (current ?? []).map((row) => (row.orderId === orderId ? updated : row)),
+        );
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "지급 완료 처리에 실패했습니다.");
     } finally {
@@ -68,7 +71,10 @@ export function AdminSettlementsView() {
         <Heading level={2}>판매자 정산</Heading>
         <label className="flex items-center gap-2 text-sm text-neutral-600">
           상태
-          <Select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
+          <Select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as StatusFilter)}
+          >
             <option value="PENDING">지급 대기</option>
             <option value="PAID">지급 완료</option>
             <option value="ALL">전체</option>
@@ -94,22 +100,34 @@ export function AdminSettlementsView() {
         {(rows ?? []).map((row) => (
           <tr key={row.orderId} className="border-t border-neutral-100">
             <td className="px-3 py-2.5 font-mono text-xs">
-              <Link href={`/orders/${row.orderId}`} className="text-neutral-500 hover:text-brand-600">
+              <Link
+                href={`/orders/${row.orderId}`}
+                className="text-neutral-500 hover:text-brand-600"
+              >
                 {shortId(row.orderId)}
               </Link>
             </td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(row.sellerId)}</td>
             <td className="px-3 py-2.5 text-right tabular-nums">{formatKrw(row.grossAmount)}</td>
-            <td className="px-3 py-2.5 text-right tabular-nums text-neutral-500">{formatKrw(row.fee)}</td>
-            <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{formatKrw(row.payout)}</td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(row.createdAt)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-neutral-500">
+              {formatKrw(row.fee)}
+            </td>
+            <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+              {formatKrw(row.payout)}
+            </td>
+            <td className="px-3 py-2.5 text-xs text-neutral-500">
+              {formatDateTime(row.createdAt)}
+            </td>
             <td className="px-3 py-2.5 text-right">
               {row.status === "PENDING" ? (
                 <div className="ml-auto flex max-w-[340px] items-center justify-end gap-2">
                   <Input
                     value={references[row.orderId] ?? ""}
                     onChange={(event) =>
-                      setReferences((current) => ({ ...current, [row.orderId]: event.target.value }))
+                      setReferences((current) => ({
+                        ...current,
+                        [row.orderId]: event.target.value,
+                      }))
                     }
                     maxLength={120}
                     placeholder="은행 거래번호 / 배치 ID"

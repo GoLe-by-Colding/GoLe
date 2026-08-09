@@ -64,9 +64,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  const posts = await fetchJson<ReadonlyArray<{ id: string; createdAt?: string }>>(
-    "/api/v1/community/posts",
-  );
+  const posts =
+    await fetchJson<ReadonlyArray<{ id: string; createdAt?: string }>>("/api/v1/community/posts");
   const communityRoutes: MetadataRoute.Sitemap = (posts ?? []).slice(0, 100).map((p) => ({
     url: `${env.siteUrl}/community/${p.id}`,
     lastModified: p.createdAt ? new Date(p.createdAt) : now,
