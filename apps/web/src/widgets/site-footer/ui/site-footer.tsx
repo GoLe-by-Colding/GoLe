@@ -59,7 +59,7 @@ export function SiteFooter() {
           </div>
 
           <p className="max-w-md text-sm leading-relaxed text-brand-200/70">
-            깊은 바다에서 건져 올린 브릭 — 체결가 시세와 에스크로 안전거래로 레고를 가장 합리적으로
+            깊은 바다에서 건져 올린 브릭 — 체결가 시세와 구매확정 안전거래로 레고를 가장 합리적으로
             거래하세요.
           </p>
 
@@ -73,8 +73,8 @@ export function SiteFooter() {
           {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
           <p className="max-w-3xl text-xs leading-relaxed text-brand-300/50">
             GoLe는 통신판매중개자로서 거래 당사자가 아니며, 판매자가 등록한 상품 정보 및 거래에 대한
-            책임은 각 판매자에게 있습니다. GoLe는 에스크로(결제대금예치)와 분쟁 조정 절차를 통해
-            안전한 거래를 지원합니다.
+            책임은 각 판매자에게 있습니다. GoLe는 결제 승인 후 판매자 정산 보류와 분쟁 조정 절차를
+            통해 안전한 거래를 지원합니다.
           </p>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">

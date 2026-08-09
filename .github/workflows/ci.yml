@@ -97,6 +97,8 @@ jobs:
       contents: read
     env:
       DISCORD_CI_WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK_URL }}
+      DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+      DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
       WEB_RESULT: ${{ needs.web.result }}
       API_RESULT: ${{ needs.api.result }}
     steps:
@@ -108,7 +110,15 @@ jobs:
           else
             status="❌ CI 실패"
           fi
+          if [ "$DISCORD_SUPPRESS_NOTIFICATIONS" = "true" ]; then
+            flags=4096
+          else
+            flags=null
+          fi
           payload=$(jq -n \
             --arg content "$status · web=$WEB_RESULT · api=$API_RESULT · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            '{content: $content, allowed_mentions: {parse: []}}')
+            --arg avatar_url "$DISCORD_AVATAR_URL" \
+            --argjson flags "$flags" \
+            '{content: $content, avatar_url: $avatar_url, allowed_mentions: {parse: []}}
+             + (if $flags == null then {} else {flags: $flags} end)')
           curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_CI_WEBHOOK_URL"

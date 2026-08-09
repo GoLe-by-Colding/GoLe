@@ -1,60 +1,23 @@
+import * as PortOne from "@portone/browser-sdk/v2";
+import type { PaymentRequest, PaymentResponse } from "@portone/browser-sdk/v2";
 import { env } from "@shared/config";
 
-/**
- * 포트원(PortOne) V2 브라우저 결제 연동.
- *
- * npm 의존성 없이 공식 CDN SDK(window.PortOne)를 동적 로드한다.
- * 환경변수(NEXT_PUBLIC_PORTONE_STORE_ID / NEXT_PUBLIC_PORTONE_CHANNEL_KEY)가 모두 설정된 경우에만 활성.
- * 결제는 브라우저에서 수행하고 서버가 결과를 검증한다(verify-on-server). paymentId 는 주문 id를 사용한다.
- */
+/** PortOne V2 카카오페이 오류. 사용자 취소와 실제 장애를 UI에서 구분한다. */
+export class PortOnePaymentError extends Error {
+  readonly code: string | undefined;
+  readonly pgCode: string | undefined;
+  readonly pgMessage: string | undefined;
+  readonly userCancelled: boolean;
 
-const SDK_URL = "https://cdn.portone.io/v2/browser-sdk.js";
-
-interface PortOnePaymentResult {
-  readonly code?: string;
-  readonly message?: string;
-  readonly paymentId?: string;
-  readonly txId?: string;
-}
-
-interface PortOneSdk {
-  requestPayment(request: Record<string, unknown>): Promise<PortOnePaymentResult>;
-}
-
-declare global {
-  interface Window {
-    PortOne?: PortOneSdk;
+  constructor(response: Pick<PaymentResponse, "code" | "message" | "pgCode" | "pgMessage">) {
+    super(response.message ?? response.pgMessage ?? "결제를 완료하지 못했습니다.");
+    this.name = "PortOnePaymentError";
+    this.code = response.code;
+    this.pgCode = response.pgCode;
+    this.pgMessage = response.pgMessage;
+    const reason = `${response.code ?? ""} ${response.message ?? ""} ${response.pgMessage ?? ""}`;
+    this.userCancelled = /cancel|취소/i.test(reason);
   }
-}
-
-export function isPortOneEnabled(): boolean {
-  return env.portOneStoreId.length > 0 && env.portOneChannelKey.length > 0;
-}
-
-async function loadSdk(): Promise<PortOneSdk> {
-  if (typeof window === "undefined") {
-    throw new Error("PortOne SDK는 브라우저에서만 사용할 수 있습니다.");
-  }
-  if (window.PortOne) {
-    return window.PortOne;
-  }
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${SDK_URL}"]`);
-    if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("PortOne SDK 로드 실패")));
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = SDK_URL;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("PortOne SDK 로드 실패"));
-    document.head.appendChild(script);
-  });
-  if (!window.PortOne) {
-    throw new Error("PortOne SDK 초기화 실패");
-  }
-  return window.PortOne;
 }
 
 export interface PortOnePayParams {
@@ -63,22 +26,72 @@ export interface PortOnePayParams {
   readonly totalAmount: number;
 }
 
+export function isPortOneEnabled(): boolean {
+  return env.paymentMode !== "stub" && getPortOneConfigurationError() === undefined;
+}
+
+/** 공개 브라우저 설정 누락을 조용히 스텁 결제로 우회하지 않고 화면에 드러낸다. */
+export function getPortOneConfigurationError(): string | undefined {
+  if (env.paymentMode === "stub") {
+    return undefined;
+  }
+  if (env.portOneStoreId.length === 0) {
+    return "결제 상점 설정이 누락되었습니다. 잠시 후 다시 시도해 주세요.";
+  }
+  if (env.portOneChannelKey.length === 0) {
+    return "카카오페이 결제 채널 설정이 누락되었습니다. 잠시 후 다시 시도해 주세요.";
+  }
+  return undefined;
+}
+
 /**
- * 결제창을 띄우고 결제를 요청한다. 성공 시 resolve, 사용자가 취소하거나 실패하면 throw.
- * 결제 성공 후에는 반드시 서버 검증(payOrder)을 호출해야 한다.
+ * 카카오페이 직연동용 요청을 한 곳에서 만든다.
+ * 카카오페이는 EASY_PAY/KRW만 사용하며, PC는 iframe·모바일은 redirect로 복귀한다.
  */
-export async function requestPortOnePayment(params: PortOnePayParams): Promise<void> {
-  const sdk = await loadSdk();
-  const result = await sdk.requestPayment({
+export function buildPortOnePaymentRequest(
+  params: PortOnePayParams,
+  origin = typeof window === "undefined" ? undefined : window.location.origin,
+): PaymentRequest {
+  if (origin === undefined) {
+    throw new Error("PortOne SDK는 브라우저에서만 사용할 수 있습니다.");
+  }
+  const configurationError = getPortOneConfigurationError();
+  if (configurationError !== undefined) {
+    throw new Error(configurationError);
+  }
+  if (!Number.isSafeInteger(params.totalAmount) || params.totalAmount <= 0) {
+    throw new Error("결제 금액이 올바르지 않습니다.");
+  }
+
+  const redirectUrl = new URL("/payments/portone/return", origin);
+  return {
     storeId: env.portOneStoreId,
     channelKey: env.portOneChannelKey,
     paymentId: params.paymentId,
     orderName: params.orderName,
     totalAmount: params.totalAmount,
-    currency: "CURRENCY_KRW",
-    payMethod: "CARD",
-  });
+    currency: "KRW",
+    payMethod: "EASY_PAY",
+    locale: "KO_KR",
+    windowType: { pc: "IFRAME", mobile: "REDIRECTION" },
+    redirectUrl: redirectUrl.toString(),
+  };
+}
+
+/** 결제창 성공 응답 뒤에도 반드시 서버의 PortOne 원장 검증을 거쳐야 한다. */
+export async function requestPortOnePayment(params: PortOnePayParams): Promise<void> {
+  const result = await PortOne.requestPayment(buildPortOnePaymentRequest(params));
+  if (result === undefined) {
+    throw new Error(
+      "결제창 응답을 확인하지 못했습니다. 중복 결제하지 말고 주문 상태를 확인해 주세요.",
+    );
+  }
   if (result.code !== undefined) {
-    throw new Error(result.message ?? "결제에 실패했습니다.");
+    throw new PortOnePaymentError(result);
+  }
+  if (result.paymentId !== params.paymentId) {
+    throw new Error(
+      "결제 응답의 주문번호가 일치하지 않습니다. 중복 결제하지 말고 고객지원에 문의해 주세요.",
+    );
   }
 }

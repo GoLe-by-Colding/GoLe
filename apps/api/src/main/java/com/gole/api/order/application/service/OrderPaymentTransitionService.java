@@ -41,10 +41,27 @@ public class OrderPaymentTransitionService {
                 }
                 return order.getStatus();
             }
-            case PENDING -> {
+            case PENDING, NOT_FOUND -> {
                 return order.getStatus();
             }
         }
+        return orders.save(order).getStatus();
+    }
+
+    /**
+     * TTL이 지난 결제 대기 주문 중 PG 원장에도 결제 건이 없는 주문만 만료한다.
+     *
+     * <p>스케줄러가 후보를 고른 뒤 결제 웹훅이 먼저 도착할 수 있으므로, 트랜잭션 안에서 최신 주문 상태를
+     * 다시 읽고 PAYMENT_PENDING일 때만 매물 선점을 해제한다.
+     */
+    @Transactional
+    public OrderStatus expireMissingPayment(String orderId, Instant now) {
+        Order order = load(orderId);
+        if (order.getStatus() != OrderStatus.PAYMENT_PENDING) {
+            return order.getStatus();
+        }
+        order.failPayment(now);
+        listings.release(order.getListingId());
         return orders.save(order).getStatus();
     }
 

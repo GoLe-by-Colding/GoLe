@@ -131,14 +131,19 @@ gole:
     operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
     # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
     avatar-url: ${DISCORD_AVATAR_URL:https://gole.kscold.com/icon.svg}
+    # 야간·초기 연동 중에는 Discord 메시지를 보내되 푸시 알림은 울리지 않는다.
+    suppress-notifications: ${DISCORD_SUPPRESS_NOTIFICATIONS:true}
 
 # 포트원(PortOne) V2 결제. 로컬은 스텁을 허용하지만 GOLE_ENVIRONMENT=production에서는
-# enabled=true + api-secret이 아니면 안전하게 부팅을 중단한다.
+# enabled=true와 비밀키·상점·채널 설정이 모두 없으면 안전하게 부팅을 중단한다.
 portone:
   enabled: ${PORTONE_ENABLED:false}
   api-base: ${PORTONE_API_BASE:https://api.portone.io}
   api-secret: ${PORTONE_API_SECRET:}
   webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
+  store-id: ${PORTONE_STORE_ID:}
+  channel-key: ${PORTONE_CHANNEL_KEY:}
+  channel-type: ${PORTONE_CHANNEL_TYPE:TEST}
   reconciliation:
     minimum-age: ${PORTONE_RECONCILIATION_MINIMUM_AGE:PT10M}
     initial-delay: ${PORTONE_RECONCILIATION_INITIAL_DELAY:PT1M}

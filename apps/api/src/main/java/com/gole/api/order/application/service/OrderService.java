@@ -1,8 +1,10 @@
 package com.gole.api.order.application.service;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.operations.OperationalSignal;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
@@ -28,6 +30,7 @@ import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +58,7 @@ public class OrderService
     private final OrderIdGeneratorPort idGenerator;
     private final Clock clock;
     private final OrderPaymentTransitionService paymentTransitions;
+    private final OperationalEventPublisher operationalEvents;
 
     public OrderService(
             OrderRepositoryPort orderRepository,
@@ -65,7 +69,8 @@ public class OrderService
             SellerNotifierPort sellerNotifier,
             OrderIdGeneratorPort idGenerator,
             Clock clock,
-            OrderPaymentTransitionService paymentTransitions) {
+            OrderPaymentTransitionService paymentTransitions,
+            OperationalEventPublisher operationalEvents) {
         this.orderRepository = orderRepository;
         this.listingReservation = listingReservation;
         this.paymentGateway = paymentGateway;
@@ -75,14 +80,10 @@ public class OrderService
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.paymentTransitions = paymentTransitions;
+        this.operationalEvents = operationalEvents;
     }
 
     @Override
-    @OperationalSignal(
-            category = Category.PAYMENT,
-            title = "주문 생성",
-            description = "결제 대기 주문이 생성되었습니다.",
-            includeResult = true)
     public String place(PlaceOrderCommand command) {
         // 요구사항 13.1: 단일 문서 원자 갱신(findAndModify)이 단일 낙찰을 보장한다.
         // 트랜잭션 밖에서 수행해 동시 요청 시 패자는 write-conflict 대신 깔끔히 빈 결과를 받는다.
@@ -106,6 +107,9 @@ public class OrderService
                     reserved.condition(),
                     reserved.price(),
                     Instant.now(clock));
+            // 브라우저가 금액을 바꿔 요청하더라도 결제되기 전에 PortOne 원장과 주문 금액을 고정한다.
+            // 외부 I/O 또는 저장 실패 시 아래 보상 경로에서 매물 선점을 해제한다.
+            paymentGateway.preparePayment(order.getId(), order.getAmount());
             orderId = orderRepository.save(order).getId();
         } catch (RuntimeException failure) {
             // 선점은 Mongo 원자 갱신으로 트랜잭션 밖에서 수행하므로 주문 저장 전 실패는 직접 보상한다.
@@ -123,16 +127,13 @@ public class OrderService
     }
 
     @Override
-    @OperationalSignal(
-            category = Category.PAYMENT,
-            title = "결제 상태 변경",
-            description = "결제 승인 검증이 끝났습니다.",
-            includeArguments = 0,
-            includeResult = true)
     public OrderStatus pay(String orderId) {
         Order order = getById(orderId);
+        OrderStatus previousStatus = order.getStatus();
         PaymentVerificationResult verification = paymentGateway.verifyPayment(orderId, order.getAmount());
-        return paymentTransitions.applyPaymentVerification(orderId, verification, Instant.now(clock));
+        OrderStatus status = paymentTransitions.applyPaymentVerification(orderId, verification, Instant.now(clock));
+        publishPaymentDecision(orderId, previousStatus, status);
+        return status;
     }
 
     @Override
@@ -161,12 +162,6 @@ public class OrderService
     }
 
     @Override
-    @OperationalSignal(
-            category = Category.PAYMENT,
-            level = Level.WARNING,
-            title = "결제 환불",
-            description = "환불과 매물 선점 해제가 완료되었습니다.",
-            includeArguments = 0)
     public void refund(String orderId) {
         Order order = getById(orderId);
         if (order.getStatus() == OrderStatus.REFUNDED) {
@@ -177,6 +172,7 @@ public class OrderService
         if (order.getStatus() == OrderStatus.REFUND_PENDING) {
             if (paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
                 paymentTransitions.finalizeRefund(orderId, now);
+                publishRefundCompleted(orderId, now);
             }
             return;
         }
@@ -184,10 +180,18 @@ public class OrderService
         RefundResult result = paymentGateway.refund(orderId, order.getAmount());
         if (result == RefundResult.REQUESTED) {
             paymentTransitions.markRefundPending(orderId, now);
+            publishPaymentEvent(
+                    Level.WARNING,
+                    "환불 처리 대기",
+                    "PG에 환불이 접수되어 최종 완료를 기다리고 있습니다.",
+                    orderId,
+                    OrderStatus.REFUND_PENDING,
+                    now);
             return;
         }
 
         paymentTransitions.finalizeRefund(orderId, now);
+        publishRefundCompleted(orderId, now);
     }
 
     @Override
@@ -200,7 +204,9 @@ public class OrderService
             throw new PaymentGatewayUnavailableException(
                     orderId, new IllegalStateException("PG refund is not final yet"));
         }
-        paymentTransitions.finalizeRefund(orderId, Instant.now(clock));
+        Instant now = Instant.now(clock);
+        paymentTransitions.finalizeRefund(orderId, now);
+        publishRefundCompleted(orderId, now);
     }
 
     @Override
@@ -213,5 +219,44 @@ public class OrderService
     @Transactional(readOnly = true)
     public List<Order> getByBuyerId(String buyerId) {
         return orderRepository.findByBuyerId(buyerId);
+    }
+
+    private void publishPaymentDecision(String orderId, OrderStatus previousStatus, OrderStatus status) {
+        if (status == previousStatus) {
+            return;
+        }
+        Instant now = Instant.now(clock);
+        switch (status) {
+            case FUNDS_HELD -> publishPaymentEvent(
+                    Level.SUCCESS, "결제 승인 완료", "PG 원장 검증 후 결제 금액이 안전하게 보유되었습니다.", orderId, status, now);
+            case PAYMENT_REVIEW -> publishPaymentEvent(
+                    Level.WARNING, "결제 수동 확인 대기", "결제를 자동 확정하지 않고 관리자 검토 상태로 보존했습니다.", orderId, status, now);
+            case PAYMENT_FAILED -> publishPaymentEvent(
+                    Level.ERROR, "결제 실패 확정", "PG 원장에서 결제 실패 상태가 확인되어 매물 선점을 해제했습니다.", orderId, status, now);
+            default -> {
+                // 결제 대기나 이미 처리된 상태는 운영 채널의 불필요한 사용자 취소 알림을 만들지 않는다.
+            }
+        }
+    }
+
+    private void publishRefundCompleted(String orderId, Instant occurredAt) {
+        publishPaymentEvent(
+                Level.SUCCESS,
+                "환불 완료",
+                "PG 원장에서 전액 환불을 확인하고 매물 선점을 해제했습니다.",
+                orderId,
+                OrderStatus.REFUNDED,
+                occurredAt);
+    }
+
+    private void publishPaymentEvent(
+            Level level, String title, String description, String orderId, OrderStatus status, Instant occurredAt) {
+        operationalEvents.publish(new OperationalEvent(
+                Category.PAYMENT,
+                level,
+                title,
+                description,
+                Map.of("주문 ID", orderId, "상태", status.name()),
+                occurredAt));
     }
 }

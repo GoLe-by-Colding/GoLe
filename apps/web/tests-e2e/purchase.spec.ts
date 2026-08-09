@@ -37,9 +37,9 @@ test.describe("Purchase flow", () => {
     await expect(page).toHaveURL(/\/orders\/.+/);
     await expect(page.getByTestId("order-status")).toHaveText("결제 대기");
 
-    // 3) 결제 → 에스크로 보관
+    // 3) 결제 → 판매자 정산 대기
     await page.getByRole("button", { name: "결제하기" }).click();
-    await expect(page.getByTestId("order-status")).toHaveText("결제 완료(에스크로 보관)");
+    await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
 
     // 4) 구매 확정 → 거래 완료
     await page.getByRole("button", { name: "구매 확정" }).click();

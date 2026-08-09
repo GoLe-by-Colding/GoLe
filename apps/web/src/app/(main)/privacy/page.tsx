@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           <Section title="2. 개인정보 수집 및 이용 목적">
             <ul className="list-disc space-y-1 pl-5">
               <li>회원 식별, 로그인, 계정 관리</li>
-              <li>중고거래 에스크로 서비스 제공</li>
+              <li>중고거래 결제 승인·구매확정·판매자 정산 관리</li>
               <li>거래 후기·시세 통계·커뮤니티 기능 제공</li>
               <li>부정 이용 방지 및 보안 운영</li>
             </ul>
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
 
           <Section title="5. 개인정보 처리 위탁">
             <ul className="list-disc space-y-1 pl-5">
-              <li>결제 처리: PortOne(포트원) — 에스크로 결제</li>
+              <li>결제 처리: PortOne(포트원) 및 카카오페이 — 결제 승인·취소·환불 처리</li>
               <li>
                 이미지 저장: MinIO(자체 운영 서버) — 상품 사진·커뮤니티 이미지 보관. 이용자가
                 업로드한 이미지는 공개 URL로 서빙되며, 매물 삭제·회원 탈퇴 시 함께 파기됩니다.
@@ -100,8 +100,8 @@ export default function PrivacyPage() {
             <p>
               로그인 상태 유지를 위해 세션 토큰을 HttpOnly·SameSite 쿠키에 저장합니다. 이 쿠키는
               페이지의 JavaScript에서 읽을 수 없으며, 브라우저 설정에서 저장을 거부하면 로그인 기반
-              기능을 이용할 수 없습니다. 화면 표시를 위한 계정 ID와 권한 정보만 브라우저 로컬 저장소에
-              보관합니다.
+              기능을 이용할 수 없습니다. 화면 표시를 위한 계정 ID와 권한 정보만 브라우저 로컬
+              저장소에 보관합니다.
             </p>
           </Section>
 

@@ -9,6 +9,8 @@ public interface PaymentGatewayPort {
     enum PaymentVerificationResult {
         PAID,
         PENDING,
+        /** PG 원장에 아직 결제 건 자체가 없다. 사용자의 즉시 조회에서는 실패로 확정하지 않는다. */
+        NOT_FOUND,
         FAILED,
         REVIEW_REQUIRED
     }
@@ -17,6 +19,9 @@ public interface PaymentGatewayPort {
         SUCCEEDED,
         REQUESTED
     }
+
+    /** 브라우저 결제창을 열기 전에 주문 금액을 PG에 고정한다. 스텁은 아무 작업도 하지 않는다. */
+    default void preparePayment(String orderId, long amount) {}
 
     /** PG 원장을 조회해 결제의 최종/진행 상태를 검증한다. */
     PaymentVerificationResult verifyPayment(String orderId, long amount);

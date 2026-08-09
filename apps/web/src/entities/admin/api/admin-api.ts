@@ -9,6 +9,23 @@ export interface AdminOverview {
   readonly activeListings: number;
   readonly pendingReports: number;
   readonly pendingSettlements: number;
+  /** 롤링 배포 중 구버전 API에는 없을 수 있다. */
+  readonly paymentReadiness?: AdminPaymentReadiness;
+}
+
+export interface AdminPaymentConfigurationIssue {
+  readonly setting: string;
+  readonly problem: "MISSING" | "INVALID";
+}
+
+export interface AdminPaymentReadiness {
+  readonly enabled: boolean;
+  readonly ready: boolean;
+  readonly state: "DISABLED" | "MISCONFIGURED" | "READY";
+  readonly channelType: "TEST" | "LIVE" | "UNKNOWN";
+  readonly provider: "KAKAOPAY";
+  readonly currency: "KRW";
+  readonly issues: readonly AdminPaymentConfigurationIssue[];
 }
 
 export interface AdminOrder {

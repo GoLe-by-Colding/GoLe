@@ -20,11 +20,16 @@ log() { printf '\n▶ %s\n' "$*"; }
 # URL은 DISCORD_DEPLOY_WEBHOOK_URL(우선) 또는 DISCORD_OPERATIONS_WEBHOOK_URL로만 주입한다.
 notify_discord() {
   local webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
+  local avatar_url="${DISCORD_AVATAR_URL:-https://gole.kscold.com/icon.svg}"
+  local notification_flags=""
   local message="$1"
   if [ -z "$webhook_url" ]; then return 0; fi
+  if [ "${DISCORD_SUPPRESS_NOTIFICATIONS:-true}" = "true" ]; then
+    notification_flags=',"flags":4096'
+  fi
   curl -fsS --max-time 5 \
     -H 'Content-Type: application/json' \
-    --data "{\"content\":\"${message}\"}" \
+    --data "{\"content\":\"${message}\",\"avatar_url\":\"${avatar_url}\",\"allowed_mentions\":{\"parse\":[]}${notification_flags}}" \
     "$webhook_url" >/dev/null || true
 }
 

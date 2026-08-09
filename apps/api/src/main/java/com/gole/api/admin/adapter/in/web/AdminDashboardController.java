@@ -5,6 +5,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
+import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
@@ -35,16 +36,19 @@ public class AdminDashboardController {
     private final ListAdminActionsUseCase listAdminActions;
     private final ManageReportsUseCase manageReports;
     private final ManageSettlementsUseCase manageSettlements;
+    private final GetPaymentReadinessUseCase paymentReadiness;
 
     public AdminDashboardController(
             AdminReadModelPort readModel,
             ListAdminActionsUseCase listAdminActions,
             ManageReportsUseCase manageReports,
-            ManageSettlementsUseCase manageSettlements) {
+            ManageSettlementsUseCase manageSettlements,
+            GetPaymentReadinessUseCase paymentReadiness) {
         this.readModel = readModel;
         this.listAdminActions = listAdminActions;
         this.manageReports = manageReports;
         this.manageSettlements = manageSettlements;
+        this.paymentReadiness = paymentReadiness;
     }
 
     @Operation(summary = "대시보드 집계", description = "컬렉션 카운트 + GMV·주문상태·활성매물")
@@ -57,7 +61,8 @@ public class AdminDashboardController {
                 stats.countByStatus(),
                 readModel.activeListingCount(),
                 manageReports.count(ReportStatus.PENDING),
-                manageSettlements.count(SettlementStatus.PENDING));
+                manageSettlements.count(SettlementStatus.PENDING),
+                AdminDtos.PaymentReadinessResponse.from(paymentReadiness.getPaymentReadiness()));
     }
 
     @Operation(summary = "감사 로그", description = "관리자 조치 이력을 최근순으로 조회합니다(ADMIN 전용).")

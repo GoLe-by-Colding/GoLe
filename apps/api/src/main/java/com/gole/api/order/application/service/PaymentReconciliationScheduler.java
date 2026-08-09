@@ -56,11 +56,20 @@ public class PaymentReconciliationScheduler {
         Instant now = Instant.now(clock);
         var candidates = orders.findPaymentPendingCreatedBefore(now.minus(minimumAge));
         int transitioned = 0;
+        int expired = 0;
         int failed = 0;
         for (Order order : candidates) {
             try {
                 PaymentVerificationResult result = paymentGateway.verifyPayment(order.getId(), order.getAmount());
-                OrderStatus status = transitions.applyPaymentVerification(order.getId(), result, now);
+                OrderStatus status;
+                if (result == PaymentVerificationResult.NOT_FOUND) {
+                    status = transitions.expireMissingPayment(order.getId(), now);
+                    if (status == OrderStatus.PAYMENT_FAILED) {
+                        expired++;
+                    }
+                } else {
+                    status = transitions.applyPaymentVerification(order.getId(), result, now);
+                }
                 if (status != OrderStatus.PAYMENT_PENDING) {
                     transitioned++;
                 }
@@ -81,6 +90,7 @@ public class PaymentReconciliationScheduler {
                     Map.of(
                             "검사", Integer.toString(candidates.size()),
                             "상태 변경", Integer.toString(transitioned),
+                            "결제 미시작 만료", Integer.toString(expired),
                             "재시도 필요", Integer.toString(failed)),
                     now));
         }

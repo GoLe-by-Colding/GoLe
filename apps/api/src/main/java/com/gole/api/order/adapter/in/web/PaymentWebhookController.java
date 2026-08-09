@@ -1,5 +1,6 @@
 package com.gole.api.order.adapter.in.web;
 
+import com.gole.api.common.exception.DomainException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
@@ -12,6 +13,7 @@ import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,18 +47,21 @@ public class PaymentWebhookController {
     private final OperationalEventPublisher operationalEventPublisher;
     private final PortOneWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
+    private final String expectedStoreId;
 
     public PaymentWebhookController(
             PayOrderUseCase payOrderUseCase,
             ConfirmRefundUseCase confirmRefundUseCase,
             OperationalEventPublisher operationalEventPublisher,
             PortOneWebhookVerifier webhookVerifier,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${portone.store-id:}") String expectedStoreId) {
         this.payOrderUseCase = payOrderUseCase;
         this.confirmRefundUseCase = confirmRefundUseCase;
         this.operationalEventPublisher = operationalEventPublisher;
         this.webhookVerifier = webhookVerifier;
         this.objectMapper = objectMapper;
+        this.expectedStoreId = expectedStoreId.trim();
     }
 
     @PostMapping("/webhook")
@@ -69,6 +74,18 @@ public class PaymentWebhookController {
         String rawBody = body == null ? "" : body;
         webhookVerifier.verify(rawBody, messageId, signature, timestamp);
         Map<String, Object> payload = parsePayload(rawBody);
+        String webhookStoreId = extractDataStoreId(payload);
+        if (expectedStoreId.isBlank() || !expectedStoreId.equals(webhookStoreId)) {
+            log.warn("[PortOne webhook] storeId 불일치 또는 누락");
+            operationalEventPublisher.publish(new OperationalEvent(
+                    Category.PAYMENT,
+                    Level.WARNING,
+                    "PortOne 웹훅 상점 불일치",
+                    "설정된 상점과 다른 결제 웹훅을 승인하지 않고 응답만 완료했습니다.",
+                    Map.of("수신 상점", webhookStoreId == null ? "누락" : webhookStoreId),
+                    Instant.now()));
+            return; // ack; 다른 상점의 재시도로 운영 채널을 반복 오염시키지 않는다.
+        }
         String paymentId = extractPaymentId(payload);
         if (paymentId == null || paymentId.isBlank() || paymentId.length() > 100) {
             log.warn("[PortOne webhook] paymentId 없음 payloadKeys={}", payload == null ? "[]" : payload.keySet());
@@ -99,8 +116,9 @@ public class PaymentWebhookController {
             // 503으로 응답해야 PortOne이 웹훅을 재시도한다. 주문/매물 상태는 pay()에서 변경되기 전이다.
             log.warn("[PortOne webhook] 결제 검증 일시 장애 orderId={}", paymentId);
             throw ex;
-        } catch (RuntimeException ex) {
-            // 이미 처리됨/결제대기 아님/주문 없음/검증 실패 등 → ack(재시도 방지). 상세는 로깅.
+        } catch (DomainException ex) {
+            // 이미 처리됨/결제대기 아님/주문 없음 등 영구적인 도메인 거절만 ack한다.
+            // DB·네트워크 같은 예상하지 못한 RuntimeException은 전파해 PortOne이 다시 보내게 한다.
             log.info("[PortOne webhook] 무시 orderId={} reason={}", paymentId, ex.getMessage());
             operationalEventPublisher.publish(new OperationalEvent(
                     Category.PAYMENT,
@@ -146,5 +164,14 @@ public class PaymentWebhookController {
             return "";
         }
         return String.valueOf(payload.get("type"));
+    }
+
+    /** PortOne V2 webhook은 상점 식별자를 반드시 data.storeId에 담는다. */
+    private static String extractDataStoreId(Map<String, Object> payload) {
+        if (payload == null || !(payload.get("data") instanceof Map<?, ?> data)) {
+            return null;
+        }
+        Object storeId = data.get("storeId");
+        return storeId instanceof String string && !string.isBlank() ? string : null;
     }
 }

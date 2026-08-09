@@ -7,6 +7,8 @@ import com.gole.api.admin.domain.model.AdminAction;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
+import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.report.domain.model.Report;
 import jakarta.validation.constraints.Min;
@@ -14,6 +16,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,7 +39,40 @@ public final class AdminDtos {
             Map<String, Long> ordersByStatus,
             long activeListings,
             long pendingReports,
-            long pendingSettlements) {}
+            long pendingSettlements,
+            PaymentReadinessResponse paymentReadiness) {}
+
+    /** 설정값 원문 없이 결제 연동의 운영 준비 상태만 노출한다. */
+    public record PaymentReadinessResponse(
+            boolean enabled,
+            boolean ready,
+            String state,
+            String channelType,
+            String provider,
+            String currency,
+            List<PaymentConfigurationIssueResponse> issues) {
+
+        public static PaymentReadinessResponse from(Snapshot snapshot) {
+            return new PaymentReadinessResponse(
+                    snapshot.enabled(),
+                    snapshot.ready(),
+                    snapshot.state().name(),
+                    snapshot.channelType().name(),
+                    snapshot.provider(),
+                    snapshot.currency(),
+                    snapshot.issues().stream()
+                            .map(PaymentConfigurationIssueResponse::from)
+                            .toList());
+        }
+    }
+
+    public record PaymentConfigurationIssueResponse(String setting, String problem) {
+
+        private static PaymentConfigurationIssueResponse from(ConfigurationIssue issue) {
+            return new PaymentConfigurationIssueResponse(
+                    issue.setting(), issue.problem().name());
+        }
+    }
 
     // ── 모니터링 행 ────────────────────────────────────────────
 

@@ -19,17 +19,18 @@ class DiscordConfigurationGuardTest {
 
         assertThatThrownBy(() -> new DiscordConfigurationGuard(properties).run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("ADMIN");
+                .hasMessageContaining("OPERATIONS");
     }
 
     @Test
-    void genericWebhookSafelyCoversEveryCategory() {
+    void genericWebhookDoesNotReplaceRoleSpecificDestinations() {
         DiscordOperationsProperties properties = new DiscordOperationsProperties();
         properties.setEnabled(true);
         properties.setWebhookUrl("https://discord.example/all");
 
-        assertThatCode(() -> new DiscordConfigurationGuard(properties).run(NO_ARGS))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> new DiscordConfigurationGuard(properties).run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ACCOUNT");
     }
 
     @Test

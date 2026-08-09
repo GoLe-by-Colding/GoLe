@@ -8,7 +8,17 @@ interface AppEnv {
   readonly discordInviteUrl: string;
   readonly portOneStoreId: string;
   readonly portOneChannelKey: string;
+  readonly paymentMode: "stub" | "portone-test" | "portone-live";
   readonly nodeEnv: "development" | "production" | "test";
+}
+
+function readPaymentMode(nodeEnv: AppEnv["nodeEnv"]): AppEnv["paymentMode"] {
+  const raw = process.env.NEXT_PUBLIC_PAYMENT_MODE;
+  if (raw === "stub" || raw === "portone-test" || raw === "portone-live") {
+    return raw;
+  }
+  // 운영에서 설정 누락을 개발용 스텁으로 조용히 우회하면 실제 결제 없이 주문이 승인될 수 있다.
+  return nodeEnv === "production" ? "portone-live" : "stub";
 }
 
 function readApiBaseUrl(): string {
@@ -42,12 +52,14 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
   return "development";
 }
 
+const nodeEnv = readNodeEnv();
+
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
   siteUrl: readSiteUrl(),
-  discordInviteUrl:
-    process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
+  discordInviteUrl: process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
   portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
   portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",
-  nodeEnv: readNodeEnv(),
+  paymentMode: readPaymentMode(nodeEnv),
+  nodeEnv,
 });

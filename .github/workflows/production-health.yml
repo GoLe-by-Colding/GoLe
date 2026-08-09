@@ -19,6 +19,8 @@ jobs:
     env:
       HEALTH_URL: https://gole.kscold.com/actuator/health/readiness
       DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+      DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+      DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
     steps:
       - name: Check production API
         id: check
@@ -28,9 +30,17 @@ jobs:
       - name: Notify outage
         if: ${{ steps.check.outcome == 'failure' && env.DISCORD_OPERATIONS_WEBHOOK_URL != '' }}
         run: |
+          if [ "$DISCORD_SUPPRESS_NOTIFICATIONS" = "true" ]; then
+            flags=4096
+          else
+            flags=null
+          fi
           payload=$(jq -n \
             --arg content "🚨 GoLe 운영 API 응답 실패 · $HEALTH_URL · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            '{content: $content, allowed_mentions: {parse: []}}')
+            --arg avatar_url "$DISCORD_AVATAR_URL" \
+            --argjson flags "$flags" \
+            '{content: $content, avatar_url: $avatar_url, allowed_mentions: {parse: []}}
+             + (if $flags == null then {} else {flags: $flags} end)')
           curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_OPERATIONS_WEBHOOK_URL"
 
       - name: Fail workflow when unhealthy

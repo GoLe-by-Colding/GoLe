@@ -135,7 +135,7 @@ export async function HomePage() {
               </span>
             </h1>
             <p className="animate-rise max-w-[44ch] text-lg leading-relaxed text-brand-100/80 [animation-delay:120ms]">
-              체결가 기반 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션.
+              체결가 기반 시세 · 구매확정 안전거래 · 셀러 샵 · 컬렉션.
               <br className="max-sm:hidden" />
               흩어져 있던 레고 거래를 한곳에서.
             </p>
@@ -156,7 +156,7 @@ export async function HomePage() {
                   value:
                     stats.listings > 0
                       ? `${stats.listings.toLocaleString("ko-KR")}개`
-                      : "에스크로 보호",
+                      : "정산 전 보호",
                 },
                 {
                   label: "체결 시세",

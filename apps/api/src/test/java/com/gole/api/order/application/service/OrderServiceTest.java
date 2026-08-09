@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
@@ -18,6 +20,7 @@ import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,7 @@ class OrderServiceTest {
     private InMemoryOrders orders;
     private FakeReservation reservation;
     private CountingSettlement settlement;
+    private RecordingPublisher events;
     private OrderService service;
 
     @BeforeEach
@@ -38,6 +42,7 @@ class OrderServiceTest {
         orders = new InMemoryOrders();
         reservation = new FakeReservation();
         settlement = new CountingSettlement();
+        events = new RecordingPublisher();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
                 orders,
@@ -48,7 +53,8 @@ class OrderServiceTest {
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 clock,
-                new OrderPaymentTransitionService(orders, reservation));
+                new OrderPaymentTransitionService(orders, reservation),
+                events);
     }
 
     @Test
@@ -89,10 +95,38 @@ class OrderServiceTest {
     }
 
     @Test
+    void place_preRegistersAmountAndReleasesReservationWhenPgIsUnavailable() {
+        reservation.available = true;
+        RecordingPreparePayment payment = new RecordingPreparePayment();
+        service = serviceWith(payment);
+
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        assertThat(payment.preparedOrderId).isEqualTo(id);
+        assertThat(payment.preparedAmount).isEqualTo(280_000);
+
+        reservation.released = false;
+        payment.fail = true;
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-2", "buyer-1")))
+                .isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(reservation.released).isTrue();
+        assertThat(orders.store).hasSize(1);
+    }
+
+    @Test
     void fullFlow_completes_andSettlesOnce() {
         reservation.available = true;
         String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
         assertThat(service.pay(id)).isEqualTo(OrderStatus.FUNDS_HELD);
+        assertThat(events.events).singleElement().satisfies(event -> {
+            assertThat(event.category()).isEqualTo(OperationalEvent.Category.PAYMENT);
+            assertThat(event.level()).isEqualTo(OperationalEvent.Level.SUCCESS);
+            assertThat(event.title()).isEqualTo("결제 승인 완료");
+            assertThat(event.fields())
+                    .containsOnlyKeys("주문 ID", "상태")
+                    .containsEntry("주문 ID", id)
+                    .containsEntry("상태", OrderStatus.FUNDS_HELD.name());
+        });
         service.complete(id);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(settlement.calls.get()).isEqualTo(1);
@@ -104,9 +138,18 @@ class OrderServiceTest {
         reservation.available = true;
         String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
         service.pay(id);
+        events.events.clear();
         service.refund(id);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
         assertThat(reservation.released).isTrue();
+        assertThat(events.events).singleElement().satisfies(event -> {
+            assertThat(event.level()).isEqualTo(OperationalEvent.Level.SUCCESS);
+            assertThat(event.title()).isEqualTo("환불 완료");
+            assertThat(event.fields()).containsEntry("상태", OrderStatus.REFUNDED.name());
+        });
+
+        service.refund(id);
+        assertThat(events.events).hasSize(1);
     }
 
     @Test
@@ -116,17 +159,32 @@ class OrderServiceTest {
         service.pay(id);
         AsyncRefundPayment payment = new AsyncRefundPayment();
         service = serviceWith(payment);
+        events.events.clear();
 
         service.refund(id);
 
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
         assertThat(reservation.released).isFalse();
+        assertThat(events.events).singleElement().satisfies(event -> {
+            assertThat(event.level()).isEqualTo(OperationalEvent.Level.WARNING);
+            assertThat(event.title()).isEqualTo("환불 처리 대기");
+            assertThat(event.fields()).containsEntry("상태", OrderStatus.REFUND_PENDING.name());
+        });
+
+        service.refund(id);
+        assertThat(events.events).hasSize(1);
 
         payment.fullyRefunded = true;
         service.confirmRefund(id);
 
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
         assertThat(reservation.released).isTrue();
+        assertThat(events.events).hasSize(2);
+        assertThat(events.events.get(1).level()).isEqualTo(OperationalEvent.Level.SUCCESS);
+        assertThat(events.events.get(1).title()).isEqualTo("환불 완료");
+
+        service.confirmRefund(id);
+        assertThat(events.events).hasSize(2);
     }
 
     @Test
@@ -142,11 +200,13 @@ class OrderServiceTest {
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
-                new OrderPaymentTransitionService(orders, reservation));
+                new OrderPaymentTransitionService(orders, reservation),
+                events);
 
         assertThatThrownBy(() -> service.pay(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
         assertThat(reservation.released).isFalse();
+        assertThat(events.events).isEmpty();
     }
 
     @Test
@@ -157,6 +217,18 @@ class OrderServiceTest {
 
         assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_PENDING);
         assertThat(reservation.released).isFalse();
+        assertThat(events.events).isEmpty();
+    }
+
+    @Test
+    void missingPgPaymentDuringUserVerification_keepsOrderAndReservation() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.NOT_FOUND));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(reservation.released).isFalse();
+        assertThat(events.events).isEmpty();
     }
 
     @Test
@@ -167,6 +239,16 @@ class OrderServiceTest {
 
         assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(reservation.released).isTrue();
+        assertThat(events.events).singleElement().satisfies(event -> {
+            assertThat(event.category()).isEqualTo(OperationalEvent.Category.PAYMENT);
+            assertThat(event.level()).isEqualTo(OperationalEvent.Level.ERROR);
+            assertThat(event.title()).isEqualTo("결제 실패 확정");
+            assertThat(event.fields())
+                    .containsOnlyKeys("주문 ID", "상태")
+                    .doesNotContainValue("buyer-1")
+                    .doesNotContainValue("seller-1")
+                    .doesNotContainValue("280000");
+        });
     }
 
     @Test
@@ -177,9 +259,17 @@ class OrderServiceTest {
 
         assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_REVIEW);
         assertThat(reservation.released).isFalse();
+        assertThat(events.events).singleElement().satisfies(event -> {
+            assertThat(event.level()).isEqualTo(OperationalEvent.Level.WARNING);
+            assertThat(event.title()).isEqualTo("결제 수동 확인 대기");
+            assertThat(event.fields()).containsEntry("상태", OrderStatus.PAYMENT_REVIEW.name());
+        });
 
         service = serviceWith(new FixedVerificationPayment(PaymentVerificationResult.PAID));
         assertThat(service.pay(id)).isEqualTo(OrderStatus.FUNDS_HELD);
+        assertThat(events.events).hasSize(2);
+        assertThat(events.events.get(1).level()).isEqualTo(OperationalEvent.Level.SUCCESS);
+        assertThat(events.events.get(1).title()).isEqualTo("결제 승인 완료");
     }
 
     private OrderService serviceWith(PaymentGatewayPort paymentGateway) {
@@ -192,7 +282,8 @@ class OrderServiceTest {
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
-                new OrderPaymentTransitionService(orders, reservation));
+                new OrderPaymentTransitionService(orders, reservation),
+                events);
     }
 
     // --- fakes ---
@@ -253,7 +344,7 @@ class OrderServiceTest {
         }
     }
 
-    private static final class AlwaysApprovePayment implements PaymentGatewayPort {
+    private static class AlwaysApprovePayment implements PaymentGatewayPort {
         @Override
         public PaymentVerificationResult verifyPayment(String orderId, long amount) {
             return PaymentVerificationResult.PAID;
@@ -267,6 +358,22 @@ class OrderServiceTest {
         @Override
         public boolean isFullyRefunded(String orderId, long amount) {
             return true;
+        }
+    }
+
+    private static final class RecordingPreparePayment extends AlwaysApprovePayment {
+        private String preparedOrderId;
+        private long preparedAmount;
+        private boolean fail;
+
+        @Override
+        public void preparePayment(String orderId, long amount) {
+            if (fail) {
+                throw new PaymentGatewayUnavailableException(
+                        orderId, new IllegalStateException("pre-register unavailable"));
+            }
+            preparedOrderId = orderId;
+            preparedAmount = amount;
         }
     }
 
@@ -338,6 +445,15 @@ class OrderServiceTest {
         @Override
         public String newOrderId() {
             return "order-" + (++n);
+        }
+    }
+
+    private static final class RecordingPublisher implements OperationalEventPublisher {
+        private final List<OperationalEvent> events = new ArrayList<>();
+
+        @Override
+        public void publish(OperationalEvent event) {
+            events.add(event);
         }
     }
 }

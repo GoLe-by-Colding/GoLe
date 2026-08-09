@@ -15,6 +15,7 @@ public class DiscordOperationsProperties {
     private String paymentWebhookUrl = "";
     private String operationsWebhookUrl = "";
     private String avatarUrl = "";
+    private boolean suppressNotifications = true;
 
     public boolean isEnabled() {
         return enabled;
@@ -70,6 +71,14 @@ public class DiscordOperationsProperties {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public boolean isSuppressNotifications() {
+        return suppressNotifications;
+    }
+
+    public void setSuppressNotifications(boolean suppressNotifications) {
+        this.suppressNotifications = suppressNotifications;
     }
 
     public String webhookFor(OperationalEvent.Category category) {

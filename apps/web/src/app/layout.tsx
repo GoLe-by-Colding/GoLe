@@ -7,7 +7,7 @@ import "./globals.css";
 const SITE_NAME = "GoLe";
 const SITE_TITLE = "GoLe — 레고 중고거래 플랫폼";
 const SITE_DESCRIPTION =
-  "레고 중고거래·실시간 시세·검수 안전결제·컬렉션·커뮤니티를 한 곳에서. 에스크로로 안전하게 사고팔고, 체결가 기반 시세를 확인하고, 나만의 레고 컬렉션을 자랑하세요.";
+  "레고 중고거래·실시간 시세·안전결제·컬렉션·커뮤니티를 한 곳에서. 구매확정 기반 정산과 체결가 시세로 합리적으로 거래하고, 나만의 레고 컬렉션을 자랑하세요.";
 const KEYWORDS = [
   "레고",
   "레고 중고",
@@ -18,7 +18,7 @@ const KEYWORDS = [
   "MOC",
   "레고 컬렉션",
   "안전거래",
-  "에스크로",
+  "구매확정 안전결제",
 ];
 
 export const metadata: Metadata = {
