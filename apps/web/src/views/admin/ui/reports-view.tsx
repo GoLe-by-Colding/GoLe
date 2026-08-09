@@ -101,7 +101,9 @@ export function AdminReportsView() {
             <td className="px-3 py-2.5 font-medium">
               <Link
                 href={
-                  r.targetType === "LISTING" ? `/listings/${r.targetId}` : `/community/${r.targetId}`
+                  r.targetType === "LISTING"
+                    ? `/listings/${r.targetId}`
+                    : `/community/${r.targetId}`
                 }
                 className="text-neutral-900 hover:text-brand-600"
               >

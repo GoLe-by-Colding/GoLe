@@ -45,8 +45,7 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
   siteUrl: readSiteUrl(),
-  discordInviteUrl:
-    process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
+  discordInviteUrl: process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
   portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
   portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",
   nodeEnv: readNodeEnv(),

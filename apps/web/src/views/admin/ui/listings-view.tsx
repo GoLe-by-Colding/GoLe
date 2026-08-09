@@ -8,7 +8,12 @@ import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import { Badge, Button, Heading, Text } from "@shared/ui";
-import { LISTING_STATUS_LABEL, LISTING_STATUS_TONE, formatDateTime, shortId } from "../model/labels";
+import {
+  LISTING_STATUS_LABEL,
+  LISTING_STATUS_TONE,
+  formatDateTime,
+  shortId,
+} from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
 /** 매물 모더레이션 — 전체 상태 목록 + 사유를 받는 강제 내림. (요구사항 4) */

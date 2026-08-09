@@ -112,9 +112,7 @@ export function AdminAccountsView() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() =>
-                          directAction(() => reinstateAdminAccount(token ?? "", a.id))
-                        }
+                        onClick={() => directAction(() => reinstateAdminAccount(token ?? "", a.id))}
                       >
                         정지 해제
                       </Button>
