@@ -2,7 +2,6 @@ package com.gole.api.common.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.sun.net.httpserver.HttpServer;
@@ -14,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class DiscordOperationalEventPublisherTest {
 
