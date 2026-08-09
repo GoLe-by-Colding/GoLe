@@ -174,12 +174,22 @@ DISCORD_OPERATIONS_WEBHOOK_URL=https://discord.com/api/webhooks/...  # 선택: �
 
 `ubuntu-gole` 컨테이너에서 PM2(`gole-backend`, `gole-frontend`)로 구동, nginx가 `gole.kscold.com`을 프록시(HTTPS). 표준 절차·명령은 `.kiro/steering/deploy.md`.
 
+`main` 브랜치의 CI가 성공하면 저장소 전용 self-hosted runner가 `ubuntu-gole` 내부에서 CD를 자동 실행한다. GitHub의 **Actions → CD → Run workflow**에서 수동 배포도 가능하다.
+
 ```bash
 # 로컬: 커밋 → push
 git push origin main
 # 컨테이너: git pull → 빌드 → pm2 reload → health
 DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
   docker exec ubuntu-gole bash -lc "cd /app && bash scripts/deploy.sh all"
+```
+
+GoLe Ubuntu에 직접 접속할 때는 다른 인스턴스 포트가 아닌 `2223`만 사용한다.
+
+```bash
+ssh -p 2223 root@localhost              # Mac mini 내부
+ssh -p 2223 root@kscold.iptime.org      # 외부(공유기 포트포워딩 필요)
+cd /app
 ```
 
 ## 커밋 컨벤션
