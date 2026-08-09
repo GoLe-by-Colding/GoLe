@@ -1,6 +1,8 @@
 package com.gole.api.community.domain.model;
 
+import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.community.domain.exception.DuplicateLikeException;
+import com.gole.api.community.domain.exception.PostContentRequiredException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -66,8 +68,28 @@ public final class Post {
 
     /** 본문/이미지 수정(작성자). 권한 검증은 애플리케이션 서비스에서 수행한다. */
     public void edit(String newContent, List<String> newImageUrls) {
-        this.content = Objects.requireNonNull(newContent, "content");
-        this.imageUrls = newImageUrls == null ? List.of() : List.copyOf(newImageUrls);
+        edit(newContent, newImageUrls, status);
+    }
+
+    /**
+     * 부분 수정 결과를 반영한다. 임시저장은 빈 본문을 허용하지만 발행 결과에는 본문이 필요하다.
+     */
+    public void edit(String newContent, List<String> newImageUrls, PostStatus newStatus) {
+        if (newContent == null) {
+            throw new BadRequestException("INVALID_POST_BODY", "본문은 null일 수 없습니다");
+        }
+        if (newImageUrls == null) {
+            throw new BadRequestException("INVALID_POST_PHOTOS", "사진 목록은 null일 수 없습니다");
+        }
+        if (newStatus == null || newStatus == PostStatus.DELETED) {
+            throw new BadRequestException("INVALID_POST_STATUS", "게시글 상태는 draft 또는 published여야 합니다");
+        }
+        if (newStatus == PostStatus.PUBLISHED && newContent.isBlank()) {
+            throw new PostContentRequiredException();
+        }
+        this.content = newContent;
+        this.imageUrls = List.copyOf(newImageUrls);
+        this.status = newStatus;
     }
 
     /** 삭제(요구사항 12.7). */

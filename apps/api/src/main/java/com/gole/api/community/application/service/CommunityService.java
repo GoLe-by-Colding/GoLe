@@ -7,6 +7,7 @@ import com.gole.api.community.application.port.in.EditPostUseCase;
 import com.gole.api.community.application.port.in.GetFeedUseCase;
 import com.gole.api.community.application.port.in.LikePostUseCase;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
+import com.gole.api.community.application.port.in.PatchPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
@@ -15,6 +16,7 @@ import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.domain.exception.PostNotFoundException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
+import com.gole.api.community.domain.model.PostStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -31,6 +33,7 @@ public class CommunityService
                 GetFeedUseCase,
                 DeletePostUseCase,
                 EditPostUseCase,
+                PatchPostUseCase,
                 ModeratePostUseCase {
 
     private static final int MAX_FEED_ROWS = 100;
@@ -132,6 +135,23 @@ public class CommunityService
         }
         post.edit(command.content(), command.imageUrls());
         postRepository.save(post);
+    }
+
+    @Override
+    public Post patch(PatchPostCommand command) {
+        Post post = postRepository
+                .findById(command.postId())
+                .filter(candidate -> candidate.getStatus() != PostStatus.DELETED)
+                .orElseThrow(() -> new PostNotFoundException(command.postId()));
+        if (!post.getAuthorId().equals(command.requesterId())) {
+            throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
+        }
+
+        String nextBody = command.body().provided() ? command.body().value() : post.getContent();
+        List<String> nextPhotos = command.photos().provided() ? command.photos().value() : post.getImageUrls();
+        PostStatus nextStatus = command.status().provided() ? command.status().value() : post.getStatus();
+        post.edit(nextBody, nextPhotos, nextStatus);
+        return postRepository.save(post);
     }
 
     private Post requirePublished(String postId) {

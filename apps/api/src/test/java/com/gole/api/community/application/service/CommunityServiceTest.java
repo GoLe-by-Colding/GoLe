@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase.CommentCommand;
+import com.gole.api.community.application.port.in.PatchPostUseCase.PatchField;
+import com.gole.api.community.application.port.in.PatchPostUseCase.PatchPostCommand;
 import com.gole.api.community.application.port.in.PublishPostUseCase.PublishPostCommand;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
 import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.domain.exception.DuplicateLikeException;
+import com.gole.api.community.domain.exception.PostContentRequiredException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
+import com.gole.api.community.domain.model.PostStatus;
+import com.gole.api.community.domain.model.PostType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -69,6 +74,73 @@ class CommunityServiceTest {
         assertThat(created.id()).isEqualTo("id-2");
         assertThat(created.authorId()).isEqualTo("user-2");
         assertThat(service.comments(id, 100)).hasSize(1);
+    }
+
+    @Test
+    void patch_omittedBody_keepsExistingDraftBody() {
+        draft("draft-1", "기존 본문", List.of("old.jpg"));
+
+        Post updated = service.patch(new PatchPostCommand(
+                "draft-1",
+                "author-1",
+                PatchField.omitted(),
+                PatchField.provided(List.of("new.jpg")),
+                PatchField.omitted()));
+
+        assertThat(updated.getContent()).isEqualTo("기존 본문");
+        assertThat(updated.getImageUrls()).containsExactly("new.jpg");
+        assertThat(updated.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void patch_emptyBody_clearsDraftAndKeepsPhotos() {
+        draft("draft-1", "지울 본문", List.of("community/example.jpg"));
+
+        Post updated = service.patch(new PatchPostCommand(
+                "draft-1",
+                "author-1",
+                PatchField.provided(""),
+                PatchField.provided(List.of("community/example.jpg")),
+                PatchField.provided(PostStatus.DRAFT)));
+
+        assertThat(updated.getContent()).isEmpty();
+        assertThat(updated.getImageUrls()).containsExactly("community/example.jpg");
+        assertThat(updated.getStatus()).isEqualTo(PostStatus.DRAFT);
+    }
+
+    @Test
+    void patch_emptyBody_rejectsPublishingDraft() {
+        draft("draft-1", "기존 본문", List.of("photo.jpg"));
+
+        assertThatThrownBy(() -> service.patch(new PatchPostCommand(
+                        "draft-1",
+                        "author-1",
+                        PatchField.provided(""),
+                        PatchField.omitted(),
+                        PatchField.provided(PostStatus.PUBLISHED))))
+                .isInstanceOf(PostContentRequiredException.class)
+                .hasMessage("발행 게시글은 본문이 필요합니다");
+    }
+
+    @Test
+    void patch_emptyBody_rejectsWhenExistingStatusIsPublished() {
+        String id = publish();
+
+        assertThatThrownBy(() -> service.patch(new PatchPostCommand(
+                        id, "author-1", PatchField.provided(""), PatchField.omitted(), PatchField.omitted())))
+                .isInstanceOf(PostContentRequiredException.class);
+    }
+
+    private void draft(String id, String content, List<String> photos) {
+        posts.save(new Post(
+                id,
+                "author-1",
+                content,
+                photos,
+                PostType.GENERAL,
+                PostStatus.DRAFT,
+                java.util.Set.of(),
+                Instant.parse("2026-01-01T00:00:00Z")));
     }
 
     private static final class InMemoryPosts implements PostRepositoryPort {
