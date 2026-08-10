@@ -16,6 +16,21 @@ TARGET="${1:-all}"
 
 log() { printf '\n▶ %s\n' "$*"; }
 
+# 배포 자체가 실패하면 애플리케이션 내부 알림도 뜰 수 없으므로 스크립트가 직접 알린다.
+# URL은 DISCORD_DEPLOY_WEBHOOK_URL(우선) 또는 DISCORD_OPERATIONS_WEBHOOK_URL로만 주입한다.
+notify_discord() {
+  local webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
+  local message="$1"
+  if [ -z "$webhook_url" ]; then return 0; fi
+  curl -fsS --max-time 5 \
+    -H 'Content-Type: application/json' \
+    --data "{\"content\":\"${message}\"}" \
+    "$webhook_url" >/dev/null || true
+}
+
+trap 'notify_discord "❌ GoLe ${TARGET} 배포 실패 · gole.kscold.com"' ERR
+notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.kscold.com"
+
 log "git pull --ff-only origin main"
 git pull --ff-only origin main
 
@@ -58,3 +73,4 @@ curl -fsS -o /dev/null -w "  frontend: HTTP %{http_code}\n" http://localhost:300
 
 log "✔ 배포 완료"
 pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true
+notify_discord "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.kscold.com"

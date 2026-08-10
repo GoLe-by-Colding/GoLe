@@ -14,8 +14,14 @@ import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +43,7 @@ public class SocialAuthService implements SocialLoginUseCase {
     private final SessionTokenPort sessionToken;
     private final SessionStorePort sessionStore;
     private final OAuthStateStorePort stateStore;
+    private final OperationalEventPublisher operationalEventPublisher;
 
     public SocialAuthService(
             SocialIdentityProviderPort identityProvider,
@@ -45,7 +52,8 @@ public class SocialAuthService implements SocialLoginUseCase {
             PasswordHasherPort passwordHasher,
             SessionTokenPort sessionToken,
             SessionStorePort sessionStore,
-            OAuthStateStorePort stateStore) {
+            OAuthStateStorePort stateStore,
+            OperationalEventPublisher operationalEventPublisher) {
         this.identityProvider = identityProvider;
         this.accountRepository = accountRepository;
         this.identifierGenerator = identifierGenerator;
@@ -53,6 +61,7 @@ public class SocialAuthService implements SocialLoginUseCase {
         this.sessionToken = sessionToken;
         this.sessionStore = sessionStore;
         this.stateStore = stateStore;
+        this.operationalEventPublisher = operationalEventPublisher;
     }
 
     @Override
@@ -91,6 +100,20 @@ public class SocialAuthService implements SocialLoginUseCase {
         var existing = accountRepository.findByEmail(email);
         Account account = existing.orElseGet(() -> createSocialAccount(email));
         boolean newAccount = existing.isEmpty();
+
+        if (newAccount) {
+            operationalEventPublisher.publish(new OperationalEvent(
+                    Category.ACCOUNT,
+                    Level.SUCCESS,
+                    "새 소셜 회원가입",
+                    "소셜 로그인으로 신규 계정이 생성되었습니다.",
+                    Map.of(
+                            "계정 ID",
+                            account.getId(),
+                            "Provider",
+                            command.provider().key()),
+                    Instant.now()));
+        }
 
         String token = sessionToken.issue(account);
         sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);

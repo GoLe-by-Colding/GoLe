@@ -1,5 +1,8 @@
 package com.gole.api.order.application.service;
 
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalSignal;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
@@ -61,6 +64,11 @@ public class OrderService
     }
 
     @Override
+    @OperationalSignal(
+            category = Category.PAYMENT,
+            title = "주문 생성",
+            description = "결제 대기 주문이 생성되었습니다.",
+            includeResult = true)
     public String place(PlaceOrderCommand command) {
         // 요구사항 13.1: 단일 문서 원자 갱신(findAndModify)이 단일 낙찰을 보장한다.
         // 트랜잭션 밖에서 수행해 동시 요청 시 패자는 write-conflict 대신 깔끔히 빈 결과를 받는다.
@@ -86,6 +94,12 @@ public class OrderService
 
     @Override
     @Transactional
+    @OperationalSignal(
+            category = Category.PAYMENT,
+            title = "결제 상태 변경",
+            description = "결제 승인 검증이 끝났습니다.",
+            includeArguments = 0,
+            includeResult = true)
     public OrderStatus pay(String orderId) {
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
@@ -103,6 +117,11 @@ public class OrderService
 
     @Override
     @Transactional
+    @OperationalSignal(
+            category = Category.PAYMENT,
+            title = "거래 완료",
+            description = "구매 확정과 정산 처리가 완료되었습니다.",
+            includeArguments = 0)
     public void complete(String orderId) {
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
@@ -123,6 +142,12 @@ public class OrderService
 
     @Override
     @Transactional
+    @OperationalSignal(
+            category = Category.PAYMENT,
+            level = Level.WARNING,
+            title = "결제 환불",
+            description = "환불과 매물 선점 해제가 완료되었습니다.",
+            includeArguments = 0)
     public void refund(String orderId) {
         Order order = getById(orderId);
         Instant now = Instant.now(clock);

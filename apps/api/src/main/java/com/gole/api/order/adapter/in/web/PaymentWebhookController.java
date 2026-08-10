@@ -1,7 +1,12 @@
 package com.gole.api.order.adapter.in.web;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,9 +34,12 @@ public class PaymentWebhookController {
     private static final Logger log = LoggerFactory.getLogger(PaymentWebhookController.class);
 
     private final PayOrderUseCase payOrderUseCase;
+    private final OperationalEventPublisher operationalEventPublisher;
 
-    public PaymentWebhookController(PayOrderUseCase payOrderUseCase) {
+    public PaymentWebhookController(
+            PayOrderUseCase payOrderUseCase, OperationalEventPublisher operationalEventPublisher) {
         this.payOrderUseCase = payOrderUseCase;
+        this.operationalEventPublisher = operationalEventPublisher;
     }
 
     @PostMapping("/webhook")
@@ -40,6 +48,13 @@ public class PaymentWebhookController {
         String paymentId = extractPaymentId(payload);
         if (paymentId == null || paymentId.isBlank()) {
             log.warn("[PortOne webhook] paymentId 없음 payload={}", payload);
+            operationalEventPublisher.publish(new OperationalEvent(
+                    Category.PAYMENT,
+                    Level.WARNING,
+                    "PortOne 웹훅 형식 오류",
+                    "paymentId가 없는 결제 웹훅을 수신했습니다.",
+                    Map.of(),
+                    Instant.now()));
             return; // ack
         }
         try {
@@ -48,6 +63,13 @@ public class PaymentWebhookController {
         } catch (RuntimeException ex) {
             // 이미 처리됨/결제대기 아님/주문 없음/검증 실패 등 → ack(재시도 방지). 상세는 로깅.
             log.info("[PortOne webhook] 무시 orderId={} reason={}", paymentId, ex.getMessage());
+            operationalEventPublisher.publish(new OperationalEvent(
+                    Category.PAYMENT,
+                    Level.WARNING,
+                    "PortOne 웹훅 처리 보류",
+                    "결제 웹훅이 승인 상태로 반영되지 않았습니다. 서버 로그를 확인하세요.",
+                    Map.of("주문 ID", paymentId, "예외 종류", ex.getClass().getSimpleName()),
+                    Instant.now()));
         }
     }
 
