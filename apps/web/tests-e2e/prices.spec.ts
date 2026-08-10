@@ -35,12 +35,27 @@ test.describe("Prices (KREAM-style)", () => {
 
   test("홈에서 전달한 세트를 바로 선택하고 목록 선택을 URL에 반영한다", async ({ page }) => {
     await page.goto("/");
-    await page.locator('a[href="/prices?set=75313"]').last().click();
-    await expect(page).toHaveURL(/\/prices\?set=75313$/);
-    await expect(page.getByText("#75313 · Star Wars", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: /타이타닉/ }).click();
-    await expect(page).toHaveURL(/\/prices\?set=10294$/);
-    await expect(page.getByText("#10294 · Icons", { exact: true })).toBeVisible();
+    // 홈 상단 시세 티커는 무한 마퀴(animate-market-ticker)라 클릭이 "요소가 멈출 때까지"
+    // 대기에 걸린다. 정적인 "지금 뜨는 세트" 목록에서 집는다.
+    const trending = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "지금 뜨는 세트" }) });
+    const trendingLink = trending.locator('a[href^="/prices?set="]').first();
+    const initialSet = new URL(
+      (await trendingLink.getAttribute("href"))!,
+      "http://localhost",
+    ).searchParams.get("set")!;
+
+    await trendingLink.click();
+    await expect(page).toHaveURL(new RegExp(`/prices\\?set=${initialSet}$`));
+    await expect(page.getByText(new RegExp(`^#${initialSet} ·`))).toBeVisible();
+
+    // 목록에서 다른 세트를 고르면 URL이 따라온다(세트 목록만 ol 안의 aria-pressed 버튼).
+    await page.locator('ol button[aria-pressed="false"]').first().click();
+    await expect(page).toHaveURL(/\/prices\?set=[^&]+$/);
+    const pickedSet = new URL(page.url()).searchParams.get("set")!;
+    expect(pickedSet).not.toBe(initialSet);
+    await expect(page.getByText(new RegExp(`^#${pickedSet} ·`))).toBeVisible();
   });
 });
