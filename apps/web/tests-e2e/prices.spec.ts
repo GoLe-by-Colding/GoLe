@@ -32,4 +32,15 @@ test.describe("Prices (KREAM-style)", () => {
     // 목록이 여전히 렌더된다(첫 세트 버튼 존재)
     await expect(page.getByRole("img", { name: "시세 추이 차트" }).first()).toBeVisible();
   });
+
+  test("홈에서 전달한 세트를 바로 선택하고 목록 선택을 URL에 반영한다", async ({ page }) => {
+    await page.goto("/");
+    await page.locator('a[href="/prices?set=75313"]').last().click();
+    await expect(page).toHaveURL(/\/prices\?set=75313$/);
+    await expect(page.getByText("#75313 · Star Wars", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: /타이타닉/ }).click();
+    await expect(page).toHaveURL(/\/prices\?set=10294$/);
+    await expect(page.getByText("#10294 · Icons", { exact: true })).toBeVisible();
+  });
 });

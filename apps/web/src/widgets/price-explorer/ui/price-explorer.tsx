@@ -17,6 +17,7 @@ export interface PriceBoardItem {
 
 export interface PriceExplorerProps {
   readonly items: readonly PriceBoardItem[];
+  readonly initialSetNumber?: string | undefined;
 }
 
 type Period = "1M" | "6M" | "1Y" | "ALL";
@@ -82,7 +83,7 @@ function ChangeBadge({ ratio }: { readonly ratio: number }) {
   );
 }
 
-export function PriceExplorer({ items }: PriceExplorerProps) {
+export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
   const [sort, setSort] = useState<SortKey>("popular");
   const sorted = useMemo(() => {
     const copy = [...items];
@@ -99,7 +100,10 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
     }
   }, [items, sort]);
   const firstWithData = sorted.find((i) => i.points.length >= 2) ?? sorted[0];
-  const [selected, setSelected] = useState<string>(firstWithData?.setNumber ?? "");
+  const requested = sorted.find((i) => i.setNumber === initialSetNumber);
+  const [selected, setSelected] = useState<string>(
+    requested?.setNumber ?? firstWithData?.setNumber ?? "",
+  );
   const [period, setPeriod] = useState<Period>("6M");
 
   const current = sorted.find((i) => i.setNumber === selected) ?? firstWithData;
@@ -114,6 +118,13 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
 
   if (!current) {
     return null;
+  }
+
+  function handleSelect(setNumber: string) {
+    setSelected(setNumber);
+    const url = new URL(window.location.href);
+    url.searchParams.set("set", setNumber);
+    window.history.replaceState(window.history.state, "", url);
   }
 
   return (
@@ -144,7 +155,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               <li key={item.setNumber}>
                 <button
                   type="button"
-                  onClick={() => setSelected(item.setNumber)}
+                  onClick={() => handleSelect(item.setNumber)}
                   aria-pressed={active}
                   className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
                     active
