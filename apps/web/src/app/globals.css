@@ -59,11 +59,11 @@
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 
   /* ─── Radius ─── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-2xl: 24px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
   --radius-full: 9999px;
 
   /* ─── Elevation (떠 있는 레이어에만 사용) ─── */
