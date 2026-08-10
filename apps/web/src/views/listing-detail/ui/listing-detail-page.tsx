@@ -78,7 +78,11 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             ) : null}
           </div>
           <div className="mt-2 flex gap-3">
-            <PurchaseButton listingId={listing.id} available={isAvailable} />
+            <PurchaseButton
+              listingId={listing.id}
+              sellerId={listing.sellerId}
+              available={isAvailable}
+            />
           </div>
           <ChatButton listingId={listing.id} sellerId={listing.sellerId} available={isAvailable} />
           {listing.catalogSetNumber !== null ? (

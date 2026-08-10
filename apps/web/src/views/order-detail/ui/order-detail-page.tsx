@@ -181,7 +181,8 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </ol>
         </div>
 
-        {order.status === "completed" ? (
+        {/* 자기거래 주문(차단 이전에 쌓인 건)에는 후기 동선을 열지 않는다. 서버도 거부한다. */}
+        {order.status === "completed" && order.buyerId !== order.sellerId ? (
           <Card padded className="flex flex-col gap-3">
             <Text weight="semibold">판매자 후기 남기기</Text>
             <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />

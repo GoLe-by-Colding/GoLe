@@ -12,6 +12,7 @@ import com.gole.api.review.application.port.out.ReviewIdGeneratorPort;
 import com.gole.api.review.application.port.out.ReviewRepositoryPort;
 import com.gole.api.review.domain.exception.DuplicateReviewException;
 import com.gole.api.review.domain.exception.InvalidRatingException;
+import com.gole.api.review.domain.exception.SelfReviewException;
 import com.gole.api.review.domain.model.Review;
 import java.time.Clock;
 import java.time.Instant;
@@ -72,6 +73,16 @@ class ReviewServiceTest {
 
         assertThatThrownBy(() -> service.write(new WriteReviewCommand("order-1", "intruder", 5, "내용")))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    /** 자기거래 차단 이전에 쌓인 주문으로 자기 평점을 올릴 수 없어야 한다. */
+    @Test
+    void write_onSelfTradedOrder_isForbidden() {
+        orders.put("order-1", "same-user", "same-user", true);
+
+        assertThatThrownBy(() -> service.write(new WriteReviewCommand("order-1", "same-user", 5, "셀프 칭찬")))
+                .isInstanceOf(SelfReviewException.class);
+        assertThat(service.bySeller("same-user")).isEmpty();
     }
 
     @Test
