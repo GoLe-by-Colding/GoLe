@@ -95,6 +95,31 @@ class PricingServiceTest {
     }
 
     @Test
+    void valuation_groupAnchorTracksTheDominantGrade_notTheGroupAverage() {
+        // 회귀 방지. DAMAGED 표본 0건 + USED_FAIR 5건이 계수(0.62)대로 체결된 상황.
+        // 그룹 폴백은 "대상 등급 표본이 얇을 때"만 타므로 풀이 한 등급에 쏠리는 게 기본이다.
+        // 기준계수를 등급 계수 평균(0.535)으로 잡으면 하자 등급이 16% 비싸게 나온다.
+        record(SetCondition.NEW_SEALED, 1_000_000, 1_000_000, 1_000_000);
+        record(SetCondition.USED_FAIR, 620_000, 620_000, 620_000, 620_000, 620_000);
+
+        PriceValuation.ConditionValuation damaged = conditionOf(valuation(), SetCondition.DAMAGED);
+        assertThat(damaged.basis()).isEqualTo(ValuationBasis.GROUP);
+        assertThat(damaged.sampleCount()).isEqualTo(5);
+        assertThat(damaged.fairPrice()).isEqualTo(450_000); // 620,000 * 0.45/0.62
+    }
+
+    @Test
+    void valuation_groupAnchorDoesNotUndervalueTheBetterGradeInADominatedPool() {
+        // 반대 방향. LIKE_NEW 표본 0건 + USED_GOOD 5건 → 기준계수는 0.78이어야 한다.
+        record(SetCondition.NEW_SEALED, 1_000_000, 1_000_000, 1_000_000);
+        record(SetCondition.USED_GOOD, 780_000, 780_000, 780_000, 780_000, 780_000);
+
+        PriceValuation.ConditionValuation likeNew = conditionOf(valuation(), SetCondition.LIKE_NEW);
+        assertThat(likeNew.basis()).isEqualTo(ValuationBasis.GROUP);
+        assertThat(likeNew.fairPrice()).isEqualTo(880_000); // 780,000 * 0.88/0.78
+    }
+
+    @Test
     void valuation_fallsBackToModel_whenGroupIsAlsoThin() {
         record(SetCondition.NEW_SEALED, 1_000_000, 1_000_000, 1_000_000);
         record(SetCondition.DAMAGED, 400_000); // INCOMPLETE 그룹 전체가 1건

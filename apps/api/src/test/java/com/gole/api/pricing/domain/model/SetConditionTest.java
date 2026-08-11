@@ -1,7 +1,6 @@
 package com.gole.api.pricing.domain.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -27,13 +26,6 @@ class SetConditionTest {
         assertThat(ConditionGroup.SEALED.members()).containsExactly(SetCondition.NEW_SEALED);
         assertThat(ConditionGroup.COMPLETE.members()).containsExactly(SetCondition.LIKE_NEW, SetCondition.USED_GOOD);
         assertThat(ConditionGroup.INCOMPLETE.members()).containsExactly(SetCondition.USED_FAIR, SetCondition.DAMAGED);
-    }
-
-    @Test
-    void referenceFactorIsTheMeanOfMemberFactors() {
-        assertThat(ConditionGroup.SEALED.referenceFactor()).isCloseTo(1.00, within(1e-9));
-        assertThat(ConditionGroup.COMPLETE.referenceFactor()).isCloseTo((0.88 + 0.78) / 2, within(1e-9));
-        assertThat(ConditionGroup.INCOMPLETE.referenceFactor()).isCloseTo((0.62 + 0.45) / 2, within(1e-9));
     }
 
     @Test

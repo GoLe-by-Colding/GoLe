@@ -110,7 +110,8 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
                 List<PriceTransaction> pooled = pooledByGroup.computeIfAbsent(
                         group, g -> repository.findByConditionsAscending(setNumber, g.members()));
                 if (pooled.size() >= MIN_REAL_SAMPLES) {
-                    conditions.add(PriceValuation.group(condition, marketPrice, medianPrice(pooled), pooled.size()));
+                    conditions.add(PriceValuation.group(
+                            condition, marketPrice, medianPrice(pooled), medianFactor(pooled), pooled.size()));
                     continue;
                 }
             }
@@ -128,5 +129,26 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
                 ascending.stream().mapToLong(PriceTransaction::price).sorted().toArray();
         int n = prices.length;
         return n % 2 == 1 ? prices[n / 2] : Math.round((prices[n / 2 - 1] + prices[n / 2]) / 2.0);
+    }
+
+    /**
+     * 그룹 표본의 대표 감가 계수 — 표본이 속한 등급 계수들의 중앙값.
+     *
+     * <p>{@link #medianPrice}와 <b>같은 표본에서 같은 방식(중앙값)으로</b> 뽑는 것이 핵심이다.
+     * 앵커 가격이 표본 가중인데 기준 계수만 등급 평균이면 둘의 기준점이 어긋난다. 표본이 한
+     * 등급으로만 차 있으면 그 등급 계수가 그대로 나오고, 반반이면 두 계수의 중간이 나온다.
+     *
+     * @return 표본이 비었으면 0 — 호출측({@code PriceValuation.group})이 감가 모델로 물러난다
+     */
+    private static double medianFactor(List<PriceTransaction> pooled) {
+        double[] factors = pooled.stream()
+                .mapToDouble(t -> t.condition().factor())
+                .sorted()
+                .toArray();
+        int n = factors.length;
+        if (n == 0) {
+            return 0;
+        }
+        return n % 2 == 1 ? factors[n / 2] : (factors[n / 2 - 1] + factors[n / 2]) / 2.0;
     }
 }

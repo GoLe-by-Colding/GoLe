@@ -47,15 +47,22 @@ public record PriceValuation(String setNumber, long marketPrice, List<ConditionV
      * <p>{@code 등급가 = 그룹중앙값 × 등급계수 / 그룹대표계수}. 그룹 안에서의 상대 위치만
      * 모델로 보정하므로, 미개봉 시세에서 통째로 외삽하는 {@link #model}보다 앵커가 가깝다.
      *
-     * @param groupMedian 그룹 체결가의 중앙값
-     * @param sampleCount 그룹 체결 건수
+     * <p>⚠️ {@code groupReference}는 <b>그 그룹의 등급 계수 평균이 아니라, 앵커를 만든 표본
+     * 자체에서 뽑아야 한다.</b> {@code groupMedian}은 표본 가중 통계라 표본이 한 등급에 쏠리면
+     * 그 등급 쪽으로 끌려간다. 그런데 그룹 폴백은 <b>정의상</b> 대상 등급의 표본이 얇을 때만
+     * 타므로, 쏠린 표본이 예외가 아니라 기본 상황이다. 여기에 등급 계수의 단순 평균을 기준으로
+     * 쓰면 두 통계의 기준점이 어긋나 체계적으로 편향된다 — 예를 들어 INCOMPLETE 그룹이
+     * USED_FAIR 체결로만 차 있을 때 DAMAGED가 약 16% 비싸게 나온다.
+     *
+     * @param groupMedian    그룹 체결가의 중앙값
+     * @param groupReference 그 중앙값에 대응하는 감가 계수. 0 이하면 감가 모델로 물러난다
+     * @param sampleCount    그룹 체결 건수
      */
     public static ConditionValuation group(
-            SetCondition condition, long marketPrice, long groupMedian, int sampleCount) {
-        double reference = condition.group().referenceFactor();
-        long fair = reference <= 0
+            SetCondition condition, long marketPrice, long groupMedian, double groupReference, int sampleCount) {
+        long fair = groupReference <= 0
                 ? Math.round(marketPrice * condition.factor())
-                : Math.round(groupMedian * (condition.factor() / reference));
+                : Math.round(groupMedian * (condition.factor() / groupReference));
         return spread(condition, ValuationBasis.GROUP, fair, depreciation(marketPrice, fair), sampleCount);
     }
 

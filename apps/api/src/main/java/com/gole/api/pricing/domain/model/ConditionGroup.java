@@ -43,15 +43,4 @@ public enum ConditionGroup {
                 .filter(c -> c.group() == this)
                 .toList();
     }
-
-    /**
-     * 그룹 대표 감가 계수 — 소속 등급 계수의 평균.
-     *
-     * <p>그룹 표본의 중앙값은 "이 그룹의 전형적인 물건" 가격이다. 그 전형값이 어느 계수에
-     * 해당하는지가 이 값이고, 특정 등급으로 환산할 때 기준점이 된다.
-     * {@code 등급가 = 그룹중앙값 × 등급계수 / 그룹대표계수}
-     */
-    public double referenceFactor() {
-        return members().stream().mapToDouble(SetCondition::factor).average().orElse(1.0);
-    }
 }
