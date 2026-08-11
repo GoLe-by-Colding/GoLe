@@ -78,19 +78,19 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex w-fit items-center gap-1 text-xs font-medium text-neutral-400 transition-colors hover:text-danger"
+        className="inline-flex w-fit text-xs font-medium text-neutral-400 transition-colors hover:text-danger"
       >
-        <span aria-hidden="true">🚩</span> 신고하기
+        신고하기
       </button>
 
       {open ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-neutral-900/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 grid place-items-center bg-neutral-900/40 p-4"
           role="dialog"
           aria-modal="true"
           aria-label="콘텐츠 신고"
         >
-          <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6 shadow-lift">
+          <div className="flex w-full max-w-md flex-col gap-4 rounded-lg bg-white p-6 shadow-lift">
             {state === "done" || state === "duplicate" ? (
               <>
                 <span className="text-lg font-bold text-neutral-900">
@@ -118,7 +118,7 @@ export function ReportButton({ targetType, targetId }: ReportButtonProps) {
                   {REPORT_REASONS.map((value) => (
                     <label
                       key={value}
-                      className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3.5 py-2.5 text-sm font-medium transition-colors ${
                         reason === value
                           ? "border-brand-400 bg-brand-50 text-brand-700"
                           : "border-neutral-200 text-neutral-600 hover:border-neutral-300"

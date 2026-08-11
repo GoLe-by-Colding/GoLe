@@ -10,6 +10,7 @@ import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
@@ -61,6 +62,23 @@ class OrderServiceTest {
         reservation.available = false;
         assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "buyer-1")))
                 .isInstanceOf(ItemUnavailableException.class);
+    }
+
+    @Test
+    void place_rejectsSelfPurchase() {
+        reservation.available = true;
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "seller-1")))
+                .isInstanceOf(SelfPurchaseException.class);
+    }
+
+    /** 거부하면서 선점을 되돌리지 않으면 매물이 RESERVED로 굳어 아무도 사지 못한다. */
+    @Test
+    void place_selfPurchase_releasesReservation_andCreatesNoOrder() {
+        reservation.available = true;
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "seller-1")))
+                .isInstanceOf(SelfPurchaseException.class);
+        assertThat(reservation.released).isTrue();
+        assertThat(orders.findByBuyerId("seller-1")).isEmpty();
     }
 
     @Test

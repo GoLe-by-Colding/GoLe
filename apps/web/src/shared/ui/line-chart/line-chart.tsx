@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export interface LineChartPoint {
   readonly value: number;
@@ -17,11 +17,18 @@ export interface LineChartProps {
 
 const W = 720;
 const H = 280;
-const PAD_T = 18;
-const PAD_B = 26;
+const PAD_T = 16;
+const PAD_B = 20;
 const PAD_L = 6;
-const PAD_R = 64; // 우측 가격 라벨 공간
-const GRID_LINES = 4;
+const PAD_R = 12; // 마지막 체결점 마커가 잘리지 않을 만큼만
+const GRID_LINES = 3;
+
+/**
+ * 모노톤 큐빅의 접선 길이 계수.
+ * 1이면 표준 Hermite(h/3)라 점마다 봉우리가 크게 부풀어 체결가처럼 노이즈가 큰
+ * 계열은 파형처럼 보인다. 낮출수록 실제 경로에 붙어 시세 차트의 인상이 또렷해진다.
+ */
+const TENSION = 0.55;
 
 interface Pt {
   readonly x: number;
@@ -29,7 +36,7 @@ interface Pt {
 }
 
 /**
- * 모노톤 큐빅(Fritsch–Carlson) 보간으로 부드러운 라인 path를 만든다.
+ * 모노톤 큐빅(Fritsch–Carlson) 보간으로 라인 path를 만든다.
  * 데이터 사이에 가짜 봉우리/오버슈트가 생기지 않아 시세 차트에 적합하다.
  */
 function smoothPath(pts: readonly Pt[]): string {
@@ -68,11 +75,11 @@ function smoothPath(pts: readonly Pt[]): string {
   }
   let d = `M${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`;
   for (let i = 0; i < n - 1; i += 1) {
-    const h = dx[i]!;
-    const cp1x = pts[i]!.x + h / 3;
-    const cp1y = pts[i]!.y + (m[i]! * h) / 3;
-    const cp2x = pts[i + 1]!.x - h / 3;
-    const cp2y = pts[i + 1]!.y - (m[i + 1]! * h) / 3;
+    const arm = (dx[i]! / 3) * TENSION;
+    const cp1x = pts[i]!.x + arm;
+    const cp1y = pts[i]!.y + m[i]! * arm;
+    const cp2x = pts[i + 1]!.x - arm;
+    const cp2y = pts[i + 1]!.y - m[i + 1]! * arm;
     d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${pts[i + 1]!.x.toFixed(1)},${pts[i + 1]!.y.toFixed(1)}`;
   }
   return d;
@@ -81,6 +88,12 @@ function smoothPath(pts: readonly Pt[]): string {
 /**
  * 의존성 없는 인터랙티브 SVG 라인 차트(KREAM 스타일).
  * 균일 스케일(viewBox)로 왜곡 없이 렌더하고, 가로 그리드 + 우측 가격축 + 호버 툴팁을 제공한다.
+ *
+ * 레이아웃은 "플롯(가변 폭 SVG) + 가격축(고정 폭 컬럼)"의 flex 행이다.
+ * 축 눈금을 SVG `<text>`로 그리면 viewBox 배율만큼 글자가 함께 확대·축소돼
+ * 넓은 화면에서는 비대해지고 좁은 화면에서는 읽을 수 없게 된다. 그래서 축은
+ * HTML로 그리고, 축이 차지할 폭도 viewBox 비율이 아니라 px로 고정한다.
+ *
  * 도메인 의존이 없는 일반 UI라 shared/ui 에 둔다.
  */
 export function LineChart({
@@ -90,11 +103,12 @@ export function LineChart({
   emptyText = "데이터가 부족해요",
 }: LineChartProps) {
   const [hover, setHover] = useState<number | null>(null);
+  const gradientId = useId().replaceAll(":", "");
 
   if (points.length < 2) {
     return (
       <div
-        className="flex items-center justify-center rounded-xl bg-neutral-50 text-sm text-neutral-400"
+        className="flex items-center justify-center rounded-lg bg-neutral-50 text-sm text-neutral-400"
         style={{ height }}
       >
         {emptyText}
@@ -104,9 +118,14 @@ export function LineChart({
 
   const n = points.length;
   const values = points.map((p) => p.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const rawSpan = rawMax - rawMin;
+  const domainPadding =
+    rawSpan === 0 ? Math.max(Math.abs(rawMax) * 0.05, 1) : Math.max(rawSpan * 0.08, 1);
+  const min = rawMin - domainPadding;
+  const max = rawMax + domainPadding;
+  const span = max - min;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
@@ -117,7 +136,7 @@ export function LineChart({
   const line = smoothPath(coords);
   const area = `${line} L${xAt(n - 1).toFixed(1)},${H - PAD_B} L${PAD_L},${H - PAD_B} Z`;
 
-  // 가로 그리드 + 우측 가격 라벨
+  // 가로 그리드 + 우측 가격 눈금
   const grid = Array.from({ length: GRID_LINES + 1 }, (_, i) => {
     const t = i / GRID_LINES;
     const y = PAD_T + t * innerH;
@@ -130,97 +149,213 @@ export function LineChart({
   const lineColor = up ? "var(--color-brand-600)" : "var(--color-danger)";
   const hc = hover !== null ? coords[hover] : null;
   const hp = hover !== null ? points[hover] : null;
+  // 상단에 붙은 점은 위쪽 공간이 없어 툴팁을 아래로 뒤집는다.
+  const tooltipBelow = hc ? hc.y / H < 0.3 : false;
+  /**
+   * 현재가 배지에 가장 가까운 눈금은 항상 숨긴다.
+   * 겹침 여부는 렌더된 px 간격으로 결정되는데 그 값은 컨테이너 폭에 따라 달라지므로,
+   * viewBox 단위의 고정 임계값으로는 어떤 크기에서도 안전하다고 보장할 수 없다.
+   */
+  const badgeNearestTick = grid.reduce(
+    (best, g, i) => (Math.abs(g.y - last.y) < Math.abs(grid[best]!.y - last.y) ? i : best),
+    0,
+  );
 
   function handleMove(event: React.PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = (event.clientX - rect.left) / rect.width;
+    const viewX = ((event.clientX - rect.left) / rect.width) * W;
+    const ratio = (viewX - PAD_L) / innerW;
     const i = Math.max(0, Math.min(n - 1, Math.round(ratio * (n - 1))));
     setHover(i);
   }
 
-  return (
-    <div className="relative w-full select-none">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label="시세 추이 차트"
-        onPointerMove={handleMove}
-        onPointerLeave={() => setHover(null)}
-        className="block w-full"
-        style={{ aspectRatio: `${W} / ${H}` }}
-      >
-        <defs>
-          <linearGradient id="line-chart-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-          </linearGradient>
-        </defs>
+  function handleKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Home") {
+      setHover(0);
+      return;
+    }
+    if (event.key === "End") {
+      setHover(n - 1);
+      return;
+    }
+    const current = hover ?? n - 1;
+    setHover(event.key === "ArrowLeft" ? Math.max(0, current - 1) : Math.min(n - 1, current + 1));
+  }
 
-        {/* 가로 그리드 + 우측 가격 라벨 */}
-        {grid.map((g, i) => (
-          <g key={i}>
-            <line
-              x1={PAD_L}
-              y1={g.y.toFixed(1)}
-              x2={W - PAD_R}
-              y2={g.y.toFixed(1)}
-              stroke="var(--color-neutral-100)"
-              strokeWidth={1}
+  const xLabelIndexes = Array.from(new Set([0, Math.floor((n - 1) / 2), n - 1]));
+
+  return (
+    <div className="@container w-full select-none">
+      {/* 플롯 + 가격축. 축 컬럼은 stretch로 플롯 높이를 그대로 받는다. */}
+      <div className="flex">
+        <div className="relative min-w-0 flex-1">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            role="img"
+            aria-label="시세 추이 차트. 좌우 방향키로 날짜별 가격을 확인할 수 있습니다."
+            tabIndex={0}
+            onPointerMove={handleMove}
+            onPointerLeave={() => setHover(null)}
+            onFocus={() => setHover(n - 1)}
+            onBlur={() => setHover(null)}
+            onKeyDown={handleKeyDown}
+            className="block w-full touch-pan-y rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-100"
+            style={{ aspectRatio: `${W} / ${H}` }}
+          >
+            <title>날짜별 체결가 추이</title>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={lineColor} stopOpacity="0.16" />
+                <stop offset="60%" stopColor={lineColor} stopOpacity="0.04" />
+                <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* 가로 그리드 — 맨 아래 줄만 축 기준선이라 실선으로 둔다 */}
+            {grid.map((g, i) => {
+              const isBaseline = i === GRID_LINES;
+              return (
+                <line
+                  key={i}
+                  x1={0}
+                  y1={g.y.toFixed(1)}
+                  x2={W}
+                  y2={g.y.toFixed(1)}
+                  stroke="var(--color-neutral-200)"
+                  strokeWidth={1}
+                  strokeDasharray={isBaseline ? undefined : "2 6"}
+                  strokeOpacity={isBaseline ? 1 : 0.85}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+
+            <path d={area} fill={`url(#${gradientId})`} />
+            <path
+              d={line}
+              fill="none"
+              stroke={lineColor}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
             />
-            <text x={W - PAD_R + 8} y={g.y + 4} fontSize="13" fill="var(--color-neutral-400)">
-              {formatValue(Math.round(g.v))}
-            </text>
-          </g>
-        ))}
 
-        <path d={area} fill="url(#line-chart-area)" />
-        <path
-          d={line}
-          fill="none"
-          stroke={lineColor}
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
+            {hc ? (
+              <line
+                x1={hc.x}
+                y1={PAD_T}
+                x2={hc.x}
+                y2={H - PAD_B}
+                stroke="var(--color-neutral-300)"
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
 
-        {hc ? (
-          <line
-            x1={hc.x}
-            y1={PAD_T}
-            x2={hc.x}
-            y2={H - PAD_B}
-            stroke="var(--color-neutral-300)"
-            strokeWidth={1}
-            strokeDasharray="4 4"
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : null}
-        <circle cx={last.x} cy={last.y} r={4} fill={lineColor} />
-        {hc ? (
-          <circle cx={hc.x} cy={hc.y} r={5} fill={lineColor} stroke="#fff" strokeWidth={2} />
-        ) : null}
-      </svg>
+            {/* 마지막 체결점: 옅은 후광 + 흰 테두리 점 */}
+            <circle cx={last.x} cy={last.y} r={9} fill={lineColor} opacity={0.14} />
+            <circle
+              cx={last.x}
+              cy={last.y}
+              r={3.5}
+              fill={lineColor}
+              stroke="#fff"
+              strokeWidth={2}
+            />
 
-      {/* X축 기간 라벨 */}
-      <div className="mt-1 flex justify-between pr-14 text-[11px] text-neutral-400">
-        <span>{points[0]!.label}</span>
-        <span>{points[n - 1]!.label}</span>
+            {hc ? (
+              <circle
+                cx={hc.x}
+                cy={hc.y}
+                r={4.5}
+                fill={lineColor}
+                stroke="#fff"
+                strokeWidth={2.5}
+              />
+            ) : null}
+          </svg>
+
+          {/* 호버 툴팁 — 좌표계가 플롯과 같도록 플롯 컬럼 안에 둔다 */}
+          {hp ? (
+            <div
+              className="pointer-events-none absolute z-10 rounded-md bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift"
+              style={{
+                left: `clamp(52px, ${(hc!.x / W) * 100}%, calc(100% - 52px))`,
+                top: `${(hc!.y / H) * 100}%`,
+                transform: tooltipBelow
+                  ? "translate(-50%, 14px)"
+                  : "translate(-50%, calc(-100% - 14px))",
+              }}
+            >
+              <div className="whitespace-nowrap text-sm font-bold text-white">
+                {formatValue(hp.value)}
+              </div>
+              <div className="whitespace-nowrap text-[11px] text-neutral-400">{hp.label}</div>
+              {/* 데이터 점을 가리키는 꼬리 */}
+              <span
+                aria-hidden="true"
+                className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-neutral-900"
+                style={tooltipBelow ? { top: -4 } : { bottom: -4 }}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {/* 우측 가격축 */}
+        <div className="relative w-[72px] shrink-0 pl-2 @lg:w-[92px] @lg:pl-2.5">
+          {grid.map((g, i) => {
+            if (i === badgeNearestTick) return null;
+            // 좁은 폭에서는 눈금 간격이 글자 높이에 가까워지므로 양 끝만 남긴다.
+            const interior = i !== 0 && i !== GRID_LINES;
+            return (
+              <span
+                key={i}
+                className={`absolute -translate-y-1/2 text-[10px] tabular-nums whitespace-nowrap text-neutral-400 @lg:text-[11px] ${
+                  interior ? "hidden @lg:block" : ""
+                }`}
+                style={{ top: `${(g.y / H) * 100}%` }}
+              >
+                {formatValue(Math.round(g.v))}
+              </span>
+            );
+          })}
+          <span
+            className="absolute -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-[10px] font-bold tabular-nums whitespace-nowrap text-white @lg:text-[11px]"
+            style={{ top: `${(last.y / H) * 100}%`, backgroundColor: lineColor }}
+          >
+            {formatValue(values[n - 1]!)}
+          </span>
+        </div>
       </div>
 
-      {/* 호버 툴팁 */}
-      {hp ? (
-        <div
-          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift"
-          style={{ left: `${(hover! / (n - 1)) * ((innerW / W) * 100) + (PAD_L / W) * 100}%` }}
-        >
-          <div className="whitespace-nowrap text-sm font-bold text-white">
-            {formatValue(hp.value)}
-          </div>
-          <div className="whitespace-nowrap text-[11px] text-neutral-400">{hp.label}</div>
-        </div>
-      ) : null}
+      {/* X축 기간 라벨 — 플롯 폭에만 맞추고 각 라벨을 실제 데이터 x 좌표에 정렬한다 */}
+      <div className="relative mt-1.5 mr-[72px] h-4 @lg:mr-[92px]">
+        {xLabelIndexes.map((index, i) => (
+          <span
+            key={index}
+            className="absolute top-0 text-[11px] tabular-nums whitespace-nowrap text-neutral-400"
+            style={{
+              left: `${(xAt(index) / W) * 100}%`,
+              transform:
+                i === 0
+                  ? "none"
+                  : i === xLabelIndexes.length - 1
+                    ? "translateX(-100%)"
+                    : "translateX(-50%)",
+            }}
+          >
+            {points[index]!.label}
+          </span>
+        ))}
+      </div>
+
+      <span className="sr-only" aria-live="polite">
+        {hp ? `${hp.label}, ${formatValue(hp.value)}` : ""}
+      </span>
     </div>
   );
 }

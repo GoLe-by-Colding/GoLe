@@ -19,7 +19,8 @@ test.describe("Create listing", () => {
 
     const title = `E2E 테스트 세트 ${Date.now()}`;
     await page.getByLabel("제목").fill(title);
-    await page.getByLabel("설명").fill("E2E 자동 등록 상품");
+    // "설명서 포함" 체크박스와 부분 일치하므로 정확 일치로 집는다.
+    await page.getByLabel("설명", { exact: true }).fill("E2E 자동 등록 상품");
     await page.getByLabel("가격 (원)").fill("12345");
 
     // 파일 업로드(1x1 PNG) — MinIO 업로드 후 미리보기 표시까지 대기

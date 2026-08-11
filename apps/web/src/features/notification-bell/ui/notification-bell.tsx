@@ -49,9 +49,15 @@ export function NotificationBell() {
       aria-label={count > 0 ? `알림 ${count}건` : "알림"}
       className="relative grid h-8 w-8 place-items-center rounded-full text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
     >
-      <span aria-hidden="true" className="text-lg">
-        🔔
-      </span>
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+        <path
+          d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 6 2 6 2 7.5h-15c0-1.5 2-1.5 2-7.5ZM10 20h4"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
       {count > 0 ? (
         <span className="absolute -right-0.5 -top-0.5 grid min-w-[16px] place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-4 text-white">
           {count > 99 ? "99+" : count}

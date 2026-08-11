@@ -96,14 +96,11 @@ export function NotificationsPage() {
         ) : items.length === 0 ? (
           <Card>
             <div className="flex flex-col items-center gap-2 p-10 text-center">
-              <span aria-hidden="true" className="text-3xl">
-                🔔
-              </span>
               <Text tone="secondary">아직 알림이 없어요.</Text>
             </div>
           </Card>
         ) : (
-          <ul className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200/70 bg-white divide-y divide-neutral-100">
+          <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
             {items.map((n) => {
               const body = (
                 <div className="flex items-start gap-3 px-5 py-4">

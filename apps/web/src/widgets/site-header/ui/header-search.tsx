@@ -91,14 +91,14 @@ export function HeaderSearch({ fullWidth = false, onSubmitted }: HeaderSearchPro
             autoComplete="off"
             onChange={(e) => setValue(e.target.value)}
             onFocus={() => results.length > 0 && setSearch((s) => ({ ...s, open: true }))}
-            className="h-10 w-full rounded-full border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-brand-100"
+            className="h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-brand-100"
           />
         </div>
       </form>
       {open ? (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-neutral-200/60 bg-white shadow-lift"
+          className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lift"
         >
           {results.map((s) => (
             <li key={s.setNumber}>

@@ -103,9 +103,9 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             <Skeleton className="h-9 w-20" />
             <Skeleton className="h-6 w-24 rounded-full" />
           </div>
-          <Skeleton className="h-28 w-full rounded-2xl" />
+          <Skeleton className="h-28 w-full rounded-lg" />
           <div className="flex gap-3">
-            <Skeleton className="h-12 flex-1 rounded-xl" />
+            <Skeleton className="h-12 flex-1 rounded-md" />
           </div>
         </div>
       </Container>
@@ -162,7 +162,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         </div>
 
         {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
-        <p className="rounded-xl bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-500">
+        <p className="rounded-lg bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-500">
           GoLe는 통신판매중개자로서 거래 당사자가 아니며, 상품 정보·거래에 대한 책임은 판매자에게
           있습니다. 결제 대금은 에스크로로 보호되며, 구매 확정 전까지 판매자에게 지급되지 않습니다.
         </p>
@@ -181,7 +181,8 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </ol>
         </div>
 
-        {order.status === "completed" ? (
+        {/* 자기거래 주문(차단 이전에 쌓인 건)에는 후기 동선을 열지 않는다. 서버도 거부한다. */}
+        {order.status === "completed" && order.buyerId !== order.sellerId ? (
           <Card padded className="flex flex-col gap-3">
             <Text weight="semibold">판매자 후기 남기기</Text>
             <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />

@@ -40,7 +40,11 @@ async function loadBoard(): Promise<readonly PriceBoardItem[]> {
   );
 }
 
-export async function PricesPage() {
+export interface PricesPageProps {
+  readonly initialSetNumber?: string | undefined;
+}
+
+export async function PricesPage({ initialSetNumber }: PricesPageProps) {
   const board = await loadBoard();
 
   return (
@@ -56,7 +60,7 @@ export async function PricesPage() {
         {board.length === 0 ? (
           <Text tone="muted">시세 데이터를 불러오지 못했습니다.</Text>
         ) : (
-          <PriceExplorer items={board} />
+          <PriceExplorer items={board} initialSetNumber={initialSetNumber} />
         )}
       </div>
     </Container>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   CONDITION_LABEL,
+  valuationBasisLabel,
+  valuationBasisTone,
   fetchPriceChart,
   fetchPriceValuation,
   type PricePoint,
@@ -53,7 +55,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
     return (
       <Card padded className="flex flex-col gap-3">
         <Skeleton className="h-5 w-28" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       </Card>
     );
   }
@@ -91,7 +93,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         emptyText="시세 데이터가 부족해요"
       />
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+      <div className="overflow-x-auto rounded-lg border border-neutral-200">
         <table className="w-full min-w-[460px] border-collapse text-sm">
           <thead>
             <tr className="bg-neutral-50 text-xs text-neutral-500">
@@ -110,14 +112,21 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
                   className={`border-t border-neutral-100 ${isHighlight ? "bg-brand-50/60" : ""}`}
                 >
                   <td className="px-3 py-2.5">
-                    <span
-                      className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}
-                    >
-                      {CONDITION_LABEL[c.condition]}
-                    </span>
-                    {isHighlight ? (
-                      <span className="ml-1 text-[11px] text-brand-600">· 이 상품</span>
-                    ) : null}
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        <span
+                          className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}
+                        >
+                          {CONDITION_LABEL[c.condition]}
+                        </span>
+                        {isHighlight ? (
+                          <span className="ml-1 text-[11px] text-brand-600">· 이 상품</span>
+                        ) : null}
+                      </span>
+                      <span className={`text-[11px] ${valuationBasisTone(c.basis)}`}>
+                        {valuationBasisLabel(c.basis, c.sampleCount)}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-neutral-900">
                     {formatKrw(c.fairPrice)}

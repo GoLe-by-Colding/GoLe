@@ -9,6 +9,11 @@ test.describe("Prices (KREAM-style)", () => {
     // 인터랙티브 차트
     await expect(page.getByRole("img", { name: "시세 추이 차트" }).first()).toBeVisible();
 
+    // API가 주는 상대 미디어 URL도 로컬/운영 환경의 공개 원점에서 정상 로드되어야 한다.
+    const catalogImages = page.locator('img[src*="/api/v1/media/catalog/"]');
+    await expect(catalogImages.first()).toBeVisible();
+    await expect(page.locator('[data-image-fallback="true"]')).toHaveCount(0);
+
     // 상태별 시세(즉시판매/즉시구매) 헤더
     await expect(page.getByText("즉시판매").first()).toBeVisible();
     await expect(page.getByText("즉시구매").first()).toBeVisible();
@@ -26,5 +31,31 @@ test.describe("Prices (KREAM-style)", () => {
     await page.getByLabel("정렬").selectOption("recent");
     // 목록이 여전히 렌더된다(첫 세트 버튼 존재)
     await expect(page.getByRole("img", { name: "시세 추이 차트" }).first()).toBeVisible();
+  });
+
+  test("홈에서 전달한 세트를 바로 선택하고 목록 선택을 URL에 반영한다", async ({ page }) => {
+    await page.goto("/");
+
+    // 홈 상단 시세 티커는 무한 마퀴(animate-market-ticker)라 클릭이 "요소가 멈출 때까지"
+    // 대기에 걸린다. 정적인 "지금 뜨는 세트" 목록에서 집는다.
+    const trending = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "지금 뜨는 세트" }) });
+    const trendingLink = trending.locator('a[href^="/prices?set="]').first();
+    const initialSet = new URL(
+      (await trendingLink.getAttribute("href"))!,
+      "http://localhost",
+    ).searchParams.get("set")!;
+
+    await trendingLink.click();
+    await expect(page).toHaveURL(new RegExp(`/prices\\?set=${initialSet}$`));
+    await expect(page.getByText(new RegExp(`^#${initialSet} ·`))).toBeVisible();
+
+    // 목록에서 다른 세트를 고르면 URL이 따라온다(세트 목록만 ol 안의 aria-pressed 버튼).
+    await page.locator('ol button[aria-pressed="false"]').first().click();
+    await expect(page).toHaveURL(/\/prices\?set=[^&]+$/);
+    const pickedSet = new URL(page.url()).searchParams.get("set")!;
+    expect(pickedSet).not.toBe(initialSet);
+    await expect(page.getByText(new RegExp(`^#${pickedSet} ·`))).toBeVisible();
   });
 });

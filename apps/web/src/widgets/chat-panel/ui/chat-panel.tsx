@@ -47,8 +47,8 @@ export function ChatPanel({ listingId, myId, otherId, isBuyer }: ChatPanelProps)
   if (loading) {
     return (
       <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-8 w-3/4 rounded-xl" />
-        <Skeleton className="h-8 w-1/2 rounded-xl" />
+        <Skeleton className="h-8 w-3/4 rounded-lg" />
+        <Skeleton className="h-8 w-1/2 rounded-lg" />
       </div>
     );
   }
@@ -102,7 +102,7 @@ export function ChatPanel({ listingId, myId, otherId, isBuyer }: ChatPanelProps)
           }}
           placeholder="메시지 입력… (Enter 전송, Shift+Enter 줄바꿈)"
           rows={1}
-          className="flex-1 resize-none rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+          className="flex-1 resize-none rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
         />
         <Button type="submit" size="sm" disabled={sending || !input.trim()} className="shrink-0">
           전송

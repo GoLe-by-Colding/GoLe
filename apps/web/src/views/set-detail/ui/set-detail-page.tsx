@@ -5,7 +5,7 @@ import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
 import type { PriceStatistics } from "@entities/pricing";
 import { ListingGrid } from "@widgets/listing-grid";
-import { Badge, Card, Container, Heading, Text } from "@shared/ui";
+import { Badge, Card, Container, Heading, MediaImage, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface SetDetailPageProps {
@@ -46,22 +46,18 @@ export function SetDetailPage({ set, listings, statistics }: SetDetailPageProps)
       </nav>
 
       <header className="flex flex-col gap-6 pb-8 md:flex-row md:items-start">
-        <div className="w-full shrink-0 overflow-hidden rounded-xl border border-neutral-200/70 bg-neutral-50 md:w-72">
-          {set.imageUrl === null ? (
-            <div
-              className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-brand-50 to-neutral-100 text-6xl font-bold text-brand-300"
-              aria-hidden="true"
-            >
-              🧱
-            </div>
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumbnailUrl(set.imageUrl, 640)}
-              alt={`${set.name} (${set.setNumber})`}
-              className="aspect-[4/3] w-full object-cover"
-            />
-          )}
+        <div className="w-full shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 md:w-72">
+          <MediaImage
+            src={set.imageUrl === null ? null : thumbnailUrl(set.imageUrl, 640)}
+            alt={`${set.name} (${set.setNumber})`}
+            className="aspect-[4/3] w-full object-cover"
+            fallback={
+              <span className="flex flex-col items-center gap-1 font-mono">
+                <span className="text-sm font-bold tracking-[0.2em]">SET</span>
+                <span className="text-xs">#{set.setNumber}</span>
+              </span>
+            }
+          />
         </div>
 
         <div className="flex flex-1 flex-col gap-3">

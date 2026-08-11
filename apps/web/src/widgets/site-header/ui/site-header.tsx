@@ -35,7 +35,7 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-200/50 bg-white/80 backdrop-blur-xl backdrop-saturate-[1.8]">
+    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
       <Container width="xl">
         <div className="flex h-16 items-center gap-8">
           <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
@@ -49,24 +49,13 @@ export function SiteHeader() {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`relative rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`relative border-b-2 px-3 py-2 text-sm transition-colors ${
                     active
-                      ? "font-semibold text-brand-600"
-                      : "font-medium text-neutral-500 hover:text-neutral-900"
+                      ? "border-brand-600 font-semibold text-brand-700"
+                      : "border-transparent font-medium text-neutral-500 hover:border-neutral-300 hover:text-neutral-900"
                   }`}
                 >
                   {item.label}
-                  {active ? (
-                    /* 브릭 스터드 3점 인디케이터 */
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-0 -bottom-[3px] flex justify-center gap-[3px]"
-                    >
-                      <span className="h-1 w-1 rounded-full bg-brand-600" />
-                      <span className="h-1 w-1 rounded-full bg-brand-600" />
-                      <span className="h-1 w-1 rounded-full bg-accent-400" />
-                    </span>
-                  ) : null}
                 </Link>
               );
             })}

@@ -66,7 +66,8 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
         }
 
         if (query.condition() != null) {
-            criteria = criteria.and("condition").is(query.condition().name());
+            // 3단계 시절 저장값(USED_COMPLETE 등)도 함께 매칭해야 과거 매물이 필터에서 빠지지 않는다.
+            criteria = criteria.and("condition").in(query.condition().storageNames());
         }
 
         if (query.category() != null) {
@@ -162,7 +163,8 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 document.getTitle(),
                 document.getDescription(),
                 Money.won(document.getPriceAmount()),
-                ItemCondition.valueOf(document.getCondition()),
+                // valueOf가 아니라 fromKey — 레거시 값(USED_COMPLETE 등)에서 예외가 나지 않게.
+                ItemCondition.fromKey(document.getCondition()),
                 toDisclosure(document),
                 document.getPhotoUrls(),
                 document.getCatalogSetNumber(),

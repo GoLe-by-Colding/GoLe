@@ -77,8 +77,10 @@ export function ProfilePage() {
   }
 
   function tabClass(t: Tab) {
-    return `flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-      tab === t ? "bg-white text-brand-700 shadow-soft" : "text-neutral-500 hover:text-neutral-800"
+    return `flex-1 border-b-2 py-2.5 text-sm font-semibold transition-colors ${
+      tab === t
+        ? "border-brand-600 text-brand-700"
+        : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
     }`;
   }
 
@@ -99,7 +101,7 @@ export function ProfilePage() {
         </div>
 
         {/* 탭 */}
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
+        <div className="grid grid-cols-3 border-b border-neutral-200">
           {(["info", "orders", "listings"] as Tab[]).map((t) => (
             <button key={t} type="button" className={tabClass(t)} onClick={() => setTab(t)}>
               {TAB_LABEL[t]}
@@ -130,12 +132,9 @@ export function ProfilePage() {
         {tab === "orders" && (
           <div className="flex flex-col gap-3">
             {orders === null ? (
-              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
+              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
             ) : orders.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-                <span aria-hidden="true" className="text-3xl">
-                  🛒
-                </span>
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
                 <Text tone="secondary" weight="medium">
                   구매 내역이 없어요
                 </Text>
@@ -145,7 +144,7 @@ export function ProfilePage() {
                 <Link
                   key={o.id}
                   href={`/orders/${o.id}`}
-                  className="flex items-center justify-between rounded-2xl border border-neutral-200/60 bg-white px-4 py-3.5 hover:bg-neutral-50"
+                  className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
                 >
                   <div className="flex flex-col gap-0.5">
                     <span className="font-mono text-xs text-neutral-400">{o.id.slice(0, 8)}</span>
@@ -179,12 +178,9 @@ export function ProfilePage() {
               </LinkButton>
             </div>
             {listings === null ? (
-              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)
+              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
             ) : listings.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-16 text-center">
-                <span aria-hidden="true" className="text-3xl">
-                  📦
-                </span>
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
                 <Text tone="secondary" weight="medium">
                   등록한 매물이 없어요
                 </Text>
@@ -197,7 +193,7 @@ export function ProfilePage() {
                 <Link
                   key={l.id}
                   href={`/listings/${l.id}`}
-                  className="flex items-center justify-between rounded-2xl border border-neutral-200/60 bg-white px-4 py-3.5 hover:bg-neutral-50"
+                  className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
                 >
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate font-medium text-neutral-900">{l.title}</span>

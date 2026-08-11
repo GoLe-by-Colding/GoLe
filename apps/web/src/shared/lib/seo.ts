@@ -18,13 +18,15 @@ export function schemaAvailability(status: string): string {
 }
 
 /**
- * 매물 상태등급 → schema.org itemCondition.
- * 현재 백엔드 등급은 3단계다. `condition-disclosure` 5단계 확장이 들어오면 함께 갱신해야 한다.
+ * 매물 상태등급 → schema.org itemCondition. (condition-disclosure 5단계)
+ *
+ * schema.org에는 우리 등급과 1:1로 맞는 값이 없다. NewCondition/UsedCondition/DamagedCondition
+ * 세 갈래로만 접는다. 레거시 값(used_complete 등)도 중고로 떨어지므로 별도 처리가 필요 없다.
  */
 export function schemaItemCondition(condition: string): string {
-  return condition === "new_sealed"
-    ? "https://schema.org/NewCondition"
-    : "https://schema.org/UsedCondition";
+  if (condition === "new_sealed") return "https://schema.org/NewCondition";
+  if (condition === "damaged") return "https://schema.org/DamagedCondition";
+  return "https://schema.org/UsedCondition";
 }
 
 /**

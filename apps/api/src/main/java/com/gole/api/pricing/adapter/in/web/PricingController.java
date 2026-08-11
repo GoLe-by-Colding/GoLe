@@ -62,9 +62,13 @@ public class PricingController {
 
     @Operation(
             summary = "상태별 시세 밸류에이션",
-            description = "최근 체결가 기준으로 미개봉·중고풀세트·부품빠짐 상태별 "
-                    + "공정 시세·즉시판매(매도)·즉시구매(매수)를 반환합니다. "
-                    + "실거래 3건 이상이면 실데이터, 아니면 감가 모델로 산출합니다.")
+            description = "최근 체결가 기준으로 5개 등급(미개봉·거의새것·중고양호·사용감·하자)별 "
+                    + "공정 시세·즉시판매(매도)·즉시구매(매수)를 반환합니다.\n\n"
+                    + "근거는 강한 순으로 3단계이며 `basis` 필드로 노출됩니다.\n"
+                    + "- `grade`: 해당 등급 체결 3건 이상 → 그 중앙값\n"
+                    + "- `group`: 등급 표본 부족 → 같은 집계 그룹(미개봉/개봉·온전/불완전·하자) "
+                    + "체결 3건 이상을 앵커로 환산\n"
+                    + "- `model`: 표본 없음 → 미개봉 시세 × 등급 감가 계수")
     @GetMapping("/valuation")
     public ValuationResponse valuation(@PathVariable String setNumber) {
         return getPriceInsightsUseCase

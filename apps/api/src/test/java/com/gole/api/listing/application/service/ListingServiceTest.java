@@ -118,7 +118,7 @@ class ListingServiceTest {
                 "밀레니엄 팰컨 75192",
                 "중고",
                 900_000,
-                ItemCondition.USED_COMPLETE,
+                ItemCondition.USED_GOOD,
                 ConditionDisclosure.basic(),
                 List.of("photo-2.jpg"),
                 "75192"));
@@ -137,7 +137,7 @@ class ListingServiceTest {
                 "밀레니엄 팰컨 75192",
                 "중고",
                 900_000,
-                ItemCondition.USED_COMPLETE,
+                ItemCondition.USED_GOOD,
                 ConditionDisclosure.basic(),
                 List.of("photo-2.jpg"),
                 "75192"));

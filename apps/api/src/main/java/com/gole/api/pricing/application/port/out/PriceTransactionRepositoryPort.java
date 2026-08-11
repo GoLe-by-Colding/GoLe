@@ -26,6 +26,15 @@ public interface PriceTransactionRepositoryPort {
             String setNumber, com.gole.api.pricing.domain.model.SetCondition condition);
 
     /**
+     * 특정 세트의 <b>여러 등급</b> 체결 거래를 한 번에 체결 시각 오름차순으로 조회한다.
+     *
+     * <p>등급별 표본이 모자랄 때 {@code ConditionGroup} 단위로 받치기 위한 조회다.
+     * 등급마다 따로 부르면 그룹 하나당 N번 왕복하므로 묶어서 받는다.
+     */
+    List<PriceTransaction> findByConditionsAscending(
+            String setNumber, List<com.gole.api.pricing.domain.model.SetCondition> conditions);
+
+    /**
      * 체결 건수 기준 상위 세트를 집계한다(인기 랭킹). (백로그 13.4)
      *
      * @param limit 반환할 최대 세트 수

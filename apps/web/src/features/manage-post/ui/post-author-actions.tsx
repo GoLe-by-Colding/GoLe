@@ -69,7 +69,7 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+      <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

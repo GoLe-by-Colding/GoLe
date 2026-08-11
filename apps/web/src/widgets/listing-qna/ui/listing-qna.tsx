@@ -76,13 +76,13 @@ export function ListingQna({ listingId }: ListingQnaProps) {
       {/* 댓글 목록 */}
       {comments === null ? (
         <div className="flex flex-col gap-2">
-          <Skeleton className="h-10 w-full rounded-xl" />
-          <Skeleton className="h-10 w-4/5 rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-4/5 rounded-lg" />
         </div>
       ) : comments.length === 0 ? (
         <p className="text-sm text-neutral-400">아직 문의가 없어요. 첫 질문을 남겨보세요!</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200/60">
+        <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
           {comments.map((c) => (
             <li key={c.id} className="px-4 py-3">
               <div className="flex items-center gap-2">
@@ -114,7 +114,7 @@ export function ListingQna({ listingId }: ListingQnaProps) {
             placeholder="궁금한 점을 남겨주세요."
             rows={3}
             required
-            className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+            className="w-full rounded-md border border-neutral-200 bg-white px-4 py-2.5 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
           />
           <div className="flex justify-end">
             <Button type="submit" size="sm" disabled={submitting || !content.trim()}>
