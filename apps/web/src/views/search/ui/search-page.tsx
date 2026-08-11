@@ -1,5 +1,6 @@
 import {
   searchListings,
+  ITEM_CONDITIONS,
   type ItemCondition,
   type Listing,
   type ListingCategory,
@@ -19,7 +20,7 @@ export interface SearchPageProps {
   readonly sort?: string | undefined;
 }
 
-const CONDITIONS: readonly ItemCondition[] = ["new_sealed", "used_complete", "used_incomplete"];
+const CONDITIONS = ITEM_CONDITIONS;
 const CATEGORIES: readonly ListingCategory[] = ["set", "parts", "minifig", "moc"];
 const SORTS: readonly ListingSort[] = ["newest", "price_asc", "price_desc"];
 

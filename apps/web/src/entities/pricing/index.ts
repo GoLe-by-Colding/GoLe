@@ -3,10 +3,11 @@ export type {
   PricePoint,
   TrendingSet,
   SetCondition,
+  ValuationBasis,
   ConditionValuation,
   PriceValuation,
 } from "./model/types";
-export { CONDITION_LABEL } from "./model/types";
+export { CONDITION_LABEL, valuationBasisLabel, valuationBasisTone } from "./model/types";
 export {
   fetchPriceStatistics,
   fetchPriceStatisticsForPage,

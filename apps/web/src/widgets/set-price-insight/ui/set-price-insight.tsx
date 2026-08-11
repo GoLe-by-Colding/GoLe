@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   CONDITION_LABEL,
+  valuationBasisLabel,
+  valuationBasisTone,
   fetchPriceChart,
   fetchPriceValuation,
   type PricePoint,
@@ -110,14 +112,21 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
                   className={`border-t border-neutral-100 ${isHighlight ? "bg-brand-50/60" : ""}`}
                 >
                   <td className="px-3 py-2.5">
-                    <span
-                      className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}
-                    >
-                      {CONDITION_LABEL[c.condition]}
-                    </span>
-                    {isHighlight ? (
-                      <span className="ml-1 text-[11px] text-brand-600">· 이 상품</span>
-                    ) : null}
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        <span
+                          className={`font-medium ${isHighlight ? "text-brand-700" : "text-neutral-900"}`}
+                        >
+                          {CONDITION_LABEL[c.condition]}
+                        </span>
+                        {isHighlight ? (
+                          <span className="ml-1 text-[11px] text-brand-600">· 이 상품</span>
+                        ) : null}
+                      </span>
+                      <span className={`text-[11px] ${valuationBasisTone(c.basis)}`}>
+                        {valuationBasisLabel(c.basis, c.sampleCount)}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-neutral-900">
                     {formatKrw(c.fairPrice)}

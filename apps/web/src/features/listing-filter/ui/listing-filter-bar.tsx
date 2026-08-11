@@ -7,6 +7,7 @@ import {
   type ItemCondition,
   type ListingCategory,
   type ListingSort,
+  ITEM_CONDITIONS,
   LISTING_CATEGORIES,
 } from "@entities/listing";
 import { SetAutocomplete } from "./set-autocomplete";
@@ -25,7 +26,7 @@ export interface ListingFilterBarProps {
   readonly initial: ListingFilterValues;
 }
 
-const CONDITIONS: readonly ItemCondition[] = ["new_sealed", "used_complete", "used_incomplete"];
+const CONDITIONS = ITEM_CONDITIONS;
 
 const SORTS: ReadonlyArray<{ readonly value: ListingSort; readonly label: string }> = [
   { value: "newest", label: "최신순" },

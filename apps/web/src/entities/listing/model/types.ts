@@ -3,7 +3,21 @@
  */
 import { formatKrw } from "@shared/lib";
 
-export type ItemCondition = "new_sealed" | "used_complete" | "used_incomplete";
+/**
+ * 매물 상태 등급(고지 축). 백엔드 ItemCondition과 1:1.
+ * 3단계 시절 값(used_complete/used_incomplete)은 백엔드가 읽기 시점에 흡수하므로
+ * 프론트에는 새 등급만 존재한다.
+ */
+export type ItemCondition = "new_sealed" | "like_new" | "used_good" | "used_fair" | "damaged";
+
+/** 등급 선택지. 좋은 상태 → 나쁜 상태 순서를 여기 한 곳에서만 정의한다. */
+export const ITEM_CONDITIONS: readonly ItemCondition[] = [
+  "new_sealed",
+  "like_new",
+  "used_good",
+  "used_fair",
+  "damaged",
+];
 export type Completeness = "full_box" | "no_box" | "bulk";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
 export type ListingCategory = "set" | "parts" | "minifig" | "moc";
@@ -47,8 +61,10 @@ export interface Listing {
 
 const CONDITION_LABEL: Record<ItemCondition, string> = {
   new_sealed: "미개봉",
-  used_complete: "중고-완전",
-  used_incomplete: "중고-부품일부",
+  like_new: "거의 새것",
+  used_good: "중고-양호",
+  used_fair: "중고-사용감",
+  damaged: "하자 있음",
 };
 
 const COMPLETENESS_LABEL: Record<Completeness, string> = {

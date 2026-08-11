@@ -6,8 +6,8 @@ import java.util.List;
  * 상태별 시세 밸류에이션. 시장 체결가(미개봉 기준)에서 상태별 공정 시세를 산출하고,
  * 각 상태마다 즉시판매(매도)·즉시구매(매수) 호가를 스프레드로 산출한다. (KREAM식 호가)
  *
- * <p>상태별 공정가는 실제 상태별 체결 데이터가 충분하면 그 값으로, 아니면 감가 모델로 산출한다.
- * {@code basedOnRealData}/{@code sampleCount}로 근거를 노출한다.
+ * <p>상태별 공정가는 근거가 강한 순서로 3단계를 밟는다 — 등급 실측 → 그룹 실측 환산 → 감가 모델.
+ * 어느 단계를 썼는지는 {@link ValuationBasis}로, 표본 수는 {@code sampleCount}로 노출한다.
  */
 public record PriceValuation(String setNumber, long marketPrice, List<ConditionValuation> conditions) {
 
@@ -16,8 +16,13 @@ public record PriceValuation(String setNumber, long marketPrice, List<ConditionV
     /** 즉시구매(매수) 스프레드 — 공정가보다 약간 높게. */
     public static final double BUY_SPREAD = 1.05;
 
+    /**
+     * @param sampleCount     공정가 산출에 실제로 쓰인 체결 건수. 모델 폴백이면 0.
+     * @param basedOnRealData 체결 데이터 기반 여부. {@code basis.isReal()}과 같다.
+     */
     public record ConditionValuation(
             SetCondition condition,
+            ValuationBasis basis,
             int depreciationPct,
             long fairPrice,
             long sellPrice,
@@ -25,22 +30,47 @@ public record PriceValuation(String setNumber, long marketPrice, List<ConditionV
             int sampleCount,
             boolean basedOnRealData) {}
 
-    /** 감가 모델 기반(실데이터 부족 시 폴백). */
+    /** 감가 모델 기반(체결 표본 없음). 미개봉 시세에 등급 계수만 곱한다. */
     public static ConditionValuation model(SetCondition condition, long marketPrice) {
         long fair = Math.round(marketPrice * condition.factor());
-        return spread(condition, fair, condition.depreciationPct(), 0, false);
+        return spread(condition, ValuationBasis.MODEL, fair, condition.depreciationPct(), 0);
     }
 
-    /** 실제 상태별 체결가 기반. */
-    public static ConditionValuation real(SetCondition condition, long marketPrice, long fairPrice, int sampleCount) {
-        int dep = marketPrice <= 0 ? 0 : Math.max(0, (int) Math.round((1.0 - (double) fairPrice / marketPrice) * 100));
-        return spread(condition, fairPrice, dep, sampleCount, true);
+    /** 해당 등급의 실제 체결가 기반. 가장 강한 근거. */
+    public static ConditionValuation grade(SetCondition condition, long marketPrice, long fairPrice, int sampleCount) {
+        return spread(condition, ValuationBasis.GRADE, fairPrice, depreciation(marketPrice, fairPrice), sampleCount);
+    }
+
+    /**
+     * 그룹 체결가를 앵커로 환산. 등급 표본이 모자랄 때 쓴다.
+     *
+     * <p>{@code 등급가 = 그룹중앙값 × 등급계수 / 그룹대표계수}. 그룹 안에서의 상대 위치만
+     * 모델로 보정하므로, 미개봉 시세에서 통째로 외삽하는 {@link #model}보다 앵커가 가깝다.
+     *
+     * @param groupMedian 그룹 체결가의 중앙값
+     * @param sampleCount 그룹 체결 건수
+     */
+    public static ConditionValuation group(
+            SetCondition condition, long marketPrice, long groupMedian, int sampleCount) {
+        double reference = condition.group().referenceFactor();
+        long fair = reference <= 0
+                ? Math.round(marketPrice * condition.factor())
+                : Math.round(groupMedian * (condition.factor() / reference));
+        return spread(condition, ValuationBasis.GROUP, fair, depreciation(marketPrice, fair), sampleCount);
+    }
+
+    /** 시장가 대비 감가율(%). 시장가가 없거나 공정가가 더 높으면 0. */
+    private static int depreciation(long marketPrice, long fairPrice) {
+        if (marketPrice <= 0) {
+            return 0;
+        }
+        return Math.max(0, (int) Math.round((1.0 - (double) fairPrice / marketPrice) * 100));
     }
 
     private static ConditionValuation spread(
-            SetCondition condition, long fair, int dep, int sampleCount, boolean real) {
+            SetCondition condition, ValuationBasis basis, long fair, int dep, int sampleCount) {
         long sell = Math.round(fair * SELL_SPREAD);
         long buy = Math.round(fair * BUY_SPREAD);
-        return new ConditionValuation(condition, dep, fair, sell, buy, sampleCount, real);
+        return new ConditionValuation(condition, basis, dep, fair, sell, buy, sampleCount, basis.isReal());
     }
 }

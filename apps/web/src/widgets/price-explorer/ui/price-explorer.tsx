@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CONDITION_LABEL, type PricePoint, type PriceValuation } from "@entities/pricing";
+import {
+  CONDITION_LABEL,
+  valuationBasisLabel,
+  valuationBasisTone,
+  type PricePoint,
+  type PriceValuation,
+} from "@entities/pricing";
 import { Badge, Card, LineChart, MediaImage } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
@@ -293,10 +299,8 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                               <span className="font-medium text-neutral-900">
                                 {CONDITION_LABEL[c.condition]}
                               </span>
-                              <span
-                                className={`text-[11px] ${c.basedOnRealData ? "text-success" : "text-neutral-400"}`}
-                              >
-                                {c.basedOnRealData ? `실거래 ${c.sampleCount}건` : "추정"}
+                              <span className={`text-[11px] ${valuationBasisTone(c.basis)}`}>
+                                {valuationBasisLabel(c.basis, c.sampleCount)}
                               </span>
                             </div>
                           </td>
