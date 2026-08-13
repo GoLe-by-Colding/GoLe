@@ -112,3 +112,14 @@ export function formatDateTime(value: string | null): string {
 export function shortId(value: string): string {
   return value.length > 8 ? value.slice(0, 8) : value;
 }
+
+/**
+ * 정산 요율을 백분율로. 0.05 → "5%", 0.035 → "3.5%".
+ *
+ * 정산 시점에 적용된 값이라 현재 설정과 다를 수 있다. 소수점은 필요할 때만 붙여
+ * 목록에서 "5.0%"처럼 자릿수가 흔들리지 않게 한다.
+ */
+export function formatFeeRate(rate: number): string {
+  const percent = rate * 100;
+  return `${Number.isInteger(percent) ? percent : percent.toFixed(1)}%`;
+}

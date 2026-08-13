@@ -7,7 +7,7 @@ import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import { Badge, Heading, Select, Text } from "@shared/ui";
-import { ORDER_STATUS_LABEL, formatDateTime, shortId } from "../model/labels";
+import { ORDER_STATUS_LABEL, formatDateTime, formatFeeRate, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
 const STATUSES = ["PAYMENT_PENDING", "FUNDS_HELD", "COMPLETED", "REFUNDED", "PAYMENT_FAILED"];
@@ -62,15 +62,16 @@ export function AdminOrdersView() {
       </div>
 
       <Text tone="muted" size="sm">
-        읽기 전용입니다. 분쟁 환불은 구매자·판매자 흐름에서 처리합니다.
+        읽기 전용입니다. 분쟁 환불은 구매자·판매자 흐름에서 처리합니다. 수수료·정산액은 거래 완료
+        시점에 확정되며, 판매자 지급 실행은 아직 연동되지 않았습니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
-        headers={["주문", "상태", "금액", "세트", "구매자", "판매자", "생성"]}
-        alignRight={[2]}
-        minWidth={780}
+        headers={["주문", "상태", "금액", "수수료", "정산액", "세트", "구매자", "판매자", "생성"]}
+        alignRight={[2, 3, 4]}
+        minWidth={980}
         empty="주문이 없습니다."
         rowCount={(rows ?? []).length}
       >
@@ -88,6 +89,27 @@ export function AdminOrdersView() {
             </td>
             <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
               {formatKrw(o.amount)}
+            </td>
+            <td className="px-3 py-2.5 text-right tabular-nums">
+              {o.fee === null ? (
+                <span className="text-neutral-300">—</span>
+              ) : (
+                <span className="text-neutral-600">
+                  {formatKrw(o.fee)}
+                  {o.feeRate !== null ? (
+                    <span className="ml-1 text-xs text-neutral-400">
+                      {formatFeeRate(o.feeRate)}
+                    </span>
+                  ) : null}
+                </span>
+              )}
+            </td>
+            <td className="px-3 py-2.5 text-right tabular-nums">
+              {o.payout === null ? (
+                <span className="text-neutral-300">—</span>
+              ) : (
+                formatKrw(o.payout)
+              )}
             </td>
             <td className="px-3 py-2.5 text-neutral-600">{o.catalogSetNumber ?? "—"}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.buyerId)}</td>

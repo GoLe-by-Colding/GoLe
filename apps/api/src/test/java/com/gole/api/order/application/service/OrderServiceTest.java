@@ -10,9 +10,12 @@ import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.OrderStateException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
+import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.Settlement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -92,6 +95,56 @@ class OrderServiceTest {
         assertThat(reservation.sold).isTrue();
     }
 
+    /**
+     * 회귀: 정산 전표가 주문과 함께 저장되어야 한다.
+     *
+     * <p>이전에는 정산 어댑터가 계산만 하고 아무 데도 남기지 않았고, 영속성 어댑터도 정산을
+     * null로 고정 저장했다. 그래서 완료 주문에서 수수료·정산액을 되읽을 수 없었다.
+     */
+    @Test
+    void complete_attachesSettlement_toSavedOrder() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service.complete(id);
+
+        Settlement saved = orders.findById(id).orElseThrow().getSettlement();
+        assertThat(saved).isNotNull();
+        assertThat(saved.grossAmount()).isEqualTo(280_000);
+        assertThat(saved.fee()).isEqualTo(14_000); // 5%
+        assertThat(saved.payout()).isEqualTo(266_000);
+        assertThat(saved.feeRate()).isEqualTo(0.05);
+        // 자금 보존: 판매자 지급액 + 플랫폼 수수료 = 구매자가 낸 금액
+        assertThat(saved.payout() + saved.fee()).isEqualTo(saved.grossAmount());
+    }
+
+    /** 완료 전에는 정산이 없어야 한다 — 0원 정산과 미정산이 구분되어야 하기 때문. */
+    @Test
+    void settlement_isAbsent_beforeCompletion() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        assertThat(orders.findById(id).orElseThrow().getSettlement()).isNull();
+        service.pay(id);
+        assertThat(orders.findById(id).orElseThrow().getSettlement()).isNull();
+    }
+
+    /**
+     * 이중 정산 방어. 상태 전이가 이미 재실행을 막지만, 나중에 재정산·수동 보정 경로가
+     * 생겼을 때 조용히 두 번 계산되지 않도록 애그리거트에서도 거부한다.
+     */
+    @Test
+    void attachSettlement_rejectsSecondAttempt() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service.complete(id);
+
+        Order completed = orders.findById(id).orElseThrow();
+        assertThatThrownBy(() -> completed.attachSettlement(
+                        Settlement.compute(id, "seller-1", 280_000, new FeePolicy(0.05, 0, 0), Instant.EPOCH)))
+                .isInstanceOf(OrderStateException.class);
+    }
+
     @Test
     void refund_returnsFunds_andReleasesListing() {
         reservation.available = true;
@@ -167,11 +220,14 @@ class OrderServiceTest {
     }
 
     private static final class CountingSettlement implements SettlementPort {
+        private static final FeePolicy POLICY = new FeePolicy(0.05, 0, 0);
+
         private final AtomicInteger calls = new AtomicInteger();
 
         @Override
-        public void settleOnce(String orderId, String sellerId, long grossAmount) {
+        public Settlement settleOnce(String orderId, String sellerId, long grossAmount) {
             calls.incrementAndGet();
+            return Settlement.compute(orderId, sellerId, grossAmount, POLICY, Instant.EPOCH);
         }
     }
 

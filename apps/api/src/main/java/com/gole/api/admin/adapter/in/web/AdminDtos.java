@@ -27,11 +27,20 @@ public final class AdminDtos {
 
     // ── 대시보드 ──────────────────────────────────────────────
 
+    /**
+     * @param gmv             완료 주문 거래액. 플랫폼을 통과한 돈이지 플랫폼의 돈이 아니다.
+     * @param platformRevenue 완료 주문의 수수료 합계. 실제 플랫폼 매출.
+     */
     public record OverviewResponse(
-            Map<String, Long> counts, long gmv, Map<String, Long> ordersByStatus, long activeListings) {}
+            Map<String, Long> counts,
+            long gmv,
+            long platformRevenue,
+            Map<String, Long> ordersByStatus,
+            long activeListings) {}
 
     // ── 모니터링 행 ────────────────────────────────────────────
 
+    /** 정산 값(fee/payout/feeRate)은 미정산 주문에서 null이다. */
     public record OrderRow(
             String id,
             String status,
@@ -39,6 +48,9 @@ public final class AdminDtos {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            Long fee,
+            Long payout,
+            Double feeRate,
             Instant createdAt) {
 
         public static OrderRow from(AdminReadModelPort.OrderRow row) {
@@ -49,6 +61,9 @@ public final class AdminDtos {
                     row.buyerId(),
                     row.sellerId(),
                     row.catalogSetNumber(),
+                    row.fee(),
+                    row.payout(),
+                    row.feeRate(),
                     row.createdAt());
         }
     }

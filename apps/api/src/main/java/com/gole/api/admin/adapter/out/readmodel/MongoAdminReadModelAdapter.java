@@ -47,12 +47,16 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     public OrderStats orderStats() {
         Map<String, Long> countByStatus = new LinkedHashMap<>();
         long completedGmv = 0L;
+        long platformRevenue = 0L;
         AggregationResults<Document> results = mongoTemplate.aggregate(
                 Aggregation.newAggregation(Aggregation.group("status")
                         .count()
                         .as("count")
                         .sum("amount")
-                        .as("sum")),
+                        .as("sum")
+                        // 정산 전표가 없는 문서는 $sum이 0으로 취급한다(레거시 완료 주문 안전).
+                        .sum("settlement.fee")
+                        .as("fee")),
                 "orders",
                 Document.class);
         for (Document row : results) {
@@ -60,9 +64,10 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
             countByStatus.put(status, toLong(row.get("count")));
             if ("COMPLETED".equals(status)) {
                 completedGmv += toLong(row.get("sum"));
+                platformRevenue += toLong(row.get("fee"));
             }
         }
-        return new OrderStats(countByStatus, completedGmv);
+        return new OrderStats(countByStatus, completedGmv, platformRevenue);
     }
 
     @Override
@@ -78,14 +83,20 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
         }
         query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "orders").stream()
-                .map(d -> new OrderRow(
-                        str(d.get("_id")),
-                        d.getString("status"),
-                        toLong(d.get("amount")),
-                        d.getString("buyerId"),
-                        d.getString("sellerId"),
-                        d.getString("catalogSetNumber"),
-                        instant(d.get("createdAt"))))
+                .map(d -> {
+                    Document settlement = d.get("settlement", Document.class);
+                    return new OrderRow(
+                            str(d.get("_id")),
+                            d.getString("status"),
+                            toLong(d.get("amount")),
+                            d.getString("buyerId"),
+                            d.getString("sellerId"),
+                            d.getString("catalogSetNumber"),
+                            nullableLong(settlement, "fee"),
+                            nullableLong(settlement, "payout"),
+                            nullableDouble(settlement, "feeRate"),
+                            instant(d.get("createdAt")));
+                })
                 .toList();
     }
 
@@ -122,6 +133,25 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
 
     private static long toLong(Object value) {
         return value instanceof Number n ? n.longValue() : 0L;
+    }
+
+    /** 임베디드 정산 문서의 정수 필드. 문서·필드가 없으면 null(미정산)을 그대로 돌려준다. */
+    private static Long nullableLong(Document embedded, String field) {
+        if (embedded == null) {
+            return null;
+        }
+        return embedded.get(field) instanceof Number n ? n.longValue() : null;
+    }
+
+    /**
+     * 임베디드 정산 문서의 실수 필드. feeRate는 도입 이전 문서에 없을 수 있는데, 이때는
+     * null로 두어 "정산은 됐지만 요율 기록이 없음"을 화면이 구분할 수 있게 한다.
+     */
+    private static Double nullableDouble(Document embedded, String field) {
+        if (embedded == null) {
+            return null;
+        }
+        return embedded.get(field) instanceof Number n ? n.doubleValue() : null;
     }
 
     private static String str(Object value) {

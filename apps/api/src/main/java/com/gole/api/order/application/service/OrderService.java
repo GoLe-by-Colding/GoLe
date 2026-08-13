@@ -143,8 +143,10 @@ public class OrderService
             executedPriceRecorder.record(
                     order.getCatalogSetNumber(), order.getAmount(), 1, now, order.getListingCondition());
         }
-        // 요구사항 13.5: exactly-once 정산
-        settlement.settleOnce(orderId, order.getSellerId(), order.getAmount());
+        // 요구사항 13.5: exactly-once 정산.
+        // 전표를 주문에 붙여 상태 전이와 같은 저장으로 커밋한다. 정산을 별도 쓰기로 두면
+        // 뒤따르는 save(order)가 그것을 덮어써 수수료·정산액이 유실된다.
+        order.attachSettlement(settlement.settleOnce(orderId, order.getSellerId(), order.getAmount()));
 
         orderRepository.save(order);
     }

@@ -4,7 +4,10 @@ import { apiRequest } from "@shared/api";
 
 export interface AdminOverview {
   readonly counts: Readonly<Record<string, number>>;
+  /** 완료 주문 거래액. 플랫폼을 통과한 돈이지 플랫폼의 돈이 아니다. */
   readonly gmv: number;
+  /** 완료 주문의 수수료 합계 — 실제 플랫폼 매출. */
+  readonly platformRevenue: number;
   readonly ordersByStatus: Readonly<Record<string, number>>;
   readonly activeListings: number;
 }
@@ -16,6 +19,10 @@ export interface AdminOrder {
   readonly buyerId: string;
   readonly sellerId: string;
   readonly catalogSetNumber: string | null;
+  /** 정산 값은 미정산 주문에서 null이다. 0으로 오지 않으므로 "수수료 0원"과 구분된다. */
+  readonly fee: number | null;
+  readonly payout: number | null;
+  readonly feeRate: number | null;
   readonly createdAt: string | null;
 }
 

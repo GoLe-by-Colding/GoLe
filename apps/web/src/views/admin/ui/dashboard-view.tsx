@@ -75,7 +75,7 @@ export function AdminDashboardView() {
 
       {overview !== null ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card padded className="flex flex-col gap-1">
               <Text tone="secondary" size="sm">
                 거래액(GMV · 완료)
@@ -83,6 +83,18 @@ export function AdminDashboardView() {
               <span className="text-2xl font-extrabold tracking-tight text-brand-600">
                 {formatKrw(overview.gmv)}
               </span>
+            </Card>
+            {/* GMV는 플랫폼을 통과한 돈이고, 플랫폼의 매출은 수수료다. 둘을 나란히 두어 혼동을 막는다. */}
+            <Card padded className="flex flex-col gap-1">
+              <Text tone="secondary" size="sm">
+                플랫폼 수익(수수료)
+              </Text>
+              <span className="text-2xl font-extrabold tracking-tight">
+                {formatKrw(overview.platformRevenue)}
+              </span>
+              <Text tone="muted" size="sm">
+                완료 주문 기준 · 지급 실행 미연동
+              </Text>
             </Card>
             <Card padded className="flex flex-col gap-1">
               <Text tone="secondary" size="sm">

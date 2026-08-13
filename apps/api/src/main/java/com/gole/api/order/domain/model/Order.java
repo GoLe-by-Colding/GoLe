@@ -25,6 +25,10 @@ public final class Order {
     private final Instant createdAt;
     private final List<OrderStatusChange> history;
     private OrderStatus status;
+
+    /** 정산 전표. 완료 시점에 확정되며 그 전에는 null이다. (요구사항 13.4) */
+    private Settlement settlement;
+
     private Long version;
 
     public Order(
@@ -38,6 +42,7 @@ public final class Order {
             OrderStatus status,
             Instant createdAt,
             List<OrderStatusChange> history,
+            Settlement settlement,
             Long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.listingId = Objects.requireNonNull(listingId, "listingId");
@@ -49,7 +54,36 @@ public final class Order {
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
+        this.settlement = settlement;
         this.version = version;
+    }
+
+    /** 하위호환 생성자(정산 전표 도입 이전). */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                history,
+                null,
+                version);
     }
 
     /** 하위호환 생성자(레거시/테스트). */
@@ -117,6 +151,21 @@ public final class Order {
         transitionTo(OrderStatus.REFUNDED, now);
     }
 
+    /**
+     * 정산 전표를 확정한다. 완료 주문에만, 단 한 번만 가능하다. (요구사항 13.5 exactly-once)
+     *
+     * <p>상태 전이({@code FUNDS_HELD → COMPLETED})가 이미 재실행을 막지만, 정산은 돈이 걸린
+     * 계산이라 애그리거트에서도 이중 부착을 거부한다. 상태 머신 하나에만 의존하면 나중에
+     * 재정산·수동 보정 경로가 생겼을 때 조용히 두 번 계산된다.
+     */
+    public void attachSettlement(Settlement settlement) {
+        requireStatus(OrderStatus.COMPLETED, "settlement");
+        if (this.settlement != null) {
+            throw new OrderStateException("Settlement already attached for order " + id);
+        }
+        this.settlement = Objects.requireNonNull(settlement, "settlement");
+    }
+
     private void requireStatus(OrderStatus expected, String target) {
         if (status != expected) {
             throw new OrderStateException("Cannot transition to " + target + " from " + status);
@@ -166,6 +215,11 @@ public final class Order {
 
     public List<OrderStatusChange> getHistory() {
         return Collections.unmodifiableList(history);
+    }
+
+    /** 정산 전표. 완료 전이거나 정산 도입 이전 레거시 주문이면 null. */
+    public Settlement getSettlement() {
+        return settlement;
     }
 
     public Long getVersion() {

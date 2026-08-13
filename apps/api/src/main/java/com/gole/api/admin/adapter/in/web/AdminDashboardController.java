@@ -35,13 +35,14 @@ public class AdminDashboardController {
         this.listAdminActions = listAdminActions;
     }
 
-    @Operation(summary = "대시보드 집계", description = "컬렉션 카운트 + GMV·주문상태·활성매물")
+    @Operation(summary = "대시보드 집계", description = "컬렉션 카운트 + GMV·플랫폼 수익·주문상태·활성매물")
     @GetMapping("/overview")
     public OverviewResponse overview() {
         OrderStats stats = readModel.orderStats();
         return new OverviewResponse(
                 readModel.collectionCounts(COLLECTIONS),
                 stats.completedGmv(),
+                stats.platformRevenue(),
                 stats.countByStatus(),
                 readModel.activeListingCount());
     }

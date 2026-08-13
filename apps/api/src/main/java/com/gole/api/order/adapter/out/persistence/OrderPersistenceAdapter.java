@@ -1,10 +1,12 @@
 package com.gole.api.order.adapter.out.persistence;
 
+import com.gole.api.order.adapter.out.persistence.OrderDocument.SettlementDocument;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.StatusChangeDocument;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
+import com.gole.api.order.domain.model.Settlement;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -59,7 +61,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 order.getStatus().name(),
                 order.getCreatedAt(),
                 history,
-                null,
+                toSettlementDocument(order.getSettlement()),
                 order.getVersion());
     }
 
@@ -78,6 +80,35 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 OrderStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 history,
+                toSettlement(document.getSettlement()),
                 document.getVersion());
+    }
+
+    private static SettlementDocument toSettlementDocument(Settlement settlement) {
+        if (settlement == null) {
+            return null;
+        }
+        return new SettlementDocument(
+                settlement.orderId(),
+                settlement.sellerId(),
+                settlement.grossAmount(),
+                settlement.fee(),
+                settlement.payout(),
+                settlement.feeRate(),
+                settlement.settledAt());
+    }
+
+    private static Settlement toSettlement(SettlementDocument document) {
+        if (document == null) {
+            return null;
+        }
+        return new Settlement(
+                document.getOrderId(),
+                document.getSellerId(),
+                document.getGrossAmount(),
+                document.getFee(),
+                document.getPayout(),
+                document.getFeeRate(), // 레거시 문서는 getter가 당시 상수로 보정한다
+                document.getSettledAt());
     }
 }
