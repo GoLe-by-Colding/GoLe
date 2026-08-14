@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatRoom } from "../model/types";
-import { createOrGetRoom, fetchMessages, sendMessage } from "../api/chat-api";
+import { chatStreamUrl, createOrGetRoom, fetchMessages, sendMessage } from "../api/chat-api";
 
 export interface UseChatRoomOptions {
   readonly listingId: string;
@@ -10,6 +10,8 @@ export interface UseChatRoomOptions {
   readonly otherId: string;
   /** myId가 구매자인지 여부. 구매자=buyerId, 판매자=sellerId. */
   readonly isBuyer: boolean;
+  /** 세션 토큰. 채팅은 대화 참여자만 접근할 수 있어 필수다. */
+  readonly token: string;
 }
 
 export interface UseChatRoomResult {
@@ -28,6 +30,7 @@ export function useChatRoom({
   myId,
   otherId,
   isBuyer,
+  token,
 }: UseChatRoomOptions): UseChatRoomResult {
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -49,10 +52,10 @@ export function useChatRoom({
 
     void (async () => {
       try {
-        const r = await createOrGetRoom(listingId, buyerId, sellerId);
+        const r = await createOrGetRoom(token, listingId, buyerId, sellerId);
         if (!active) return;
         setRoom(r);
-        const history = await fetchMessages(r.id);
+        const history = await fetchMessages(token, r.id);
         if (!active) return;
         setMessages(history);
       } catch {
@@ -65,7 +68,7 @@ export function useChatRoom({
     return () => {
       active = false;
     };
-  }, [listingId, myId, otherId, isBuyer]);
+  }, [listingId, myId, otherId, isBuyer, token]);
 
   // SSE 연결 — room이 확정된 뒤 구독
   useEffect(() => {
@@ -74,8 +77,7 @@ export function useChatRoom({
       typeof window !== "undefined"
         ? window.location.origin
         : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
-    const url = `${base}/api/v1/chat/rooms/${room.id}/stream`;
-    const es = new EventSource(url);
+    const es = new EventSource(chatStreamUrl(base, room.id, token));
     sseRef.current = es;
 
     es.addEventListener("message", (ev: MessageEvent<string>) => {
@@ -102,15 +104,16 @@ export function useChatRoom({
       es.close();
       sseRef.current = null;
     };
-  }, [room, appendMessage]);
+  }, [room, appendMessage, token]);
 
   const send = useCallback(
     async (content: string) => {
       if (!room) return;
-      await sendMessage(room.id, myId, content);
+      // 보낸 사람은 서버가 세션에서 정한다.
+      await sendMessage(token, room.id, content);
       // 낙관적 업데이트는 SSE에서 처리(중복 dedup)
     },
-    [room, myId],
+    [room, token],
   );
 
   return { room, messages, send, loading, error };

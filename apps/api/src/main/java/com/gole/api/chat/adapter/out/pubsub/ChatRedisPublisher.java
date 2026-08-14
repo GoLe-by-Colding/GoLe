@@ -16,28 +16,18 @@ public class ChatRedisPublisher {
     private static final String CHANNEL_PREFIX = "chat:";
 
     private final StringRedisTemplate redisTemplate;
+    private final ChatMessageCodec codec;
 
-    public ChatRedisPublisher(StringRedisTemplate redisTemplate) {
+    public ChatRedisPublisher(StringRedisTemplate redisTemplate, ChatMessageCodec codec) {
         this.redisTemplate = redisTemplate;
+        this.codec = codec;
     }
 
     public void publish(ChatMessage message) {
-        // ObjectMapper 없이 단순 JSON 문자열 조합 (값 이스케이프 적용)
-        String payload = "{"
-                + "\"id\":\"" + esc(message.id()) + "\","
-                + "\"senderId\":\"" + esc(message.senderId()) + "\","
-                + "\"content\":\"" + esc(message.content()) + "\","
-                + "\"sentAt\":\"" + esc(message.sentAt().toString()) + "\""
-                + "}";
         try {
-            redisTemplate.convertAndSend(CHANNEL_PREFIX + message.roomId(), payload);
+            redisTemplate.convertAndSend(CHANNEL_PREFIX + message.roomId(), codec.encode(message));
         } catch (Exception e) {
             log.warn("Chat publish failed: {}", e.getMessage());
         }
-    }
-
-    /** 큰따옴표·역슬래시만 이스케이프(채팅 메시지용 최소 이스케이프). */
-    private static String esc(String s) {
-        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

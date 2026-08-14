@@ -20,6 +20,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -99,6 +100,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(
                         "INVALID_PARAMETER", "요청 파라미터 '" + ex.getName() + "' 값이 올바르지 않습니다: " + ex.getValue()));
+    }
+
+    /**
+     * 필수 요청 파라미터 누락 → 400. (예: {@code ?buyerId=} 없이 호출)
+     *
+     * <p>바로 위 타입 변환 핸들러와 <b>같은 이유</b>로 필요하다. 빠뜨리면 파라미터 하나 안 넣은
+     * 요청이 500으로 나가고 운영 알림까지 울린다. 실제로 채팅 SSE에서 그렇게 새어나갔다.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("MISSING_PARAMETER", "필수 요청 파라미터 '" + ex.getParameterName() + "'가 없습니다"));
     }
 
     /** 예상하지 못한 500 오류는 사용자에게 내부 정보를 숨기고 운영 채널에는 추적 ID를 남긴다. */

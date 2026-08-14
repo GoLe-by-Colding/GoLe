@@ -10,17 +10,20 @@ export interface ChatPanelProps {
   readonly myId: string;
   readonly otherId: string;
   readonly isBuyer: boolean;
+  /** 세션 토큰. 서버가 대화 참여자만 통과시키므로 필수다. */
+  readonly token: string;
 }
 
 /**
  * 실시간 채팅 패널. SSE로 새 메시지를 수신하고 REST로 전송한다.
  */
-export function ChatPanel({ listingId, myId, otherId, isBuyer }: ChatPanelProps) {
+export function ChatPanel({ listingId, myId, otherId, isBuyer, token }: ChatPanelProps) {
   const { messages, send, loading, error } = useChatRoom({
     listingId,
     myId,
     otherId,
     isBuyer,
+    token,
   });
 
   const [input, setInput] = useState("");

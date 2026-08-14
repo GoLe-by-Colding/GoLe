@@ -14,7 +14,7 @@ export function ChatListPage() {
 
   useEffect(() => {
     if (!session) return;
-    fetchMyRooms(session.accountId)
+    fetchMyRooms(session.sessionToken)
       .then((list) => {
         setRooms(list);
         // 데스크톱: 첫 방 자동 선택
@@ -51,6 +51,7 @@ export function ChatListPage() {
       myId,
       otherId: isBuyer ? room.sellerId : room.buyerId,
       isBuyer,
+      token: session?.sessionToken ?? "",
     };
   }
 

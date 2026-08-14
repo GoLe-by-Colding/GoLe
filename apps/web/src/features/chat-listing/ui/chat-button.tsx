@@ -41,7 +41,12 @@ export function ChatButton({ listingId, sellerId, available }: ChatButtonProps) 
           className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
           style={{ height: 420 }}
         >
-          <InlineChatPanel listingId={listingId} myId={session.accountId} sellerId={sellerId} />
+          <InlineChatPanel
+            listingId={listingId}
+            myId={session.accountId}
+            sellerId={sellerId}
+            token={session.sessionToken}
+          />
         </div>
       ) : null}
     </div>
@@ -52,14 +57,16 @@ interface InlineChatPanelProps {
   readonly listingId: string;
   readonly myId: string;
   readonly sellerId: string;
+  readonly token: string;
 }
 
-function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
+function InlineChatPanel({ listingId, myId, sellerId, token }: InlineChatPanelProps) {
   const { messages, send, loading, error } = useChatRoom({
     listingId,
     myId,
     otherId: sellerId,
     isBuyer: true,
+    token,
   });
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
