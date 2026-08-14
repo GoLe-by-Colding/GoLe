@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchAdminOrders, type AdminOrder } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, paymentMethodLabel } from "@shared/lib";
 import { Badge, Heading, Select, Text } from "@shared/ui";
 import { ORDER_STATUS_LABEL, formatDateTime, formatFeeRate, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
@@ -63,15 +63,27 @@ export function AdminOrdersView() {
 
       <Text tone="muted" size="sm">
         읽기 전용입니다. 분쟁 환불은 구매자·판매자 흐름에서 처리합니다. 수수료·정산액은 거래 완료
-        시점에 확정되며, 판매자 지급 실행은 아직 연동되지 않았습니다.
+        시점에 확정되며, 판매자 지급 실행은 아직 연동되지 않았습니다. 결제수단은 결제 승인 시점에
+        PG가 알려준 값입니다.
       </Text>
 
       <AdminStatus error={error} loading={rows === null} />
 
       <AdminTable
-        headers={["주문", "상태", "금액", "수수료", "정산액", "세트", "구매자", "판매자", "생성"]}
+        headers={[
+          "주문",
+          "상태",
+          "금액",
+          "수수료",
+          "정산액",
+          "결제수단",
+          "세트",
+          "구매자",
+          "판매자",
+          "생성",
+        ]}
         alignRight={[2, 3, 4]}
-        minWidth={980}
+        minWidth={1080}
         empty="주문이 없습니다."
         rowCount={(rows ?? []).length}
       >
@@ -109,6 +121,13 @@ export function AdminOrdersView() {
                 <span className="text-neutral-300">—</span>
               ) : (
                 formatKrw(o.payout)
+              )}
+            </td>
+            <td className="px-3 py-2.5 text-neutral-600">
+              {o.paymentMethod === null ? (
+                <span className="text-neutral-300">—</span>
+              ) : (
+                paymentMethodLabel(o.paymentMethod)
               )}
             </td>
             <td className="px-3 py-2.5 text-neutral-600">{o.catalogSetNumber ?? "—"}</td>

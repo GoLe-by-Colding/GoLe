@@ -26,6 +26,12 @@ public final class Order {
     private final List<OrderStatusChange> history;
     private OrderStatus status;
 
+    /**
+     * 결제수단. 결제 승인 시점에 PG가 알려준 값으로 채워지며, 승인 전이거나 결제수단 기록
+     * 도입 이전 주문이면 null이다. (요구사항 13.2)
+     */
+    private PaymentMethod paymentMethod;
+
     /** 정산 전표. 완료 시점에 확정되며 그 전에는 null이다. (요구사항 13.4) */
     private Settlement settlement;
 
@@ -42,6 +48,7 @@ public final class Order {
             OrderStatus status,
             Instant createdAt,
             List<OrderStatusChange> history,
+            PaymentMethod paymentMethod,
             Settlement settlement,
             Long version) {
         this.id = Objects.requireNonNull(id, "id");
@@ -54,8 +61,39 @@ public final class Order {
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
+        this.paymentMethod = paymentMethod;
         this.settlement = settlement;
         this.version = version;
+    }
+
+    /** 하위호환 생성자(결제수단 기록 도입 이전). */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Settlement settlement,
+            Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                history,
+                null,
+                settlement,
+                version);
     }
 
     /** 하위호환 생성자(정산 전표 도입 이전). */
@@ -82,6 +120,7 @@ public final class Order {
                 status,
                 createdAt,
                 history,
+                null,
                 null,
                 version);
     }
@@ -127,9 +166,15 @@ public final class Order {
                 null);
     }
 
-    /** 결제 승인 → 자금 보유. (요구사항 7.2, 13.2) */
-    public void confirmFundsHeld(Instant now) {
+    /**
+     * 결제 승인 → 자금 보유. 승인 시 PG가 알려준 결제수단을 함께 새긴다. (요구사항 7.2, 13.2)
+     *
+     * <p>결제수단은 승인 응답에만 실려 오는 사실이라 이 시점을 놓치면 되찾을 곳이 없다.
+     * PG가 알려주지 않았으면 null을 받아 그대로 비워 둔다 — 모른다는 것도 기록이다.
+     */
+    public void confirmFundsHeld(Instant now, PaymentMethod paymentMethod) {
         requireStatus(OrderStatus.PAYMENT_PENDING, "funds-held");
+        this.paymentMethod = paymentMethod;
         transitionTo(OrderStatus.FUNDS_HELD, now);
     }
 
@@ -215,6 +260,11 @@ public final class Order {
 
     public List<OrderStatusChange> getHistory() {
         return Collections.unmodifiableList(history);
+    }
+
+    /** 결제수단. 결제 승인 전이거나 PG가 알려주지 않았으면 null. */
+    public PaymentMethod getPaymentMethod() {
+        return paymentMethod;
     }
 
     /** 정산 전표. 완료 전이거나 정산 도입 이전 레거시 주문이면 null. */

@@ -1,4 +1,5 @@
 import { apiRequest } from "@shared/api";
+import type { PaymentMethod } from "@shared/lib";
 
 // ── 타입 ─────────────────────────────────────────────────────
 
@@ -23,6 +24,8 @@ export interface AdminOrder {
   readonly fee: number | null;
   readonly payout: number | null;
   readonly feeRate: number | null;
+  /** 결제 승인 전 주문에서는 null. "확인 불가(UNKNOWN)"와 다른 뜻이다. */
+  readonly paymentMethod: PaymentMethod | null;
   readonly createdAt: string | null;
 }
 

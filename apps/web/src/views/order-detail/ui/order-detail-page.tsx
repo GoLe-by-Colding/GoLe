@@ -10,7 +10,12 @@ import {
   type Order,
 } from "@entities/order";
 import { ApiError } from "@shared/api";
-import { formatKrw, isPortOneEnabled, requestPortOnePayment } from "@shared/lib";
+import {
+  formatKrw,
+  isPortOneEnabled,
+  paymentMethodLabel,
+  requestPortOnePayment,
+} from "@shared/lib";
 import { Badge, Button, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
 import { WriteReviewForm } from "@features/write-review";
 
@@ -130,6 +135,14 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             <Text tone="secondary">결제 금액</Text>
             <span className="text-xl font-bold">{formatKrw(order.amount)}</span>
           </div>
+          {order.paymentMethod !== null ? (
+            <div className="flex justify-between text-sm text-neutral-500">
+              <span>결제수단</span>
+              <span data-testid="order-payment-method">
+                {paymentMethodLabel(order.paymentMethod)}
+              </span>
+            </div>
+          ) : null}
           <div className="flex justify-between text-sm text-neutral-500">
             <span>주문번호</span>
             <span className="font-mono">{order.id.slice(0, 8)}</span>

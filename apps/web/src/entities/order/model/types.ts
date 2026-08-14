@@ -1,3 +1,5 @@
+import type { PaymentMethod } from "@shared/lib";
+
 /**
  * 주문 도메인 타입. 백엔드 OrderResponse와 1:1 대응.
  */
@@ -21,6 +23,8 @@ export interface Order {
   readonly catalogSetNumber: string | null;
   readonly amount: number;
   readonly status: OrderStatus;
+  /** 결제 승인 시점에 PG가 알려준 값. 결제 전이면 null. */
+  readonly paymentMethod: PaymentMethod | null;
   readonly createdAt: string;
   readonly history: readonly OrderStatusChange[];
 }

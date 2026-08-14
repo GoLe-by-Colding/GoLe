@@ -1,11 +1,14 @@
 package com.gole.api.order.adapter.out.persistence;
 
+import com.gole.api.order.adapter.out.persistence.OrderDocument.PaymentMethodDocument;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.SettlementDocument;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.StatusChangeDocument;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import com.gole.api.order.domain.model.Settlement;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +64,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 order.getStatus().name(),
                 order.getCreatedAt(),
                 history,
+                toPaymentMethodDocument(order.getPaymentMethod()),
                 toSettlementDocument(order.getSettlement()),
                 order.getVersion());
     }
@@ -80,8 +84,36 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 OrderStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 history,
+                toPaymentMethod(document.getPaymentMethod()),
                 toSettlement(document.getSettlement()),
                 document.getVersion());
+    }
+
+    private static PaymentMethodDocument toPaymentMethodDocument(PaymentMethod method) {
+        if (method == null) {
+            return null;
+        }
+        return new PaymentMethodDocument(method.type().name(), method.provider());
+    }
+
+    /**
+     * 문서 → 도메인. 모르는 분류 문자열은 예외 대신 {@link PaymentMethodType#UNKNOWN}으로 접는다.
+     *
+     * <p>{@code valueOf}가 던지면 주문 전체를 읽지 못하게 된다. 결제수단 하나를 모른다고
+     * 주문 조회·정산 조회가 함께 무너지는 것은 손해가 너무 크다(신버전이 쓴 값을 구버전이
+     * 읽는 롤백 상황이 대표적이다).
+     */
+    private static PaymentMethod toPaymentMethod(PaymentMethodDocument document) {
+        if (document == null) {
+            return null;
+        }
+        PaymentMethodType type;
+        try {
+            type = PaymentMethodType.valueOf(document.getType());
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            type = PaymentMethodType.UNKNOWN;
+        }
+        return new PaymentMethod(type, document.getProvider());
     }
 
     private static SettlementDocument toSettlementDocument(Settlement settlement) {

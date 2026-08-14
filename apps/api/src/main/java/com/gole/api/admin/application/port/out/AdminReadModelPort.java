@@ -55,7 +55,16 @@ public interface AdminReadModelPort {
             Long fee,
             Long payout,
             Double feeRate,
+            PaymentMethodView paymentMethod,
             Instant createdAt) {}
+
+    /**
+     * 결제수단. 결제 승인 전이거나 기록 도입 이전 주문이면 행 전체가 null이다.
+     *
+     * @param type PaymentMethodType 이름(CARD·EASY_PAY 등)
+     * @param provider 간편결제 사업자(KAKAOPAY 등). 해당 없으면 null.
+     */
+    record PaymentMethodView(String type, String provider) {}
 
     record ListingRow(
             String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {}

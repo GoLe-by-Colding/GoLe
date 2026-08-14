@@ -1,6 +1,7 @@
 package com.gole.api.order.adapter.out.payment;
 
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentAuthorization;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,26 +39,27 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public boolean authorize(String orderId, long amount) {
+    public PaymentAuthorization authorize(String orderId, long amount) {
         try {
             Map<?, ?> payment = client.get()
                     .uri("/payments/{paymentId}", orderId)
                     .retrieve()
                     .body(Map.class);
             if (payment == null) {
-                return false;
+                return PaymentAuthorization.declined();
             }
             String status = String.valueOf(payment.get("status"));
             long paidTotal = extractPaidTotal(payment);
-            boolean ok = "PAID".equals(status) && paidTotal == amount;
-            if (!ok) {
+            if (!"PAID".equals(status) || paidTotal != amount) {
                 log.warn(
                         "[PortOne] 검증 실패 orderId={} status={} paid={} expected={}", orderId, status, paidTotal, amount);
+                return PaymentAuthorization.declined();
             }
-            return ok;
+            // 결제수단은 이 응답에만 실려 온다. 분류에 실패해도(UNKNOWN) 승인은 그대로 진행한다.
+            return PaymentAuthorization.approved(PortOnePaymentMethodMapper.from(payment));
         } catch (Exception ex) {
             log.error("[PortOne] 결제 조회 실패 orderId={}: {}", orderId, ex.getMessage());
-            return false;
+            return PaymentAuthorization.declined();
         }
     }
 

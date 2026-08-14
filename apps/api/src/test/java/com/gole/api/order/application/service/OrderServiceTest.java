@@ -8,6 +8,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentAuthorization;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderStateException;
@@ -15,6 +16,8 @@ import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import com.gole.api.order.domain.model.Settlement;
 import java.time.Clock;
 import java.time.Instant;
@@ -32,6 +35,7 @@ class OrderServiceTest {
     private InMemoryOrders orders;
     private FakeReservation reservation;
     private CountingSettlement settlement;
+    private FakePayment payment;
     private OrderService service;
 
     @BeforeEach
@@ -39,11 +43,12 @@ class OrderServiceTest {
         orders = new InMemoryOrders();
         reservation = new FakeReservation();
         settlement = new CountingSettlement();
+        payment = new FakePayment();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
                 orders,
                 reservation,
-                new AlwaysApprovePayment(),
+                payment,
                 settlement,
                 (s, p, q, t, c) -> {},
                 (sellerId, orderId, amount) -> {},
@@ -145,6 +150,55 @@ class OrderServiceTest {
                 .isInstanceOf(OrderStateException.class);
     }
 
+    /**
+     * 결제수단은 승인 시점에 주문에 새겨져야 한다.
+     *
+     * <p>PG가 알려준 결제수단을 버리면, 나중에 "이 주문 카카오페이로 결제한 건데요"라는 문의에
+     * 우리 데이터로는 답할 수 없다. 프론트가 보내는 값은 요청 의도일 뿐 승인 결과가 아니다.
+     */
+    @Test
+    void pay_recordsPaymentMethod_fromGateway() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        service.pay(id);
+
+        PaymentMethod method = orders.findById(id).orElseThrow().getPaymentMethod();
+        assertThat(method).isNotNull();
+        assertThat(method.type()).isEqualTo(PaymentMethodType.EASY_PAY);
+        assertThat(method.provider()).isEqualTo("KAKAOPAY");
+    }
+
+    @Test
+    void paymentMethod_isAbsent_beforePayment() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        assertThat(orders.findById(id).orElseThrow().getPaymentMethod()).isNull();
+    }
+
+    /** 승인 실패 주문에 결제수단이 남으면 "결제된 것처럼" 보인다. */
+    @Test
+    void payDeclined_recordsNoPaymentMethod() {
+        reservation.available = true;
+        payment.approve = false;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.PAYMENT_FAILED);
+        assertThat(orders.findById(id).orElseThrow().getPaymentMethod()).isNull();
+    }
+
+    /** 결제수단을 모르는 PG(스텁 포함)라도 승인 자체는 진행되어야 한다. */
+    @Test
+    void pay_succeedsEvenWhenGatewayOmitsMethod() {
+        reservation.available = true;
+        payment.method = null;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        assertThat(service.pay(id)).isEqualTo(OrderStatus.FUNDS_HELD);
+        assertThat(orders.findById(id).orElseThrow().getPaymentMethod()).isNull();
+    }
+
     @Test
     void refund_returnsFunds_andReleasesListing() {
         reservation.available = true;
@@ -209,10 +263,13 @@ class OrderServiceTest {
         }
     }
 
-    private static final class AlwaysApprovePayment implements PaymentGatewayPort {
+    private static final class FakePayment implements PaymentGatewayPort {
+        private boolean approve = true;
+        private PaymentMethod method = new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY");
+
         @Override
-        public boolean authorize(String orderId, long amount) {
-            return true;
+        public PaymentAuthorization authorize(String orderId, long amount) {
+            return approve ? PaymentAuthorization.approved(method) : PaymentAuthorization.declined();
         }
 
         @Override

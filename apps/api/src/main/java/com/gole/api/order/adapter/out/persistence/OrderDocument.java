@@ -43,6 +43,8 @@ public class OrderDocument {
 
     private List<StatusChangeDocument> statusHistory;
 
+    private PaymentMethodDocument paymentMethod; // nullable, 결제 승인 시 채워짐
+
     private SettlementDocument settlement; // nullable, 완료/정산 시 채워짐
 
     @Version
@@ -63,6 +65,7 @@ public class OrderDocument {
             String status,
             Instant createdAt,
             List<StatusChangeDocument> statusHistory,
+            PaymentMethodDocument paymentMethod,
             SettlementDocument settlement,
             Long version) {
         this.id = id;
@@ -75,6 +78,7 @@ public class OrderDocument {
         this.status = status;
         this.createdAt = createdAt;
         this.statusHistory = statusHistory;
+        this.paymentMethod = paymentMethod;
         this.settlement = settlement;
         this.version = version;
     }
@@ -119,6 +123,10 @@ public class OrderDocument {
         return statusHistory;
     }
 
+    public PaymentMethodDocument getPaymentMethod() {
+        return paymentMethod;
+    }
+
     public SettlementDocument getSettlement() {
         return settlement;
     }
@@ -152,6 +160,30 @@ public class OrderDocument {
 
         public Instant getOccurredAt() {
             return occurredAt;
+        }
+    }
+
+    /** 결제수단 임베디드 문서. ({@code PaymentMethod}와 매핑) */
+    public static class PaymentMethodDocument {
+
+        private String type;
+        private String provider; // nullable — 간편결제가 아니거나 사업자 불명
+
+        protected PaymentMethodDocument() {
+            // MongoDB 매핑용
+        }
+
+        public PaymentMethodDocument(String type, String provider) {
+            this.type = type;
+            this.provider = provider;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getProvider() {
+            return provider;
         }
     }
 

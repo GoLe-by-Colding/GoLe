@@ -1,6 +1,7 @@
 package com.gole.api.admin.adapter.out.readmodel;
 
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
+import com.gole.api.admin.application.port.out.AdminReadModelPort.PaymentMethodView;
 import java.time.Instant;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -95,6 +96,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
                             nullableLong(settlement, "fee"),
                             nullableLong(settlement, "payout"),
                             nullableDouble(settlement, "feeRate"),
+                            paymentMethod(d.get("paymentMethod", Document.class)),
                             instant(d.get("createdAt")));
                 })
                 .toList();
@@ -152,6 +154,18 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
             return null;
         }
         return embedded.get(field) instanceof Number n ? n.doubleValue() : null;
+    }
+
+    /**
+     * 임베디드 결제수단 문서. 결제 승인 전 주문과 기록 도입 이전 주문에는 없으므로 null을
+     * 그대로 돌려준다 — 화면에서 "미결제"와 "분류 불명(UNKNOWN)"은 다른 뜻이다.
+     */
+    private static PaymentMethodView paymentMethod(Document embedded) {
+        if (embedded == null) {
+            return null;
+        }
+        String type = embedded.getString("type");
+        return type == null ? null : new PaymentMethodView(type, embedded.getString("provider"));
     }
 
     private static String str(Object value) {

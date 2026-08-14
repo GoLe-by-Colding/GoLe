@@ -56,8 +56,12 @@ test.describe("Purchase flow", () => {
     await expect(page.getByTestId("order-status")).toHaveText("결제 대기");
 
     // 5) 결제 → 에스크로 보관
+    // 결제 전에는 결제수단 줄이 아예 없어야 한다("미결제"와 "확인 불가"는 다른 뜻).
+    await expect(page.getByTestId("order-payment-method")).toHaveCount(0);
     await page.getByRole("button", { name: "결제하기" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("결제 완료(에스크로 보관)");
+    // 승인 응답에 실려 온 결제수단이 주문에 새겨진다. 로컬 스텁 PG는 카드로 승인한다.
+    await expect(page.getByTestId("order-payment-method")).toHaveText("카드");
 
     // 6) 구매 확정 → 거래 완료
     await page.getByRole("button", { name: "구매 확정" }).click();

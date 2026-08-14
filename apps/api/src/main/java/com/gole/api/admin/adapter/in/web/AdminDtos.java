@@ -40,7 +40,7 @@ public final class AdminDtos {
 
     // ── 모니터링 행 ────────────────────────────────────────────
 
-    /** 정산 값(fee/payout/feeRate)은 미정산 주문에서 null이다. */
+    /** 정산 값(fee/payout/feeRate)은 미정산 주문에서, paymentMethod는 결제 전 주문에서 null이다. */
     public record OrderRow(
             String id,
             String status,
@@ -51,6 +51,7 @@ public final class AdminDtos {
             Long fee,
             Long payout,
             Double feeRate,
+            PaymentMethod paymentMethod,
             Instant createdAt) {
 
         public static OrderRow from(AdminReadModelPort.OrderRow row) {
@@ -64,7 +65,16 @@ public final class AdminDtos {
                     row.fee(),
                     row.payout(),
                     row.feeRate(),
+                    PaymentMethod.from(row.paymentMethod()),
                     row.createdAt());
+        }
+    }
+
+    /** 결제수단 응답. provider는 간편결제에만 있다. */
+    public record PaymentMethod(String type, String provider) {
+
+        public static PaymentMethod from(AdminReadModelPort.PaymentMethodView view) {
+            return view == null ? null : new PaymentMethod(view.type(), view.provider());
         }
     }
 

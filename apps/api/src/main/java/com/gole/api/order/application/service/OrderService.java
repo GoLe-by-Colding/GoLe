@@ -14,6 +14,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort.ReservedLi
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentAuthorization;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
@@ -113,9 +114,10 @@ public class OrderService
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
 
-        boolean authorized = paymentGateway.authorize(orderId, order.getAmount());
-        if (authorized) {
-            order.confirmFundsHeld(now); // 요구사항 13.2
+        PaymentAuthorization authorization = paymentGateway.authorize(orderId, order.getAmount());
+        if (authorization.approved()) {
+            // 결제수단은 승인 응답에만 실려 온다. 여기서 주문에 새기지 않으면 되찾을 곳이 없다.
+            order.confirmFundsHeld(now, authorization.method()); // 요구사항 13.2
         } else {
             order.failPayment(now); // 요구사항 13.3: 자금 미보유
             listingReservation.release(order.getListingId());
