@@ -169,8 +169,13 @@ DISCORD_OPERATIONS_WEBHOOK_URL=https://discord.com/api/webhooks/...  # 선택: �
 
 - GitHub Actions secret `DISCORD_CI_WEBHOOK_URL`: main CI 결과 알림
 - GitHub Actions secret `DISCORD_OPERATIONS_WEBHOOK_URL`: 운영 헬스체크 실패 알림
+- GitHub Actions secrets `DISCORD_ACCOUNT_WEBHOOK_URL`, `DISCORD_PAYMENT_WEBHOOK_URL`: 운영 배포 시 백엔드 가입·결제 알림 경로로 주입
 - 서버 환경변수 `DISCORD_DEPLOY_WEBHOOK_URL`: 배포 스크립트 알림(미설정 시 operations URL 사용)
 - webhook URL은 Discord 채널 설정 → 연동 → 웹후크에서 만들며 저장소나 채팅에 붙여 넣지 않는다.
+
+`CD` 워크플로가 `main`의 CI 성공 뒤 자동 실행되며, 위 비밀값을 배포 시점에만 환경변수로 넘긴다.
+`deploy.sh`의 `pm2 reload --update-env`가 이 값을 앱 프로세스에 반영한다. 서버에 영구 저장하지
+않으므로, 서버에서 손으로 `pm2 restart`를 하면 알림 경로가 조용히 사라진다 — 재배포로 복구한다.
 
 ---
 

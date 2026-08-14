@@ -26,7 +26,17 @@ jobs:
     runs-on: [self-hosted, Linux, ARM64, gole-production]
     timeout-minutes: 30
     steps:
+      # Discord 라우팅 값은 서버에 영구 저장하지 않고 배포 시점에만 주입한다.
+      # deploy.sh의 `pm2 reload --update-env`가 이 환경변수를 앱 프로세스로 넘긴다.
+      # 그래서 서버에서 손으로 `pm2 restart`를 하면 알림이 조용히 꺼진다 — 재배포로 복구한다.
       - name: Deploy latest main
+        env:
+          DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
+          DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+          DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
+          DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
+          GOLE_DISCORD_ALERTS_ENABLED: "true"
+          GOLE_ENVIRONMENT: production
         run: bash /app/scripts/deploy.sh all
 
       - name: Verify production readiness
