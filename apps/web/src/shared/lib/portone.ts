@@ -1,4 +1,5 @@
 import { env } from "@shared/config";
+import { buildPortOneRequest, type PortOnePayParams } from "./portone-request";
 
 /**
  * 포트원(PortOne) V2 브라우저 결제 연동.
@@ -57,27 +58,21 @@ async function loadSdk(): Promise<PortOneSdk> {
   return window.PortOne;
 }
 
-export interface PortOnePayParams {
-  readonly paymentId: string;
-  readonly orderName: string;
-  readonly totalAmount: number;
-}
-
 /**
  * 결제창을 띄우고 결제를 요청한다. 성공 시 resolve, 사용자가 취소하거나 실패하면 throw.
  * 결제 성공 후에는 반드시 서버 검증(payOrder)을 호출해야 한다.
+ *
+ * <p>페이로드 조립은 {@link buildPortOneRequest}가 맡는다 — 결제 계정 없이 검증할 수 있도록
+ * 순수 함수로 떼어놓았다.
  */
 export async function requestPortOnePayment(params: PortOnePayParams): Promise<void> {
   const sdk = await loadSdk();
-  const result = await sdk.requestPayment({
-    storeId: env.portOneStoreId,
-    channelKey: env.portOneChannelKey,
-    paymentId: params.paymentId,
-    orderName: params.orderName,
-    totalAmount: params.totalAmount,
-    currency: "CURRENCY_KRW",
-    payMethod: "CARD",
-  });
+  const result = await sdk.requestPayment(
+    buildPortOneRequest(params, {
+      storeId: env.portOneStoreId,
+      channelKey: env.portOneChannelKey,
+    }),
+  );
   if (result.code !== undefined) {
     throw new Error(result.message ?? "결제에 실패했습니다.");
   }

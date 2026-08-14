@@ -54,6 +54,8 @@ test.describe("Purchase flow", () => {
     await page.getByRole("button", { name: "구매하기" }).click();
     await expect(page).toHaveURL(/\/orders\/.+/);
     await expect(page.getByTestId("order-status")).toHaveText("결제 대기");
+    // 포트원 미설정 환경에서는 서버 스텁이 승인하므로 결제수단 선택이 뜨면 안 된다.
+    await expect(page.getByTestId("payment-method-choice")).toHaveCount(0);
 
     // 5) 결제 → 에스크로 보관
     // 결제 전에는 결제수단 줄이 아예 없어야 한다("미결제"와 "확인 불가"는 다른 뜻).

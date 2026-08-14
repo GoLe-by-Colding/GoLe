@@ -11,12 +11,15 @@ import {
 } from "@entities/order";
 import { ApiError } from "@shared/api";
 import {
+  PAYMENT_CHOICES,
+  PAYMENT_CHOICE_LABEL,
   formatKrw,
   isPortOneEnabled,
   paymentMethodLabel,
   requestPortOnePayment,
+  type PaymentMethodChoice,
 } from "@shared/lib";
-import { Badge, Button, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
+import { Badge, Button, Card, Container, Field, Heading, Select, Skeleton, Text } from "@shared/ui";
 import { WriteReviewForm } from "@features/write-review";
 
 export interface OrderDetailPageProps {
@@ -27,6 +30,8 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  // 포트원 미설정 환경에서는 서버 스텁이 결제하므로 이 선택은 화면에 나오지 않는다.
+  const [payMethod, setPayMethod] = useState<PaymentMethodChoice>("CARD");
 
   useEffect(() => {
     let active = true;
@@ -74,6 +79,10 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           paymentId: current.id,
           orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
           totalAmount: current.amount,
+          method: payMethod,
+          // 모바일 결제창은 페이지를 이동했다가 돌아온다. 복귀 주소가 없으면
+          // 결제를 마친 사용자가 빈 화면에 남는다.
+          redirectUrl: `${window.location.origin}/orders/${current.id}`,
         });
       }
       setOrder(await payOrder(orderId));
@@ -88,7 +97,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     } finally {
       setBusy(false);
     }
-  }, [orderId]);
+  }, [orderId, payMethod]);
 
   if (error && order === null) {
     return (
@@ -150,6 +159,29 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         </Card>
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
+
+        {/* 결제수단 선택은 포트원이 설정된 환경에서만 의미가 있다. 미설정이면 서버 스텁이
+            승인하므로 고를 수 있는 척하는 화면을 보여주지 않는다. */}
+        {order.status === "payment_pending" && isPortOneEnabled() ? (
+          <div data-testid="payment-method-choice">
+            <Field label="결제수단">
+              {({ inputId }) => (
+                <Select
+                  id={inputId}
+                  value={payMethod}
+                  disabled={busy}
+                  onChange={(e) => setPayMethod(e.target.value as PaymentMethodChoice)}
+                >
+                  {PAYMENT_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>
+                      {PAYMENT_CHOICE_LABEL[choice]}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        ) : null}
 
         <div className="flex gap-3">
           {order.status === "payment_pending" ? (

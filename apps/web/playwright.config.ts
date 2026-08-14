@@ -5,6 +5,9 @@ const PORT = 3000;
 // 미지정 시 로컬 dev 서버(pnpm dev)를 자동 기동한다.
 const EXTERNAL = process.env.E2E_BASE_URL;
 const BASE_URL = EXTERNAL ?? `http://localhost:${PORT}`;
+// unit 프로젝트만 돌릴 때는 브라우저도 dev 서버도 필요 없다. 켜두면 순수 로직 한 줄 고칠 때마다
+// Next 부팅을 기다리게 되어 TDD 반복이 느려진다.
+const UNIT_ONLY = process.env.PW_UNIT_ONLY === "1";
 
 export default defineConfig({
   testDir: "./tests-e2e",
@@ -19,6 +22,12 @@ export default defineConfig({
   },
   projects: [
     {
+      // 브라우저 없이 도는 순수 로직 테스트(결제 페이로드 조립 등).
+      // 별도 러너를 들이지 않고 Playwright를 그대로 쓴다. `--project=unit`으로 빠르게 반복한다.
+      name: "unit",
+      testDir: "./tests-unit",
+    },
+    {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
       testIgnore: /mobile\.spec\.ts/,
@@ -31,7 +40,7 @@ export default defineConfig({
     },
   ],
   // 외부 대상이 아니면 로컬 dev 서버를 자동 기동한다.
-  ...(EXTERNAL
+  ...(EXTERNAL || UNIT_ONLY
     ? {}
     : {
         webServer: {

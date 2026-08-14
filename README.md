@@ -112,7 +112,8 @@ pnpm --filter web typecheck     # tsc --noEmit
 pnpm --filter web lint          # eslint (boundaries)
 pnpm --filter web fsd:lint      # steiger (FSD 구조)
 pnpm --filter web build         # next build
-pnpm --filter web e2e           # Playwright
+pnpm --filter web e2e           # Playwright 전체(브라우저)
+pnpm --filter web exec playwright test --project=unit  # 순수 로직만(브라우저 없이, 빠름)
 
 # 백엔드
 cd apps/api && ./gradlew test            # 단위 테스트
@@ -145,6 +146,63 @@ cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 1. 각 provider 콘솔에서 OAuth 앱 생성 → redirect URI `https://gole.kscold.com/auth/callback/{google|kakao|naver}` 등록.
 2. 백엔드 컨테이너 환경변수 주입: `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (카카오·네이버는 `KAKAO_*`/`NAVER_*`).
 3. `pm2 restart gole-backend --update-env` → 해당 버튼 자동 활성화. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
+
+### 결제(PortOne) 활성화
+
+미설정이면 `StubPaymentGatewayAdapter`가 **모든 결제를 무료로 승인**한다. 주문·정산 흐름은
+전부 진짜로 돌지만 돈은 오가지 않는다. 데모 환경에서는 의도된 동작이고, 실결제를 받으려면
+아래를 설정해야 한다.
+
+> ⚠️ **프론트 키는 빌드 타임에 번들에 박힌다.** `NEXT_PUBLIC_*`은 `next build` 시점의 환경변수를
+> 읽어 정적 인라인되므로, pm2 `env`나 `--update-env`로는 **반영되지 않는다**. 소셜 로그인처럼
+> "환경변수 넣고 재시작"이 통하지 않는 유일한 항목이다. 반드시 **재빌드**해야 한다.
+
+| 변수 | 위치 | 주입 시점 | 비고 |
+|---|---|---|---|
+| `NEXT_PUBLIC_PORTONE_STORE_ID` | 프론트 | **빌드 타임** | 공개 가능 |
+| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` | 프론트 | **빌드 타임** | 공개 가능 |
+| `PORTONE_ENABLED` | 백엔드 | 런타임 | `true`면 실연동, 기본 `false`(스텁) |
+| `PORTONE_API_SECRET` | 백엔드 | 런타임 | **서버 전용 비밀값. 프론트·저장소 금지** |
+
+환경별 권장 조합:
+
+| 환경 | 채널 | 비고 |
+|---|---|---|
+| 개발자 로컬 | 미설정(스텁) 또는 테스트 채널 | 스텁이면 계정 없이 전체 흐름 검증 가능 |
+| 개발 서버 | 테스트 채널 | 실제 결제창까지 뜨지만 돈은 안 나간다 |
+| 운영 서버 | 실채널 | PG 심사 통과 후 |
+
+활성화 순서 — **프론트를 먼저** 한다. 백엔드만 켜면 프론트가 결제창을 건너뛰는데 서버는
+포트원에 조회해 결제 기록이 없으므로 **모든 결제가 실패**한다.
+
+```bash
+# 1) 프론트 키를 서버의 apps/web/.env.production 에 둔다 (.gitignore 대상)
+NEXT_PUBLIC_PORTONE_STORE_ID=store-...
+NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-key-...
+
+# 2) 프론트 재빌드 (반드시 빌드를 다시 해야 반영된다)
+bash /app/scripts/deploy.sh frontend
+
+# 3) 백엔드 환경변수 주입 후 재시작
+PORTONE_ENABLED=true
+PORTONE_API_SECRET=...
+pm2 restart gole-backend --update-env
+
+# 4) 포트원 콘솔에 웹훅 등록
+#    https://<도메인>/api/v1/payments/portone/webhook
+```
+
+확인:
+
+```bash
+pm2 env gole-backend | grep -i portone   # 비어 있으면 스텁으로 동작 중
+```
+
+결제 흐름은 verify-on-server다. 브라우저가 결제 후 서버에 알리고, 서버가 포트원에 **직접
+재조회**해 `status=PAID`와 금액 일치를 확인한 뒤에만 자금 보유로 전이한다. 웹훅도 같은 검증을
+거치므로 서명 시크릿 없이도 위조 웹훅으로 결제가 확정되지 않는다.
+
+미구현: 부분 환불(전액 취소만 가능), 간편결제 사업자는 카카오페이만 선택지에 있다.
 
 ### Discord 고래방
 

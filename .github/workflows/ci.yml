@@ -47,6 +47,12 @@ jobs:
       - name: FSD lint (steiger)
         run: pnpm --filter web fsd:lint
 
+      # 브라우저·dev 서버 없이 도는 순수 로직 테스트(결제 페이로드 조립 등). 몇 초면 끝난다.
+      - name: Unit tests
+        run: pnpm --filter web exec playwright test --project=unit
+        env:
+          PW_UNIT_ONLY: "1"
+
       - name: Build
         run: pnpm --filter web build
 
