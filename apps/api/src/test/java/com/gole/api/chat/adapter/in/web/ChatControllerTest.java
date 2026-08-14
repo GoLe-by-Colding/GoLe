@@ -140,7 +140,7 @@ class ChatControllerTest {
                 "레고 세트",
                 "설명",
                 Money.won(10_000),
-                ItemCondition.USED_COMPLETE,
+                ItemCondition.USED_GOOD,
                 ConditionDisclosure.basic(),
                 List.of("photo.jpg"),
                 "10307",

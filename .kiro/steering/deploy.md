@@ -34,6 +34,12 @@ DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
 - 프로세스 정의 변경이 필요하면 `ecosystem.config.js` 를 수정해 커밋한다(런타임 형태는 `bash -c` 유지).
 - 아래의 수동 절차는 스크립트가 막힐 때를 위한 참고용으로 남겨둔다.
 
+### GitHub Actions CD
+
+`.github/workflows/cd.yml`은 `main` push의 CI가 성공한 뒤 `ubuntu-gole` 안의 저장소 전용 self-hosted runner에서 자동 실행된다. 외부 SSH 인바운드 포트를 사용하지 않으며, runner 라벨(`self-hosted`, `Linux`, `ARM64`, `gole-production`) 때문에 다른 인스턴스에서는 실행되지 않는다.
+
+GitHub의 **Actions → CD → Run workflow**에서 같은 배포를 수동 실행할 수도 있다.
+
 ---
 
 ## 컨테이너 내부 구조

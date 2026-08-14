@@ -38,8 +38,10 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
   }
 
   function tabClass(active: boolean): string {
-    return `block rounded-lg py-2 text-center text-sm font-semibold transition-colors ${
-      active ? "bg-white text-brand-700 shadow-soft" : "text-neutral-500 hover:text-neutral-800"
+    return `block border-b-2 py-2.5 text-center text-sm font-semibold transition-colors ${
+      active
+        ? "border-brand-600 text-brand-700"
+        : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
     }`;
   }
 
@@ -54,7 +56,7 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
         <div
           role="tablist"
           aria-label="인증 방식"
-          className="grid grid-cols-2 gap-1 rounded-xl bg-neutral-100 p-1"
+          className="grid grid-cols-2 border-b border-neutral-200"
         >
           <Link
             href="/login"

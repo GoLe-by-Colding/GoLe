@@ -1,4 +1,4 @@
-import { Badge, Card, ResilientImage } from "@shared/ui";
+import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { Listing } from "../model/types";
 import {
@@ -17,12 +17,13 @@ export function ListingCard({ listing }: ListingCardProps) {
 
   return (
     <Card interactive padded={false} className="flex flex-col" data-testid="listing-card">
-      <div className="overflow-hidden rounded-t-2xl">
-        <ResilientImage
-          className="img-zoom w-full aspect-[4/3] object-cover bg-neutral-100"
-          src={cover === undefined ? "/icon.svg" : thumbnailUrl(cover, 480)}
+      <div className="overflow-hidden">
+        <MediaImage
+          className="aspect-[4/3] w-full bg-neutral-100 object-cover"
+          src={cover === undefined ? null : thumbnailUrl(cover, 480)}
           alt={listing.title}
           loading="lazy"
+          fallback="이미지 준비 중"
         />
       </div>
       <div className="flex flex-col gap-2.5 p-4">

@@ -1,8 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CONDITION_LABEL, type PricePoint, type PriceValuation } from "@entities/pricing";
-import { Badge, BrickIcon, Card, LineChart } from "@shared/ui";
+import {
+  CONDITION_LABEL,
+  valuationBasisLabel,
+  valuationBasisTone,
+  type PricePoint,
+  type PriceValuation,
+} from "@entities/pricing";
+import { Badge, Card, LineChart, MediaImage } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 
 export interface PriceBoardItem {
@@ -17,6 +23,7 @@ export interface PriceBoardItem {
 
 export interface PriceExplorerProps {
   readonly items: readonly PriceBoardItem[];
+  readonly initialSetNumber?: string | undefined;
 }
 
 type Period = "1M" | "6M" | "1Y" | "ALL";
@@ -82,7 +89,7 @@ function ChangeBadge({ ratio }: { readonly ratio: number }) {
   );
 }
 
-export function PriceExplorer({ items }: PriceExplorerProps) {
+export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
   const [sort, setSort] = useState<SortKey>("popular");
   const sorted = useMemo(() => {
     const copy = [...items];
@@ -99,7 +106,10 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
     }
   }, [items, sort]);
   const firstWithData = sorted.find((i) => i.points.length >= 2) ?? sorted[0];
-  const [selected, setSelected] = useState<string>(firstWithData?.setNumber ?? "");
+  const requested = sorted.find((i) => i.setNumber === initialSetNumber);
+  const [selected, setSelected] = useState<string>(
+    requested?.setNumber ?? firstWithData?.setNumber ?? "",
+  );
   const [period, setPeriod] = useState<Period>("6M");
 
   const current = sorted.find((i) => i.setNumber === selected) ?? firstWithData;
@@ -116,17 +126,24 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
     return null;
   }
 
+  function handleSelect(setNumber: string) {
+    setSelected(setNumber);
+    const url = new URL(window.location.href);
+    url.searchParams.set("set", setNumber);
+    window.history.replaceState(window.history.state, "", url);
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       {/* 세트 목록 + 정렬 */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 lg:sticky lg:top-20 lg:self-start">
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-bold text-neutral-900">세트 시세</span>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
             aria-label="정렬"
-            className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 focus-visible:outline-2 focus-visible:outline-brand-400"
+            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 focus-visible:outline-2 focus-visible:outline-brand-400"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -135,7 +152,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             ))}
           </select>
         </div>
-        <ol className="flex max-h-[560px] flex-col gap-1 overflow-y-auto rounded-2xl border border-neutral-200/60 bg-white p-2 shadow-soft max-lg:max-h-none">
+        <ol className="flex max-h-[360px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 lg:max-h-[560px]">
           {sorted.map((item) => {
             const active = item.setNumber === current.setNumber;
             const itemLatest =
@@ -144,26 +161,21 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               <li key={item.setNumber}>
                 <button
                   type="button"
-                  onClick={() => setSelected(item.setNumber)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                    active ? "bg-brand-50" : "hover:bg-neutral-50"
+                  onClick={() => handleSelect(item.setNumber)}
+                  aria-pressed={active}
+                  className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? "border-brand-200 bg-brand-50"
+                      : "border-transparent hover:bg-neutral-50"
                   }`}
                 >
-                  {item.imageUrl !== null ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imageUrl}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-lg border border-neutral-200/60 object-cover"
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-100 text-neutral-400"
-                    >
-                      <BrickIcon className="h-5 w-5" />
-                    </span>
-                  )}
+                  <MediaImage
+                    src={item.imageUrl}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-md border border-neutral-200 object-cover"
+                    fallback="SET"
+                    fallbackClassName="text-[9px] tracking-wide"
+                  />
                   <span className="flex min-w-0 flex-col">
                     <span
                       className={`truncate text-sm font-semibold ${active ? "text-brand-700" : "text-neutral-900"}`}
@@ -184,14 +196,13 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
       {/* 상세 */}
       <Card padded className="flex flex-col gap-5">
         <div className="flex items-center gap-3">
-          {current.imageUrl !== null ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={current.imageUrl}
-              alt=""
-              className="h-14 w-14 shrink-0 rounded-xl border border-neutral-200/60 object-cover"
-            />
-          ) : null}
+          <MediaImage
+            src={current.imageUrl}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-md border border-neutral-200 object-cover"
+            fallback="SET"
+            fallbackClassName="text-[10px] tracking-wide"
+          />
           <div className="flex flex-col">
             <span className="text-lg font-bold text-neutral-900">{current.name}</span>
             <span className="font-mono text-xs text-neutral-500">
@@ -202,29 +213,30 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
 
         {latest !== null ? (
           <>
-            <div className="flex items-end gap-3">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-3xl font-extrabold tracking-tight text-neutral-900">
                 {formatKrw(latest)}
               </span>
-              <span className="mb-1">
+              <span>
                 <ChangeBadge ratio={ratio} />
               </span>
-              <span className="mb-1 text-xs text-neutral-400">
+              <span className="text-xs text-neutral-400">
                 {PERIODS.find((p) => p.value === period)!.label} 기준
               </span>
             </div>
 
             {/* 기간 탭 */}
-            <div className="flex gap-1 rounded-xl bg-neutral-100 p-1">
+            <div className="flex border-b border-neutral-200">
               {PERIODS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
                   onClick={() => setPeriod(p.value)}
-                  className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  aria-pressed={period === p.value}
+                  className={`flex-1 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
                     period === p.value
-                      ? "bg-white text-brand-700 shadow-soft"
-                      : "text-neutral-500 hover:text-neutral-800"
+                      ? "border-brand-600 text-brand-700"
+                      : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
                   }`}
                 >
                   {p.label}
@@ -232,28 +244,31 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
               ))}
             </div>
 
-            <LineChart
-              points={series.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
-              formatValue={formatKrw}
-              emptyText="시세 데이터가 부족해요"
-            />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-neutral-900">체결가 추이</span>
+                <span className="text-xs text-neutral-400">차트를 가리켜 날짜별 가격 확인</span>
+              </div>
+              <LineChart
+                points={series.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
+                formatValue={formatKrw}
+                emptyText="시세 데이터가 부족해요"
+              />
+            </div>
 
             {/* 기간 통계 스트립 */}
-            <div className="grid grid-cols-3 gap-3">
+            <dl className="grid grid-cols-3 divide-x divide-neutral-200 border-y border-neutral-200">
               {[
                 { label: "거래량", value: `${series.length}건` },
                 { label: "기간 고가", value: high !== null ? formatKrw(high) : "—" },
                 { label: "기간 저가", value: low !== null ? formatKrw(low) : "—" },
               ].map((s) => (
-                <div
-                  key={s.label}
-                  className="flex flex-col gap-0.5 rounded-xl border border-neutral-200/60 bg-neutral-50 px-3 py-2.5"
-                >
-                  <span className="text-xs text-neutral-400">{s.label}</span>
-                  <span className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</span>
+                <div key={s.label} className="flex flex-col gap-0.5 px-3 py-3">
+                  <dt className="text-xs text-neutral-400">{s.label}</dt>
+                  <dd className="text-sm font-bold tabular-nums text-neutral-900">{s.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
 
             {/* 상태별 감가 · 매수/매도 */}
             {current.valuation?.hasData ? (
@@ -262,7 +277,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                   <span className="text-sm font-bold text-neutral-900">상태별 시세</span>
                   <span className="text-xs text-neutral-400">최근 체결가 기준 추정</span>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-neutral-200/60">
+                <div className="overflow-x-auto rounded-lg border border-neutral-200">
                   <table className="w-full min-w-[520px] border-collapse text-sm">
                     <thead>
                       <tr className="bg-neutral-50 text-xs text-neutral-500">
@@ -275,16 +290,17 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
                     </thead>
                     <tbody>
                       {current.valuation.conditions.map((c) => (
-                        <tr key={c.condition} className="border-t border-neutral-100">
+                        <tr
+                          key={c.condition}
+                          className="border-t border-neutral-100 hover:bg-neutral-50"
+                        >
                           <td className="px-3 py-2.5">
                             <div className="flex flex-col gap-0.5">
                               <span className="font-medium text-neutral-900">
                                 {CONDITION_LABEL[c.condition]}
                               </span>
-                              <span
-                                className={`text-[11px] ${c.basedOnRealData ? "text-success" : "text-neutral-400"}`}
-                              >
-                                {c.basedOnRealData ? `실거래 ${c.sampleCount}건` : "추정"}
+                              <span className={`text-[11px] ${valuationBasisTone(c.basis)}`}>
+                                {valuationBasisLabel(c.basis, c.sampleCount)}
                               </span>
                             </div>
                           </td>
@@ -316,7 +332,7 @@ export function PriceExplorer({ items }: PriceExplorerProps) {
             {recent.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-bold text-neutral-900">최근 체결 내역</span>
-                <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200/60">
+                <ul className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
                   {recent.map((p, i) => (
                     <li
                       key={`${p.executedAt}-${i}`}

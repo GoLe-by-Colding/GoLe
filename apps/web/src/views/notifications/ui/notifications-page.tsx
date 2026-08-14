@@ -101,7 +101,7 @@ export function NotificationsPage() {
             </div>
           </Card>
         ) : (
-          <ul className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200/70 bg-white divide-y divide-neutral-100">
+          <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
             {items.map((n) => {
               const body = (
                 <div className="flex items-start gap-3 px-5 py-4">

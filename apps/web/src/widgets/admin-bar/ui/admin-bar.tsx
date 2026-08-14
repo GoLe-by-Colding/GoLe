@@ -82,7 +82,7 @@ export function AdminBar() {
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-3 print:hidden">
-        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-3 py-2 text-sm text-white shadow-lg backdrop-blur">
+        <div className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white shadow-lg">
           <Badge tone="brand">ADMIN</Badge>
 
           {collapsed ? null : (
@@ -143,7 +143,7 @@ export function AdminBar() {
             type="button"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "관리자 바 펼치기" : "관리자 바 접기"}
-            className="ml-1 rounded-full px-2 py-0.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+            className="ml-1 rounded-md px-2 py-0.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           >
             {collapsed ? "›" : "‹"}
           </button>

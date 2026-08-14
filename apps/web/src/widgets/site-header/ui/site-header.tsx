@@ -35,13 +35,19 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-200/50 bg-white/80 backdrop-blur-xl backdrop-saturate-[1.8]">
+    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
       <Container width="xl">
         <div className="flex h-16 items-center gap-8">
           <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
             <Logo size={32} className="text-xl" />
           </Link>
-          <nav className="flex items-center gap-1 max-sm:hidden">
+          {/*
+            브레이크포인트는 실제 콘텐츠 폭 기준이다. 로고 + 메뉴 7개 + 검색창 + 액션까지
+            한 줄에 들어가려면 약 1275px가 필요한데 Container width="xl"의 내용 폭은 1240px다.
+            그래서 데스크톱 nav는 lg(1024px), 검색 입력은 xl(1280px)부터만 노출한다.
+            (이 값을 낮추면 640~1100px 구간에서 링크 텍스트가 글자 단위로 줄바꿈되며 깨진다.)
+          */}
+          <nav className="flex shrink-0 items-center gap-1 whitespace-nowrap max-lg:hidden">
             {NAV_ITEMS.map((item) => {
               const active = isActive(item.href);
               return (
@@ -49,24 +55,13 @@ export function SiteHeader() {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`relative rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`relative border-b-2 px-3 py-2 text-sm transition-colors ${
                     active
-                      ? "font-semibold text-brand-600"
-                      : "font-medium text-neutral-500 hover:text-neutral-900"
+                      ? "border-brand-600 font-semibold text-brand-700"
+                      : "border-transparent font-medium text-neutral-500 hover:border-neutral-300 hover:text-neutral-900"
                   }`}
                 >
                   {item.label}
-                  {active ? (
-                    /* 브릭 스터드 3점 인디케이터 */
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-0 -bottom-[3px] flex justify-center gap-[3px]"
-                    >
-                      <span className="h-1 w-1 rounded-full bg-brand-600" />
-                      <span className="h-1 w-1 rounded-full bg-brand-600" />
-                      <span className="h-1 w-1 rounded-full bg-accent-400" />
-                    </span>
-                  ) : null}
                 </Link>
               );
             })}
@@ -79,10 +74,31 @@ export function SiteHeader() {
               고래방 ↗
             </a>
           </nav>
-          <div className="flex flex-1 justify-center px-4 max-md:hidden">
-            <HeaderSearch />
+          {/* 스페이서는 항상 남겨 둔다. 이게 없으면 액션 영역이 왼쪽으로 붙는다. */}
+          <div className="flex flex-1 justify-center px-4">
+            <div className="flex w-full justify-center max-xl:hidden">
+              <HeaderSearch />
+            </div>
           </div>
-          <div className="flex items-center gap-2 max-sm:hidden">
+          <div className="flex shrink-0 items-center gap-2 max-sm:hidden">
+            {/* 검색 입력이 빠지는 lg~xl 구간에서도 검색 진입점은 남긴다. */}
+            <Link
+              href="/search"
+              aria-label="검색"
+              className="hidden h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 lg:max-xl:grid"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7" strokeWidth="2" />
+                <path d="m20 20-3.2-3.2" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </Link>
             {session ? (
               <div className="inline-flex items-center gap-2">
                 {session.role === "ADMIN" ? (
@@ -119,7 +135,7 @@ export function SiteHeader() {
             aria-expanded={menuOpen}
             aria-controls="mobile-menu"
             onClick={() => setMenuOpen((v) => !v)}
-            className="hidden h-10 w-10 items-center justify-center rounded-lg text-neutral-700 hover:bg-neutral-100 max-sm:inline-flex"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-700 hover:bg-neutral-100 max-lg:inline-flex"
           >
             <span className="relative block h-4 w-5">
               <span
@@ -137,7 +153,7 @@ export function SiteHeader() {
 
         {/* 모바일 메뉴 패널 */}
         {menuOpen ? (
-          <div id="mobile-menu" className="flex flex-col gap-1 pb-4 sm:hidden">
+          <div id="mobile-menu" className="flex flex-col gap-1 pb-4 lg:hidden">
             <div className="px-1 pb-3">
               <HeaderSearch fullWidth onSubmitted={() => setMenuOpen(false)} />
             </div>
@@ -170,7 +186,7 @@ export function SiteHeader() {
                 Discord 고래방 ↗
               </a>
             </nav>
-            <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3">
+            <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:hidden">
               {session ? (
                 <>
                   {session.role === "ADMIN" ? (

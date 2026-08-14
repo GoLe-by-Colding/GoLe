@@ -40,8 +40,15 @@ public final class PricingResponses {
         }
     }
 
+    /**
+     * @param basis           공정가 근거: {@code grade}(등급 실측) | {@code group}(그룹 실측 환산) |
+     *                        {@code model}(감가 모델)
+     * @param sampleCount     공정가 산출에 실제로 쓰인 체결 건수. {@code model}이면 0
+     * @param basedOnRealData {@code basis != model}. 기존 클라이언트 호환용으로 유지한다
+     */
     public record ConditionValuationResponse(
             String condition,
+            String basis,
             int depreciationPct,
             long fairPrice,
             long sellPrice,
@@ -52,6 +59,7 @@ public final class PricingResponses {
         public static ConditionValuationResponse from(PriceValuation.ConditionValuation c) {
             return new ConditionValuationResponse(
                     c.condition().key(),
+                    c.basis().key(),
                     c.depreciationPct(),
                     c.fairPrice(),
                     c.sellPrice(),

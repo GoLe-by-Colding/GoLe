@@ -1,17 +1,25 @@
 services:
   mongo:
     image: mongo:7
-    container_name: gole-mongo
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "${MONGODB_PORT:-27017}:${MONGODB_PORT:-27017}"
     # 단일 노드 replica set: 멀티 도큐먼트 트랜잭션(주문/결제/정산 정합성)에 필요.
     # 로컬 개발 단순화를 위해 auth는 비활성. 운영에서는 keyfile + auth 적용 필요.
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    command: ["--port", "${MONGODB_PORT:-27017}", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--port",
+          "${MONGODB_PORT:-27017}",
+          "--eval",
+          "db.adminCommand('ping').ok",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,17 +35,16 @@ services:
       - bash
       - -c
       - |
-        mongosh --host mongo:27017 --quiet --eval '
+        mongosh --host mongo:${MONGODB_PORT:-27017} --quiet --eval '
           try { rs.status().ok }
-          catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]}) }
+          catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:${MONGODB_PORT:-27017}"}]}) }
         '
 
   redis:
     image: redis:7-alpine
-    container_name: gole-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -51,23 +58,23 @@ services:
   # 시드 커버 아트를 여기에 올린다. 이게 없으면 MediaSeeder가 전부 실패하고
   # 로컬은 이미지가 깨진 채로 뜬다.
   minio:
-    image: minio/minio:latest
-    container_name: gole-minio
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # 웹 콘솔 (http://localhost:9001, minioadmin/minioadmin)
+      - "${MINIO_API_PORT:-9000}:9000" # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # 웹 콘솔
     environment:
-      MINIO_ROOT_USER: ${STORAGE_S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${STORAGE_S3_SECRET_KEY:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     command: ["server", "/data", "--console-address", ":9001"]
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   # `gole` 버킷 생성 + 익명 읽기 허용(멱등).
   # 애플리케이션도 ensureBucket()으로 버킷을 만들지만, 인프라만 띄운 상태에서
@@ -83,7 +90,7 @@ services:
       - -c
       - |
         mc alias set local http://minio:9000 \
-          "${STORAGE_S3_ACCESS_KEY:-minioadmin}" "${STORAGE_S3_SECRET_KEY:-minioadmin}"
+          "${MINIO_ROOT_USER:-minioadmin}" "${MINIO_ROOT_PASSWORD:-minioadmin}"
         mc mb --ignore-existing local/${STORAGE_S3_BUCKET:-gole}
         mc anonymous set download local/${STORAGE_S3_BUCKET:-gole}
 

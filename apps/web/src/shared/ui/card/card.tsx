@@ -16,7 +16,7 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function Card({
-  elevation = "raised",
+  elevation = "flat",
   interactive = false,
   padded = false,
   className,
@@ -26,10 +26,10 @@ export function Card({
   return (
     <div
       className={cn(
-        "group bg-white border border-neutral-200/60 rounded-2xl overflow-hidden",
+        "group overflow-hidden rounded-lg border border-neutral-200 bg-white",
         ELEVATION[elevation],
         interactive &&
-          "cursor-pointer transition-all duration-300 ease-out hover:border-brand-300/60 hover:shadow-lift hover:-translate-y-1 hover:ring-1 hover:ring-brand-200/50",
+          "cursor-pointer transition-colors duration-150 hover:border-brand-300 hover:bg-neutral-50/30",
         padded && "p-5",
         className,
       )}

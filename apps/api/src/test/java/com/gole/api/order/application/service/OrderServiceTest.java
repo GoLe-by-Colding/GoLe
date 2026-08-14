@@ -3,7 +3,6 @@ package com.gole.api.order.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
@@ -15,6 +14,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerific
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
@@ -74,13 +74,20 @@ class OrderServiceTest {
     }
 
     @Test
-    void place_rejectsSelfPurchaseAndReleasesReservation() {
+    void place_rejectsSelfPurchase() {
         reservation.available = true;
-
         assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "seller-1")))
-                .isInstanceOf(ForbiddenException.class);
+                .isInstanceOf(SelfPurchaseException.class);
+    }
+
+    /** 거부하면서 선점을 되돌리지 않으면 매물이 RESERVED로 굳어 아무도 사지 못한다. */
+    @Test
+    void place_selfPurchase_releasesReservation_andCreatesNoOrder() {
+        reservation.available = true;
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "seller-1")))
+                .isInstanceOf(SelfPurchaseException.class);
         assertThat(reservation.released).isTrue();
-        assertThat(orders.store).isEmpty();
+        assertThat(orders.findByBuyerId("seller-1")).isEmpty();
     }
 
     @Test

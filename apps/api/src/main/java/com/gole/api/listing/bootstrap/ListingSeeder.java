@@ -57,7 +57,7 @@ public class ListingSeeder implements CommandLineRunner {
                         "밀레니엄 팰컨 UCS 정품",
                         "75192 조립 후 전시만 했습니다. 부품 누락 없음.",
                         1_250_000,
-                        ItemCondition.USED_COMPLETE,
+                        ItemCondition.LIKE_NEW,
                         "75192"),
                 listing(
                         "seller-brickbank",
@@ -71,15 +71,22 @@ public class ListingSeeder implements CommandLineRunner {
                         "페라리 데이토나 SP3",
                         "42143 조립완성품, 설명서/박스 보관.",
                         430_000,
-                        ItemCondition.USED_COMPLETE,
+                        ItemCondition.USED_GOOD,
                         "42143"),
                 listing(
                         "seller-minifig",
                         "호그와트 성 일부 부품",
                         "71043 일부 미니피겨 분실, 본체는 완전.",
                         520_000,
-                        ItemCondition.USED_INCOMPLETE,
+                        ItemCondition.USED_FAIR,
                         "71043"),
+                listing(
+                        "seller-minifig",
+                        "타이타닉 하자 있는 전시품",
+                        "10294 운반 중 일부 파손과 변색이 있습니다. 사진 확인 후 문의 주세요.",
+                        430_000,
+                        ItemCondition.DAMAGED,
+                        "10294"),
                 listing(
                         "seller-minifig",
                         "백 투 더 퓨처 타임머신 새상품",
@@ -93,7 +100,7 @@ public class ListingSeeder implements CommandLineRunner {
                         "AT-AT UCS 조립완성",
                         "75313 전시품, 상태 최상.",
                         980_000,
-                        ItemCondition.USED_COMPLETE,
+                        ItemCondition.LIKE_NEW,
                         "75313"),
                 listing(
                         "seller-minifig",
@@ -124,10 +131,14 @@ public class ListingSeeder implements CommandLineRunner {
     private static ConditionDisclosure disclosureFor(ItemCondition condition) {
         return switch (condition) {
             case NEW_SEALED -> new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "");
-            case USED_COMPLETE -> new ConditionDisclosure(
+            case LIKE_NEW -> new ConditionDisclosure(
                     Completeness.FULL_BOX, true, true, false, "", "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
-            case USED_INCOMPLETE -> new ConditionDisclosure(
-                    Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 변색이 있습니다.");
+            case USED_GOOD -> new ConditionDisclosure(
+                    Completeness.NO_BOX, false, true, false, "", "박스는 없지만 부품과 설명서는 온전합니다.");
+            case USED_FAIR -> new ConditionDisclosure(
+                    Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 사용감이 있습니다.");
+            case DAMAGED -> new ConditionDisclosure(
+                    Completeness.NO_BOX, false, false, true, "운반 중 파손된 조각 3개 누락.", "일부 피스에 변색과 파손이 있습니다.");
         };
     }
 }

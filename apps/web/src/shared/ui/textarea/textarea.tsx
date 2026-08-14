@@ -11,7 +11,7 @@ export function Textarea({ invalid = false, className, rows = 4, ...rest }: Text
       rows={rows}
       aria-invalid={invalid}
       className={cn(
-        "w-full px-3 py-2 rounded-md bg-white text-neutral-900 text-base border transition resize-y",
+        "w-full px-3 py-2 rounded-md bg-white text-neutral-900 text-base border transition-colors resize-y",
         "placeholder:text-neutral-500 hover:border-neutral-400 focus:outline-none focus:ring-2",
         invalid
           ? "border-danger focus:border-danger focus:ring-danger-soft"

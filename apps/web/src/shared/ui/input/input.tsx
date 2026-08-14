@@ -11,7 +11,7 @@ export function Input({ invalid = false, className, type = "text", ...rest }: In
       type={type}
       aria-invalid={invalid}
       className={cn(
-        "w-full h-11 px-3 rounded-md bg-white text-neutral-900 text-base border transition",
+        "w-full h-11 px-3 rounded-md bg-white text-neutral-900 text-base border transition-colors",
         "placeholder:text-neutral-500 hover:border-neutral-400",
         "focus:outline-none focus:ring-2",
         invalid

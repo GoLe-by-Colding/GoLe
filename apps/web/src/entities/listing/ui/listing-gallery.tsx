@@ -20,7 +20,7 @@ export function ListingGallery({ photos, alt }: ListingGalleryProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50">
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="w-full aspect-[4/3] object-cover" src={thumbnailUrl(main, 800)} alt={alt} />
       </div>

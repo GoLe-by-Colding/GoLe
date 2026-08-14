@@ -8,12 +8,13 @@ import {
   type ListingCategory,
   conditionLabel,
   completenessLabel,
+  ITEM_CONDITIONS,
   LISTING_CATEGORIES,
 } from "@entities/listing";
 import { ApiError, uploadImages } from "@shared/api";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
-const CONDITIONS: readonly ItemCondition[] = ["new_sealed", "used_complete", "used_incomplete"];
+const CONDITIONS = ITEM_CONDITIONS;
 
 const COMPLETENESS: readonly Completeness[] = ["full_box", "no_box", "bulk"];
 

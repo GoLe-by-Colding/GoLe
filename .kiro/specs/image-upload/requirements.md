@@ -3,7 +3,9 @@
 > 매물·게시글 이미지를 URL 직접 입력 대신 **파일 업로드**로 받는다. 저장은 MinIO(S3 호환), 공개는 백엔드 스트리밍 경유.
 
 ## 배경 / 제약
-- MinIO는 Mac 호스트 프로세스(`host.docker.internal:9000`), 버킷 `gole`. 콘솔만 공개되고 **S3 API는 외부 미공개**(`.kiro/steering/minio.md`).
+- 로컬 개발은 Docker Compose MinIO(`localhost:9000`), 운영은 Mac 호스트 MinIO
+  (`host.docker.internal:9000`)와 `gole` 버킷을 사용한다. 운영 S3 API는 외부에 공개하지
+  않는다(`.kiro/steering/minio.md`).
 - 따라서 브라우저가 MinIO에 직접 접근할 수 없다 → 이미지는 **백엔드(`/api/v1/media/...`)를 통해 공개**한다(기존 nginx `/api/` 라우팅 재사용, 신규 인프라 불필요).
 
 ## 요구사항 M1 — 이미지 업로드

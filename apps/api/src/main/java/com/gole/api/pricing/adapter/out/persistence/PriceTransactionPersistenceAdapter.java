@@ -64,7 +64,25 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     @Override
     public List<PriceTransaction> findByConditionAscending(
             String setNumber, com.gole.api.pricing.domain.model.SetCondition condition) {
-        return repository.findBySetNumberAndConditionOrderByExecutedAtAsc(setNumber, condition.key()).stream()
+        // 현재 키만으로 조회하면 3단계 시절 체결(used_complete 등)이 빠진다. storageKeys()로 함께 훑는다.
+        return findByStorageKeys(setNumber, condition.storageKeys());
+    }
+
+    @Override
+    public List<PriceTransaction> findByConditionsAscending(
+            String setNumber, List<com.gole.api.pricing.domain.model.SetCondition> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
+            return List.of();
+        }
+        List<String> keys = conditions.stream()
+                .flatMap(c -> c.storageKeys().stream())
+                .distinct()
+                .toList();
+        return findByStorageKeys(setNumber, keys);
+    }
+
+    private List<PriceTransaction> findByStorageKeys(String setNumber, List<String> keys) {
+        return repository.findBySetNumberAndConditionInOrderByExecutedAtAsc(setNumber, keys).stream()
                 .map(this::toDomain)
                 .toList();
     }

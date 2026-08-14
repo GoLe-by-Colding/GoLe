@@ -22,7 +22,12 @@ public class PriceTransactionDocument {
 
     private int quantity;
 
-    /** 상품 상태 키(new_sealed/used_complete/used_incomplete). 레거시 문서는 null. */
+    /**
+     * 상품 상태 키(new_sealed/like_new/used_good/used_fair/damaged). 상태 태깅 이전 문서는 null.
+     *
+     * <p>3단계 시절 키(used_complete/used_incomplete)가 남아 있을 수 있다. 읽기는
+     * {@code SetCondition.fromKey}가, 조회는 {@code SetCondition.storageKeys()}가 흡수한다.
+     */
     @Indexed
     private String condition;
 

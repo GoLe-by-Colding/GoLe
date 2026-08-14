@@ -10,6 +10,7 @@ import com.gole.api.review.application.port.out.OrderQueryPort.OrderSnapshot;
 import com.gole.api.review.application.port.out.ReviewIdGeneratorPort;
 import com.gole.api.review.application.port.out.ReviewRepositoryPort;
 import com.gole.api.review.domain.exception.DuplicateReviewException;
+import com.gole.api.review.domain.exception.SelfReviewException;
 import com.gole.api.review.domain.model.Review;
 import com.gole.api.review.domain.model.SellerRatingSummary;
 import java.time.Clock;
@@ -56,6 +57,11 @@ public class ReviewService implements WriteReviewUseCase, GetSellerReviewsUseCas
         // R2.3: 요청자가 주문의 구매자여야 함
         if (!order.buyerId().equals(command.reviewerId())) {
             throw new ForbiddenException("NOT_ORDER_BUYER", "Only the buyer of the order can write a review");
+        }
+
+        // R2.5: 자기 자신에게는 후기를 남길 수 없다(자기거래 주문 방어).
+        if (order.sellerId().equals(command.reviewerId())) {
+            throw new SelfReviewException(command.orderId());
         }
 
         // R2.4: 주문당 1회

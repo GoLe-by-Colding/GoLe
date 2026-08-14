@@ -71,12 +71,12 @@ export function SetAutocomplete({
           if (!e.target.value.trim()) setSearch({ results: [], open: false });
         }}
         onFocus={() => results.length > 0 && setSearch((s) => ({ ...s, open: true }))}
-        className="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+        className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
       />
       {open ? (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-neutral-200/60 bg-white shadow-lift"
+          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lift"
         >
           {results.map((s) => (
             <li key={s.setNumber}>

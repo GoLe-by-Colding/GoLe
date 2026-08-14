@@ -34,13 +34,15 @@ media/
 
 ## 3. S3 어댑터(MinIO) 설정
 AWS SDK v2 `software.amazon.awssdk:s3`. `S3Client`:
-- endpoint override: `storage.s3.endpoint`(컨테이너: `http://host.docker.internal:9000`)
+- endpoint override: `storage.s3.endpoint`(로컬: `http://localhost:9000`, 운영 컨테이너:
+  `http://host.docker.internal:9000`)
 - region: `us-east-1`, credentials: static(`minioadmin`/`minioadmin`)
 - `forcePathStyle(true)` (MinIO 필수)
 - 시작 시 `ensureBucket("gole")`(없으면 createBucket).
 
 `application.yml`:
 ```yaml
+# application.yml — 운영 컨테이너 기본값
 storage:
   s3:
     endpoint: ${STORAGE_S3_ENDPOINT:http://host.docker.internal:9000}
@@ -51,6 +53,10 @@ storage:
   public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.kscold.com}
   max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
 ```
+로컬 실행은 `application-local.yml`에서 endpoint를 `http://localhost:${MINIO_API_PORT:9000}`로,
+공개 URL을 `http://localhost:${SERVER_PORT:8080}`로 재정의한다. Compose 포트와 자격증명은
+루트 `.env`를 `scripts/gradle.mjs`와 Docker Compose가 함께 읽어 일치시킨다.
+
 멀티파트 한도도 Spring에 맞춰 설정(`spring.servlet.multipart.max-file-size/max-request-size`).
 
 ## 4. API

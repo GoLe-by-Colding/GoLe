@@ -10,6 +10,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function Page() {
-  return <PricesPage />;
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const requestedSet = params["set"];
+  const initialSetNumber = Array.isArray(requestedSet) ? requestedSet[0] : requestedSet;
+
+  return <PricesPage initialSetNumber={initialSetNumber} />;
 }

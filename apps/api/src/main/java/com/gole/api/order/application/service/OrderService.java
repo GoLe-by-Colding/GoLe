@@ -1,6 +1,5 @@
 package com.gole.api.order.application.service;
 
-import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
@@ -25,6 +24,7 @@ import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
+import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
@@ -91,9 +91,12 @@ public class OrderService
                 .reserve(command.listingId())
                 .orElseThrow(() -> new ItemUnavailableException(command.listingId()));
 
+        // 자기거래 금지: 완료된 주문은 체결가로 기록되어 시세의 원천이 되므로,
+        // 자전거래를 허용하면 시세를 임의로 만들 수 있다.
+        // 판매자는 선점 결과로만 알 수 있어 선점 이후에 검사하고, 선점을 되돌린 뒤 거부한다.
         if (reserved.sellerId().equals(command.buyerId())) {
             listingReservation.release(command.listingId());
-            throw new ForbiddenException("SELF_PURCHASE_NOT_ALLOWED", "자신의 매물은 구매할 수 없습니다");
+            throw new SelfPurchaseException(command.listingId());
         }
 
         String orderId;

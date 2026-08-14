@@ -62,7 +62,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
           </div>
 
           {/* 상태 고지: 구매자가 구매 전에 확인 */}
-          <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
+          <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm">
             <span className="font-semibold text-neutral-800">판매자 상태 고지</span>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-600">
               <span>구성: {completenessLabel(listing.completeness)}</span>
@@ -78,7 +78,11 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             ) : null}
           </div>
           <div className="mt-2 flex gap-3">
-            <PurchaseButton listingId={listing.id} available={isAvailable} />
+            <PurchaseButton
+              listingId={listing.id}
+              sellerId={listing.sellerId}
+              available={isAvailable}
+            />
           </div>
           <ChatButton listingId={listing.id} sellerId={listing.sellerId} available={isAvailable} />
           {listing.catalogSetNumber !== null ? (

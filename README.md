@@ -54,7 +54,7 @@ GoLe/
 ├── .kiro/
 │   ├── specs/                   # SDD 스펙 (requirements/design/tasks)
 │   └── steering/                # 배포·컨벤션·브랜드·인프라 가이드
-├── docker-compose.yml           # mongo(rs0) + redis
+├── docker-compose.yml           # mongo(rs0) + redis + minio
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -69,17 +69,40 @@ GoLe/
 
 ## Getting Started
 
+필수 환경: Node.js 22+, pnpm 10.30.3, Java 21, Docker Compose 2.20+.
+
 ```bash
-# 0. 인프라 기동 (MongoDB rs0 + Redis)
-docker compose up -d
-
-# 1. 프론트엔드
+# 최초 1회
 pnpm install
-pnpm --filter web dev          # http://localhost:3000
 
-# 2. 백엔드 (Java 21)
-cd apps/api && ./gradlew bootRun   # http://localhost:8080
+# 인프라 기동 (MongoDB rs0 + Redis + MinIO)
+pnpm infra:up
+
+# 터미널 1: 백엔드 (Java 21, http://localhost:8080)
+pnpm dev:api
+
+# 터미널 2: 프론트엔드 (http://localhost:3000)
+pnpm dev:web
 ```
+
+루트 스크립트 `pnpm dev:api`는 OS에 맞는 Gradle Wrapper와 로컬 Spring 프로필을 자동
+적용한다. 기본 포트에서는 별도 환경 파일이 필요 없다. 다른 프로젝트와 포트가 겹칠 때만
+팀 공통 예시를 개인 파일로 복사해 필요한 값을 변경한다.
+
+```bash
+cp .env.example .env
+cp apps/web/.env.example apps/web/.env.development.local
+```
+
+`.env`는 Docker Compose와 백엔드가 함께 읽고, `.env.development.local`은 Next.js 개발
+서버에서만 읽는다. 두 개인 파일은 Git에서 제외된다. 기본 접속 주소는 다음과 같다.
+
+| 서비스 | 주소 |
+|---|---|
+| Frontend | `http://localhost:3000` |
+| Backend / Swagger | `http://localhost:8080` / `http://localhost:8080/swagger-ui.html` |
+| MongoDB / Redis | `localhost:27017` / `localhost:6379` |
+| MinIO API / Console | `http://localhost:9000` / `http://localhost:9001` |
 
 ### 품질 게이트
 
@@ -174,12 +197,22 @@ DISCORD_OPERATIONS_WEBHOOK_URL=https://discord.com/api/webhooks/...  # 선택: �
 
 `ubuntu-gole` 컨테이너에서 PM2(`gole-backend`, `gole-frontend`)로 구동, nginx가 `gole.kscold.com`을 프록시(HTTPS). 표준 절차·명령은 `.kiro/steering/deploy.md`.
 
+`main` 브랜치의 CI가 성공하면 저장소 전용 self-hosted runner가 `ubuntu-gole` 내부에서 CD를 자동 실행한다. GitHub의 **Actions → CD → Run workflow**에서 수동 배포도 가능하다.
+
 ```bash
 # 로컬: 커밋 → push
 git push origin main
 # 컨테이너: git pull → 빌드 → pm2 reload → health
 DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
   docker exec ubuntu-gole bash -lc "cd /app && bash scripts/deploy.sh all"
+```
+
+GoLe Ubuntu에 직접 접속할 때는 다른 인스턴스 포트가 아닌 `2223`만 사용한다.
+
+```bash
+ssh -p 2223 root@localhost              # Mac mini 내부
+ssh -p 2223 root@kscold.iptime.org      # 외부(공유기 포트포워딩 필요)
+cd /app
 ```
 
 ## 커밋 컨벤션

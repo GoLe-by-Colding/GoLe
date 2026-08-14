@@ -8,7 +8,11 @@ apps/web/out/
 .turbo/
 *.tsbuildinfo
 next-env.d.ts
-.env*.local
+# 개인 환경변수. 예시 파일만 버전 관리한다.
+.env
+.env.*
+!.env.example
+!**/.env.example
 playwright-report/
 test-results/
 blob-report/

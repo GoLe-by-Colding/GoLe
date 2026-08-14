@@ -107,10 +107,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("VALIDATION_ERROR", message));
     }
 
+    /**
+     * 요청 파라미터 타입 변환 실패 → 400. (예: {@code ?condition=오타}, {@code ?minPrice=abc})
+     *
+     * <p>이 핸들러가 <b>반드시 있어야 하는</b> 이유 — 아래 {@code @ExceptionHandler(Exception.class)}
+     * catch-all이 Spring 기본 400 매핑({@code DefaultHandlerExceptionResolver})보다 먼저 잡는다.
+     * 그래서 이 핸들러가 없으면 클라이언트의 단순 오타가 500으로 나가고, 그때마다
+     * {@code handleUnexpected}가 ERROR 등급 운영 이벤트까지 발행한다. 쿼리스트링을 훑는 봇 하나로
+     * 운영 알림 채널이 막힌다.
+     */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("INVALID_PARAMETER", "올바르지 않은 요청 값입니다: " + ex.getName()));
+                .body(new ErrorResponse(
+                        "INVALID_PARAMETER", "요청 파라미터 '" + ex.getName() + "' 값이 올바르지 않습니다: " + ex.getValue()));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
