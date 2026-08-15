@@ -154,3 +154,10 @@ portone:
     minimum-age: ${PORTONE_RECONCILIATION_MINIMUM_AGE:PT10M}
     initial-delay: ${PORTONE_RECONCILIATION_INITIAL_DELAY:PT1M}
     interval: ${PORTONE_RECONCILIATION_INTERVAL:PT5M}
+
+# CoolSMS(SOLAPI) 카카오 알림톡. 활성화 시 키·시크릿·채널 연동 ID가 모두 필요하다.
+coolsms:
+  enabled: ${COOLSMS_ENABLED:false}
+  api-key: ${COOLSMS_API_KEY:}
+  api-secret: ${COOLSMS_API_SECRET:}
+  pf-id: ${COOLSMS_PF_ID:}
