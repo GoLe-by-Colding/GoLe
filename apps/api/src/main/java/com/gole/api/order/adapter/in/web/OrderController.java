@@ -7,6 +7,7 @@ import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import com.gole.api.order.application.port.in.StartPaymentUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final PlaceOrderUseCase placeOrderUseCase;
+    private final StartPaymentUseCase startPaymentUseCase;
     private final PayOrderUseCase payOrderUseCase;
     private final CompleteOrderUseCase completeOrderUseCase;
     private final RefundOrderUseCase refundOrderUseCase;
@@ -37,11 +39,13 @@ public class OrderController {
 
     public OrderController(
             PlaceOrderUseCase placeOrderUseCase,
+            StartPaymentUseCase startPaymentUseCase,
             PayOrderUseCase payOrderUseCase,
             CompleteOrderUseCase completeOrderUseCase,
             RefundOrderUseCase refundOrderUseCase,
             GetOrderUseCase getOrderUseCase) {
         this.placeOrderUseCase = placeOrderUseCase;
+        this.startPaymentUseCase = startPaymentUseCase;
         this.payOrderUseCase = payOrderUseCase;
         this.completeOrderUseCase = completeOrderUseCase;
         this.refundOrderUseCase = refundOrderUseCase;
@@ -54,6 +58,18 @@ public class OrderController {
         String id = placeOrderUseCase.place(new PlaceOrderCommand(request.listingId(), request.buyerId()));
         return OrderResponse.from(getOrderUseCase.getById(id));
     }
+
+    @Operation(
+            summary = "결제 시도 시작",
+            description = "결제창을 열기 직전에 호출해 PG 결제 식별자를 받는다. 시도마다 새 값이 발급되므로 결제창을 닫았다가 다시 결제해도 막히지 않는다.")
+    @PostMapping("/{orderId}/payment-attempts")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PaymentAttemptResponse startPayment(@PathVariable String orderId) {
+        return new PaymentAttemptResponse(startPaymentUseCase.start(orderId));
+    }
+
+    /** 결제 시도 발급 결과. */
+    public record PaymentAttemptResponse(String paymentId) {}
 
     @PostMapping("/{orderId}/payment")
     public OrderResponse pay(@PathVariable String orderId) {

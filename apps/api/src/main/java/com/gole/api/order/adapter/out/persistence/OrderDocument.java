@@ -47,6 +47,18 @@ public class OrderDocument {
 
     private SettlementDocument settlement; // nullable, 완료/정산 시 채워짐
 
+    /** 결제 시도 횟수. 0은 시도 이전이거나 결제 시도 도입 이전 레거시 문서다. */
+    private int paymentAttempt;
+
+    /**
+     * 발급된 모든 PG 결제 식별자. 웹훅이 결제 식별자만 들고 오므로 주문을 되찾는 유일한 열쇠다.
+     *
+     * <p>과거 시도까지 담는 이유는 웹훅이 이전 시도의 결과를 들고 도착할 수 있기 때문이다.
+     * 배열 필드 인덱스는 원소 각각을 색인하므로 어느 시도로도 단건 조회가 된다.
+     */
+    @Indexed
+    private List<String> paymentIds;
+
     @Version
     private Long version;
 
@@ -54,6 +66,41 @@ public class OrderDocument {
         // MongoDB 매핑용
     }
 
+    public OrderDocument(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            String status,
+            Instant createdAt,
+            List<StatusChangeDocument> statusHistory,
+            PaymentMethodDocument paymentMethod,
+            SettlementDocument settlement,
+            int paymentAttempt,
+            List<String> paymentIds,
+            Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                statusHistory,
+                paymentMethod,
+                settlement,
+                version);
+        this.paymentAttempt = paymentAttempt;
+        this.paymentIds = paymentIds;
+    }
+
+    /** 하위호환 생성자(결제 시도 도입 이전). */
     public OrderDocument(
             String id,
             String listingId,
@@ -129,6 +176,14 @@ public class OrderDocument {
 
     public SettlementDocument getSettlement() {
         return settlement;
+    }
+
+    public int getPaymentAttempt() {
+        return paymentAttempt;
+    }
+
+    public List<String> getPaymentIds() {
+        return paymentIds;
     }
 
     public Long getVersion() {

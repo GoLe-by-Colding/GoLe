@@ -58,17 +58,18 @@ public class PaymentWebhookController {
             return; // ack
         }
         try {
-            payOrderUseCase.pay(paymentId); // PortOne에 재검증 후 funds-held 전이
-            log.info("[PortOne webhook] 결제 반영 완료 orderId={}", paymentId);
+            // 결제 식별자는 주문 id가 아니다(시도마다 달라진다). 주문을 되찾은 뒤 재검증한다.
+            payOrderUseCase.payByPaymentId(paymentId);
+            log.info("[PortOne webhook] 결제 반영 완료 paymentId={}", paymentId);
         } catch (RuntimeException ex) {
             // 이미 처리됨/결제대기 아님/주문 없음/검증 실패 등 → ack(재시도 방지). 상세는 로깅.
-            log.info("[PortOne webhook] 무시 orderId={} reason={}", paymentId, ex.getMessage());
+            log.info("[PortOne webhook] 무시 paymentId={} reason={}", paymentId, ex.getMessage());
             operationalEventPublisher.publish(new OperationalEvent(
                     Category.PAYMENT,
                     Level.WARNING,
                     "PortOne 웹훅 처리 보류",
                     "결제 웹훅이 승인 상태로 반영되지 않았습니다. 서버 로그를 확인하세요.",
-                    Map.of("주문 ID", paymentId, "예외 종류", ex.getClass().getSimpleName()),
+                    Map.of("결제 ID", paymentId, "예외 종류", ex.getClass().getSimpleName()),
                     Instant.now()));
         }
     }

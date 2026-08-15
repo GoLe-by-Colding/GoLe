@@ -35,8 +35,52 @@ public final class Order {
     /** 정산 전표. 완료 시점에 확정되며 그 전에는 null이다. (요구사항 13.4) */
     private Settlement settlement;
 
+    /**
+     * 결제 시도 횟수. PG의 결제 식별자는 시도마다 새로 발급되어야 하므로 그 근거를 주문이 가진다.
+     *
+     * <p>0은 <b>시도 이전</b>이자 결제 식별자 도입 이전 레거시 주문을 뜻한다. 레거시 주문은
+     * 주문 id를 그대로 결제 식별자로 썼으므로 {@link #getPaymentId()}가 그 규약을 유지한다.
+     */
+    private int paymentAttempt;
+
     private Long version;
 
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            PaymentMethod paymentMethod,
+            Settlement settlement,
+            int paymentAttempt,
+            Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                history,
+                paymentMethod,
+                settlement,
+                version);
+        if (paymentAttempt < 0) {
+            throw new IllegalArgumentException("결제 시도 횟수는 음수일 수 없습니다: " + paymentAttempt);
+        }
+        this.paymentAttempt = paymentAttempt;
+    }
+
+    /** 하위호환 생성자(결제 시도 도입 이전). */
     public Order(
             String id,
             String listingId,
@@ -164,6 +208,51 @@ public final class Order {
                 now,
                 history,
                 null);
+    }
+
+    /**
+     * 새 결제 시도를 시작하고 그 시도의 결제 식별자를 돌려준다.
+     *
+     * <p>PG는 결제 식별자를 <b>한 번만</b> 받아준다. 주문 id를 그대로 쓰면 사용자가 결제창을 닫은
+     * 뒤 다시 결제할 때 같은 식별자가 재사용되어 PG가 거부하고, 그 주문은 영영 결제할 수 없게
+     * 된다. 결제창을 닫는 것은 흔한 행동이므로 시도마다 새 식별자를 발급한다.
+     *
+     * <p>결제 대기 상태에서만 가능하다. 이미 자금이 보유된 주문에 새 시도를 열어주면 이중 결제가
+     * 된다.
+     */
+    public String beginPaymentAttempt(Instant now) {
+        requireStatus(OrderStatus.PAYMENT_PENDING, "payment-attempt");
+        Objects.requireNonNull(now, "now");
+        paymentAttempt++;
+        return getPaymentId();
+    }
+
+    /**
+     * 현재 시도의 PG 결제 식별자.
+     *
+     * <p>시도 이전(레거시 포함)에는 주문 id 자체가 식별자다 — 결제 시도 도입 전에 만들어진
+     * 주문과 웹훅이 그 규약으로 이미 움직이고 있기 때문이다.
+     */
+    public String getPaymentId() {
+        return paymentAttempt == 0 ? id : id + "-" + paymentAttempt;
+    }
+
+    /**
+     * 지금까지 발급한 모든 결제 식별자.
+     *
+     * <p>웹훅은 <b>과거 시도</b>의 결과를 들고 도착할 수 있다(1차 시도를 취소한 줄 알았는데 실제로는
+     * 승인된 경우). 현재 식별자만 알고 있으면 그런 웹훅이 주문을 찾지 못하고 버려진다.
+     */
+    public List<String> getIssuedPaymentIds() {
+        List<String> ids = new ArrayList<>();
+        for (int attempt = 1; attempt <= paymentAttempt; attempt++) {
+            ids.add(id + "-" + attempt);
+        }
+        return Collections.unmodifiableList(ids);
+    }
+
+    public int getPaymentAttempt() {
+        return paymentAttempt;
     }
 
     /**

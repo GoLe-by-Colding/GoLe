@@ -8,6 +8,7 @@ import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import com.gole.api.order.application.port.in.StartPaymentUseCase;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.ListingReservationPort.ReservedListing;
@@ -35,7 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class OrderService
-        implements PlaceOrderUseCase, PayOrderUseCase, CompleteOrderUseCase, RefundOrderUseCase, GetOrderUseCase {
+        implements PlaceOrderUseCase,
+                StartPaymentUseCase,
+                PayOrderUseCase,
+                CompleteOrderUseCase,
+                RefundOrderUseCase,
+                GetOrderUseCase {
 
     private final OrderRepositoryPort orderRepository;
     private final ListingReservationPort listingReservation;
@@ -102,6 +108,34 @@ public class OrderService
         return orderId;
     }
 
+    /**
+     * 새 결제 시도를 시작한다. 브라우저는 여기서 받은 식별자로 결제창을 연다.
+     *
+     * <p>시도 횟수를 늘린 상태를 즉시 저장한다. 결제창이 열리기 전에 서버가 그 식별자를 알고
+     * 있어야 뒤이은 검증·환불·웹훅이 같은 것을 가리킨다.
+     */
+    @Override
+    @Transactional
+    public String start(String orderId) {
+        Order order = getById(orderId);
+        String paymentId = order.beginPaymentAttempt(Instant.now(clock));
+        orderRepository.save(order);
+        return paymentId;
+    }
+
+    /**
+     * 웹훅 진입점. 결제 식별자로 주문을 되찾은 뒤 같은 검증 경로를 탄다.
+     *
+     * <p>결제 식별자는 시도마다 달라지므로 주문 id로 바로 조회할 수 없다.
+     */
+    @Override
+    @Transactional
+    public OrderStatus payByPaymentId(String paymentId) {
+        Order order =
+                orderRepository.findByPaymentId(paymentId).orElseThrow(() -> new OrderNotFoundException(paymentId));
+        return pay(order.getId());
+    }
+
     @Override
     @Transactional
     @OperationalSignal(
@@ -114,7 +148,8 @@ public class OrderService
         Order order = getById(orderId);
         Instant now = Instant.now(clock);
 
-        PaymentAuthorization authorization = paymentGateway.authorize(orderId, order.getAmount());
+        // 검증 대상은 주문 id가 아니라 이번 시도의 결제 식별자다. 재시도한 주문에서 둘은 다르다.
+        PaymentAuthorization authorization = paymentGateway.authorize(order.getPaymentId(), order.getAmount());
         if (authorization.approved()) {
             // 결제수단은 승인 응답에만 실려 온다. 여기서 주문에 새기지 않으면 되찾을 곳이 없다.
             order.confirmFundsHeld(now, authorization.method()); // 요구사항 13.2
@@ -166,7 +201,8 @@ public class OrderService
         Instant now = Instant.now(clock);
 
         order.refund(now); // FUNDS_HELD → REFUNDED (불가 시 예외)
-        paymentGateway.refund(orderId, order.getAmount());
+        // 환불도 결제 식별자 기준이다. 주문 id로 요청하면 재시도된 주문의 환불이 대상을 못 찾는다.
+        paymentGateway.refund(order.getPaymentId(), order.getAmount());
         listingReservation.release(order.getListingId());
         orderRepository.save(order);
     }

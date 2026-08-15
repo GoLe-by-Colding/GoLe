@@ -39,6 +39,20 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
         return repository.findById(orderId).map(this::toDomain);
     }
 
+    /**
+     * 발급 이력에서 먼저 찾고, 없으면 주문 id로 되짚는다.
+     *
+     * <p>후자는 결제 시도 도입 이전 주문을 위한 것이다. 그 시절 결제 식별자는 주문 id 자체였고
+     * 그렇게 결제된 주문의 웹훅이 아직 도착할 수 있다.
+     */
+    @Override
+    public Optional<Order> findByPaymentId(String paymentId) {
+        return repository
+                .findFirstByPaymentIdsContains(paymentId)
+                .or(() -> repository.findById(paymentId))
+                .map(this::toDomain);
+    }
+
     @Override
     public List<Order> findByBuyerId(String buyerId) {
         return repository.findByBuyerId(buyerId).stream().map(this::toDomain).toList();
@@ -66,6 +80,8 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 history,
                 toPaymentMethodDocument(order.getPaymentMethod()),
                 toSettlementDocument(order.getSettlement()),
+                order.getPaymentAttempt(),
+                order.getIssuedPaymentIds(),
                 order.getVersion());
     }
 
@@ -86,6 +102,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 history,
                 toPaymentMethod(document.getPaymentMethod()),
                 toSettlement(document.getSettlement()),
+                document.getPaymentAttempt(),
                 document.getVersion());
     }
 

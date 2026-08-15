@@ -209,6 +209,78 @@ class OrderServiceTest {
         assertThat(reservation.released).isTrue();
     }
 
+    // --- 결제 시도(재시도 가능성) ---
+
+    /**
+     * 결제창을 닫은 사용자가 다시 결제할 수 있어야 한다. PG는 같은 결제 식별자를 두 번 받아주지
+     * 않으므로, 시도마다 새 식별자가 나오지 않으면 그 주문은 영영 결제할 수 없게 된다.
+     */
+    @Test
+    void startPayment_issuesDistinctIdentifierPerAttempt() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        String first = service.start(id);
+        String second = service.start(id);
+
+        assertThat(first).isNotEqualTo(second);
+        assertThat(first).isNotEqualTo(id);
+        assertThat(service.getById(id).getIssuedPaymentIds()).containsExactly(first, second);
+    }
+
+    @Test
+    void pay_verifiesCurrentAttemptIdentifier_notOrderId() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.start(id);
+        String current = service.start(id);
+
+        service.pay(id);
+
+        assertThat(payment.authorizedPaymentId).isEqualTo(current);
+    }
+
+    /** 시도 이전(레거시 규약) 주문은 주문 id가 곧 결제 식별자다. */
+    @Test
+    void pay_withoutAttempt_fallsBackToOrderId() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+
+        service.pay(id);
+
+        assertThat(payment.authorizedPaymentId).isEqualTo(id);
+    }
+
+    /**
+     * 웹훅은 <b>과거 시도</b>의 결과를 들고 도착할 수 있다. 현재 식별자만 알고 있으면 그런 웹훅이
+     * 주문을 못 찾고 버려져, 돈은 빠져나갔는데 주문은 결제 대기로 남는다.
+     */
+    @Test
+    void payByPaymentId_findsOrderByAnyIssuedIdentifier() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        String stale = service.start(id);
+        service.start(id);
+
+        assertThat(service.payByPaymentId(stale)).isEqualTo(OrderStatus.FUNDS_HELD);
+    }
+
+    /** 자금이 이미 보유된 주문에 새 시도를 열어주면 이중 결제가 된다. */
+    @Test
+    void startPayment_isRejectedAfterFundsHeld() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+
+        assertThatThrownBy(() -> service.start(id)).isInstanceOf(OrderStateException.class);
+    }
+
+    @Test
+    void refund_usesPaymentIdentifier() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        String current = service.start(id);
+        service.pay(id);
+
+        service.refund(id);
+
+        assertThat(payment.refundedPaymentId).isEqualTo(current);
+    }
+
     // --- fakes ---
 
     private static final class InMemoryOrders implements OrderRepositoryPort {
@@ -223,6 +295,15 @@ class OrderServiceTest {
         @Override
         public Optional<Order> findById(String orderId) {
             return Optional.ofNullable(store.get(orderId));
+        }
+
+        /** 실제 어댑터와 같이 발급 이력에서 찾고, 없으면 주문 id로 되짚는다(레거시 규약). */
+        @Override
+        public Optional<Order> findByPaymentId(String paymentId) {
+            return store.values().stream()
+                    .filter(o -> o.getIssuedPaymentIds().contains(paymentId))
+                    .findFirst()
+                    .or(() -> findById(paymentId));
         }
 
         @Override
@@ -266,14 +347,21 @@ class OrderServiceTest {
     private static final class FakePayment implements PaymentGatewayPort {
         private boolean approve = true;
         private PaymentMethod method = new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY");
+        /** PG에 실제로 건넨 결제 식별자. 주문 id와 같은지 다른지가 이 변경의 핵심이라 붙잡아 둔다. */
+        private String authorizedPaymentId;
+
+        private String refundedPaymentId;
 
         @Override
-        public PaymentAuthorization authorize(String orderId, long amount) {
+        public PaymentAuthorization authorize(String paymentId, long amount) {
+            authorizedPaymentId = paymentId;
             return approve ? PaymentAuthorization.approved(method) : PaymentAuthorization.declined();
         }
 
         @Override
-        public void refund(String orderId, long amount) {}
+        public void refund(String paymentId, long amount) {
+            refundedPaymentId = paymentId;
+        }
     }
 
     private static final class CountingSettlement implements SettlementPort {
