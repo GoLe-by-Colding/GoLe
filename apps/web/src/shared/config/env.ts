@@ -9,7 +9,9 @@ interface AppEnv {
   readonly siteUrl: string;
   readonly discordInviteUrl: string;
   readonly portOneStoreId: string;
-  readonly portOneChannelKey: string;
+  /** 포트원 채널 키는 결제수단(=PG사)마다 다르다. 미설정 수단은 빈 문자열이다. */
+  readonly portOneChannelKeyCard: string;
+  readonly portOneChannelKeyKakaopay: string;
   readonly nodeEnv: "development" | "production" | "test";
 }
 
@@ -64,7 +66,9 @@ export const env: AppEnv = Object.freeze({
   publicApiBaseUrl: readPublicApiBaseUrl(),
   siteUrl: readSiteUrl(),
   discordInviteUrl: process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
+  // 점 표기여야 클라이언트 번들에 정적 인라인된다(위 readApiBaseUrl 주석 참고).
   portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
-  portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",
+  portOneChannelKeyCard: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD ?? "",
+  portOneChannelKeyKakaopay: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY ?? "",
   nodeEnv: readNodeEnv(),
 });

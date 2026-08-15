@@ -7,14 +7,15 @@ import {
   orderStatusLabel,
   payOrder,
   refundOrder,
+  startPayment,
   type Order,
 } from "@entities/order";
 import { ApiError } from "@shared/api";
 import {
-  PAYMENT_CHOICES,
   PAYMENT_CHOICE_LABEL,
   formatKrw,
   isPortOneEnabled,
+  paymentChoices,
   paymentMethodLabel,
   requestPortOnePayment,
   type PaymentMethodChoice,
@@ -26,12 +27,19 @@ export interface OrderDetailPageProps {
   readonly orderId: string;
 }
 
+/**
+ * 결제창을 띄울 수 있는 수단. 채널 키는 빌드 타임 환경변수라 렌더마다 바뀌지 않으므로
+ * 모듈 로드 시점에 한 번만 정한다.
+ */
+const PAY_CHOICES = paymentChoices();
+
 export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   // 포트원 미설정 환경에서는 서버 스텁이 결제하므로 이 선택은 화면에 나오지 않는다.
-  const [payMethod, setPayMethod] = useState<PaymentMethodChoice>("CARD");
+  // 카드 채널만 계약한 환경도 있으므로 기본값을 "CARD"로 못 박지 않는다.
+  const [payMethod, setPayMethod] = useState<PaymentMethodChoice>(PAY_CHOICES[0] ?? "CARD");
 
   useEffect(() => {
     let active = true;
@@ -75,8 +83,11 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     try {
       const current = await fetchOrder(orderId);
       if (isPortOneEnabled()) {
+        // 결제 식별자는 서버가 시도마다 새로 발급한다. 주문 id를 그대로 쓰면 결제창을 닫았던
+        // 사용자가 다시 결제할 때 PG가 중복 식별자로 거부해 그 주문이 영영 막힌다.
+        const { paymentId } = await startPayment(orderId);
         await requestPortOnePayment({
-          paymentId: current.id,
+          paymentId,
           orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
           totalAmount: current.amount,
           method: payMethod,
@@ -172,7 +183,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
                   disabled={busy}
                   onChange={(e) => setPayMethod(e.target.value as PaymentMethodChoice)}
                 >
-                  {PAYMENT_CHOICES.map((choice) => (
+                  {PAY_CHOICES.map((choice) => (
                     <option key={choice} value={choice}>
                       {PAYMENT_CHOICE_LABEL[choice]}
                     </option>

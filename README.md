@@ -160,9 +160,14 @@ cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 | 변수 | 위치 | 주입 시점 | 비고 |
 |---|---|---|---|
 | `NEXT_PUBLIC_PORTONE_STORE_ID` | 프론트 | **빌드 타임** | 공개 가능 |
-| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` | 프론트 | **빌드 타임** | 공개 가능 |
+| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD` | 프론트 | **빌드 타임** | 공개 가능. 카드 PG 채널 |
+| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY` | 프론트 | **빌드 타임** | 공개 가능. 카카오페이 채널 |
 | `PORTONE_ENABLED` | 백엔드 | 런타임 | `true`면 실연동, 기본 `false`(스텁) |
 | `PORTONE_API_SECRET` | 백엔드 | 런타임 | **서버 전용 비밀값. 프론트·저장소 금지** |
+
+> **채널 키는 결제수단마다 다르다.** 포트원은 PG사별로 채널을 따로 만들기 때문에(카드=KG이니시스,
+> 카카오페이=카카오페이) 채널 키 하나를 두 수단에 재사용하면 한쪽 결제가 통째로 실패한다.
+> 설정하지 않은 수단은 결제수단 선택지에 아예 나오지 않으므로, 카드만 계약한 환경도 그대로 돌아간다.
 
 환경별 권장 조합:
 
@@ -178,7 +183,8 @@ cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 ```bash
 # 1) 프론트 키를 서버의 apps/web/.env.production 에 둔다 (.gitignore 대상)
 NEXT_PUBLIC_PORTONE_STORE_ID=store-...
-NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-key-...
+NEXT_PUBLIC_PORTONE_CHANNEL_KEY_CARD=channel-key-...
+NEXT_PUBLIC_PORTONE_CHANNEL_KEY_KAKAOPAY=channel-key-...
 
 # 2) 프론트 재빌드 (반드시 빌드를 다시 해야 반영된다)
 bash /app/scripts/deploy.sh frontend
@@ -203,6 +209,12 @@ pm2 env gole-backend | grep -i portone   # 비어 있으면 스텁으로 동작 
 거치므로 서명 시크릿 없이도 위조 웹훅으로 결제가 확정되지 않는다.
 
 미구현: 부분 환불(전액 취소만 가능), 간편결제 사업자는 카카오페이만 선택지에 있다.
+**판매자 지급 실행도 미구현이다** — 정산 전표는 계산·영속화되지만 실제 이체는 일어나지 않는다
+(`StubSettlementAdapter`). 플랫폼이 자금을 직접 보관·송금하는 구조는 전자금융 관련 등록 문제가
+따르므로, 포트원 "파트너 정산 자동화" 같은 PG의 하위 판매자 정산 대행을 먼저 검토해야 한다.
+
+> 카카오페이는 PG사 정책상 **에스크로 결제를 지원하지 않는다.** 통신판매업 신고에 필요한
+> 구매안전서비스를 붙일 때는 카드 PG(KG이니시스) 쪽을 써야 한다.
 
 ### Discord 고래방
 

@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 import {
-  EASY_PAY_PROVIDER,
+  availablePaymentChoices,
   buildPortOneRequest,
+  type PortOneChannelKeys,
   type PortOnePayParams,
 } from "../src/shared/lib/portone-request";
 
@@ -21,7 +22,12 @@ const BASE: PortOnePayParams = {
   redirectUrl: "https://gole.kscold.com/orders/order-1234",
 };
 
-const CONFIG = { storeId: "store-abc", channelKey: "channel-key-xyz" };
+const CHANNEL_KEYS: PortOneChannelKeys = {
+  CARD: "channel-key-card",
+  KAKAOPAY: "channel-key-kakao",
+};
+
+const CONFIG = { storeId: "store-abc", channelKeys: CHANNEL_KEYS };
 
 test.describe("buildPortOneRequest", () => {
   test("공통 필드를 그대로 싣는다", () => {
@@ -29,7 +35,6 @@ test.describe("buildPortOneRequest", () => {
 
     expect(request).toMatchObject({
       storeId: "store-abc",
-      channelKey: "channel-key-xyz",
       paymentId: "order-1234",
       orderName: "GoLe 주문 order-12",
       totalAmount: 280000,
@@ -44,13 +49,40 @@ test.describe("buildPortOneRequest", () => {
     expect(request["easyPay"]).toBeUndefined();
   });
 
-  test("카카오페이는 payMethod=EASY_PAY + 사업자 지정이다", () => {
+  /**
+   * 카카오페이는 PG사 자체가 간편결제사다. 전용 채널이 이미 사업자를 결정하므로
+   * easyPayProvider를 실을 필요가 없고, 포트원도 이 값을 무시한다.
+   */
+  test("카카오페이는 payMethod=EASY_PAY이고 사업자를 따로 싣지 않는다", () => {
     const request = buildPortOneRequest({ ...BASE, method: "KAKAOPAY" }, CONFIG);
 
-    // 간편결제는 payMethod만으로 부족하다. 사업자를 지정하지 않으면 결제창이
-    // 카드로 뜨거나 사업자 선택 화면이 한 단계 더 끼어든다.
     expect(request["payMethod"]).toBe("EASY_PAY");
-    expect(request["easyPay"]).toEqual({ easyPayProvider: EASY_PAY_PROVIDER.KAKAOPAY });
+    expect(request["easyPay"]).toBeUndefined();
+  });
+
+  /**
+   * 포트원은 PG사마다 채널이 따로다. 결제수단을 고르는 것은 곧 채널을 고르는 것이라,
+   * 채널 키 하나를 모든 수단에 재사용하면 한쪽 결제가 통째로 실패한다.
+   */
+  test("결제수단에 맞는 채널 키를 고른다", () => {
+    expect(buildPortOneRequest({ ...BASE, method: "CARD" }, CONFIG)["channelKey"]).toBe(
+      "channel-key-card",
+    );
+    expect(buildPortOneRequest({ ...BASE, method: "KAKAOPAY" }, CONFIG)["channelKey"]).toBe(
+      "channel-key-kakao",
+    );
+  });
+
+  /** 설정 누락은 결제 실패가 아니라 설정 문제다. 원인이 드러나는 자리에서 끊는다. */
+  test("채널 키가 없는 결제수단은 요청을 만들지 않는다", () => {
+    const cardOnly = {
+      storeId: "store-abc",
+      channelKeys: { CARD: "channel-key-card", KAKAOPAY: "" },
+    };
+
+    expect(() => buildPortOneRequest({ ...BASE, method: "KAKAOPAY" }, cardOnly)).toThrow(
+      /카카오페이/,
+    );
   });
 
   /**
@@ -69,9 +101,19 @@ test.describe("buildPortOneRequest", () => {
 
     expect(request["totalAmount"]).toBe(1);
   });
+});
 
-  /** 사업자 식별자는 한 곳에서만 정의한다 — 콘솔 표기와 다르면 여기만 고치면 된다. */
-  test("카카오페이 사업자 식별자는 상수 한 곳에서 온다", () => {
-    expect(EASY_PAY_PROVIDER.KAKAOPAY).toBe("KAKAOPAY");
+test.describe("availablePaymentChoices", () => {
+  test("채널 키가 설정된 수단만 남긴다", () => {
+    expect(availablePaymentChoices(CHANNEL_KEYS)).toEqual(["CARD", "KAKAOPAY"]);
+    expect(availablePaymentChoices({ CARD: "channel-key-card", KAKAOPAY: "" })).toEqual(["CARD"]);
+    expect(availablePaymentChoices({ CARD: "", KAKAOPAY: "channel-key-kakao" })).toEqual([
+      "KAKAOPAY",
+    ]);
+  });
+
+  /** 하나도 없으면 포트원 자체가 꺼진 것으로 본다(서버 스텁이 결제를 승인한다). */
+  test("설정이 없으면 빈 목록이다", () => {
+    expect(availablePaymentChoices({ CARD: "", KAKAOPAY: "" })).toEqual([]);
   });
 });

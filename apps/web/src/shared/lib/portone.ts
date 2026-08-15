@@ -1,11 +1,17 @@
 import { env } from "@shared/config";
-import { buildPortOneRequest, type PortOnePayParams } from "./portone-request";
+import {
+  availablePaymentChoices,
+  buildPortOneRequest,
+  type PaymentMethodChoice,
+  type PortOneChannelKeys,
+  type PortOnePayParams,
+} from "./portone-request";
 
 /**
  * 포트원(PortOne) V2 브라우저 결제 연동.
  *
  * npm 의존성 없이 공식 CDN SDK(window.PortOne)를 동적 로드한다.
- * 환경변수(NEXT_PUBLIC_PORTONE_STORE_ID / NEXT_PUBLIC_PORTONE_CHANNEL_KEY)가 모두 설정된 경우에만 활성.
+ * 상점 ID와 결제수단별 채널 키가 설정된 경우에만 활성이며, 채널이 있는 수단만 선택지가 된다.
  * 결제는 브라우저에서 수행하고 서버가 결과를 검증한다(verify-on-server). paymentId 는 주문 id를 사용한다.
  */
 
@@ -28,8 +34,28 @@ declare global {
   }
 }
 
+function channelKeys(): PortOneChannelKeys {
+  return {
+    CARD: env.portOneChannelKeyCard,
+    KAKAOPAY: env.portOneChannelKeyKakaopay,
+  };
+}
+
+/**
+ * 실제로 결제창을 띄울 수 있는 결제수단. 상점 ID가 없으면 어떤 수단도 쓸 수 없다.
+ *
+ * <p>채널을 하나만 계약한 환경(예: 카드만)에서 카카오페이를 선택지로 내보내면 결제창이
+ * 열리지 않으므로, 화면은 이 목록만 보여준다.
+ */
+export function paymentChoices(): readonly PaymentMethodChoice[] {
+  if (env.portOneStoreId.length === 0) {
+    return [];
+  }
+  return availablePaymentChoices(channelKeys());
+}
+
 export function isPortOneEnabled(): boolean {
-  return env.portOneStoreId.length > 0 && env.portOneChannelKey.length > 0;
+  return paymentChoices().length > 0;
 }
 
 async function loadSdk(): Promise<PortOneSdk> {
@@ -70,7 +96,7 @@ export async function requestPortOnePayment(params: PortOnePayParams): Promise<v
   const result = await sdk.requestPayment(
     buildPortOneRequest(params, {
       storeId: env.portOneStoreId,
-      channelKey: env.portOneChannelKey,
+      channelKeys: channelKeys(),
     }),
   );
   if (result.code !== undefined) {
