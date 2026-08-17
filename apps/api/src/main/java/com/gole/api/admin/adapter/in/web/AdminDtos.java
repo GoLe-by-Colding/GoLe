@@ -76,6 +76,7 @@ public final class AdminDtos {
 
     // ── 모니터링 행 ────────────────────────────────────────────
 
+    /** {@code paymentMethod}는 결제 승인 전 주문에서 null이다. */
     public record OrderRow(
             String id,
             String status,
@@ -83,6 +84,7 @@ public final class AdminDtos {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            PaymentMethodResponse paymentMethod,
             Instant createdAt) {
 
         public static OrderRow from(AdminReadModelPort.OrderRow row) {
@@ -93,7 +95,21 @@ public final class AdminDtos {
                     row.buyerId(),
                     row.sellerId(),
                     row.catalogSetNumber(),
+                    PaymentMethodResponse.from(row.paymentMethod()),
                     row.createdAt());
+        }
+    }
+
+    /**
+     * 결제수단 응답. provider는 간편결제에만 있다.
+     *
+     * <p>구매자 API({@code OrderResponse.PaymentMethodResponse})와 같은 표기를 쓴다 — 같은 개념을
+     * 두 API가 다르게 내보내면 프론트에 매핑 테이블이 두 벌 생긴다.
+     */
+    public record PaymentMethodResponse(String type, String provider) {
+
+        public static PaymentMethodResponse from(AdminReadModelPort.PaymentMethodView view) {
+            return view == null ? null : new PaymentMethodResponse(view.type(), view.provider());
         }
     }
 

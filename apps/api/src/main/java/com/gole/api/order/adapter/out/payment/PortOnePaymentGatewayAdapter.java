@@ -79,50 +79,52 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public PaymentVerificationResult verifyPayment(String orderId, long amount) {
+    public PaymentVerification verifyPayment(String orderId, long amount) {
         try {
             Map<?, ?> payment = fetchPayment(orderId);
             String status = normalizedText(payment.get("status"));
             if (status == null) {
                 log.warn("[PortOne] 결제 상태 누락 orderId={}", orderId);
                 publishReviewRequired(orderId, "PG 상태 누락", null);
-                return PaymentVerificationResult.REVIEW_REQUIRED;
+                return PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
             }
             String provenanceFailure = findPaymentProvenanceFailure(payment, orderId, amount);
             if (provenanceFailure != null) {
                 log.error("[PortOne] 결제 원장 기본 검증 실패 orderId={} reason={}", orderId, provenanceFailure);
                 publishReviewRequired(orderId, provenanceFailure, status);
-                return PaymentVerificationResult.REVIEW_REQUIRED;
+                return PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
             }
             if ("PAID".equals(status)) {
                 String validationFailure = findPaymentValidationFailure(payment, orderId, amount);
                 if (validationFailure == null) {
-                    return PaymentVerificationResult.PAID;
+                    // 검증을 통과한 원장에서만 결제수단을 읽는다. 위 검증이 이미 method를
+                    // 확인했으므로 추가 조회 없이 사실을 그대로 넘긴다.
+                    return PaymentVerification.paid(PortOnePaymentMethodMapper.from(payment));
                 }
                 log.error("[PortOne] 결제 원장 검증 실패 orderId={} reason={}", orderId, validationFailure);
                 publishReviewRequired(orderId, validationFailure, status);
-                return PaymentVerificationResult.REVIEW_REQUIRED;
+                return PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
             }
             if ("FAILED".equals(status) || "CANCELLED".equals(status)) {
                 // 실패 결제는 method/channel이 없을 수 있지만, 예약을 해제하는 최종 전이 전에
                 // 위에서 최소 provenance(ID·상점·V2·통화·금액)를 검증한 뒤에만 실패로 확정한다.
-                return PaymentVerificationResult.FAILED;
+                return PaymentVerification.of(PaymentVerificationResult.FAILED);
             }
             return switch (status) {
                     // 결제 단건 조회 응답의 discriminator는 PAY_PENDING이다. PENDING은
                     // PaymentStatus 필터 값과 이전 응답에 대한 안전한 호환으로만 허용한다.
-                case "READY", "PAY_PENDING", "PENDING" -> PaymentVerificationResult.PENDING;
+                case "READY", "PAY_PENDING", "PENDING" -> PaymentVerification.of(PaymentVerificationResult.PENDING);
                 default -> {
                     log.warn("[PortOne] 알 수 없는 결제 상태 orderId={} status={}", orderId, status);
                     publishReviewRequired(orderId, "알 수 없는 PG 상태", status);
-                    yield PaymentVerificationResult.REVIEW_REQUIRED;
+                    yield PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
                 }
             };
         } catch (HttpClientErrorException.NotFound ex) {
             // 결제창을 열기 전 주문 상세를 조회한 경우 PortOne에는 paymentId가 아직 없다.
             // 즉시 실패로 확정하면 정상적인 결제 재시도를 막으므로 별도 상태로 돌려준다.
             log.info("[PortOne] 결제 건 없음 orderId={}", orderId);
-            return PaymentVerificationResult.NOT_FOUND;
+            return PaymentVerification.of(PaymentVerificationResult.NOT_FOUND);
         } catch (Exception ex) {
             log.error("[PortOne] 결제 조회 실패 orderId={}: {}", orderId, ex.getMessage());
             // 조회 실패는 결제 거절이 아니다. false를 반환하면 매물 선점이 잘못 풀리므로 재시도 가능한 예외로 분리한다.

@@ -17,7 +17,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort.ReservedLi
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
-import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
@@ -133,7 +133,7 @@ public class OrderService
     public OrderStatus pay(String orderId) {
         Order order = getById(orderId);
         OrderStatus previousStatus = order.getStatus();
-        PaymentVerificationResult verification = paymentGateway.verifyPayment(orderId, order.getAmount());
+        PaymentVerification verification = paymentGateway.verifyPayment(orderId, order.getAmount());
         OrderStatus status = paymentTransitions.applyPaymentVerification(orderId, verification, Instant.now(clock));
         publishPaymentDecision(orderId, previousStatus, status);
         return status;

@@ -25,8 +25,39 @@ public final class Order {
     private final Instant createdAt;
     private final List<OrderStatusChange> history;
     private OrderStatus status;
+    /** 결제 승인 시점에 PG가 알려준 결제수단. 결제 전·레거시 주문은 null. */
+    private PaymentMethod paymentMethod;
+
     private Long version;
 
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.listingId = Objects.requireNonNull(listingId, "listingId");
+        this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
+        this.sellerId = Objects.requireNonNull(sellerId, "sellerId");
+        this.catalogSetNumber = catalogSetNumber;
+        this.listingCondition = listingCondition;
+        this.amount = amount;
+        this.status = Objects.requireNonNull(status, "status");
+        this.paymentMethod = paymentMethod;
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.history = new ArrayList<>(history);
+        this.version = version;
+    }
+
+    /** 하위호환 생성자(결제수단 도입 이전). */
     public Order(
             String id,
             String listingId,
@@ -39,17 +70,19 @@ public final class Order {
             Instant createdAt,
             List<OrderStatusChange> history,
             Long version) {
-        this.id = Objects.requireNonNull(id, "id");
-        this.listingId = Objects.requireNonNull(listingId, "listingId");
-        this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
-        this.sellerId = Objects.requireNonNull(sellerId, "sellerId");
-        this.catalogSetNumber = catalogSetNumber;
-        this.listingCondition = listingCondition;
-        this.amount = amount;
-        this.status = Objects.requireNonNull(status, "status");
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
-        this.history = new ArrayList<>(history);
-        this.version = version;
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                null,
+                createdAt,
+                history,
+                version);
     }
 
     /** 하위호환 생성자(레거시/테스트). */
@@ -93,10 +126,23 @@ public final class Order {
                 null);
     }
 
-    /** 결제 승인 → 자금 보유. (요구사항 7.2, 13.2) */
-    public void confirmFundsHeld(Instant now) {
+    /**
+     * 결제 승인 → 자금 보유. (요구사항 7.2, 13.2)
+     *
+     * <p>결제수단을 <b>이 전이에서만</b> 기록한다. 승인된 PG 원장에만 실려오는 사실이라
+     * 나중에 되찾을 곳이 없고, 한 번 기록된 뒤에는 바뀌지 않는다.
+     *
+     * @param paymentMethod 확인된 결제수단. PG가 알려주지 않았으면 {@link PaymentMethod#UNKNOWN}.
+     */
+    public void confirmFundsHeld(Instant now, PaymentMethod paymentMethod) {
         requirePaymentDecisionStatus("funds-held");
+        this.paymentMethod = paymentMethod == null ? PaymentMethod.UNKNOWN : paymentMethod;
         transitionTo(OrderStatus.FUNDS_HELD, now);
+    }
+
+    /** 결제수단을 알 수 없는 자금 보유 전이. */
+    public void confirmFundsHeld(Instant now) {
+        confirmFundsHeld(now, PaymentMethod.UNKNOWN);
     }
 
     /** 결제 실패. (요구사항 13.3) */
@@ -181,6 +227,11 @@ public final class Order {
 
     public OrderStatus getStatus() {
         return status;
+    }
+
+    /** 결제 승인 시점에 확인된 결제수단. 결제 전이거나 결제수단 도입 이전 주문이면 null. */
+    public PaymentMethod getPaymentMethod() {
+        return paymentMethod;
     }
 
     public Instant getCreatedAt() {
