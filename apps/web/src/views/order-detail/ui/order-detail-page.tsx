@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   completeOrder,
   fetchOrder,
@@ -33,6 +33,50 @@ const AUTO_REFRESH_MAX_ATTEMPTS = 12;
 
 type ConfirmationAction = "complete" | "refund";
 
+/**
+ * 이 주문에서 결제창을 띄운 적이 있는지 기억한다.
+ *
+ * 서버는 이 사실을 모른다 — 결제 시도는 포트원 원장에만 남고, 주문 상세 조회는 PG를 호출하지
+ * 않는다(호출하면 화면을 열 때마다 PG를 때린다). 그래서 브라우저가 기억한다.
+ *
+ * sessionStorage를 쓰는 이유: 모바일 결제는 리다이렉트로 페이지를 떠났다가 돌아오고, 사용자가
+ * 새로고침도 한다. 메모리에만 두면 정작 안내가 필요한 그 순간에 사라진다.
+ */
+const PAYMENT_ATTEMPT_KEY_PREFIX = "gole.order.payment-attempted:";
+const PAYMENT_ATTEMPT_CHANGE_EVENT = "gole:payment-attempt-change";
+
+function readPaymentAttempted(orderId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(PAYMENT_ATTEMPT_KEY_PREFIX + orderId) !== null;
+  } catch {
+    // 프라이버시 모드 등에서 접근이 막히면 "시도 안 함"으로 본다.
+    return false;
+  }
+}
+
+function rememberPaymentAttempt(orderId: string): void {
+  try {
+    window.sessionStorage.setItem(PAYMENT_ATTEMPT_KEY_PREFIX + orderId, "1");
+    window.dispatchEvent(new Event(PAYMENT_ATTEMPT_CHANGE_EVENT));
+  } catch {
+    // 기록에 실패해도 결제 자체를 막지는 않는다.
+  }
+}
+
+/** useSyncExternalStore용 구독. session-store와 같은 방식이다(같은 탭은 커스텀 이벤트로 전파). */
+function subscribePaymentAttempt(onChange: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+  window.addEventListener(PAYMENT_ATTEMPT_CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(PAYMENT_ATTEMPT_CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
 export interface OrderDetailPageProps {
   readonly orderId: string;
 }
@@ -43,6 +87,12 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  // sessionStorage는 React 밖의 상태다. 서버 렌더에는 없으므로 서버 스냅샷은 항상 false다.
+  const paymentAttempted = useSyncExternalStore(
+    subscribePaymentAttempt,
+    () => readPaymentAttempted(orderId),
+    () => false,
+  );
   const paymentConfigurationError = getPortOneConfigurationError();
 
   useEffect(() => {
@@ -78,9 +128,15 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
 
   // 결제 승인·운영 검토·비동기 환불은 웹훅으로 상태가 바뀔 수 있다. 무한 폴링을 피하려고
   // 5초 간격으로 최대 1분만 자동 확인하고, 이후에는 사용자가 직접 다시 확인할 수 있게 한다.
+  //
+  // 결제 대기는 시도한 뒤에만 확인한다. 주문을 만든 직후부터 돌리면 정작 결제를 마치고
+  // 돌아왔을 때 1분 창이 이미 소진돼 있다. 검토·환불은 서버가 주도하므로 조건 없이 확인한다.
   useEffect(() => {
     const watchedStatus = order?.status;
     if (watchedStatus === undefined || !AUTO_REFRESH_STATUSES.has(watchedStatus)) {
+      return;
+    }
+    if (watchedStatus === "payment_pending" && !paymentAttempted) {
       return;
     }
 
@@ -112,7 +168,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [order?.status, orderId]);
+  }, [order?.status, orderId, paymentAttempted]);
 
   const run = useCallback(
     async (action: (id: string) => Promise<Order>) => {
@@ -147,6 +203,9 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     try {
       const current = await fetchOrder(orderId);
       if (isPortOneEnabled()) {
+        // 결제창을 여는 순간 기록한다. 모바일은 여기서 페이지를 떠나므로 이후에 기록할 기회가 없다.
+        // 커스텀 이벤트가 같은 탭의 구독자에게 전파하므로 별도 setState가 필요 없다.
+        rememberPaymentAttempt(orderId);
         await requestPortOnePayment({
           paymentId: current.id,
           orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
@@ -157,6 +216,10 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     } catch (cause) {
       if (cause instanceof PortOnePaymentError && cause.userCancelled) {
         setError("결제가 취소되었습니다. 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.");
+      } else if (cause instanceof PortOnePaymentError) {
+        // 결제창에서 실패한 경우다. 사유 분류가 빗나가도 "주문이 보존된다"는 사실은 알려야 한다 —
+        // 그걸 모르면 사용자가 중복 결제를 시도한다.
+        setError(`${cause.message} 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.`);
       } else if (cause instanceof ApiError && cause.status >= 500) {
         setError(
           "결제 승인 여부를 확인하고 있습니다. 중복 결제하지 말고 잠시 뒤 주문 상태를 다시 확인해 주세요.",
@@ -255,7 +318,21 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </p>
         ) : null}
 
-        {order.status === "payment_pending" ? (
+        {/*
+          결제 시도 전에는 "기다리고 있어요"가 사실이 아니다 — 아직 아무것도 시작되지 않았고,
+          "결제를 마쳤는데 상태가 그대로라면"은 결제한 사람에게 할 말이다. 시도 전에는 다음에
+          무엇을 할지만 알려준다.
+        */}
+        {order.status === "payment_pending" && !paymentAttempted ? (
+          <OrderStatusNotice
+            title="아직 결제하지 않았어요"
+            description="아래 결제하기를 누르면 카카오페이 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+            refreshing={refreshing}
+            onRefresh={refreshOrder}
+          />
+        ) : null}
+
+        {order.status === "payment_pending" && paymentAttempted ? (
           <OrderStatusNotice
             title="카카오페이 결제를 기다리고 있어요"
             description="결제를 마쳤는데 상태가 그대로라면 다시 결제하지 말고 승인 상태를 확인해 주세요. 최대 1분 동안 자동으로도 확인합니다."
