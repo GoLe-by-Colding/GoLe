@@ -53,8 +53,13 @@ test.describe("Purchase flow", () => {
     await page.getByRole("button", { name: "결제하기" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
 
-    // 6) 구매 확정 → 거래 완료
+    // 승인된 결제의 결제수단이 기록되어 주문에 남는다. PG가 승인 시점에만 알려주는 사실이라
+    // 여기서 비어 있으면 되찾을 곳이 없다.
+    await expect(page.getByTestId("order-payment-method")).toHaveText("카카오페이");
+
+    // 6) 구매 확정 → 거래 완료. 되돌리기 어려운 조치라 명시적 확인을 거친다.
     await page.getByRole("button", { name: "구매 확정" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "상품을 받았어요" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
   });
 });
