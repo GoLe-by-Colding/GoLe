@@ -37,6 +37,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
+    // CoolSMS(SOLAPI) 카카오 알림톡 발송 공식 SDK.
+    implementation("com.solapi:sdk:1.1.0")
+
     // PortOne Standard Webhooks signature verification (HMAC-SHA256 + replay-window validation).
     implementation("io.portone:server-sdk:0.24.0")
 
