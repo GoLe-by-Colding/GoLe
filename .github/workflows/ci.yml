@@ -146,6 +146,10 @@ jobs:
           # 앱이 러너 호스트에서 직접 뜨므로 컨테이너 전용 호스트명을 쓰면 안 된다.
           STORAGE_S3_ENDPOINT: http://localhost:9000
           STORAGE_PUBLIC_BASE_URL: http://localhost:9000/gole
+          # spring.mail.host가 정의되어 있으면 Spring이 MailHealthIndicator를 자동 등록하고,
+          # SMTP가 없는 환경에서는 그 지표 하나가 /actuator/health 전체를 DOWN(503)으로 만든다.
+          # CI에는 SMTP를 붙이지 않으므로 이 지표를 끈다. Mongo·Redis 확인은 그대로 남는다.
+          MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
         run: |
           nohup java -jar build/libs/*.jar > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 90); do
@@ -154,7 +158,13 @@ jobs:
             fi
             sleep 1
           done
-          echo "::error::API failed to start"; tail -100 "$RUNNER_TEMP/api.log"; exit 1
+          echo "::error::API failed to start"
+          # 어느 지표가 DOWN인지 바로 보이게 남긴다. 로그만 있으면 원인 찾기가 훨씬 느리다.
+          echo "--- /actuator/health ---"
+          curl -sS http://localhost:8080/actuator/health || echo "(응답 없음)"
+          echo "--- api.log ---"
+          tail -100 "$RUNNER_TEMP/api.log"
+          exit 1
 
       # E2E_WITH_BACKEND: 관리자 API 가드 테스트는 이 값이 없으면 조용히 스킵된다.
       # 백엔드가 실제로 떠 있는 이 잡이 그 테스트를 돌릴 수 있는 유일한 곳이다.
