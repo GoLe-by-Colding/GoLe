@@ -35,6 +35,7 @@ public interface AdminReadModelPort {
 
     record OrderStats(Map<String, Long> countByStatus, long completedGmv) {}
 
+    /** {@code paymentMethod}는 결제 승인 전 주문과 결제수단 도입 이전 주문에서 null이다. */
     record OrderRow(
             String id,
             String status,
@@ -42,7 +43,11 @@ public interface AdminReadModelPort {
             String buyerId,
             String sellerId,
             String catalogSetNumber,
+            PaymentMethodView paymentMethod,
             Instant createdAt) {}
+
+    /** 읽기 모델의 결제수단. 도메인 열거형 이름을 그대로 옮긴다. */
+    record PaymentMethodView(String type, String provider) {}
 
     record ListingRow(
             String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {}

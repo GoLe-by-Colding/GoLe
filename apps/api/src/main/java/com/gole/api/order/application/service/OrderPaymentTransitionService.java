@@ -2,7 +2,7 @@ package com.gole.api.order.application.service;
 
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
-import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -23,13 +23,13 @@ public class OrderPaymentTransitionService {
     }
 
     @Transactional
-    public OrderStatus applyPaymentVerification(String orderId, PaymentVerificationResult verification, Instant now) {
+    public OrderStatus applyPaymentVerification(String orderId, PaymentVerification verification, Instant now) {
         Order order = load(orderId);
         if (order.getStatus() != OrderStatus.PAYMENT_PENDING && order.getStatus() != OrderStatus.PAYMENT_REVIEW) {
             return order.getStatus();
         }
-        switch (verification) {
-            case PAID -> order.confirmFundsHeld(now);
+        switch (verification.result()) {
+            case PAID -> order.confirmFundsHeld(now, verification.method());
             case FAILED -> {
                 order.failPayment(now);
                 listings.release(order.getListingId());

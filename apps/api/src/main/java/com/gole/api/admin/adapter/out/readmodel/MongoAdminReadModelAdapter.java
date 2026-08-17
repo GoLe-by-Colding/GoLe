@@ -95,6 +95,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
                         d.getString("buyerId"),
                         d.getString("sellerId"),
                         d.getString("catalogSetNumber"),
+                        paymentMethod(d.get("paymentMethod")),
                         instant(d.get("createdAt"))))
                 .toList();
     }
@@ -171,5 +172,22 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
             return date.toInstant();
         }
         return value instanceof Instant i ? i : null;
+    }
+
+    /**
+     * 임베디드 결제수단 문서를 읽는다. 결제 전 주문에는 필드 자체가 없으므로 null이 정상이다.
+     *
+     * <p>{@code type}이 없는 문서는 결제수단 행 전체를 비운다 — 사업자만 있고 분류가 없는 값은
+     * 화면에서 "카카오페이"로 보이지만 무엇으로 결제됐는지는 말해주지 못한다.
+     */
+    private static PaymentMethodView paymentMethod(Object value) {
+        if (!(value instanceof Document method)) {
+            return null;
+        }
+        String type = method.getString("type");
+        if (type == null || type.isBlank()) {
+            return null;
+        }
+        return new PaymentMethodView(type, method.getString("provider"));
     }
 }

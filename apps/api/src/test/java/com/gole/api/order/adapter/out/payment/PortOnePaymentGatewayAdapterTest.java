@@ -8,10 +8,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -86,11 +89,39 @@ class PortOnePaymentGatewayAdapterTest {
         responseBody.set(validPaidResponse("order-1"));
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
 
-        PaymentVerificationResult result = adapter(events).verifyPayment("order-1", 15_000);
+        PaymentVerification result = adapter(events).verifyPayment("order-1", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.PAID);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.PAID);
         assertThat(requestPath.get()).isEqualTo("/payments/order-1");
         assertThat(authorization.get()).isEqualTo("PortOne api-secret");
+    }
+
+    /**
+     * 승인 원장에서만 얻을 수 있는 결제수단을 검증 결과에 실어 돌려준다.
+     * 이미 검증이 읽은 값이므로 추가 조회 없이 따라와야 한다.
+     */
+    @Test
+    @DisplayName("승인된 결제의 결제수단을 검증 결과에 함께 담아 돌려준다")
+    void reportsPaymentMethodOfApprovedPayment() {
+        responseBody.set(validPaidResponse("order-1"));
+
+        PaymentVerification result =
+                adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-1", 15_000);
+
+        assertThat(result.method()).isEqualTo(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+    }
+
+    /** 승인되지 않은 결제의 결제수단은 사실이 아니다. 기록할 것이 없으므로 비어 있어야 한다. */
+    @Test
+    @DisplayName("승인되지 않은 결제는 결제수단을 싣지 않는다")
+    void omitsPaymentMethodWhenPaymentIsNotApproved() {
+        responseBody.set(basePaymentResponse("FAILED", "order-failed"));
+
+        PaymentVerification result =
+                adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-failed", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.FAILED);
+        assertThat(result.method()).isNull();
     }
 
     @Test
@@ -128,9 +159,9 @@ class PortOnePaymentGatewayAdapterTest {
         responseBody.set(response);
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
 
-        PaymentVerificationResult result = adapter(events).verifyPayment("order-1", 15_000);
+        PaymentVerification result = adapter(events).verifyPayment("order-1", 15_000);
 
-        assertThat(result).as(reason).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        assertThat(result.result()).as(reason).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
         verify(events).publish(any());
     }
 
@@ -140,10 +171,10 @@ class PortOnePaymentGatewayAdapterTest {
     void preservesNonFinalPaymentStatuses(String status) {
         responseBody.set(basePaymentResponse(status, "order-1"));
 
-        PaymentVerificationResult result =
+        PaymentVerification result =
                 adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-1", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.PENDING);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.PENDING);
     }
 
     @Test
@@ -152,9 +183,9 @@ class PortOnePaymentGatewayAdapterTest {
         responseBody.set(basePaymentResponse("PAY_PENDING", "order-other"));
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
 
-        PaymentVerificationResult result = adapter(events).verifyPayment("order-1", 15_000);
+        PaymentVerification result = adapter(events).verifyPayment("order-1", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
         verify(events).publish(any());
     }
 
@@ -163,10 +194,10 @@ class PortOnePaymentGatewayAdapterTest {
     void acceptsFailedPaymentOnlyAfterBaseProvenanceValidation() {
         responseBody.set(basePaymentResponse("FAILED", "order-failed"));
 
-        PaymentVerificationResult result =
+        PaymentVerification result =
                 adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-failed", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.FAILED);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.FAILED);
     }
 
     @Test
@@ -175,9 +206,9 @@ class PortOnePaymentGatewayAdapterTest {
         responseBody.set(basePaymentResponse("FAILED", "order-failed").replace("store-1", "store-other"));
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
 
-        PaymentVerificationResult result = adapter(events).verifyPayment("order-failed", 15_000);
+        PaymentVerification result = adapter(events).verifyPayment("order-failed", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
         verify(events).publish(any());
     }
 
@@ -187,10 +218,10 @@ class PortOnePaymentGatewayAdapterTest {
         responseStatus.set(404);
         responseBody.set("{\"type\":\"PAYMENT_NOT_FOUND\"}");
 
-        PaymentVerificationResult result =
+        PaymentVerification result =
                 adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-never-opened", 15_000);
 
-        assertThat(result).isEqualTo(PaymentVerificationResult.NOT_FOUND);
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.NOT_FOUND);
     }
 
     @ParameterizedTest
