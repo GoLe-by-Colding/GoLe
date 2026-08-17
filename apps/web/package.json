@@ -35,6 +35,6 @@
     "prettier": "^3.4.2",
     "steiger": "^0.5.7",
     "tailwindcss": "^4.3.0",
-    "typescript": "^5"
+    "typescript": "^6"
   }
 }
