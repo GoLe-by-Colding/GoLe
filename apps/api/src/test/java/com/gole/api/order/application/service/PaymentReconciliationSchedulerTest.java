@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -31,8 +32,10 @@ class PaymentReconciliationSchedulerTest {
         OrderPaymentTransitionService transitions = mock(OrderPaymentTransitionService.class);
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
         when(orders.findPaymentPendingCreatedBefore(now.minusSeconds(600))).thenReturn(List.of(order));
-        when(gateway.verifyPayment("order-1", 280_000)).thenReturn(PaymentVerificationResult.PAID);
-        when(transitions.applyPaymentVerification("order-1", PaymentVerificationResult.PAID, now))
+        when(gateway.verifyPayment("order-1", 280_000))
+                .thenReturn(PaymentVerification.of(PaymentVerificationResult.PAID));
+        when(transitions.applyPaymentVerification(
+                        "order-1", PaymentVerification.of(PaymentVerificationResult.PAID), now))
                 .thenReturn(OrderStatus.FUNDS_HELD);
         PaymentReconciliationScheduler scheduler = new PaymentReconciliationScheduler(
                 orders, gateway, transitions, events, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(10));
@@ -41,7 +44,8 @@ class PaymentReconciliationSchedulerTest {
 
         verify(orders).findPaymentPendingCreatedBefore(now.minusSeconds(600));
         verify(gateway).verifyPayment("order-1", 280_000);
-        verify(transitions).applyPaymentVerification("order-1", PaymentVerificationResult.PAID, now);
+        verify(transitions)
+                .applyPaymentVerification("order-1", PaymentVerification.of(PaymentVerificationResult.PAID), now);
         verify(events)
                 .publish(org.mockito.ArgumentMatchers.argThat(
                         event -> event.fields().get("상태 변경").equals("1")
@@ -58,14 +62,16 @@ class PaymentReconciliationSchedulerTest {
         OrderPaymentTransitionService transitions = mock(OrderPaymentTransitionService.class);
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
         when(orders.findPaymentPendingCreatedBefore(now.minusSeconds(600))).thenReturn(List.of(order));
-        when(gateway.verifyPayment("order-1", 280_000)).thenReturn(PaymentVerificationResult.NOT_FOUND);
+        when(gateway.verifyPayment("order-1", 280_000))
+                .thenReturn(PaymentVerification.of(PaymentVerificationResult.NOT_FOUND));
         when(transitions.expireMissingPayment("order-1", now)).thenReturn(OrderStatus.PAYMENT_FAILED);
         PaymentReconciliationScheduler scheduler = scheduler(orders, gateway, transitions, events, now);
 
         scheduler.reconcileStalePayments();
 
         verify(transitions).expireMissingPayment("order-1", now);
-        verify(transitions, never()).applyPaymentVerification("order-1", PaymentVerificationResult.NOT_FOUND, now);
+        verify(transitions, never())
+                .applyPaymentVerification("order-1", PaymentVerification.of(PaymentVerificationResult.NOT_FOUND), now);
         verify(events)
                 .publish(org.mockito.ArgumentMatchers.argThat(
                         event -> event.fields().get("상태 변경").equals("1")
@@ -82,14 +88,17 @@ class PaymentReconciliationSchedulerTest {
         OrderPaymentTransitionService transitions = mock(OrderPaymentTransitionService.class);
         OperationalEventPublisher events = mock(OperationalEventPublisher.class);
         when(orders.findPaymentPendingCreatedBefore(now.minusSeconds(600))).thenReturn(List.of(order));
-        when(gateway.verifyPayment("order-1", 280_000)).thenReturn(PaymentVerificationResult.PENDING);
-        when(transitions.applyPaymentVerification("order-1", PaymentVerificationResult.PENDING, now))
+        when(gateway.verifyPayment("order-1", 280_000))
+                .thenReturn(PaymentVerification.of(PaymentVerificationResult.PENDING));
+        when(transitions.applyPaymentVerification(
+                        "order-1", PaymentVerification.of(PaymentVerificationResult.PENDING), now))
                 .thenReturn(OrderStatus.PAYMENT_PENDING);
         PaymentReconciliationScheduler scheduler = scheduler(orders, gateway, transitions, events, now);
 
         scheduler.reconcileStalePayments();
 
-        verify(transitions).applyPaymentVerification("order-1", PaymentVerificationResult.PENDING, now);
+        verify(transitions)
+                .applyPaymentVerification("order-1", PaymentVerification.of(PaymentVerificationResult.PENDING), now);
         verify(transitions, never()).expireMissingPayment("order-1", now);
         verifyNoInteractions(events);
     }

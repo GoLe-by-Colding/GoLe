@@ -1,10 +1,13 @@
 package com.gole.api.order.adapter.out.persistence;
 
+import com.gole.api.order.adapter.out.persistence.OrderDocument.PaymentMethodDocument;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.StatusChangeDocument;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -74,7 +77,36 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 order.getCreatedAt(),
                 history,
                 null,
+                toPaymentMethodDocument(order.getPaymentMethod()),
                 order.getVersion());
+    }
+
+    private static PaymentMethodDocument toPaymentMethodDocument(PaymentMethod method) {
+        return method == null ? null : new PaymentMethodDocument(method.type().name(), method.provider());
+    }
+
+    /**
+     * 저장된 결제수단을 도메인으로 되돌린다.
+     *
+     * <p>열거형에 없는 {@code type}은 예외 대신 {@link PaymentMethodType#UNKNOWN}으로 읽는다.
+     * 분류 하나를 몰라서 주문 조회 전체가 실패하는 편이 훨씬 나쁘다.
+     */
+    private static PaymentMethod toPaymentMethod(PaymentMethodDocument document) {
+        if (document == null) {
+            return null;
+        }
+        return new PaymentMethod(parseType(document.getType()), document.getProvider());
+    }
+
+    private static PaymentMethodType parseType(String raw) {
+        if (raw == null) {
+            return PaymentMethodType.UNKNOWN;
+        }
+        try {
+            return PaymentMethodType.valueOf(raw);
+        } catch (IllegalArgumentException unknownType) {
+            return PaymentMethodType.UNKNOWN;
+        }
     }
 
     private Order toDomain(OrderDocument document) {
@@ -90,6 +122,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 document.getListingCondition(),
                 document.getAmount(),
                 OrderStatus.valueOf(document.getStatus()),
+                toPaymentMethod(document.getPaymentMethod()),
                 document.getCreatedAt(),
                 history,
                 document.getVersion());

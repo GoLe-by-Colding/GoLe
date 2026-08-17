@@ -49,6 +49,8 @@ test.describe("Prices (KREAM-style)", () => {
 
     await trendingLink.click();
     await expect(page).toHaveURL(new RegExp(`/prices\\?set=${initialSet}$`));
+    // 홈의 "지금 뜨는 세트"는 거래량 기준이라 추천(featured) 목록과 다르다. 추천이 아닌
+    // 세트로 들어와도 요청한 세트가 그대로 보여야 한다(조용히 다른 세트를 보여주면 안 된다).
     await expect(page.getByText(new RegExp(`^#${initialSet} ·`))).toBeVisible();
 
     // 목록에서 다른 세트를 고르면 URL이 따라온다(세트 목록만 ol 안의 aria-pressed 버튼).

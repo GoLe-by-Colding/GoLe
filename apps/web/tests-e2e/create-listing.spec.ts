@@ -1,17 +1,14 @@
 import { test, expect } from "@playwright/test";
+import { E2E_SELLER, signInAs } from "./support/e2e-session";
 
 // 백엔드(MongoDB + MinIO)가 떠 있는 로컬/테스트 환경 전용 풀 플로우 E2E.
 // 데이터를 생성하므로 배포(prod) 대상(E2E_BASE_URL)에서는 건너뛴다.
+// 사전 조건: scripts/seed-e2e-accounts.sh 로 계정·세션을 심어야 한다.
 test.describe("Create listing", () => {
   test.skip(!!process.env.E2E_BASE_URL, "로컬 백엔드 전용 플로우(쓰기 발생)");
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem(
-        "gole.session",
-        JSON.stringify({ accountId: "e2e-seller", sessionToken: "e2e-token", role: "USER" }),
-      );
-    });
+    await signInAs(page, E2E_SELLER);
   });
 
   test("로그인 셀러가 상품을 등록하면 상세로 이동한다", async ({ page }) => {

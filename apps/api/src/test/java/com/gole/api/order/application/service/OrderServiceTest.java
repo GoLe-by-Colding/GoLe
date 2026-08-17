@@ -10,6 +10,7 @@ import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
@@ -17,6 +18,8 @@ import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -353,8 +356,8 @@ class OrderServiceTest {
 
     private static class AlwaysApprovePayment implements PaymentGatewayPort {
         @Override
-        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
-            return PaymentVerificationResult.PAID;
+        public PaymentVerification verifyPayment(String orderId, long amount) {
+            return PaymentVerification.paid(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
         }
 
         @Override
@@ -386,8 +389,8 @@ class OrderServiceTest {
 
     private record FixedVerificationPayment(PaymentVerificationResult result) implements PaymentGatewayPort {
         @Override
-        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
-            return result;
+        public PaymentVerification verifyPayment(String orderId, long amount) {
+            return PaymentVerification.of(result);
         }
 
         @Override
@@ -403,7 +406,7 @@ class OrderServiceTest {
 
     private static final class UnavailablePayment implements PaymentGatewayPort {
         @Override
-        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
+        public PaymentVerification verifyPayment(String orderId, long amount) {
             throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
         }
 
@@ -422,8 +425,8 @@ class OrderServiceTest {
         private boolean fullyRefunded;
 
         @Override
-        public PaymentVerificationResult verifyPayment(String orderId, long amount) {
-            return PaymentVerificationResult.PAID;
+        public PaymentVerification verifyPayment(String orderId, long amount) {
+            return PaymentVerification.paid(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
         }
 
         @Override

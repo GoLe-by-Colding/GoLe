@@ -1,4 +1,5 @@
 import { apiRequest } from "@shared/api";
+import type { PaymentMethod } from "@shared/lib";
 
 // ── 타입 ─────────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ export interface AdminOrder {
   readonly buyerId: string;
   readonly sellerId: string;
   readonly catalogSetNumber: string | null;
+  /** 결제 승인 시 PG가 알려준 결제수단. 결제 전 주문은 null. */
+  readonly paymentMethod: PaymentMethod | null;
   readonly createdAt: string | null;
 }
 
