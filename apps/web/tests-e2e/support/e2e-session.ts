@@ -22,7 +22,15 @@ export const E2E_BUYER = {
   role: "USER",
 } as const;
 
-type E2ESession = typeof E2E_SELLER | typeof E2E_BUYER;
+/**
+ * role은 화면 렌더용이다 — 서버는 토큰으로 권한을 정하므로(계정 문서의 role) 여기서 바꿔도
+ * 실제 권한은 변하지 않는다. API 응답을 전부 가로채는 화면 검증에서만 덮어쓴다.
+ */
+export interface E2ESession {
+  readonly accountId: string;
+  readonly sessionToken: string;
+  readonly role: string;
+}
 
 /** 첫 스크립트 실행 전에 세션을 심는다. 페이지 이동 전에 호출해야 한다. */
 export async function signInAs(page: Page, session: E2ESession): Promise<void> {
