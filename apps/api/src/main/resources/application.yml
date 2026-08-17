@@ -91,6 +91,14 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    mail:
+      # spring.mail.host 를 정의하는 순간 Spring이 MailHealthIndicator를 자동 등록한다.
+      # SMTP_HOST 미설정 시 기본값은 localhost:587이고 그 자리에 SMTP 서버는 없다.
+      # 그러면 메일 인증(gole.verification.email.enabled)이 꺼져 있는 기본 구성에서도
+      # /actuator/health 전체가 DOWN(503)이 되고, deploy.sh의 헬스 게이트가 정상 배포를
+      # 실패로 처리한다. 실제로 쓰는 SMTP를 붙일 때만 이 지표를 켠다.
+      enabled: ${GOLE_MAIL_HEALTH_ENABLED:false}
 
 logging:
   level:
