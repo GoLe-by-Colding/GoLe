@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchAdminOrders, reconcileAdminOrderPayment, type AdminOrder } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, paymentMethodLabel } from "@shared/lib";
 import { Badge, Button, Heading, Input, Select, Text } from "@shared/ui";
 import { ORDER_STATUS_LABEL, formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
@@ -103,9 +103,9 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
 
       <AdminTable
         caption="거래 주문 모니터링 목록"
-        headers={["주문", "상태", "금액", "세트", "구매자", "판매자", "생성", "운영"]}
+        headers={["주문", "상태", "금액", "결제수단", "세트", "구매자", "판매자", "생성", "운영"]}
         alignRight={[2]}
-        minWidth={780}
+        minWidth={860}
         empty="주문이 없습니다."
         rowCount={(rows ?? []).length}
       >
@@ -132,6 +132,7 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
             <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
               {formatKrw(o.amount)}
             </td>
+            <td className="px-3 py-2.5 text-neutral-600">{paymentMethodLabel(o.paymentMethod)}</td>
             <td className="px-3 py-2.5 text-neutral-600">{o.catalogSetNumber ?? "—"}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.buyerId)}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.sellerId)}</td>

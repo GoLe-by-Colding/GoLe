@@ -16,6 +16,7 @@ import {
   formatKrw,
   getPortOneConfigurationError,
   isPortOneEnabled,
+  paymentMethodLabel,
   PortOnePaymentError,
   requestPortOnePayment,
 } from "@shared/lib";
@@ -228,6 +229,14 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             <Text tone="secondary">결제 금액</Text>
             <span className="text-xl font-bold">{formatKrw(order.amount)}</span>
           </div>
+          {order.paymentMethod !== null && order.paymentMethod !== undefined ? (
+            <div className="flex justify-between text-sm text-neutral-500">
+              <span>결제수단</span>
+              <span data-testid="order-payment-method">
+                {paymentMethodLabel(order.paymentMethod)}
+              </span>
+            </div>
+          ) : null}
           <div className="flex justify-between text-sm text-neutral-500">
             <span>주문번호</span>
             <span className="font-mono">{order.id.slice(0, 8)}</span>

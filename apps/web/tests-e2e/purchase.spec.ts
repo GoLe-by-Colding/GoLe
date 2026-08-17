@@ -1,20 +1,19 @@
 import { test, expect } from "@playwright/test";
+import { E2E_BUYER, E2E_SELLER, switchTo } from "./support/e2e-session";
 
 // 백엔드(MongoDB replica set + MinIO) 기동 필요. 데이터를 생성하므로 배포(prod) 대상에서는 건너뛴다.
+// 사전 조건: scripts/seed-e2e-accounts.sh 로 계정·세션을 심어야 한다.
 test.describe("Purchase flow", () => {
   test.skip(!!process.env.E2E_BASE_URL, "로컬 백엔드 전용 플로우(쓰기 발생)");
 
   test.beforeEach(async ({ page }) => {
     // 이미 세션이 있으면 덮지 않는다 — 테스트 도중 구매자 계정으로 전환한 뒤
     // reload 해도 셀러 세션으로 되돌아가지 않도록.
-    await page.addInitScript(() => {
+    await page.addInitScript((value) => {
       if (!window.localStorage.getItem("gole.session")) {
-        window.localStorage.setItem(
-          "gole.session",
-          JSON.stringify({ accountId: "e2e-seller", sessionToken: "t", role: "USER" }),
-        );
+        window.localStorage.setItem("gole.session", value);
       }
-    });
+    }, JSON.stringify(E2E_SELLER));
   });
 
   test("상품 등록 → 구매 → 결제 → 구매확정", async ({ page }) => {
@@ -42,12 +41,7 @@ test.describe("Purchase flow", () => {
     await expect(page.getByRole("button", { name: "구매하기" })).toHaveCount(0);
 
     // 3) 구매자 계정으로 전환
-    await page.evaluate(() => {
-      window.localStorage.setItem(
-        "gole.session",
-        JSON.stringify({ accountId: "e2e-buyer", sessionToken: "t", role: "USER" }),
-      );
-    });
+    await switchTo(page, E2E_BUYER);
     await page.reload();
 
     // 4) 구매하기 → 주문 생성 → 체크아웃 이동
@@ -59,8 +53,13 @@ test.describe("Purchase flow", () => {
     await page.getByRole("button", { name: "결제하기" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
 
-    // 6) 구매 확정 → 거래 완료
+    // 승인된 결제의 결제수단이 기록되어 주문에 남는다. PG가 승인 시점에만 알려주는 사실이라
+    // 여기서 비어 있으면 되찾을 곳이 없다.
+    await expect(page.getByTestId("order-payment-method")).toHaveText("카카오페이");
+
+    // 6) 구매 확정 → 거래 완료. 되돌리기 어려운 조치라 명시적 확인을 거친다.
     await page.getByRole("button", { name: "구매 확정" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "상품을 받았어요" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
   });
 });

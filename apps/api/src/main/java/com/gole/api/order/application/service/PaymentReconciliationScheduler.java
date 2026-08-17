@@ -6,6 +6,7 @@ import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -60,15 +61,15 @@ public class PaymentReconciliationScheduler {
         int failed = 0;
         for (Order order : candidates) {
             try {
-                PaymentVerificationResult result = paymentGateway.verifyPayment(order.getId(), order.getAmount());
+                PaymentVerification verification = paymentGateway.verifyPayment(order.getId(), order.getAmount());
                 OrderStatus status;
-                if (result == PaymentVerificationResult.NOT_FOUND) {
+                if (verification.result() == PaymentVerificationResult.NOT_FOUND) {
                     status = transitions.expireMissingPayment(order.getId(), now);
                     if (status == OrderStatus.PAYMENT_FAILED) {
                         expired++;
                     }
                 } else {
-                    status = transitions.applyPaymentVerification(order.getId(), result, now);
+                    status = transitions.applyPaymentVerification(order.getId(), verification, now);
                 }
                 if (status != OrderStatus.PAYMENT_PENDING) {
                     transitioned++;

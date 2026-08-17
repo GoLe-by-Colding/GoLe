@@ -39,6 +39,12 @@ export default defineConfig({
           url: BASE_URL,
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
+          // 브라우저는 항상 스텁 결제로 돈다. 실제 PortOne 결제창은 자동화할 수 없으므로,
+          // portone-test 모드가 켜지면 구매 플로우가 결제창을 기다리다 "결제 대기"에서 멈춘다.
+          //
+          // 결제 요청 조립 계약 테스트(portone-request.spec.ts)는 브라우저가 아니라 이
+          // Node 프로세스에서 돌기 때문에, 여기서 덮어써도 그 테스트의 환경은 그대로다.
+          env: { ...process.env, NEXT_PUBLIC_PAYMENT_MODE: "stub" },
         },
       }),
 });

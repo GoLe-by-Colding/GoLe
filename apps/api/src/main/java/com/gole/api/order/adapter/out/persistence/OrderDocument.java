@@ -51,6 +51,8 @@ public class OrderDocument {
 
     private SettlementDocument settlement; // nullable, 완료/정산 시 채워짐
 
+    private PaymentMethodDocument paymentMethod; // nullable, 결제 승인 시 채워짐
+
     @Version
     private Long version;
 
@@ -70,6 +72,7 @@ public class OrderDocument {
             Instant createdAt,
             List<StatusChangeDocument> statusHistory,
             SettlementDocument settlement,
+            PaymentMethodDocument paymentMethod,
             Long version) {
         this.id = id;
         this.listingId = listingId;
@@ -82,6 +85,7 @@ public class OrderDocument {
         this.createdAt = createdAt;
         this.statusHistory = statusHistory;
         this.settlement = settlement;
+        this.paymentMethod = paymentMethod;
         this.version = version;
     }
 
@@ -129,6 +133,10 @@ public class OrderDocument {
         return settlement;
     }
 
+    public PaymentMethodDocument getPaymentMethod() {
+        return paymentMethod;
+    }
+
     public Long getVersion() {
         return version;
     }
@@ -158,6 +166,35 @@ public class OrderDocument {
 
         public Instant getOccurredAt() {
             return occurredAt;
+        }
+    }
+
+    /**
+     * 결제수단 임베디드 문서. ({@code PaymentMethod}와 매핑)
+     *
+     * <p>{@code type}은 도메인 열거형 이름을 그대로 저장한다. 우리가 모르는 수단은 {@code UNKNOWN}
+     * 으로 접히므로, 읽을 때 열거형에 없는 값을 만나도 주문 조회가 깨지지 않는다.
+     */
+    public static class PaymentMethodDocument {
+
+        private String type;
+        private String provider; // nullable — 간편결제가 아니면 없음
+
+        protected PaymentMethodDocument() {
+            // MongoDB 매핑용
+        }
+
+        public PaymentMethodDocument(String type, String provider) {
+            this.type = type;
+            this.provider = provider;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getProvider() {
+            return provider;
         }
     }
 
