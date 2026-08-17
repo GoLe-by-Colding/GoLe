@@ -119,6 +119,11 @@ cd apps/api && ./gradlew test            # 단위 테스트
 cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 ```
 
+E2E 사전 조건: 인프라(`pnpm infra:up`)와 **API 서버(`pnpm dev:api`)가 따로 떠 있어야** 한다.
+web dev 서버는 Playwright가 자동 기동한다. 쓰기 플로우(`create-listing`·`purchase`)는 서버가
+검증하는 실제 세션이 필요하므로 `pnpm e2e:seed`로 계정·세션을 한 번 심어야 한다(멱등).
+`E2E_BASE_URL`을 지정하면 배포 대상 읽기전용 검증이 되고 쓰기 플로우는 자동 skip된다.
+
 ---
 
 ## API 개요
@@ -145,6 +150,78 @@ cd apps/api && ./gradlew integrationTest # Testcontainers (Docker 필요)
 1. 각 provider 콘솔에서 OAuth 앱 생성 → redirect URI `https://gole.kscold.com/auth/callback/{google|kakao|naver}` 등록.
 2. 백엔드 컨테이너 환경변수 주입: `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (카카오·네이버는 `KAKAO_*`/`NAVER_*`).
 3. `pm2 restart gole-backend --update-env` → 해당 버튼 자동 활성화. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
+
+### 결제(PortOne) 활성화
+
+미설정이면 `StubPaymentGatewayAdapter`가 **모든 결제를 무료로 승인**한다. 주문·정산 흐름은
+전부 진짜로 돌지만 돈은 오가지 않는다. 데모 환경에서는 의도된 동작이고, 실결제를 받으려면
+아래를 설정해야 한다. (운영 환경에서 스텁으로 기동하는 것은 `PaymentConfigurationGuard`가 막는다.)
+
+> ⚠️ **프론트 키는 빌드 타임에 번들에 박힌다.** `NEXT_PUBLIC_*`은 `next build` 시점의 환경변수를
+> 읽어 정적 인라인되므로, pm2 `env`나 `--update-env`로는 **반영되지 않는다**. 소셜 로그인처럼
+> "환경변수 넣고 재시작"이 통하지 않는 유일한 항목이다. 반드시 **재빌드**해야 한다.
+
+| 변수 | 위치 | 주입 시점 | 비고 |
+|---|---|---|---|
+| `NEXT_PUBLIC_PAYMENT_MODE` | 프론트 | **빌드 타임** | `stub`·`portone-test`·`portone-live`. 미설정 시 개발은 `stub`, 운영은 `portone-live` |
+| `NEXT_PUBLIC_PORTONE_STORE_ID` | 프론트 | **빌드 타임** | 공개 가능 |
+| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` | 프론트 | **빌드 타임** | 공개 가능 |
+| `PORTONE_ENABLED` | 백엔드 | 런타임 | `true`면 실연동, 기본 `false`(스텁) |
+| `PORTONE_API_SECRET` | 백엔드 | 런타임 | **서버 전용 비밀값. 프론트·저장소 금지** |
+| `PORTONE_WEBHOOK_SECRET` | 백엔드 | 런타임 | **서버 전용 비밀값.** 웹훅 서명 검증에 쓴다 |
+| `PORTONE_STORE_ID` · `PORTONE_CHANNEL_KEY` | 백엔드 | 런타임 | 원장 검증에서 프론트 값과 일치하는지 확인한다 |
+| `PORTONE_CHANNEL_TYPE` | 백엔드 | 런타임 | 기본 `TEST`. 실채널은 `LIVE` |
+
+현재 결제수단은 **카카오페이 한 가지**다. 어댑터가 원장의 `method.type=EASY_PAY`,
+`method.provider=KAKAOPAY`와 설정된 채널 키·유형을 모두 확인한 뒤에만 승인하므로, 카드 등 다른
+수단을 열려면 채널 추가와 함께 그 검증도 함께 넓혀야 한다.
+
+활성화 순서 — **프론트를 먼저** 한다. 백엔드만 켜면 프론트가 결제창을 건너뛰는데 서버는
+포트원에 조회해 결제 기록이 없으므로 결제가 진행되지 않는다.
+
+```bash
+# 1) 프론트 키를 서버의 apps/web/.env.production 에 둔다 (.gitignore 대상)
+NEXT_PUBLIC_PAYMENT_MODE=portone-test
+NEXT_PUBLIC_PORTONE_STORE_ID=store-...
+NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-key-...
+
+# 2) 프론트 재빌드 (반드시 빌드를 다시 해야 반영된다)
+bash /app/scripts/deploy.sh frontend
+
+# 3) 백엔드 환경변수 주입 후 재시작
+PORTONE_ENABLED=true
+PORTONE_API_SECRET=...
+PORTONE_WEBHOOK_SECRET=...
+PORTONE_STORE_ID=store-...
+PORTONE_CHANNEL_KEY=channel-key-...
+pm2 restart gole-backend --update-env
+
+# 4) 포트원 콘솔에 웹훅 등록
+#    https://<도메인>/api/v1/payments/portone/webhook
+```
+
+확인:
+
+```bash
+pm2 env gole-backend | grep -i portone   # 비어 있으면 스텁으로 동작 중
+```
+
+관리자 대시보드의 결제 준비 상태(`GET /admin/overview`의 `paymentReadiness`)로도 설정 누락을
+설정값 원문 없이 확인할 수 있다.
+
+결제 흐름은 verify-on-server다. 브라우저가 결제 후 서버에 알리고, 서버가 포트원에 **직접
+재조회**해 `status=PAID`와 금액·상점·채널·결제수단 일치를 확인한 뒤에만 자금 보유로 전이한다.
+금액 불일치나 알 수 없는 상태는 자동 실패시키지 않고 `PAYMENT_REVIEW`로 보존해 운영 검토함에
+올린다. TTL이 지난 결제 대기 주문은 `PaymentReconciliationScheduler`가 원장과 대조해 정리한다.
+
+미구현: 부분 환불(전액 취소만 가능). **판매자 지급 실행도 자동화되어 있지 않다** — 완료 주문의
+정산 전표는 `settlements` 원장에 멱등 생성되지만(`MongoSettlementAdapter`), 실제 이체는
+관리자가 지급 증빙 번호를 입력해 수동 확정한다(`/admin/settlements`). 플랫폼이 자금을 직접
+보관·송금하는 구조는 전자금융 관련 등록 문제가 따르므로, 포트원 "파트너 정산 자동화" 같은
+PG의 하위 판매자 정산 대행을 먼저 검토해야 한다.
+
+> 카카오페이는 PG사 정책상 **에스크로 결제를 지원하지 않는다.** 통신판매업 신고에 필요한
+> 구매안전서비스를 붙일 때는 카드 PG 쪽을 써야 한다.
 
 ### Discord 고래방
 
