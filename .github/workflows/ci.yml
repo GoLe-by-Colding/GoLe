@@ -169,6 +169,11 @@ jobs:
           tail -100 "$RUNNER_TEMP/api.log"
           exit 1
 
+      # 쓰기 플로우(create-listing·purchase)는 서버가 검증하는 실제 세션이 필요하다.
+      # API가 뜬 뒤에 심는다 — 시더가 accounts 컬렉션을 만들어 둔 뒤여야 인덱스가 준비된다.
+      - name: Seed E2E accounts and sessions
+        run: bash scripts/seed-e2e-accounts.sh
+
       # E2E_WITH_BACKEND: 관리자 API 가드 테스트는 이 값이 없으면 조용히 스킵된다.
       # 백엔드가 실제로 떠 있는 이 잡이 그 테스트를 돌릴 수 있는 유일한 곳이다.
       #
