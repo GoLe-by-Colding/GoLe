@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
@@ -109,6 +110,35 @@ class PortOnePaymentGatewayAdapterTest {
                 adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-1", 15_000);
 
         assertThat(result.method()).isEqualTo(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+    }
+
+    /**
+     * 실제 카카오페이 결제에서 받은 원문 그대로다. {@code method.type}이 discriminator
+     * ({@code PaymentMethodEasyPay})로 온다는 사실을 픽스처와 별개로 한 번 더 못박는다.
+     *
+     * <p>검증 게이트가 {@code "EASY_PAY"} 문자열을 직접 비교하던 동안 실결제는 100%
+     * 수동 검토로 떨어졌는데, 픽스처가 같은 잘못된 표기를 쓰고 있어 테스트는 초록이었다.
+     * 픽스처를 되돌리는 변경이 있어도 이 테스트는 남아서 걸러낸다.
+     */
+    @Test
+    @DisplayName("포트원이 실제로 주는 PaymentMethodEasyPay 표기를 승인으로 인정한다")
+    void acceptsRealPortOneEasyPayDiscriminator() {
+        responseBody.set(
+                """
+                {"status":"PAID","id":"order-1","storeId":"store-1","version":"V2","currency":"KRW",
+                "amount":{"total":15000},
+                "channel":{"type":"TEST","key":"channel-key-1","pgProvider":"KAKAOPAY"},
+                "method":{"type":"PaymentMethodEasyPay","provider":"KAKAOPAY",
+                "easyPayMethod":{"type":"PaymentMethodEasyPayMethodCharge"}}}
+                """);
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        PaymentVerification result = adapter(events).verifyPayment("order-1", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.PAID);
+        assertThat(result.method()).isEqualTo(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+        // 승인된 결제는 수동 검토 이벤트를 만들지 않는다.
+        verifyNoInteractions(events);
     }
 
     /** 승인되지 않은 결제의 결제수단은 사실이 아니다. 기록할 것이 없으므로 비어 있어야 한다. */
@@ -372,7 +402,11 @@ class PortOnePaymentGatewayAdapterTest {
                         "currency":"KRW","amount":{"total":15000},
                         "channel":{"key":"channel-key-1","type":"TEST"}}
                         """),
-                Arguments.of("간편결제 아님", validPaidResponse("order-1").replace("EASY_PAY", "CARD")),
+                Arguments.of(
+                        "간편결제 아님",
+                        // easyPayMethod 쪽 discriminator까지 같이 바뀌지 않도록 method.type만 정확히 지목한다.
+                        validPaidResponse("order-1")
+                                .replace("\"type\":\"PaymentMethodEasyPay\",", "\"type\":\"PaymentMethodCard\",")),
                 Arguments.of("카카오페이 아님", validPaidResponse("order-1").replace("KAKAOPAY", "NAVERPAY")),
                 Arguments.of("금액 누락", validPaidResponse("order-1").replace("\"amount\":{\"total\":15000},", "")),
                 Arguments.of("금액 불일치", validPaidResponse("order-1").replace("15000", "16000")));
@@ -386,11 +420,20 @@ class PortOnePaymentGatewayAdapterTest {
         return Stream.of(400, 401, 429, 500, 503);
     }
 
+    /**
+     * 실제 포트원 V2 {@code GET /payments/{id}} 응답 형태다. {@code method.type}은
+     * {@code "EASY_PAY"}가 아니라 discriminator인 {@code "PaymentMethodEasyPay"}로 온다.
+     *
+     * <p>여기에 오지 않는 표기를 넣으면 통과하지 못할 코드가 통과한다. 실제로 이 픽스처가
+     * {@code "EASY_PAY"}였던 동안 검증 게이트는 모든 실결제를 수동 검토로 떨어뜨렸고,
+     * 테스트는 계속 초록이었다.
+     */
     private static String validPaidResponse(String paymentId) {
         return """
                 {"status":"PAID","id":"%s","storeId":"store-1","version":"V2","currency":"KRW",
                 "amount":{"total":15000},"channel":{"key":"channel-key-1","type":"TEST"},
-                "method":{"type":"EASY_PAY","provider":"KAKAOPAY"}}
+                "method":{"type":"PaymentMethodEasyPay","provider":"KAKAOPAY",
+                "easyPayMethod":{"type":"PaymentMethodEasyPayMethodCharge"}}}
                 """
                 .formatted(paymentId);
     }
