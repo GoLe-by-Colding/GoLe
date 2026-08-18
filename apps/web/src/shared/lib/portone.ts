@@ -16,7 +16,11 @@ export class PortOnePaymentError extends Error {
     this.pgCode = response.pgCode;
     this.pgMessage = response.pgMessage;
     const reason = `${response.code ?? ""} ${response.message ?? ""} ${response.pgMessage ?? ""}`;
-    this.userCancelled = /cancel|취소/i.test(reason);
+    // 문구 기반 판정이다. SDK가 code를 열거형 없이 string으로만 두기 때문에 코드 목록에 의존할 수
+    // 없다. 카카오페이는 창을 닫으면 "사용자가 프로세스를 중단하였습니다"를 주는데, cancel·취소만
+    // 보던 탓에 취소로 분류되지 않아 원문이 그대로 화면에 노출됐다.
+    // 빗나가도 호출자가 "주문은 보존된다"는 안내는 하도록 되어 있다.
+    this.userCancelled = /cancel|취소|중단/i.test(reason);
   }
 }
 
