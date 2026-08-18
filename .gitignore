@@ -38,3 +38,6 @@ pnpm-debug.log*
 
 # Kiro 로컬 스펙 메타데이터(머신별 specId) — 추적하지 않는다
 .kiro/specs/**/.config.kiro
+
+# Claude Code 로컬 가이드 — 추적하지 않는다
+CLAUDE.md
