@@ -7,6 +7,8 @@ import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
+import com.gole.api.order.domain.model.PaymentMethod;
+import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
@@ -90,8 +92,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             }
             String provenanceFailure = findPaymentProvenanceFailure(payment, orderId, amount);
             if (provenanceFailure != null) {
-                log.error("[PortOne] 결제 원장 기본 검증 실패 orderId={} reason={}", orderId, provenanceFailure);
-                publishReviewRequired(orderId, provenanceFailure, status);
+                logLedgerMismatch("결제 원장 기본 검증 실패", orderId, provenanceFailure, amount, payment);
+                publishReviewRequired(orderId, provenanceFailure, status, payment);
                 return PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
             }
             if ("PAID".equals(status)) {
@@ -99,10 +101,17 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 if (validationFailure == null) {
                     // 검증을 통과한 원장에서만 결제수단을 읽는다. 위 검증이 이미 method를
                     // 확인했으므로 추가 조회 없이 사실을 그대로 넘긴다.
-                    return PaymentVerification.paid(PortOnePaymentMethodMapper.from(payment));
+                    PaymentMethod method = PortOnePaymentMethodMapper.from(payment);
+                    log.info(
+                            "[PortOne] 결제 승인 확인 orderId={} amount={} method={}/{}",
+                            orderId,
+                            amount,
+                            method.type(),
+                            method.provider());
+                    return PaymentVerification.paid(method);
                 }
-                log.error("[PortOne] 결제 원장 검증 실패 orderId={} reason={}", orderId, validationFailure);
-                publishReviewRequired(orderId, validationFailure, status);
+                logLedgerMismatch("결제 원장 검증 실패", orderId, validationFailure, amount, payment);
+                publishReviewRequired(orderId, validationFailure, status, payment);
                 return PaymentVerification.of(PaymentVerificationResult.REVIEW_REQUIRED);
             }
             if ("FAILED".equals(status) || "CANCELLED".equals(status)) {
@@ -139,7 +148,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             String status = normalizedText(payment.get("status"));
             String validationFailure = findPaymentValidationFailure(payment, orderId, amount);
             if (validationFailure != null) {
-                publishReviewRequired(orderId, "환불 전 " + validationFailure, status);
+                logLedgerMismatch("환불 전 원장 검증 실패", orderId, validationFailure, amount, payment);
+                publishReviewRequired(orderId, "환불 전 " + validationFailure, status, payment);
                 throw new PaymentReviewRequiredException();
             }
             if ("CANCELLED".equals(status)) {
@@ -203,7 +213,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             String status = normalizedText(payment.get("status"));
             String validationFailure = findPaymentValidationFailure(payment, orderId, amount);
             if (validationFailure != null) {
-                publishReviewRequired(orderId, "환불 확정 전 " + validationFailure, status);
+                logLedgerMismatch("환불 확정 전 원장 검증 실패", orderId, validationFailure, amount, payment);
+                publishReviewRequired(orderId, "환불 확정 전 " + validationFailure, status, payment);
                 throw new PaymentReviewRequiredException();
             }
             if ("CANCELLED".equals(status) && extractCancelledTotal(payment) != amount) {
@@ -282,13 +293,18 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
         if (!expectedChannelType.equals(normalizedText(channel.get("type")))) {
             return "결제 채널 유형 불일치 또는 누락";
         }
-        if (!(payment.get("method") instanceof Map<?, ?> method)) {
+        if (!(payment.get("method") instanceof Map<?, ?>)) {
             return "결제수단 정보 누락";
         }
-        if (!"EASY_PAY".equals(normalizedText(method.get("type")))) {
+        // 포트원 표기의 해석은 PortOnePaymentMethodMapper 한 곳에만 둔다. 검증이 별도로
+        // 파싱하면 실제 표기(`PaymentMethodEasyPay`)를 한쪽만 아는 상태가 되고, 그러면
+        // 정상 결제가 전부 수동 검토로 떨어진다. 실제로 그렇게 깨져 있었다.
+        PaymentMethod method = PortOnePaymentMethodMapper.from(payment);
+        if (method.type() != PaymentMethodType.EASY_PAY) {
             return "결제수단 유형 불일치 또는 누락";
         }
-        if (!"KAKAOPAY".equals(normalizedText(method.get("provider")))) {
+        // provider는 PaymentMethod 생성자가 이미 대문자로 정규화한다.
+        if (!"KAKAOPAY".equals(method.provider())) {
             return "간편결제 제공자 불일치 또는 누락";
         }
         return null;
@@ -330,5 +346,68 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 "주문 상태를 변경하지 않고 보존했습니다. PortOne 대시보드와 관리자 주문 화면에서 확인하세요.",
                 Map.of("주문 ID", orderId, "사유", reason, "PG 상태", pgStatus == null ? "누락" : pgStatus),
                 Instant.now()));
+    }
+
+    /** 원장을 손에 쥐고 있을 때는 관측값까지 알림에 실어 보낸다. 알림만 보고 원인을 좁힐 수 있어야 한다. */
+    private void publishReviewRequired(String orderId, String reason, String pgStatus, Map<?, ?> payment) {
+        operationalEvents.publish(new OperationalEvent(
+                Category.PAYMENT,
+                Level.ERROR,
+                "결제 수동 확인 필요",
+                "주문 상태를 변경하지 않고 보존했습니다. PortOne 대시보드와 관리자 주문 화면에서 확인하세요.",
+                Map.of(
+                        "주문 ID",
+                        orderId,
+                        "사유",
+                        reason,
+                        "PG 상태",
+                        pgStatus == null ? "누락" : pgStatus,
+                        "PG 원장",
+                        observedLedger(payment)),
+                Instant.now()));
+    }
+
+    /**
+     * 어긋난 검사 이름과 함께 <b>기대값·관측값을 나란히</b> 남긴다.
+     *
+     * <p>사유만으로는 원인을 못 찾는다. 실제로 {@code method.type} 표기 하나가 어긋나
+     * 모든 실결제가 수동 검토로 떨어졌을 때, 로그에 "결제수단 유형 불일치"만 있어서
+     * 포트원 원장을 따로 조회해야 비로소 원인이 드러났다. 그 왕복을 없앤다.
+     *
+     * <p>API secret은 여기 오지 않는다. 결제 조회 응답에 포함되지 않는 값이다.
+     */
+    private void logLedgerMismatch(String what, String orderId, String reason, long amount, Map<?, ?> payment) {
+        log.error(
+                "[PortOne] {} orderId={} reason={}{}  기대: {}{}  실제: {}",
+                what,
+                orderId,
+                reason,
+                System.lineSeparator(),
+                expectedLedger(orderId, amount),
+                System.lineSeparator(),
+                observedLedger(payment));
+    }
+
+    private String expectedLedger(String orderId, long amount) {
+        return "id=%s storeId=%s version=V2 currency=KRW amount=%d channel.key=%s channel.type=%s method=간편결제/KAKAOPAY"
+                .formatted(orderId, expectedStoreId, amount, expectedChannelKey, expectedChannelType);
+    }
+
+    /** 정규화하지 않은 원문을 그대로 보여준다. 표기 차이가 원인일 때 정규화하면 그 단서가 사라진다. */
+    private static String observedLedger(Map<?, ?> payment) {
+        Map<?, ?> channel = payment.get("channel") instanceof Map<?, ?> found ? found : Map.of();
+        Map<?, ?> method = payment.get("method") instanceof Map<?, ?> found ? found : Map.of();
+        return "id=%s storeId=%s version=%s currency=%s amount=%d channel.key=%s channel.type=%s method.type=%s method.provider=%s status=%s"
+                .formatted(
+                        payment.get("id"),
+                        payment.get("storeId"),
+                        payment.get("version"),
+                        payment.get("currency"),
+                        extractPaidTotal(payment),
+                        channel.get("key"),
+                        channel.get("type"),
+                        method.get("type"),
+                        method.get("provider"),
+                        payment.get("status"));
     }
 }

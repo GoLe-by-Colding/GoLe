@@ -38,6 +38,20 @@ async function openOrder(page: Page, id: string, status: TestOrderStatus) {
 }
 
 test.describe("Order detail recovery UX", () => {
+  /**
+   * 결제 시도 전에는 "기다리고 있어요"가 사실이 아니다. 그 문구는 결제를 마친 사람에게
+   * "다시 결제하지 말라"고 말하기 위한 것이라, 시작도 안 한 사람에게 보이면 오해를 만든다.
+   */
+  test("payment pending before any attempt tells the buyer to start, not to wait", async ({
+    page,
+  }) => {
+    await openOrder(page, "order-untouched", "payment_pending");
+
+    await expect(page.getByText("아직 결제하지 않았어요")).toBeVisible();
+    await expect(page.getByText("카카오페이 결제를 기다리고 있어요")).toBeHidden();
+    await expect(page.getByRole("button", { name: "결제하기" })).toBeVisible();
+  });
+
   test("payment review can be refreshed without opening another payment", async ({ page }) => {
     let reads = 0;
     await page.route("**/api/v1/orders/order-review", async (route) => {
