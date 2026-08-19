@@ -219,6 +219,13 @@ public class AdminModerationController {
         return row;
     }
 
+    @Operation(summary = "수수료 집계", description = "정산 원장 기준 수수료 총액·건수(R5.6). status 미지정 시 전체.")
+    @GetMapping("/settlements/summary")
+    public ManageSettlementsUseCase.FeeTotals settlementTotals(
+            @RequestParam(required = false) ManageSettlementsUseCase.SettlementStatus status) {
+        return manageSettlements.totals(status);
+    }
+
     private void record(
             HttpServletRequest http, AdminActionType type, AdminTargetType targetType, String targetId, String reason) {
         AdminActor actor = AdminActor.of(http);

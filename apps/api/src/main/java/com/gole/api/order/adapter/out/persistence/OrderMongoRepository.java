@@ -17,4 +17,11 @@ public interface OrderMongoRepository extends MongoRepository<OrderDocument, Str
 
     /** 자동 재조정 한 번에 최대 100건만 가져와 PG와 DB에 부하가 몰리지 않게 한다. */
     List<OrderDocument> findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(String status, Instant cutoff);
+
+    /** 파이프라인 만료 후보(상태 + 마지막 전이 시각). order_status_changed_at_idx를 탄다. */
+    List<OrderDocument> findTop100ByStatusAndStatusChangedAtBeforeOrderByStatusChangedAtAsc(
+            String status, Instant cutoff);
+
+    /** 상태별 조회(예외 큐 — DISPUTED 목록 등). */
+    List<OrderDocument> findTop100ByStatusOrderByCreatedAtAsc(String status);
 }

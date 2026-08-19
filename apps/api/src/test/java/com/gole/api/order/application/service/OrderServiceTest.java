@@ -16,6 +16,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayUnavailableExceptio
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
+import com.gole.api.order.domain.model.DisputeReason;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.PaymentMethod;
@@ -141,6 +142,65 @@ class OrderServiceTest {
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(settlement.calls.get()).isEqualTo(1);
         assertThat(reservation.sold).isTrue();
+    }
+
+    /**
+     * A6b(R5.5) 회귀 고정: 환불된 주문은 수수료·정산을 만들지 않는다.
+     * 지금은 REFUNDED 경로가 정산을 호출하지 않아 자연 충족이지만, 이 테스트가 없으면
+     * 환불 흐름을 고치다 정산 호출이 끼어들어도 아무도 모른다.
+     */
+    @Test
+    void refund_neverCreatesSettlement() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service.refund(id);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(settlement.calls.get()).isZero();
+    }
+
+    /** 분쟁 → 환불 판정 경로에서도 정산이 없어야 한다. (R5.5, R4.4) */
+    @Test
+    void disputedRefund_neverCreatesSettlement() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        Order order = service.getById(id);
+        order.openDispute(DisputeReason.NOT_ARRIVED, "도착하지 않았어요", Instant.parse("2026-01-02T00:00:00Z"));
+        orders.save(order);
+
+        service.refund(id);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(settlement.calls.get()).isZero();
+        assertThat(reservation.released).isTrue();
+    }
+
+    /** 분쟁 → 완료 판정은 기존 완료 경로 그대로 — 수수료 확정 + 정산 1회. (R4.4) */
+    @Test
+    void disputedComplete_settlesOnce() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        Order order = service.getById(id);
+        order.openDispute(DisputeReason.ITEM_MISMATCH, null, Instant.parse("2026-01-02T00:00:00Z"));
+        orders.save(order);
+
+        service.complete(id);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(settlement.calls.get()).isEqualTo(1);
+    }
+
+    /** 분쟁은 FUNDS_HELD에서만 열린다 — 완료·환불 후에는 불가. (R4.1) */
+    @Test
+    void dispute_onlyOpensFromFundsHeld() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service.complete(id);
+        Order completed = service.getById(id);
+        assertThatThrownBy(
+                        () -> completed.openDispute(DisputeReason.DAMAGED, null, Instant.parse("2026-01-03T00:00:00Z")))
+                .isInstanceOf(com.gole.api.order.domain.exception.OrderStateException.class);
     }
 
     @Test

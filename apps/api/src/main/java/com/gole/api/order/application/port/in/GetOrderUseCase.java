@@ -8,4 +8,7 @@ public interface GetOrderUseCase {
     Order getById(String orderId);
 
     List<Order> getByBuyerId(String buyerId);
+
+    /** 판매자 발송 관리용 판매 내역. */
+    List<Order> getBySellerId(String sellerId);
 }

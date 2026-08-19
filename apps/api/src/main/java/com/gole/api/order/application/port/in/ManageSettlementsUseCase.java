@@ -12,10 +12,15 @@ public interface ManageSettlementsUseCase {
 
     SettlementSummary markPaid(String orderId, String paymentReference);
 
+    /** 수수료 총액·건수 집계. (shipping-and-fees R5.6) 상태를 null로 주면 전체. */
+    FeeTotals totals(SettlementStatus status);
+
     enum SettlementStatus {
         PENDING,
         PAID
     }
+
+    record FeeTotals(long count, long grossTotal, long feeTotal, long payoutTotal) {}
 
     record SettlementSummary(
             String orderId,

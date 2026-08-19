@@ -7,6 +7,7 @@ export type OrderStatus =
   | "payment_review"
   | "payment_failed"
   | "funds_held"
+  | "disputed"
   | "completed"
   | "refund_pending"
   | "refunded";
@@ -26,6 +27,11 @@ export interface Order {
   readonly status: OrderStatus;
   /** 결제 승인 시 PG가 알려준 결제수단. 결제 전 주문은 null. */
   readonly paymentMethod: PaymentMethod | null;
+  /** 구매자 연락처 — 서버가 기본 마스킹해서 내려준다(R8.4). */
+  readonly buyerPhoneMasked: string | null;
+  readonly disputeReason: DisputeReason | null;
+  readonly disputeDetail: string | null;
+  readonly disputeOpenedAt: string | null;
   readonly createdAt: string;
   readonly history: readonly OrderStatusChange[];
 }
@@ -35,6 +41,7 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   payment_review: "결제 확인 필요",
   payment_failed: "결제 실패",
   funds_held: "결제 완료(정산 대기)",
+  disputed: "분쟁 검토 중",
   completed: "거래 완료",
   refund_pending: "환불 처리 중",
   refunded: "환불됨",
@@ -43,3 +50,12 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 export function orderStatusLabel(status: OrderStatus): string {
   return STATUS_LABEL[status];
 }
+
+export type DisputeReason = "not_shipped" | "not_arrived" | "item_mismatch" | "damaged";
+
+export const DISPUTE_REASON_LABEL: Record<DisputeReason, string> = {
+  not_shipped: "미발송",
+  not_arrived: "미도착",
+  item_mismatch: "상품 불일치",
+  damaged: "파손",
+};

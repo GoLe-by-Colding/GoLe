@@ -3,11 +3,13 @@ package com.gole.api.order.adapter.out.persistence;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.PaymentMethodDocument;
 import com.gole.api.order.adapter.out.persistence.OrderDocument.StatusChangeDocument;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.domain.model.DisputeReason;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
+import com.gole.api.order.domain.model.PhoneNumber;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +55,22 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
     }
 
     @Override
+    public List<Order> findByStatusChangedBefore(OrderStatus status, Instant cutoff) {
+        return repository
+                .findTop100ByStatusAndStatusChangedAtBeforeOrderByStatusChangedAtAsc(status.name(), cutoff)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Order> findByStatus(OrderStatus status) {
+        return repository.findTop100ByStatusOrderByCreatedAtAsc(status.name()).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Order> findPaymentPendingCreatedBefore(Instant cutoff) {
         return repository
                 .findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(OrderStatus.PAYMENT_PENDING.name(), cutoff)
@@ -75,6 +93,13 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 order.getAmount(),
                 order.getStatus().name(),
                 order.getCreatedAt(),
+                order.getStatusChangedAt(),
+                order.getBuyerPhone() == null ? null : order.getBuyerPhone().value(),
+                order.getDisputeReason() == null
+                        ? null
+                        : order.getDisputeReason().name(),
+                order.getDisputeDetail(),
+                order.getDisputeOpenedAt(),
                 history,
                 null,
                 toPaymentMethodDocument(order.getPaymentMethod()),
@@ -123,6 +148,10 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 document.getAmount(),
                 OrderStatus.valueOf(document.getStatus()),
                 toPaymentMethod(document.getPaymentMethod()),
+                document.getBuyerPhone() == null ? null : new PhoneNumber(document.getBuyerPhone()),
+                document.getDisputeReason() == null ? null : DisputeReason.valueOf(document.getDisputeReason()),
+                document.getDisputeDetail(),
+                document.getDisputeOpenedAt(),
                 document.getCreatedAt(),
                 history,
                 document.getVersion());

@@ -27,6 +27,13 @@ public final class Order {
     private OrderStatus status;
     /** 결제 승인 시점에 PG가 알려준 결제수단. 결제 전·레거시 주문은 null. */
     private PaymentMethod paymentMethod;
+    /** 구매자 CS 연락처(숫자만 정규화). 미수집(레거시) 주문은 null. (shipping-and-fees R8.1) */
+    private final PhoneNumber buyerPhone;
+
+    // 분쟁(R4). DISPUTED 진입 시 채워지고 판정 후에도 기록으로 남는다.
+    private DisputeReason disputeReason;
+    private String disputeDetail;
+    private Instant disputeOpenedAt;
 
     private Long version;
 
@@ -43,6 +50,43 @@ public final class Order {
             Instant createdAt,
             List<OrderStatusChange> history,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                paymentMethod,
+                null,
+                null,
+                null,
+                null,
+                createdAt,
+                history,
+                version);
+    }
+
+    /** 정식 생성자(연락처·분쟁 필드 포함). 영속성 어댑터가 사용한다. */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            PhoneNumber buyerPhone,
+            DisputeReason disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.listingId = Objects.requireNonNull(listingId, "listingId");
         this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
@@ -52,6 +96,10 @@ public final class Order {
         this.amount = amount;
         this.status = Objects.requireNonNull(status, "status");
         this.paymentMethod = paymentMethod;
+        this.buyerPhone = buyerPhone;
+        this.disputeReason = disputeReason;
+        this.disputeDetail = disputeDetail;
+        this.disputeOpenedAt = disputeOpenedAt;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
         this.version = version;
@@ -110,6 +158,20 @@ public final class Order {
             String listingCondition,
             long amount,
             Instant now) {
+        return place(id, listingId, buyerId, sellerId, catalogSetNumber, listingCondition, amount, null, now);
+    }
+
+    /** 신규 주문(구매자 CS 연락처 포함). (요구사항 7.1, shipping-and-fees R8.1) */
+    public static Order place(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            PhoneNumber buyerPhone,
+            Instant now) {
         List<OrderStatusChange> history = new ArrayList<>();
         history.add(new OrderStatusChange(OrderStatus.PAYMENT_PENDING, now));
         return new Order(
@@ -121,6 +183,11 @@ public final class Order {
                 listingCondition,
                 amount,
                 OrderStatus.PAYMENT_PENDING,
+                null,
+                buyerPhone,
+                null,
+                null,
+                null,
                 now,
                 history,
                 null);
@@ -157,15 +224,39 @@ public final class Order {
         transitionTo(OrderStatus.PAYMENT_REVIEW, now);
     }
 
-    /** 구매 확정 → 완료(정산 권한). (요구사항 7.4, 13.4) */
+    /**
+     * 구매 확정 → 완료(정산 권한). (요구사항 7.4, 13.4)
+     *
+     * <p>{@code DISPUTED}에서도 가능하다 — 분쟁 판정이 "거래 완료"로 나거나(R4.4)
+     * 구매자가 분쟁을 접고 직접 확정하는 경우다.
+     */
     public void complete(Instant now) {
-        requireStatus(OrderStatus.FUNDS_HELD, "completed");
+        if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.DISPUTED) {
+            throw new OrderStateException("Cannot transition to completed from " + status);
+        }
         transitionTo(OrderStatus.COMPLETED, now);
     }
 
-    /** 비동기 환불 접수. funds-held 에서만 가능. */
+    /**
+     * 분쟁 제기. (shipping-and-fees R4.1)
+     *
+     * <p>{@code FUNDS_HELD}에서만 진입한다 — 이미 완료·환불된 주문은 분쟁 대상이 아니다.
+     * 자동 구매확정 후보 조회가 {@code status == FUNDS_HELD}이므로 이 전이만으로
+     * 타이머 정지(R4.2)가 성립한다.
+     */
+    public void openDispute(DisputeReason reason, String detail, Instant now) {
+        requireStatus(OrderStatus.FUNDS_HELD, "disputed");
+        this.disputeReason = Objects.requireNonNull(reason, "reason");
+        this.disputeDetail = detail;
+        this.disputeOpenedAt = now;
+        transitionTo(OrderStatus.DISPUTED, now);
+    }
+
+    /** 비동기 환불 접수. funds-held 또는 분쟁 판정(환불)에서 가능. */
     public void requestRefund(Instant now) {
-        requireStatus(OrderStatus.FUNDS_HELD, "refund-pending");
+        if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.DISPUTED) {
+            throw new OrderStateException("Cannot transition to refund-pending from " + status);
+        }
         transitionTo(OrderStatus.REFUND_PENDING, now);
     }
 
@@ -174,7 +265,9 @@ public final class Order {
         if (status == OrderStatus.REFUNDED) {
             return;
         }
-        if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.REFUND_PENDING) {
+        if (status != OrderStatus.FUNDS_HELD
+                && status != OrderStatus.DISPUTED
+                && status != OrderStatus.REFUND_PENDING) {
             throw new OrderStateException("Cannot transition to refunded from " + status);
         }
         transitionTo(OrderStatus.REFUNDED, now);
@@ -232,6 +325,27 @@ public final class Order {
     /** 결제 승인 시점에 확인된 결제수단. 결제 전이거나 결제수단 도입 이전 주문이면 null. */
     public PaymentMethod getPaymentMethod() {
         return paymentMethod;
+    }
+
+    public PhoneNumber getBuyerPhone() {
+        return buyerPhone;
+    }
+
+    public DisputeReason getDisputeReason() {
+        return disputeReason;
+    }
+
+    public String getDisputeDetail() {
+        return disputeDetail;
+    }
+
+    public Instant getDisputeOpenedAt() {
+        return disputeOpenedAt;
+    }
+
+    /** 마지막 상태 전이 시각. 파이프라인 타임아웃 판정의 기준이다. (R9) */
+    public Instant getStatusChangedAt() {
+        return history.isEmpty() ? createdAt : history.get(history.size() - 1).occurredAt();
     }
 
     public Instant getCreatedAt() {

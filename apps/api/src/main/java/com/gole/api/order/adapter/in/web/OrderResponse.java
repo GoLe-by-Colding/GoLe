@@ -13,6 +13,11 @@ public record OrderResponse(
         long amount,
         String status,
         PaymentMethodResponse paymentMethod,
+        /** 구매자 연락처 — 기본 마스킹(R8.4). 전체 번호는 /contacts 엔드포인트로만. */
+        String buyerPhoneMasked,
+        String disputeReason,
+        String disputeDetail,
+        Instant disputeOpenedAt,
         Instant createdAt,
         List<StatusChange> history) {
 
@@ -43,6 +48,12 @@ public record OrderResponse(
                 order.getAmount(),
                 order.getStatus().name().toLowerCase(),
                 method == null ? null : new PaymentMethodResponse(method.type().name(), method.provider()),
+                order.getBuyerPhone() == null ? null : order.getBuyerPhone().masked(),
+                order.getDisputeReason() == null
+                        ? null
+                        : order.getDisputeReason().key(),
+                order.getDisputeDetail(),
+                order.getDisputeOpenedAt(),
                 order.getCreatedAt(),
                 history);
     }

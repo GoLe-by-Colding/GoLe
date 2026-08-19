@@ -44,8 +44,10 @@ test.describe("Purchase flow", () => {
     await switchTo(page, E2E_BUYER);
     await page.reload();
 
-    // 4) 구매하기 → 주문 생성 → 체크아웃 이동
+    // 4) 구매하기 → CS 연락처 입력(R8.1) → 주문 생성 → 체크아웃 이동
     await page.getByRole("button", { name: "구매하기" }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.getByRole("button", { name: "주문하기" }).click();
     await expect(page).toHaveURL(/\/orders\/.+/);
     await expect(page.getByTestId("order-status")).toHaveText("결제 대기");
 

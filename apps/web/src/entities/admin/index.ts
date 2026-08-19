@@ -40,4 +40,8 @@ export {
   createAdminSet,
   updateAdminSet,
   setAdminSetFeatured,
+  fetchAdminExceptionQueue,
+  resolveAdminDispute,
+  fetchAdminOrderContacts,
 } from "./api/admin-api";
+export type { AdminExceptionEntry, AdminShipmentFacts, AdminOrderContacts } from "./api/admin-api";

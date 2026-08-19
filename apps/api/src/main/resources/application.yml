@@ -119,6 +119,18 @@ gole:
     seed-on-empty: ${GOLE_REPORT_SEED:true}
   media:
     seed-on-startup: ${GOLE_MEDIA_SEED:true}
+  # 파이프라인 상태별 타임아웃(shipping-and-fees R9.1). 코드 상수 금지 — 전부 여기서.
+  # 정상 거래는 운영자 개입 0으로 끝까지 흘러가고, 예외만 큐에 올라온다(R7).
+  pipeline:
+    interval: ${GOLE_PIPELINE_INTERVAL:PT1M}
+    payment-pending-expiry: ${GOLE_PIPELINE_PAYMENT_EXPIRY:PT30M}
+    shipment-reminder-after: ${GOLE_PIPELINE_SHIPMENT_REMINDER:P3D}
+    unshipped-refund-after: ${GOLE_PIPELINE_UNSHIPPED_REFUND:P7D}
+    carrier-pickup-timeout: ${GOLE_PIPELINE_CARRIER_PICKUP_TIMEOUT:P3D}
+    transit-stall-after: ${GOLE_PIPELINE_TRANSIT_STALL:P14D}
+    auto-complete-after: ${GOLE_PIPELINE_AUTO_COMPLETE:P7D}
+    dispute-escalation-after: ${GOLE_PIPELINE_DISPUTE_ESCALATION:P3D}
+    tracker-unknown-after: ${GOLE_PIPELINE_TRACKER_UNKNOWN:PT24H}
   # 플랫폼 수수료 정책(shipping-and-fees R5). 요율 변경이 배포 없이 가능해야 한다.
   # min/max 가 0이면 하한/상한 없음.
   fee:
@@ -162,6 +174,18 @@ portone:
     minimum-age: ${PORTONE_RECONCILIATION_MINIMUM_AGE:PT10M}
     initial-delay: ${PORTONE_RECONCILIATION_INITIAL_DELAY:PT1M}
     interval: ${PORTONE_RECONCILIATION_INTERVAL:PT5M}
+
+# 배송 트래커(Delivery Tracker, tracker.delivery). 기본은 스텁 — 자격증명을 주입해야 실 연동.
+# 스텁은 등록 경과 시간으로 상태를 시뮬레이션한다(1분 후 이동중, 3분 후 배송완료).
+shipping:
+  tracker:
+    enabled: ${SHIPPING_TRACKER_ENABLED:false}
+    api-base: ${SHIPPING_TRACKER_API_BASE:https://apis.tracker.delivery/graphql}
+    client-id: ${SHIPPING_TRACKER_CLIENT_ID:}
+    client-secret: ${SHIPPING_TRACKER_CLIENT_SECRET:}
+    poll-interval: ${SHIPPING_TRACKER_POLL_INTERVAL:PT1M}
+    cache-ttl-active: ${SHIPPING_TRACKER_CACHE_TTL_ACTIVE:PT10M}
+    cache-ttl-delivered: ${SHIPPING_TRACKER_CACHE_TTL_DELIVERED:PT24H}
 
 # CoolSMS(SOLAPI) 카카오 알림톡. 활성화 시 키·시크릿·채널 연동 ID가 모두 필요하다.
 coolsms:

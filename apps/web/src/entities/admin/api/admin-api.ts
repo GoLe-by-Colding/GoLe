@@ -322,3 +322,64 @@ export function setAdminSetFeatured(
 ): Promise<AdminLegoSet> {
   return post<AdminLegoSet>(token, `/api/admin/catalog/sets/${setNumber}/featured`, { featured });
 }
+
+// ── 예외 큐 (shipping-and-fees R7.6) ─────────────────────────
+
+export interface AdminShipmentFacts {
+  readonly carrierLabel: string;
+  readonly waybillNumber: string;
+  readonly status: string;
+  readonly rawStatus: string | null;
+  readonly registeredAt: string;
+  readonly deliveredAt: string | null;
+  readonly lastTrackedAt: string | null;
+}
+
+export interface AdminExceptionEntry {
+  readonly type: string;
+  readonly typeLabel: string;
+  readonly orderId: string;
+  readonly orderStatus: string;
+  readonly buyerId: string;
+  readonly sellerId: string;
+  readonly amount: number;
+  readonly since: string;
+  readonly reason: string | null;
+  readonly disputeDetail: string | null;
+  /** 배송 사실(R4.3) — 분쟁 판정의 객관적 근거. 미발송이면 null. */
+  readonly shipment: AdminShipmentFacts | null;
+}
+
+export function fetchAdminExceptionQueue(token: string): Promise<readonly AdminExceptionEntry[]> {
+  return get<readonly AdminExceptionEntry[]>(token, "/api/admin/exception-queue");
+}
+
+export function resolveAdminDispute(
+  token: string,
+  orderId: string,
+  resolution: "refund" | "complete",
+  note?: string,
+): Promise<readonly AdminExceptionEntry[]> {
+  return post<readonly AdminExceptionEntry[]>(
+    token,
+    `/api/admin/orders/${orderId}/dispute-resolution`,
+    {
+      resolution,
+      ...(note ? { note } : {}),
+    },
+  );
+}
+
+export interface AdminOrderContacts {
+  readonly buyerPhone: string | null;
+  readonly sellerPhone: string | null;
+  readonly notice: string;
+}
+
+/** 전체 번호 열람 — 서버가 감사 로그를 남긴다(R8.5). */
+export function fetchAdminOrderContacts(
+  token: string,
+  orderId: string,
+): Promise<AdminOrderContacts> {
+  return get<AdminOrderContacts>(token, `/api/admin/orders/${orderId}/contacts`);
+}

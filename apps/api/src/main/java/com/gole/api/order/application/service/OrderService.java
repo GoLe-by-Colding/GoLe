@@ -27,6 +27,7 @@ import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PhoneNumber;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -109,6 +110,7 @@ public class OrderService
                     reserved.catalogSetNumber(),
                     reserved.condition(),
                     reserved.price(),
+                    PhoneNumber.ofNullable(command.buyerPhone()),
                     Instant.now(clock));
             // 브라우저가 금액을 바꿔 요청하더라도 결제되기 전에 PortOne 원장과 주문 금액을 고정한다.
             // 외부 I/O 또는 저장 실패 시 아래 보상 경로에서 매물 선점을 해제한다.
@@ -222,6 +224,12 @@ public class OrderService
     @Transactional(readOnly = true)
     public List<Order> getByBuyerId(String buyerId) {
         return orderRepository.findByBuyerId(buyerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Order> getBySellerId(String sellerId) {
+        return orderRepository.findBySellerId(sellerId);
     }
 
     private void publishPaymentDecision(String orderId, OrderStatus previousStatus, OrderStatus status) {

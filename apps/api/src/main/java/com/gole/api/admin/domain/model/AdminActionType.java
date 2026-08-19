@@ -17,5 +17,8 @@ public enum AdminActionType {
     CATALOG_SET_UPDATE,
     CATALOG_SET_FEATURE,
     ORDER_PAYMENT_RECONCILE,
+    ORDER_DISPUTE_RESOLVE,
+    /** 개인정보 열람도 조치다 — 운영자의 전체 연락처 열람 감사 기록(R8.5). */
+    ORDER_CONTACT_VIEW,
     SETTLEMENT_MARK_PAID
 }

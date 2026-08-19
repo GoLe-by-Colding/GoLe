@@ -20,7 +20,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "orders")
 @CompoundIndexes({
     @CompoundIndex(name = "buyer_created_at_idx", def = "{'buyerId': 1, 'createdAt': -1}"),
-    @CompoundIndex(name = "seller_created_at_idx", def = "{'sellerId': 1, 'createdAt': -1}")
+    @CompoundIndex(name = "seller_created_at_idx", def = "{'sellerId': 1, 'createdAt': -1}"),
+    // 파이프라인 만료 후보 조회(설계 P2). 이름 고정 — 배포 전 동일 키 다른 이름 인덱스 확인.
+    @CompoundIndex(name = "order_status_changed_at_idx", def = "{'status': 1, 'statusChangedAt': 1}")
 })
 public class OrderDocument {
 
@@ -47,6 +49,20 @@ public class OrderDocument {
 
     private Instant createdAt;
 
+    /**
+     * 마지막 상태 전이 시각(파이프라인 타임아웃 기준, R9). 이 필드 도입 이전 문서는 null이며
+     * 읽기 시 상태 이력의 마지막 항목으로 보정하고, 다음 저장 때 채워진다.
+     */
+    private Instant statusChangedAt;
+
+    /** 구매자 CS 연락처(숫자만). 미수집 주문은 null. (R8.1) */
+    private String buyerPhone;
+
+    // 분쟁 기록(R4). 판정 후에도 남는다.
+    private String disputeReason;
+    private String disputeDetail;
+    private Instant disputeOpenedAt;
+
     private List<StatusChangeDocument> statusHistory;
 
     private SettlementDocument settlement; // nullable, 완료/정산 시 채워짐
@@ -70,10 +86,20 @@ public class OrderDocument {
             long amount,
             String status,
             Instant createdAt,
+            Instant statusChangedAt,
+            String buyerPhone,
+            String disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
             List<StatusChangeDocument> statusHistory,
             SettlementDocument settlement,
             PaymentMethodDocument paymentMethod,
             Long version) {
+        this.statusChangedAt = statusChangedAt;
+        this.buyerPhone = buyerPhone;
+        this.disputeReason = disputeReason;
+        this.disputeDetail = disputeDetail;
+        this.disputeOpenedAt = disputeOpenedAt;
         this.id = id;
         this.listingId = listingId;
         this.buyerId = buyerId;
@@ -123,6 +149,26 @@ public class OrderDocument {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getStatusChangedAt() {
+        return statusChangedAt;
+    }
+
+    public String getBuyerPhone() {
+        return buyerPhone;
+    }
+
+    public String getDisputeReason() {
+        return disputeReason;
+    }
+
+    public String getDisputeDetail() {
+        return disputeDetail;
+    }
+
+    public Instant getDisputeOpenedAt() {
+        return disputeOpenedAt;
     }
 
     public List<StatusChangeDocument> getStatusHistory() {

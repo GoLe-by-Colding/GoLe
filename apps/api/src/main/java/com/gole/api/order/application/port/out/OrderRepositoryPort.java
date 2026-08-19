@@ -23,4 +23,14 @@ public interface OrderRepositoryPort {
     default List<Order> findPaymentPendingCreatedBefore(Instant cutoff) {
         return List.of();
     }
+
+    /** 마지막 전이가 cutoff 이전인 특정 상태 주문(파이프라인 만료 후보, R9). */
+    default List<Order> findByStatusChangedBefore(com.gole.api.order.domain.model.OrderStatus status, Instant cutoff) {
+        return List.of();
+    }
+
+    /** 특정 상태의 주문(예외 큐 조회용). */
+    default List<Order> findByStatus(com.gole.api.order.domain.model.OrderStatus status) {
+        return List.of();
+    }
 }

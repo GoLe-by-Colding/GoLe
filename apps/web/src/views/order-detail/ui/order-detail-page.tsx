@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   completeOrder,
+  DISPUTE_REASON_LABEL,
   fetchOrder,
   orderStatusLabel,
   payOrder,
@@ -10,6 +11,8 @@ import {
   type Order,
   type OrderStatus,
 } from "@entities/order";
+import { fetchShipment, refreshShipment, type Shipment } from "@entities/shipment";
+import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { env } from "@shared/config";
 import {
@@ -21,7 +24,10 @@ import {
   requestPortOnePayment,
 } from "@shared/lib";
 import { Badge, Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import { OpenDisputeButton } from "@features/open-dispute";
+import { RegisterWaybillForm } from "@features/register-waybill";
 import { WriteReviewForm } from "@features/write-review";
+import { ShipmentTracker } from "@widgets/shipment-tracker";
 
 const AUTO_REFRESH_STATUSES: ReadonlySet<OrderStatus> = new Set([
   "payment_pending",
@@ -82,7 +88,10 @@ export interface OrderDetailPageProps {
 }
 
 export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
+  const { session } = useSession();
   const [order, setOrder] = useState<Order | null>(null);
+  const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [trackerBusy, setTrackerBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,6 +116,14 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         if (active) {
           setError("주문을 불러오지 못했습니다.");
         }
+        return;
+      }
+      // 운송장은 없을 수 있다(발송 전) — 404는 정상이다.
+      try {
+        const s = await fetchShipment(orderId);
+        if (active) setShipment(s);
+      } catch {
+        if (active) setShipment(null);
       }
     })();
     return () => {
@@ -184,6 +201,19 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     },
     [orderId],
   );
+
+  const handleTrackerRefresh = useCallback(async () => {
+    setTrackerBusy(true);
+    try {
+      setShipment(await refreshShipment(orderId));
+      // 배송완료 → 자동확정 등 주문 상태가 함께 움직일 수 있다.
+      setOrder(await fetchOrder(orderId));
+    } catch {
+      // 조회 실패는 치명적이지 않다 — 다음 폴링이 다시 시도한다.
+    } finally {
+      setTrackerBusy(false);
+    }
+  }, [orderId]);
 
   const confirmOrderAction = useCallback(async () => {
     const selected = confirmation;
@@ -266,16 +296,20 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     );
   }
 
+  const isSeller = session !== null && session.accountId === order.sellerId;
+
   return (
     <Container width="sm">
       <div className="flex flex-col gap-6 pt-10 pb-16">
         <div className="flex items-center justify-between">
-          <Heading level={1}>주문</Heading>
+          <Heading level={1}>{isSeller ? "판매 주문" : "주문"}</Heading>
           <Badge
             tone={
               order.status === "completed"
                 ? "success"
-                : order.status === "payment_review" || order.status === "refund_pending"
+                : order.status === "payment_review" ||
+                    order.status === "refund_pending" ||
+                    order.status === "disputed"
                   ? "warning"
                   : order.status === "payment_failed" || order.status === "refunded"
                     ? "danger"
@@ -363,6 +397,17 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           />
         ) : null}
 
+        {order.status === "disputed" ? (
+          <OrderStatusNotice
+            tone="warning"
+            title="분쟁을 검토하고 있어요"
+            description={`운영자가 배송 기록을 근거로 환불 또는 거래 완료를 판정합니다.${order.disputeReason ? ` (사유: ${DISPUTE_REASON_LABEL[order.disputeReason]})` : ""} 판정 결과는 알림으로 안내됩니다.`}
+            refreshing={refreshing}
+            onRefresh={refreshOrder}
+            showSupport
+          />
+        ) : null}
+
         {order.status === "payment_failed" ? (
           <div className="flex flex-col gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-4">
             <div className="flex flex-col gap-1">
@@ -381,8 +426,38 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </div>
         ) : null}
 
+        {/* ── 배송 (shipping-and-fees) ── */}
+        {isSeller && order.status === "funds_held" ? (
+          <Card padded className="flex flex-col gap-4">
+            <Text weight="semibold">{shipment === null ? "발송 처리" : "배송 현황"}</Text>
+            {shipment !== null ? (
+              <ShipmentTracker
+                shipment={shipment}
+                onRefresh={() => void handleTrackerRefresh()}
+                refreshing={trackerBusy}
+              />
+            ) : null}
+            <RegisterWaybillForm
+              orderId={order.id}
+              existing={shipment}
+              onRegistered={(s) => setShipment(s)}
+            />
+          </Card>
+        ) : null}
+
+        {!isSeller && shipment !== null && order.status !== "payment_pending" ? (
+          <Card padded className="flex flex-col gap-4">
+            <Text weight="semibold">배송 현황</Text>
+            <ShipmentTracker
+              shipment={shipment}
+              onRefresh={() => void handleTrackerRefresh()}
+              refreshing={trackerBusy}
+            />
+          </Card>
+        ) : null}
+
         <div className="flex gap-3">
-          {order.status === "payment_pending" ? (
+          {order.status === "payment_pending" && !isSeller ? (
             <Button
               size="lg"
               fullWidth
@@ -392,7 +467,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
               {busy ? "처리 중..." : "결제하기"}
             </Button>
           ) : null}
-          {order.status === "funds_held" ? (
+          {order.status === "funds_held" && !isSeller ? (
             <>
               <Button
                 size="lg"
@@ -402,17 +477,24 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
               >
                 구매 확정
               </Button>
-              <Button
-                size="lg"
-                variant="secondary"
-                disabled={busy}
-                onClick={() => setConfirmation("refund")}
-              >
-                환불
-              </Button>
+              {shipment === null ? (
+                // 발송 전에만 일방 환불이 가능하다(R4.5). 발송 후 문제는 분쟁으로.
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => setConfirmation("refund")}
+                >
+                  환불
+                </Button>
+              ) : null}
             </>
           ) : null}
         </div>
+
+        {!isSeller && order.status === "funds_held" && shipment !== null ? (
+          <OpenDisputeButton orderId={order.id} onDisputed={(o) => setOrder(o)} />
+        ) : null}
 
         {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
         <p className="rounded-lg bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-500">

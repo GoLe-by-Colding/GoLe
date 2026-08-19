@@ -3,6 +3,7 @@ package com.gole.api.order.adapter.out.settlement;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
+import com.gole.api.order.application.port.in.ManageSettlementsUseCase.FeeTotals;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.order.application.port.out.SettlementPort;
@@ -17,6 +18,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -74,6 +77,27 @@ public class MongoSettlementAdapter implements SettlementPort, ManageSettlements
                 ? new Query()
                 : Query.query(Criteria.where("status").is(status.name()));
         return mongoTemplate.count(query, SettlementDocument.class);
+    }
+
+    @Override
+    public FeeTotals totals(SettlementStatus status) {
+        List<AggregationOperation> stages = new java.util.ArrayList<>();
+        if (status != null) {
+            stages.add(Aggregation.match(Criteria.where("status").is(status.name())));
+        }
+        stages.add(Aggregation.group()
+                .count()
+                .as("count")
+                .sum("grossAmount")
+                .as("grossTotal")
+                .sum("fee")
+                .as("feeTotal")
+                .sum("payout")
+                .as("payoutTotal"));
+        var results =
+                mongoTemplate.aggregate(Aggregation.newAggregation(stages), SettlementDocument.class, FeeTotals.class);
+        FeeTotals totals = results.getUniqueMappedResult();
+        return totals == null ? new FeeTotals(0, 0, 0, 0) : totals;
     }
 
     @Override

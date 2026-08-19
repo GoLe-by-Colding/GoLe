@@ -7,5 +7,13 @@ public interface PlaceOrderUseCase {
 
     String place(PlaceOrderCommand command);
 
-    record PlaceOrderCommand(String listingId, String buyerId) {}
+    /**
+     * @param buyerPhone 구매자 CS 연락처(R8.1). 미수집 호출 경로(레거시)를 위해 null 허용.
+     */
+    record PlaceOrderCommand(String listingId, String buyerId, String buyerPhone) {
+
+        public PlaceOrderCommand(String listingId, String buyerId) {
+            this(listingId, buyerId, null);
+        }
+    }
 }
