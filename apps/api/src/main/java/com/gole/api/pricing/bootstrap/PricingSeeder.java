@@ -88,11 +88,17 @@ public class PricingSeeder implements CommandLineRunner {
             double trend = ((hash % 37) - 12) / 100.0; // -12% ~ +24% 장기 추세
             for (Band band : bands) {
                 long bandBase = Math.round(s.base() * band.condition().factor());
+                long noiseSeed =
+                        hash * 0x9E3779B97F4A7C15L + band.condition().key().hashCode();
+                // 잔차는 주 단위로 이어진다(AR(1)). 매주 독립 난수를 쓰면 값이 위아래로
+                // 튀어 차트가 톱니처럼 보이고, 자기상관을 주면 실제 체결가처럼 한동안
+                // 오르다 한동안 빠지는 파형이 된다.
+                double residual = 0.0;
                 for (int week = band.weeks(); week >= 0; week--) {
                     // weeks가 0이면(단일 포인트) 추세를 적용할 구간 자체가 없다.
                     double progress = band.weeks() == 0 ? 0.0 : (double) (band.weeks() - week) / band.weeks();
-                    int wobble = ((hash + week * 17 + band.condition().key().hashCode()) % 13) - 6; // ±6%
-                    double f = 1.0 + trend * progress + wobble / 100.0;
+                    residual = residual * AR_PERSISTENCE + noise(noiseSeed, week) * WEEKLY_SHOCK;
+                    double f = 1.0 + trend * progress + residual;
                     long price = Math.max(1, Math.round(bandBase * f));
                     Instant executedAt = now.minus(week * 7L, ChronoUnit.DAYS);
                     docs.add(new PriceTransactionDocument(
@@ -112,6 +118,27 @@ public class PricingSeeder implements CommandLineRunner {
         if (!docs.isEmpty() || remappedCount > 0) {
             log.info("[seed] pricing: {}건 적재(등급별), 레거시 키 {}건 재매핑, 미태깅 {}세트 재시드", docs.size(), remappedCount, purged);
         }
+    }
+
+    /** 직전 주 잔차가 이번 주에 남는 비율. 1에 가까울수록 추세가 길게 이어진다. */
+    private static final double AR_PERSISTENCE = 0.72;
+
+    /** 주간 충격의 최대 크기(=±4.5%). 이보다 키우면 다시 지그재그로 보인다. */
+    private static final double WEEKLY_SHOCK = 0.045;
+
+    /**
+     * (seed, week) → [-1, 1] 결정적 잡음.
+     *
+     * <p>예전 구현은 {@code (hash + week * 17) % 13}이었다. 17 mod 13 = 4라 주차가 늘 때마다
+     * 잔차가 13주 주기로 정확히 되돌아왔고, 차트가 균일한 톱니 모양으로 그려졌다.
+     * splitmix64 계열 믹싱은 짧은 주기가 생기지 않는다.
+     */
+    private static double noise(long seed, int week) {
+        long z = seed + week * 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        z ^= z >>> 31;
+        return ((z >>> 11) / (double) (1L << 53)) * 2.0 - 1.0;
     }
 
     /**

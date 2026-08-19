@@ -1,6 +1,6 @@
 export { cn } from "./class-names";
 export type { ClassValue } from "./class-names";
-export { formatKrw } from "./format";
+export { formatKrw, formatKrwCompact } from "./format";
 export { thumbnailUrl } from "./thumbnail";
 export {
   buildPortOnePaymentRequest,

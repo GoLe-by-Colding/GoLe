@@ -12,7 +12,7 @@ import {
   type SetCondition,
 } from "@entities/pricing";
 import { Card, LineChart, Skeleton } from "@shared/ui";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, formatKrwCompact } from "@shared/lib";
 
 export interface SetPriceInsightProps {
   readonly setNumber: string;
@@ -23,6 +23,21 @@ export interface SetPriceInsightProps {
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** 등락 방향 캐럿. 텍스트 색을 그대로 따르므로 상승/하락 색은 부모가 정한다. */
+function TrendCaret({ up }: { readonly up: boolean }) {
+  return (
+    <svg
+      width="9"
+      height="7"
+      viewBox="0 0 10 8"
+      aria-hidden="true"
+      className={up ? undefined : "rotate-180"}
+    >
+      <path d="M5 0.6 9.3 7.4H0.7z" fill="currentColor" />
+    </svg>
+  );
 }
 
 /**
@@ -75,21 +90,25 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         <span className="font-mono text-xs text-neutral-400">#{setNumber}</span>
       </div>
 
-      <div className="flex items-end gap-3">
-        <span className="text-2xl font-extrabold tracking-tight text-neutral-900">
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] leading-none font-bold tracking-[-0.02em] text-neutral-900 tabular-nums">
           {formatKrw(latest)}
         </span>
+        {/* 등락은 ▲/▼ 글리프 대신 선형 아이콘으로 그린다. 글리프는 폰트마다 크기·정렬이
+            제각각이고 본문 굵기와 섞이면 값싸 보인다(디자인 시스템: 아이콘 일원화). */}
         <span
-          className={`mb-1 text-sm font-bold tabular-nums ${up ? "text-success" : "text-danger"}`}
+          className={`inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${up ? "text-success" : "text-danger"}`}
         >
-          {up ? "▲" : "▼"} {Math.abs(ratio * 100).toFixed(1)}%
+          <TrendCaret up={up} />
+          {Math.abs(ratio * 100).toFixed(1)}%
         </span>
-        <span className="mb-1 text-xs text-neutral-400">최근 체결가 기준</span>
+        <span className="text-xs text-neutral-400">최근 체결가 기준</span>
       </div>
 
       <LineChart
         points={points.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
         formatValue={formatKrw}
+        formatAxisValue={formatKrwCompact}
         emptyText="시세 데이터가 부족해요"
       />
 

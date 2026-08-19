@@ -10,8 +10,15 @@ export interface LineChartPoint {
 export interface LineChartProps {
   readonly points: readonly LineChartPoint[];
   readonly height?: number;
-  /** 값 포맷터(툴팁/축). 기본 toLocaleString. */
+  /** 값 포맷터(툴팁). 기본 toLocaleString. */
   readonly formatValue?: (value: number) => string;
+  /**
+   * 가격축·현재가 배지 전용 포맷터. 기본값은 {@link formatValue}.
+   *
+   * <p>축은 눈금이 넷이라 툴팁과 같은 자릿수를 쓰면 숫자 벽이 되어 정작 읽어야 할 선을 가린다.
+   * 축약 표기를 넘기면 축만 짧아지고 툴팁은 정확한 값을 유지한다.
+   */
+  readonly formatAxisValue?: (value: number) => string;
   readonly emptyText?: string;
 }
 
@@ -100,8 +107,10 @@ export function LineChart({
   points,
   height = 260,
   formatValue = (v) => v.toLocaleString(),
+  formatAxisValue,
   emptyText = "데이터가 부족해요",
 }: LineChartProps) {
+  const formatAxis = formatAxisValue ?? formatValue;
   const [hover, setHover] = useState<number | null>(null);
   const gradientId = useId().replaceAll(":", "");
 
@@ -319,7 +328,7 @@ export function LineChart({
                 }`}
                 style={{ top: `${(g.y / H) * 100}%` }}
               >
-                {formatValue(Math.round(g.v))}
+                {formatAxis(Math.round(g.v))}
               </span>
             );
           })}
@@ -327,7 +336,7 @@ export function LineChart({
             className="absolute -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-[10px] font-bold tabular-nums whitespace-nowrap text-white @lg:text-[11px]"
             style={{ top: `${(last.y / H) * 100}%`, backgroundColor: lineColor }}
           >
-            {formatValue(values[n - 1]!)}
+            {formatAxis(values[n - 1]!)}
           </span>
         </div>
       </div>
