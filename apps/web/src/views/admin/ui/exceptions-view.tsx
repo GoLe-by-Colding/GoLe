@@ -40,7 +40,11 @@ export function AdminExceptionsView() {
       });
   }, [token]);
 
-  useEffect(load, [load]);
+  // orders-view와 같은 패턴 — 효과 본문에서 setState를 동기 호출하지 않도록 지연 실행한다.
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function resolve(orderId: string, resolution: "refund" | "complete") {
     if (token === null) return;
