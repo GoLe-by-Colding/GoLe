@@ -36,7 +36,11 @@ jobs:
           DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
           DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
           GOLE_DISCORD_ALERTS_ENABLED: "true"
-          GOLE_ENVIRONMENT: production
+          # SMTP/PortOne 운영 키가 아직 등록되지 않은 공개 검증 환경이다. 키 없이
+          # production 가드를 우회하지 말고 staging으로 정직하게 표시한다.
+          GOLE_ENVIRONMENT: staging
+          # 번들 SVG는 classpath에서 직접 제공하므로 MinIO 시드 재업로드가 필요 없다.
+          GOLE_MEDIA_SEED: "false"
         run: bash /app/scripts/deploy.sh all
 
       - name: Verify production readiness

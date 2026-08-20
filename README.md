@@ -256,6 +256,11 @@ DISCORD_DEDUPLICATION_WINDOW=PT5M                               # 같은 애플�
 `deploy.sh`의 `pm2 reload --update-env`가 이 값을 앱 프로세스에 반영한다. 서버에 영구 저장하지
 않으므로, 서버에서 손으로 `pm2 restart`를 하면 알림 경로가 조용히 사라진다 — 재배포로 복구한다.
 
+현재 공개 서버는 SMTP와 PortOne 운영 비밀값이 GitHub Actions에 등록되기 전까지
+`GOLE_ENVIRONMENT=staging`으로 배포한다. `production`으로 전환하려면 SMTP 설정과
+`PORTONE_ENABLED=true`, PortOne API·웹훅·스토어·채널 키를 먼저 등록해야 하며, 백엔드의
+기동 가드가 누락된 구성을 거부한다.
+
 ---
 
 ## Specs (SDD)

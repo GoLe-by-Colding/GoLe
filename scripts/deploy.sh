@@ -87,9 +87,9 @@ wait_for_url() {
 }
 
 log "runtime smoke checks"
-# 전체 health는 MongoDB·Redis·오브젝트 스토리지까지 포함한다. readinessState만 보는
-# /actuator/health/readiness로는 프로세스가 떠 있지만 핵심 인프라가 죽은 상태를 놓칠 수 있다.
-if ! wait_for_url "backend + dependencies" "http://localhost:8080/actuator/health" 30; then
+# readiness 그룹은 MongoDB·Redis를 포함한다. MinIO는 전체 health에서 별도로 DOWN을
+# 보고하되 번들 미디어 fallback이 있으므로 업로드 기능만 degraded 상태로 둔다.
+if ! wait_for_url "backend + core dependencies" "http://localhost:8080/actuator/health/readiness" 30; then
   pm2 logs gole-backend --lines 50 --nostream || true
   exit 1
 fi
@@ -98,6 +98,10 @@ fi
 wait_for_url "catalog API" "http://localhost:8080/api/v1/catalog/sets/featured" 3
 wait_for_url "bundled media" "http://localhost:8080/api/v1/media/catalog/10294.svg" 3
 wait_for_url "frontend" "http://localhost:3000/" 15
+
+printf '  optional dependencies: '
+curl -sS --max-time 10 http://localhost:8080/actuator/health || true
+printf '\n'
 
 log "✔ 배포 완료"
 pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true

@@ -91,6 +91,12 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        # 서비스 readiness는 핵심 데이터 경로(Mongo/Redis)를 뜻한다. MinIO 장애는
+        # 전체 health에는 DOWN으로 남지만 번들 미디어 fallback이 있으므로 사이트
+        # 전체를 내리지 않고 업로드 요청만 명확한 503으로 처리한다.
+        readiness:
+          include: readinessState,mongo,redis
   health:
     mail:
       # spring.mail.host 를 정의하는 순간 Spring이 MailHealthIndicator를 자동 등록한다.
