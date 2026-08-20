@@ -87,32 +87,22 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           <Badge tone="brand">ADMIN</Badge>
         </div>
 
-        <div className="grid overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:220px_1fr]">
+        <div className="grid overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_1fr]">
           <nav
             aria-label="운영자 메뉴"
-            className="border-b border-neutral-200/70 bg-white p-3 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
+            className="border-b border-neutral-200/70 bg-white p-4 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
           >
-            <ul className="flex gap-1 lg:sticky lg:top-20 lg:flex-col">
+            <ul className="flex gap-2 lg:sticky lg:top-20 lg:flex-col">
               {NAV.map((item) => {
                 const active =
                   item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
                 return (
                   <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-brand-600 text-white shadow-brand"
-                          : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
-                      )}
-                    >
-                      {item.label}
+                    <AdminNavigationItem href={item.href} label={item.label} active={active}>
                       {item.href === "/admin/reports" && pendingReports > 0 ? (
                         <Badge tone="warning">{pendingReports}</Badge>
                       ) : null}
-                    </Link>
+                    </AdminNavigationItem>
                   </li>
                 );
               })}
@@ -123,6 +113,35 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
         </div>
       </div>
     </Container>
+  );
+}
+
+/** Figma `Admin/Navigation Item` (107:5) — 200 × 40 기본 상태를 코드 토큰으로 재현한다. */
+function AdminNavigationItem({
+  href,
+  label,
+  active,
+  children,
+}: {
+  readonly href: string;
+  readonly label: string;
+  readonly active: boolean;
+  readonly children?: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex h-10 w-[200px] items-center justify-between gap-2 whitespace-nowrap rounded-lg p-3 text-sm font-medium transition-colors motion-reduce:transition-none",
+        active
+          ? "bg-brand-600 text-white shadow-brand"
+          : "bg-surface-raised text-text-secondary hover:bg-neutral-100 hover:text-neutral-900",
+      )}
+    >
+      <span>{label}</span>
+      {children}
+    </Link>
   );
 }
 

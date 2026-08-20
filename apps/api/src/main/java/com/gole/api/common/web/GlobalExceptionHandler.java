@@ -10,6 +10,7 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -18,6 +19,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.mongodb.UncategorizedMongoDbException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -98,6 +101,33 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("PAYMENT_GATEWAY_UNAVAILABLE", "결제 상태 확인이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."));
     }
 
+    @ExceptionHandler(ObjectStorageUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleObjectStorageUnavailable(
+            ObjectStorageUnavailableException ex, HttpServletRequest request) {
+        String errorReference = publishDependencyFailure("미디어 저장소 연결 장애", ex, request);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(
+                        "MEDIA_STORAGE_UNAVAILABLE", "이미지 저장소 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요. 참조: " + errorReference));
+    }
+
+    @ExceptionHandler(UncategorizedMongoDbException.class)
+    public ResponseEntity<ErrorResponse> handleMongoUnavailable(
+            UncategorizedMongoDbException ex, HttpServletRequest request) {
+        String errorReference = publishDependencyFailure("데이터베이스 연결 장애", ex, request);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(
+                        "DATABASE_UNAVAILABLE", "데이터 조회가 지연되고 있습니다. 잠시 후 다시 시도해 주세요. 참조: " + errorReference));
+    }
+
+    @ExceptionHandler(RedisConnectionFailureException.class)
+    public ResponseEntity<ErrorResponse> handleRedisUnavailable(
+            RedisConnectionFailureException ex, HttpServletRequest request) {
+        String errorReference = publishDependencyFailure("캐시 서버 연결 장애", ex, request);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(
+                        "CACHE_UNAVAILABLE", "실시간 기능 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요. 참조: " + errorReference));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
@@ -176,5 +206,21 @@ public class GlobalExceptionHandler {
                 Instant.now()));
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("INTERNAL_SERVER_ERROR", "일시적인 오류가 발생했습니다. 참조: " + errorReference));
+    }
+
+    private String publishDependencyFailure(String title, Exception ex, HttpServletRequest request) {
+        String errorReference = UUID.randomUUID().toString();
+        log.error("[{}] {} path={}", errorReference, title, request.getRequestURI(), ex);
+        operationalEventPublisher.publish(new OperationalEvent(
+                Category.APPLICATION,
+                Level.ERROR,
+                title,
+                "외부 인프라 연결 실패를 감지했습니다. 서버 로그에서 원인을 확인하고 연결 상태를 복구하세요.",
+                Map.of(
+                        "오류 참조", errorReference,
+                        "요청 경로", request.getRequestURI(),
+                        "예외 종류", ex.getClass().getSimpleName()),
+                Instant.now()));
+        return errorReference;
     }
 }

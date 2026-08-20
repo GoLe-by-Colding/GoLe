@@ -62,19 +62,42 @@ log "pm2 reload (ecosystem.config.js)"
 pm2 reload "$ROOT/ecosystem.config.js" --update-env || pm2 start "$ROOT/ecosystem.config.js"
 pm2 save
 
-log "health check"
-ok=0
-for _ in $(seq 1 30); do
-  if curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1; then ok=1; break; fi
-  sleep 2
-done
-if [ "$ok" -ne 1 ]; then
-  echo "✖ 백엔드 헬스체크 실패 (8080/actuator/health)" >&2
-  pm2 logs gole-backend --lines 30 --nostream || true
+wait_for_url() {
+  local label="$1"
+  local url="$2"
+  local attempts="${3:-30}"
+  local response_file
+  response_file="$(mktemp)"
+
+  for _ in $(seq 1 "$attempts"); do
+    if curl -fsS --max-time 10 -o "$response_file" "$url"; then
+      printf '  %s: OK\n' "$label"
+      rm -f "$response_file"
+      return 0
+    fi
+    sleep 2
+  done
+
+  printf '✖ %s 실패 (%s)\n' "$label" "$url" >&2
+  if [ -s "$response_file" ]; then
+    sed -n '1,20p' "$response_file" >&2
+  fi
+  rm -f "$response_file"
+  return 1
+}
+
+log "runtime smoke checks"
+# 전체 health는 MongoDB·Redis·오브젝트 스토리지까지 포함한다. readinessState만 보는
+# /actuator/health/readiness로는 프로세스가 떠 있지만 핵심 인프라가 죽은 상태를 놓칠 수 있다.
+if ! wait_for_url "backend + dependencies" "http://localhost:8080/actuator/health" 30; then
+  pm2 logs gole-backend --lines 50 --nostream || true
   exit 1
 fi
-echo -n "  backend: "; curl -fsS http://localhost:8080/actuator/health; echo
-curl -fsS -o /dev/null -w "  frontend: HTTP %{http_code}\n" http://localhost:3000/ || true
+
+# 실제 공개 API와 번들 SVG를 호출해 라우팅/직렬화/미디어 응답 회귀까지 함께 막는다.
+wait_for_url "catalog API" "http://localhost:8080/api/v1/catalog/sets/featured" 3
+wait_for_url "bundled media" "http://localhost:8080/api/v1/media/catalog/10294.svg" 3
+wait_for_url "frontend" "http://localhost:3000/" 15
 
 log "✔ 배포 완료"
 pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true

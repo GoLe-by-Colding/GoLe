@@ -17,7 +17,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,7 +71,11 @@ public class AdminExceptionQueueController {
         Resolution resolution =
                 "refund".equalsIgnoreCase(request.resolution()) ? Resolution.REFUND : Resolution.COMPLETE;
         resolveDispute.resolve(new ResolveDisputeCommand(orderId, resolution));
-        record(http, AdminActionType.ORDER_DISPUTE_RESOLVE, orderId, resolution.name() + emptyOr(request.note()));
+        record(
+                http,
+                AdminActionType.ORDER_DISPUTE_RESOLVE,
+                orderId,
+                resolution.name() + " — " + request.note().trim());
         return exceptionQueue.list();
     }
 
@@ -91,11 +97,9 @@ public class AdminExceptionQueueController {
                 new RecordAdminActionCommand(actor.id(), actor.email(), type, AdminTargetType.ORDER, orderId, reason));
     }
 
-    private static String emptyOr(String note) {
-        return note == null || note.isBlank() ? "" : " — " + note.trim();
-    }
-
-    public record ResolveDisputeRequest(@NotNull String resolution, String note) {}
+    public record ResolveDisputeRequest(
+            @NotBlank @Pattern(regexp = "(?i)refund|complete") String resolution,
+            @NotBlank @Size(max = 500) String note) {}
 
     public record AdminContactsResponse(String buyerPhone, String sellerPhone, String notice) {}
 }

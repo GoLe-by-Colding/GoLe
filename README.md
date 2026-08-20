@@ -232,7 +232,8 @@ PG의 하위 판매자 정산 대행을 먼저 검토해야 한다.
 
 백엔드는 회원가입, 주문·결제·환불, PortOne 웹훅 이상, 애플리케이션 기동, 처리되지 않은 500 오류를
 구조화된 Discord embed로 전송한다. 비밀번호·세션 토큰·이메일·결제 비밀값은 전송하지 않는다.
-앱이 완전히 내려간 경우에는 `.github/workflows/production-health.yml`이 5분마다 readiness를 외부에서 확인한다.
+앱이 완전히 내려간 경우에는 `.github/workflows/production-health.yml`을 수동 실행해 readiness를 외부에서 확인한다.
+정기 실행은 CI 실패 메일과 Discord 중복 알림을 만들지 않도록 비활성화되어 있다.
 
 ```bash
 # 백엔드/PM2 환경변수
@@ -242,6 +243,7 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...             # 공통 fa
 DISCORD_ACCOUNT_WEBHOOK_URL=https://discord.com/api/webhooks/...     # 선택: 가입
 DISCORD_PAYMENT_WEBHOOK_URL=https://discord.com/api/webhooks/...     # 선택: 결제
 DISCORD_OPERATIONS_WEBHOOK_URL=https://discord.com/api/webhooks/...  # 선택: 오류/기동/배포
+DISCORD_DEDUPLICATION_WINDOW=PT5M                               # 같은 애플리케이션 장애 묶음
 ```
 
 - GitHub Actions secret `DISCORD_CI_WEBHOOK_URL`: main CI 결과 알림

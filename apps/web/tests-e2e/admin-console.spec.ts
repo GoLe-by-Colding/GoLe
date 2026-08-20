@@ -19,7 +19,12 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
   });
 
   test("비로그인 사용자에게 콘솔 하위 경로도 동일하게 차단된다 (R1.3)", async ({ page }) => {
-    for (const path of ["/admin/reports", "/admin/accounts", "/admin/settlements", "/admin/audit"]) {
+    for (const path of [
+      "/admin/reports",
+      "/admin/accounts",
+      "/admin/settlements",
+      "/admin/audit",
+    ]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
     }
@@ -107,6 +112,62 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
+  });
+
+  test("비활성 메뉴는 Figma Admin/Navigation Item 규격을 따른다", async ({ page }) => {
+    await page.goto("/admin");
+
+    const navigationItem = page.getByRole("link", { name: "주문", exact: true });
+    await expect(navigationItem).toHaveCSS("width", "200px");
+    await expect(navigationItem).toHaveCSS("height", "40px");
+    await expect(navigationItem).toHaveCSS("padding", "12px");
+    await expect(navigationItem).toHaveCSS("border-radius", "10px");
+    await expect(navigationItem).toHaveCSS("background-color", "rgb(252, 251, 248)");
+    await expect(navigationItem).toHaveCSS("color", "rgb(91, 82, 75)");
+    await expect(navigationItem).toHaveCSS("font-size", "14px");
+    await expect(navigationItem).toHaveCSS("font-weight", "500");
+  });
+
+  test("분쟁 판정은 사유를 필수로 받아 서버 감사 기록에 전달한다", async ({ page }) => {
+    let submittedBody: unknown;
+    await page.route("**/api/admin/exception-queue", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            type: "dispute",
+            typeLabel: "분쟁",
+            orderId: "order-dispute-1",
+            orderStatus: "disputed",
+            buyerId: "buyer-1",
+            sellerId: "seller-1",
+            amount: 120000,
+            since: "2026-08-20T01:00:00Z",
+            reason: "상품 상태 상이",
+            disputeDetail: "설명과 다른 부품이 왔습니다.",
+            shipment: null,
+          },
+        ]),
+      });
+    });
+    await page.route("**/api/admin/orders/order-dispute-1/dispute-resolution", async (route) => {
+      submittedBody = route.request().postDataJSON();
+      await route.fulfill({ contentType: "application/json", body: "[]" });
+    });
+
+    await page.goto("/admin/exceptions");
+    await page.getByRole("button", { name: "환불 판정" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "전액 환불 판정" });
+    await expect(dialog.getByRole("button", { name: "환불 확정" })).toBeDisabled();
+    await dialog.getByRole("textbox", { name: "조치 사유" }).fill("배송 사실과 제출 사진을 확인함");
+    await dialog.getByRole("button", { name: "환불 확정" }).click();
+
+    await expect(dialog).toHaveCount(0);
+    expect(submittedBody).toEqual({
+      resolution: "refund",
+      note: "배송 사실과 제출 사진을 확인함",
+    });
   });
 
   test("좁은 화면에서 콘솔 셸이 페이지 전체 가로 스크롤을 만들지 않는다", async ({ page }) => {
@@ -254,7 +315,10 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
 });
 
 test.describe("관리자 API 가드", () => {
-  test.skip(() => !process.env.E2E_WITH_BACKEND, "백엔드 대상 테스트는 E2E_WITH_BACKEND=1 에서만 실행");
+  test.skip(
+    () => !process.env.E2E_WITH_BACKEND,
+    "백엔드 대상 테스트는 E2E_WITH_BACKEND=1 에서만 실행",
+  );
 
   test("토큰이 없으면 401 (R1.2)", async () => {
     const ctx = await request.newContext({ baseURL: API_BASE });

@@ -11,7 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +47,7 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
     private final Duration retryDelay;
     private final Duration maxRetryDelay;
     private final int maxAttempts;
+    private final ConcurrentMap<String, Long> recentApplicationEvents = new ConcurrentHashMap<>();
 
     @Autowired
     public DiscordOperationalEventPublisher(DiscordOperationsProperties properties, ObjectMapper objectMapper) {
@@ -80,6 +84,9 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         if (!properties.isEnabled() || webhookUrl == null || webhookUrl.isBlank()) {
             return;
         }
+        if (isDuplicateApplicationEvent(event)) {
+            return;
+        }
 
         try {
             HttpRequest request = HttpRequest.newBuilder(withWaitConfirmation(webhookUrl))
@@ -91,6 +98,39 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         } catch (IllegalArgumentException | JacksonException ex) {
             log.warn("Discord 운영 알림 구성 오류: {}", ex.getMessage());
         }
+    }
+
+    /** 동일 인프라 장애가 요청 수만큼 Discord를 도배하지 않도록 애플리케이션 이벤트만 묶는다. */
+    private boolean isDuplicateApplicationEvent(OperationalEvent event) {
+        Duration window = properties.getDeduplicationWindow();
+        if (event.category() != OperationalEvent.Category.APPLICATION
+                || window == null
+                || window.isZero()
+                || window.isNegative()) {
+            return false;
+        }
+
+        long now = System.nanoTime();
+        long windowNanos = window.toNanos();
+        String fingerprint = String.join(
+                "|",
+                event.category().name(),
+                event.level().name(),
+                event.title(),
+                event.fields().getOrDefault("예외 종류", "-"));
+        AtomicBoolean duplicate = new AtomicBoolean(false);
+        recentApplicationEvents.compute(fingerprint, (ignored, previous) -> {
+            if (previous != null && now - previous < windowNanos) {
+                duplicate.set(true);
+                return previous;
+            }
+            return now;
+        });
+
+        if (recentApplicationEvents.size() > 256) {
+            recentApplicationEvents.entrySet().removeIf(entry -> now - entry.getValue() >= windowNanos);
+        }
+        return duplicate.get();
     }
 
     private void send(HttpRequest request, int attempt) {

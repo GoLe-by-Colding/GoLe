@@ -1,5 +1,6 @@
 package com.gole.api.media.adapter.out.s3;
 
+import com.gole.api.media.application.port.out.BundledMediaPort;
 import com.gole.api.media.application.port.out.ObjectStoragePort;
 import com.gole.api.media.application.service.MediaService;
 import java.net.URI;
@@ -53,8 +54,10 @@ public class S3Config {
     @Bean
     public MediaService mediaService(
             ObjectStoragePort objectStorage,
+            BundledMediaPort bundledMedia,
             com.gole.api.media.application.port.out.ImageProcessorPort imageProcessor,
             StorageProperties properties) {
-        return new MediaService(objectStorage, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
+        return new MediaService(
+                objectStorage, bundledMedia, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
     }
 }

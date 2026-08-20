@@ -1,5 +1,6 @@
 package com.gole.api.common.operations;
 
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ public class DiscordOperationsProperties {
     private String operationsWebhookUrl = "";
     private String avatarUrl = "";
     private boolean suppressNotifications = true;
+    private Duration deduplicationWindow = Duration.ofMinutes(5);
 
     public boolean isEnabled() {
         return enabled;
@@ -79,6 +81,14 @@ public class DiscordOperationsProperties {
 
     public void setSuppressNotifications(boolean suppressNotifications) {
         this.suppressNotifications = suppressNotifications;
+    }
+
+    public Duration getDeduplicationWindow() {
+        return deduplicationWindow;
+    }
+
+    public void setDeduplicationWindow(Duration deduplicationWindow) {
+        this.deduplicationWindow = deduplicationWindow;
     }
 
     public String webhookFor(OperationalEvent.Category category) {

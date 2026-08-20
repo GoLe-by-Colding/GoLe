@@ -24,13 +24,16 @@ class MediaServiceTest {
 
     private FakeStorage storage;
     private FakeProcessor processor;
+    private Map<String, ObjectStoragePort.StoredObject> bundled;
     private MediaService service;
 
     @BeforeEach
     void setUp() {
         storage = new FakeStorage();
         processor = new FakeProcessor();
-        service = new MediaService(storage, processor, "https://gole.kscold.com", 1_000);
+        bundled = new HashMap<>();
+        service = new MediaService(
+                storage, key -> Optional.ofNullable(bundled.get(key)), processor, "https://gole.kscold.com", 1_000);
     }
 
     @Test
@@ -85,6 +88,28 @@ class MediaServiceTest {
 
         assertThat(loaded.content()).isEqualTo(webpBytes());
         assertThat(loaded.contentType()).isEqualTo("image/webp");
+    }
+
+    @Test
+    void load_returnsBundledAsset_withoutCallingObjectStorage() {
+        bundled.put("catalog/10294.svg", new ObjectStoragePort.StoredObject("svg".getBytes(), "image/svg+xml"));
+        storage.failOnGet = true;
+
+        LoadedImage loaded = service.load("catalog/10294.svg");
+
+        assertThat(loaded.content()).isEqualTo("svg".getBytes());
+        assertThat(loaded.contentType()).isEqualTo("image/svg+xml");
+    }
+
+    @Test
+    void loadResized_returnsBundledSvg_withoutCreatingDerivative() {
+        bundled.put("catalog/10294.svg", new ObjectStoragePort.StoredObject("svg".getBytes(), "image/svg+xml"));
+        storage.failOnGet = true;
+
+        LoadedImage loaded = service.loadResized("catalog/10294.svg", 240);
+
+        assertThat(loaded.content()).isEqualTo("svg".getBytes());
+        assertThat(processor.calls).isZero();
     }
 
     @Test
@@ -156,6 +181,7 @@ class MediaServiceTest {
     private static final class FakeStorage implements ObjectStoragePort {
         private final Map<String, StoredObject> objects = new HashMap<>();
         private boolean bucketEnsured = false;
+        private boolean failOnGet = false;
 
         @Override
         public void ensureBucket() {
@@ -169,6 +195,9 @@ class MediaServiceTest {
 
         @Override
         public Optional<StoredObject> get(String key) {
+            if (failOnGet) {
+                throw new AssertionError("object storage must not be called");
+            }
             return Optional.ofNullable(objects.get(key));
         }
     }

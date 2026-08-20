@@ -1,8 +1,10 @@
 package com.gole.api.media.adapter.out.s3;
 
 import com.gole.api.media.application.port.out.ObjectStoragePort;
+import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
 import java.util.Optional;
 import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -33,23 +35,31 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
             return;
         }
         try {
-            s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
-        } catch (NoSuchBucketException e) {
-            s3Client.createBucket(b -> b.bucket(bucket));
+            try {
+                s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
+            } catch (NoSuchBucketException e) {
+                s3Client.createBucket(b -> b.bucket(bucket));
+            }
+            bucketReady = true;
+        } catch (SdkException e) {
+            throw new ObjectStorageUnavailableException(e);
         }
-        bucketReady = true;
     }
 
     @Override
     public void put(String key, byte[] content, String contentType) {
         ensureBucket(); // 지연 보장: 스토리지 일시 장애 후에도 첫 업로드 시 복구
-        s3Client.putObject(
-                PutObjectRequest.builder()
-                        .bucket(bucket)
-                        .key(key)
-                        .contentType(contentType)
-                        .build(),
-                RequestBody.fromBytes(content));
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(key)
+                            .contentType(contentType)
+                            .build(),
+                    RequestBody.fromBytes(content));
+        } catch (SdkException e) {
+            throw new ObjectStorageUnavailableException(e);
+        }
     }
 
     @Override
@@ -62,6 +72,8 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
                     object.asByteArray(), contentType == null ? "application/octet-stream" : contentType));
         } catch (NoSuchKeyException | NoSuchBucketException e) {
             return Optional.empty();
+        } catch (SdkException e) {
+            throw new ObjectStorageUnavailableException(e);
         }
     }
 }

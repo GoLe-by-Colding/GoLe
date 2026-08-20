@@ -146,6 +146,51 @@ class DiscordOperationalEventPublisherTest {
     }
 
     @Test
+    void publish_deduplicatesRepeatedApplicationDependencyFailures() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        CountDownLatch received = new CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/webhook", exchange -> {
+            requests.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+            received.countDown();
+        });
+        server.start();
+
+        try {
+            DiscordOperationsProperties properties = properties(server);
+            properties.setDeduplicationWindow(Duration.ofMinutes(5));
+            DiscordOperationalEventPublisher publisher =
+                    new DiscordOperationalEventPublisher(properties, new ObjectMapper());
+            OperationalEvent first = new OperationalEvent(
+                    Category.APPLICATION,
+                    Level.ERROR,
+                    "미디어 저장소 연결 장애",
+                    "스토리지 연결 실패",
+                    Map.of("요청 경로", "/api/v1/media/catalog/10294.svg", "예외 종류", "SdkClientException"),
+                    Instant.now());
+            OperationalEvent second = new OperationalEvent(
+                    Category.APPLICATION,
+                    Level.ERROR,
+                    "미디어 저장소 연결 장애",
+                    "스토리지 연결 실패",
+                    Map.of("요청 경로", "/api/v1/media/catalog/10307.svg", "예외 종류", "SdkClientException"),
+                    Instant.now());
+
+            publisher.publish(first);
+            publisher.publish(second);
+
+            assertThat(received.await(2, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(100);
+            assertThat(requests).hasValue(1);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void publish_retriesRateLimitUsingRetryAfter() throws Exception {
         AtomicInteger requests = new AtomicInteger();
         CountDownLatch succeeded = new CountDownLatch(1);

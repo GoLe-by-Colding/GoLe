@@ -358,14 +358,14 @@ export function resolveAdminDispute(
   token: string,
   orderId: string,
   resolution: "refund" | "complete",
-  note?: string,
+  note: string,
 ): Promise<readonly AdminExceptionEntry[]> {
   return post<readonly AdminExceptionEntry[]>(
     token,
     `/api/admin/orders/${orderId}/dispute-resolution`,
     {
       resolution,
-      ...(note ? { note } : {}),
+      note,
     },
   );
 }

@@ -9,6 +9,7 @@ import {
   type AdminExceptionEntry,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
+import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import { Badge, Button, Heading, Text } from "@shared/ui";
@@ -26,7 +27,6 @@ export function AdminExceptionsView() {
 
   const [rows, setRows] = useState<readonly AdminExceptionEntry[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [busyOrder, setBusyOrder] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
@@ -45,21 +45,7 @@ export function AdminExceptionsView() {
     const timer = window.setTimeout(load, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  async function resolve(orderId: string, resolution: "refund" | "complete") {
-    if (token === null) return;
-    const label = resolution === "refund" ? "전액 환불" : "거래 완료";
-    if (!window.confirm(`이 분쟁을 "${label}"로 판정할까요? 되돌릴 수 없습니다.`)) return;
-    setBusyOrder(orderId);
-    setError(undefined);
-    try {
-      setRows(await resolveAdminDispute(token, orderId, resolution));
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "판정 처리에 실패했습니다.");
-    } finally {
-      setBusyOrder(null);
-    }
-  }
+  const disputeAction = useModerationAction(load);
 
   async function revealContacts(orderId: string) {
     if (token === null) return;
@@ -176,16 +162,36 @@ export function AdminExceptionsView() {
                     <>
                       <Button
                         size="sm"
-                        disabled={busyOrder === row.orderId}
-                        onClick={() => void resolve(row.orderId, "refund")}
+                        disabled={disputeAction.busy}
+                        onClick={() =>
+                          disputeAction.ask({
+                            title: "전액 환불 판정",
+                            target: `주문 ${shortId(row.orderId)} · ${formatKrw(row.amount)}`,
+                            confirmLabel: "환불 확정",
+                            run: (note) =>
+                              resolveAdminDispute(token ?? "", row.orderId, "refund", note).then(
+                                () => undefined,
+                              ),
+                          })
+                        }
                       >
                         환불 판정
                       </Button>
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={busyOrder === row.orderId}
-                        onClick={() => void resolve(row.orderId, "complete")}
+                        disabled={disputeAction.busy}
+                        onClick={() =>
+                          disputeAction.ask({
+                            title: "거래 완료 판정",
+                            target: `주문 ${shortId(row.orderId)} · ${formatKrw(row.amount)}`,
+                            confirmLabel: "완료 확정",
+                            run: (note) =>
+                              resolveAdminDispute(token ?? "", row.orderId, "complete", note).then(
+                                () => undefined,
+                              ),
+                          })
+                        }
                       >
                         거래 완료 판정
                       </Button>
@@ -209,6 +215,18 @@ export function AdminExceptionsView() {
           })}
         </ul>
       )}
+
+      {disputeAction.pending !== null ? (
+        <ReasonPrompt
+          title={disputeAction.pending.title}
+          target={disputeAction.pending.target}
+          confirmLabel={disputeAction.pending.confirmLabel}
+          busy={disputeAction.busy}
+          error={disputeAction.error}
+          onConfirm={disputeAction.confirm}
+          onCancel={disputeAction.cancel}
+        />
+      ) : null}
     </div>
   );
 }
