@@ -46,6 +46,12 @@
   --color-surface-raised: #fcfbf8;
   --color-text-secondary: #5b524b;
 
+  /* ─── 시세 등락(한국 관례: 상승 빨강 / 하락 파랑 — KREAM·증권앱과 동일) ───
+     success/danger 와 분리하는 이유: 성공=초록/위험=빨강 문법과 시세 문법이 정반대라
+     같은 토큰을 쓰면 화면마다 의미가 뒤집힌다. */
+  --color-rise: #f04452;
+  --color-fall: #3182f6;
+
   /* ─── Semantic ─── */
   --color-success: #16a34a;
   --color-success-soft: #dcfce7;

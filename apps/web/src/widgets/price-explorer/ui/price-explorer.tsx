@@ -78,13 +78,15 @@ function formatDate(iso: string): string {
   return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function ChangeBadge({ ratio }: { readonly ratio: number }) {
+/** 기간 변동 표기 — 크림처럼 금액과 %를 함께, 색은 한국 관례(상승 빨강/하락 파랑). */
+function ChangeBadge({ ratio, diff }: { readonly ratio: number; readonly diff?: number }) {
   const up = ratio >= 0;
-  const cls = up ? "text-success" : "text-danger";
+  const cls = up ? "text-rise" : "text-fall";
   const sign = up ? "▲" : "▼";
   return (
     <span className={`text-sm font-bold tabular-nums ${cls}`}>
-      {sign} {Math.abs(ratio * 100).toFixed(1)}%
+      {sign} {diff !== undefined ? `${Math.abs(diff).toLocaleString("ko-KR")} ` : ""}(
+      {Math.abs(ratio * 100).toFixed(1)}%)
     </span>
   );
 }
@@ -218,7 +220,10 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                 {formatKrw(latest)}
               </span>
               <span>
-                <ChangeBadge ratio={ratio} />
+                <ChangeBadge
+                  ratio={ratio}
+                  {...(series.length >= 2 ? { diff: latest - series[0]!.price } : {})}
+                />
               </span>
               <span className="text-xs text-neutral-400">
                 {PERIODS.find((p) => p.value === period)!.label} 기준

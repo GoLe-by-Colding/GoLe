@@ -97,7 +97,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
         {/* 등락은 ▲/▼ 글리프 대신 선형 아이콘으로 그린다. 글리프는 폰트마다 크기·정렬이
             제각각이고 본문 굵기와 섞이면 값싸 보인다(디자인 시스템: 아이콘 일원화). */}
         <span
-          className={`inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${up ? "text-success" : "text-danger"}`}
+          className={`inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${up ? "text-rise" : "text-fall"}`}
         >
           <TrendCaret up={up} />
           {Math.abs(ratio * 100).toFixed(1)}%

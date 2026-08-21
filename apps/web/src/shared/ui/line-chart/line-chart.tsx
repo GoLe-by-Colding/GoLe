@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 
 export interface LineChartPoint {
   readonly value: number;
@@ -112,7 +112,6 @@ export function LineChart({
 }: LineChartProps) {
   const formatAxis = formatAxisValue ?? formatValue;
   const [hover, setHover] = useState<number | null>(null);
-  const gradientId = useId().replaceAll(":", "");
 
   if (points.length < 2) {
     return (
@@ -143,7 +142,6 @@ export function LineChart({
 
   const coords = points.map((p, i) => ({ x: xAt(i), y: yAt(p.value) }));
   const line = smoothPath(coords);
-  const area = `${line} L${xAt(n - 1).toFixed(1)},${H - PAD_B} L${PAD_L},${H - PAD_B} Z`;
 
   // 가로 그리드 + 우측 가격 눈금
   const grid = Array.from({ length: GRID_LINES + 1 }, (_, i) => {
@@ -155,7 +153,8 @@ export function LineChart({
 
   const last = coords[n - 1]!;
   const up = values[n - 1]! >= values[0]!;
-  const lineColor = up ? "var(--color-brand-600)" : "var(--color-danger)";
+  // 시세 관례(KREAM·증권앱): 상승 빨강, 하락 파랑. 브랜드색을 쓰면 등락이 안 읽힌다.
+  const lineColor = up ? "var(--color-rise)" : "var(--color-fall)";
   const hc = hover !== null ? coords[hover] : null;
   const hp = hover !== null ? points[hover] : null;
   // 상단에 붙은 점은 위쪽 공간이 없어 툴팁을 아래로 뒤집는다.
@@ -214,13 +213,6 @@ export function LineChart({
             style={{ aspectRatio: `${W} / ${H}` }}
           >
             <title>날짜별 체결가 추이</title>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={lineColor} stopOpacity="0.16" />
-                <stop offset="60%" stopColor={lineColor} stopOpacity="0.04" />
-                <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-              </linearGradient>
-            </defs>
 
             {/* 가로 그리드 — 맨 아래 줄만 축 기준선이라 실선으로 둔다 */}
             {grid.map((g, i) => {
@@ -241,12 +233,12 @@ export function LineChart({
               );
             })}
 
-            <path d={area} fill={`url(#${gradientId})`} />
+            {/* 크림처럼 면 채우기 없이 라인만. 채우면 배경과 섞여 값싸 보인다. */}
             <path
               d={line}
               fill="none"
               stroke={lineColor}
-              strokeWidth={2}
+              strokeWidth={1.75}
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
