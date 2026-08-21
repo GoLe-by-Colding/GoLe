@@ -7,7 +7,10 @@
 # 흐름: git pull(ff-only) → 빌드 → pm2 reload(ecosystem.config.js) → health check.
 # 이 스크립트는 ubuntu-gole 컨테이너 한정으로 동작하며, 다른 컨테이너/호스트에 영향을 주지 않는다.
 #
-set -euo pipefail
+# -E(errtrace): ERR 트랩을 셸 함수·서브셸 안까지 상속시킨다. 지금 실패 알림은 아래
+# EXIT 트랩이 맡지만(이유는 그쪽 주석), 이후 ERR 트랩을 붙이더라도 build_backend 같은
+# 함수 안에서 정상 동작하도록 errtrace를 켜 둔다.
+set -Eeuo pipefail
 
 # repo 루트로 이동 (이 스크립트는 scripts/ 하위에 있다)
 cd "$(dirname "$0")/.."
@@ -33,7 +36,34 @@ notify_discord() {
     "$webhook_url" >/dev/null || true
 }
 
-trap 'notify_discord "❌ GoLe ${TARGET} 배포 실패 · gole.kscold.com"' ERR
+# 배포 결과(성공/실패) 알림은 실행당 정확히 한 번만 나간다. 성공 경로와 아래 EXIT
+# 트랩이 같은 실행에서 겹쳐도 이 가드가 중복 발송을 막는다.
+DEPLOY_RESULT_NOTIFIED=0
+notify_deploy_result_once() {
+  if [ "$DEPLOY_RESULT_NOTIFIED" = "1" ]; then return 0; fi
+  DEPLOY_RESULT_NOTIFIED=1
+  notify_discord "$1"
+}
+
+# 실패 알림은 ERR이 아니라 EXIT 트랩에서 보낸다. ERR 트랩만으로는 두 방향으로 어긋난다.
+#
+#   1. 놓친다 — bash는 명시적인 `exit`에서 ERR을 발화하지 않는다. readiness 실패 경로가
+#      정확히 그 모양이라 지금까지 조용히 끝났다.
+#   2. 두 번 보낸다 — `set -E`는 ERR 트랩을 서브셸까지 상속시키는데, 서브셸은 위의
+#      단발 가드를 복사본으로 갖는다. `(cd apps/api && ./gradlew ...)` 가 실패하면
+#      서브셸에서 한 번, 부모의 최종 그물에서 또 한 번 나간다.
+#
+# EXIT 트랩은 서브셸이 상속하지 않고, 함수 내부 실패·명시적 exit·예기치 못한 종료를
+# 모두 잡는다. 그래서 실행당 배포 결과 알림이 정확히 한 건으로 수렴한다.
+# (`-E` 자체는 유지한다 — 이후 ERR 트랩을 추가하더라도 함수 안에서 동작하도록.)
+on_deploy_exit() {
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.kscold.com"
+  fi
+}
+trap on_deploy_exit EXIT
+
 notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.kscold.com"
 
 log "git pull --ff-only origin main"
@@ -105,4 +135,4 @@ printf '\n'
 
 log "✔ 배포 완료"
 pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true
-notify_discord "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.kscold.com"
+notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.kscold.com"

@@ -30,12 +30,17 @@ jobs:
       # deploy.sh의 `pm2 reload --update-env`가 이 환경변수를 앱 프로세스로 넘긴다.
       # 그래서 서버에서 손으로 `pm2 restart`를 하면 알림이 조용히 꺼진다 — 재배포로 복구한다.
       - name: Deploy latest main
+        id: deploy
         env:
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
           DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
           DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
           GOLE_DISCORD_ALERTS_ENABLED: "true"
+          # 운영 런타임의 무음 여부를 배포 시점에 명시한다. 이 값을 넘기지 않으면
+          # application.yml의 기본값(true)이 이겨서 ERROR 경보까지 푸시 없이 나간다.
+          # 야간 검증 때만 repository variable을 true로 올리고, 평시에는 false다.
+          DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
           # SMTP/PortOne 운영 키가 아직 등록되지 않은 공개 검증 환경이다. 키 없이
           # production 가드를 우회하지 말고 staging으로 정직하게 표시한다.
           GOLE_ENVIRONMENT: staging
@@ -45,3 +50,31 @@ jobs:
 
       - name: Verify production readiness
         run: curl -fsS --max-time 15 https://gole.kscold.com/actuator/health/readiness
+
+      # deploy.sh가 실패했다면 그쪽에서 이미 실패 알림을 한 건 보냈다. 여기서 또 보내지
+      # 않도록 "배포는 성공했는데 공개 readiness가 죽은" 경우로만 좁힌다. 배포 실패 알림은
+      # 어느 경로로 실패하든 실행당 정확히 한 건이어야 한다.
+      - name: Notify post-deploy readiness failure
+        if: ${{ failure() && steps.deploy.outcome == 'success' }}
+        env:
+          DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
+          DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+          DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+          DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
+        run: |
+          webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
+          if [ -z "$webhook_url" ]; then
+            echo "배포 webhook 미설정 — 알림을 건너뛴다"
+            exit 0
+          fi
+          flags=""
+          if [ "$DISCORD_SUPPRESS_NOTIFICATIONS" = "true" ]; then
+            flags=',"flags":4096'
+          fi
+          # self-hosted 러너에 jq가 있다고 가정하지 않는다(deploy.sh와 같은 이유).
+          # content는 전부 우리가 만든 값이라 JSON 이스케이프가 필요한 문자가 없다.
+          content="❌ GoLe 배포 후 readiness 검증 실패 · gole.kscold.com · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          curl -fsS --max-time 10 \
+            -H 'Content-Type: application/json' \
+            --data "{\"content\":\"${content}\",\"avatar_url\":\"${DISCORD_AVATAR_URL}\",\"allowed_mentions\":{\"parse\":[]}${flags}}" \
+            "$webhook_url" >/dev/null
