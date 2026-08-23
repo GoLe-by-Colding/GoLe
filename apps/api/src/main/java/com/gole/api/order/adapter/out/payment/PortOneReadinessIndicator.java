@@ -26,6 +26,7 @@ public class PortOneReadinessIndicator implements GetPaymentReadinessUseCase {
     private final String webhookSecret;
     private final String storeId;
     private final String channelKey;
+    private final String cardChannelKey;
     private final String channelType;
 
     public PortOneReadinessIndicator(
@@ -34,12 +35,14 @@ public class PortOneReadinessIndicator implements GetPaymentReadinessUseCase {
             @Value("${portone.webhook-secret:}") String webhookSecret,
             @Value("${portone.store-id:}") String storeId,
             @Value("${portone.channel-key:}") String channelKey,
+            @Value("${portone.card-channel-key:}") String cardChannelKey,
             @Value("${portone.channel-type:TEST}") String channelType) {
         this.enabled = enabled;
         this.apiSecret = apiSecret;
         this.webhookSecret = webhookSecret;
         this.storeId = storeId;
         this.channelKey = channelKey;
+        this.cardChannelKey = cardChannelKey;
         this.channelType = channelType;
     }
 
@@ -60,7 +63,15 @@ public class PortOneReadinessIndicator implements GetPaymentReadinessUseCase {
 
         State state = !enabled ? State.DISABLED : issues.isEmpty() ? State.READY : State.MISCONFIGURED;
         return new Snapshot(
-                enabled, state == State.READY, state, safeChannelType, "KAKAOPAY", "KRW", List.copyOf(issues));
+                enabled, state == State.READY, state, safeChannelType, openMethods(), "KRW", List.copyOf(issues));
+    }
+
+    /**
+     * 지금 열려 있는 결제수단. 카카오페이는 필수 설정이라 항상 있고, 카드는 채널 키가 있을 때만
+     * 열린다. 여기 없는 수단으로 낸 결제는 어댑터가 승인하지 않는다.
+     */
+    private List<String> openMethods() {
+        return cardChannelKey == null || cardChannelKey.isBlank() ? List.of("KAKAOPAY") : List.of("KAKAOPAY", "CARD");
     }
 
     private static void addMissing(List<ConfigurationIssue> issues, String setting, String value) {

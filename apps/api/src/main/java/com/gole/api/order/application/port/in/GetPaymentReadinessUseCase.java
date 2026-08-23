@@ -26,12 +26,16 @@ public interface GetPaymentReadinessUseCase {
 
     record ConfigurationIssue(String setting, Problem problem) {}
 
+    /**
+     * @param methods 지금 열려 있는 결제수단 식별자(예: {@code ["KAKAOPAY", "CARD"]}). 결제수단이
+     *     설정에 따라 늘고 주는 값이므로 고정 문자열 하나로는 운영 상태를 나타낼 수 없다.
+     */
     record Snapshot(
             boolean enabled,
             boolean ready,
             State state,
             ChannelType channelType,
-            String provider,
+            List<String> methods,
             String currency,
             List<ConfigurationIssue> issues) {}
 }
