@@ -16,6 +16,7 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
     private final String webhookSecret;
     private final String storeId;
     private final String channelKey;
+    private final String cardChannelKey;
     private final String channelType;
 
     public PaymentConfigurationGuard(
@@ -25,6 +26,7 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
             @Value("${portone.webhook-secret:}") String webhookSecret,
             @Value("${portone.store-id:}") String storeId,
             @Value("${portone.channel-key:}") String channelKey,
+            @Value("${portone.card-channel-key:}") String cardChannelKey,
             @Value("${portone.channel-type:TEST}") String channelType) {
         this.environment = environment;
         this.portOneEnabled = portOneEnabled;
@@ -32,6 +34,7 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
         this.webhookSecret = webhookSecret;
         this.storeId = storeId;
         this.channelKey = channelKey;
+        this.cardChannelKey = cardChannelKey;
         this.channelType = channelType;
     }
 
@@ -51,6 +54,11 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
         }
         if (portOneEnabled && !isValidChannelType(channelType)) {
             throw new IllegalStateException("PORTONE_CHANNEL_TYPE must be TEST or LIVE");
+        }
+        // 카드 채널은 없어도 되지만, 카카오페이 채널과 같은 값이면 안 된다. 같으면 그 채널 하나가
+        // 두 결제수단을 모두 승인하게 되어 "채널이 결제수단을 정한다"는 검증 규칙이 무너진다.
+        if (portOneEnabled && !cardChannelKey.isBlank() && cardChannelKey.trim().equals(channelKey.trim())) {
+            throw new IllegalStateException("PORTONE_CARD_CHANNEL_KEY must differ from PORTONE_CHANNEL_KEY");
         }
         if (isProduction(environment) && !portOneEnabled) {
             throw new IllegalStateException(
