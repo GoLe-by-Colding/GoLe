@@ -1,12 +1,27 @@
 import { expect, test } from "@playwright/test";
-import { buildPortOnePaymentRequest, isPortOneEnabled } from "../src/shared/lib/portone";
+import {
+  buildPortOnePaymentRequest,
+  isCardPaymentAvailable,
+  isPortOneEnabled,
+} from "../src/shared/lib/portone";
 
-test.describe("PortOne KakaoPay request contract", () => {
+const CARD_CUSTOMER = {
+  fullName: "홍길동",
+  email: "buyer@example.com",
+  phoneNumber: "010-1234-5678",
+} as const;
+
+test.describe("PortOne request contract", () => {
   test("uses the configured test channel, EASY_PAY, KRW and a mobile return URL", () => {
     expect(isPortOneEnabled()).toBe(true);
 
     const request = buildPortOnePaymentRequest(
-      { paymentId: "order-123", orderName: "GoLe 주문 order-12", totalAmount: 49_900 },
+      {
+        paymentId: "order-123",
+        orderName: "GoLe 주문 order-12",
+        totalAmount: 49_900,
+        method: "kakaopay",
+      },
       "https://gole.example",
     );
 
@@ -22,18 +37,72 @@ test.describe("PortOne KakaoPay request contract", () => {
       redirectUrl: "https://gole.example/payments/portone/return",
     });
     expect(request.isEscrow).toBeUndefined();
+    // 카카오페이는 구매자 정보를 요구하지 않는다. 보내지 않는 편이 낫다.
+    expect(request.customer).toBeUndefined();
+  });
+
+  test("uses the card channel, CARD and the buyer identity KG Inicis requires", () => {
+    expect(isCardPaymentAvailable()).toBe(true);
+
+    const request = buildPortOnePaymentRequest(
+      {
+        paymentId: "order-card",
+        orderName: "GoLe 주문 order-ca",
+        totalAmount: 49_900,
+        method: "card",
+        customer: CARD_CUSTOMER,
+      },
+      "https://gole.example",
+    );
+
+    expect(request).toMatchObject({
+      storeId: "store-test",
+      channelKey: "channel-card-test",
+      paymentId: "order-card",
+      currency: "KRW",
+      payMethod: "CARD",
+      customer: CARD_CUSTOMER,
+    });
+  });
+
+  /** 결제창에서 PG 오류로 튕기기 전에, 무엇이 빠졌는지 말할 수 있는 자리에서 막는다. */
+  test("refuses to open a card payment window without the buyer identity", () => {
+    expect(() =>
+      buildPortOnePaymentRequest(
+        {
+          paymentId: "order-card",
+          orderName: "GoLe 주문",
+          totalAmount: 49_900,
+          method: "card",
+        },
+        "https://gole.example",
+      ),
+    ).toThrow("이름·이메일·연락처");
+
+    expect(() =>
+      buildPortOnePaymentRequest(
+        {
+          paymentId: "order-card",
+          orderName: "GoLe 주문",
+          totalAmount: 49_900,
+          method: "card",
+          customer: { ...CARD_CUSTOMER, fullName: "  " },
+        },
+        "https://gole.example",
+      ),
+    ).toThrow("이름");
   });
 
   test("rejects non-positive or fractional KRW amounts", () => {
     expect(() =>
       buildPortOnePaymentRequest(
-        { paymentId: "order-123", orderName: "GoLe 주문", totalAmount: 0 },
+        { paymentId: "order-123", orderName: "GoLe 주문", totalAmount: 0, method: "kakaopay" },
         "https://gole.example",
       ),
     ).toThrow("결제 금액");
     expect(() =>
       buildPortOnePaymentRequest(
-        { paymentId: "order-123", orderName: "GoLe 주문", totalAmount: 10.5 },
+        { paymentId: "order-123", orderName: "GoLe 주문", totalAmount: 10.5, method: "kakaopay" },
         "https://gole.example",
       ),
     ).toThrow("결제 금액");

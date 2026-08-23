@@ -10,6 +10,8 @@ interface AppEnv {
   readonly discordInviteUrl: string;
   readonly portOneStoreId: string;
   readonly portOneChannelKey: string;
+  /** 카드(KG이니시스) 채널. 빈 문자열이면 카드 결제를 노출하지 않는다. */
+  readonly portOneCardChannelKey: string;
   readonly paymentMode: "stub" | "portone-test" | "portone-live";
   readonly nodeEnv: "development" | "production" | "test";
 }
@@ -78,6 +80,7 @@ export const env: AppEnv = Object.freeze({
   discordInviteUrl: process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ?? "https://discord.gg/ExbG5MPjbK",
   portOneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? "",
   portOneChannelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? "",
+  portOneCardChannelKey: process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY ?? "",
   paymentMode: readPaymentMode(nodeEnv),
   nodeEnv,
 });
