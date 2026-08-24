@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Card, Text } from "@shared/ui";
+import { AlertCircleIcon, Card, LoaderIcon, Text } from "@shared/ui";
 
 export interface AdminTableProps {
   /** 표의 목적을 설명하는 접근 가능한 제목. 화면에는 노출하지 않는다. */
@@ -63,7 +63,7 @@ export function AdminTable({
   );
 }
 
-/** 목록 로딩/에러 상태를 한 줄로 표시한다. */
+/** 목록 로딩/에러 상태를 운영 맥락이 유지되는 상태 패널로 표시한다. */
 export function AdminStatus({
   error,
   loading,
@@ -73,16 +73,37 @@ export function AdminStatus({
 }) {
   if (error !== undefined) {
     return (
-      <p className="text-sm text-danger" role="alert" aria-atomic="true">
-        {error}
-      </p>
+      <Card
+        padded
+        className="flex items-start gap-3 border-danger/25 bg-danger-soft/65"
+        role="alert"
+        aria-atomic="true"
+      >
+        <AlertCircleIcon className="mt-0.5 size-5 shrink-0 text-danger" />
+        <div className="flex flex-col gap-1">
+          <Text weight="medium">운영 데이터 연결을 확인해 주세요</Text>
+          <Text tone="secondary" size="sm">
+            {error} 화면 구조와 메뉴는 계속 사용할 수 있으며, API가 복구되면 최신 상태를 다시
+            불러옵니다.
+          </Text>
+        </div>
+      </Card>
     );
   }
   if (loading) {
     return (
-      <Text tone="muted" size="sm" role="status" aria-live="polite" aria-atomic="true">
-        불러오는 중...
-      </Text>
+      <Card
+        padded
+        className="flex items-center gap-3 border-brand-100 bg-brand-50/55"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <LoaderIcon className="size-5 animate-spin text-brand-600 motion-reduce:animate-none" />
+        <Text tone="secondary" size="sm">
+          운영 현황을 불러오는 중입니다.
+        </Text>
+      </Card>
     );
   }
   return null;

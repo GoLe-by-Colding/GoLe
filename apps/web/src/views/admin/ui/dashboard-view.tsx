@@ -69,7 +69,7 @@ export function AdminDashboardView() {
   }, [token]);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="gole-rise-in flex flex-col gap-8">
       <AdminStatus error={error} loading={overview === null && error === undefined} />
 
       {overview !== null ? <PaymentReadinessPanel readiness={overview.paymentReadiness} /> : null}
@@ -83,14 +83,14 @@ export function AdminDashboardView() {
             </Text>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Link href="/admin/reports">
             <Card
               padded
               className={
                 pendingReports > 0
                   ? "h-full border-warning/40 bg-warning-soft"
-                  : "h-full transition-colors hover:border-neutral-300"
+                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
               }
             >
               <div className="flex items-center justify-between gap-3">
@@ -108,7 +108,7 @@ export function AdminDashboardView() {
               className={
                 failedPayments > 0
                   ? "h-full border-danger/30 bg-danger-soft"
-                  : "h-full transition-colors hover:border-neutral-300"
+                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
               }
             >
               <div className="flex items-center justify-between gap-3">
@@ -121,7 +121,10 @@ export function AdminDashboardView() {
             </Card>
           </Link>
           <Link href="/admin/orders?status=PAYMENT_PENDING">
-            <Card padded className="h-full transition-colors hover:border-neutral-300">
+            <Card
+              padded
+              className="h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
+            >
               <div className="flex items-center justify-between gap-3">
                 <Text weight="medium">결제 대기 주문</Text>
                 <Badge tone={pendingPayments > 0 ? "warning" : "success"}>
@@ -139,7 +142,7 @@ export function AdminDashboardView() {
               className={
                 reviewPayments > 0
                   ? "h-full border-danger/30 bg-danger-soft"
-                  : "h-full transition-colors hover:border-neutral-300"
+                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
               }
             >
               <div className="flex items-center justify-between gap-3">
@@ -157,7 +160,7 @@ export function AdminDashboardView() {
               className={
                 pendingSettlements > 0
                   ? "h-full border-warning/40 bg-warning-soft"
-                  : "h-full transition-colors hover:border-neutral-300"
+                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
               }
             >
               <div className="flex items-center justify-between gap-3">
