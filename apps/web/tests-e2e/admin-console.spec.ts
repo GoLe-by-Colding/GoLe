@@ -11,6 +11,30 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 const ADMIN_EMAIL = process.env.GOLE_ADMIN_EMAIL ?? "";
 const ADMIN_PASSWORD = process.env.GOLE_ADMIN_PASSWORD ?? "";
 
+/** 로컬 세션(비신뢰 표시 상태)만 심는다. 권한 판정은 서버 응답으로만 이뤄져야 한다. */
+async function seedLocalSession(
+  page: import("@playwright/test").Page,
+  session: Record<string, unknown>,
+): Promise<void> {
+  await page.addInitScript((value) => {
+    window.localStorage.setItem("gole.session", value as string);
+  }, JSON.stringify(session));
+}
+
+/** 권위 있는 현재 사용자 조회(GET /me)를 흉내 낸다. */
+async function mockMe(
+  page: import("@playwright/test").Page,
+  result: { status: number; body?: unknown },
+): Promise<void> {
+  await page.route("**/api/v1/accounts/me", async (route) => {
+    await route.fulfill({
+      status: result.status,
+      contentType: "application/json",
+      body: JSON.stringify(result.body ?? { code: "UNAUTHORIZED", message: "unauthorized" }),
+    });
+  });
+}
+
 test.describe("운영자 콘솔 — 화면 게이트", () => {
   test("비로그인 사용자에게 /admin은 로그인 안내를 보여준다 (R1.3)", async ({ page }) => {
     await page.goto("/admin");
@@ -30,12 +54,11 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     }
   });
 
-  test("일반 사용자에게 /admin은 권한 없음 안내를 보여준다 (R1.4)", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem(
-        "gole.session",
-        JSON.stringify({ accountId: "u-1", sessionToken: "fake", role: "USER" }),
-      );
+  test("서버가 USER로 확인한 계정에는 권한 없음 안내를 보여준다 (R1.4)", async ({ page }) => {
+    await seedLocalSession(page, { accountId: "u-1", sessionToken: "", role: "USER" });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "u-1", email: "user@gole.test", role: "USER" },
     });
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "접근 권한이 없습니다" })).toBeVisible();
@@ -61,20 +84,132 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
       /noindex.*nofollow/,
     );
   });
+
+  test("위조한 로컬 role=ADMIN + 빈 토큰으로는 콘솔이 렌더되지 않는다", async ({ page }) => {
+    let overviewRequested = false;
+    // 콘솔 셸이 직접 쓰는 운영 집계만 관찰한다.
+    // (사이트 레이아웃의 admin-bar는 별도 위젯이라 이 테스트 범위 밖이다.)
+    await page.route("**/api/admin/overview**", async (route) => {
+      overviewRequested = true;
+      await route.fulfill({ status: 401, contentType: "application/json", body: "{}" });
+    });
+    await seedLocalSession(page, {
+      accountId: "forged-1",
+      sessionToken: "",
+      role: "ADMIN",
+    });
+    await mockMe(page, { status: 401 });
+
+    await page.goto("/admin");
+
+    await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toHaveCount(0);
+    // 서버 확인을 통과하기 전에는 콘솔이 운영 집계를 요청하지 않는다.
+    expect(overviewRequested).toBe(false);
+  });
+
+  test("유효하지 않은 토큰이면 콘솔 대신 로그인 안내가 나온다", async ({ page }) => {
+    await seedLocalSession(page, {
+      accountId: "forged-2",
+      sessionToken: "not-a-real-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, { status: 401 });
+
+    await page.goto("/admin/settlements");
+
+    await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "판매자 정산" })).toHaveCount(0);
+  });
+
+  test("권한 확인에 실패하면 열어주지 않는다(fail closed)", async ({ page }) => {
+    await seedLocalSession(page, { accountId: "a-1", sessionToken: "", role: "ADMIN" });
+    await page.route("**/api/v1/accounts/me", async (route) => {
+      await route.abort("failed");
+    });
+
+    await page.goto("/admin");
+
+    await expect(page.getByRole("heading", { name: "권한을 확인할 수 없습니다" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "홈으로" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "로그인" })).toHaveCount(0);
+  });
+
+  test("권한 확인 오류에서 재시도하면 서버 권한을 다시 확인한다", async ({ page }) => {
+    await seedLocalSession(page, { accountId: "admin-1", sessionToken: "", role: "ADMIN" });
+    let attempts = 0;
+    await page.route("**/api/v1/accounts/me", async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.abort("failed");
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" }),
+      });
+    });
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({ contentType: "application/json", body: '{"pendingReports":0}' });
+    });
+
+    await page.goto("/admin");
+    await page.getByRole("button", { name: "다시 시도" }).click();
+    await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toBeVisible();
+    expect(attempts).toBe(2);
+  });
+
+  test("서버가 ADMIN으로 확인하면 콘솔이 렌더된다", async ({ page }) => {
+    await seedLocalSession(page, { accountId: "admin-1", sessionToken: "", role: "ADMIN" });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
+    });
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ pendingReports: 0, ordersByStatus: {} }),
+      });
+    });
+
+    await page.goto("/admin");
+
+    await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+  });
+
+  test("콘솔 로그인 안내는 원래 경로를 returnTo로 전달한다", async ({ page }) => {
+    await page.goto("/admin/reports");
+
+    await expect(page.getByRole("link", { name: "로그인" })).toHaveAttribute(
+      "href",
+      `/login?returnTo=${encodeURIComponent("/admin/reports")}`,
+    );
+  });
+
+  test("콘솔 로그인 안내는 현재 검색 조건도 returnTo로 보존한다", async ({ page }) => {
+    await page.goto("/admin/reports?status=pending");
+    await expect(page.getByRole("link", { name: "로그인" })).toHaveAttribute(
+      "href",
+      `/login?returnTo=${encodeURIComponent("/admin/reports?status=pending")}`,
+    );
+  });
 });
 
 test.describe("운영자 콘솔 — 대시보드 셸", () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem(
-        "gole.session",
-        JSON.stringify({
-          accountId: "admin-1",
-          email: "admin@gole.test",
-          sessionToken: "admin-test-token",
-          role: "ADMIN",
-        }),
-      );
+    await seedLocalSession(page, {
+      accountId: "admin-1",
+      email: "admin@gole.test",
+      sessionToken: "admin-test-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
     });
     await page.route("**/api/admin/overview", async (route) => {
       await route.fulfill({
