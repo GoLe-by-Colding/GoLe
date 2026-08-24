@@ -9,7 +9,7 @@ import {
   type PriceValuation,
 } from "@entities/pricing";
 import { Badge, Card, LineChart, MediaImage } from "@shared/ui";
-import { formatKrw } from "@shared/lib";
+import { formatKrw, formatKrwCompact } from "@shared/lib";
 
 export interface PriceBoardItem {
   readonly setNumber: string;
@@ -257,6 +257,7 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
               <LineChart
                 points={series.map((p) => ({ value: p.price, label: formatDate(p.executedAt) }))}
                 formatValue={formatKrw}
+                formatAxisValue={formatKrwCompact}
                 emptyText="시세 데이터가 부족해요"
               />
             </div>
