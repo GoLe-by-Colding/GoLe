@@ -5,7 +5,7 @@ import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
-import { BrickIcon, Container, Heading, LinkButton, Text } from "@shared/ui";
+import { BrickIcon, Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
 
@@ -106,7 +106,7 @@ export async function HomePage() {
     <div className="flex flex-col">
       <section className="border-b border-brand-900 bg-brand-950 text-white">
         <Container width="xl">
-          <div className="grid gap-12 py-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] lg:items-end max-sm:py-14">
+          <div className="grid gap-12 py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:items-center max-sm:py-14">
             <div className="flex flex-col gap-7">
               <span className="self-start border-l-2 border-accent-400 pl-3 text-sm font-semibold text-accent-300">
                 깊은 바다에서 건져 올린 브릭
@@ -119,41 +119,66 @@ export async function HomePage() {
                 <br className="max-sm:hidden" />
                 흩어져 있던 레고 거래를 한곳에서.
               </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <LinkButton href="/search" variant="accent" size="lg">
+              <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
+                가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.
+              </p>
+            </div>
+
+            {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
+                CTA(그래서 무엇을 하는가) 순으로 한 줄기 시선을 만든다. */}
+            <div className="gole-hero-flow flex min-w-0 flex-col gap-6 max-lg:gap-5">
+              <div className="flex min-h-52 items-center justify-center max-lg:order-2 max-sm:min-h-40">
+                <Logo
+                  size={286}
+                  showWordmark={false}
+                  spout
+                  className="gole-mascot-float drop-shadow-[0_18px_24px_rgba(3,10,35,0.22)]"
+                />
+              </div>
+
+              <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
+                <div className="flex items-center gap-2 py-2.5">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
+                  <span className="text-xs font-semibold tracking-wide text-accent-300">
+                    실시간 거래 현황
+                  </span>
+                </div>
+                {[
+                  {
+                    label: "활성 매물",
+                    value:
+                      stats.listings > 0
+                        ? `${stats.listings.toLocaleString("ko-KR")}개`
+                        : "정산 전 보호",
+                  },
+                  {
+                    label: "체결 시세",
+                    value:
+                      stats.txCount > 0
+                        ? `${stats.txCount.toLocaleString("ko-KR")}건`
+                        : "체결가 기반",
+                  },
+                  { label: "거래 방식", value: "직거래 · 택배" },
+                ].map((stat) => (
+                  <div key={stat.label} className="flex items-baseline justify-between gap-4 py-3">
+                    <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
+                      {stat.label}
+                    </span>
+                    <span className="text-base font-bold tracking-tight text-white">
+                      {stat.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3 max-lg:order-1 sm:max-lg:flex-row">
+                <LinkButton href="/search" variant="accent" size="lg" fullWidth>
                   상품 둘러보기
                 </LinkButton>
-                <LinkButton href="/prices" variant="inverse" size="lg">
+                <LinkButton href="/prices" variant="inverse" size="lg" fullWidth>
                   시세 확인하기
                 </LinkButton>
               </div>
-            </div>
-
-            <div className="divide-y divide-white/15 border-y border-white/20">
-              {[
-                {
-                  label: "활성 매물",
-                  value:
-                    stats.listings > 0
-                      ? `${stats.listings.toLocaleString("ko-KR")}개`
-                      : "정산 전 보호",
-                },
-                {
-                  label: "체결 시세",
-                  value:
-                    stats.txCount > 0
-                      ? `${stats.txCount.toLocaleString("ko-KR")}건`
-                      : "체결가 기반",
-                },
-                { label: "거래 방식", value: "직거래 · 택배" },
-              ].map((stat) => (
-                <div key={stat.label} className="flex items-baseline justify-between gap-4 py-4">
-                  <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
-                    {stat.label}
-                  </span>
-                  <span className="text-lg font-bold tracking-tight text-white">{stat.value}</span>
-                </div>
-              ))}
             </div>
           </div>
         </Container>
