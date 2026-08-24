@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   Container,
+  EmptyState,
   Heading,
   Input,
   LinkButton,
@@ -93,19 +94,31 @@ export function CollectionPage() {
 
   if (accountId === null) {
     return (
-      <Container width="sm">
-        <div className="flex flex-col items-start gap-4 pt-10">
-          <Heading level={1}>내 컬렉션</Heading>
-          <Text tone="secondary">컬렉션을 보려면 로그인이 필요합니다.</Text>
-          <LinkButton href="/login">로그인하러 가기</LinkButton>
+      <Container width="lg">
+        <div className="flex flex-col gap-7 pt-10 pb-16 sm:pt-14">
+          <div className="flex flex-col gap-2">
+            <Heading level={1}>내 컬렉션</Heading>
+            <Text tone="secondary">좋아하는 세트를 모으고 시세 변화를 한눈에 확인하세요.</Text>
+          </div>
+          <EmptyState
+            eyebrow="나만의 브릭 선반"
+            title="로그인하고 첫 컬렉션을 시작하세요"
+            description="보유·위시·판매 완료 세트를 한곳에 모으면 현재 추정 가치와 거래 흐름을 계속 이어서 볼 수 있어요."
+            details={["보유 세트 추정가", "위시·판매 상태 관리"]}
+            action={
+              <LinkButton href={`/login?returnTo=${encodeURIComponent("/collection")}`}>
+                로그인하고 시작하기
+              </LinkButton>
+            }
+          />
         </div>
       </Container>
     );
   }
 
   return (
-    <Container width="md">
-      <div className="flex flex-col gap-6 pt-8 pb-16">
+    <Container width="lg">
+      <div className="flex flex-col gap-6 pt-10 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>내 컬렉션</Heading>
           <Text tone="secondary">보유 세트의 추정 가치를 확인하세요.</Text>
@@ -152,7 +165,12 @@ export function CollectionPage() {
         </Card>
 
         {items.length === 0 ? (
-          <Text tone="muted">아직 컬렉션이 비어 있습니다.</Text>
+          <EmptyState
+            eyebrow="COLLECTION 01"
+            title="첫 브릭을 컬렉션에 담아보세요"
+            description="위의 세트 번호와 상태를 선택해 추가하면 고래가 나만의 브릭 선반을 채워 드려요."
+            details={["세트별 보유 상태 기록", "컬렉션 추정가 자동 합산"]}
+          />
         ) : (
           <ul className="flex flex-col gap-2">
             {items.map((item) => (
