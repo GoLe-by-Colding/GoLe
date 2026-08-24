@@ -228,6 +228,10 @@
     background-color: var(--color-neutral-50);
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    /* 스크롤바 자리를 항상 비워 둔다. 페이지마다 내용 높이가 달라 세로 스크롤바가
+       생겼다 사라지면 뷰포트 폭이 스크롤바 두께만큼 바뀌고, 가운데 정렬된 레이아웃이
+       이동할 때마다 좌우로 흔들린다(오버레이 스크롤바가 아닌 환경에서). */
+    scrollbar-gutter: stable;
   }
 
   body {
