@@ -130,8 +130,19 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     };
   }, [access, token, pathname]);
 
+  // 확인 중에도 콘솔과 같은 골격(폭·제목 줄·240px 사이드바 그리드)을 유지한다.
+  // 좁은 안내 카드로 떨어뜨리면 확인이 끝나는 순간 640px에서 1280px로 벌어지며
+  // 화면 전체가 한 번 출렁인다. 메뉴 항목은 아직 노출하지 않는다.
   if (access === "checking") {
-    return <GateFrame busy>권한을 확인하는 중입니다…</GateFrame>;
+    return (
+      <ConsoleFrame badge={<Badge tone="neutral">확인 중</Badge>} nav={null}>
+        <div className="flex min-h-[320px] items-center justify-center p-6" aria-busy="true">
+          <p role="status" aria-live="polite" className="text-sm text-neutral-500">
+            권한을 확인하는 중입니다…
+          </p>
+        </div>
+      </ConsoleFrame>
+    );
   }
 
   if (access === "unauthenticated") {
@@ -181,36 +192,65 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   }
 
   return (
+    <ConsoleFrame
+      badge={<Badge tone="brand">ADMIN</Badge>}
+      nav={
+        <nav
+          aria-label="운영자 메뉴"
+          className="border-b border-neutral-200/70 bg-white p-4 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
+        >
+          <ul className="flex gap-2 lg:sticky lg:top-20 lg:flex-col">
+            {NAV.map((item) => {
+              const active =
+                item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+              return (
+                <li key={item.href}>
+                  <AdminNavigationItem href={item.href} label={item.label} active={active}>
+                    {item.href === "/admin/reports" && pendingReports > 0 ? (
+                      <Badge tone="warning">{pendingReports}</Badge>
+                    ) : null}
+                  </AdminNavigationItem>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      }
+    >
+      <div className="min-w-0 p-4 sm:p-6 lg:p-8">{children}</div>
+    </ConsoleFrame>
+  );
+}
+
+/**
+ * 콘솔의 바깥 골격. 권한 확인 중과 확인 후가 같은 폭·같은 그리드를 쓰도록
+ * 한곳에서만 정의한다. 사이드바가 아직 없어도 240px 트랙은 그대로 유지된다.
+ */
+function ConsoleFrame({
+  badge,
+  nav,
+  children,
+}: {
+  readonly badge: ReactNode;
+  readonly nav: ReactNode;
+  readonly children: ReactNode;
+}) {
+  return (
     <Container width="xl">
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex items-center gap-3">
           <Heading level={1}>운영자 콘솔</Heading>
-          <Badge tone="brand">ADMIN</Badge>
+          {badge}
         </div>
 
         <div className="grid overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_1fr]">
-          <nav
-            aria-label="운영자 메뉴"
-            className="border-b border-neutral-200/70 bg-white p-4 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
-          >
-            <ul className="flex gap-2 lg:sticky lg:top-20 lg:flex-col">
-              {NAV.map((item) => {
-                const active =
-                  item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
-                return (
-                  <li key={item.href}>
-                    <AdminNavigationItem href={item.href} label={item.label} active={active}>
-                      {item.href === "/admin/reports" && pendingReports > 0 ? (
-                        <Badge tone="warning">{pendingReports}</Badge>
-                      ) : null}
-                    </AdminNavigationItem>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-
-          <div className="min-w-0 p-4 sm:p-6 lg:p-8">{children}</div>
+          {nav ?? (
+            <div
+              aria-hidden="true"
+              className="bg-white max-lg:h-0 lg:border-r lg:border-neutral-200/70"
+            />
+          )}
+          {children}
         </div>
       </div>
     </Container>
