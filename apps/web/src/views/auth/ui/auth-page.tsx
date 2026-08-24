@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef } from "react";
 import { SignInForm } from "@features/sign-in";
 import { SignUpForm } from "@features/sign-up";
 import { SocialLoginButtons } from "@features/social-login";
+import { useSession } from "@entities/user";
 import { AuthCard } from "@widgets/auth-layout";
 import { Button } from "@shared/ui";
+import { applyRoleGuard, resolveReturnTo, returnToLabel } from "../model/return-to";
 
 export interface AuthPageProps {
   /** 소셜 첫 가입 직후 온보딩 환영 화면 표시 여부(서버에서 ?welcome=1 판별). */
@@ -16,11 +19,43 @@ export interface AuthPageProps {
 /**
  * 통합 인증 화면. 로그인/회원가입을 탭으로 전환하며(URL `/login`·`/signup` 구동),
  * 로컬(이메일) + 소셜(Google/Kakao/Naver) 4가지 진입을 한 화면에서 제공한다.
+ *
+ * `?returnTo=`로 들어온 복귀 경로는 검증 후에만 사용하고, 인증이 끝나면 그 화면으로 돌려보낸다.
+ * `useSearchParams`를 쓰므로 Suspense 경계를 슬라이스 안에서 직접 제공한다.
  */
 export function AuthPage({ welcome = false }: AuthPageProps) {
+  return (
+    <Suspense fallback={<AuthFallback welcome={welcome} />}>
+      <AuthPageContent welcome={welcome} />
+    </Suspense>
+  );
+}
+
+/** Suspense 대기 중 레이아웃이 튀지 않도록 같은 카드 골격을 유지한다. */
+function AuthFallback({ welcome }: { readonly welcome: boolean }) {
+  return (
+    <AuthCard title={welcome ? "환영합니다" : "로그인"}>
+      <p role="status" aria-live="polite" className="py-6 text-center text-sm text-neutral-500">
+        불러오는 중…
+      </p>
+    </AuthCard>
+  );
+}
+
+function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { session } = useSession();
   const mode = pathname === "/signup" ? "signup" : "signin";
+
+  // 형태 검증만 통과한 값. 실제 이동 직전에 역할 게이트를 한 번 더 적용한다.
+  const returnTo = resolveReturnTo(searchParams.get("returnTo"));
+
+  /** 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다. */
+  function goAfterAuth(role: "USER" | "ADMIN" | null | undefined): void {
+    router.replace(applyRoleGuard(returnTo, role) ?? "/");
+  }
 
   if (welcome) {
     return (
@@ -29,8 +64,13 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
           <p className="text-sm leading-relaxed text-neutral-600">
             이제 GoLe에서 레고 시세를 확인하고, 안전하게 거래하고, 컬렉션을 자랑할 수 있어요.
           </p>
-          <Button size="lg" fullWidth onClick={() => router.replace("/")}>
-            시작하기
+          <Button
+            size="lg"
+            fullWidth
+            disabled={session === null}
+            onClick={() => goAfterAuth(session?.role ?? null)}
+          >
+            {session === null ? "세션 확인 중…" : "시작하기"}
           </Button>
         </div>
       </AuthCard>
@@ -45,6 +85,11 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
     }`;
   }
 
+  /** 탭 전환 시에도 복귀 경로를 잃지 않는다. */
+  function tabHref(target: "/login" | "/signup"): string {
+    return returnTo === null ? target : `${target}?returnTo=${encodeURIComponent(returnTo)}`;
+  }
+
   return (
     <AuthCard
       title={mode === "signup" ? "회원가입" : "로그인"}
@@ -53,13 +98,15 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
       }
     >
       <div className="flex flex-col gap-5">
+        {returnTo === null ? null : <ReturnToNotice target={returnTo} />}
+
         <div
           role="tablist"
           aria-label="인증 방식"
           className="grid grid-cols-2 border-b border-neutral-200"
         >
           <Link
-            href="/login"
+            href={tabHref("/login")}
             role="tab"
             aria-selected={mode === "signin"}
             className={tabClass(mode === "signin")}
@@ -67,7 +114,7 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
             로그인
           </Link>
           <Link
-            href="/signup"
+            href={tabHref("/signup")}
             role="tab"
             aria-selected={mode === "signup"}
             className={tabClass(mode === "signup")}
@@ -77,15 +124,47 @@ export function AuthPage({ welcome = false }: AuthPageProps) {
         </div>
 
         {mode === "signin" ? (
-          <SignInForm onSignedIn={() => router.push("/")} />
+          <SignInForm onSignedIn={(signedIn) => goAfterAuth(signedIn.role)} />
         ) : (
           <SignUpForm
-            onRegistered={(email) => router.push(`/verify?email=${encodeURIComponent(email)}`)}
+            onRegistered={(email) => {
+              const next = new URLSearchParams({ email });
+              if (returnTo !== null) {
+                next.set("returnTo", returnTo);
+              }
+              router.push(`/verify?${next.toString()}`);
+            }}
           />
         )}
 
         <SocialLoginButtons />
       </div>
     </AuthCard>
+  );
+}
+
+/**
+ * 왜 로그인 화면에 왔는지와 어디로 돌아가는지를 알린다.
+ * 화면 진입 시 포커스를 받아 스크린 리더가 문맥을 먼저 읽도록 한다.
+ */
+function ReturnToNotice({ target }: { readonly target: string }) {
+  const ref = useRef<HTMLParagraphElement | null>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <p
+      ref={ref}
+      tabIndex={-1}
+      role="status"
+      data-testid="return-to-notice"
+      data-return-to={target}
+      className="rounded-md bg-brand-50 p-3 text-sm text-brand-800"
+    >
+      로그인하면 <strong className="font-semibold">{returnToLabel(target)}</strong> 화면으로
+      돌아갑니다.
+    </p>
   );
 }

@@ -4,13 +4,17 @@ import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VerifyEmailForm } from "@features/verify-email";
 import { AuthCard } from "@widgets/auth-layout";
+import { resolveReturnTo } from "@views/auth/model/return-to";
 
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
+  const returnTo = resolveReturnTo(searchParams.get("returnTo"));
+  const loginHref =
+    returnTo === null ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
 
-  return <VerifyEmailForm initialEmail={email} onVerified={() => router.push("/login")} />;
+  return <VerifyEmailForm initialEmail={email} onVerified={() => router.replace(loginHref)} />;
 }
 
 export function VerifyEmailPage() {
