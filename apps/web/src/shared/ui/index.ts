@@ -9,6 +9,9 @@ export type { CardProps, CardElevation } from "./card";
 export { Logo } from "./logo";
 export type { LogoProps } from "./logo";
 
+export { EmptyState } from "./empty-state";
+export type { EmptyStateProps } from "./empty-state";
+
 export { Skeleton } from "./skeleton";
 export type { SkeletonProps } from "./skeleton";
 
