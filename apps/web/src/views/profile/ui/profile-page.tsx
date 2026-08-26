@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchMyOrders, orderStatusLabel, type Order } from "@entities/order";
-import { searchListings, type Listing } from "@entities/listing";
+import { fetchMyListings, type Listing } from "@entities/listing";
 import { fetchMe, useSession, type Me } from "@entities/user";
 import { formatKrw } from "@shared/lib";
 import {
@@ -90,9 +90,8 @@ export function ProfilePage() {
         if (!controller.signal.aborted) setOrders(FAILED);
       });
 
-    searchListings({ query: "", sort: "newest" }, controller.signal)
-      .then((all) => {
-        const mine = all.filter((l) => l.sellerId === accountId);
+    fetchMyListings(controller.signal)
+      .then((mine) => {
         if (!controller.signal.aborted) setListings({ status: "ready", data: mine });
       })
       .catch(() => {
@@ -163,7 +162,8 @@ export function ProfilePage() {
                 {email ?? shortenId(accountId)}
               </Heading>
             )}
-            <Badge tone={session.role === "ADMIN" ? "brand" : "neutral"}>
+            {/* flex-col의 기본 stretch가 배지를 줄 끝까지 늘린다. 배지는 내용만큼만 차지해야 한다. */}
+            <Badge tone={session.role === "ADMIN" ? "brand" : "neutral"} className="self-start">
               {session.role === "ADMIN" ? "관리자" : "일반 회원"}
             </Badge>
           </div>
