@@ -35,6 +35,9 @@ test.describe("Create listing", () => {
 
     await expect(page).toHaveURL(/\/listings\/.+/);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(page.getByText("₩12,345")).toBeVisible();
+    // Next의 라우트 알림(#__next-route-announcer__)이 문서 제목을 그대로 읽어 주는데,
+    // 제목에 가격이 들어 있어 부분 일치로는 가격 노드와 함께 2개가 잡힌다(strict mode 위반).
+    // 알림 텍스트는 "<제목> — ₩12,345 · GoLe"라 정확 일치에는 걸리지 않는다.
+    await expect(page.getByText("₩12,345", { exact: true })).toBeVisible();
   });
 });
