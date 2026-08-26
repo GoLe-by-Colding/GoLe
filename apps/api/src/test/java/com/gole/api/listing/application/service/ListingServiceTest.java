@@ -166,6 +166,16 @@ class ListingServiceTest {
     }
 
     @Test
+    void bySeller_삭제한_매물은_빠진다() {
+        String removed = service.create(validCommand());
+        service.create(validCommand());
+        service.delete(removed);
+
+        // 본인이 내린 매물이 계속 남으면 목록에 쓰레기만 쌓인다.
+        assertThat(service.bySeller("seller-1")).hasSize(1);
+    }
+
+    @Test
     void bySeller_다른_셀러의_매물은_섞이지_않는다() {
         service.create(validCommand());
         service.create(new CreateListingCommand(
@@ -220,7 +230,10 @@ class ListingServiceTest {
 
         @Override
         public List<Listing> findBySeller(String sellerId) {
-            return store.stream().filter(l -> l.getSellerId().equals(sellerId)).toList();
+            return store.stream()
+                    .filter(l -> l.getSellerId().equals(sellerId))
+                    .filter(l -> l.getStatus() != ListingStatus.DELETED)
+                    .toList();
         }
 
         @Override

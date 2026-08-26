@@ -115,7 +115,10 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
 
     @Override
     public List<Listing> findBySeller(String sellerId) {
-        return repository.findBySellerIdOrderByCreatedAtDesc(sellerId).stream()
+        // 삭제한 매물은 뺀다. 본인이 내린 것이 목록에 계속 남으면 시간이 갈수록 쓰레기만 쌓인다.
+        return repository
+                .findBySellerIdAndStatusNotOrderByCreatedAtDesc(sellerId, ListingStatus.DELETED.name())
+                .stream()
                 .map(this::toDomain)
                 .toList();
     }
