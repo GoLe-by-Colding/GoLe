@@ -29,6 +29,9 @@ public interface ListingRepositoryPort {
     /** 특정 셀러의 활성 리스팅 목록. (요구사항 16) */
     List<Listing> findActiveBySeller(String sellerId);
 
+    /** 셀러의 리스팅(최신순, 삭제 제외). 본인 "내 매물" 조회용. */
+    List<Listing> findBySeller(String sellerId);
+
     /** 여러 셀러의 활성 리스팅 목록(피드 구성 등). (요구사항 17) */
     List<Listing> findActiveBySellers(List<String> sellerIds);
 

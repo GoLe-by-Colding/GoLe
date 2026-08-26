@@ -153,6 +153,45 @@ class ListingServiceTest {
                 .isNull();
     }
 
+    @Test
+    void bySeller_판매완료까지_포함하고_활성만_주는_조회와_구분된다() {
+        String sold = service.create(validCommand());
+        service.create(validCommand());
+        service.markSold(sold);
+
+        // "내 매물"은 판매완료도 보여야 한다 — 팔린 매물이 목록에서 사라지면 판매자는
+        // 자기가 뭘 팔았는지 확인할 데가 없다.
+        assertThat(service.bySeller("seller-1")).hasSize(2);
+        assertThat(service.activeBySeller("seller-1")).hasSize(1);
+    }
+
+    @Test
+    void bySeller_삭제한_매물은_빠진다() {
+        String removed = service.create(validCommand());
+        service.create(validCommand());
+        service.delete(removed);
+
+        // 본인이 내린 매물이 계속 남으면 목록에 쓰레기만 쌓인다.
+        assertThat(service.bySeller("seller-1")).hasSize(1);
+    }
+
+    @Test
+    void bySeller_다른_셀러의_매물은_섞이지_않는다() {
+        service.create(validCommand());
+        service.create(new CreateListingCommand(
+                "seller-2",
+                "밀레니엄 팰컨 75192",
+                "미개봉",
+                900_000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-2.jpg"),
+                "75192"));
+
+        assertThat(service.bySeller("seller-1")).hasSize(1);
+        assertThat(service.bySeller("seller-1").getFirst().getSellerId()).isEqualTo("seller-1");
+    }
+
     private static final class InMemoryListingRepository implements ListingRepositoryPort {
         private final List<Listing> store = new ArrayList<>();
 
@@ -186,6 +225,14 @@ class ListingServiceTest {
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> l.getSellerId().equals(sellerId))
+                    .toList();
+        }
+
+        @Override
+        public List<Listing> findBySeller(String sellerId) {
+            return store.stream()
+                    .filter(l -> l.getSellerId().equals(sellerId))
+                    .filter(l -> l.getStatus() != ListingStatus.DELETED)
                     .toList();
         }
 

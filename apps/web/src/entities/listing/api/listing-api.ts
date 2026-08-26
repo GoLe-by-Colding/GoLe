@@ -49,6 +49,20 @@ export function fetchActiveListings(signal?: AbortSignal): Promise<readonly List
   });
 }
 
+/**
+ * 로그인 계정이 등록한 매물 전체(상태 무관, 최신순).
+ *
+ * 검색 API는 활성 매물만 돌려주므로 "내 매물"을 그걸로 만들면 판매완료·예약중이 빠지고,
+ * 전체를 받아 클라이언트에서 거르면 매물이 늘수록 느려진다. 대상 셀러는 쿼리 파라미터가
+ * 아니라 서버가 세션에서 정한다.
+ */
+export function fetchMyListings(signal?: AbortSignal): Promise<readonly Listing[]> {
+  return apiRequest<readonly Listing[]>("/api/v1/listings/mine", {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
 export type ListingSort = "newest" | "price_asc" | "price_desc";
 
 export interface SearchListingsParams {

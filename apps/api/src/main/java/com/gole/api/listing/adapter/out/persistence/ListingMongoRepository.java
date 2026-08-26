@@ -14,6 +14,9 @@ public interface ListingMongoRepository extends MongoRepository<ListingDocument,
     /** 특정 셀러의 특정 상태 리스팅. */
     List<ListingDocument> findBySellerIdAndStatus(String sellerId, String status);
 
+    /** 특정 셀러의 리스팅 중 특정 상태를 제외한 것(최신순). 본인 "내 매물" 조회용. */
+    List<ListingDocument> findBySellerIdAndStatusNotOrderByCreatedAtDesc(String sellerId, String status);
+
     /** 여러 셀러의 특정 상태 리스팅. */
     List<ListingDocument> findBySellerIdInAndStatus(List<String> sellerIds, String status);
 

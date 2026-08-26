@@ -99,6 +99,11 @@ public class ListingService
     }
 
     @Override
+    public List<Listing> bySeller(String sellerId) {
+        return listingRepository.findBySeller(sellerId);
+    }
+
+    @Override
     public List<Listing> activeBySellers(List<String> sellerIds) {
         return listingRepository.findActiveBySellers(sellerIds);
     }

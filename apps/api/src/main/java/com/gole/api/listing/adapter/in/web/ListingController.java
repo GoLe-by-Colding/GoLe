@@ -3,6 +3,7 @@ package com.gole.api.listing.adapter.in.web;
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.adapter.in.web.ListingRequests.CreateListingRequest;
+import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.DeleteListingUseCase;
@@ -43,18 +44,21 @@ public class ListingController {
     private final SearchListingsUseCase searchListingsUseCase;
     private final MarkListingSoldUseCase markListingSoldUseCase;
     private final DeleteListingUseCase deleteListingUseCase;
+    private final BrowseListingsUseCase browseListingsUseCase;
 
     public ListingController(
             CreateListingUseCase createListingUseCase,
             GetListingUseCase getListingUseCase,
             SearchListingsUseCase searchListingsUseCase,
             MarkListingSoldUseCase markListingSoldUseCase,
-            DeleteListingUseCase deleteListingUseCase) {
+            DeleteListingUseCase deleteListingUseCase,
+            BrowseListingsUseCase browseListingsUseCase) {
         this.createListingUseCase = createListingUseCase;
         this.getListingUseCase = getListingUseCase;
         this.searchListingsUseCase = searchListingsUseCase;
         this.markListingSoldUseCase = markListingSoldUseCase;
         this.deleteListingUseCase = deleteListingUseCase;
+        this.browseListingsUseCase = browseListingsUseCase;
     }
 
     @Operation(summary = "매물 등록", description = "판매할 레고 상품을 등록합니다. sellerId는 로그인 계정 ID.")
@@ -107,6 +111,18 @@ public class ListingController {
                 category == null ? null : com.gole.api.listing.domain.model.ListingCategory.fromKey(category),
                 setNumber);
         return searchListingsUseCase.search(searchQuery).stream()
+                .map(ListingResponse::from)
+                .toList();
+    }
+
+    @Operation(
+            summary = "내 매물",
+            description = "로그인 계정이 등록한 매물 전체(상태 무관, 최신순). 프로필의 '내 매물' 탭에 쓴다.\n\n"
+                    + "검색(`GET /api/v1/listings`)은 활성 매물만 돌려주므로 판매완료·예약중 매물이 빠진다.\n"
+                    + "대상 셀러는 쿼리 파라미터가 아니라 인증 세션에서 정한다 — 남의 비활성 매물을 볼 수 없다.")
+    @GetMapping("/mine")
+    public List<ListingResponse> listMine(HttpServletRequest http) {
+        return browseListingsUseCase.bySeller(AuthenticatedUser.id(http)).stream()
                 .map(ListingResponse::from)
                 .toList();
     }

@@ -30,7 +30,7 @@ class ListingConditionBindingTest {
         new ListingWebConfig().addFormatters(conversionService);
 
         // 검색 use case는 빈 목록만 돌려주면 된다. 여기서 보는 것은 바인딩 결과지 검색 결과가 아니다.
-        ListingController controller = new ListingController(null, null, query -> List.of(), null, null);
+        ListingController controller = new ListingController(null, null, query -> List.of(), null, null, null);
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(event -> {}))
