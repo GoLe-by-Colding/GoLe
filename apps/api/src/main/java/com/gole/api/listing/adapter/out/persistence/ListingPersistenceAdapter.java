@@ -114,6 +114,13 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     }
 
     @Override
+    public List<Listing> findBySeller(String sellerId) {
+        return repository.findBySellerIdOrderByCreatedAtDesc(sellerId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Listing> findActiveBySellers(List<String> sellerIds) {
         return repository.findBySellerIdInAndStatus(sellerIds, ListingStatus.ACTIVE.name()).stream()
                 .map(this::toDomain)

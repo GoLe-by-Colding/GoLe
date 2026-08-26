@@ -42,7 +42,10 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         boolean privateRead = uri.startsWith("/api/v1/orders")
                 || uri.startsWith("/api/v1/collections")
                 || uri.startsWith("/api/v1/users/")
-                || uri.startsWith("/api/v1/chat");
+                || uri.startsWith("/api/v1/chat")
+                // 매물 조회는 공개지만 "내 매물"만은 예외다. 세션으로 대상을 정하므로 여기서
+                // 인증을 붙여야 하고, 빠지면 계정 속성이 없어 컨트롤러가 500으로 터진다.
+                || uri.startsWith("/api/v1/listings/mine");
         return !privateRead;
     }
 }
