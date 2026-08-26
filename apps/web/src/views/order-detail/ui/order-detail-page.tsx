@@ -5,6 +5,7 @@ import {
   completeOrder,
   DISPUTE_REASON_LABEL,
   fetchOrder,
+  fetchOrderContacts,
   orderStatusLabel,
   payOrder,
   refundOrder,
@@ -12,18 +13,32 @@ import {
   type OrderStatus,
 } from "@entities/order";
 import { fetchShipment, refreshShipment, type Shipment } from "@entities/shipment";
-import { useSession } from "@entities/user";
+import { fetchMe, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { env } from "@shared/config";
 import {
   formatKrw,
   getPortOneConfigurationError,
+  isCardPaymentAvailable,
   isPortOneEnabled,
   paymentMethodLabel,
   PortOnePaymentError,
   requestPortOnePayment,
+  type PortOneCustomer,
+  type PortOneMethod,
 } from "@shared/lib";
-import { Badge, Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Container,
+  Field,
+  Heading,
+  Input,
+  LinkButton,
+  Skeleton,
+  Text,
+} from "@shared/ui";
 import { OpenDisputeButton } from "@features/open-dispute";
 import { RegisterWaybillForm } from "@features/register-waybill";
 import { WriteReviewForm } from "@features/write-review";
@@ -70,6 +85,21 @@ function rememberPaymentAttempt(orderId: string): void {
   }
 }
 
+/**
+ * 카드 결제에 쓴 이름을 기억한다. 계정에 이름 필드가 없어 매번 다시 물어야 하는데,
+ * 구매 때 연락처를 기억하는 것과 같은 이유로 한 번만 받는다.
+ */
+const CARD_NAME_STORAGE_KEY = "gole.buyer-name";
+
+function readStoredCardName(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(CARD_NAME_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** useSyncExternalStore용 구독. session-store와 같은 방식이다(같은 탭은 커스텀 이벤트로 전파). */
 function subscribePaymentAttempt(onChange: () => void): () => void {
   if (typeof window === "undefined") {
@@ -96,6 +126,14 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  // 결제수단 선택. 카드 채널이 설정되지 않았으면 선택 UI 자체를 노출하지 않는다.
+  const cardAvailable = isCardPaymentAvailable();
+  const [paymentMethod, setPaymentMethod] = useState<PortOneMethod>("kakaopay");
+  const [cardStep, setCardStep] = useState(false);
+  const [cardPrefilling, setCardPrefilling] = useState(false);
+  const [cardName, setCardName] = useState("");
+  const [cardEmail, setCardEmail] = useState("");
+  const [cardPhone, setCardPhone] = useState("");
   // sessionStorage는 React 밖의 상태다. 서버 렌더에는 없으므로 서버 스냅샷은 항상 false다.
   const paymentAttempted = useSyncExternalStore(
     subscribePaymentAttempt,
@@ -227,44 +265,101 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
 
   // 결제: 포트원이 설정돼 있으면 브라우저 결제창을 먼저 띄우고(paymentId=주문 id),
   // 성공 후 서버가 결제를 검증한다(payOrder). 미설정 시 서버 스텁 결제로 진행한다.
-  const handlePay = useCallback(async () => {
+  const pay = useCallback(
+    async (method: PortOneMethod, customer?: PortOneCustomer) => {
+      setError(undefined);
+      setBusy(true);
+      try {
+        const current = await fetchOrder(orderId);
+        if (isPortOneEnabled()) {
+          // 결제창을 여는 순간 기록한다. 모바일은 여기서 페이지를 떠나므로 이후에 기록할 기회가 없다.
+          // 커스텀 이벤트가 같은 탭의 구독자에게 전파하므로 별도 setState가 필요 없다.
+          rememberPaymentAttempt(orderId);
+          await requestPortOnePayment({
+            paymentId: current.id,
+            orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
+            totalAmount: current.amount,
+            method,
+            ...(customer === undefined ? {} : { customer }),
+          });
+        }
+        setOrder(await payOrder(orderId));
+        setCardStep(false);
+      } catch (cause) {
+        if (cause instanceof PortOnePaymentError && cause.userCancelled) {
+          setError(
+            "결제가 취소되었습니다. 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.",
+          );
+        } else if (cause instanceof PortOnePaymentError) {
+          // 결제창에서 실패한 경우다. 사유 분류가 빗나가도 "주문이 보존된다"는 사실은 알려야 한다 —
+          // 그걸 모르면 사용자가 중복 결제를 시도한다.
+          setError(`${cause.message} 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.`);
+        } else if (cause instanceof ApiError && cause.status >= 500) {
+          setError(
+            "결제 승인 여부를 확인하고 있습니다. 중복 결제하지 말고 잠시 뒤 주문 상태를 다시 확인해 주세요.",
+          );
+        } else if (cause instanceof ApiError) {
+          setError(cause.message);
+        } else if (cause instanceof Error) {
+          setError(cause.message);
+        } else {
+          setError("결제 중 오류가 발생했습니다.");
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    [orderId],
+  );
+
+  /**
+   * 카드 결제 단계를 연다. 이니시스가 요구하는 세 값 중 이메일·연락처는 이미 우리가 아는
+   * 사실이므로 미리 채운다 — 구매자가 새로 입력할 값은 이름 하나여야 한다.
+   *
+   * 프리필은 카드를 고른 이 순간에만 한다. 화면 진입마다 부르면 카카오페이만 쓰는 구매자에게도
+   * 불필요한 왕복이 생긴다.
+   */
+  const openCardStep = useCallback(async () => {
     setError(undefined);
-    setBusy(true);
-    try {
-      const current = await fetchOrder(orderId);
-      if (isPortOneEnabled()) {
-        // 결제창을 여는 순간 기록한다. 모바일은 여기서 페이지를 떠나므로 이후에 기록할 기회가 없다.
-        // 커스텀 이벤트가 같은 탭의 구독자에게 전파하므로 별도 setState가 필요 없다.
-        rememberPaymentAttempt(orderId);
-        await requestPortOnePayment({
-          paymentId: current.id,
-          orderName: `GoLe 주문 ${current.id.slice(0, 8)}`,
-          totalAmount: current.amount,
-        });
-      }
-      setOrder(await payOrder(orderId));
-    } catch (cause) {
-      if (cause instanceof PortOnePaymentError && cause.userCancelled) {
-        setError("결제가 취소되었습니다. 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.");
-      } else if (cause instanceof PortOnePaymentError) {
-        // 결제창에서 실패한 경우다. 사유 분류가 빗나가도 "주문이 보존된다"는 사실은 알려야 한다 —
-        // 그걸 모르면 사용자가 중복 결제를 시도한다.
-        setError(`${cause.message} 주문은 그대로 보존되며 원할 때 다시 결제할 수 있습니다.`);
-      } else if (cause instanceof ApiError && cause.status >= 500) {
-        setError(
-          "결제 승인 여부를 확인하고 있습니다. 중복 결제하지 말고 잠시 뒤 주문 상태를 다시 확인해 주세요.",
-        );
-      } else if (cause instanceof ApiError) {
-        setError(cause.message);
-      } else if (cause instanceof Error) {
-        setError(cause.message);
-      } else {
-        setError("결제 중 오류가 발생했습니다.");
-      }
-    } finally {
-      setBusy(false);
+    setCardStep(true);
+    setCardName((current) => (current.length > 0 ? current : readStoredCardName()));
+    setCardPrefilling(true);
+    // 한쪽이 실패해도 나머지는 채운다. 못 채운 칸은 구매자가 직접 입력하면 된다.
+    const [me, contacts] = await Promise.allSettled([
+      fetchMe(session?.sessionToken ?? ""),
+      fetchOrderContacts(orderId),
+    ]);
+    if (me.status === "fulfilled") {
+      setCardEmail((current) => (current.length > 0 ? current : me.value.email));
     }
-  }, [orderId]);
+    if (contacts.status === "fulfilled" && contacts.value.buyerPhone !== null) {
+      const phone = contacts.value.buyerPhone;
+      setCardPhone((current) => (current.length > 0 ? current : phone));
+    }
+    setCardPrefilling(false);
+  }, [orderId, session?.sessionToken]);
+
+  const handlePayClick = useCallback(() => {
+    if (paymentMethod === "card") {
+      void openCardStep();
+      return;
+    }
+    void pay("kakaopay");
+  }, [openCardStep, pay, paymentMethod]);
+
+  const handleCardSubmit = useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault();
+      const fullName = cardName.trim();
+      try {
+        window.localStorage.setItem(CARD_NAME_STORAGE_KEY, fullName);
+      } catch {
+        // 저장 실패는 무시 — 다음 결제에서 다시 입력하면 된다.
+      }
+      void pay("card", { fullName, email: cardEmail.trim(), phoneNumber: cardPhone.trim() });
+    },
+    [cardEmail, cardName, cardPhone, pay],
+  );
 
   if (error && order === null) {
     return (
@@ -360,7 +455,11 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         {order.status === "payment_pending" && !paymentAttempted ? (
           <OrderStatusNotice
             title="아직 결제하지 않았어요"
-            description="아래 결제하기를 누르면 카카오페이 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+            description={
+              cardAvailable
+                ? "결제수단을 고르고 결제하기를 누르면 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+                : "아래 결제하기를 누르면 카카오페이 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+            }
             refreshing={refreshing}
             onRefresh={refreshOrder}
           />
@@ -368,7 +467,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
 
         {order.status === "payment_pending" && paymentAttempted ? (
           <OrderStatusNotice
-            title="카카오페이 결제를 기다리고 있어요"
+            title="결제를 기다리고 있어요"
             description="결제를 마쳤는데 상태가 그대로라면 다시 결제하지 말고 승인 상태를 확인해 주세요. 최대 1분 동안 자동으로도 확인합니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
@@ -389,7 +488,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         {order.status === "refund_pending" ? (
           <OrderStatusNotice
             tone="warning"
-            title="카카오페이 환불을 처리하고 있어요"
+            title="환불을 처리하고 있어요"
             description="결제수단에 환불이 반영되기까지 시간이 걸릴 수 있습니다. 최대 1분 동안 자동으로 확인하며, 이후에도 직접 상태를 확인할 수 있습니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
@@ -456,17 +555,116 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </Card>
         ) : null}
 
+        {order.status === "payment_pending" && !isSeller ? (
+          <div className="flex flex-col gap-4">
+            {cardAvailable ? (
+              <fieldset className="flex flex-col gap-2" disabled={busy}>
+                <legend className="pb-2 text-sm font-semibold text-neutral-700">결제수단</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <PaymentMethodOption
+                    value="kakaopay"
+                    label="카카오페이"
+                    hint="간편결제"
+                    checked={paymentMethod === "kakaopay"}
+                    onSelect={(next) => {
+                      setPaymentMethod(next);
+                      setCardStep(false);
+                    }}
+                  />
+                  <PaymentMethodOption
+                    value="card"
+                    label="신용·체크카드"
+                    hint="KG이니시스"
+                    checked={paymentMethod === "card"}
+                    onSelect={setPaymentMethod}
+                  />
+                </div>
+              </fieldset>
+            ) : null}
+
+            {cardStep ? (
+              <form
+                onSubmit={handleCardSubmit}
+                className="flex flex-col gap-3 rounded-xl border border-neutral-200 px-4 py-4"
+              >
+                <div className="flex flex-col gap-1">
+                  <Text weight="semibold">카드 결제 정보</Text>
+                  <Text size="sm" tone="secondary">
+                    카드사가 요구하는 정보예요. 연락처와 이메일은 주문·계정 정보로 미리 채웠습니다.
+                  </Text>
+                </div>
+                <Field label="이름">
+                  {({ inputId, describedBy }) => (
+                    <Input
+                      id={inputId}
+                      aria-describedby={describedBy}
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value)}
+                      placeholder="홍길동"
+                      autoComplete="name"
+                      required
+                      autoFocus
+                    />
+                  )}
+                </Field>
+                <Field label="이메일">
+                  {({ inputId, describedBy }) => (
+                    <Input
+                      id={inputId}
+                      aria-describedby={describedBy}
+                      value={cardEmail}
+                      onChange={(e) => setCardEmail(e.target.value)}
+                      placeholder={cardPrefilling ? "불러오는 중..." : "buyer@example.com"}
+                      type="email"
+                      autoComplete="email"
+                      required
+                    />
+                  )}
+                </Field>
+                <Field label="연락처">
+                  {({ inputId, describedBy }) => (
+                    <Input
+                      id={inputId}
+                      aria-describedby={describedBy}
+                      value={cardPhone}
+                      onChange={(e) => setCardPhone(e.target.value)}
+                      placeholder={cardPrefilling ? "불러오는 중..." : "010-1234-5678"}
+                      inputMode="tel"
+                      type="tel"
+                      autoComplete="tel"
+                      required
+                    />
+                  )}
+                </Field>
+                <div className="flex gap-2">
+                  <Button size="lg" fullWidth type="submit" disabled={busy || cardPrefilling}>
+                    {busy ? "처리 중..." : "카드로 결제하기"}
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setCardStep(false)}
+                  >
+                    취소
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <Button
+                size="lg"
+                fullWidth
+                disabled={busy || paymentConfigurationError !== undefined}
+                onClick={handlePayClick}
+              >
+                {busy ? "처리 중..." : "결제하기"}
+              </Button>
+            )}
+          </div>
+        ) : null}
+
         <div className="flex gap-3">
-          {order.status === "payment_pending" && !isSeller ? (
-            <Button
-              size="lg"
-              fullWidth
-              disabled={busy || paymentConfigurationError !== undefined}
-              onClick={handlePay}
-            >
-              {busy ? "처리 중..." : "결제하기"}
-            </Button>
-          ) : null}
           {order.status === "funds_held" && !isSeller ? (
             <>
               <Button
@@ -534,6 +732,41 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         />
       ) : null}
     </Container>
+  );
+}
+
+interface PaymentMethodOptionProps {
+  readonly value: PortOneMethod;
+  readonly label: string;
+  readonly hint: string;
+  readonly checked: boolean;
+  readonly onSelect: (value: PortOneMethod) => void;
+}
+
+function PaymentMethodOption({ value, label, hint, checked, onSelect }: PaymentMethodOptionProps) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+        checked ? "border-brand-400 bg-brand-50/60" : "border-neutral-200 hover:border-neutral-300"
+      }`}
+    >
+      <input
+        type="radio"
+        name="payment-method"
+        value={value}
+        checked={checked}
+        onChange={() => onSelect(value)}
+        className="accent-brand-600"
+      />
+      <span className="flex flex-col">
+        <Text size="sm" weight="semibold">
+          {label}
+        </Text>
+        <Text size="sm" tone="muted">
+          {hint}
+        </Text>
+      </span>
+    </label>
   );
 }
 
@@ -609,7 +842,7 @@ function OrderActionConfirmation({ action, onCancel, onConfirm }: OrderActionCon
   const title = completing ? "구매를 확정할까요?" : "환불을 요청할까요?";
   const description = completing
     ? "상품을 정상적으로 받았는지 확인해 주세요. 구매를 확정하면 판매자 정산이 시작되어 되돌리기 어렵습니다."
-    : "구매 확정 전 주문만 환불할 수 있습니다. 요청 후 카카오페이 결제수단에 반영되기까지 시간이 걸릴 수 있습니다.";
+    : "구매 확정 전 주문만 환불할 수 있습니다. 요청 후 결제수단에 반영되기까지 시간이 걸릴 수 있습니다.";
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/45 px-4">

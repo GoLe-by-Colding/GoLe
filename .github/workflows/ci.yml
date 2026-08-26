@@ -190,6 +190,7 @@ jobs:
           NEXT_PUBLIC_PAYMENT_MODE: portone-test
           NEXT_PUBLIC_PORTONE_STORE_ID: store-test
           NEXT_PUBLIC_PORTONE_CHANNEL_KEY: channel-kakaopay-test
+          NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: channel-card-test
         run: pnpm --filter web e2e
 
       # CI 리포터는 github이라 playwright-report/(HTML)가 생성되지 않는다. 실패 원인을 볼 수

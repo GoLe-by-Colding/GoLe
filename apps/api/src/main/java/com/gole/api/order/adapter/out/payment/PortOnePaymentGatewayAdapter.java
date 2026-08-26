@@ -10,8 +10,12 @@ import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,7 +44,7 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     private final RestClient client;
     private final OperationalEventPublisher operationalEvents;
     private final String expectedStoreId;
-    private final String expectedChannelKey;
+    private final List<AllowedChannel> allowedChannels;
     private final String expectedChannelType;
 
     public PortOnePaymentGatewayAdapter(
@@ -48,6 +52,7 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             @Value("${portone.api-secret}") String apiSecret,
             @Value("${portone.store-id}") String expectedStoreId,
             @Value("${portone.channel-key}") String expectedChannelKey,
+            @Value("${portone.card-channel-key:}") String cardChannelKey,
             @Value("${portone.channel-type:TEST}") String expectedChannelType,
             OperationalEventPublisher operationalEvents) {
         this.client = RestClient.builder()
@@ -55,9 +60,32 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 .defaultHeader("Authorization", "PortOne " + apiSecret)
                 .build();
         this.expectedStoreId = expectedStoreId.trim();
-        this.expectedChannelKey = expectedChannelKey.trim();
+        this.allowedChannels = allowedChannels(expectedChannelKey, cardChannelKey);
         this.expectedChannelType = expectedChannelType.trim().toUpperCase(Locale.ROOT);
         this.operationalEvents = operationalEvents;
+    }
+
+    /**
+     * 채널 키와 그 채널이 낼 수 있는 결제수단을 <b>한 쌍으로</b> 묶는다.
+     *
+     * <p>둘을 따로 검사하면 조건이 "허용 채널 중 하나" ∧ "허용 수단 중 하나"로 느슨해져서,
+     * 카카오페이 채널로 낸 카드 결제처럼 우리가 계약하지 않은 조합이 통과한다. 결제수단을
+     * 늘리는 변경에서 실제로 위험한 지점은 여기 하나다.
+     *
+     * @param provider 간편결제 사업자. 사업자 구분이 없는 수단(카드 등)은 null.
+     * @param label 로그·알림에 쓰는 사람이 읽는 이름
+     */
+    private record AllowedChannel(String key, PaymentMethodType type, String provider, String label) {}
+
+    private static List<AllowedChannel> allowedChannels(String kakaoPayChannelKey, String cardChannelKey) {
+        List<AllowedChannel> channels = new ArrayList<>();
+        channels.add(
+                new AllowedChannel(kakaoPayChannelKey.trim(), PaymentMethodType.EASY_PAY, "KAKAOPAY", "간편결제/KAKAOPAY"));
+        // 카드 채널은 선택 설정이다. 비어 있으면 카드 원장은 어느 튜플과도 맞지 않아 승인되지 않는다.
+        if (!cardChannelKey.isBlank()) {
+            channels.add(new AllowedChannel(cardChannelKey.trim(), PaymentMethodType.CARD, null, "카드"));
+        }
+        return List.copyOf(channels);
     }
 
     @Override
@@ -278,6 +306,9 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
      *
      * <p>PortOne V2 결제 조회 응답은 선택 채널을 {@code channel}, 결제수단을 {@code method}에
      * 담는다. 스키마가 바뀌거나 필드가 누락된 경우에도 승인하지 않고 수동 검토로 보낸다.
+     *
+     * <p><b>기대하는 결제수단은 원장의 채널이 정한다.</b> 허용 목록에서 채널을 먼저 특정하고,
+     * 그 채널이 요구하는 수단만 인정한다({@link AllowedChannel}).
      */
     private String findPaymentValidationFailure(Map<?, ?> payment, String expectedPaymentId, long expectedAmount) {
         String provenanceFailure = findPaymentProvenanceFailure(payment, expectedPaymentId, expectedAmount);
@@ -287,9 +318,12 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
         if (!(payment.get("channel") instanceof Map<?, ?> channel)) {
             return "결제 채널 정보 누락";
         }
-        if (!expectedChannelKey.equals(text(channel.get("key")))) {
+        AllowedChannel allowed = findAllowedChannel(text(channel.get("key")));
+        if (allowed == null) {
             return "결제 채널 키 불일치 또는 누락";
         }
+        // 채널 유형은 모든 허용 채널에 공통이다. TEST 채널과 LIVE 채널을 동시에 여는 구성은
+        // 기능이 아니라 사고다.
         if (!expectedChannelType.equals(normalizedText(channel.get("type")))) {
             return "결제 채널 유형 불일치 또는 누락";
         }
@@ -300,14 +334,25 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
         // 파싱하면 실제 표기(`PaymentMethodEasyPay`)를 한쪽만 아는 상태가 되고, 그러면
         // 정상 결제가 전부 수동 검토로 떨어진다. 실제로 그렇게 깨져 있었다.
         PaymentMethod method = PortOnePaymentMethodMapper.from(payment);
-        if (method.type() != PaymentMethodType.EASY_PAY) {
+        if (method.type() != allowed.type()) {
             return "결제수단 유형 불일치 또는 누락";
         }
-        // provider는 PaymentMethod 생성자가 이미 대문자로 정규화한다.
-        if (!"KAKAOPAY".equals(method.provider())) {
-            return "간편결제 제공자 불일치 또는 누락";
+        // provider는 PaymentMethod 생성자가 이미 대문자로 정규화한다. 카드처럼 사업자 구분이
+        // 없는 수단은 매퍼도 튜플도 null이라 이 검사를 그대로 통과한다.
+        if (!Objects.equals(allowed.provider(), method.provider())) {
+            return allowed.provider() == null ? "결제수단 제공자 불일치" : "간편결제 제공자 불일치 또는 누락";
         }
         return null;
+    }
+
+    private AllowedChannel findAllowedChannel(String key) {
+        if (key == null) {
+            return null;
+        }
+        return allowedChannels.stream()
+                .filter(channel -> channel.key().equals(key))
+                .findFirst()
+                .orElse(null);
     }
 
     private String findPaymentProvenanceFailure(Map<?, ?> payment, String expectedPaymentId, long expectedAmount) {
@@ -389,8 +434,18 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     private String expectedLedger(String orderId, long amount) {
-        return "id=%s storeId=%s version=V2 currency=KRW amount=%d channel.key=%s channel.type=%s method=간편결제/KAKAOPAY"
-                .formatted(orderId, expectedStoreId, amount, expectedChannelKey, expectedChannelType);
+        return "id=%s storeId=%s version=V2 currency=KRW amount=%d channel.type=%s 허용 채널: %s"
+                .formatted(orderId, expectedStoreId, amount, expectedChannelType, allowedChannelSummary());
+    }
+
+    /**
+     * 허용 채널을 <b>전부</b> 적는다. 채널이 둘 이상이면 "어느 채널 기준으로 어긋났는지"가
+     * 사유 문구만으로는 드러나지 않는다.
+     */
+    private String allowedChannelSummary() {
+        return allowedChannels.stream()
+                .map(channel -> channel.key() + "=" + channel.label())
+                .collect(Collectors.joining(", ", "[", "]"));
     }
 
     /** 정규화하지 않은 원문을 그대로 보여준다. 표기 차이가 원인일 때 정규화하면 그 단서가 사라진다. */

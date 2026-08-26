@@ -21,6 +21,7 @@ class PortOneReadinessIndicatorTest {
                 "do-not-expose-webhook-secret",
                 "do-not-expose-store-id",
                 "do-not-expose-channel-key",
+                "",
                 "TEST");
 
         var snapshot = indicator.getPaymentReadiness();
@@ -30,7 +31,7 @@ class PortOneReadinessIndicatorTest {
         assertThat(snapshot.ready()).isTrue();
         assertThat(snapshot.state()).isEqualTo(State.READY);
         assertThat(snapshot.channelType()).isEqualTo(ChannelType.TEST);
-        assertThat(snapshot.provider()).isEqualTo("KAKAOPAY");
+        assertThat(snapshot.methods()).containsExactly("KAKAOPAY");
         assertThat(snapshot.currency()).isEqualTo("KRW");
         assertThat(snapshot.issues()).isEmpty();
         assertThat(json)
@@ -41,11 +42,25 @@ class PortOneReadinessIndicatorTest {
                         "do-not-expose-channel-key");
     }
 
+    /** 카드 채널 키가 있으면 카드가 열린 것이다. 운영자가 대시보드에서 그 사실을 봐야 한다. */
+    @Test
+    @DisplayName("카드 채널이 설정되면 열린 결제수단에 카드를 함께 보고한다")
+    void reportsCardMethodWhenCardChannelIsConfigured() throws Exception {
+        PortOneReadinessIndicator indicator = new PortOneReadinessIndicator(
+                true, "api-secret", "webhook-secret", "store-id", "channel-key", "do-not-expose-card-channel", "TEST");
+
+        var snapshot = indicator.getPaymentReadiness();
+
+        assertThat(snapshot.ready()).isTrue();
+        assertThat(snapshot.methods()).containsExactly("KAKAOPAY", "CARD");
+        assertThat(new ObjectMapper().writeValueAsString(snapshot)).doesNotContain("do-not-expose-card-channel");
+    }
+
     @Test
     @DisplayName("활성화됐지만 설정이 비었거나 잘못되면 안전한 설정 이름만 진단한다")
     void reportsMissingAndInvalidConfiguration() {
-        PortOneReadinessIndicator indicator =
-                new PortOneReadinessIndicator(true, "api-secret", " ", "", "channel-key", "sandbox-secret-like-value");
+        PortOneReadinessIndicator indicator = new PortOneReadinessIndicator(
+                true, "api-secret", " ", "", "channel-key", "", "sandbox-secret-like-value");
 
         var snapshot = indicator.getPaymentReadiness();
 
@@ -64,7 +79,7 @@ class PortOneReadinessIndicatorTest {
     @Test
     @DisplayName("비활성 상태에서도 활성화 전에 채워야 할 설정 목록을 확인할 수 있다")
     void reportsDisabledStateAndMissingConfiguration() {
-        var snapshot = new PortOneReadinessIndicator(false, "", "", "", "", "TEST").getPaymentReadiness();
+        var snapshot = new PortOneReadinessIndicator(false, "", "", "", "", "", "TEST").getPaymentReadiness();
 
         assertThat(snapshot.enabled()).isFalse();
         assertThat(snapshot.ready()).isFalse();
@@ -80,7 +95,7 @@ class PortOneReadinessIndicatorTest {
     @DisplayName("LIVE 채널은 별도 모드로 명확히 식별한다")
     void reportsLiveChannel() {
         var snapshot = new PortOneReadinessIndicator(
-                        true, "api-secret", "webhook-secret", "store-id", "channel-key", "live")
+                        true, "api-secret", "webhook-secret", "store-id", "channel-key", "", "live")
                 .getPaymentReadiness();
 
         assertThat(snapshot.ready()).isTrue();

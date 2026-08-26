@@ -29,7 +29,8 @@ class AdminDashboardControllerTest {
         when(readModel.orderStats()).thenReturn(new OrderStats(Map.of("PAYMENT_PENDING", 2L), 0));
         GetPaymentReadinessUseCase paymentReadiness = mock(GetPaymentReadinessUseCase.class);
         when(paymentReadiness.getPaymentReadiness())
-                .thenReturn(new Snapshot(true, true, State.READY, ChannelType.TEST, "KAKAOPAY", "KRW", List.of()));
+                .thenReturn(new Snapshot(
+                        true, true, State.READY, ChannelType.TEST, List.of("KAKAOPAY", "CARD"), "KRW", List.of()));
         AdminDashboardController controller = new AdminDashboardController(
                 readModel,
                 mock(ListAdminActionsUseCase.class),
@@ -43,7 +44,7 @@ class AdminDashboardControllerTest {
         assertThat(overview.paymentReadiness().ready()).isTrue();
         assertThat(overview.paymentReadiness().state()).isEqualTo("READY");
         assertThat(overview.paymentReadiness().channelType()).isEqualTo("TEST");
-        assertThat(overview.paymentReadiness().provider()).isEqualTo("KAKAOPAY");
+        assertThat(overview.paymentReadiness().methods()).containsExactly("KAKAOPAY", "CARD");
         assertThat(overview.paymentReadiness().currency()).isEqualTo("KRW");
         assertThat(overview.paymentReadiness().issues()).isEmpty();
     }

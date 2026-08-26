@@ -48,7 +48,8 @@ public final class AdminDtos {
             boolean ready,
             String state,
             String channelType,
-            String provider,
+            /** 지금 열려 있는 결제수단(KAKAOPAY·CARD). 설정에 따라 늘고 준다. */
+            List<String> methods,
             String currency,
             List<PaymentConfigurationIssueResponse> issues) {
 
@@ -58,7 +59,7 @@ public final class AdminDtos {
                     snapshot.ready(),
                     snapshot.state().name(),
                     snapshot.channelType().name(),
-                    snapshot.provider(),
+                    snapshot.methods(),
                     snapshot.currency(),
                     snapshot.issues().stream()
                             .map(PaymentConfigurationIssueResponse::from)

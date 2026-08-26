@@ -24,7 +24,8 @@ export interface AdminPaymentReadiness {
   readonly ready: boolean;
   readonly state: "DISABLED" | "MISCONFIGURED" | "READY";
   readonly channelType: "TEST" | "LIVE" | "UNKNOWN";
-  readonly provider: "KAKAOPAY";
+  /** 지금 열려 있는 결제수단. 롤링 배포 중 구버전 API에는 없을 수 있다. */
+  readonly methods?: readonly string[];
   readonly currency: "KRW";
   readonly issues: readonly AdminPaymentConfigurationIssue[];
 }

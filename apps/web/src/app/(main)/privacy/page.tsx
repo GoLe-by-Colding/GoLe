@@ -66,7 +66,10 @@ export default function PrivacyPage() {
 
           <Section title="5. 개인정보 처리 위탁">
             <ul className="list-disc space-y-1 pl-5">
-              <li>결제 처리: PortOne(포트원) 및 카카오페이 — 결제 승인·취소·환불 처리</li>
+              <li>
+                결제 처리: PortOne(포트원) 및 결제대행사(카카오페이·KG이니시스) — 결제
+                승인·취소·환불 처리
+              </li>
               <li>
                 이미지 저장: MinIO(자체 운영 서버) — 상품 사진·커뮤니티 이미지 보관. 이용자가
                 업로드한 이미지는 공개 URL로 서빙되며, 매물 삭제·회원 탈퇴 시 함께 파기됩니다.

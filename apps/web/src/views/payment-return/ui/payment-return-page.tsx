@@ -25,7 +25,7 @@ export interface PaymentReturnPageProps {
 
 type VerificationState = "checking" | "verified" | "failed" | "cancelled";
 
-/** 모바일 카카오페이 redirect 복귀 지점. 쿼리는 표시용이고 결제 승인 여부는 서버가 재검증한다. */
+/** 모바일 결제 redirect 복귀 지점. 쿼리는 표시용이고 결제 승인 여부는 서버가 재검증한다. */
 export function PaymentReturnPage({ paymentId, code, message, pgMessage }: PaymentReturnPageProps) {
   const router = useRouter();
   const started = useRef(false);
@@ -44,7 +44,7 @@ export function PaymentReturnPage({ paymentId, code, message, pgMessage }: Payme
     invalidPaymentId
       ? "결제 주문번호를 확인할 수 없습니다. 고객지원에 문의해 주세요."
       : code === undefined
-        ? "카카오페이 승인 결과를 안전하게 확인하고 있습니다."
+        ? "결제 승인 결과를 안전하게 확인하고 있습니다."
         : returnedAsCancelled
           ? "결제가 취소되었습니다. 주문 상세에서 다시 시도할 수 있습니다."
           : (message ?? pgMessage ?? "결제를 완료하지 못했습니다."),

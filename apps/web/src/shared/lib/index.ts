@@ -5,6 +5,7 @@ export { thumbnailUrl } from "./thumbnail";
 export {
   buildPortOnePaymentRequest,
   getPortOneConfigurationError,
+  isCardPaymentAvailable,
   isPortOneEnabled,
   PortOnePaymentError,
   requestPortOnePayment,
@@ -13,4 +14,4 @@ export { paymentMethodLabel } from "./payment-method";
 export type { PaymentMethod } from "./payment-method";
 export { schemaAvailability, schemaItemCondition, absoluteUrl, breadcrumbJsonLd } from "./seo";
 export type { BreadcrumbItem } from "./seo";
-export type { PortOnePayParams } from "./portone";
+export type { PortOneCustomer, PortOneMethod, PortOnePayParams } from "./portone";

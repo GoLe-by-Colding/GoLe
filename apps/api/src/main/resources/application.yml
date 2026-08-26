@@ -177,6 +177,10 @@ portone:
   webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
   store-id: ${PORTONE_STORE_ID:}
   channel-key: ${PORTONE_CHANNEL_KEY:}
+  # 카드(KG이니시스) 채널. 선택 설정 — 비우면 카드 결제가 열리지 않는다.
+  # 카카오페이 채널 키와 같은 값이면 기동을 거부한다(한 채널로 두 수단이 승인되는 것을 막는다).
+  card-channel-key: ${PORTONE_CARD_CHANNEL_KEY:}
+  # TEST/LIVE는 모든 채널에 공통으로 적용한다.
   channel-type: ${PORTONE_CHANNEL_TYPE:TEST}
   reconciliation:
     minimum-age: ${PORTONE_RECONCILIATION_MINIMUM_AGE:PT10M}

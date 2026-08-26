@@ -141,6 +141,74 @@ class PortOnePaymentGatewayAdapterTest {
         verifyNoInteractions(events);
     }
 
+    @Test
+    @DisplayName("카드 채널의 PAID 카드 원장을 승인하고 결제수단을 카드로 기록한다")
+    void approvesPaidCardFromConfiguredCardChannel() {
+        responseBody.set(validPaidCardResponse("order-card"));
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        PaymentVerification result = cardEnabledAdapter(events).verifyPayment("order-card", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.PAID);
+        // 카드는 간편결제 사업자 구분이 없다. provider를 채우면 결제수단 집계가 오염된다.
+        assertThat(result.method()).isEqualTo(PaymentMethod.of(PaymentMethodType.CARD));
+        verifyNoInteractions(events);
+    }
+
+    /**
+     * 이 스펙에서 진짜 위험한 지점이다. 허용 채널과 허용 수단을 <b>따로</b> 검사하면
+     * 두 조건 모두 만족하는 이 원장이 통과한다 — 우리가 계약하지 않은 경로다.
+     */
+    @Test
+    @DisplayName("카카오페이 채널로 들어온 카드 결제는 승인하지 않는다")
+    void rejectsCardPaymentThatCameThroughTheKakaoPayChannel() {
+        responseBody.set(validPaidCardResponse("order-card").replace("card-channel-1", "channel-key-1"));
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        PaymentVerification result = cardEnabledAdapter(events).verifyPayment("order-card", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        verify(events).publish(any());
+    }
+
+    @Test
+    @DisplayName("카드 채널로 들어온 간편결제는 승인하지 않는다")
+    void rejectsEasyPayPaymentThatCameThroughTheCardChannel() {
+        responseBody.set(validPaidResponse("order-1").replace("channel-key-1", "card-channel-1"));
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        PaymentVerification result = cardEnabledAdapter(events).verifyPayment("order-1", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        verify(events).publish(any());
+    }
+
+    /** 카드 채널을 설정하지 않은 환경에서는 카드 원장이 어느 허용 채널과도 맞지 않아야 한다. */
+    @Test
+    @DisplayName("카드 채널이 설정되지 않으면 카드 결제를 승인하지 않는다")
+    void rejectsCardPaymentWhenCardChannelIsNotConfigured() {
+        responseBody.set(validPaidCardResponse("order-card"));
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        PaymentVerification result = adapter(events).verifyPayment("order-card", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.REVIEW_REQUIRED);
+        verify(events).publish(any());
+    }
+
+    @Test
+    @DisplayName("검증된 카드 결제도 같은 전액 환불 경로를 탄다")
+    void refundsValidatedCardPayment() {
+        responseBody.set(validPaidCardResponse("order-card-refund"));
+
+        RefundResult result =
+                cardEnabledAdapter(mock(OperationalEventPublisher.class)).refund("order-card-refund", 15_000);
+
+        assertThat(result).isEqualTo(RefundResult.SUCCEEDED);
+        assertThat(cancelRequests).hasValue(1);
+        assertThat(requestPath.get()).isEqualTo("/payments/order-card-refund/cancel");
+    }
+
     /** 승인되지 않은 결제의 결제수단은 사실이 아니다. 기록할 것이 없으므로 비어 있어야 한다. */
     @Test
     @DisplayName("승인되지 않은 결제는 결제수단을 싣지 않는다")
@@ -371,12 +439,23 @@ class PortOnePaymentGatewayAdapterTest {
         verify(events).publish(any());
     }
 
+    /** 카카오페이만 연 기본 구성. 카드 채널 키가 없으면 카드는 어느 채널로도 승인되지 않는다. */
     private PortOnePaymentGatewayAdapter adapter(OperationalEventPublisher events) {
+        return adapter(events, "");
+    }
+
+    /** 카드까지 연 구성. 카드가 열려도 카카오페이 쪽 검증이 느슨해지면 안 된다. */
+    private PortOnePaymentGatewayAdapter cardEnabledAdapter(OperationalEventPublisher events) {
+        return adapter(events, "card-channel-1");
+    }
+
+    private PortOnePaymentGatewayAdapter adapter(OperationalEventPublisher events, String cardChannelKey) {
         return new PortOnePaymentGatewayAdapter(
                 "http://127.0.0.1:" + server.getAddress().getPort(),
                 "api-secret",
                 "store-1",
                 "channel-key-1",
+                cardChannelKey,
                 "TEST",
                 events);
     }
@@ -434,6 +513,20 @@ class PortOnePaymentGatewayAdapterTest {
                 "amount":{"total":15000},"channel":{"key":"channel-key-1","type":"TEST"},
                 "method":{"type":"PaymentMethodEasyPay","provider":"KAKAOPAY",
                 "easyPayMethod":{"type":"PaymentMethodEasyPayMethodCharge"}}}
+                """
+                .formatted(paymentId);
+    }
+
+    /**
+     * 카드 채널의 PAID 원장. 포트원은 카드 결제수단을 discriminator {@code PaymentMethodCard}로
+     * 주며 간편결제와 달리 {@code provider}가 없다.
+     */
+    private static String validPaidCardResponse(String paymentId) {
+        return """
+                {"status":"PAID","id":"%s","storeId":"store-1","version":"V2","currency":"KRW",
+                "amount":{"total":15000},"channel":{"key":"card-channel-1","type":"TEST"},
+                "method":{"type":"PaymentMethodCard",
+                "card":{"publisher":"신한카드","issuer":"신한카드","brand":"LOCAL"}}}
                 """
                 .formatted(paymentId);
     }
