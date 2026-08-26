@@ -141,9 +141,7 @@ test.describe("Order detail recovery UX", () => {
     await dialog.getByRole("button", { name: "환불 요청" }).click();
 
     await expect(page.getByTestId("order-status")).toHaveText("환불 처리 중");
-    await expect(
-      page.getByText("카카오페이 환불을 처리하고 있어요", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText("환불을 처리하고 있어요", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "상태 다시 확인" })).toBeVisible();
     expect(refundCalls).toBe(1);
   });
