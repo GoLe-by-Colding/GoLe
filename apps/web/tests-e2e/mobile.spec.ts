@@ -131,6 +131,12 @@ test.describe("Mobile — 결제·운영 화면", () => {
     // 표 자체는 넘치는 게 정상이다 — 다만 그 스크롤이 표 안에 갇혀 있어야 한다.
     await expect(page.locator("div.overflow-x-auto").first()).toBeVisible();
     await expect(page.getByRole("table").getByText("카카오페이")).toBeVisible();
+    // 위 expectNoHorizontalScroll은 고정 300ms 뒤에 재는데, 이 화면은 게이트가 /me 왕복을
+    // 마쳐야 표를 그린다. 아직 "확인 중" 골격이던 순간을 쟀다면 넘칠 표가 없어 무조건 통과다
+    // — 실패는 안 나지만 검증도 안 된다. 표가 실제로 붙은 지금 다시 재야 경계를 확인한 게 된다.
+    expect(await horizontalOverflow(page), "가로 스크롤 발생: /admin/orders").toBeLessThanOrEqual(
+      1,
+    );
   });
 });
 
