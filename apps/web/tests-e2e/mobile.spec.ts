@@ -98,6 +98,17 @@ test.describe("Mobile — 결제·운영 화면", () => {
    */
   test("어드민 주문 표는 페이지를 밀지 않고 표 안에서만 스크롤된다", async ({ page }) => {
     await signInAs(page, { ...E2E_SELLER, role: "ADMIN" });
+    // 콘솔 게이트는 로컬 세션의 role을 믿지 않고 서버에 다시 묻는다(fail closed). 이 응답을
+    // 심어주지 않으면 게이트가 열리지 않아 표가 아예 렌더되지 않는다 — 스크롤을 재기도 전에
+    // 실패한다. 여기서 확인하려는 건 권한이 아니라 좁은 화면의 표 스크롤이다.
+    await page.route("**/api/v1/accounts/me", (route) =>
+      route.fulfill({
+        json: { accountId: E2E_SELLER.accountId, email: "admin@gole.test", role: "ADMIN" },
+      }),
+    );
+    await page.route("**/api/admin/overview**", (route) =>
+      route.fulfill({ json: { pendingReports: 0 } }),
+    );
     await page.route("**/api/admin/reports**", (route) => route.fulfill({ json: [] }));
     await page.route("**/api/admin/orders**", (route) =>
       route.fulfill({
