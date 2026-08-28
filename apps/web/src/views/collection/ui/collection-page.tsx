@@ -121,7 +121,7 @@ export function CollectionPage() {
       <div className="flex flex-col gap-6 pt-10 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>내 컬렉션</Heading>
-          <Text tone="secondary">보유 세트의 추정 가치를 확인하세요.</Text>
+          <Text tone="secondary">보유·위시 세트와 현재 추정 가치.</Text>
         </div>
 
         <Card padded className="flex items-center justify-between">
@@ -166,9 +166,8 @@ export function CollectionPage() {
 
         {items.length === 0 ? (
           <EmptyState
-            eyebrow="COLLECTION 01"
-            title="첫 브릭을 컬렉션에 담아보세요"
-            description="위의 세트 번호와 상태를 선택해 추가하면 고래가 나만의 브릭 선반을 채워 드려요."
+            title="아직 담은 세트가 없어요"
+            description="위 칸에 세트 번호를 넣고 상태를 고르면 목록에 추가됩니다."
             details={["세트별 보유 상태 기록", "컬렉션 추정가 자동 합산"]}
           />
         ) : (

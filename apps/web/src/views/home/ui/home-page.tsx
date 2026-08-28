@@ -5,7 +5,7 @@ import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
-import { BrickIcon, Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
+import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
 
@@ -102,6 +102,16 @@ export async function HomePage() {
     loadStats(),
   ]);
 
+  // 값이 없는 지표는 문구로 대체하지 않고 빼 버린다 — "실시간"이라는 라벨이 거짓이 되지 않게.
+  const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
+    ...(stats.listings > 0
+      ? [{ label: "활성 매물", value: `${stats.listings.toLocaleString("ko-KR")}개` }]
+      : []),
+    ...(stats.txCount > 0
+      ? [{ label: "누적 체결", value: `${stats.txCount.toLocaleString("ko-KR")}건` }]
+      : []),
+  ];
+
   return (
     <div className="flex flex-col">
       <section className="border-b border-brand-900 bg-brand-950 text-white">
@@ -119,9 +129,6 @@ export async function HomePage() {
                 <br className="max-sm:hidden" />
                 흩어져 있던 레고 거래를 한곳에서.
               </p>
-              <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
-                가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.
-              </p>
             </div>
 
             {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
@@ -136,40 +143,29 @@ export async function HomePage() {
                 />
               </div>
 
-              <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
-                <div className="flex items-center gap-2 py-2.5">
-                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
-                  <span className="text-xs font-semibold tracking-wide text-accent-300">
-                    실시간 거래 현황
-                  </span>
-                </div>
-                {[
-                  {
-                    label: "활성 매물",
-                    value:
-                      stats.listings > 0
-                        ? `${stats.listings.toLocaleString("ko-KR")}개`
-                        : "정산 전 보호",
-                  },
-                  {
-                    label: "체결 시세",
-                    value:
-                      stats.txCount > 0
-                        ? `${stats.txCount.toLocaleString("ko-KR")}건`
-                        : "체결가 기반",
-                  },
-                  { label: "거래 방식", value: "직거래 · 택배" },
-                ].map((stat) => (
-                  <div key={stat.label} className="flex items-baseline justify-between gap-4 py-3">
-                    <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
-                      {stat.label}
-                    </span>
-                    <span className="text-base font-bold tracking-tight text-white">
-                      {stat.value}
+              {liveStats.length > 0 ? (
+                <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
+                  <div className="flex items-center gap-2 py-2.5">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
+                    <span className="text-xs font-semibold tracking-wide text-accent-300">
+                      실시간 거래 현황
                     </span>
                   </div>
-                ))}
-              </div>
+                  {liveStats.map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="flex items-baseline justify-between gap-4 py-3"
+                    >
+                      <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
+                        {stat.label}
+                      </span>
+                      <span className="text-base font-bold tracking-tight text-white">
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-3 max-lg:order-1 sm:max-lg:flex-row">
                 <LinkButton href="/search" variant="accent" size="lg" fullWidth>
@@ -190,27 +186,13 @@ export async function HomePage() {
         <div className="flex flex-col gap-20 pt-16 pb-24">
           {/* Trending */}
           <section className="flex flex-col gap-6">
-            <SectionHeader
-              title="지금 뜨는 세트"
-              aside={
-                <Text tone="muted" size="sm">
-                  최근 거래 활발
-                </Text>
-              }
-            />
+            <SectionHeader title="지금 뜨는 세트" />
             <TrendingSets items={trending} />
           </section>
 
           {/* Featured */}
           <section className="flex flex-col gap-6">
-            <SectionHeader
-              title="오늘의 추천"
-              aside={
-                <Text tone="muted" size="sm">
-                  인기 테마 엄선
-                </Text>
-              }
-            />
+            <SectionHeader title="오늘의 추천" />
             {featured.length > 0 ? (
               <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
                 {featured.map((set) => (
@@ -218,12 +200,11 @@ export async function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 px-6 py-16 text-center">
-                <BrickIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />
-                <Text tone="secondary" weight="medium">
-                  표시할 세트가 아직 없어요
-                </Text>
-              </div>
+              <EmptyState
+                variant="inline"
+                icon={<BrickIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />}
+                title="표시할 세트가 아직 없어요"
+              />
             )}
           </section>
 
