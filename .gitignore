@@ -39,5 +39,9 @@ pnpm-debug.log*
 # Kiro 로컬 스펙 메타데이터(머신별 specId) — 추적하지 않는다
 .kiro/specs/**/.config.kiro
 
-# Claude Code 로컬 가이드 — 추적하지 않는다
+# 에이전트 가이드 — 저장소는 도구 중립으로 두고 로컬 전용으로만 쓴다.
+# AGENTS.md 가 정본이고, CLAUDE.md 는 그것을 @import 하는 도구별 진입 파일이다.
+# 둘 다 추적하지 않으므로 새로 클론하면 직접 만들어야 한다:
+#   printf '@AGENTS.md\n' > CLAUDE.md
+AGENTS.md
 CLAUDE.md
