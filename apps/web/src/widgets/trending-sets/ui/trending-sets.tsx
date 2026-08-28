@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TrendingSet } from "@entities/pricing";
-import { Badge, MediaImage, Text, TrendingUpIcon } from "@shared/ui";
+import { Badge, EmptyState, MediaImage, Text, TrendingUpIcon } from "@shared/ui";
 import { formatKrw, thumbnailUrl } from "@shared/lib";
 
 export interface TrendingSetsProps {
@@ -10,15 +10,12 @@ export interface TrendingSetsProps {
 export function TrendingSets({ items }: TrendingSetsProps) {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 px-6 py-14 text-center">
-        <TrendingUpIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />
-        <Text tone="secondary" weight="medium">
-          아직 거래 데이터가 충분하지 않아요
-        </Text>
-        <Text tone="muted" size="sm">
-          거래가 쌓이면 인기 세트가 여기에 표시됩니다.
-        </Text>
-      </div>
+      <EmptyState
+        variant="inline"
+        icon={<TrendingUpIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />}
+        title="아직 거래 데이터가 충분하지 않아요"
+        description="거래가 쌓이면 인기 세트가 여기에 표시됩니다."
+      />
     );
   }
 

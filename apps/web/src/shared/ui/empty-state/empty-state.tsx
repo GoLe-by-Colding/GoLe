@@ -5,9 +5,16 @@ import { Logo } from "../logo";
 import { Heading, Text } from "../typography";
 
 export interface EmptyStateProps {
+  /**
+   * `panel` — 화면 전체가 비었을 때 쓰는 마스코트형. 로그인 유도·첫 시작처럼 다음 행동이 분명한 자리.
+   * `inline` — 목록 한 칸이 비었을 때 쓰는 점선 상자. 주변 UI를 밀어내지 않는다.
+   */
+  readonly variant?: "panel" | "inline";
+  /** `inline`에서 제목 위에 놓을 아이콘. `panel`은 마스코트를 쓰므로 무시된다. */
+  readonly icon?: ReactNode;
   readonly eyebrow?: string;
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly details?: readonly string[];
   readonly action?: ReactNode;
   readonly animated?: boolean;
@@ -15,10 +22,13 @@ export interface EmptyStateProps {
 }
 
 /**
- * 비어 있음·로그인 필요·첫 시작을 한 가지 브랜드 문법으로 보여주는 상태 패널.
- * Figma `Product/Empty State`의 GoLe V2 마스코트형을 코드로 대응한다.
+ * 비어 있음·로그인 필요·첫 시작을 한 가지 문법으로 보여주는 상태 컴포넌트.
+ * 빈 화면이 화면에서 가장 화려한 요소가 되지 않도록, 배경은 단색이고 장식은 두지 않는다
+ * (`.kiro/steering/brand-identity.md` — 그라데이션 배경 금지, 그림자 절제).
  */
 export function EmptyState({
+  variant = "panel",
+  icon,
   eyebrow,
   title,
   description,
@@ -27,21 +37,39 @@ export function EmptyState({
   animated = true,
   className,
 }: EmptyStateProps) {
+  if (variant === "inline") {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center gap-2 rounded-xl border border-dashed border-neutral-300 px-6 py-14 text-center",
+          className,
+        )}
+      >
+        {icon}
+        <Text tone="secondary" weight="medium">
+          {title}
+        </Text>
+        {description ? (
+          <Text tone="muted" size="sm">
+            {description}
+          </Text>
+        ) : null}
+        {action ? <div className="pt-2">{action}</div> : null}
+      </div>
+    );
+  }
+
   return (
     <section
       className={cn(
-        "relative isolate overflow-hidden rounded-2xl border border-brand-100 bg-[linear-gradient(135deg,var(--color-brand-50),white_58%,var(--color-accent-50))] px-6 py-8 shadow-soft sm:px-9 sm:py-10",
+        "rounded-xl border border-neutral-200/70 bg-neutral-50 px-6 py-8 sm:px-9 sm:py-10",
         className,
       )}
     >
-      <div
-        aria-hidden="true"
-        className="absolute -top-10 -right-8 size-44 rounded-full border-[28px] border-white/55"
-      />
-      <div className="relative grid items-center gap-7 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-10">
-        <div className="flex min-h-40 items-center justify-center rounded-2xl border border-white/80 bg-white/55 px-4 shadow-soft">
+      <div className="grid items-center gap-7 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-10">
+        <div className="flex items-center justify-center">
           <Logo
-            size={190}
+            size={160}
             showWordmark={false}
             spout
             className={animated ? "gole-mascot-float" : ""}
@@ -55,12 +83,14 @@ export function EmptyState({
             </span>
           ) : null}
           <div className="flex flex-col gap-2">
-            <Heading level={2} className="text-2xl sm:text-3xl">
+            <Heading level={2} className="text-2xl">
               {title}
             </Heading>
-            <Text tone="secondary" className="max-w-[42ch] leading-relaxed">
-              {description}
-            </Text>
+            {description ? (
+              <Text tone="secondary" className="max-w-[42ch] leading-relaxed">
+                {description}
+              </Text>
+            ) : null}
           </div>
           {details.length > 0 ? (
             <ul className="grid gap-2 text-sm text-neutral-600 sm:grid-cols-2">

@@ -5,7 +5,15 @@ import Link from "next/link";
 import { fetchMyRooms, type ChatRoom } from "@entities/chat";
 import { useSession } from "@entities/user";
 import { ChatPanel } from "@widgets/chat-panel";
-import { Container, Heading, LinkButton, MessageCircleIcon, Skeleton, Text } from "@shared/ui";
+import {
+  Container,
+  EmptyState,
+  Heading,
+  LinkButton,
+  MessageCircleIcon,
+  Skeleton,
+  Text,
+} from "@shared/ui";
 
 export function ChatListPage() {
   const { session } = useSession();
@@ -75,15 +83,12 @@ export function ChatListPage() {
             ))}
           </div>
         ) : rooms.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
-            <MessageCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
-            <Text tone="secondary" weight="medium">
-              아직 채팅이 없어요
-            </Text>
-            <Text tone="muted" size="sm">
-              상품 상세에서 채팅하기로 대화를 시작해보세요
-            </Text>
-          </div>
+          <EmptyState
+            variant="inline"
+            icon={<MessageCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+            title="아직 채팅이 없어요"
+            description="상품 상세의 채팅하기로 대화를 시작할 수 있어요."
+          />
         ) : (
           <div className="grid gap-4 md:grid-cols-[320px_1fr] md:items-start">
             {/* 방 목록 — 모바일에서 방 선택 시 숨김 */}
@@ -153,7 +158,7 @@ export function ChatListPage() {
                 </div>
               </div>
             ) : (
-              <div className="hidden place-items-center rounded-lg border border-dashed border-neutral-300 text-center text-sm text-neutral-400 md:grid md:h-[640px]">
+              <div className="hidden place-items-center rounded-xl border border-dashed border-neutral-300 text-center text-sm text-neutral-400 md:grid md:h-[640px]">
                 왼쪽에서 대화를 선택하세요
               </div>
             )}
