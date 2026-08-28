@@ -45,3 +45,7 @@ pnpm-debug.log*
 #   printf '@AGENTS.md\n' > CLAUDE.md
 AGENTS.md
 CLAUDE.md
+
+# Claude Code 프로젝트 설정 — 위와 같은 이유로 로컬 전용이다.
+# .claude/settings.local.json 에 검증 명령 허용목록이 들어 있다(승인 클릭 줄이기용).
+.claude/
