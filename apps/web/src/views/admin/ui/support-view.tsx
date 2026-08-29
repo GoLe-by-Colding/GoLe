@@ -61,12 +61,14 @@ export function AdminSupportView() {
   const [actionError, setActionError] = useState<string | undefined>();
   const selectedRoomRef = useRef<string | null>(null);
   const ticketsGenerationRef = useRef(0);
-  const conversationGenerationRef = useRef(0);
+  const conversationScopeGenerationRef = useRef(0);
+  const conversationRequestGenerationRef = useRef(0);
   const actionGenerationRef = useRef(0);
   const ownsSelectedConversationRef = useRef(false);
 
   const invalidateConversation = useCallback(() => {
-    conversationGenerationRef.current += 1;
+    conversationScopeGenerationRef.current += 1;
+    conversationRequestGenerationRef.current += 1;
     actionGenerationRef.current += 1;
     ownsSelectedConversationRef.current = false;
     setMessages([]);
@@ -125,7 +127,8 @@ export function AdminSupportView() {
   }, [accountId, invalidateConversation, selectRoom, status, token]);
 
   const loadConversation = useCallback(() => {
-    const generation = ++conversationGenerationRef.current;
+    const scopeGeneration = conversationScopeGenerationRef.current;
+    const requestGeneration = ++conversationRequestGenerationRef.current;
     ownsSelectedConversationRef.current = isMine;
     if (token === null || selected === null || !isMine) {
       setMessages([]);
@@ -140,7 +143,8 @@ export function AdminSupportView() {
     ])
       .then(([nextMessages, nextNotes]) => {
         if (
-          conversationGenerationRef.current !== generation ||
+          conversationScopeGenerationRef.current !== scopeGeneration ||
+          conversationRequestGenerationRef.current !== requestGeneration ||
           selectedRoomRef.current !== roomId
         ) {
           return;
@@ -152,7 +156,8 @@ export function AdminSupportView() {
       })
       .catch((cause: unknown) => {
         if (
-          conversationGenerationRef.current !== generation ||
+          conversationScopeGenerationRef.current !== scopeGeneration ||
+          conversationRequestGenerationRef.current !== requestGeneration ||
           selectedRoomRef.current !== roomId
         ) {
           return;
@@ -291,7 +296,7 @@ export function AdminSupportView() {
       return;
     }
     const roomId = selected.roomId;
-    const generation = conversationGenerationRef.current;
+    const scopeGeneration = conversationScopeGenerationRef.current;
     const oldest = messages[0];
     if (oldest === undefined) return;
     setLoadingOlderMessages(true);
@@ -301,17 +306,26 @@ export function AdminSupportView() {
         beforeSentAt: oldest.sentAt,
         beforeId: oldest.id,
       });
-      if (conversationGenerationRef.current !== generation || selectedRoomRef.current !== roomId) {
+      if (
+        conversationScopeGenerationRef.current !== scopeGeneration ||
+        selectedRoomRef.current !== roomId
+      ) {
         return;
       }
       setMessages((current) => mergeRows(current, older, (row) => row.sentAt));
       setHasOlderMessages(older.length === 60);
     } catch (cause) {
-      if (conversationGenerationRef.current === generation && selectedRoomRef.current === roomId) {
+      if (
+        conversationScopeGenerationRef.current === scopeGeneration &&
+        selectedRoomRef.current === roomId
+      ) {
         setConversationError(messageOf(cause, "이전 문의 대화를 불러오지 못했습니다."));
       }
     } finally {
-      if (conversationGenerationRef.current === generation && selectedRoomRef.current === roomId) {
+      if (
+        conversationScopeGenerationRef.current === scopeGeneration &&
+        selectedRoomRef.current === roomId
+      ) {
         setLoadingOlderMessages(false);
       }
     }

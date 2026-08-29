@@ -21,6 +21,7 @@ import {
   Button,
   Card,
   Container,
+  EmptyState,
   Heading,
   LinkButton,
   PackageIcon,
@@ -537,15 +538,16 @@ function InlineFailure({ onRetry }: { readonly onRetry: () => void }) {
 /** 목록 패널이 실패했을 때. 빈 목록과 구분해서 보여준다. */
 function PanelFailure({ onRetry }: { readonly onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
-      <AlertCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
-      <Text tone="secondary" weight="medium">
-        불러오지 못했어요
-      </Text>
-      <Button variant="ghost" size="sm" onClick={onRetry}>
-        다시 시도
-      </Button>
-    </div>
+    <EmptyState
+      variant="inline"
+      icon={<AlertCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+      title="불러오지 못했어요"
+      action={
+        <Button variant="ghost" size="sm" onClick={onRetry}>
+          다시 시도
+        </Button>
+      }
+    />
   );
 }
 
@@ -558,13 +560,5 @@ function PanelEmpty({
   readonly message: string;
   readonly action?: ReactNode;
 }) {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-neutral-300 py-16 text-center">
-      {icon}
-      <Text tone="secondary" weight="medium">
-        {message}
-      </Text>
-      {action}
-    </div>
-  );
+  return <EmptyState variant="inline" icon={icon} title={message} action={action} />;
 }

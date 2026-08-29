@@ -6,7 +6,7 @@ import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { fetchLaunchConfig } from "@entities/launch";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
-import { BrickIcon, Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
+import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
 
@@ -104,6 +104,15 @@ export async function HomePage() {
     fetchLaunchConfig(),
   ]);
   const paymentsOpen = launch.features.payments;
+  // 데이터가 없는 칸을 마케팅 문구로 채우면 "실시간"이라는 라벨이 거짓이 된다.
+  const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
+    ...(stats.listings > 0
+      ? [{ label: "활성 매물", value: `${stats.listings.toLocaleString("ko-KR")}개` }]
+      : []),
+    ...(stats.txCount > 0
+      ? [{ label: "누적 체결", value: `${stats.txCount.toLocaleString("ko-KR")}건` }]
+      : []),
+  ];
 
   return (
     <div className="flex flex-col">
@@ -141,42 +150,29 @@ export async function HomePage() {
                 />
               </div>
 
-              <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
-                <div className="flex items-center gap-2 py-2.5">
-                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
-                  <span className="text-xs font-semibold tracking-wide text-accent-300">
-                    실시간 거래 현황
-                  </span>
-                </div>
-                {[
-                  {
-                    label: "활성 매물",
-                    value:
-                      stats.listings > 0
-                        ? `${stats.listings.toLocaleString("ko-KR")}개`
-                        : paymentsOpen
-                          ? "정산 전 보호"
-                          : "판매자 대화 가능",
-                  },
-                  {
-                    label: "체결 시세",
-                    value:
-                      stats.txCount > 0
-                        ? `${stats.txCount.toLocaleString("ko-KR")}건`
-                        : "체결가 기반",
-                  },
-                  { label: "거래 방식", value: "직거래 · 택배" },
-                ].map((stat) => (
-                  <div key={stat.label} className="flex items-baseline justify-between gap-4 py-3">
-                    <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
-                      {stat.label}
-                    </span>
-                    <span className="text-base font-bold tracking-tight text-white">
-                      {stat.value}
+              {liveStats.length > 0 ? (
+                <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
+                  <div className="flex items-center gap-2 py-2.5">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
+                    <span className="text-xs font-semibold tracking-wide text-accent-300">
+                      실시간 거래 현황
                     </span>
                   </div>
-                ))}
-              </div>
+                  {liveStats.map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="flex items-baseline justify-between gap-4 py-3"
+                    >
+                      <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
+                        {stat.label}
+                      </span>
+                      <span className="text-base font-bold tracking-tight text-white">
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-3 max-lg:order-1 sm:max-lg:flex-row">
                 <LinkButton href="/search" variant="accent" size="lg" fullWidth>
@@ -230,12 +226,11 @@ export async function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-neutral-300 px-6 py-16 text-center">
-                <BrickIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />
-                <Text tone="secondary" weight="medium">
-                  표시할 세트가 아직 없어요
-                </Text>
-              </div>
+              <EmptyState
+                variant="inline"
+                icon={<BrickIcon className="h-10 w-10 text-brand-300" strokeWidth={1.5} />}
+                title="표시할 세트가 아직 없어요"
+              />
             )}
           </section>
 

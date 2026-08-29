@@ -12,7 +12,7 @@ import { useSession } from "@entities/user";
 import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
-import { Badge, Button, Heading, Text } from "@shared/ui";
+import { Badge, Button, EmptyState, Heading, Text } from "@shared/ui";
 import { formatDateTime, shortId } from "../model/labels";
 
 /**
@@ -82,14 +82,11 @@ export function AdminExceptionsView() {
       {rows === null ? (
         <Text tone="muted">불러오는 중…</Text>
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-neutral-300 px-6 py-14 text-center">
-          <Text tone="secondary" weight="medium">
-            처리할 예외가 없어요
-          </Text>
-          <Text tone="muted" size="sm">
-            모든 거래가 자동 파이프라인 위에서 정상 진행 중입니다.
-          </Text>
-        </div>
+        <EmptyState
+          variant="inline"
+          title="처리할 예외가 없어요"
+          description="모든 거래가 자동 파이프라인 위에서 정상 진행 중입니다."
+        />
       ) : (
         <ul className="flex flex-col gap-4">
           {rows.map((row) => {

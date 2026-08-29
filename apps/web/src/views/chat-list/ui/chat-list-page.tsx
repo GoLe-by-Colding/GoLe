@@ -26,6 +26,7 @@ import {
   Badge,
   Button,
   Container,
+  EmptyState,
   Heading,
   LinkButton,
   MessageCircleIcon,
@@ -419,8 +420,19 @@ export function ChatListPage() {
           <LoadingRows />
         ) : conversations.length === 0 ? (
           <EmptyState
-            onStart={() => setComposer("DIRECT")}
-            onSupport={() => setComposer("SUPPORT")}
+            variant="inline"
+            icon={<MessageCircleIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+            title="아직 대화가 없어요"
+            description="판매자와 거래를 상의하거나, 다른 사용자와 모임을 시작해 보세요."
+            className="min-h-[440px] bg-neutral-50/50"
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={() => setComposer("DIRECT")}>첫 대화 시작</Button>
+                <Button variant="secondary" onClick={() => setComposer("SUPPORT")}>
+                  운영팀 문의
+                </Button>
+              </div>
+            }
           />
         ) : (
           <div className="grid min-h-[660px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
@@ -893,34 +905,6 @@ function LoadingRows() {
         ))}
       </div>
       <Skeleton className="hidden min-h-[660px] rounded-2xl md:block" />
-    </div>
-  );
-}
-
-function EmptyState({
-  onStart,
-  onSupport,
-}: {
-  readonly onStart: () => void;
-  readonly onSupport: () => void;
-}) {
-  return (
-    <div className="flex min-h-[440px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/50 px-6 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-brand-600 shadow-soft">
-        <MessageCircleIcon className="h-7 w-7" strokeWidth={1.7} />
-      </span>
-      <div>
-        <p className="font-bold text-neutral-900">아직 대화가 없어요</p>
-        <p className="mt-1 text-sm text-neutral-500">
-          판매자와 거래를 상의하거나, 다른 사용자와 모임을 시작해 보세요.
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Button onClick={onStart}>첫 대화 시작</Button>
-        <Button variant="secondary" onClick={onSupport}>
-          운영팀 문의
-        </Button>
-      </div>
     </div>
   );
 }
