@@ -74,7 +74,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
 
   if (result?.key !== requestKey) {
     return (
-      <Card padded className="flex flex-col gap-3">
+      <Card padded aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
         <Skeleton className="h-5 w-28" />
         <Skeleton className="h-48 w-full rounded-lg" />
       </Card>
@@ -83,7 +83,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
 
   if (result.failed || result.snapshot === null) {
     return (
-      <Card padded>
+      <Card padded aria-live="polite" aria-busy="false">
         <EmptyState
           variant="inline"
           title="시세를 불러오지 못했어요"
@@ -103,7 +103,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
 
   if (snapshot.state === "EMPTY") {
     return (
-      <Card padded>
+      <Card padded aria-live="polite" aria-busy="false">
         <EmptyState
           variant="inline"
           title="아직 체결 시세가 없어요"
@@ -117,7 +117,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
 
   if (snapshot.state === "OBSERVATIONS_ONLY") {
     return (
-      <Card padded className="flex flex-col gap-4">
+      <Card padded aria-live="polite" aria-busy="false" className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-base font-bold text-neutral-900">GoLe 시세</span>
           <span className="flex flex-wrap justify-end gap-2">
@@ -159,7 +159,7 @@ export function SetPriceInsight({ setNumber, highlight }: SetPriceInsightProps) 
   const up = ratio === null || ratio >= 0;
 
   return (
-    <Card padded className="flex flex-col gap-5">
+    <Card padded aria-live="polite" aria-busy="false" className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-base font-bold text-neutral-900">GoLe 시세</span>
         <span className="flex items-center gap-2">
