@@ -145,12 +145,26 @@ public class OrderService
     @OperationalSignal(
             category = Category.PAYMENT,
             title = "거래 완료",
-            description = "구매 확정과 정산 처리가 완료되었습니다.",
+            description = "구매 확정과 정산 원장 적재가 완료되었습니다.",
             includeArguments = 0)
     @Transactional
     public void complete(String orderId) {
         Order order = getById(orderId);
-        Instant now = Instant.now(clock);
+        completeAndRecord(order, Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public boolean completeAutomatically(String orderId) {
+        Order order = getById(orderId);
+        if (order.getStatus() != OrderStatus.FUNDS_HELD) {
+            return false;
+        }
+        completeAndRecord(order, Instant.now(clock));
+        return true;
+    }
+
+    private void completeAndRecord(Order order, Instant now) {
 
         order.complete(now); // FUNDS_HELD → COMPLETED (불가 시 예외)
         listingReservation.markSold(order.getListingId());
@@ -161,7 +175,7 @@ public class OrderService
                     order.getCatalogSetNumber(), order.getAmount(), 1, now, order.getListingCondition());
         }
         // 요구사항 13.5: exactly-once 정산
-        settlement.settleOnce(orderId, order.getSellerId(), order.getAmount());
+        settlement.settleOnce(order.getId(), order.getSellerId(), order.getAmount());
 
         orderRepository.save(order);
     }

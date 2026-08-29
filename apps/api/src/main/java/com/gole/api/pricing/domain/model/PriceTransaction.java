@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 체결 거래 기록. 에스크로 주문이 완료될 때 카탈로그 세트 기준으로 적재된다. (요구사항 9.1)
+ * 체결 거래 기록. 플랫폼 결제 주문이 구매확정될 때 카탈로그 세트 기준으로 적재된다. (요구사항 9.1)
  * 불변 값(이벤트). 상품 상태(condition)는 상태별 시세 산정에 사용한다(미지정 시 미개봉으로 간주).
  */
 public record PriceTransaction(String setNumber, long price, int quantity, Instant executedAt, SetCondition condition) {

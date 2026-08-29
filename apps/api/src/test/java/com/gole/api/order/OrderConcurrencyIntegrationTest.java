@@ -50,6 +50,10 @@ class OrderConcurrencyIntegrationTest {
         registry.add("gole.listing.seed-on-empty", () -> "false");
         registry.add("gole.pricing.seed-on-empty", () -> "false");
         registry.add("gole.community.seed-on-empty", () -> "false");
+        // 이 테스트는 유예 정책이 아니라 지급 증빙의 전역 유일성을 검증한다.
+        registry.add("gole.settlement.mode", () -> "MANUAL");
+        registry.add("gole.settlement.payout-contract-verified", () -> "true");
+        registry.add("gole.settlement.payout-holdback", () -> "0s");
     }
 
     @Autowired
@@ -138,9 +142,11 @@ class OrderConcurrencyIntegrationTest {
         payOrder.pay(secondOrder);
         completeOrder.complete(secondOrder);
 
-        settlements.markPaid(firstOrder, "BANK-UNIQUE-001");
+        settlements.claimManualPayout(firstOrder, "admin-1");
+        settlements.markPaid(firstOrder, "admin-1", "BANK-UNIQUE-001");
 
-        assertThatThrownBy(() -> settlements.markPaid(secondOrder, "BANK-UNIQUE-001"))
+        settlements.claimManualPayout(secondOrder, "admin-1");
+        assertThatThrownBy(() -> settlements.markPaid(secondOrder, "admin-1", "BANK-UNIQUE-001"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("이미 다른 정산");
     }

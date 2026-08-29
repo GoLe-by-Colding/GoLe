@@ -58,7 +58,7 @@ public class ReviewSeeder implements CommandLineRunner {
                 new Seed("seller-brickbank", "buyer-soo", 5, "부품 누락 없이 완벽했어요. 설명서까지 깨끗합니다."),
                 new Seed("seller-brickbank", "buyer-hyun", 4, "응답 빠르고 친절하셨어요. 직거래로 안전하게 받았습니다."),
                 new Seed("seller-minifig", "buyer-ji", 5, "미니피그 상태 최고예요. 희귀 피그 구해서 너무 만족합니다."),
-                new Seed("seller-minifig", "buyer-won", 4, "사진과 동일한 상태. 에스크로라 믿고 거래했어요."));
+                new Seed("seller-minifig", "buyer-won", 4, "사진과 동일한 상태라 안심하고 거래했어요."));
 
         Instant now = Instant.now(clock);
         int i = 0;

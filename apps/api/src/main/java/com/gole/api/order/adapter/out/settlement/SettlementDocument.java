@@ -28,6 +28,12 @@ public class SettlementDocument {
 
     private Instant createdAt;
     private Instant paidAt;
+    private int payoutAttempts;
+    private String payoutAttemptId;
+    private String payoutOperatorId;
+    private Instant payoutAttemptedAt;
+    private Instant payoutNextAttemptAt;
+    private String payoutError;
 
     @Version
     private Long version;
@@ -55,6 +61,32 @@ public class SettlementDocument {
         this.paymentReference = paymentReference;
         this.createdAt = createdAt;
         this.paidAt = paidAt;
+    }
+
+    SettlementDocument(
+            String orderId,
+            String sellerId,
+            long grossAmount,
+            long fee,
+            long payout,
+            double feeRate,
+            String status,
+            String paymentReference,
+            Instant createdAt,
+            Instant paidAt,
+            int payoutAttempts,
+            String payoutAttemptId,
+            String payoutOperatorId,
+            Instant payoutAttemptedAt,
+            Instant payoutNextAttemptAt,
+            String payoutError) {
+        this(orderId, sellerId, grossAmount, fee, payout, feeRate, status, paymentReference, createdAt, paidAt);
+        this.payoutAttempts = payoutAttempts;
+        this.payoutAttemptId = payoutAttemptId;
+        this.payoutOperatorId = payoutOperatorId;
+        this.payoutAttemptedAt = payoutAttemptedAt;
+        this.payoutNextAttemptAt = payoutNextAttemptAt;
+        this.payoutError = payoutError;
     }
 
     public String getOrderId() {
@@ -95,5 +127,29 @@ public class SettlementDocument {
 
     public Instant getPaidAt() {
         return paidAt;
+    }
+
+    public int getPayoutAttempts() {
+        return payoutAttempts;
+    }
+
+    public String getPayoutAttemptId() {
+        return payoutAttemptId;
+    }
+
+    public String getPayoutOperatorId() {
+        return payoutOperatorId;
+    }
+
+    public Instant getPayoutAttemptedAt() {
+        return payoutAttemptedAt;
+    }
+
+    public Instant getPayoutNextAttemptAt() {
+        return payoutNextAttemptAt;
+    }
+
+    public String getPayoutError() {
+        return payoutError;
     }
 }

@@ -74,7 +74,7 @@ public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUse
             throw new ForbiddenException("SHIPMENT_ACCESS_DENIED", "주문의 판매자만 운송장을 등록할 수 있습니다");
         }
         if (order.getStatus() != OrderStatus.FUNDS_HELD) {
-            throw new ShipmentStateException("결제가 완료된(에스크로 보관) 주문에만 운송장을 등록할 수 있습니다");
+            throw new ShipmentStateException("결제 승인이 확인된 주문에만 운송장을 등록할 수 있습니다");
         }
         Carrier carrier = Carrier.fromKey(command.carrierKey())
                 .orElseThrow(() ->

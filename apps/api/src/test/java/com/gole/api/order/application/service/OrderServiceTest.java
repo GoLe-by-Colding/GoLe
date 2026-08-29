@@ -190,6 +190,32 @@ class OrderServiceTest {
         assertThat(settlement.calls.get()).isEqualTo(1);
     }
 
+    @Test
+    void automaticCompletionNeverOverridesAnOpenedDispute() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        Order order = service.getById(id);
+        order.openDispute(DisputeReason.ITEM_MISMATCH, null, Instant.parse("2026-01-02T00:00:00Z"));
+        orders.save(order);
+
+        assertThat(service.completeAutomatically(id)).isFalse();
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.DISPUTED);
+        assertThat(settlement.calls.get()).isZero();
+        assertThat(reservation.sold).isFalse();
+    }
+
+    @Test
+    void automaticCompletionFinalizesOnlyFundsHeldOrder() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+
+        assertThat(service.completeAutomatically(id)).isTrue();
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(settlement.calls.get()).isEqualTo(1);
+    }
+
     /** 분쟁은 FUNDS_HELD에서만 열린다 — 완료·환불 후에는 불가. (R4.1) */
     @Test
     void dispute_onlyOpensFromFundsHeld() {

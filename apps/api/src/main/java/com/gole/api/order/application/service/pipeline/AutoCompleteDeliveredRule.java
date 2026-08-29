@@ -9,6 +9,7 @@ import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
 import com.gole.api.shipping.domain.model.Shipment;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -59,7 +60,15 @@ public class AutoCompleteDeliveredRule implements PipelineRule {
             // 이미 완료·환불·분쟁 — 멱등(R3.3). 분쟁 중이면 확정하지 않는다(R4.2).
             return false;
         }
-        completeOrder.complete(orderId);
+        try {
+            if (!completeOrder.completeAutomatically(orderId)) {
+                return false;
+            }
+        } catch (OptimisticLockingFailureException racedWithUserAction) {
+            // FUNDS_HELD를 읽은 직후 사용자가 분쟁·환불을 열 수 있다. 낙관적 락 패배는
+            // 실패가 아니라 "사용자 전이를 우선함"으로 처리하고 알림도 보내지 않는다.
+            return false;
+        }
         notifier.autoCompleted(order.getBuyerId(), order.getSellerId(), orderId);
         return true;
     }

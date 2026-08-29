@@ -6,6 +6,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OrderRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PaymentReconciliationResponse;
 import com.gole.api.admin.adapter.in.web.AdminDtos.PostRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
+import com.gole.api.admin.adapter.in.web.AdminDtos.RecoverSettlementRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReportRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.SettlementRow;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
@@ -117,13 +118,53 @@ public class AdminModerationController {
             @PathVariable String orderId,
             @Valid @RequestBody MarkSettlementPaidRequest request,
             HttpServletRequest http) {
-        SettlementRow row = SettlementRow.from(manageSettlements.markPaid(orderId, request.paymentReference()));
+        AdminActor actor = AdminActor.of(http);
+        SettlementRow row =
+                SettlementRow.from(manageSettlements.markPaid(orderId, actor.id(), request.paymentReference()));
         record(
                 http,
                 AdminActionType.SETTLEMENT_MARK_PAID,
                 AdminTargetType.SETTLEMENT,
                 orderId,
                 request.paymentReference());
+        return row;
+    }
+
+    @Operation(summary = "수동 정산 작업 배정", description = "외부 이체 전에 원장을 현재 운영자에게 원자적으로 배정합니다.")
+    @PostMapping("/settlements/{orderId}/claim")
+    public SettlementRow claimSettlement(@PathVariable String orderId, HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        SettlementRow row = SettlementRow.from(manageSettlements.claimManualPayout(orderId, actor.id()));
+        record(http, AdminActionType.SETTLEMENT_CLAIM, AdminTargetType.SETTLEMENT, orderId, null);
+        return row;
+    }
+
+    @Operation(summary = "수동 정산 재조정", description = "진행 중 원장을 잠그고 외부 지급 결과를 반드시 확인해야 하는 상태로 전환합니다.")
+    @PostMapping("/settlements/{orderId}/reconcile")
+    public SettlementRow reconcileSettlement(
+            @PathVariable String orderId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        SettlementRow row =
+                SettlementRow.from(manageSettlements.reconcileManualPayout(orderId, actor.id(), request.reason()));
+        record(http, AdminActionType.SETTLEMENT_RECONCILE, AdminTargetType.SETTLEMENT, orderId, request.reason());
+        return row;
+    }
+
+    @Operation(summary = "차단 정산 결과 복구", description = "외부 지급 결과를 확인해 지급 완료로 기록하거나 미지급 작업을 현재 운영자에게 다시 배정합니다.")
+    @PostMapping("/settlements/{orderId}/recover")
+    public SettlementRow recoverSettlement(
+            @PathVariable String orderId,
+            @Valid @RequestBody RecoverSettlementRequest request,
+            HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        SettlementRow row = SettlementRow.from(manageSettlements.recoverBlockedPayout(
+                orderId, actor.id(), request.alreadyPaid(), request.paymentReference(), request.reason()));
+        record(
+                http,
+                AdminActionType.SETTLEMENT_RECOVER,
+                AdminTargetType.SETTLEMENT,
+                orderId,
+                (request.alreadyPaid() ? "지급 확인 · " : "미지급 확인 · ") + request.reason());
         return row;
     }
 
@@ -191,7 +232,7 @@ public class AdminModerationController {
         return row;
     }
 
-    @Operation(summary = "신고 대상 조치 후 완료", description = "신고 대상이 매물이면 내리고 게시글이면 삭제한 뒤 신고를 RESOLVED로 전이합니다.")
+    @Operation(summary = "신고 대상 조치 후 완료", description = "매물 내림·게시글 삭제 전용입니다. 채팅 신고는 스냅샷 검토 후 별도 계정 조치를 사용합니다.")
     @PostMapping("/reports/{reportId}/resolve-target")
     public ReportRow resolveReportTarget(
             @PathVariable String reportId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
@@ -203,7 +244,7 @@ public class AdminModerationController {
                     AdminTargetType.LISTING,
                     report.getTargetId(),
                     request.reason());
-        } else {
+        } else if (report.getTargetType() == ReportTargetType.POST) {
             record(http, AdminActionType.POST_REMOVE, AdminTargetType.POST, report.getTargetId(), request.reason());
         }
         ReportRow row = ReportRow.from(report);

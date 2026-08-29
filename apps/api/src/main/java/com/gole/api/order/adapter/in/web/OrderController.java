@@ -7,6 +7,7 @@ import com.gole.api.order.adapter.in.web.OrderRequests.OpenDisputeRequest;
 import com.gole.api.order.adapter.in.web.OrderRequests.PlaceOrderRequest;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
+import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase;
 import com.gole.api.order.application.port.in.OpenDisputeUseCase;
 import com.gole.api.order.application.port.in.OpenDisputeUseCase.OpenDisputeCommand;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -45,6 +47,7 @@ public class OrderController {
     private final GetOrderUseCase getOrderUseCase;
     private final OpenDisputeUseCase openDisputeUseCase;
     private final GetShipmentUseCase getShipmentUseCase;
+    private final GetSellerSettlementsUseCase sellerSettlements;
 
     public OrderController(
             PlaceOrderUseCase placeOrderUseCase,
@@ -53,7 +56,8 @@ public class OrderController {
             RefundOrderUseCase refundOrderUseCase,
             GetOrderUseCase getOrderUseCase,
             OpenDisputeUseCase openDisputeUseCase,
-            GetShipmentUseCase getShipmentUseCase) {
+            GetShipmentUseCase getShipmentUseCase,
+            GetSellerSettlementsUseCase sellerSettlements) {
         this.placeOrderUseCase = placeOrderUseCase;
         this.payOrderUseCase = payOrderUseCase;
         this.completeOrderUseCase = completeOrderUseCase;
@@ -61,6 +65,7 @@ public class OrderController {
         this.getOrderUseCase = getOrderUseCase;
         this.openDisputeUseCase = openDisputeUseCase;
         this.getShipmentUseCase = getShipmentUseCase;
+        this.sellerSettlements = sellerSettlements;
     }
 
     @PostMapping
@@ -102,7 +107,7 @@ public class OrderController {
         return OrderResponse.from(getOrderUseCase.getById(orderId));
     }
 
-    @Operation(summary = "분쟁 제기", description = "구매자만. 에스크로 보관(funds_held) 상태에서만 가능하며 자동 구매확정이 정지된다.")
+    @Operation(summary = "분쟁 제기", description = "구매자만. 결제 승인(funds_held) 상태에서만 가능하며 자동 구매확정이 정지된다.")
     @PostMapping("/{orderId}/dispute")
     public OrderResponse openDispute(
             @PathVariable String orderId, @Valid @RequestBody OpenDisputeRequest request, HttpServletRequest http) {
@@ -127,6 +132,13 @@ public class OrderController {
     public OrderResponse get(@PathVariable String orderId, HttpServletRequest http) {
         requireParty(orderId, http);
         return OrderResponse.from(getOrderUseCase.getById(orderId));
+    }
+
+    @Operation(summary = "내 정산 내역", description = "판매자 본인의 정산 원장(최신순). 지급 예정액과 지급 가능 시각을 함께 준다.")
+    @GetMapping("/settlements")
+    public List<GetSellerSettlementsUseCase.SellerSettlementSummary> mySettlements(
+            @RequestParam(value = "limit", defaultValue = "50") int limit, HttpServletRequest http) {
+        return sellerSettlements.listBySeller(AuthenticatedUser.id(http), limit);
     }
 
     @Operation(summary = "내 판매 내역", description = "sellerId 기준 주문 목록(최신순). 판매자 발송 관리에 사용.")

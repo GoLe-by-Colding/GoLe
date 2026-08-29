@@ -168,6 +168,11 @@ public final class AdminDtos {
     public record MarkSettlementPaidRequest(
             @NotBlank(message = "지급 증빙 번호를 입력해야 합니다") @Size(max = 120) String paymentReference) {}
 
+    public record RecoverSettlementRequest(
+            boolean alreadyPaid,
+            @Size(max = 120) String paymentReference,
+            @NotBlank(message = "외부 지급 확인 근거를 입력해야 합니다") @Size(max = 500) String reason) {}
+
     public record SettlementRow(
             String orderId,
             String sellerId,
@@ -178,7 +183,13 @@ public final class AdminDtos {
             String status,
             String paymentReference,
             Instant createdAt,
-            Instant paidAt) {
+            Instant payableAt,
+            Instant paidAt,
+            int payoutAttempts,
+            String payoutOperatorId,
+            Instant payoutAttemptedAt,
+            Instant payoutNextAttemptAt,
+            String payoutError) {
 
         public static SettlementRow from(SettlementSummary summary) {
             return new SettlementRow(
@@ -191,7 +202,13 @@ public final class AdminDtos {
                     summary.status().name(),
                     summary.paymentReference(),
                     summary.createdAt(),
-                    summary.paidAt());
+                    summary.payableAt(),
+                    summary.paidAt(),
+                    summary.payoutAttempts(),
+                    summary.payoutOperatorId(),
+                    summary.payoutAttemptedAt(),
+                    summary.payoutNextAttemptAt(),
+                    summary.payoutError());
         }
     }
 
