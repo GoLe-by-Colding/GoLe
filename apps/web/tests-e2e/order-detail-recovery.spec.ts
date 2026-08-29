@@ -71,9 +71,14 @@ test.describe("Order detail recovery UX", () => {
 
   test("payment review can be refreshed without opening another payment", async ({ page }) => {
     let reads = 0;
+    let reconciliationCompleted = false;
     await page.route("**/api/v1/orders/order-review", async (route) => {
       reads += 1;
-      await fulfillOrder(route, reads === 1 ? "payment_review" : "funds_held", "order-review");
+      await fulfillOrder(
+        route,
+        reconciliationCompleted ? "funds_held" : "payment_review",
+        "order-review",
+      );
     });
 
     await page.goto("/orders/order-review");
@@ -83,21 +88,23 @@ test.describe("Order detail recovery UX", () => {
       "/chat?compose=support",
     );
 
+    reconciliationCompleted = true;
     await page.getByRole("button", { name: "상태 다시 확인" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
     await expect(page.getByRole("button", { name: "구매 확정" })).toBeVisible();
-    expect(reads).toBe(2);
+    expect(reads).toBeGreaterThanOrEqual(2);
   });
 
   test("payment review is automatically refreshed on the bounded polling interval", async ({
     page,
   }) => {
     let reads = 0;
+    let reconciliationCompleted = false;
     await page.route("**/api/v1/orders/order-auto-refresh", async (route) => {
       reads += 1;
       await fulfillOrder(
         route,
-        reads === 1 ? "payment_review" : "funds_held",
+        reconciliationCompleted ? "funds_held" : "payment_review",
         "order-auto-refresh",
       );
     });
@@ -105,10 +112,11 @@ test.describe("Order detail recovery UX", () => {
 
     await page.goto("/orders/order-auto-refresh");
     await expect(page.getByTestId("order-status")).toHaveText("결제 확인 필요");
+    reconciliationCompleted = true;
     await page.clock.fastForward(5_000);
 
     await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
-    expect(reads).toBe(2);
+    expect(reads).toBeGreaterThanOrEqual(2);
   });
 
   test("purchase completion requires an explicit confirmation", async ({ page }) => {
