@@ -4,17 +4,20 @@ import com.gole.api.pricing.application.port.in.GetPriceInsightsUseCase;
 import com.gole.api.pricing.application.port.in.RecordExecutedPriceUseCase;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.domain.model.ConditionGroup;
+import com.gole.api.pricing.domain.model.MarketDataState;
+import com.gole.api.pricing.domain.model.PriceSnapshot;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import com.gole.api.pricing.domain.model.PriceTransactionSource;
 import com.gole.api.pricing.domain.model.PriceValuation;
 import com.gole.api.pricing.domain.model.SetCondition;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 /**
@@ -25,9 +28,11 @@ import org.springframework.stereotype.Service;
 public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsightsUseCase {
 
     private final PriceTransactionRepositoryPort repository;
+    private final MarketEvidencePolicy evidencePolicy;
 
-    public PricingService(PriceTransactionRepositoryPort repository) {
+    public PricingService(PriceTransactionRepositoryPort repository, MarketEvidencePolicy evidencePolicy) {
         this.repository = repository;
+        this.evidencePolicy = evidencePolicy;
     }
 
     @Override
@@ -37,13 +42,50 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
                 command.price(),
                 command.quantity(),
                 command.executedAt(),
-                SetCondition.fromKey(command.condition())));
+                SetCondition.fromKey(command.condition()),
+                PriceTransactionSource.fromKey(command.source()),
+                command.sourceReference()));
+    }
+
+    @Override
+    public PriceSnapshot getSnapshot(String setNumber) {
+        List<PriceTransaction> allIncluded = included(repository.findInRangeAscending(setNumber, null, null));
+        // 공개 헤드라인은 차트·밸류에이션과 같은 미개봉 체결 모집단을 사용한다.
+        // 모든 등급을 합치면 중고 체결만 3건인 세트가 ESTABLISHED가 되면서 정작
+        // 미개봉 차트와 밸류에이션은 비는 모순이 생긴다.
+        List<PriceTransaction> ascending = byCondition(allIncluded, SetCondition.NEW_SEALED);
+        int sampleCount = ascending.size();
+        MarketDataState state = MarketDataState.fromSampleCount(sampleCount, MIN_REAL_SAMPLES);
+        List<PriceTransaction> recentFirst = new ArrayList<>(ascending);
+        Collections.reverse(recentFirst);
+        PriceStatistics statistics =
+                state == MarketDataState.ESTABLISHED ? PriceStatistics.from(setNumber, recentFirst) : null;
+        PriceValuation valuation = state == MarketDataState.ESTABLISHED
+                ? valuationFromIncluded(setNumber, allIncluded).orElse(null)
+                : null;
+        // provenance는 헤드라인뿐 아니라 같은 응답의 상태별 밸류에이션이 사용할 수 있는
+        // 모든 등급 증빙을 포함한다. 미개봉은 LIVE인데 중고 등급은 데모인 경우를 FIRST_PARTY로
+        // 잘못 표시하지 않는다.
+        Set<PriceTransactionSource> sources =
+                allIncluded.stream().map(PriceTransaction::source).collect(Collectors.toUnmodifiableSet());
+        boolean demo = sources.contains(PriceTransactionSource.DEMO_SEED)
+                || sources.contains(PriceTransactionSource.PLATFORM_TEST);
+        return new PriceSnapshot(
+                setNumber,
+                state,
+                MIN_REAL_SAMPLES,
+                sampleCount,
+                List.copyOf(recentFirst),
+                statistics,
+                valuation,
+                sources,
+                demo);
     }
 
     @Override
     public Optional<PriceStatistics> getStatistics(String setNumber, Instant from, Instant to) {
-        List<PriceTransaction> ascending = repository.findInRangeAscending(setNumber, from, to);
-        if (ascending.isEmpty()) {
+        List<PriceTransaction> ascending = included(repository.findInRangeAscending(setNumber, from, to));
+        if (ascending.size() < MIN_REAL_SAMPLES) {
             return Optional.empty(); // 요구사항 9.5: no-data
         }
         List<PriceTransaction> recentFirst = new ArrayList<>(ascending);
@@ -53,17 +95,18 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
 
     @Override
     public List<PriceTransaction> getChart(String setNumber, Instant from, Instant to) {
-        return repository.findInRangeAscending(setNumber, from, to);
+        return included(repository.findInRangeAscending(setNumber, from, to));
     }
 
     @Override
     public List<PriceTransaction> getChart(String setNumber, SetCondition condition) {
-        return repository.findByConditionAscending(setNumber, condition);
+        return included(repository.findByConditionAscending(setNumber, condition));
     }
 
     @Override
     public List<PriceTransaction> getHistory(String setNumber) {
-        List<PriceTransaction> recentFirst = new ArrayList<>(repository.findInRangeAscending(setNumber, null, null));
+        List<PriceTransaction> recentFirst =
+                new ArrayList<>(included(repository.findInRangeAscending(setNumber, null, null)));
         Collections.reverse(recentFirst);
         return recentFirst;
     }
@@ -83,32 +126,36 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
      */
     @Override
     public Optional<PriceValuation> getValuation(String setNumber) {
-        Optional<PriceStatistics> stats = getStatistics(setNumber, null, null);
-        if (stats.isEmpty()) {
+        return valuationFromIncluded(setNumber, included(repository.findInRangeAscending(setNumber, null, null)));
+    }
+
+    /**
+     * 하나의 원자적 증빙 목록에서 헤드라인과 모든 상태별 밸류에이션을 함께 계산한다.
+     *
+     * <p>스냅샷 생성 중 등급마다 저장소를 다시 읽으면 요청 도중 새 체결이 들어올 때 표본 수,
+     * 통계, 밸류에이션의 기준 시점이 달라질 수 있다. 공개 응답은 최초 한 번 읽은 목록만
+     * 사용해 내부 일관성을 보장한다.
+     */
+    private Optional<PriceValuation> valuationFromIncluded(String setNumber, List<PriceTransaction> allIncluded) {
+        List<PriceTransaction> sealed = byCondition(allIncluded, SetCondition.NEW_SEALED);
+        if (sealed.size() < MIN_REAL_SAMPLES) {
             return Optional.empty();
         }
-        // 시장 기준가: 미개봉 최근 체결가가 있으면 그 값, 없으면 전체 최근 체결가.
-        List<PriceTransaction> sealed = repository.findByConditionAscending(setNumber, SetCondition.NEW_SEALED);
-        long marketPrice = sealed.isEmpty()
-                ? stats.get().latestPrice()
-                : sealed.get(sealed.size() - 1).price();
-
-        // 그룹 표본은 소속 등급마다 다시 읽지 않고 그룹당 한 번만 읽는다.
-        Map<ConditionGroup, List<PriceTransaction>> pooledByGroup = new EnumMap<>(ConditionGroup.class);
+        long marketPrice = sealed.get(sealed.size() - 1).price();
 
         List<PriceValuation.ConditionValuation> conditions = new ArrayList<>();
         for (SetCondition condition : SetCondition.values()) {
-            List<PriceTransaction> series = repository.findByConditionAscending(setNumber, condition);
+            List<PriceTransaction> series = byCondition(allIncluded, condition);
             if (series.size() >= MIN_REAL_SAMPLES) {
                 conditions.add(PriceValuation.grade(condition, marketPrice, medianPrice(series), series.size()));
                 continue;
             }
 
             ConditionGroup group = condition.group();
-            // 단독 등급 그룹(미개봉)은 그룹 표본이 등급 표본과 같아 조회할 이유가 없다.
             if (group.members().size() > 1) {
-                List<PriceTransaction> pooled = pooledByGroup.computeIfAbsent(
-                        group, g -> repository.findByConditionsAscending(setNumber, g.members()));
+                List<PriceTransaction> pooled = allIncluded.stream()
+                        .filter(transaction -> group.members().contains(transaction.condition()))
+                        .toList();
                 if (pooled.size() >= MIN_REAL_SAMPLES) {
                     conditions.add(PriceValuation.group(
                             condition, marketPrice, medianPrice(pooled), medianFactor(pooled), pooled.size()));
@@ -123,6 +170,16 @@ public class PricingService implements RecordExecutedPriceUseCase, GetPriceInsig
 
     /** 해당 단위(등급 또는 그룹)의 실데이터를 신뢰하기 위한 최소 표본 수. */
     private static final int MIN_REAL_SAMPLES = 3;
+
+    private List<PriceTransaction> included(List<PriceTransaction> transactions) {
+        return transactions.stream().filter(evidencePolicy::includes).toList();
+    }
+
+    private static List<PriceTransaction> byCondition(List<PriceTransaction> transactions, SetCondition condition) {
+        return transactions.stream()
+                .filter(transaction -> transaction.condition() == condition)
+                .toList();
+    }
 
     private static long medianPrice(List<PriceTransaction> ascending) {
         long[] prices =

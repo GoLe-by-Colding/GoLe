@@ -1,5 +1,6 @@
 package com.gole.api.order.application.port.out;
 
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import java.time.Instant;
 
 /**
@@ -8,11 +9,13 @@ import java.time.Instant;
  */
 public interface ExecutedPriceRecorderPort {
 
-    /** 상품 상태 포함(신규). */
-    void record(String setNumber, long price, int quantity, Instant executedAt, String condition);
-
-    /** 하위호환 — 상태 미지정(미개봉 기본). */
-    default void record(String setNumber, long price, int quantity, Instant executedAt) {
-        record(setNumber, price, quantity, executedAt, null);
-    }
+    /** 주문 ID를 출처 참조로 함께 남기는 플랫폼 결제 체결. */
+    void record(
+            String orderId,
+            String setNumber,
+            long price,
+            int quantity,
+            Instant executedAt,
+            String condition,
+            PaymentEvidenceKind paymentEvidenceKind);
 }

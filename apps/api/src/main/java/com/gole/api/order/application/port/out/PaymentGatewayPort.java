@@ -1,5 +1,6 @@
 package com.gole.api.order.application.port.out;
 
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 
 /**
@@ -49,15 +50,27 @@ public interface PaymentGatewayPort {
      * @param result 검증 상태
      * @param method 확인된 결제수단. {@code PAID}가 아니거나 PG가 알려주지 않으면 null.
      */
-    record PaymentVerification(PaymentVerificationResult result, PaymentMethod method) {
+    record PaymentVerification(
+            PaymentVerificationResult result, PaymentMethod method, PaymentEvidenceKind evidenceKind) {
+
+        public PaymentVerification {
+            if (result == PaymentVerificationResult.PAID && evidenceKind == null) {
+                evidenceKind = PaymentEvidenceKind.UNVERIFIED;
+            }
+        }
 
         /** 결제수단을 확인할 수 없는 결과(대기·실패·검토 등). */
         public static PaymentVerification of(PaymentVerificationResult result) {
-            return new PaymentVerification(result, null);
+            return new PaymentVerification(result, null, null);
         }
 
+        /** 하위호환. 증빙 환경을 명시하지 않은 승인 결과는 공개 시세에서 제외한다. */
         public static PaymentVerification paid(PaymentMethod method) {
-            return new PaymentVerification(PaymentVerificationResult.PAID, method);
+            return paid(method, PaymentEvidenceKind.UNVERIFIED);
+        }
+
+        public static PaymentVerification paid(PaymentMethod method, PaymentEvidenceKind evidenceKind) {
+            return new PaymentVerification(PaymentVerificationResult.PAID, method, evidenceKind);
         }
     }
 }

@@ -31,16 +31,19 @@ public class TrendingService implements GetTrendingSetsUseCase {
     private final TrendingCachePort cache;
     private final FindLegoSetUseCase findLegoSet;
     private final Clock clock;
+    private final MarketEvidencePolicy evidencePolicy;
 
     public TrendingService(
             PriceTransactionRepositoryPort repository,
             TrendingCachePort cache,
             FindLegoSetUseCase findLegoSet,
-            Clock clock) {
+            Clock clock,
+            MarketEvidencePolicy evidencePolicy) {
         this.repository = repository;
         this.cache = cache;
         this.findLegoSet = findLegoSet;
         this.clock = clock;
+        this.evidencePolicy = evidencePolicy;
     }
 
     @Override
@@ -54,9 +57,10 @@ public class TrendingService implements GetTrendingSetsUseCase {
 
         // 최근 30일 우선, 데이터가 없으면 전체 기간으로 폴백(희소 데이터에서도 표시 유지).
         Instant since = Instant.now(clock).minus(TRENDING_WINDOW);
-        List<TradeAggregate> aggregates = repository.findTopTradedSets(effectiveLimit, since);
+        List<TradeAggregate> aggregates =
+                repository.findTopTradedSets(effectiveLimit, since, evidencePolicy.includedSources());
         if (aggregates.isEmpty()) {
-            aggregates = repository.findTopTradedSets(effectiveLimit, null);
+            aggregates = repository.findTopTradedSets(effectiveLimit, null, evidencePolicy.includedSources());
         }
 
         List<TrendingSet> trending = aggregates.stream().map(this::enrich).toList();

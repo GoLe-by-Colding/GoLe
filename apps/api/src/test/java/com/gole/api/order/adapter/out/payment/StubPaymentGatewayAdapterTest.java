@@ -11,8 +11,10 @@ class StubPaymentGatewayAdapterTest {
     void localStubKeepsDeterministicDeveloperFlow() {
         StubPaymentGatewayAdapter adapter = new StubPaymentGatewayAdapter("local");
 
-        assertThat(adapter.verifyPayment("order-1", 10_000).result())
+        var verification = adapter.verifyPayment("order-1", 10_000);
+        assertThat(verification.result())
                 .isEqualTo(com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult.PAID);
+        assertThat(verification.evidenceKind()).isEqualTo(com.gole.api.order.domain.model.PaymentEvidenceKind.TEST);
     }
 
     @Test

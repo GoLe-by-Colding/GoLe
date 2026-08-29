@@ -31,6 +31,14 @@ public class PriceTransactionDocument {
     @Indexed
     private String condition;
 
+    /** platform_payment/platform_test/direct_trade/demo_seed. 기존 문서는 null이며 검증되지 않은 레거시다. */
+    @Indexed
+    private String source;
+
+    /** 주문 ID·채팅방 ID 등 출처 원장과 대조할 참조. 신규 플랫폼 결제는 주문 ID를 기록한다. */
+    @Indexed(unique = true, sparse = true)
+    private String sourceReference;
+
     @Indexed
     private Instant executedAt;
 
@@ -44,12 +52,26 @@ public class PriceTransactionDocument {
 
     public PriceTransactionDocument(
             String id, String setNumber, long price, int quantity, Instant executedAt, String condition) {
+        this(id, setNumber, price, quantity, executedAt, condition, null, null);
+    }
+
+    public PriceTransactionDocument(
+            String id,
+            String setNumber,
+            long price,
+            int quantity,
+            Instant executedAt,
+            String condition,
+            String source,
+            String sourceReference) {
         this.id = id;
         this.setNumber = setNumber;
         this.price = price;
         this.quantity = quantity;
         this.executedAt = executedAt;
         this.condition = condition;
+        this.source = source;
+        this.sourceReference = sourceReference;
     }
 
     public String getId() {
@@ -70,6 +92,14 @@ public class PriceTransactionDocument {
 
     public String getCondition() {
         return condition;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public String getSourceReference() {
+        return sourceReference;
     }
 
     public Instant getExecutedAt() {

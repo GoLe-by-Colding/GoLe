@@ -1,6 +1,7 @@
 package com.gole.api.pricing.adapter.in.web;
 
 import com.gole.api.pricing.adapter.in.web.PricingResponses.PricePointResponse;
+import com.gole.api.pricing.adapter.in.web.PricingResponses.SnapshotResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.StatisticsResponse;
 import com.gole.api.pricing.adapter.in.web.PricingResponses.ValuationResponse;
 import com.gole.api.pricing.application.port.in.GetPriceInsightsUseCase;
@@ -27,6 +28,11 @@ public class PricingController {
 
     public PricingController(GetPriceInsightsUseCase getPriceInsightsUseCase) {
         this.getPriceInsightsUseCase = getPriceInsightsUseCase;
+    }
+
+    @GetMapping("/snapshot")
+    public SnapshotResponse snapshot(@PathVariable String setNumber) {
+        return SnapshotResponse.from(getPriceInsightsUseCase.getSnapshot(setNumber));
     }
 
     @GetMapping("/statistics")

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
+import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
@@ -20,6 +21,7 @@ import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.DisputeReason;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Clock;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +57,7 @@ class OrderServiceTest {
                 reservation,
                 new AlwaysApprovePayment(),
                 settlement,
-                (s, p, q, t, c) -> {},
+                (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 clock,
@@ -143,6 +146,38 @@ class OrderServiceTest {
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(settlement.calls.get()).isEqualTo(1);
         assertThat(reservation.sold).isTrue();
+    }
+
+    @Test
+    void completionRecordsOrderIdAsPriceEvidenceReference() {
+        reservation.available = true;
+        AtomicReference<String> recordedOrderId = new AtomicReference<>();
+        AtomicReference<String> recordedSetNumber = new AtomicReference<>();
+        AtomicReference<PaymentEvidenceKind> recordedEvidence = new AtomicReference<>();
+        ExecutedPriceRecorderPort recorder = (orderId, setNumber, price, quantity, executedAt, condition, evidence) -> {
+            recordedOrderId.set(orderId);
+            recordedSetNumber.set(setNumber);
+            recordedEvidence.set(evidence);
+        };
+        service = new OrderService(
+                orders,
+                reservation,
+                new AlwaysApprovePayment(),
+                settlement,
+                recorder,
+                (sellerId, orderId, amount) -> {},
+                new SequentialIds(),
+                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
+                new OrderPaymentTransitionService(orders, reservation),
+                events);
+
+        String orderId = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(orderId);
+        service.complete(orderId);
+
+        assertThat(recordedOrderId).hasValue(orderId);
+        assertThat(recordedSetNumber).hasValue("10307");
+        assertThat(recordedEvidence).hasValue(PaymentEvidenceKind.LIVE);
     }
 
     /**
@@ -370,7 +405,7 @@ class OrderServiceTest {
                 reservation,
                 new UnavailablePayment(),
                 settlement,
-                (s, p, q, t, c) -> {},
+                (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
@@ -452,7 +487,7 @@ class OrderServiceTest {
                 reservation,
                 paymentGateway,
                 settlement,
-                (s, p, q, t, c) -> {},
+                (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
@@ -521,7 +556,8 @@ class OrderServiceTest {
     private static class AlwaysApprovePayment implements PaymentGatewayPort {
         @Override
         public PaymentVerification verifyPayment(String orderId, long amount) {
-            return PaymentVerification.paid(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+            return PaymentVerification.paid(
+                    new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"), PaymentEvidenceKind.LIVE);
         }
 
         @Override

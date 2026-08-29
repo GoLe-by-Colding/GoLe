@@ -119,6 +119,11 @@ gole:
     seed-on-empty: ${GOLE_LISTING_SEED:false}
   pricing:
     seed-on-empty: ${GOLE_PRICING_SEED:false}
+    evidence:
+      # 공개 환경의 시장 통계는 플랫폼 결제 증빙만 포함한다. 데모·출처 미확인 문서는
+      # 로컬 개발에서 명시적으로 허용할 때만 읽는다.
+      include-demo: ${GOLE_PRICING_INCLUDE_DEMO:false}
+      include-legacy: ${GOLE_PRICING_INCLUDE_LEGACY:false}
   community:
     seed-on-empty: ${GOLE_COMMUNITY_SEED:false}
   report:

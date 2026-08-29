@@ -3,6 +3,7 @@ package com.gole.api.pricing.application.port.out;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Outbound port: 체결 거래 영속성. (요구사항 9.1~9.5)
@@ -40,7 +41,10 @@ public interface PriceTransactionRepositoryPort {
      * @param limit 반환할 최대 세트 수
      * @param since 이 시각 이후의 체결만 집계. {@code null}이면 전체 기간.
      */
-    List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since);
+    List<TradeAggregate> findTopTradedSets(
+            int limit,
+            java.time.Instant since,
+            Set<com.gole.api.pricing.domain.model.PriceTransactionSource> includedSources);
 
     /**
      * @param setNumber    세트 번호

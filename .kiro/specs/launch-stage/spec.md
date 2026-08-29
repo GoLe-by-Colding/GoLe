@@ -78,7 +78,7 @@ PortOne 설정이 준비되지 않았는데 단계만 올리면 사용자에게 
 
 ## TODO — 이번 범위 밖
 
-### T1. 직거래 완료가는 검증 전까지 시세 집계에서 제외한다
+### T1. 직거래 완료가는 검증 전까지 시세 집계에서 제외한다 — 완료
 
 **정책.** 직거래(`DIRECT_CHAT`)에서 신고된 거래완료가는 플랫폼이 결제를 매개하지 않아 금액을
 검증할 수단이 없다. 양측이 합의만 하면 임의의 숫자를 넣을 수 있으므로, 그대로 집계하면 시세가
@@ -95,6 +95,10 @@ R9(거래완료 양측 확인)이 직거래 완료를 기록하기 시작하는 
 4. 테스트: 플랫폼 결제 완료가는 기존과 동일하게 집계에 반영된다(회귀 방지).
 5. 직거래 건을 집계에 포함하는 별도 스위치를 둔다면, 기본값은 **제외**이고 변경은 이 스펙의
    변경 이력에 남는다.
+
+구현 근거: `PriceTransactionSource`, `MarketEvidencePolicy`, 주문 ID 기반
+`sourceReference`, `PricingServiceTest.marketReadsExcludeDirectDemoAndUnverifiedEvidenceByDefault`.
+콜드스타트 표시 계약은 `.kiro/specs/pricing-evidence/spec.md`에서 이어 간다.
 
 ### T2. 게이트 경로 목록의 회귀 방지
 

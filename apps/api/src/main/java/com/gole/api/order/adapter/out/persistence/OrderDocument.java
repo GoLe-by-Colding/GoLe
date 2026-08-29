@@ -73,6 +73,9 @@ public class OrderDocument {
 
     private PaymentMethodDocument paymentMethod; // nullable, 결제 승인 시 채워짐
 
+    /** LIVE/TEST/UNVERIFIED. 필드 도입 전 주문은 null이며 공개 시세에서 fail-closed 처리한다. */
+    private String paymentEvidenceKind;
+
     @Version
     private Long version;
 
@@ -100,6 +103,50 @@ public class OrderDocument {
             SettlementDocument settlement,
             PaymentMethodDocument paymentMethod,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                statusChangedAt,
+                buyerPhone,
+                disputeReason,
+                disputeDetail,
+                disputeOpenedAt,
+                shipmentRegisteredAt,
+                statusHistory,
+                settlement,
+                paymentMethod,
+                null,
+                version);
+    }
+
+    public OrderDocument(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            String status,
+            Instant createdAt,
+            Instant statusChangedAt,
+            String buyerPhone,
+            String disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
+            List<StatusChangeDocument> statusHistory,
+            SettlementDocument settlement,
+            PaymentMethodDocument paymentMethod,
+            String paymentEvidenceKind,
+            Long version) {
         this.statusChangedAt = statusChangedAt;
         this.buyerPhone = buyerPhone;
         this.disputeReason = disputeReason;
@@ -118,6 +165,7 @@ public class OrderDocument {
         this.statusHistory = statusHistory;
         this.settlement = settlement;
         this.paymentMethod = paymentMethod;
+        this.paymentEvidenceKind = paymentEvidenceKind;
         this.version = version;
     }
 
@@ -191,6 +239,10 @@ public class OrderDocument {
 
     public PaymentMethodDocument getPaymentMethod() {
         return paymentMethod;
+    }
+
+    public String getPaymentEvidenceKind() {
+        return paymentEvidenceKind;
     }
 
     public Long getVersion() {

@@ -7,6 +7,7 @@ import com.gole.api.order.domain.model.DisputeReason;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.OrderStatusChange;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import com.gole.api.order.domain.model.PhoneNumber;
@@ -112,6 +113,9 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 history,
                 null,
                 toPaymentMethodDocument(order.getPaymentMethod()),
+                order.getPaymentEvidenceKind() == null
+                        ? null
+                        : order.getPaymentEvidenceKind().name(),
                 order.getVersion());
     }
 
@@ -143,6 +147,17 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
         }
     }
 
+    private static PaymentEvidenceKind parseEvidenceKind(String raw) {
+        if (raw == null) {
+            return PaymentEvidenceKind.UNVERIFIED;
+        }
+        try {
+            return PaymentEvidenceKind.valueOf(raw);
+        } catch (IllegalArgumentException unknownKind) {
+            return PaymentEvidenceKind.UNVERIFIED;
+        }
+    }
+
     private Order toDomain(OrderDocument document) {
         List<OrderStatusChange> history = document.getStatusHistory().stream()
                 .map(change -> new OrderStatusChange(OrderStatus.valueOf(change.getStatus()), change.getOccurredAt()))
@@ -162,6 +177,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 document.getDisputeDetail(),
                 document.getDisputeOpenedAt(),
                 document.getShipmentRegisteredAt(),
+                parseEvidenceKind(document.getPaymentEvidenceKind()),
                 document.getCreatedAt(),
                 history,
                 document.getVersion());

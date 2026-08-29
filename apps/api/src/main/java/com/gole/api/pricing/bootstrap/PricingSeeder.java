@@ -97,7 +97,9 @@ public class PricingSeeder implements CommandLineRunner {
                             price,
                             1,
                             executedAt,
-                            band.condition().key()));
+                            band.condition().key(),
+                            "demo_seed",
+                            null));
                 }
             }
         }

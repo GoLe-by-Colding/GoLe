@@ -3,8 +3,10 @@ package com.gole.api.pricing.adapter.out.persistence;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import com.gole.api.pricing.domain.model.PriceTransactionSource;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
@@ -82,15 +84,25 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
     }
 
     private List<PriceTransaction> findByStorageKeys(String setNumber, List<String> keys) {
-        return repository.findBySetNumberAndConditionInOrderByExecutedAtAsc(setNumber, keys).stream()
+        Criteria conditionCriteria = Criteria.where("condition").in(keys);
+        if (keys.contains(com.gole.api.pricing.domain.model.SetCondition.NEW_SEALED.key())) {
+            conditionCriteria = new Criteria()
+                    .orOperator(conditionCriteria, Criteria.where("condition").is(null));
+        }
+        Query query = new Query(
+                        new Criteria().andOperator(Criteria.where("setNumber").is(setNumber), conditionCriteria))
+                .with(Sort.by(Sort.Direction.ASC, "executedAt"));
+        return mongoTemplate.find(query, PriceTransactionDocument.class).stream()
                 .map(this::toDomain)
                 .toList();
     }
 
     @Override
-    public List<TradeAggregate> findTopTradedSets(int limit, java.time.Instant since) {
+    public List<TradeAggregate> findTopTradedSets(
+            int limit, java.time.Instant since, Set<PriceTransactionSource> includedSources) {
         java.util.List<org.springframework.data.mongodb.core.aggregation.AggregationOperation> ops =
                 new java.util.ArrayList<>();
+        ops.add(Aggregation.match(sourceCriteria(includedSources)));
         if (since != null) {
             ops.add(Aggregation.match(Criteria.where("executedAt").gte(since)));
         }
@@ -110,6 +122,25 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 .toList();
     }
 
+    private static Criteria sourceCriteria(Set<PriceTransactionSource> includedSources) {
+        List<String> keys =
+                includedSources.stream().map(PriceTransactionSource::key).toList();
+        boolean includeLegacy = includedSources.contains(PriceTransactionSource.LEGACY_UNVERIFIED);
+        if (includeLegacy && !keys.isEmpty()) {
+            return new Criteria()
+                    .orOperator(
+                            Criteria.where("source").in(keys),
+                            Criteria.where("source").is(null));
+        }
+        if (includeLegacy) {
+            return Criteria.where("source").is(null);
+        }
+        if (keys.isEmpty()) {
+            return Criteria.where("_id").exists(false);
+        }
+        return Criteria.where("source").in(keys);
+    }
+
     /** 집계 결과 행 매핑용. {@code _id}에는 group 키(setNumber)가 담긴다. */
     private record TradeAggregateRow(String id, long tradeCount, double averagePrice) {}
 
@@ -121,7 +152,9 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 transaction.price(),
                 transaction.quantity(),
                 transaction.executedAt(),
-                transaction.condition().key());
+                transaction.condition().key(),
+                transaction.source().key(),
+                transaction.sourceReference());
     }
 
     private PriceTransaction toDomain(PriceTransactionDocument document) {
@@ -130,6 +163,8 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 document.getPrice(),
                 document.getQuantity(),
                 document.getExecutedAt(),
-                com.gole.api.pricing.domain.model.SetCondition.fromKey(document.getCondition()));
+                com.gole.api.pricing.domain.model.SetCondition.fromKey(document.getCondition()),
+                PriceTransactionSource.fromKey(document.getSource()),
+                document.getSourceReference());
     }
 }

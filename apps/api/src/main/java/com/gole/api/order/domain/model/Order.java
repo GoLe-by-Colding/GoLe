@@ -27,6 +27,8 @@ public final class Order {
     private OrderStatus status;
     /** 결제 승인 시점에 PG가 알려준 결제수단. 결제 전·레거시 주문은 null. */
     private PaymentMethod paymentMethod;
+    /** 결제 검증 순간의 LIVE/TEST 증빙. 서버 설정이 바뀌어도 구매확정 때 재분류하지 않는다. */
+    private PaymentEvidenceKind paymentEvidenceKind;
     /** 구매자 CS 연락처(숫자만 정규화). 미수집(레거시) 주문은 null. (shipping-and-fees R8.1) */
     private final PhoneNumber buyerPhone;
 
@@ -133,6 +135,47 @@ public final class Order {
             Instant createdAt,
             List<OrderStatusChange> history,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                paymentMethod,
+                buyerPhone,
+                disputeReason,
+                disputeDetail,
+                disputeOpenedAt,
+                shipmentRegisteredAt,
+                null,
+                createdAt,
+                history,
+                version);
+    }
+
+    /** 정식 생성자(결제 증빙 포함). 영속성 어댑터가 사용한다. */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            PhoneNumber buyerPhone,
+            DisputeReason disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
+            PaymentEvidenceKind paymentEvidenceKind,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.listingId = Objects.requireNonNull(listingId, "listingId");
         this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
@@ -142,6 +185,7 @@ public final class Order {
         this.amount = amount;
         this.status = Objects.requireNonNull(status, "status");
         this.paymentMethod = paymentMethod;
+        this.paymentEvidenceKind = paymentEvidenceKind;
         this.buyerPhone = buyerPhone;
         this.disputeReason = disputeReason;
         this.disputeDetail = disputeDetail;
@@ -249,8 +293,14 @@ public final class Order {
      * @param paymentMethod 확인된 결제수단. PG가 알려주지 않았으면 {@link PaymentMethod#UNKNOWN}.
      */
     public void confirmFundsHeld(Instant now, PaymentMethod paymentMethod) {
+        confirmFundsHeld(now, paymentMethod, PaymentEvidenceKind.UNVERIFIED);
+    }
+
+    /** 결제 승인 시점의 결제수단과 증빙 등급을 함께 불변 기록한다. */
+    public void confirmFundsHeld(Instant now, PaymentMethod paymentMethod, PaymentEvidenceKind paymentEvidenceKind) {
         requirePaymentDecisionStatus("funds-held");
         this.paymentMethod = paymentMethod == null ? PaymentMethod.UNKNOWN : paymentMethod;
+        this.paymentEvidenceKind = paymentEvidenceKind == null ? PaymentEvidenceKind.UNVERIFIED : paymentEvidenceKind;
         transitionTo(OrderStatus.FUNDS_HELD, now);
     }
 
@@ -391,6 +441,10 @@ public final class Order {
     /** 결제 승인 시점에 확인된 결제수단. 결제 전이거나 결제수단 도입 이전 주문이면 null. */
     public PaymentMethod getPaymentMethod() {
         return paymentMethod;
+    }
+
+    public PaymentEvidenceKind getPaymentEvidenceKind() {
+        return paymentEvidenceKind;
     }
 
     public PhoneNumber getBuyerPhone() {

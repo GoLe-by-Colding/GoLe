@@ -1,5 +1,6 @@
 package com.gole.api.pricing.adapter.in.web;
 
+import com.gole.api.pricing.domain.model.PriceSnapshot;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import com.gole.api.pricing.domain.model.PriceValuation;
@@ -33,10 +34,64 @@ public final class PricingResponses {
         }
     }
 
-    public record PricePointResponse(long price, int quantity, Instant executedAt) {
+    public record PricePointResponse(long price, int quantity, Instant executedAt, String source, String condition) {
 
         public static PricePointResponse from(PriceTransaction tx) {
-            return new PricePointResponse(tx.price(), tx.quantity(), tx.executedAt());
+            return new PricePointResponse(
+                    tx.price(),
+                    tx.quantity(),
+                    tx.executedAt(),
+                    tx.source().key(),
+                    tx.condition().key());
+        }
+    }
+
+    public record ProvenanceResponse(String mode, List<String> includedSources, boolean demo) {}
+
+    public record SnapshotResponse(
+            String setNumber,
+            String state,
+            int minimumSamples,
+            int sampleCount,
+            List<PricePointResponse> observations,
+            StatisticsResponse statistics,
+            ValuationResponse valuation,
+            ProvenanceResponse provenance) {
+
+        public static SnapshotResponse from(PriceSnapshot snapshot) {
+            return new SnapshotResponse(
+                    snapshot.setNumber(),
+                    snapshot.state().name(),
+                    snapshot.minimumSamples(),
+                    snapshot.sampleCount(),
+                    snapshot.observations().stream()
+                            .map(PricePointResponse::from)
+                            .toList(),
+                    snapshot.statistics() == null ? null : StatisticsResponse.of(snapshot.statistics()),
+                    snapshot.valuation() == null ? null : ValuationResponse.of(snapshot.valuation()),
+                    new ProvenanceResponse(
+                            provenanceMode(snapshot),
+                            snapshot.includedSources().stream()
+                                    .map(source -> source.key())
+                                    .sorted()
+                                    .toList(),
+                            snapshot.demo()));
+        }
+
+        private static String provenanceMode(PriceSnapshot snapshot) {
+            if (snapshot.includedSources().isEmpty()) {
+                return "NONE";
+            }
+            if (snapshot.includedSources().size() > 1) {
+                return "MIXED";
+            }
+            return switch (snapshot.includedSources().iterator().next()) {
+                case PLATFORM_PAYMENT -> "FIRST_PARTY";
+                case PLATFORM_TEST -> "DEMO";
+                case DIRECT_TRADE -> "DIRECT_TRADE";
+                case DEMO_SEED -> "DEMO";
+                case LEGACY_UNVERIFIED -> "LEGACY_UNVERIFIED";
+            };
         }
     }
 

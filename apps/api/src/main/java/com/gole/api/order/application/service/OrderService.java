@@ -174,7 +174,13 @@ public class OrderService
         // 요구사항 9.1: 체결가 기록(카탈로그 연결 시)
         if (order.getCatalogSetNumber() != null) {
             executedPriceRecorder.record(
-                    order.getCatalogSetNumber(), order.getAmount(), 1, now, order.getListingCondition());
+                    order.getId(),
+                    order.getCatalogSetNumber(),
+                    order.getAmount(),
+                    1,
+                    now,
+                    order.getListingCondition(),
+                    order.getPaymentEvidenceKind());
         }
         // 요구사항 13.5: exactly-once 정산
         settlement.settleOnce(order.getId(), order.getSellerId(), order.getAmount());

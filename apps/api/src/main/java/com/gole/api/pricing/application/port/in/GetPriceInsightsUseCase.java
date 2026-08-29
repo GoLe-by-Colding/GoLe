@@ -1,5 +1,6 @@
 package com.gole.api.pricing.application.port.in;
 
+import com.gole.api.pricing.domain.model.PriceSnapshot;
 import com.gole.api.pricing.domain.model.PriceStatistics;
 import com.gole.api.pricing.domain.model.PriceTransaction;
 import com.gole.api.pricing.domain.model.PriceValuation;
@@ -13,7 +14,10 @@ import java.util.Optional;
  */
 public interface GetPriceInsightsUseCase {
 
-    /** 통계. 거래가 없으면 empty(요구사항 9.5). */
+    /** 표본 단계와 provenance를 포함한 일관된 공개 시세 스냅샷. */
+    PriceSnapshot getSnapshot(String setNumber);
+
+    /** 통계. 검증된 체결이 최소 표본(현재 3건)에 못 미치면 empty(요구사항 9.5). */
     Optional<PriceStatistics> getStatistics(String setNumber, Instant from, Instant to);
 
     /** 차트용 시계열(시간 오름차순). (요구사항 9.3) */

@@ -22,6 +22,9 @@ gole:
     seed-on-empty: true
   pricing:
     seed-on-empty: true
+    evidence:
+      include-demo: true
+      include-legacy: false
   community:
     seed-on-empty: true
   report:

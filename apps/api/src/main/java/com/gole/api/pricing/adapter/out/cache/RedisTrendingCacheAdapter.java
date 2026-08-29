@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
 public class RedisTrendingCacheAdapter implements TrendingCachePort {
 
     private static final Logger log = LoggerFactory.getLogger(RedisTrendingCacheAdapter.class);
-    private static final String KEY_PREFIX = "pricing:trending:";
+    private static final String KEY_PREFIX = "pricing:trending:v2:";
 
     private final StringRedisTemplate redisTemplate;
 

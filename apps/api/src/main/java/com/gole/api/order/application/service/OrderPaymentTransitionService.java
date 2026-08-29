@@ -29,7 +29,7 @@ public class OrderPaymentTransitionService {
             return order.getStatus();
         }
         switch (verification.result()) {
-            case PAID -> order.confirmFundsHeld(now, verification.method());
+            case PAID -> order.confirmFundsHeld(now, verification.method(), verification.evidenceKind());
             case FAILED -> {
                 order.failPayment(now);
                 listings.release(order.getListingId());

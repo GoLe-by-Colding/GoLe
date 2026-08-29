@@ -7,6 +7,7 @@ import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
@@ -136,7 +137,9 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                             amount,
                             method.type(),
                             method.provider());
-                    return PaymentVerification.paid(method);
+                    PaymentEvidenceKind evidenceKind =
+                            "LIVE".equals(expectedChannelType) ? PaymentEvidenceKind.LIVE : PaymentEvidenceKind.TEST;
+                    return PaymentVerification.paid(method, evidenceKind);
                 }
                 logLedgerMismatch("결제 원장 검증 실패", orderId, validationFailure, amount, payment);
                 publishReviewRequired(orderId, validationFailure, status, payment);

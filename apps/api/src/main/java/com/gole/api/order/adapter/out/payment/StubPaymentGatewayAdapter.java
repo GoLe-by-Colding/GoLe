@@ -1,6 +1,7 @@
 package com.gole.api.order.adapter.out.payment;
 
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.util.UUID;
@@ -44,7 +45,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
         log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
-        return PaymentVerification.paid(STUB_PAYMENT_METHOD);
+        return PaymentVerification.paid(STUB_PAYMENT_METHOD, PaymentEvidenceKind.TEST);
     }
 
     @Override

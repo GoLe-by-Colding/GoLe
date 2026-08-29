@@ -16,6 +16,8 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
     private final String environment;
     private final boolean verificationEmailEnabled;
     private final Map<String, Boolean> seedFlags;
+    private final boolean demoPricingEvidence;
+    private final boolean legacyPricingEvidence;
 
     public ProductionConfigurationGuard(
             @Value("${gole.environment:local}") String environment,
@@ -26,9 +28,13 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
             @Value("${gole.community.seed-on-empty:false}") boolean communitySeed,
             @Value("${gole.report.seed-on-empty:false}") boolean reportSeed,
             @Value("${gole.review.seed-on-empty:false}") boolean reviewSeed,
-            @Value("${gole.media.seed-on-startup:false}") boolean mediaSeed) {
+            @Value("${gole.media.seed-on-startup:false}") boolean mediaSeed,
+            @Value("${gole.pricing.evidence.include-demo:false}") boolean demoPricingEvidence,
+            @Value("${gole.pricing.evidence.include-legacy:false}") boolean legacyPricingEvidence) {
         this.environment = environment;
         this.verificationEmailEnabled = verificationEmailEnabled;
+        this.demoPricingEvidence = demoPricingEvidence;
+        this.legacyPricingEvidence = legacyPricingEvidence;
         this.seedFlags = Map.of(
                 "catalog", catalogSeed,
                 "listing", listingSeed,
@@ -47,6 +53,10 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
         }
         if (!isPublicEnvironment()) {
             return;
+        }
+        if (demoPricingEvidence || legacyPricingEvidence) {
+            throw new IllegalStateException(
+                    "Public environments must exclude demo and unverified legacy pricing evidence");
         }
         String enabledSeeds = seedFlags.entrySet().stream()
                 .filter(Map.Entry::getValue)

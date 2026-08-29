@@ -49,6 +49,8 @@ jobs:
           GOLE_CATALOG_SEED: "false"
           GOLE_LISTING_SEED: "false"
           GOLE_PRICING_SEED: "false"
+          GOLE_PRICING_INCLUDE_DEMO: "false"
+          GOLE_PRICING_INCLUDE_LEGACY: "false"
           GOLE_COMMUNITY_SEED: "false"
           GOLE_REPORT_SEED: "false"
           GOLE_REVIEW_SEED: "false"

@@ -14,6 +14,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerific
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import com.sun.net.httpserver.HttpServer;
@@ -110,6 +111,19 @@ class PortOnePaymentGatewayAdapterTest {
                 adapter(mock(OperationalEventPublisher.class)).verifyPayment("order-1", 15_000);
 
         assertThat(result.method()).isEqualTo(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+        assertThat(result.evidenceKind()).isEqualTo(PaymentEvidenceKind.TEST);
+    }
+
+    @Test
+    @DisplayName("LIVE 채널 결제는 주문에 실제 금전 결제 증빙으로 고정한다")
+    void recordsLivePaymentEvidenceAtVerificationTime() {
+        responseBody.set(validPaidResponse("order-live").replace("\"TEST\"", "\"LIVE\""));
+
+        PaymentVerification result =
+                adapter(mock(OperationalEventPublisher.class), "", "LIVE").verifyPayment("order-live", 15_000);
+
+        assertThat(result.result()).isEqualTo(PaymentVerificationResult.PAID);
+        assertThat(result.evidenceKind()).isEqualTo(PaymentEvidenceKind.LIVE);
     }
 
     /**
@@ -467,13 +481,18 @@ class PortOnePaymentGatewayAdapterTest {
     }
 
     private PortOnePaymentGatewayAdapter adapter(OperationalEventPublisher events, String cardChannelKey) {
+        return adapter(events, cardChannelKey, "TEST");
+    }
+
+    private PortOnePaymentGatewayAdapter adapter(
+            OperationalEventPublisher events, String cardChannelKey, String channelType) {
         return new PortOnePaymentGatewayAdapter(
                 "http://127.0.0.1:" + server.getAddress().getPort(),
                 "api-secret",
                 "store-1",
                 "channel-key-1",
                 cardChannelKey,
-                "TEST",
+                channelType,
                 events);
     }
 

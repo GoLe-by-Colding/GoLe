@@ -10,6 +10,7 @@ import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.application.port.out.TrendingCachePort;
 import com.gole.api.pricing.domain.model.PriceTransaction;
+import com.gole.api.pricing.domain.model.PriceTransactionSource;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -40,7 +41,8 @@ class TrendingServiceTest {
             }
             throw new RuntimeException("not found");
         };
-        TrendingService service = new TrendingService(repo, cache, catalog, CLOCK);
+        TrendingService service =
+                new TrendingService(repo, cache, catalog, CLOCK, new MarketEvidencePolicy(false, false));
 
         List<TrendingSet> result = service.getTrending(8);
 
@@ -51,6 +53,7 @@ class TrendingServiceTest {
         // 카탈로그에 없는 세트는 setNumber로 우아하게 대체
         assertThat(result.get(1).name()).isEqualTo("99999");
         assertThat(result.get(1).imageUrl()).isNull();
+        assertThat(repo.includedSources).containsExactly(PriceTransactionSource.PLATFORM_PAYMENT);
         // 결과가 캐시에 저장됨
         assertThat(cache.stored).containsKey(8);
     }
@@ -67,7 +70,8 @@ class TrendingServiceTest {
                 sn -> {
                     throw new RuntimeException("should not be called");
                 },
-                CLOCK);
+                CLOCK,
+                new MarketEvidencePolicy(false, false));
 
         List<TrendingSet> result = service.getTrending(8);
 
@@ -84,7 +88,8 @@ class TrendingServiceTest {
                 sn -> {
                     throw new RuntimeException();
                 },
-                CLOCK);
+                CLOCK,
+                new MarketEvidencePolicy(false, false));
 
         service.getTrending(0);
 
@@ -95,6 +100,7 @@ class TrendingServiceTest {
         private final List<TradeAggregate> aggregates;
         private boolean called = false;
         private int lastLimit = -1;
+        private java.util.Set<PriceTransactionSource> includedSources = java.util.Set.of();
 
         FakeRepo(List<TradeAggregate> aggregates) {
             this.aggregates = aggregates;
@@ -123,9 +129,13 @@ class TrendingServiceTest {
         }
 
         @Override
-        public List<TradeAggregate> findTopTradedSets(int limit, Instant since) {
+        public List<TradeAggregate> findTopTradedSets(
+                int limit,
+                Instant since,
+                java.util.Set<com.gole.api.pricing.domain.model.PriceTransactionSource> includedSources) {
             called = true;
             lastLimit = limit;
+            this.includedSources = includedSources;
             return aggregates;
         }
     }

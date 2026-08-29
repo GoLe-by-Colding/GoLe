@@ -9,6 +9,7 @@ import com.gole.api.order.adapter.out.persistence.OrderDocument.PaymentMethodDoc
 import com.gole.api.order.adapter.out.persistence.OrderDocument.StatusChangeDocument;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
@@ -38,11 +39,13 @@ class OrderPaymentMethodPersistenceTest {
     @DisplayName("결제수단이 저장 후 복원까지 살아남는다")
     void roundTripsPaymentMethod() {
         Order order = Order.place("order-1", "listing-1", "buyer-1", "seller-1", "10305", "new_sealed", 15_000, NOW);
-        order.confirmFundsHeld(NOW, new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+        order.confirmFundsHeld(
+                NOW, new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"), PaymentEvidenceKind.LIVE);
 
         Order restored = adapterEchoingSavedDocument().save(order);
 
         assertThat(restored.getPaymentMethod()).isEqualTo(new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY"));
+        assertThat(restored.getPaymentEvidenceKind()).isEqualTo(PaymentEvidenceKind.LIVE);
     }
 
     @Test
@@ -68,6 +71,7 @@ class OrderPaymentMethodPersistenceTest {
 
         assertThat(restored).isPresent();
         assertThat(restored.get().getPaymentMethod()).isNull();
+        assertThat(restored.get().getPaymentEvidenceKind()).isEqualTo(PaymentEvidenceKind.UNVERIFIED);
     }
 
     /**

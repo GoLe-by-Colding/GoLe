@@ -12,6 +12,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerific
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.PaymentEvidenceKind;
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.time.Instant;
@@ -50,10 +51,12 @@ class OrderPaymentTransitionServiceTest {
         OrderPaymentTransitionService service = new OrderPaymentTransitionService(orders, listings);
         PaymentMethod kakaoPay = new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY");
 
-        OrderStatus status = service.applyPaymentVerification("order-1", PaymentVerification.paid(kakaoPay), NOW);
+        OrderStatus status = service.applyPaymentVerification(
+                "order-1", PaymentVerification.paid(kakaoPay, PaymentEvidenceKind.TEST), NOW);
 
         assertThat(status).isEqualTo(OrderStatus.FUNDS_HELD);
         assertThat(order.getPaymentMethod()).isEqualTo(kakaoPay);
+        assertThat(order.getPaymentEvidenceKind()).isEqualTo(PaymentEvidenceKind.TEST);
     }
 
     @Test

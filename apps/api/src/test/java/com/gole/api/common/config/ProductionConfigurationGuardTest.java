@@ -48,12 +48,23 @@ class ProductionConfigurationGuardTest {
     }
 
     @Test
+    void stagingRejectsDemoOrUnverifiedPricingEvidence() {
+        ProductionConfigurationGuard guard = new ProductionConfigurationGuard(
+                "staging", false, false, false, false, false, false, false, false, true, false);
+
+        assertThatThrownBy(() -> guard.run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("unverified legacy pricing evidence");
+    }
+
+    @Test
     void localDefaultsAndHardenedProductionAreAllowed() {
         assertThatCode(() -> guard("local", false, true).run(NO_ARGS)).doesNotThrowAnyException();
         assertThatCode(() -> guard("production", true, false).run(NO_ARGS)).doesNotThrowAnyException();
     }
 
     private static ProductionConfigurationGuard guard(String environment, boolean email, boolean seeds) {
-        return new ProductionConfigurationGuard(environment, email, seeds, seeds, seeds, seeds, seeds, seeds, seeds);
+        return new ProductionConfigurationGuard(
+                environment, email, seeds, seeds, seeds, seeds, seeds, seeds, seeds, false, false);
     }
 }
