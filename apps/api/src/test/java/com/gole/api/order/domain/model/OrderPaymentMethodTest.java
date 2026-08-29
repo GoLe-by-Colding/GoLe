@@ -71,6 +71,7 @@ class OrderPaymentMethodTest {
         PaymentMethod kakaoPay = new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY");
         order.confirmFundsHeld(NOW, kakaoPay);
 
+        order.requestRefund(NOW.plusSeconds(30));
         order.refund(NOW.plusSeconds(60));
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);

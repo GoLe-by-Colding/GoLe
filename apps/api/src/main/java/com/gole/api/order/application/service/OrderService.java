@@ -22,6 +22,8 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
+import com.gole.api.order.application.service.OrderPaymentTransitionService.RefundPreparation;
+import com.gole.api.order.application.service.OrderPaymentTransitionService.RefundStart;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
@@ -182,30 +184,36 @@ public class OrderService
 
     @Override
     public void refund(String orderId) {
-        Order order = getById(orderId);
-        if (order.getStatus() == OrderStatus.REFUNDED) {
+        Instant now = Instant.now(clock);
+        RefundPreparation preparation = paymentTransitions.beginRefund(orderId, now);
+        Order order = preparation.order();
+        if (preparation.result() == RefundStart.ALREADY_REFUNDED) {
             return;
         }
-        Instant now = Instant.now(clock);
 
-        if (order.getStatus() == OrderStatus.REFUND_PENDING) {
+        if (preparation.result() == RefundStart.ALREADY_PENDING) {
             if (paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
-                paymentTransitions.finalizeRefund(orderId, now);
-                publishRefundCompleted(orderId, now);
+                Instant confirmedAt = Instant.now(clock);
+                paymentTransitions.finalizeRefund(orderId, confirmedAt);
+                publishRefundCompleted(orderId, confirmedAt);
+                return;
             }
-            return;
+            // 이전 취소 호출이 PG에 도달하기 전에 끊겼을 수 있다. 어댑터는 먼저 원장의
+            // 기존 REQUESTED/CANCELLED 취소를 확인하고 currentCancellableAmount로 잔액을
+            // 고정하므로 같은 주문의 재조정 호출이 중복 환불을 만들지 않는다.
         }
 
         RefundResult result = paymentGateway.refund(orderId, order.getAmount());
         if (result == RefundResult.REQUESTED) {
-            paymentTransitions.markRefundPending(orderId, now);
-            publishPaymentEvent(
-                    Level.WARNING,
-                    "환불 처리 대기",
-                    "PG에 환불이 접수되어 최종 완료를 기다리고 있습니다.",
-                    orderId,
-                    OrderStatus.REFUND_PENDING,
-                    now);
+            if (preparation.result() == RefundStart.STARTED) {
+                publishPaymentEvent(
+                        Level.WARNING,
+                        "환불 처리 대기",
+                        "PG에 환불이 접수되어 최종 완료를 기다리고 있습니다.",
+                        orderId,
+                        OrderStatus.REFUND_PENDING,
+                        now);
+            }
             return;
         }
 
@@ -215,17 +223,19 @@ public class OrderService
 
     @Override
     public void confirmRefund(String orderId) {
-        Order order = getById(orderId);
-        if (order.getStatus() == OrderStatus.REFUNDED) {
+        Instant now = Instant.now(clock);
+        RefundPreparation preparation = paymentTransitions.beginRefund(orderId, now);
+        Order order = preparation.order();
+        if (preparation.result() == RefundStart.ALREADY_REFUNDED) {
             return;
         }
         if (!paymentGateway.isFullyRefunded(orderId, order.getAmount())) {
             throw new PaymentGatewayUnavailableException(
                     orderId, new IllegalStateException("PG refund is not final yet"));
         }
-        Instant now = Instant.now(clock);
-        paymentTransitions.finalizeRefund(orderId, now);
-        publishRefundCompleted(orderId, now);
+        Instant confirmedAt = Instant.now(clock);
+        paymentTransitions.finalizeRefund(orderId, confirmedAt);
+        publishRefundCompleted(orderId, confirmedAt);
     }
 
     @Override

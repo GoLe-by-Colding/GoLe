@@ -71,6 +71,14 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
     }
 
     @Override
+    public List<Order> findByStatusAfterId(OrderStatus status, String afterId) {
+        List<OrderDocument> documents = afterId == null
+                ? repository.findTop100ByStatusOrderByIdAsc(status.name())
+                : repository.findTop100ByStatusAndIdGreaterThanOrderByIdAsc(status.name(), afterId);
+        return documents.stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public List<Order> findPaymentPendingCreatedBefore(Instant cutoff) {
         return repository
                 .findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(OrderStatus.PAYMENT_PENDING.name(), cutoff)
@@ -100,6 +108,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                         : order.getDisputeReason().name(),
                 order.getDisputeDetail(),
                 order.getDisputeOpenedAt(),
+                order.getShipmentRegisteredAt(),
                 history,
                 null,
                 toPaymentMethodDocument(order.getPaymentMethod()),
@@ -152,6 +161,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 document.getDisputeReason() == null ? null : DisputeReason.valueOf(document.getDisputeReason()),
                 document.getDisputeDetail(),
                 document.getDisputeOpenedAt(),
+                document.getShipmentRegisteredAt(),
                 document.getCreatedAt(),
                 history,
                 document.getVersion());

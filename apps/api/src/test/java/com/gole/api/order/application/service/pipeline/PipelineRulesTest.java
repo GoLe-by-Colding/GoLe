@@ -297,7 +297,9 @@ class PipelineRulesTest {
         @Override
         public void refund(String orderId) {
             refunded.add(orderId);
-            orders.store.get(orderId).refund(NOW);
+            Order order = orders.store.get(orderId);
+            order.requestRefund(NOW);
+            order.refund(NOW);
         }
     }
 

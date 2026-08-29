@@ -187,6 +187,11 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 }
                 return RefundResult.SUCCEEDED;
             }
+            if (hasRequestedFullCancellation(payment, orderId, amount)) {
+                // 비동기 취소는 결제 상태가 아직 PAID일 수 있다. 동일 취소를 다시 만들지 않고
+                // Transaction.Cancelled 웹훅 또는 다음 원장 재조정을 기다린다.
+                return RefundResult.REQUESTED;
+            }
             if (!"PAID".equals(status)) {
                 publishReviewRequired(orderId, "자동 환불할 수 없는 PG 상태", status);
                 throw new PaymentReviewRequiredException();
@@ -295,6 +300,24 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
             return number(amountMap.get("cancelled"));
         }
         return -1;
+    }
+
+    private boolean hasRequestedFullCancellation(Map<?, ?> payment, String orderId, long amount) {
+        if (!(payment.get("cancellations") instanceof List<?> cancellations)) {
+            return false;
+        }
+        for (Object value : cancellations) {
+            if (!(value instanceof Map<?, ?> cancellation)
+                    || !"REQUESTED".equals(normalizedText(cancellation.get("status")))) {
+                continue;
+            }
+            if (number(cancellation.get("totalAmount")) != amount) {
+                publishReviewRequired(orderId, "진행 중인 환불 금액 불일치 또는 누락", "REQUESTED", payment);
+                throw new PaymentReviewRequiredException();
+            }
+            return true;
+        }
+        return false;
     }
 
     private static long number(Object value) {

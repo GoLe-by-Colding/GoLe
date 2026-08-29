@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.common.exception.ForbiddenException;
-import com.gole.api.order.application.port.in.GetOrderUseCase;
+import com.gole.api.order.application.port.in.PrepareShipmentRegistrationUseCase;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -66,6 +66,7 @@ class ShipmentServiceTest {
         assertThat(saved.getStatus()).isEqualTo(DeliveryStatus.PENDING);
         assertThat(saved.getWaybill().value()).isEqualTo("123456789012");
         assertThat(saved.getSellerPhone()).isEqualTo("01012345678");
+        assertThat(orders.store.get("order-1").getShipmentRegisteredAt()).isEqualTo(NOW);
         assertThat(notifier.waybillRegistered).containsExactly("buyer-1");
     }
 
@@ -236,7 +237,7 @@ class ShipmentServiceTest {
         }
     }
 
-    static class FakeOrders implements GetOrderUseCase {
+    static class FakeOrders implements PrepareShipmentRegistrationUseCase {
         private final Map<String, Order> store = new HashMap<>();
 
         void put(Order order) {
@@ -244,22 +245,16 @@ class ShipmentServiceTest {
         }
 
         @Override
-        public Order getById(String orderId) {
+        public Order prepare(String orderId, String sellerId) {
             Order order = store.get(orderId);
             if (order == null) {
                 throw new OrderNotFoundException(orderId);
             }
+            if (!order.getSellerId().equals(sellerId)) {
+                throw new ForbiddenException("SHIPMENT_ACCESS_DENIED", "주문의 판매자만 운송장을 등록할 수 있습니다");
+            }
+            order.registerShipment(NOW);
             return order;
-        }
-
-        @Override
-        public List<Order> getByBuyerId(String buyerId) {
-            return List.of();
-        }
-
-        @Override
-        public List<Order> getBySellerId(String sellerId) {
-            return List.of();
         }
     }
 }

@@ -28,7 +28,12 @@ public interface PaymentGatewayPort {
     /** PG 원장을 조회해 결제의 최종/진행 상태를 검증한다. */
     PaymentVerification verifyPayment(String orderId, long amount);
 
-    /** 환불 처리. PG가 비동기 접수만 한 경우 REQUESTED를 반환한다. */
+    /**
+     * 환불 처리. PG가 비동기 접수만 한 경우 REQUESTED를 반환한다.
+     *
+     * <p>같은 {@code orderId}로 재호출될 수 있으므로 구현체는 원장의 기존 취소 내역과
+     * 취소 가능 잔액을 검증해 중복 환불 없이 재조정할 수 있어야 한다.
+     */
     RefundResult refund(String orderId, long amount);
 
     /** PG 원장 재조회로 전액 환불 완료 여부를 확인한다. */

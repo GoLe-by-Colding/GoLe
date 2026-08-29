@@ -15,6 +15,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerific
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.OrderStateException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.DisputeReason;
 import com.gole.api.order.domain.model.Order;
@@ -157,6 +158,83 @@ class OrderServiceTest {
         service.refund(id);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
         assertThat(settlement.calls.get()).isZero();
+    }
+
+    @Test
+    void refund_claimsPendingStateBeforeCallingPaymentGateway() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        AtomicInteger refundCalls = new AtomicInteger();
+        service = serviceWith(new AlwaysApprovePayment() {
+            @Override
+            public RefundResult refund(String orderId, long amount) {
+                refundCalls.incrementAndGet();
+                assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+                return RefundResult.SUCCEEDED;
+            }
+        });
+
+        service.refund(id);
+
+        assertThat(refundCalls).hasValue(1);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+    }
+
+    @Test
+    void refundGatewayOutage_keepsOrderClaimedAndBlocksCompletion() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service = serviceWith(new UnavailablePayment());
+
+        assertThatThrownBy(() -> service.refund(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
+
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+        assertThatThrownBy(() -> service.complete(id)).isInstanceOf(OrderStateException.class);
+        assertThat(settlement.calls).hasValue(0);
+        assertThat(reservation.released).isFalse();
+    }
+
+    @Test
+    void refundRetry_recoversPendingOrderAfterAmbiguousGatewayFailure() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        RecoverableRefundPayment payment = new RecoverableRefundPayment();
+        service = serviceWith(payment);
+
+        assertThatThrownBy(() -> service.refund(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+
+        service.refund(id);
+
+        assertThat(payment.refundAttempts).hasValue(2);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(reservation.released).isTrue();
+    }
+
+    @Test
+    void refund_rejectsFundsHeldOrderClaimedForShipmentBeforeCallingGateway() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        Order order = service.getById(id);
+        order.registerShipment(Instant.parse("2026-01-01T00:01:00Z"));
+        orders.save(order);
+        AtomicInteger refundCalls = new AtomicInteger();
+        service = serviceWith(new AlwaysApprovePayment() {
+            @Override
+            public RefundResult refund(String orderId, long amount) {
+                refundCalls.incrementAndGet();
+                return RefundResult.SUCCEEDED;
+            }
+        });
+
+        assertThatThrownBy(() -> service.refund(id)).isInstanceOf(OrderStateException.class);
+
+        assertThat(refundCalls).hasValue(0);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.FUNDS_HELD);
     }
 
     /** 분쟁 → 환불 판정 경로에서도 정산이 없어야 한다. (R5.5, R4.4) */
@@ -504,6 +582,23 @@ class OrderServiceTest {
         @Override
         public boolean isFullyRefunded(String orderId, long amount) {
             throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("portone timeout"));
+        }
+    }
+
+    private static final class RecoverableRefundPayment extends AlwaysApprovePayment {
+        private final AtomicInteger refundAttempts = new AtomicInteger();
+
+        @Override
+        public RefundResult refund(String orderId, long amount) {
+            if (refundAttempts.incrementAndGet() == 1) {
+                throw new PaymentGatewayUnavailableException(orderId, new IllegalStateException("ambiguous timeout"));
+            }
+            return RefundResult.SUCCEEDED;
+        }
+
+        @Override
+        public boolean isFullyRefunded(String orderId, long amount) {
+            return false;
         }
     }
 

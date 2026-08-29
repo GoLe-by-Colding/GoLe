@@ -105,6 +105,7 @@ class OrderPaymentMethodPersistenceTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(new StatusChangeDocument(OrderStatus.FUNDS_HELD.name(), NOW)),
                 null,
                 paymentMethod,

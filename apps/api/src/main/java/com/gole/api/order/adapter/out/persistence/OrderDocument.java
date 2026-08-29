@@ -22,7 +22,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
     @CompoundIndex(name = "buyer_created_at_idx", def = "{'buyerId': 1, 'createdAt': -1}"),
     @CompoundIndex(name = "seller_created_at_idx", def = "{'sellerId': 1, 'createdAt': -1}"),
     // 파이프라인 만료 후보 조회(설계 P2). 이름 고정 — 배포 전 동일 키 다른 이름 인덱스 확인.
-    @CompoundIndex(name = "order_status_changed_at_idx", def = "{'status': 1, 'statusChangedAt': 1}")
+    @CompoundIndex(name = "order_status_changed_at_idx", def = "{'status': 1, 'statusChangedAt': 1}"),
+    @CompoundIndex(name = "order_status_id_idx", def = "{'status': 1, '_id': 1}")
 })
 public class OrderDocument {
 
@@ -63,6 +64,9 @@ public class OrderDocument {
     private String disputeDetail;
     private Instant disputeOpenedAt;
 
+    /** 주문 버전에 묶인 최초 운송장 등록 펜스. 도입 전 주문은 null. */
+    private Instant shipmentRegisteredAt;
+
     private List<StatusChangeDocument> statusHistory;
 
     private SettlementDocument settlement; // nullable, 완료/정산 시 채워짐
@@ -91,6 +95,7 @@ public class OrderDocument {
             String disputeReason,
             String disputeDetail,
             Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
             List<StatusChangeDocument> statusHistory,
             SettlementDocument settlement,
             PaymentMethodDocument paymentMethod,
@@ -100,6 +105,7 @@ public class OrderDocument {
         this.disputeReason = disputeReason;
         this.disputeDetail = disputeDetail;
         this.disputeOpenedAt = disputeOpenedAt;
+        this.shipmentRegisteredAt = shipmentRegisteredAt;
         this.id = id;
         this.listingId = listingId;
         this.buyerId = buyerId;
@@ -169,6 +175,10 @@ public class OrderDocument {
 
     public Instant getDisputeOpenedAt() {
         return disputeOpenedAt;
+    }
+
+    public Instant getShipmentRegisteredAt() {
+        return shipmentRegisteredAt;
     }
 
     public List<StatusChangeDocument> getStatusHistory() {

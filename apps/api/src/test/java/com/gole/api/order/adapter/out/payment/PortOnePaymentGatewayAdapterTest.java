@@ -401,6 +401,23 @@ class PortOnePaymentGatewayAdapterTest {
     }
 
     @Test
+    @DisplayName("이미 접수된 전액 환불은 취소 API를 중복 호출하지 않고 대기 처리한다")
+    void treatsRequestedFullCancellationAsIdempotentRefund() {
+        responseBody.set(validPaidResponse("order-requested")
+                .replace(
+                        "\"amount\":{\"total\":15000},",
+                        "\"amount\":{\"total\":15000},"
+                                + "\"cancellations\":[{\"status\":\"REQUESTED\",\"totalAmount\":15000}],"));
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+
+        RefundResult result = adapter(events).refund("order-requested", 15_000);
+
+        assertThat(result).isEqualTo(RefundResult.REQUESTED);
+        assertThat(cancelRequests).hasValue(0);
+        verify(events, never()).publish(any());
+    }
+
+    @Test
     @DisplayName("환불 성공 응답 금액이 주문 금액과 다르면 완료 처리하지 않는다")
     void rejectsCancellationResponseWithDifferentAmount() {
         responseBody.set(validPaidResponse("order-refund"));

@@ -2,6 +2,9 @@ package com.gole.api.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
@@ -10,16 +13,27 @@ import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
+import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
+import com.gole.api.order.application.port.in.OpenDisputeUseCase;
+import com.gole.api.order.application.port.in.OpenDisputeUseCase.OpenDisputeCommand;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
+import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderStateException;
+import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
+import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
+import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase;
+import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase.RegisterWaybillCommand;
+import com.gole.api.shipping.application.port.out.ShipmentNotifierPort;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -27,6 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -72,7 +87,28 @@ class OrderConcurrencyIntegrationTest {
     CompleteOrderUseCase completeOrder;
 
     @Autowired
+    RefundOrderUseCase refundOrder;
+
+    @Autowired
+    GetOrderUseCase getOrder;
+
+    @Autowired
+    OpenDisputeUseCase openDispute;
+
+    @Autowired
+    RegisterWaybillUseCase registerWaybill;
+
+    @Autowired
+    GetShipmentUseCase getShipment;
+
+    @Autowired
     ManageSettlementsUseCase settlements;
+
+    @Autowired
+    PriceTransactionRepositoryPort prices;
+
+    @MockitoBean
+    ShipmentNotifierPort shipmentNotifier;
 
     private String createActiveListing() {
         return createListing.create(new CreateListingCommand(
@@ -149,5 +185,115 @@ class OrderConcurrencyIntegrationTest {
         assertThatThrownBy(() -> settlements.markPaid(secondOrder, "admin-1", "BANK-UNIQUE-001"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("이미 다른 정산");
+    }
+
+    @Test
+    void refundAndShipmentRegistration_cannotBothWin() throws Exception {
+        for (int i = 0; i < 8; i++) {
+            int attempt = i;
+            String orderId = paidOrder("shipment-race-buyer-" + attempt);
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<Boolean> refundWon = pool.submit(() -> runAfter(start, () -> refundOrder.refund(orderId)));
+                Future<Boolean> shipmentWon = pool.submit(() -> runAfter(
+                        start,
+                        () -> registerWaybill.register(new RegisterWaybillCommand(
+                                orderId, "seller-x", "cj_logistics", "12345678901" + attempt, "01012345678"))));
+
+                start.countDown();
+                boolean refunded = refundWon.get(30, TimeUnit.SECONDS);
+                boolean shipped = shipmentWon.get(30, TimeUnit.SECONDS);
+
+                assertThat(refunded).isNotEqualTo(shipped);
+                OrderStatus finalStatus = getOrder.getById(orderId).getStatus();
+                boolean shipmentExists = getShipment.getByOrderId(orderId).isPresent();
+                assertThat((finalStatus == OrderStatus.REFUNDED && !shipmentExists)
+                                || (finalStatus == OrderStatus.FUNDS_HELD && shipmentExists))
+                        .isTrue();
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void shipmentFailure_rollsBackOrderFenceAndShipmentTogether() {
+        String orderId = paidOrder("shipment-rollback-buyer");
+        doThrow(new IllegalStateException("notification failure after shipment save"))
+                .when(shipmentNotifier)
+                .notifyWaybillRegistered(anyString(), anyString(), anyString(), anyString());
+
+        try {
+            assertThatThrownBy(() -> registerWaybill.register(new RegisterWaybillCommand(
+                            orderId, "seller-x", "cj_logistics", "123456789012", "01012345678")))
+                    .isInstanceOf(IllegalStateException.class);
+        } finally {
+            reset(shipmentNotifier);
+        }
+
+        assertThat(getOrder.getById(orderId).getShipmentRegisteredAt()).isNull();
+        assertThat(getShipment.getByOrderId(orderId)).isEmpty();
+    }
+
+    @Test
+    void disputedRefundAndCompletion_cannotBothCreateMoneyOutcomes() throws Exception {
+        for (int i = 0; i < 8; i++) {
+            String buyerId = "dispute-race-buyer-" + i;
+            String orderId = paidOrder(buyerId);
+            String listingId = getOrder.getById(orderId).getListingId();
+            int priceCountBefore =
+                    prices.findInRangeAscending("10307", null, null).size();
+            openDispute.open(new OpenDisputeCommand(orderId, buyerId, "item_mismatch", "동시성 검증"));
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<Boolean> refundWon = pool.submit(() -> runAfter(start, () -> refundOrder.refund(orderId)));
+                Future<Boolean> completionWon =
+                        pool.submit(() -> runAfter(start, () -> completeOrder.complete(orderId)));
+
+                start.countDown();
+                boolean refunded = refundWon.get(30, TimeUnit.SECONDS);
+                boolean completed = completionWon.get(30, TimeUnit.SECONDS);
+
+                assertThat(refunded).isNotEqualTo(completed);
+                OrderStatus finalStatus = getOrder.getById(orderId).getStatus();
+                boolean hasSettlement = settlements.list(null, 100).stream()
+                        .anyMatch(summary -> summary.orderId().equals(orderId));
+                int priceCountAfter =
+                        prices.findInRangeAscending("10307", null, null).size();
+                if (finalStatus == OrderStatus.REFUNDED) {
+                    assertThat(hasSettlement).isFalse();
+                    assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.ACTIVE);
+                    assertThat(priceCountAfter).isEqualTo(priceCountBefore);
+                } else {
+                    assertThat(finalStatus).isEqualTo(OrderStatus.COMPLETED);
+                    assertThat(hasSettlement).isTrue();
+                    assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.SOLD);
+                    assertThat(priceCountAfter).isEqualTo(priceCountBefore + 1);
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    private String paidOrder(String buyerId) {
+        String orderId = placeOrder.place(new PlaceOrderCommand(createActiveListing(), buyerId));
+        payOrder.pay(orderId);
+        return orderId;
+    }
+
+    private static boolean runAfter(CountDownLatch start, Runnable action) {
+        try {
+            start.await();
+            action.run();
+            return true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (RuntimeException expectedLoser) {
+            return false;
+        }
     }
 }

@@ -34,6 +34,13 @@ public final class Order {
     private DisputeReason disputeReason;
     private String disputeDetail;
     private Instant disputeOpenedAt;
+    /**
+     * 판매자가 최초 운송장 등록을 선점한 시각.
+     *
+     * <p>배송 문서와 별개로 주문 버전에 함께 기록해, 미발송 환불 시작과 운송장 등록이
+     * 서로 다른 컬렉션에서 동시에 성공하지 못하게 하는 동시성 펜스다.
+     */
+    private Instant shipmentRegisteredAt;
 
     private Long version;
 
@@ -87,6 +94,45 @@ public final class Order {
             Instant createdAt,
             List<OrderStatusChange> history,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                paymentMethod,
+                buyerPhone,
+                disputeReason,
+                disputeDetail,
+                disputeOpenedAt,
+                null,
+                createdAt,
+                history,
+                version);
+    }
+
+    /** 정식 생성자(배송 등록 동시성 펜스 포함). 영속성 어댑터가 사용한다. */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            PhoneNumber buyerPhone,
+            DisputeReason disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.listingId = Objects.requireNonNull(listingId, "listingId");
         this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
@@ -100,6 +146,7 @@ public final class Order {
         this.disputeReason = disputeReason;
         this.disputeDetail = disputeDetail;
         this.disputeOpenedAt = disputeOpenedAt;
+        this.shipmentRegisteredAt = shipmentRegisteredAt;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
         this.version = version;
@@ -257,7 +304,28 @@ public final class Order {
         if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.DISPUTED) {
             throw new OrderStateException("Cannot transition to refund-pending from " + status);
         }
+        if (status == OrderStatus.FUNDS_HELD && shipmentRegisteredAt != null) {
+            throw new OrderStateException("Cannot refund an order after shipment registration");
+        }
         transitionTo(OrderStatus.REFUND_PENDING, now);
+    }
+
+    /**
+     * 최초 운송장 등록을 주문 버전으로 선점한다.
+     *
+     * <p>같은 주문의 운송장 교체는 멱등으로 허용하지만, 환불이 먼저 시작됐다면 상태 검사에서
+     * 거부된다. 이 메서드를 배송 문서 저장보다 먼저 커밋해야 미발송 환불과 교차 컬렉션 경쟁이
+     * 생기지 않는다.
+     *
+     * @return 최초 등록 펜스를 새로 기록했으면 {@code true}
+     */
+    public boolean registerShipment(Instant now) {
+        requireStatus(OrderStatus.FUNDS_HELD, "shipment-registered");
+        if (shipmentRegisteredAt != null) {
+            return false;
+        }
+        shipmentRegisteredAt = Objects.requireNonNull(now, "now");
+        return true;
     }
 
     /** PG에서 확인된 환불 완료. 재전송 웹훅을 위해 멱등이다. (요구사항 13.6) */
@@ -265,9 +333,7 @@ public final class Order {
         if (status == OrderStatus.REFUNDED) {
             return;
         }
-        if (status != OrderStatus.FUNDS_HELD
-                && status != OrderStatus.DISPUTED
-                && status != OrderStatus.REFUND_PENDING) {
+        if (status != OrderStatus.REFUND_PENDING) {
             throw new OrderStateException("Cannot transition to refunded from " + status);
         }
         transitionTo(OrderStatus.REFUNDED, now);
@@ -341,6 +407,10 @@ public final class Order {
 
     public Instant getDisputeOpenedAt() {
         return disputeOpenedAt;
+    }
+
+    public Instant getShipmentRegisteredAt() {
+        return shipmentRegisteredAt;
     }
 
     /** 마지막 상태 전이 시각. 파이프라인 타임아웃 판정의 기준이다. (R9) */

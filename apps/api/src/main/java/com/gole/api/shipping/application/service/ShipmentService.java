@@ -1,10 +1,9 @@
 package com.gole.api.shipping.application.service;
 
 import com.gole.api.common.exception.BadRequestException;
-import com.gole.api.common.exception.ForbiddenException;
-import com.gole.api.order.application.port.in.GetOrderUseCase;
+import com.gole.api.order.application.port.in.PrepareShipmentRegistrationUseCase;
+import com.gole.api.order.domain.exception.OrderStateException;
 import com.gole.api.order.domain.model.Order;
-import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.PhoneNumber;
 import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
 import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase;
@@ -29,11 +28,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 배송 유스케이스. 운송장 등록(판매자 검증) · 트래커 조회 반영 · 조회.
  *
- * <p>order 컨텍스트는 {@link GetOrderUseCase} 인바운드 포트로만 참조한다(NFR-3).
+ * <p>order 컨텍스트는 {@link PrepareShipmentRegistrationUseCase} 인바운드 포트로만
+ * 참조한다(NFR-3). 주문 펜스와 배송 문서는 하나의 Mongo 트랜잭션에서 함께 커밋한다.
  */
 @Service
 public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUseCase, GetShipmentUseCase {
@@ -42,7 +43,7 @@ public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUse
     private final DeliveryTrackerPort tracker;
     private final TrackerCachePort trackerCache;
     private final ShipmentNotifierPort notifier;
-    private final GetOrderUseCase getOrder;
+    private final PrepareShipmentRegistrationUseCase prepareShipment;
     private final Clock clock;
     private final Duration activeCacheTtl;
     private final Duration deliveredCacheTtl;
@@ -52,7 +53,7 @@ public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUse
             DeliveryTrackerPort tracker,
             TrackerCachePort trackerCache,
             ShipmentNotifierPort notifier,
-            GetOrderUseCase getOrder,
+            PrepareShipmentRegistrationUseCase prepareShipment,
             Clock clock,
             @Value("${shipping.tracker.cache-ttl-active:PT10M}") Duration activeCacheTtl,
             @Value("${shipping.tracker.cache-ttl-delivered:PT24H}") Duration deliveredCacheTtl) {
@@ -60,22 +61,15 @@ public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUse
         this.tracker = tracker;
         this.trackerCache = trackerCache;
         this.notifier = notifier;
-        this.getOrder = getOrder;
+        this.prepareShipment = prepareShipment;
         this.clock = clock;
         this.activeCacheTtl = activeCacheTtl;
         this.deliveredCacheTtl = deliveredCacheTtl;
     }
 
     @Override
+    @Transactional
     public Shipment register(RegisterWaybillCommand command) {
-        Order order = getOrder.getById(command.orderId());
-        if (!order.getSellerId().equals(command.sellerId())) {
-            // R1.2: 주문의 판매자가 아니면 거부
-            throw new ForbiddenException("SHIPMENT_ACCESS_DENIED", "주문의 판매자만 운송장을 등록할 수 있습니다");
-        }
-        if (order.getStatus() != OrderStatus.FUNDS_HELD) {
-            throw new ShipmentStateException("결제 승인이 확인된 주문에만 운송장을 등록할 수 있습니다");
-        }
         Carrier carrier = Carrier.fromKey(command.carrierKey())
                 .orElseThrow(() ->
                         new BadRequestException("UNSUPPORTED_CARRIER", "지원하지 않는 택배사입니다: " + command.carrierKey()));
@@ -85,6 +79,16 @@ public class ShipmentService implements RegisterWaybillUseCase, TrackShipmentUse
                         ? null
                         : new PhoneNumber(command.sellerPhone()).value();
         Instant now = Instant.now(clock);
+        // 주문 문서의 버전을 먼저 갱신한다. 환불이 선점했다면 여기서 거부되고, 이후 배송
+        // 저장이 실패해도 바깥 트랜잭션이 펜스까지 함께 롤백한다.
+        Order order;
+        try {
+            order = prepareShipment.prepare(command.orderId(), command.sellerId());
+        } catch (OrderStateException invalidOrderState) {
+            // 기존 배송 API의 409 오류 계약을 유지한다. 낙관적 락 충돌은 이 예외가 아니므로
+            // 전역 CONCURRENT_UPDATE_CONFLICT 응답으로 그대로 전달된다.
+            throw new ShipmentStateException("결제 승인이 확인된 주문에만 운송장을 등록할 수 있습니다");
+        }
 
         Shipment shipment = shipments
                 .findByOrderId(command.orderId())

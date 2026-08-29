@@ -24,4 +24,10 @@ public interface OrderMongoRepository extends MongoRepository<OrderDocument, Str
 
     /** 상태별 조회(예외 큐 — DISPUTED 목록 등). */
     List<OrderDocument> findTop100ByStatusOrderByCreatedAtAsc(String status);
+
+    /** 상태별 순환 배치의 첫 페이지. 오래된 실패 건이 뒤 주문을 굶기지 않도록 ID 순서를 쓴다. */
+    List<OrderDocument> findTop100ByStatusOrderByIdAsc(String status);
+
+    /** 상태별 순환 배치의 다음 페이지. */
+    List<OrderDocument> findTop100ByStatusAndIdGreaterThanOrderByIdAsc(String status, String id);
 }

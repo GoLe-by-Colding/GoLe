@@ -65,14 +65,23 @@ public class OrderPaymentTransitionService {
         return orders.save(order).getStatus();
     }
 
+    /**
+     * 외부 PG 취소 호출 전에 주문을 {@code REFUND_PENDING}으로 선점한다.
+     *
+     * <p>이 짧은 트랜잭션이 구매확정·운송장 등록과 같은 주문 버전을 경쟁하므로, PG에서
+     * 돈을 돌려준 뒤 판매자 정산까지 성립하는 이중 귀속을 막는다.
+     */
     @Transactional
-    public OrderStatus markRefundPending(String orderId, Instant now) {
+    public RefundPreparation beginRefund(String orderId, Instant now) {
         Order order = load(orderId);
-        if (order.getStatus() == OrderStatus.REFUND_PENDING || order.getStatus() == OrderStatus.REFUNDED) {
-            return order.getStatus();
+        if (order.getStatus() == OrderStatus.REFUNDED) {
+            return new RefundPreparation(order, RefundStart.ALREADY_REFUNDED);
+        }
+        if (order.getStatus() == OrderStatus.REFUND_PENDING) {
+            return new RefundPreparation(order, RefundStart.ALREADY_PENDING);
         }
         order.requestRefund(now);
-        return orders.save(order).getStatus();
+        return new RefundPreparation(orders.save(order), RefundStart.STARTED);
     }
 
     @Transactional
@@ -89,4 +98,12 @@ public class OrderPaymentTransitionService {
     private Order load(String orderId) {
         return orders.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
     }
+
+    public enum RefundStart {
+        STARTED,
+        ALREADY_PENDING,
+        ALREADY_REFUNDED
+    }
+
+    public record RefundPreparation(Order order, RefundStart result) {}
 }
