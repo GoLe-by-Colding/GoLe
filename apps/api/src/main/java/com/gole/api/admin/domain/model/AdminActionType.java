@@ -20,5 +20,19 @@ public enum AdminActionType {
     ORDER_DISPUTE_RESOLVE,
     /** 개인정보 열람도 조치다 — 운영자의 전체 연락처 열람 감사 기록(R8.5). */
     ORDER_CONTACT_VIEW,
-    SETTLEMENT_MARK_PAID
+    SETTLEMENT_CLAIM,
+    SETTLEMENT_RECONCILE,
+    SETTLEMENT_RECOVER,
+    SETTLEMENT_MARK_PAID,
+    SUPPORT_ASSIGN,
+    SUPPORT_TRANSFER,
+    SUPPORT_TAKEOVER,
+    SUPPORT_REPLY,
+    SUPPORT_RESOLVE,
+    SUPPORT_REOPEN,
+    SUPPORT_INTERNAL_NOTE,
+    /** 신고에 고정된 채팅 문맥 열람. 실시간 방 접근과 구분해 별도 감사한다. */
+    CHAT_REPORT_SNAPSHOT_VIEW,
+    /** 서비스 공개 단계·기능 개방 변경. 서비스 전체를 열고 닫는 조치다. */
+    LAUNCH_STAGE_CHANGE
 }

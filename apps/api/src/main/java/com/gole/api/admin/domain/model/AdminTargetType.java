@@ -10,5 +10,8 @@ public enum AdminTargetType {
     REPORT,
     CATALOG_SET,
     ORDER,
-    SETTLEMENT
+    SETTLEMENT,
+    SUPPORT_TICKET,
+    CHAT_REPORT_SNAPSHOT,
+    LAUNCH_CONFIG
 }
