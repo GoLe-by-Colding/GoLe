@@ -50,9 +50,180 @@ async function mockPaymentsOpen(page: Page) {
   );
 }
 
+async function seedSession(page: Page, accountId: string) {
+  await page.addInitScript((id) => {
+    window.localStorage.setItem(
+      "gole.session",
+      JSON.stringify({ accountId: id, sessionToken: "", role: "USER" }),
+    );
+  }, accountId);
+}
+
+async function fulfillApiError(route: Route, status: number, message: string) {
+  await route.fulfill({
+    status,
+    contentType: "application/json",
+    body: JSON.stringify({ code: `HTTP_${status}`, message }),
+  });
+}
+
 test.describe("Order detail recovery UX", () => {
   test.beforeEach(async ({ page }) => {
     await mockPaymentsOpen(page);
+    // 운송장 없음(404)은 발송 전 정상 상태다. 오류를 검증하는 테스트는 더 구체적인 라우트를
+    // 나중에 등록해 이 기본 응답을 덮어쓴다.
+    await page.route("**/api/v1/orders/*/shipment", (route) =>
+      fulfillApiError(route, 404, "shipment not found"),
+    );
+  });
+
+  test("401 offers a verified login return path to the same order", async ({ page }) => {
+    await page.route("**/api/v1/orders/order-auth", (route) =>
+      fulfillApiError(route, 401, "unauthorized"),
+    );
+
+    await page.goto("/orders/order-auth");
+
+    await expect(page.getByRole("heading", { name: "로그인이 필요합니다" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "로그인하고 주문 보기" })).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Forders%2Forder-auth",
+    );
+    await expect(page.getByRole("button", { name: "다시 시도" })).toHaveCount(0);
+  });
+
+  test("403 explains access denial without sending the user into a retry loop", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/orders/order-forbidden", (route) =>
+      fulfillApiError(route, 403, "forbidden"),
+    );
+
+    await page.goto("/orders/order-forbidden");
+
+    await expect(page.getByRole("heading", { name: "접근할 수 없는 주문입니다" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "홈으로" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("button", { name: "다시 시도" })).toHaveCount(0);
+  });
+
+  test("404 explains that the order is missing without exposing retry", async ({ page }) => {
+    await page.route("**/api/v1/orders/order-missing", (route) =>
+      fulfillApiError(route, 404, "not found"),
+    );
+
+    await page.goto("/orders/order-missing");
+
+    await expect(page.getByRole("heading", { name: "주문을 찾을 수 없습니다" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "홈으로" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("button", { name: "다시 시도" })).toHaveCount(0);
+  });
+
+  test("only a retryable server failure exposes retry and recovers in place", async ({ page }) => {
+    let reads = 0;
+    let serverRecovered = false;
+    await page.route("**/api/v1/orders/order-server-error", async (route) => {
+      reads += 1;
+      if (!serverRecovered) {
+        await fulfillApiError(route, 503, "temporarily unavailable");
+        return;
+      }
+      await fulfillOrder(route, "completed", "order-server-error");
+    });
+
+    await page.goto("/orders/order-server-error");
+    await expect(page.getByRole("heading", { name: "주문을 불러오지 못했습니다" })).toBeVisible();
+
+    const readsBeforeRetry = reads;
+    serverRecovered = true;
+    await page.getByRole("button", { name: "다시 시도" }).click();
+
+    await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
+    expect(reads).toBeGreaterThan(readsBeforeRetry);
+  });
+
+  test("shipment 5xx locks buyer refund until absence is confirmed by 404", async ({ page }) => {
+    await seedSession(page, "buyer-ux");
+    await page.route("**/api/v1/orders/order-shipment-buyer", (route) =>
+      fulfillOrder(route, "funds_held", "order-shipment-buyer"),
+    );
+    let shipmentReads = 0;
+    let shipmentLookupRecovered = false;
+    await page.route("**/api/v1/orders/order-shipment-buyer/shipment", async (route) => {
+      shipmentReads += 1;
+      await fulfillApiError(
+        route,
+        shipmentLookupRecovered ? 404 : 503,
+        shipmentLookupRecovered ? "shipment not found" : "shipment lookup failed",
+      );
+    });
+
+    await page.goto("/orders/order-shipment-buyer");
+
+    await expect(page.getByText("배송 정보를 불러오지 못했어요.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "환불", exact: true })).toHaveCount(0);
+
+    const readsBeforeRetry = shipmentReads;
+    shipmentLookupRecovered = true;
+    await page.getByRole("button", { name: "배송 정보 다시 확인" }).click();
+
+    await expect(page.getByRole("button", { name: "환불", exact: true })).toBeVisible();
+    expect(shipmentReads).toBeGreaterThan(readsBeforeRetry);
+  });
+
+  test("shipment 5xx locks seller waybill registration until a retry resolves", async ({
+    page,
+  }) => {
+    await seedSession(page, "seller-ux");
+    await page.route("**/api/v1/orders/order-shipment-seller", (route) =>
+      fulfillOrder(route, "funds_held", "order-shipment-seller"),
+    );
+    let shipmentReads = 0;
+    let shipmentLookupRecovered = false;
+    await page.route("**/api/v1/orders/order-shipment-seller/shipment", async (route) => {
+      shipmentReads += 1;
+      await fulfillApiError(
+        route,
+        shipmentLookupRecovered ? 404 : 500,
+        shipmentLookupRecovered ? "shipment not found" : "shipment lookup failed",
+      );
+    });
+
+    await page.goto("/orders/order-shipment-seller");
+
+    await expect(page.getByText("배송 정보를 불러오지 못했어요.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "운송장 등록" })).toHaveCount(0);
+
+    const readsBeforeRetry = shipmentReads;
+    shipmentLookupRecovered = true;
+    await page.getByRole("button", { name: "배송 정보 다시 확인" }).click();
+
+    await expect(page.getByRole("button", { name: "운송장 등록" })).toBeVisible();
+    expect(shipmentReads).toBeGreaterThan(readsBeforeRetry);
+  });
+
+  test("completed seller order never exposes the buyer-only review form", async ({ page }) => {
+    await seedSession(page, "seller-ux");
+    await page.route("**/api/v1/orders/order-seller-review", (route) =>
+      fulfillOrder(route, "completed", "order-seller-review"),
+    );
+
+    await page.goto("/orders/order-seller-review");
+
+    await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
+    await expect(page.getByText("판매자 후기 남기기", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "후기 등록" })).toHaveCount(0);
+  });
+
+  test("completed buyer order exposes the review form", async ({ page }) => {
+    await seedSession(page, "buyer-ux");
+    await page.route("**/api/v1/orders/order-buyer-review", (route) =>
+      fulfillOrder(route, "completed", "order-buyer-review"),
+    );
+
+    await page.goto("/orders/order-buyer-review");
+
+    await expect(page.getByText("판매자 후기 남기기", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "후기 등록" })).toBeVisible();
   });
 
   /**

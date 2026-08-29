@@ -54,6 +54,50 @@ const AUTO_REFRESH_MAX_ATTEMPTS = 12;
 
 type ConfirmationAction = "complete" | "refund";
 
+type InitialLoadFailureKind =
+  | "unauthenticated"
+  | "forbidden"
+  | "not_found"
+  | "retryable"
+  | "unavailable";
+
+interface InitialLoadFailure {
+  readonly kind: InitialLoadFailureKind;
+  readonly message: string;
+}
+
+type ShipmentLoadState = "loading" | "absent" | "ready" | "error";
+
+function classifyInitialLoadFailure(cause: unknown): InitialLoadFailure {
+  if (cause instanceof ApiError) {
+    if (cause.status === 401) {
+      return { kind: "unauthenticated", message: "주문을 보려면 로그인이 필요합니다." };
+    }
+    if (cause.status === 403) {
+      return { kind: "forbidden", message: "이 주문을 볼 권한이 없습니다." };
+    }
+    if (cause.status === 404) {
+      return { kind: "not_found", message: "주문을 찾을 수 없습니다." };
+    }
+    if (cause.status >= 500) {
+      return {
+        kind: "retryable",
+        message: "주문 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
+      };
+    }
+  }
+  return {
+    kind: "unavailable",
+    message: "주문 정보를 확인할 수 없습니다. 홈에서 다시 시작해 주세요.",
+  };
+}
+
+/** orderId를 경로 한 칸으로 고정해 외부 URL·쿼리 주입이 불가능한 복귀 링크를 만든다. */
+function orderLoginHref(orderId: string): string {
+  const returnTo = `/orders/${encodeURIComponent(orderId)}`;
+  return `/login?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 /**
  * 이 주문에서 결제창을 띄운 적이 있는지 기억한다.
  *
@@ -121,7 +165,11 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const { session } = useSession();
   const [order, setOrder] = useState<Order | null>(null);
   const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [shipmentLoadState, setShipmentLoadState] = useState<ShipmentLoadState>("loading");
+  const [initialLoadFailure, setInitialLoadFailure] = useState<InitialLoadFailure | null>(null);
+  const [loadRevision, setLoadRevision] = useState(0);
   const [trackerBusy, setTrackerBusy] = useState(false);
+  const [shipmentRetrying, setShipmentRetrying] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,27 +199,48 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         const [data, launch] = await Promise.all([fetchOrder(orderId), fetchLaunchConfig()]);
         if (active) {
           setOrder(data);
+          setInitialLoadFailure(null);
           setPaymentsOpen(launch.features.payments);
           setReviewsOpen(launch.features.reviews);
         }
-      } catch {
+      } catch (cause) {
         if (active) {
-          setError("주문을 불러오지 못했습니다.");
+          setInitialLoadFailure(classifyInitialLoadFailure(cause));
+          setRefreshing(false);
         }
         return;
       }
       // 운송장은 없을 수 있다(발송 전) — 404는 정상이다.
       try {
         const s = await fetchShipment(orderId);
-        if (active) setShipment(s);
-      } catch {
-        if (active) setShipment(null);
+        if (active) {
+          setShipment(s);
+          setShipmentLoadState("ready");
+        }
+      } catch (cause) {
+        if (active) {
+          setShipment(null);
+          setShipmentLoadState(
+            cause instanceof ApiError && cause.status === 404 ? "absent" : "error",
+          );
+        }
+      } finally {
+        if (active) setRefreshing(false);
       }
     })();
     return () => {
       active = false;
     };
-  }, [orderId]);
+  }, [loadRevision, orderId]);
+
+  const retryInitialLoad = useCallback(() => {
+    setRefreshing(true);
+    setInitialLoadFailure(null);
+    setError(undefined);
+    setShipment(null);
+    setShipmentLoadState("loading");
+    setLoadRevision((current) => current + 1);
+  }, []);
 
   const refreshOrder = useCallback(async () => {
     setRefreshing(true);
@@ -254,6 +323,20 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
       // 조회 실패는 치명적이지 않다 — 다음 폴링이 다시 시도한다.
     } finally {
       setTrackerBusy(false);
+    }
+  }, [orderId]);
+
+  const retryShipment = useCallback(async () => {
+    setShipmentRetrying(true);
+    try {
+      const latest = await fetchShipment(orderId);
+      setShipment(latest);
+      setShipmentLoadState("ready");
+    } catch (cause) {
+      setShipment(null);
+      setShipmentLoadState(cause instanceof ApiError && cause.status === 404 ? "absent" : "error");
+    } finally {
+      setShipmentRetrying(false);
     }
   }, [orderId]);
 
@@ -369,14 +452,41 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     [cardEmail, cardName, cardPhone, pay],
   );
 
-  if (error && order === null) {
+  if (initialLoadFailure !== null && order === null) {
     return (
       <Container width="sm">
-        <div className="flex flex-col items-start gap-3 pt-10">
-          <Text tone="muted">{error}</Text>
-          <Button size="sm" variant="secondary" disabled={refreshing} onClick={refreshOrder}>
-            {refreshing ? "확인 중..." : "다시 시도"}
-          </Button>
+        <div className="flex flex-col items-start gap-4 pt-10 pb-16">
+          <div className="flex flex-col gap-2">
+            <Heading level={1}>
+              {initialLoadFailure.kind === "unauthenticated"
+                ? "로그인이 필요합니다"
+                : initialLoadFailure.kind === "forbidden"
+                  ? "접근할 수 없는 주문입니다"
+                  : initialLoadFailure.kind === "not_found"
+                    ? "주문을 찾을 수 없습니다"
+                    : "주문을 불러오지 못했습니다"}
+            </Heading>
+            <Text tone="muted">{initialLoadFailure.message}</Text>
+          </div>
+          {initialLoadFailure.kind === "unauthenticated" ? (
+            <LinkButton href={orderLoginHref(orderId)}>로그인하고 주문 보기</LinkButton>
+          ) : initialLoadFailure.kind === "retryable" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={refreshing}
+                onClick={retryInitialLoad}
+              >
+                {refreshing ? "확인 중..." : "다시 시도"}
+              </Button>
+              <LinkButton href="/" size="sm" variant="ghost">
+                홈으로
+              </LinkButton>
+            </div>
+          ) : (
+            <LinkButton href="/">홈으로</LinkButton>
+          )}
         </div>
       </Container>
     );
@@ -400,6 +510,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   }
 
   const isSeller = session !== null && session.accountId === order.sellerId;
+  const isBuyer = session !== null && session.accountId === order.buyerId;
 
   return (
     <Container width="sm">
@@ -558,23 +669,43 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         {/* ── 배송 (shipping-and-fees) ── */}
         {isSeller && order.status === "funds_held" ? (
           <Card padded className="flex flex-col gap-4">
-            <Text weight="semibold">{shipment === null ? "발송 처리" : "배송 현황"}</Text>
-            {shipment !== null ? (
+            <Text weight="semibold">
+              {shipmentLoadState === "ready" ? "배송 현황" : "발송 처리"}
+            </Text>
+            {shipmentLoadState === "loading" ? (
+              <Text size="sm" tone="muted" role="status">
+                배송 정보를 확인하고 있습니다.
+              </Text>
+            ) : shipmentLoadState === "error" ? (
+              <ShipmentLoadFailure
+                retrying={shipmentRetrying}
+                onRetry={() => void retryShipment()}
+              />
+            ) : null}
+            {shipmentLoadState === "ready" && shipment !== null ? (
               <ShipmentTracker
                 shipment={shipment}
                 onRefresh={() => void handleTrackerRefresh()}
                 refreshing={trackerBusy}
               />
             ) : null}
-            <RegisterWaybillForm
-              orderId={order.id}
-              existing={shipment}
-              onRegistered={(s) => setShipment(s)}
-            />
+            {shipmentLoadState === "ready" || shipmentLoadState === "absent" ? (
+              <RegisterWaybillForm
+                orderId={order.id}
+                existing={shipment}
+                onRegistered={(s) => {
+                  setShipment(s);
+                  setShipmentLoadState("ready");
+                }}
+              />
+            ) : null}
           </Card>
         ) : null}
 
-        {!isSeller && shipment !== null && order.status !== "payment_pending" ? (
+        {!isSeller &&
+        shipmentLoadState === "ready" &&
+        shipment !== null &&
+        order.status !== "payment_pending" ? (
           <Card padded className="flex flex-col gap-4">
             <Text weight="semibold">배송 현황</Text>
             <ShipmentTracker
@@ -582,6 +713,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
               onRefresh={() => void handleTrackerRefresh()}
               refreshing={trackerBusy}
             />
+          </Card>
+        ) : null}
+
+        {!isSeller && shipmentLoadState === "error" && order.status !== "payment_pending" ? (
+          <Card padded className="flex flex-col gap-4">
+            <Text weight="semibold">배송 현황</Text>
+            <ShipmentLoadFailure retrying={shipmentRetrying} onRetry={() => void retryShipment()} />
           </Card>
         ) : null}
 
@@ -705,7 +843,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
               >
                 구매 확정
               </Button>
-              {shipment === null ? (
+              {shipmentLoadState === "absent" ? (
                 // 발송 전에만 일방 환불이 가능하다(R4.5). 발송 후 문제는 분쟁으로.
                 <Button
                   size="lg"
@@ -720,7 +858,10 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           ) : null}
         </div>
 
-        {!isSeller && order.status === "funds_held" && shipment !== null ? (
+        {!isSeller &&
+        order.status === "funds_held" &&
+        shipmentLoadState === "ready" &&
+        shipment !== null ? (
           <OpenDisputeButton orderId={order.id} onDisputed={(o) => setOrder(o)} />
         ) : null}
 
@@ -746,7 +887,10 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         </div>
 
         {/* 자기거래 주문(차단 이전에 쌓인 건)에는 후기 동선을 열지 않는다. 서버도 거부한다. */}
-        {reviewsOpen && order.status === "completed" && order.buyerId !== order.sellerId ? (
+        {reviewsOpen &&
+        isBuyer &&
+        order.status === "completed" &&
+        order.buyerId !== order.sellerId ? (
           <Card padded className="flex flex-col gap-3">
             <Text weight="semibold">판매자 후기 남기기</Text>
             <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />
@@ -797,6 +941,24 @@ function PaymentMethodOption({ value, label, hint, checked, onSelect }: PaymentM
         </Text>
       </span>
     </label>
+  );
+}
+
+interface ShipmentLoadFailureProps {
+  readonly retrying: boolean;
+  readonly onRetry: () => void;
+}
+
+function ShipmentLoadFailure({ retrying, onRetry }: ShipmentLoadFailureProps) {
+  return (
+    <div className="flex flex-col items-start gap-3" role="alert">
+      <Text size="sm" tone="secondary">
+        배송 정보를 불러오지 못했어요. 확인 전에는 환불하거나 운송장을 등록·변경할 수 없습니다.
+      </Text>
+      <Button size="sm" variant="secondary" disabled={retrying} onClick={onRetry}>
+        {retrying ? "확인 중..." : "배송 정보 다시 확인"}
+      </Button>
+    </div>
   );
 }
 

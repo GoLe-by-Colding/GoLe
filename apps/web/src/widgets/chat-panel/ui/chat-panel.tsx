@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { reportChatMessage, useConversation, type ChatReportReason } from "@entities/chat";
 import { Button, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
@@ -36,6 +36,7 @@ export function ChatPanel({
   const [reportDetail, setReportDetail] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [reportNotice, setReportNotice] = useState<string | undefined>();
+  const messageInputId = useId();
   const bottomRef = useRef<HTMLDivElement>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const lastMessageId = messages.at(-1)?.id ?? null;
@@ -104,7 +105,13 @@ export function ChatPanel({
   return (
     <div className="flex h-full flex-col">
       {/* 메시지 영역 */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+      <div
+        role="log"
+        aria-label="대화 메시지"
+        aria-live="polite"
+        aria-relevant="additions text"
+        className="flex flex-1 flex-col gap-2 overflow-y-auto p-4"
+      >
         {hasOlder && messages.length > 0 ? (
           <Button
             type="button"
@@ -265,7 +272,11 @@ export function ChatPanel({
           onSubmit={handleSubmit}
           className="flex items-end gap-2 border-t border-neutral-200 px-4 py-3"
         >
+          <label htmlFor={messageInputId} className="sr-only">
+            메시지 입력
+          </label>
           <textarea
+            id={messageInputId}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {

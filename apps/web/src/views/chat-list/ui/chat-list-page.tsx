@@ -391,6 +391,7 @@ export function ChatListPage() {
 
         {composer && roomsBelongToCurrentAccount ? (
           <ConversationComposer
+            key={composer === "DIRECT" ? `${composer}:${requestedPeerId}` : composer}
             mode={composer}
             initialPeerId={composer === "DIRECT" ? requestedPeerId : ""}
             onClose={() => setComposer(null)}
