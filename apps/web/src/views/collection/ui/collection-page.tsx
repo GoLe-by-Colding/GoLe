@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   addCollectionItem,
   fetchCollection,
@@ -11,6 +11,7 @@ import {
   type OwnershipStatus,
 } from "@entities/collection";
 import { useSession } from "@entities/user";
+import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import {
   Badge,
@@ -27,47 +28,96 @@ import {
 
 const STATUSES: readonly OwnershipStatus[] = ["owned", "wanted", "sold"];
 
+interface CollectionLoadState {
+  readonly accountId: string | null;
+  readonly status: "idle" | "loading" | "ready" | "error";
+  readonly items: readonly CollectionItem[];
+  readonly estimate: number;
+  readonly error?: string;
+}
+
+function collectionErrorMessage(cause: unknown): string {
+  return cause instanceof ApiError
+    ? cause.message
+    : "컬렉션을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
 export function CollectionPage() {
   const { session } = useSession();
   const accountId = session?.accountId ?? null;
 
-  const [items, setItems] = useState<readonly CollectionItem[]>([]);
-  const [estimate, setEstimate] = useState(0);
+  const [collection, setCollection] = useState<CollectionLoadState>({
+    accountId: null,
+    status: "idle",
+    items: [],
+    estimate: 0,
+  });
   const [setNumber, setSetNumber] = useState("");
   const [status, setStatus] = useState<OwnershipStatus>("owned");
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | undefined>(undefined);
+  const accountIdRef = useRef(accountId);
+  const requestRef = useRef<{ generation: number; controller: AbortController } | null>(null);
+  accountIdRef.current = accountId;
 
-  const reload = useCallback(async () => {
-    if (accountId === null) {
-      return;
-    }
-    const [list, est] = await Promise.all([
-      fetchCollection(accountId),
-      fetchOwnedEstimate(accountId),
-    ]);
-    setItems(list);
-    setEstimate(est);
-  }, [accountId]);
+  const loadCollection = useCallback(async (targetAccountId: string, preserve = false) => {
+    requestRef.current?.controller.abort();
+    const generation = (requestRef.current?.generation ?? 0) + 1;
+    const controller = new AbortController();
+    requestRef.current = { generation, controller };
+    setCollection((current) => ({
+      accountId: targetAccountId,
+      status: "loading",
+      items: preserve && current.accountId === targetAccountId ? current.items : [],
+      estimate: preserve && current.accountId === targetAccountId ? current.estimate : 0,
+    }));
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      if (accountId === null) {
+    try {
+      const [items, estimate] = await Promise.all([
+        fetchCollection(targetAccountId, controller.signal),
+        fetchOwnedEstimate(targetAccountId, controller.signal),
+      ]);
+      if (
+        controller.signal.aborted ||
+        requestRef.current?.generation !== generation ||
+        accountIdRef.current !== targetAccountId
+      ) {
         return;
       }
-      const [list, est] = await Promise.all([
-        fetchCollection(accountId),
-        fetchOwnedEstimate(accountId),
-      ]);
-      if (active) {
-        setItems(list);
-        setEstimate(est);
+      setCollection({ accountId: targetAccountId, status: "ready", items, estimate });
+    } catch (cause) {
+      if (
+        controller.signal.aborted ||
+        requestRef.current?.generation !== generation ||
+        accountIdRef.current !== targetAccountId
+      ) {
+        return;
       }
-    })();
+      setCollection((current) => ({
+        accountId: targetAccountId,
+        status: "error",
+        items: current.accountId === targetAccountId ? current.items : [],
+        estimate: current.accountId === targetAccountId ? current.estimate : 0,
+        error: collectionErrorMessage(cause),
+      }));
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    if (accountId !== null) await loadCollection(accountId, true);
+  }, [accountId, loadCollection]);
+
+  useEffect(() => {
+    if (accountId === null) {
+      requestRef.current?.controller.abort();
+      setCollection({ accountId: null, status: "idle", items: [], estimate: 0 });
+      return;
+    }
+    void loadCollection(accountId);
     return () => {
-      active = false;
+      requestRef.current?.controller.abort();
     };
-  }, [accountId]);
+  }, [accountId, loadCollection]);
 
   async function handleAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,10 +125,13 @@ export function CollectionPage() {
       return;
     }
     setBusy(true);
+    setActionError(undefined);
     try {
       await addCollectionItem(accountId, setNumber.trim(), status);
       setSetNumber("");
       await reload();
+    } catch (cause) {
+      setActionError(collectionErrorMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -88,9 +141,22 @@ export function CollectionPage() {
     if (accountId === null) {
       return;
     }
-    await removeCollectionItem(itemId, accountId);
-    await reload();
+    setBusy(true);
+    setActionError(undefined);
+    try {
+      await removeCollectionItem(itemId, accountId);
+      await reload();
+    } catch (cause) {
+      setActionError(collectionErrorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
   }
+
+  const visibleCollection =
+    collection.accountId === accountId
+      ? collection
+      : { accountId, status: "loading" as const, items: [], estimate: 0 };
 
   if (accountId === null) {
     return (
@@ -126,8 +192,14 @@ export function CollectionPage() {
 
         <Card padded className="flex items-center justify-between">
           <Text tone="secondary">보유 추정가</Text>
-          <span className="text-2xl font-bold">{formatKrw(estimate)}</span>
+          <span className="text-2xl font-bold">{formatKrw(visibleCollection.estimate)}</span>
         </Card>
+
+        {actionError ? (
+          <p className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
+            {actionError}
+          </p>
+        ) : null}
 
         <Card padded>
           <form className="flex flex-wrap items-end gap-3" onSubmit={handleAdd}>
@@ -164,7 +236,25 @@ export function CollectionPage() {
           </form>
         </Card>
 
-        {items.length === 0 ? (
+        {visibleCollection.status === "loading" && visibleCollection.items.length === 0 ? (
+          <Card padded className="flex flex-col gap-3" aria-busy="true">
+            <div className="h-5 w-32 animate-pulse rounded bg-neutral-200" />
+            <div className="h-4 w-56 max-w-full animate-pulse rounded bg-neutral-100" />
+          </Card>
+        ) : visibleCollection.status === "error" && visibleCollection.items.length === 0 ? (
+          <EmptyState
+            variant="inline"
+            title="컬렉션을 불러오지 못했어요"
+            description={
+              visibleCollection.error ?? "컬렉션을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+            }
+            action={
+              <Button variant="secondary" onClick={() => void loadCollection(accountId)}>
+                다시 시도
+              </Button>
+            }
+          />
+        ) : visibleCollection.items.length === 0 ? (
           <EmptyState
             title="아직 담은 세트가 없어요"
             description="위 칸에 세트 번호를 넣고 상태를 고르면 목록에 추가됩니다."
@@ -172,7 +262,7 @@ export function CollectionPage() {
           />
         ) : (
           <ul className="flex flex-col gap-2">
-            {items.map((item) => (
+            {visibleCollection.items.map((item) => (
               <li key={item.id}>
                 <Card padded className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -181,7 +271,12 @@ export function CollectionPage() {
                     </Badge>
                     <span className="font-mono text-sm">#{item.setNumber}</span>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => void handleRemove(item.id)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void handleRemove(item.id)}
+                  >
                     삭제
                   </Button>
                 </Card>

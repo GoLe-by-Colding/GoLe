@@ -9,7 +9,24 @@ import {
   type Notification,
 } from "@entities/notification";
 import { useSession } from "@entities/user";
-import { BellIcon, Button, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import { ApiError } from "@shared/api";
+import {
+  BellIcon,
+  Button,
+  Card,
+  Container,
+  EmptyState,
+  Heading,
+  LinkButton,
+  Skeleton,
+  Text,
+} from "@shared/ui";
+
+function notificationErrorMessage(cause: unknown): string {
+  return cause instanceof ApiError
+    ? cause.message
+    : "알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
 
 /**
  * 알림 목록. 항목 클릭 시 읽음 처리 후 링크 이동, 전체 읽음 버튼 제공. (알림 스펙 N7)
@@ -18,42 +35,70 @@ export function NotificationsPage() {
   const { session } = useSession();
   const accountId = session?.accountId ?? null;
   const [items, setItems] = useState<readonly Notification[]>([]);
+  const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (accountId === null) {
       return; // 비로그인은 아래에서 로그인 안내를 렌더한다
     }
-    let active = true;
+    const controller = new AbortController();
     const run = async (): Promise<void> => {
+      setLoading(true);
+      setError(undefined);
       try {
-        const list = await fetchNotifications(accountId);
-        if (active) {
+        const list = await fetchNotifications(accountId, controller.signal);
+        if (!controller.signal.aborted) {
           setItems(list);
+          setLoadedAccountId(accountId);
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setItems([]);
+          setLoadedAccountId(accountId);
+          setError(notificationErrorMessage(cause));
         }
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
-    void run();
+    const timer = window.setTimeout(() => void run(), 0);
     return () => {
-      active = false;
+      window.clearTimeout(timer);
+      controller.abort();
     };
-  }, [accountId]);
+  }, [accountId, reloadKey]);
 
   async function handleReadAll() {
     if (accountId === null) {
       return;
     }
-    await markAllNotificationsRead(accountId);
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    setBusy(true);
+    setError(undefined);
+    try {
+      await markAllNotificationsRead(accountId);
+      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (cause) {
+      setError(notificationErrorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handleClickItem(n: Notification) {
     if (accountId !== null && !n.read) {
-      void markNotificationRead(accountId, n.id).catch(() => undefined);
+      setItems((current) =>
+        current.map((item) => (item.id === n.id ? { ...item, read: true } : item)),
+      );
+      void markNotificationRead(accountId, n.id).catch((cause: unknown) => {
+        setItems((current) =>
+          current.map((item) => (item.id === n.id ? { ...item, read: false } : item)),
+        );
+        setError(notificationErrorMessage(cause));
+      });
     }
   }
 
@@ -69,19 +114,23 @@ export function NotificationsPage() {
     );
   }
 
+  const visibleItems = loadedAccountId === accountId ? items : [];
+  const visibleLoading = loadedAccountId !== accountId || loading;
+  const visibleError = loadedAccountId === accountId ? error : undefined;
+
   return (
     <Container width="sm">
       <div className="flex flex-col gap-5 pt-10 pb-16">
         <div className="flex items-center justify-between">
           <Heading level={1}>알림</Heading>
-          {items.some((n) => !n.read) ? (
-            <Button variant="ghost" size="sm" onClick={handleReadAll}>
-              전체 읽음
+          {visibleItems.some((n) => !n.read) ? (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={handleReadAll}>
+              {busy ? "처리 중" : "전체 읽음"}
             </Button>
           ) : null}
         </div>
 
-        {loading ? (
+        {visibleLoading ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex items-start gap-3 px-1 py-2">
@@ -93,7 +142,18 @@ export function NotificationsPage() {
               </div>
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : visibleError ? (
+          <EmptyState
+            variant="inline"
+            title="알림을 불러오지 못했어요"
+            description={visibleError}
+            action={
+              <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>
+                다시 시도
+              </Button>
+            }
+          />
+        ) : visibleItems.length === 0 ? (
           <Card>
             <div className="flex flex-col items-center gap-2 p-10 text-center">
               <BellIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
@@ -102,7 +162,7 @@ export function NotificationsPage() {
           </Card>
         ) : (
           <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
-            {items.map((n) => {
+            {visibleItems.map((n) => {
               const body = (
                 <div className="flex items-start gap-3 px-5 py-4">
                   {!n.read ? (

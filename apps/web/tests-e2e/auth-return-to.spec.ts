@@ -120,9 +120,11 @@ test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
   test("ADMIN으로 로그인하면 요청한 콘솔 경로로 돌아간다", async ({ page }) => {
     await mockMe(page, "ADMIN");
     await mockSignIn(page, "ADMIN");
-    await page.route("**/api/admin/**", async (route) => {
-      await route.fulfill({ contentType: "application/json", body: "{}" });
-    });
+    await page.route("**/api/admin/**", (route) =>
+      route.fulfill({
+        json: new URL(route.request().url()).pathname.endsWith("/reports") ? [] : {},
+      }),
+    );
 
     await page.goto(`/login?returnTo=${encodeURIComponent("/admin/reports")}`);
     await page.getByLabel("이메일").fill("admin@gole.test");
@@ -144,14 +146,58 @@ test.describe("컬렉션 로그인 왕복", () => {
     );
   });
 
+  test("컬렉션 조회 실패를 화면에서 복구하고 미처리 오류를 남기지 않는다", async ({ page }) => {
+    const pageErrors: Error[] = [];
+    let recovered = false;
+    page.on("pageerror", (error) => pageErrors.push(error));
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "gole.session",
+        JSON.stringify({
+          accountId: "acc-1",
+          email: "tester@gole.test",
+          sessionToken: "session-token",
+          role: "USER",
+        }),
+      );
+    });
+    await mockMe(page, "USER");
+    await page.route("**/api/v1/collections/acc-1/items", (route) =>
+      recovered
+        ? route.fulfill({ json: [] })
+        : route.fulfill({
+            status: 503,
+            json: { code: "TEMPORARY", message: "컬렉션 서버가 잠시 응답하지 않습니다." },
+          }),
+    );
+    await page.route("**/api/v1/collections/acc-1/estimate", (route) =>
+      recovered
+        ? route.fulfill({ json: { ownedEstimatedValue: 0 } })
+        : route.fulfill({
+            status: 503,
+            json: { code: "TEMPORARY", message: "컬렉션 서버가 잠시 응답하지 않습니다." },
+          }),
+    );
+
+    await page.goto("/collection");
+    await expect(page.getByText("컬렉션을 불러오지 못했어요")).toBeVisible();
+    await expect(page.getByText("컬렉션 서버가 잠시 응답하지 않습니다.")).toBeVisible();
+
+    recovered = true;
+    await page.getByRole("button", { name: "다시 시도" }).click();
+    await expect(page.getByText("아직 담은 세트가 없어요")).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+
   test("로그인에 성공하면 컬렉션으로 돌아오고 뒤로가기가 로그인으로 되돌아가지 않는다", async ({
     page,
   }) => {
     await mockMe(page, "USER");
     await mockSignIn(page, "USER");
-    await page.route("**/api/v1/accounts/*/collection**", async (route) => {
-      await route.fulfill({ contentType: "application/json", body: "[]" });
-    });
+    await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/estimate", (route) =>
+      route.fulfill({ json: { ownedEstimatedValue: 0 } }),
+    );
 
     await page.goto("/collection");
     await page.getByRole("link", { name: "로그인하고 시작하기" }).click();
@@ -178,9 +224,10 @@ test.describe("컬렉션 로그인 왕복", () => {
     });
     await mockSignIn(page, "USER");
     await mockMe(page, "USER");
-    await page.route("**/api/v1/accounts/*/collection**", async (route) => {
-      await route.fulfill({ contentType: "application/json", body: "[]" });
-    });
+    await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/estimate", (route) =>
+      route.fulfill({ json: { ownedEstimatedValue: 0 } }),
+    );
 
     await page.goto(`/signup?returnTo=${encodeURIComponent("/collection")}`);
     await page.getByLabel("이메일").fill("new@gole.test");
