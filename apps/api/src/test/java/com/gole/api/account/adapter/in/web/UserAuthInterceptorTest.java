@@ -3,6 +3,8 @@ package com.gole.api.account.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
@@ -25,6 +27,15 @@ class UserAuthInterceptorTest {
 
         assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
                 .isTrue();
+    }
+
+    @Test
+    void publicFeeConfigDoesNotRequireSession() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/config/fees");
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isTrue();
+        verify(sessions, never()).resolve(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
