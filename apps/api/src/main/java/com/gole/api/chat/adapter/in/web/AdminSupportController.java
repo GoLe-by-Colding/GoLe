@@ -69,7 +69,9 @@ public class AdminSupportController {
     public TicketResponse assign(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
         var conversation = support.assignToSelf(roomId, actor.id());
-        record(actor, AdminActionType.SUPPORT_ASSIGN, roomId, null);
+        if (conversation.changed()) {
+            record(actor, AdminActionType.SUPPORT_ASSIGN, roomId, null);
+        }
         return TicketResponse.from(conversation.ticket(), conversation.room().title());
     }
 
@@ -102,18 +104,22 @@ public class AdminSupportController {
     @Transactional
     public TicketResponse resolve(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        SupportTicket ticket = support.resolve(roomId, actor.id());
-        record(actor, AdminActionType.SUPPORT_RESOLVE, roomId, null);
-        return response(ticket);
+        var transition = support.resolve(roomId, actor.id());
+        if (transition.changed()) {
+            record(actor, AdminActionType.SUPPORT_RESOLVE, roomId, null);
+        }
+        return response(transition.ticket());
     }
 
     @PostMapping("/{roomId}/reopen")
     @Transactional
     public TicketResponse reopen(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        SupportTicket ticket = support.reopen(roomId, actor.id());
-        record(actor, AdminActionType.SUPPORT_REOPEN, roomId, null);
-        return response(ticket);
+        var transition = support.reopen(roomId, actor.id());
+        if (transition.changed()) {
+            record(actor, AdminActionType.SUPPORT_REOPEN, roomId, null);
+        }
+        return response(transition.ticket());
     }
 
     @GetMapping("/{roomId}/messages")

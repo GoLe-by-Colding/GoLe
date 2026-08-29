@@ -10,12 +10,21 @@ export interface ChatPanelProps {
   readonly myId: string;
   readonly readOnlyReason?: string;
   readonly hiddenSenderIds?: readonly string[];
+  readonly showSenderIdentity?: boolean;
+  readonly onManageSender?: (senderId: string) => void;
 }
 
 /**
  * 실시간 채팅 패널. SSE로 새 메시지를 수신하고 REST로 전송한다.
  */
-export function ChatPanel({ roomId, myId, readOnlyReason, hiddenSenderIds = [] }: ChatPanelProps) {
+export function ChatPanel({
+  roomId,
+  myId,
+  readOnlyReason,
+  hiddenSenderIds = [],
+  showSenderIdentity = false,
+  onManageSender,
+}: ChatPanelProps) {
   const { messages, send, loadOlder, retry, hasOlder, loadingOlder, olderError, loading, error } =
     useConversation(roomId);
 
@@ -124,10 +133,32 @@ export function ChatPanel({ roomId, myId, readOnlyReason, hiddenSenderIds = [] }
           const hidden = !mine && hiddenSenderIds.includes(m.senderId);
           if (hidden) {
             return (
-              <div key={m.id} className="flex justify-start">
-                <p className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
-                  차단한 사용자의 메시지를 숨겼습니다.
-                </p>
+              <div key={m.id} className="group flex justify-start">
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2">
+                  <p className="text-xs text-neutral-500">
+                    {showSenderIdentity ? `${senderLabel(m.senderId)}의 ` : "차단한 사용자의 "}
+                    메시지를 숨겼습니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportingId(m.id);
+                      setReportNotice(undefined);
+                    }}
+                    className="min-h-9 min-w-11 rounded-md px-2 text-xs font-medium text-neutral-400 transition-colors hover:bg-white hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+                  >
+                    신고
+                  </button>
+                  {onManageSender ? (
+                    <button
+                      type="button"
+                      onClick={() => onManageSender(m.senderId)}
+                      className="min-h-9 rounded-md px-2 text-xs font-medium text-brand-700 transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+                    >
+                      차단 해제
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
           }
@@ -139,6 +170,25 @@ export function ChatPanel({ roomId, myId, readOnlyReason, hiddenSenderIds = [] }
                   mine ? "items-end" : "items-start",
                 )}
               >
+                {showSenderIdentity && !mine ? (
+                  <div className="flex min-h-7 items-center gap-1.5 px-1">
+                    <span
+                      className="max-w-48 truncate font-mono text-[11px] font-semibold text-neutral-500"
+                      title={m.senderId}
+                    >
+                      {senderLabel(m.senderId)}
+                    </span>
+                    {onManageSender ? (
+                      <button
+                        type="button"
+                        onClick={() => onManageSender(m.senderId)}
+                        className="min-h-7 rounded px-1.5 text-[11px] font-medium text-neutral-400 transition-colors hover:bg-danger/5 hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+                      >
+                        차단
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div
                   className={cn(
                     "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words",
@@ -247,4 +297,9 @@ export function ChatPanel({ roomId, myId, readOnlyReason, hiddenSenderIds = [] }
       ) : null}
     </div>
   );
+}
+
+function senderLabel(senderId: string): string {
+  const compact = senderId.replaceAll("-", "");
+  return `사용자 ${compact.slice(0, 8)}`;
 }

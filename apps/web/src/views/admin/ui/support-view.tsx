@@ -63,13 +63,12 @@ export function AdminSupportView() {
   const ticketsGenerationRef = useRef(0);
   const conversationGenerationRef = useRef(0);
   const actionGenerationRef = useRef(0);
+  const ownsSelectedConversationRef = useRef(false);
 
-  const selectRoom = useCallback((roomId: string | null) => {
-    if (selectedRoomRef.current === roomId) return;
-    selectedRoomRef.current = roomId;
+  const invalidateConversation = useCallback(() => {
     conversationGenerationRef.current += 1;
     actionGenerationRef.current += 1;
-    setSelectedRoomId(roomId);
+    ownsSelectedConversationRef.current = false;
     setMessages([]);
     setHasOlderMessages(false);
     setLoadingOlderMessages(false);
@@ -82,6 +81,16 @@ export function AdminSupportView() {
     setConversationError(undefined);
     setActionError(undefined);
   }, []);
+
+  const selectRoom = useCallback(
+    (roomId: string | null) => {
+      if (selectedRoomRef.current === roomId) return;
+      selectedRoomRef.current = roomId;
+      invalidateConversation();
+      setSelectedRoomId(roomId);
+    },
+    [invalidateConversation],
+  );
 
   const selected = useMemo(
     () => tickets?.find((ticket) => ticket.roomId === selectedRoomId) ?? null,
@@ -96,12 +105,16 @@ export function AdminSupportView() {
       .then((next) => {
         if (ticketsGenerationRef.current !== generation) return;
         setListError(undefined);
-        setTickets(next);
         const current = selectedRoomRef.current;
+        const currentTicket = next.find((ticket) => ticket.roomId === current);
+        const stillMine = currentTicket?.assigneeId === accountId;
+        if (ownsSelectedConversationRef.current && !stillMine) {
+          invalidateConversation();
+        }
+        ownsSelectedConversationRef.current = stillMine;
+        setTickets(next);
         selectRoom(
-          current !== null && next.some((ticket) => ticket.roomId === current)
-            ? current
-            : (next[0]?.roomId ?? null),
+          current !== null && currentTicket !== undefined ? current : (next[0]?.roomId ?? null),
         );
       })
       .catch((cause: unknown) => {
@@ -109,10 +122,11 @@ export function AdminSupportView() {
         setTickets((current) => current ?? []);
         setListError(messageOf(cause, "문의 목록을 새로고치지 못했습니다."));
       });
-  }, [selectRoom, status, token]);
+  }, [accountId, invalidateConversation, selectRoom, status, token]);
 
   const loadConversation = useCallback(() => {
     const generation = ++conversationGenerationRef.current;
+    ownsSelectedConversationRef.current = isMine;
     if (token === null || selected === null || !isMine) {
       setMessages([]);
       setNotes([]);
@@ -174,6 +188,13 @@ export function AdminSupportView() {
   }, [isMine, loadConversation]);
 
   function replaceTicket(updated: AdminSupportTicket) {
+    if (selectedRoomRef.current === updated.roomId) {
+      const stillMine = updated.assigneeId === accountId;
+      if (ownsSelectedConversationRef.current && !stillMine) {
+        invalidateConversation();
+      }
+      ownsSelectedConversationRef.current = stillMine;
+    }
     setTickets((current) =>
       (current ?? []).map((ticket) => (ticket.roomId === updated.roomId ? updated : ticket)),
     );
@@ -270,6 +291,7 @@ export function AdminSupportView() {
       return;
     }
     const roomId = selected.roomId;
+    const generation = conversationGenerationRef.current;
     const oldest = messages[0];
     if (oldest === undefined) return;
     setLoadingOlderMessages(true);
@@ -279,15 +301,19 @@ export function AdminSupportView() {
         beforeSentAt: oldest.sentAt,
         beforeId: oldest.id,
       });
-      if (selectedRoomRef.current !== roomId) return;
+      if (conversationGenerationRef.current !== generation || selectedRoomRef.current !== roomId) {
+        return;
+      }
       setMessages((current) => mergeRows(current, older, (row) => row.sentAt));
       setHasOlderMessages(older.length === 60);
     } catch (cause) {
-      if (selectedRoomRef.current === roomId) {
+      if (conversationGenerationRef.current === generation && selectedRoomRef.current === roomId) {
         setConversationError(messageOf(cause, "이전 문의 대화를 불러오지 못했습니다."));
       }
     } finally {
-      if (selectedRoomRef.current === roomId) setLoadingOlderMessages(false);
+      if (conversationGenerationRef.current === generation && selectedRoomRef.current === roomId) {
+        setLoadingOlderMessages(false);
+      }
     }
   }
 

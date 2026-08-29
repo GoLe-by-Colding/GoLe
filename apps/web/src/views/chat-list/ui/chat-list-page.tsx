@@ -57,12 +57,20 @@ export function ChatListPage() {
   const [tradeBusy, setTradeBusy] = useState(false);
   const [directTradeOpen, setDirectTradeOpen] = useState(false);
   const [blockedAccountIds, setBlockedAccountIds] = useState<readonly string[] | null>(null);
+  const [blockStateWarning, setBlockStateWarning] = useState<string | undefined>();
+  const [blockRetryBusy, setBlockRetryBusy] = useState(false);
   const [blockManageRoomId, setBlockManageRoomId] = useState<string | null>(null);
+  const [blockManageTargetId, setBlockManageTargetId] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState("");
   const [blockActionBusy, setBlockActionBusy] = useState(false);
   const listingRoomsRef = useRef<readonly ChatRoom[] | null>(null);
   const socialRoomsRef = useRef<readonly SocialChatRoom[] | null>(null);
   const blockedAccountIdsRef = useRef<readonly string[] | null>(null);
+  const sessionAccountIdRef = useRef(sessionAccountId);
+
+  useEffect(() => {
+    sessionAccountIdRef.current = sessionAccountId;
+  }, [sessionAccountId]);
 
   useEffect(() => {
     if (session === null) return;
@@ -106,9 +114,7 @@ export function ChatListPage() {
         const nextSocial =
           socialResult.status === "fulfilled" ? socialResult.value : (socialRoomsRef.current ?? []);
         const nextBlocked =
-          blockedResult.status === "fulfilled"
-            ? blockedResult.value
-            : (blockedAccountIdsRef.current ?? []);
+          blockedResult.status === "fulfilled" ? blockedResult.value : blockedAccountIdsRef.current;
 
         listingRoomsRef.current = nextListing;
         socialRoomsRef.current = nextSocial;
@@ -116,11 +122,16 @@ export function ChatListPage() {
         setListingRooms(nextListing);
         setSocialRooms(nextSocial);
         setBlockedAccountIds(nextBlocked);
+        setBlockStateWarning(
+          blockedResult.status === "rejected"
+            ? nextBlocked === null
+              ? "차단 정보를 확인하지 못해 대화를 잠시 잠갔습니다."
+              : "차단 정보 갱신이 지연되고 있어 마지막 확인 상태를 유지합니다."
+            : undefined,
+        );
         setRoomsOwnerId(sessionAccountId);
         setLoadWarning(
-          listingResult.status === "rejected" ||
-            socialResult.status === "rejected" ||
-            blockedResult.status === "rejected"
+          listingResult.status === "rejected" || socialResult.status === "rejected"
             ? "일부 대화를 불러오지 못했습니다. 보이는 대화는 그대로 사용할 수 있어요."
             : undefined,
         );
@@ -198,6 +209,9 @@ export function ChatListPage() {
   const selectedTargetBlocked =
     selectedBlockTarget !== null && (blockedAccountIds?.includes(selectedBlockTarget) ?? false);
   const blockManageOpen = selectedId !== null && blockManageRoomId === selectedId;
+  const managedBlockTarget = blockManageOpen ? blockManageTargetId : null;
+  const managedTargetBlocked =
+    managedBlockTarget !== null && (blockedAccountIds?.includes(managedBlockTarget) ?? false);
 
   if (!session) {
     return (
@@ -305,32 +319,51 @@ export function ChatListPage() {
   }
 
   async function updateSelectedBlock() {
-    if (selectedBlockTarget === null || blockActionBusy) return;
+    if (managedBlockTarget === null || blockedAccountIds === null || blockActionBusy) return;
     setBlockActionBusy(true);
     setRoomActionError(undefined);
     try {
-      if (selectedTargetBlocked) {
-        await unblockChatUser(selectedBlockTarget);
+      if (managedTargetBlocked) {
+        await unblockChatUser(managedBlockTarget);
       } else {
-        await blockChatUser(selectedBlockTarget, blockReason.trim() || undefined);
+        await blockChatUser(managedBlockTarget, blockReason.trim() || undefined);
       }
       setBlockedAccountIds((current) => {
-        const next = selectedTargetBlocked
-          ? (current ?? []).filter((accountId) => accountId !== selectedBlockTarget)
-          : [...new Set([...(current ?? []), selectedBlockTarget])];
+        const next = managedTargetBlocked
+          ? (current ?? []).filter((accountId) => accountId !== managedBlockTarget)
+          : [...new Set([...(current ?? []), managedBlockTarget])];
         blockedAccountIdsRef.current = next;
         return next;
       });
       setBlockReason("");
       setBlockManageRoomId(null);
+      setBlockManageTargetId(null);
     } catch {
       setRoomActionError(
-        selectedTargetBlocked
+        managedTargetBlocked
           ? "차단을 해제하지 못했습니다. 잠시 후 다시 시도해 주세요."
           : "사용자를 차단하지 못했습니다. 잠시 후 다시 시도해 주세요.",
       );
     } finally {
       setBlockActionBusy(false);
+    }
+  }
+
+  async function retryBlockedAccounts() {
+    const accountId = sessionAccountId;
+    if (accountId === null || blockRetryBusy) return;
+    setBlockRetryBusy(true);
+    try {
+      const next = await fetchBlockedChatUserIds();
+      if (sessionAccountIdRef.current !== accountId) return;
+      blockedAccountIdsRef.current = next;
+      setBlockedAccountIds(next);
+      setBlockStateWarning(undefined);
+    } catch {
+      if (sessionAccountIdRef.current !== accountId) return;
+      setBlockStateWarning("차단 정보를 확인하지 못해 대화를 잠시 잠갔습니다.");
+    } finally {
+      if (sessionAccountIdRef.current === accountId) setBlockRetryBusy(false);
     }
   }
 
@@ -370,6 +403,15 @@ export function ChatListPage() {
             className="rounded-lg bg-warning-soft px-4 py-2 text-sm text-neutral-700"
           >
             {loadWarning}
+          </p>
+        ) : null}
+
+        {blockStateWarning && roomsBelongToCurrentAccount ? (
+          <p
+            role="status"
+            className="rounded-lg bg-warning-soft px-4 py-2 text-sm text-neutral-700"
+          >
+            {blockStateWarning}
           </p>
         ) : null}
 
@@ -476,11 +518,12 @@ export function ChatListPage() {
                         </button>
                       </>
                     ) : null}
-                    {selectedBlockTarget !== null ? (
+                    {selectedBlockTarget !== null && blockedAccountIds !== null ? (
                       <button
                         type="button"
                         onClick={() => {
                           setBlockReason("");
+                          setBlockManageTargetId(selectedBlockTarget);
                           setBlockManageRoomId((current) =>
                             current === selected.room.id ? null : selected.room.id,
                           );
@@ -492,21 +535,25 @@ export function ChatListPage() {
                     ) : null}
                   </div>
                 </header>
-                {blockManageOpen && selectedBlockTarget !== null ? (
+                {blockManageOpen && managedBlockTarget !== null && blockedAccountIds !== null ? (
                   <div className="gole-rise flex flex-col gap-3 border-b border-danger/15 bg-danger/5 px-4 py-3 sm:px-5">
                     <div>
                       <p className="text-sm font-semibold text-neutral-900">
-                        {selectedTargetBlocked
+                        {managedTargetBlocked
                           ? "이 사용자의 차단을 해제할까요?"
                           : "이 사용자를 차단할까요?"}
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-neutral-600">
-                        {selectedTargetBlocked
-                          ? "해제하면 서로 다시 메시지를 보낼 수 있습니다."
-                          : "기존 대화는 보존되지만, 해제하기 전까지 서로 새 메시지를 보낼 수 없습니다."}
+                        {managedTargetBlocked
+                          ? selected.kind === "SOCIAL" && selected.room.type === "GROUP"
+                            ? "해제하면 이 사용자의 새 메시지가 내 화면에 다시 표시됩니다."
+                            : "해제하면 서로 다시 메시지를 보낼 수 있습니다."
+                          : selected.kind === "SOCIAL" && selected.room.type === "GROUP"
+                            ? "그룹 대화는 계속되며 이 사용자의 메시지만 내 화면에서 숨깁니다."
+                            : "기존 대화는 보존되지만, 해제하기 전까지 서로 새 메시지를 보낼 수 없습니다."}
                       </p>
                     </div>
-                    {!selectedTargetBlocked ? (
+                    {!managedTargetBlocked ? (
                       <input
                         value={blockReason}
                         maxLength={200}
@@ -520,19 +567,22 @@ export function ChatListPage() {
                         size="sm"
                         variant="ghost"
                         disabled={blockActionBusy}
-                        onClick={() => setBlockManageRoomId(null)}
+                        onClick={() => {
+                          setBlockManageRoomId(null);
+                          setBlockManageTargetId(null);
+                        }}
                       >
                         취소
                       </Button>
                       <Button
                         size="sm"
-                        variant={selectedTargetBlocked ? "secondary" : "danger"}
+                        variant={managedTargetBlocked ? "secondary" : "danger"}
                         disabled={blockActionBusy}
                         onClick={() => void updateSelectedBlock()}
                       >
                         {blockActionBusy
                           ? "처리 중"
-                          : selectedTargetBlocked
+                          : managedTargetBlocked
                             ? "차단 해제"
                             : "차단하기"}
                       </Button>
@@ -567,7 +617,7 @@ export function ChatListPage() {
                     {roomActionError}
                   </p>
                 ) : null}
-                {directTradeOpen && selected.kind === "LISTING" ? (
+                {directTradeOpen && selected.kind === "LISTING" && blockedAccountIds !== null ? (
                   <DirectTradeConfirmation
                     room={selected.room}
                     myId={myId}
@@ -576,18 +626,50 @@ export function ChatListPage() {
                   />
                 ) : null}
                 <div className="min-h-0 flex-1">
-                  <ChatPanel
-                    key={selected.room.id}
-                    roomId={selected.room.id}
-                    myId={myId}
-                    hiddenSenderIds={blockedAccountIds ?? []}
-                    {...(selectedTargetBlocked
-                      ? {
-                          readOnlyReason:
-                            "차단을 해제하면 이 대화에서 다시 메시지를 보낼 수 있습니다.",
-                        }
-                      : {})}
-                  />
+                  {blockedAccountIds === null ? (
+                    <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
+                      <p className="text-sm font-semibold text-neutral-900">
+                        차단 정보를 확인하는 동안 대화를 잠시 잠갔어요.
+                      </p>
+                      <p className="max-w-sm text-xs leading-relaxed text-neutral-500">
+                        차단한 사용자의 메시지가 노출되지 않도록 확인이 끝난 뒤 대화를 열어드려요.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={blockRetryBusy}
+                        onClick={() => void retryBlockedAccounts()}
+                      >
+                        {blockRetryBusy ? "확인 중" : "다시 확인"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <ChatPanel
+                      key={selected.room.id}
+                      roomId={selected.room.id}
+                      myId={myId}
+                      hiddenSenderIds={blockedAccountIds}
+                      showSenderIdentity={
+                        selected.kind === "SOCIAL" && selected.room.type === "GROUP"
+                      }
+                      {...(selected.kind === "SOCIAL" && selected.room.type === "GROUP"
+                        ? {
+                            onManageSender: (senderId: string) => {
+                              setBlockReason("");
+                              setBlockManageTargetId(senderId);
+                              setBlockManageRoomId(selected.room.id);
+                            },
+                          }
+                        : {})}
+                      {...(selectedTargetBlocked
+                        ? {
+                            readOnlyReason:
+                              "차단을 해제하면 이 대화에서 다시 메시지를 보낼 수 있습니다.",
+                          }
+                        : {})}
+                    />
+                  )}
                 </div>
               </section>
             ) : (

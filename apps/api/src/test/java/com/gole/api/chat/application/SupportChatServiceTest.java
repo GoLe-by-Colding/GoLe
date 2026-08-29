@@ -77,6 +77,62 @@ class SupportChatServiceTest {
     }
 
     @Test
+    void repeatedAssignmentDoesNotWriteOrReportAChange() {
+        SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
+        SocialChatRoom room =
+                SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-1");
+        when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(ticket));
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room));
+
+        SupportChatService.SupportConversation result = service.assignToSelf("room-1", "admin-1");
+
+        assertThat(result.changed()).isFalse();
+        assertThat(result.ticket()).isSameAs(ticket);
+        verify(tickets, never()).save(any());
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void transferToCurrentAssigneeIsRejectedWithoutWriting() {
+        assertThatThrownBy(() -> service.transfer("room-1", "admin-1", "admin-1"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("이미 내가");
+
+        verify(tickets, never()).findByRoomId(any());
+        verify(tickets, never()).save(any());
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void repeatedResolveAndReopenDoNotBumpVersion() {
+        SupportTicket assigned = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
+        SupportTicket resolved = assigned.resolve(NOW);
+        when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(resolved), Optional.of(assigned));
+
+        SupportChatService.SupportTransition resolveResult = service.resolve("room-1", "admin-1");
+        SupportChatService.SupportTransition reopenResult = service.reopen("room-1", "admin-1");
+
+        assertThat(resolveResult.changed()).isFalse();
+        assertThat(resolveResult.ticket()).isSameAs(resolved);
+        assertThat(reopenResult.changed()).isFalse();
+        assertThat(reopenResult.ticket()).isSameAs(assigned);
+        verify(tickets, never()).save(any());
+    }
+
+    @Test
+    void resolvePersistsAndReportsARealStateChange() {
+        SupportTicket assigned = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
+        when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(assigned));
+        when(tickets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SupportChatService.SupportTransition result = service.resolve("room-1", "admin-1");
+
+        assertThat(result.changed()).isTrue();
+        assertThat(result.ticket().status()).isEqualTo(SupportStatus.RESOLVED);
+        verify(tickets).save(any());
+    }
+
+    @Test
     void takeoverReplacesPreviousAssigneeAndRoomMembership() {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
         SocialChatRoom room =

@@ -58,27 +58,30 @@ public class SupportChatService {
             throw new ConflictException("SUPPORT_ALREADY_ASSIGNED", "다른 관리자가 담당 중인 문의입니다");
         }
         if (ticket.assigneeId() != null) {
-            SocialChatRoom reconciled =
-                    room.isMember(adminId) ? room : rooms.save(room.withSupportAgent(null, adminId));
-            return new SupportConversation(reconciled, ticket);
+            boolean membershipRepaired = !room.isMember(adminId);
+            SocialChatRoom reconciled = membershipRepaired ? rooms.save(room.withSupportAgent(null, adminId)) : room;
+            return new SupportConversation(reconciled, ticket, membershipRepaired);
         }
 
         Instant now = Instant.now(clock);
         SupportTicket assignedTicket = tickets.save(ticket.assignTo(adminId, now));
         SocialChatRoom assignedRoom = rooms.save(room.withSupportAgent(null, adminId));
-        return new SupportConversation(assignedRoom, assignedTicket);
+        return new SupportConversation(assignedRoom, assignedTicket, true);
     }
 
     @Transactional
     public SupportConversation transfer(String roomId, String actorId, String targetAdminId) {
         requireAdmin(actorId);
         requireAdmin(targetAdminId);
+        if (actorId.equals(targetAdminId)) {
+            throw new BadRequestException("SUPPORT_ALREADY_OWNED", "이미 내가 담당 중인 문의입니다");
+        }
         SupportTicket ticket = requireAssignedTo(roomId, actorId);
         SocialChatRoom room = requireSupportRoom(roomId);
         Instant now = Instant.now(clock);
         SupportTicket transferredTicket = tickets.save(ticket.transferTo(targetAdminId, now));
         SocialChatRoom transferredRoom = rooms.save(room.withSupportAgent(ticket.assigneeId(), targetAdminId));
-        return new SupportConversation(transferredRoom, transferredTicket);
+        return new SupportConversation(transferredRoom, transferredTicket, true);
     }
 
     /**
@@ -110,18 +113,23 @@ public class SupportChatService {
     }
 
     @Transactional
-    public SupportTicket resolve(String roomId, String actorId) {
-        return tickets.save(requireAssignedTo(roomId, actorId).resolve(Instant.now(clock)));
+    public SupportTransition resolve(String roomId, String actorId) {
+        SupportTicket current = requireAssignedTo(roomId, actorId);
+        SupportTicket next = current.resolve(Instant.now(clock));
+        return next == current
+                ? new SupportTransition(current, false)
+                : new SupportTransition(tickets.save(next), true);
     }
 
     @Transactional
-    public SupportTicket reopen(String roomId, String actorId) {
+    public SupportTransition reopen(String roomId, String actorId) {
         requireAdmin(actorId);
         SupportTicket ticket = requireTicket(roomId);
         if (ticket.assigneeId() != null && !ticket.assigneeId().equals(actorId)) {
             throw new ForbiddenException("SUPPORT_ASSIGNEE_ONLY", "담당 관리자만 문의를 재개할 수 있습니다");
         }
-        return tickets.save(ticket.reopen(Instant.now(clock)));
+        SupportTicket next = ticket.reopen(Instant.now(clock));
+        return next == ticket ? new SupportTransition(ticket, false) : new SupportTransition(tickets.save(next), true);
     }
 
     @Transactional
@@ -179,7 +187,9 @@ public class SupportChatService {
         return reason;
     }
 
-    public record SupportConversation(SocialChatRoom room, SupportTicket ticket) {}
+    public record SupportConversation(SocialChatRoom room, SupportTicket ticket, boolean changed) {}
+
+    public record SupportTransition(SupportTicket ticket, boolean changed) {}
 
     public record SupportTakeover(
             SocialChatRoom room, SupportTicket ticket, String previousAssigneeId, String reason) {}

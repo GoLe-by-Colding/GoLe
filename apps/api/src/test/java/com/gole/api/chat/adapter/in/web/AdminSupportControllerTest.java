@@ -135,6 +135,55 @@ class AdminSupportControllerTest {
     }
 
     @Test
+    void repeatedAssignmentReturnsCurrentTicketWithoutFalseAudit() throws Exception {
+        SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-2", NOW);
+        SocialChatRoom room =
+                SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
+        when(support.assignToSelf("room-1", "admin-2"))
+                .thenReturn(new SupportChatService.SupportConversation(room, ticket, false));
+
+        mvc.perform(post("/api/admin/support/room-1/assign").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void repeatedReopenReturnsCurrentTicketWithoutFalseAudit() throws Exception {
+        SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-2", NOW);
+        SocialChatRoom room =
+                SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
+        when(support.reopen("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, false));
+        when(rooms.requireRoom("room-1")).thenReturn(room);
+
+        mvc.perform(post("/api/admin/support/room-1/reopen").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void realResolveStateChangeProducesOneAuditRecord() throws Exception {
+        SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW)
+                .assignTo("admin-2", NOW)
+                .resolve(NOW.plusSeconds(10));
+        SocialChatRoom room =
+                SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
+        when(support.resolve("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, true));
+        when(rooms.requireRoom("room-1")).thenReturn(room);
+
+        mvc.perform(post("/api/admin/support/room-1/resolve").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        ArgumentCaptor<RecordAdminActionCommand> command = ArgumentCaptor.forClass(RecordAdminActionCommand.class);
+        verify(audit).record(command.capture());
+        assertThat(command.getValue().type()).isEqualTo(AdminActionType.SUPPORT_RESOLVE);
+    }
+
+    @Test
     void assignedAdminCanPageOlderSupportMessagesWithStableCursor() throws Exception {
         Instant before = NOW.plusSeconds(120);
         when(messaging.history("room-1", "admin-2", before, "message-2", 20))
