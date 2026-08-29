@@ -8,6 +8,7 @@ test.describe("Seller fee disclosure", () => {
 
   test("공개 수수료 정책으로 예상 정산액을 계산한다", async ({ page }) => {
     await page.route("**/api/v1/config/fees", async (route) => {
+      expect(route.request().headers()["content-type"]).toBeUndefined();
       await route.fulfill({
         status: 200,
         contentType: "application/json",

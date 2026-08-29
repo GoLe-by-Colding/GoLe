@@ -58,7 +58,9 @@ export async function apiRequest<TResponse>(
           },
         }),
     headers: {
-      "Content-Type": "application/json",
+      // 본문 없는 GET/HEAD에 application/json을 붙이면 브라우저가 단순 CORS 요청으로
+      // 보지 않아 폴링마다 OPTIONS 사전 요청이 하나씩 더 생긴다.
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...sessionHeader,
       ...headers,
     },
