@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * snapshot에 포함하지 않는다.
  */
 @Component
+@Profile("!e2e")
 public class PortOneReadinessIndicator implements GetPaymentReadinessUseCase {
 
     private final boolean enabled;

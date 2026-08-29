@@ -37,7 +37,24 @@ async function openOrder(page: Page, id: string, status: TestOrderStatus) {
   await expect(page.getByTestId("order-status")).toBeVisible();
 }
 
+async function mockPaymentsOpen(page: Page) {
+  await page.route("**/api/v1/config/launch", (route) =>
+    route.fulfill({
+      json: {
+        stage: 2,
+        tradeMode: "MANUAL_SETTLEMENT",
+        features: { payments: true, reviews: true, partnerPayout: false },
+        updatedAt: "2026-08-09T00:00:00Z",
+      },
+    }),
+  );
+}
+
 test.describe("Order detail recovery UX", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockPaymentsOpen(page);
+  });
+
   /**
    * 결제 시도 전에는 "기다리고 있어요"가 사실이 아니다. 그 문구는 결제를 마친 사람에게
    * "다시 결제하지 말라"고 말하기 위한 것이라, 시작도 안 한 사람에게 보이면 오해를 만든다.
@@ -61,9 +78,9 @@ test.describe("Order detail recovery UX", () => {
 
     await page.goto("/orders/order-review");
     await expect(page.getByText("운영팀이 결제를 확인하고 있어요", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "고래방에 문의" })).toHaveAttribute(
-      "target",
-      "_blank",
+    await expect(page.getByRole("link", { name: "운영팀 문의" })).toHaveAttribute(
+      "href",
+      "/chat?compose=support",
     );
 
     await page.getByRole("button", { name: "상태 다시 확인" }).click();
@@ -154,7 +171,10 @@ test.describe("Order detail recovery UX", () => {
       "href",
       "/listings/listing-ux",
     );
-    await expect(page.getByRole("link", { name: "고래방에 문의" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "운영팀 문의" })).toHaveAttribute(
+      "href",
+      "/chat?compose=support",
+    );
     await expect(page.getByRole("button", { name: "결제하기" })).toHaveCount(0);
   });
 });

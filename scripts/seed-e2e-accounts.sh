@@ -59,6 +59,23 @@ for (const a of accounts) {
 }
 db.accounts.deleteMany({ email: { \$in: accounts.map((a) => a.email) }, _id: { \$nin: accounts.map((a) => a._id) } });
 print("accounts: " + db.accounts.countDocuments({ _id: { \$in: accounts.map((a) => a._id) } }) + "/2");
+
+// 결제 E2E는 운영 기본값(Stage 1)을 암묵적으로 열지 않는다. e2e 프로필의 준비 상태와
+// 수동 정산 계약 플래그가 함께 맞을 때만 이 명시적 Stage 2 설정이 실행된다.
+db.launch_config.updateOne(
+  { _id: "launch" },
+  {
+    \$set: {
+      stage: 2,
+      overrides: {},
+      updatedAt: new Date(),
+      updatedBy: "system:e2e-seed",
+    },
+    \$setOnInsert: { version: NumberLong(0) },
+  },
+  { upsert: true },
+);
+print("launch stage: " + db.launch_config.findOne({ _id: "launch" }).stage);
 MONGO
 
 # TTL은 넉넉히 준다(2시간). E2E 한 회차보다 길고, 남아도 다음 회차가 덮어쓴다.

@@ -70,6 +70,16 @@ test.describe("Mobile — 결제·운영 화면", () => {
 
   test("결제 대기 주문 상세가 가로 스크롤 없이 렌더된다", async ({ page }) => {
     await signInAs(page, E2E_SELLER);
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 2,
+          tradeMode: "MANUAL_SETTLEMENT",
+          features: { payments: true, reviews: true, partnerPayout: false },
+          updatedAt: "2026-08-14T00:00:00Z",
+        },
+      }),
+    );
     await page.route("**/api/v1/orders/*", (route) =>
       route.fulfill({
         json: {

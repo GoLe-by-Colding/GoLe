@@ -359,9 +359,51 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
 
   test("정산 원장에서 지급 증빙을 입력해 완료 처리한다", async ({ page }) => {
     let markedPaid = false;
+    let settlementStatus: "PENDING" | "PAYOUT_IN_PROGRESS" = "PENDING";
+    const settlement = () => ({
+      orderId: "order-settlement-1",
+      sellerId: "seller-1",
+      grossAmount: 125_000,
+      fee: 6_250,
+      payout: 118_750,
+      feeRate: 0.05,
+      status: settlementStatus,
+      paymentReference: null,
+      createdAt: "2026-08-09T01:00:00Z",
+      payableAt: "2026-08-09T01:30:00Z",
+      paidAt: null,
+      payoutAttempts: settlementStatus === "PAYOUT_IN_PROGRESS" ? 1 : 0,
+      payoutOperatorId: settlementStatus === "PAYOUT_IN_PROGRESS" ? "admin-1" : null,
+      payoutAttemptedAt: settlementStatus === "PAYOUT_IN_PROGRESS" ? "2026-08-09T01:45:00Z" : null,
+      payoutNextAttemptAt: null,
+      payoutError: null,
+    });
+    await page.route("**/api/admin/launch", (route) =>
+      route.fulfill({
+        json: {
+          config: {
+            stage: 2,
+            tradeMode: "MANUAL_SETTLEMENT",
+            features: { payments: true, reviews: true, partnerPayout: false },
+            updatedAt: "2026-08-09T00:00:00Z",
+          },
+          requestedStage: 2,
+          overrides: {},
+          updatedBy: "admin-1",
+          settlementMode: "MANUAL",
+          payoutContractVerified: true,
+        },
+      }),
+    );
     await page.route("**/api/admin/settlements**", async (route) => {
       const request = route.request();
-      if (request.method() === "POST") {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === "POST" && path.endsWith("/claim")) {
+        settlementStatus = "PAYOUT_IN_PROGRESS";
+        await route.fulfill({ json: settlement() });
+        return;
+      }
+      if (request.method() === "POST" && path.endsWith("/paid")) {
         const body = request.postDataJSON() as { paymentReference?: string };
         expect(body.paymentReference).toBe("BANK-20260809-001");
         markedPaid = true;
@@ -377,31 +419,20 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             status: "PAID",
             paymentReference: body.paymentReference,
             createdAt: "2026-08-09T01:00:00Z",
+            payableAt: "2026-08-09T01:30:00Z",
             paidAt: "2026-08-09T02:00:00Z",
+            payoutAttempts: 1,
+            payoutOperatorId: "admin-1",
+            payoutAttemptedAt: "2026-08-09T01:45:00Z",
+            payoutNextAttemptAt: null,
+            payoutError: null,
           }),
         });
         return;
       }
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify(
-          markedPaid
-            ? []
-            : [
-                {
-                  orderId: "order-settlement-1",
-                  sellerId: "seller-1",
-                  grossAmount: 125_000,
-                  fee: 6_250,
-                  payout: 118_750,
-                  feeRate: 0.05,
-                  status: "PENDING",
-                  paymentReference: null,
-                  createdAt: "2026-08-09T01:00:00Z",
-                  paidAt: null,
-                },
-              ],
-        ),
+        body: JSON.stringify(markedPaid ? [] : [settlement()]),
       });
     });
 
@@ -410,7 +441,9 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByRole("link", { name: "정산" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByText("₩118,750")).toBeVisible();
 
+    await page.getByRole("button", { name: "지급 작업 시작" }).click();
     await page.getByRole("textbox", { name: /지급 증빙 번호/ }).fill("BANK-20260809-001");
+    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "지급 완료" }).click();
 
     await expect.poll(() => markedPaid).toBe(true);

@@ -509,6 +509,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description="금액 또는 PG 상태를 대조 중입니다. 중복 결제하지 마세요. 주문과 매물은 보존되며 확인 후 상태가 자동으로 갱신됩니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
+            showSupport
           />
         ) : null}
 
@@ -519,6 +520,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description="결제수단에 환불이 반영되기까지 시간이 걸릴 수 있습니다. 최대 1분 동안 자동으로 확인하며, 이후에도 직접 상태를 확인할 수 있습니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
+            showSupport
           />
         ) : null}
 
@@ -529,6 +531,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description={`운영자가 배송 기록을 근거로 환불 또는 거래 완료를 판정합니다.${order.disputeReason ? ` (사유: ${DISPUTE_REASON_LABEL[order.disputeReason]})` : ""} 판정 결과는 알림으로 안내됩니다.`}
             refreshing={refreshing}
             onRefresh={refreshOrder}
+            showSupport
           />
         ) : null}
 
@@ -544,6 +547,9 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             <div className="flex flex-wrap gap-2">
               <LinkButton href={`/listings/${order.listingId}`} size="sm" variant="secondary">
                 매물 다시 보기
+              </LinkButton>
+              <LinkButton href="/chat?compose=support" size="sm" variant="ghost">
+                운영팀 문의
               </LinkButton>
             </div>
           </div>
@@ -800,6 +806,7 @@ interface OrderStatusNoticeProps {
   readonly refreshing: boolean;
   readonly onRefresh: () => void;
   readonly tone?: "neutral" | "warning";
+  readonly showSupport?: boolean;
 }
 
 function OrderStatusNotice({
@@ -808,6 +815,7 @@ function OrderStatusNotice({
   refreshing,
   onRefresh,
   tone = "neutral",
+  showSupport = false,
 }: OrderStatusNoticeProps) {
   return (
     <div
@@ -826,6 +834,11 @@ function OrderStatusNotice({
         <Button size="sm" variant="secondary" disabled={refreshing} onClick={onRefresh}>
           {refreshing ? "확인 중..." : "상태 다시 확인"}
         </Button>
+        {showSupport ? (
+          <LinkButton href="/chat?compose=support" size="sm" variant="ghost">
+            운영팀 문의
+          </LinkButton>
+        ) : null}
       </div>
     </div>
   );
