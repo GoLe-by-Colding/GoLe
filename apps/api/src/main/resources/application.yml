@@ -137,6 +137,24 @@ gole:
     auto-complete-after: ${GOLE_PIPELINE_AUTO_COMPLETE:P7D}
     dispute-escalation-after: ${GOLE_PIPELINE_DISPUTE_ESCALATION:P3D}
     tracker-unknown-after: ${GOLE_PIPELINE_TRACKER_UNKNOWN:PT24H}
+  # 정산 실행 방식. MANUAL | PROVIDER | DISABLED
+  #   MANUAL   계약된 지급대행을 운영자가 실행한 뒤 증빙을 어드민에서 확정(PAID).
+  #   PROVIDER SettlementExecutionPort 구현체(PG 지급대행)가 자동 지급. 구현체가 없으면 부팅 실패.
+  #   DISABLED 신규 결제·정산을 열지 않는 안전 기본값. 공개 단계는 Stage 1 이하로 잠긴다.
+  # payout-contract-verified 는 현재 도메인·C2C 모델·판매자 유형의 서면 승인 확인값이다.
+  # false이면 mode와 저장 stage가 높아도 실행 Stage 1 이하, 지급 실행 불가로 잠긴다.
+  # mode 는 SettlementExecutor 가 부팅 시 검증한다 — 설정만 바꾸고 어댑터가 없으면 뜨지 않는다.
+  #
+  # payout-holdback: 구매확정(원장 적재) 후 실제 이체까지의 운영 완충 시간.
+  # 구매확정 뒤 분쟁 접수 정책을 대신하지 않으므로 약관·PG 계약과 함께 검토한다.
+  settlement:
+    mode: ${GOLE_SETTLEMENT_MODE:DISABLED}
+    payout-contract-verified: ${GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED:false}
+    payout-holdback: ${GOLE_SETTLEMENT_PAYOUT_HOLDBACK:P3D}
+    provider-retry-after: ${GOLE_SETTLEMENT_PROVIDER_RETRY_AFTER:PT5M}
+    provider-claim-timeout: ${GOLE_SETTLEMENT_PROVIDER_CLAIM_TIMEOUT:PT10M}
+    provider-batch-size: ${GOLE_SETTLEMENT_PROVIDER_BATCH_SIZE:20}
+    provider-max-attempts: ${GOLE_SETTLEMENT_PROVIDER_MAX_ATTEMPTS:5}
   # 플랫폼 수수료 정책(shipping-and-fees R5). 요율 변경이 배포 없이 가능해야 한다.
   # min/max 가 0이면 하한/상한 없음.
   fee:

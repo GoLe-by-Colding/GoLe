@@ -6,7 +6,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-/** 운영 배포에서 테스트 결제 스텁이 실결제로 오인되는 사고를 시작 단계에서 차단한다. */
+/** PortOne을 켰을 때 비밀값과 운영 채널이 완전한지 시작 단계에서 검증한다. */
 @Component
 public class PaymentConfigurationGuard implements ApplicationRunner {
 
@@ -60,9 +60,8 @@ public class PaymentConfigurationGuard implements ApplicationRunner {
         if (portOneEnabled && !cardChannelKey.isBlank() && cardChannelKey.trim().equals(channelKey.trim())) {
             throw new IllegalStateException("PORTONE_CARD_CHANNEL_KEY must differ from PORTONE_CHANNEL_KEY");
         }
-        if (isProduction(environment) && !portOneEnabled) {
-            throw new IllegalStateException(
-                    "Production must enable PortOne; refusing to start with the stub payment gateway");
+        if (isProduction(environment) && portOneEnabled && !"LIVE".equalsIgnoreCase(channelType.trim())) {
+            throw new IllegalStateException("Production PortOne payments require PORTONE_CHANNEL_TYPE=LIVE");
         }
     }
 

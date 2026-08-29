@@ -6,6 +6,7 @@ import com.gole.api.order.domain.model.PaymentMethodType;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -26,8 +27,20 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
      */
     private static final PaymentMethod STUB_PAYMENT_METHOD = new PaymentMethod(PaymentMethodType.EASY_PAY, "KAKAOPAY");
 
+    private final boolean stubAllowed;
+
+    public StubPaymentGatewayAdapter(@Value("${gole.environment:local}") String environment) {
+        this.stubAllowed = !isProduction(environment);
+    }
+
+    @Override
+    public void preparePayment(String orderId, long amount) {
+        requireStubAllowed();
+    }
+
     @Override
     public PaymentVerification verifyPayment(String orderId, long amount) {
+        requireStubAllowed();
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
         log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
@@ -36,6 +49,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
 
     @Override
     public RefundResult refund(String orderId, long amount) {
+        requireStubAllowed();
         String transactionId = newTransactionId(orderId);
         log.info("[STUB-PG] refund success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
         return RefundResult.SUCCEEDED;
@@ -43,7 +57,19 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
 
     @Override
     public boolean isFullyRefunded(String orderId, long amount) {
+        requireStubAllowed();
         return true;
+    }
+
+    private void requireStubAllowed() {
+        if (!stubAllowed) {
+            throw new IllegalStateException(
+                    "Production payment gateway is disabled; refusing to simulate a payment or refund");
+        }
+    }
+
+    private static boolean isProduction(String environment) {
+        return "production".equalsIgnoreCase(environment) || "prod".equalsIgnoreCase(environment);
     }
 
     /** 주문 식별자 기반의 결정론적 거래 식별자. */

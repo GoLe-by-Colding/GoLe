@@ -12,13 +12,11 @@ class PaymentConfigurationGuardTest {
     private static final DefaultApplicationArguments NO_ARGS = new DefaultApplicationArguments();
 
     @Test
-    void productionRejectsStubGateway() {
+    void productionMayBootWithPaymentsDisabledForDirectTradeLaunch() {
         PaymentConfigurationGuard guard =
                 new PaymentConfigurationGuard("production", false, "", "", "", "", "", "TEST");
 
-        assertThatThrownBy(() -> guard.run(NO_ARGS))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("stub payment gateway");
+        assertThatCode(() -> guard.run(NO_ARGS)).doesNotThrowAnyException();
     }
 
     @Test
@@ -107,5 +105,15 @@ class PaymentConfigurationGuardTest {
                                 "prod", true, "api-secret", "webhook-secret", "store-1", "channel-1", "", "live")
                         .run(NO_ARGS))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void productionRejectsTestPaymentChannel() {
+        PaymentConfigurationGuard guard = new PaymentConfigurationGuard(
+                "production", true, "api-secret", "webhook-secret", "store-1", "channel-1", "", "TEST");
+
+        assertThatThrownBy(() -> guard.run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PORTONE_CHANNEL_TYPE=LIVE");
     }
 }
