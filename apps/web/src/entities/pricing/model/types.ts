@@ -14,6 +14,48 @@ export interface PricePoint {
   readonly price: number;
   readonly quantity: number;
   readonly executedAt: string;
+  readonly source: PriceTransactionSource;
+  readonly condition: SetCondition;
+}
+
+export type MarketDataState = "EMPTY" | "OBSERVATIONS_ONLY" | "ESTABLISHED";
+
+export type PriceTransactionSource =
+  | "platform_payment"
+  | "platform_test"
+  | "direct_trade"
+  | "demo_seed"
+  | "legacy_unverified";
+
+export type PriceProvenanceMode =
+  | "NONE"
+  | "FIRST_PARTY"
+  | "DIRECT_TRADE"
+  | "DEMO"
+  | "LEGACY_UNVERIFIED"
+  | "MIXED";
+
+export interface PriceProvenance {
+  readonly mode: PriceProvenanceMode;
+  readonly includedSources: readonly PriceTransactionSource[];
+  readonly demo: boolean;
+}
+
+/** 공개 화면에서 1차 결제 증빙이 아닌 표본을 숨기지 않기 위한 경고 문구. */
+export function priceEvidenceWarning(provenance: PriceProvenance): string | null {
+  if (provenance.demo) return "데모 포함";
+  switch (provenance.mode) {
+    case "DIRECT_TRADE":
+      return "직거래 참고";
+    case "LEGACY_UNVERIFIED":
+      return "출처 확인 전";
+    case "MIXED":
+      return "혼합 출처 · 참고용";
+    case "NONE":
+    case "FIRST_PARTY":
+    case "DEMO":
+      return provenance.mode === "DEMO" ? "데모 데이터" : null;
+  }
 }
 
 export type SetCondition = "new_sealed" | "like_new" | "used_good" | "used_fair" | "damaged";
@@ -44,6 +86,19 @@ export interface PriceValuation {
   readonly hasData: boolean;
   readonly marketPrice: number | null;
   readonly conditions: readonly ConditionValuation[];
+}
+
+/** 표본 단계·실제 관측·파생 통계를 한 응답의 동일한 증빙 집합으로 묶는다. */
+export interface PriceSnapshot {
+  readonly setNumber: string;
+  readonly state: MarketDataState;
+  readonly minimumSamples: number;
+  readonly sampleCount: number;
+  /** 최신 체결부터 정렬된 관측 내역. 차트에는 오름차순 `/chart` 응답을 사용한다. */
+  readonly observations: readonly PricePoint[];
+  readonly statistics: PriceStatistics | null;
+  readonly valuation: PriceValuation | null;
+  readonly provenance: PriceProvenance;
 }
 
 export const CONDITION_LABEL: Record<SetCondition, string> = {

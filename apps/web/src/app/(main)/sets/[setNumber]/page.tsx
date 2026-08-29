@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchLegoSetForPage, type LegoSet } from "@entities/lego-set";
 import { fetchListingsBySet, type Listing } from "@entities/listing";
-import { fetchPriceStatisticsForPage, type PriceStatistics } from "@entities/pricing";
+import { fetchPriceSnapshotForPage, type PriceSnapshot } from "@entities/pricing";
 import { SetDetailPage } from "@views/set-detail";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
@@ -54,7 +54,7 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
 function setJsonLd(
   set: LegoSet,
   listings: readonly Listing[],
-  statistics: PriceStatistics | null,
+  snapshot: PriceSnapshot | null,
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -89,13 +89,13 @@ function setJsonLd(
     };
   }
 
-  if (statistics !== null && statistics.hasData && statistics.transactionCount > 0) {
+  if (snapshot?.state === "ESTABLISHED" && snapshot.statistics?.hasData) {
     base["additionalProperty"] = [
       ...(base["additionalProperty"] as unknown[]),
       {
         "@type": "PropertyValue",
         name: "체결 거래 수",
-        value: statistics.transactionCount,
+        value: snapshot.statistics.transactionCount,
       },
     ];
   }
@@ -115,15 +115,15 @@ export default async function Page({ params }: PageParams) {
   }
 
   // 매물·시세는 실패해도 페이지를 살린다(부분 실패 허용).
-  const [listings, statistics] = await Promise.all([
+  const [listings, snapshot] = await Promise.all([
     fetchListingsBySet(set.setNumber).catch((): readonly Listing[] => []),
-    fetchPriceStatisticsForPage(set.setNumber).catch((): PriceStatistics | null => null),
+    fetchPriceSnapshotForPage(set.setNumber).catch((): PriceSnapshot | null => null),
   ]);
 
   return (
     <>
-      <SetDetailPage set={set} listings={listings} statistics={statistics} />
-      <JsonLd data={setJsonLd(set, listings, statistics)} />
+      <SetDetailPage set={set} listings={listings} snapshot={snapshot} />
+      <JsonLd data={setJsonLd(set, listings, snapshot)} />
       <JsonLd
         data={breadcrumbJsonLd(
           [

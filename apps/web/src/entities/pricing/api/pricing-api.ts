@@ -1,5 +1,11 @@
 import { apiRequest } from "@shared/api";
-import type { PricePoint, PriceStatistics, PriceValuation, TrendingSet } from "../model/types";
+import type {
+  PricePoint,
+  PriceSnapshot,
+  PriceStatistics,
+  PriceValuation,
+  TrendingSet,
+} from "../model/types";
 
 const BASE = "/api/v1/pricing/sets";
 
@@ -16,6 +22,23 @@ export function fetchPriceStatistics(
 /** 세트 상세(SSR·색인 대상)용 시세 통계. 체결 이력은 자주 바뀌므로 5분 캐시. */
 export function fetchPriceStatisticsForPage(setNumber: string): Promise<PriceStatistics> {
   return apiRequest<PriceStatistics>(`${BASE}/${encodeURIComponent(setNumber)}/statistics`, {
+    next: { revalidate: 300 },
+  });
+}
+
+export function fetchPriceSnapshot(
+  setNumber: string,
+  signal?: AbortSignal,
+): Promise<PriceSnapshot> {
+  return apiRequest<PriceSnapshot>(`${BASE}/${encodeURIComponent(setNumber)}/snapshot`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+/** 세트 상세(SSR·색인 대상)용 시세 증빙 스냅샷. */
+export function fetchPriceSnapshotForPage(setNumber: string): Promise<PriceSnapshot> {
+  return apiRequest<PriceSnapshot>(`${BASE}/${encodeURIComponent(setNumber)}/snapshot`, {
     next: { revalidate: 300 },
   });
 }

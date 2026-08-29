@@ -63,7 +63,7 @@ export const COUNT_LABEL: Readonly<Record<string, string>> = {
   orders: "주문",
   posts: "게시글",
   reviews: "후기",
-  price_transactions: "시세 체결",
+  price_transactions: "시세 원장 전체",
 };
 
 /** 감사 로그의 조치 유형을 운영자가 읽는 말로 옮긴다. */

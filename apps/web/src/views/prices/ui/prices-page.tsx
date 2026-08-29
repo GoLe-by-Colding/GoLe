@@ -1,10 +1,5 @@
 import { fetchFeaturedLegoSets, fetchLegoSetByNumber, type LegoSet } from "@entities/lego-set";
-import {
-  fetchPriceChart,
-  fetchPriceValuation,
-  type PricePoint,
-  type PriceValuation,
-} from "@entities/pricing";
+import { fetchPriceSnapshot, type PricePoint, type PriceSnapshot } from "@entities/pricing";
 import { Container, Heading, Text } from "@shared/ui";
 import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
 
@@ -29,23 +24,20 @@ async function loadBoard(initialSetNumber?: string): Promise<readonly PriceBoard
 
   return Promise.all(
     sets.map(async (set): Promise<PriceBoardItem> => {
-      let points: readonly PricePoint[] = [];
-      let valuation: PriceValuation | null = null;
-      try {
-        [points, valuation] = await Promise.all([
-          fetchPriceChart(set.setNumber),
-          fetchPriceValuation(set.setNumber),
-        ]);
-      } catch {
-        // 개별 세트 실패는 빈 데이터로 처리한다.
-      }
+      const snapshot: PriceSnapshot | null = await fetchPriceSnapshot(set.setNumber).catch(
+        (): null => null,
+      );
+      // snapshot 관측은 최신순이다. 같은 원자적 응답을 뒤집어 차트에 써서 헤드라인과
+      // 시계열이 서로 다른 요청 시점·표본을 가리키지 않게 한다.
+      const points: readonly PricePoint[] | null =
+        snapshot === null ? null : [...snapshot.observations].reverse();
       return {
         setNumber: set.setNumber,
         name: set.name,
         theme: set.theme,
         imageUrl: set.imageUrl,
         points,
-        valuation,
+        snapshot,
       };
     }),
   );
@@ -71,7 +63,11 @@ export async function PricesPage({ initialSetNumber }: PricesPageProps) {
         {board.length === 0 ? (
           <Text tone="muted">시세 데이터를 불러오지 못했습니다.</Text>
         ) : (
-          <PriceExplorer items={board} initialSetNumber={initialSetNumber} />
+          <PriceExplorer
+            key={initialSetNumber ?? "default"}
+            items={board}
+            initialSetNumber={initialSetNumber}
+          />
         )}
       </div>
     </Container>
