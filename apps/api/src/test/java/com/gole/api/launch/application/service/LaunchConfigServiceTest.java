@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,8 +48,11 @@ class LaunchConfigServiceTest {
     private final LaunchConfigHistoryPort history = mock(LaunchConfigHistoryPort.class);
     private final GetPaymentReadinessUseCase readiness = mock(GetPaymentReadinessUseCase.class);
     private final LaunchSettlementModePort settlementMode = mock(LaunchSettlementModePort.class);
-    private final LaunchConfigService service =
-            new LaunchConfigService(repository, history, readiness, settlementMode, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final LaunchConfigSafetyClampWriter safetyClampWriter = new LaunchConfigSafetyClampWriter(
+            repository, history, readiness, settlementMode, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final LaunchConfigSafetyClamp safetyClamp = new LaunchConfigSafetyClamp(safetyClampWriter);
+    private final LaunchConfigService service = new LaunchConfigService(
+            repository, history, readiness, settlementMode, safetyClamp, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void defaultToManualSettlement() {
@@ -86,13 +90,14 @@ class LaunchConfigServiceTest {
     }
 
     @Test
-    @DisplayName("관리자 요청값은 정산 모드로 낮춘 실행값과 별도로 보존한다")
-    void requestedKeepsStoredStage() {
+    @DisplayName("정산 조건이 깨지면 관리자 요청값도 Stage 1로 영구 잠근다")
+    void requestedIsPersistentlyClampedWithExecution() {
         stored(LaunchStage.FULL);
         when(settlementMode.currentMode()).thenReturn(Mode.DISABLED);
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
-        assertThat(service.requested().stage()).isEqualTo(LaunchStage.FULL);
+        assertThat(service.requested().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        verify(repository, org.mockito.Mockito.atLeastOnce()).save(any(LaunchConfig.class));
     }
 
     @Test
@@ -108,7 +113,7 @@ class LaunchConfigServiceTest {
         assertExecutableStage(LaunchStage.TRADING, Mode.MANUAL, LaunchStage.TRADING);
         assertExecutableStage(LaunchStage.TRADING, Mode.PROVIDER, LaunchStage.BROWSE_ONLY);
         assertExecutableStage(LaunchStage.FULL, Mode.DISABLED, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.FULL, Mode.MANUAL, LaunchStage.TRADING);
+        assertExecutableStage(LaunchStage.FULL, Mode.MANUAL, LaunchStage.BROWSE_ONLY);
         assertExecutableStage(LaunchStage.FULL, Mode.PROVIDER, LaunchStage.FULL);
     }
 
@@ -130,7 +135,45 @@ class LaunchConfigServiceTest {
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
-        assertThat(service.requested().stage()).isEqualTo(LaunchStage.FULL);
+        assertThat(service.requested().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+    }
+
+    @Test
+    @DisplayName("준비 상태가 회복돼도 자동 재개하지 않고 관리자 명시 전환을 기다린다")
+    void recoveredReadinessDoesNotResumeWithoutExplicitAdminChange() {
+        AtomicReference<LaunchConfig> persisted =
+                new AtomicReference<>(new LaunchConfig(LaunchStage.FULL, Map.of(), null, "admin-0", 0L));
+        when(repository.load()).thenAnswer(ignored -> Optional.of(persisted.get()));
+        when(repository.save(any(LaunchConfig.class))).thenAnswer(invocation -> {
+            LaunchConfig candidate = invocation.getArgument(0);
+            LaunchConfig saved = new LaunchConfig(
+                    candidate.stage(),
+                    candidate.overrides(),
+                    candidate.updatedAt(),
+                    candidate.updatedBy(),
+                    persisted.get().version() + 1);
+            persisted.set(saved);
+            return saved;
+        });
+        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
+
+        assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        assertThat(persisted.get().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+
+        when(readiness.getPaymentReadiness()).thenReturn(ready());
+        assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        assertThat(service.requested().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+
+        LaunchConfig resumed =
+                service.changeStage(new ChangeStageCommand(LaunchStage.FULL, "지급대행 복구 확인", "admin-1", "a@gole.local"));
+        assertThat(resumed.stage()).isEqualTo(LaunchStage.FULL);
+        assertThat(persisted.get().stage()).isEqualTo(LaunchStage.FULL);
+        ArgumentCaptor<LaunchConfigChange> changes = ArgumentCaptor.forClass(LaunchConfigChange.class);
+        verify(history, org.mockito.Mockito.times(2)).append(changes.capture());
+        assertThat(changes.getAllValues())
+                .extracting(LaunchConfigChange::actorId)
+                .containsExactly("system:launch-safety-clamp", "admin-1");
     }
 
     @Test
@@ -145,7 +188,7 @@ class LaunchConfigServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("결제 설정이 준비되지 않아");
 
-        verify(repository, never()).save(any());
+        verify(repository).save(any(LaunchConfig.class));
     }
 
     @Test
@@ -286,7 +329,7 @@ class LaunchConfigServiceTest {
 
         assertThat(updated.stage()).isEqualTo(LaunchStage.PREPARING);
         verify(readiness, never()).getPaymentReadiness();
-        verify(repository).save(any());
+        verify(repository, org.mockito.Mockito.times(2)).save(any());
     }
 
     @Test
@@ -294,8 +337,11 @@ class LaunchConfigServiceTest {
     void sameStageIsNoop() {
         stored(LaunchStage.TRADING);
 
-        service.changeStage(new ChangeStageCommand(LaunchStage.TRADING, "확인차", "admin-1", "a@gole.local"));
+        var result = service.changeStageWithResult(
+                new ChangeStageCommand(LaunchStage.TRADING, "확인차", "admin-1", "a@gole.local"));
 
+        assertThat(result.changed()).isFalse();
+        assertThat(result.config().stage()).isEqualTo(LaunchStage.TRADING);
         verify(repository, never()).save(any());
         verify(history, never()).append(any());
     }
@@ -331,6 +377,23 @@ class LaunchConfigServiceTest {
                 .hasMessageContaining("결제 설정이 준비되지 않아");
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("결제 비활성 override 해제로 기본 결제가 되살아날 때도 준비 검증을 거친다")
+    void clearingDisabledPaymentOverrideRequiresReadiness() {
+        when(repository.load())
+                .thenReturn(Optional.of(
+                        new LaunchConfig(LaunchStage.TRADING, Map.of(LaunchFeature.PAYMENTS, false), null, "admin-0")));
+        when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
+
+        assertThatThrownBy(() -> service.setFeatureOverride(new SetFeatureOverrideCommand(
+                        LaunchFeature.PAYMENTS, null, "결제 재개", "admin-1", "a@gole.local")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("결제 설정이 준비되지 않아");
+
+        verify(repository, never()).save(any());
+        verify(history, never()).append(any());
     }
 
     @Test

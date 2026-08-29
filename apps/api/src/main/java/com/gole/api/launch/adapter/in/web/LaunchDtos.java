@@ -47,6 +47,7 @@ public final class LaunchDtos {
      * 관리자 조회 응답. 공개 응답에 운영 메타(override 원본, 조치자)를 더한다.
      *
      * <p>공개 응답을 그대로 품어서, 관리자가 보는 값과 사용자가 보는 값이 어긋날 수 없게 한다.
+     * {@code requestedStage}도 안전 래치를 통과한 영속 값이라 실행 조건 복구만으로 자동 상향되지 않는다.
      */
     public record AdminLaunchConfigResponse(
             LaunchConfigResponse config,

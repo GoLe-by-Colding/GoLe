@@ -8,5 +8,6 @@ public interface LaunchConfigRepositoryPort {
 
     Optional<LaunchConfig> load();
 
-    void save(LaunchConfig config);
+    /** 저장 후 낙관적 잠금 버전이 반영된 값을 반환한다. */
+    LaunchConfig save(LaunchConfig config);
 }

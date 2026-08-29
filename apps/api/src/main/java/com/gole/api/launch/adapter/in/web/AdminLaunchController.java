@@ -13,6 +13,7 @@ import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchFeature;
@@ -61,7 +62,8 @@ public class AdminLaunchController {
     @Operation(summary = "현재 공개 단계 조회", description = "공개 응답에 override 원본과 마지막 조치자를 더해 돌려준다.")
     @GetMapping
     public AdminLaunchConfigResponse current() {
-        return response(getLaunchConfig.current(), manageLaunchConfig.requested());
+        LaunchConfig current = getLaunchConfig.current();
+        return response(current, current);
     }
 
     @Operation(summary = "공개 단계 변경", description = "사유가 필수다. 결제가 새로 열리는 전이는 PortOne 설정이 준비되지 않으면 거부된다.")
@@ -69,11 +71,15 @@ public class AdminLaunchController {
     public AdminLaunchConfigResponse changeStage(
             @Valid @RequestBody ChangeStageRequest request, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        LaunchConfig updated = manageLaunchConfig.changeStage(new ChangeStageCommand(
+        StageChangeResult result = manageLaunchConfig.changeStageWithResult(new ChangeStageCommand(
                 LaunchStage.ofLevel(request.stage()), request.reason(), actor.id(), actor.email()));
-        // 조치가 성공한 뒤에만 감사 기록을 남긴다(거부는 남기지 않는다).
-        record(actor, "stage=" + updated.stage().level(), request.reason());
-        return response(getLaunchConfig.current(), updated);
+        LaunchConfig updated = result.config();
+        // 실제 상태가 바뀐 성공만 감사 기록을 남긴다. 같은 단계 재요청은 성공 응답이지만
+        // 운영 조치가 아니므로 이력과 관리자 감사 로그 모두 늘리지 않는다.
+        if (result.changed()) {
+            record(actor, "stage=" + updated.stage().level(), request.reason());
+        }
+        return current();
     }
 
     @Operation(summary = "기능 개방 override", description = "enabled 를 비우면 override 를 해제하고 단계 기본값으로 되돌린다. 사유는 필수다.")
@@ -85,7 +91,7 @@ public class AdminLaunchController {
         LaunchConfig updated = manageLaunchConfig.setFeatureOverride(
                 new SetFeatureOverrideCommand(target, request.enabled(), request.reason(), actor.id(), actor.email()));
         record(actor, target.apiName() + "=" + updated.isEnabled(target), request.reason());
-        return response(getLaunchConfig.current(), updated);
+        return current();
     }
 
     @Operation(summary = "공개 단계 변경 이력", description = "무엇이 무엇으로 바뀌었는지와 사유를 최신순으로 돌려준다.")

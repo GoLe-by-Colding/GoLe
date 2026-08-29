@@ -4,6 +4,7 @@ import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
@@ -44,11 +45,11 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
     private static final Logger log = LoggerFactory.getLogger(LaunchConfigService.class);
     private static final int MAX_HISTORY = 200;
     private static final int MAX_REASON_LENGTH = 500;
-
     private final LaunchConfigRepositoryPort repository;
     private final LaunchConfigHistoryPort history;
     private final GetPaymentReadinessUseCase paymentReadiness;
     private final LaunchSettlementModePort settlementMode;
+    private final LaunchConfigSafetyClamp safetyClamp;
     private final Clock clock;
 
     public LaunchConfigService(
@@ -56,58 +57,60 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
             LaunchConfigHistoryPort history,
             GetPaymentReadinessUseCase paymentReadiness,
             LaunchSettlementModePort settlementMode,
+            LaunchConfigSafetyClamp safetyClamp,
             Clock clock) {
         this.repository = repository;
         this.history = history;
         this.paymentReadiness = paymentReadiness;
         this.settlementMode = settlementMode;
+        this.safetyClamp = safetyClamp;
         this.clock = clock;
     }
 
     @Override
     public LaunchConfig current() {
-        LaunchConfig stored = stored();
-        LaunchConfig settlementLimited = constrainBySettlement(stored);
-        LaunchConfig executable = constrainByPaymentReadiness(settlementLimited);
-        if (executable.stage() == stored.stage()) {
-            return executable;
-        }
-        log.error(
-                "저장된 공개 단계가 현재 결제·정산 실행 조건과 불일치함 stage={} settlementMode={} — stage={}로 fail-closed",
-                stored.stage(),
-                settlementMode.currentMode(),
-                executable.stage());
-        return executable;
+        return safetyClamp.enforce();
     }
 
     @Override
     public LaunchConfig requested() {
-        return stored();
+        // 요청값도 실행값과 같은 안전 래치를 통과시킨다. 높은 희망 단계를 따로 남겨두면
+        // 환경 복구만으로 결제가 감사 기록 없이 자동 재개될 수 있다.
+        return safetyClamp.enforce();
     }
 
     @Override
     @Transactional
     public LaunchConfig changeStage(ChangeStageCommand command) {
+        return applyStageChange(command).config();
+    }
+
+    @Override
+    @Transactional
+    public StageChangeResult changeStageWithResult(ChangeStageCommand command) {
+        return applyStageChange(command);
+    }
+
+    private StageChangeResult applyStageChange(ChangeStageCommand command) {
         if (command.stage() == null) {
             throw new BadRequestException("LAUNCH_STAGE_REQUIRED", "변경할 공개 단계를 지정해야 합니다");
         }
         String reason = requireReason(command.reason());
-        LaunchConfig before = stored();
+        LaunchConfig before = safetyClamp.enforce();
         if (before.stage() == command.stage()) {
             // 같은 단계로의 재요청은 이력을 늘리지 않는다. 감사 로그가 의미 없는 줄로 덮이면
             // 정작 필요한 변경을 찾지 못한다.
-            return before;
+            return new StageChangeResult(before, false);
         }
         requireCompatibleSettlementMode(command.stage());
-        LaunchConfig executableBefore = constrainBySettlement(before);
         // 결제가 새로 열리는 방향일 때만 검증한다. 단계를 내리는 조치(사고 대응)는 막지 않는다.
-        if (opensPayments(executableBefore, command.stage())) {
+        if (opensPayments(before, command.stage())) {
             requirePaymentReadiness();
         }
 
         Instant now = Instant.now(clock);
-        LaunchConfig after = before.withStage(command.stage(), now, command.actorId());
-        repository.save(after);
+        LaunchConfig candidate = before.withStage(command.stage(), now, command.actorId());
+        LaunchConfig after = savedOrCandidate(repository.save(candidate), candidate);
         history.append(new LaunchConfigChange(
                 UUID.randomUUID().toString(),
                 LaunchConfigChange.Type.STAGE,
@@ -119,7 +122,7 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
                 command.actorEmail(),
                 now));
         log.info("공개 단계 변경 {} -> {} actor={} reason={}", before.stage(), after.stage(), command.actorId(), reason);
-        return after;
+        return new StageChangeResult(after, true);
     }
 
     @Override
@@ -129,32 +132,30 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
             throw new BadRequestException("LAUNCH_FEATURE_REQUIRED", "변경할 기능을 지정해야 합니다");
         }
         String reason = requireReason(command.reason());
-        LaunchConfig before = stored();
+        LaunchConfig before = safetyClamp.enforce();
         boolean wasEnabled = before.isEnabled(command.feature());
+        LaunchConfig projected =
+                before.withOverride(command.feature(), command.enabled(), before.updatedAt(), before.updatedBy());
+        boolean becomesEnabled = !wasEnabled && projected.isEnabled(command.feature());
 
         if (Boolean.TRUE.equals(command.enabled())) {
             if (command.feature() == LaunchFeature.PAYMENTS && !before.stage().atLeast(LaunchStage.TRADING)) {
                 throw new ConflictException("LAUNCH_STAGE_REQUIRED_FOR_PAYMENTS", "결제는 Stage 2 이상에서만 열 수 있습니다");
             }
-            if (command.feature() == LaunchFeature.PARTNER_PAYOUT) {
-                if (before.stage() != LaunchStage.FULL || settlementMode.currentMode() != Mode.PROVIDER) {
-                    throw new ConflictException(
-                            "LAUNCH_PROVIDER_MODE_REQUIRED", "자동 지급은 Stage 3과 지급대행 모드가 모두 준비돼야 열 수 있습니다");
-                }
-                if (!before.isEnabled(LaunchFeature.PAYMENTS)) {
-                    throw new ConflictException("LAUNCH_PAYMENTS_REQUIRED", "결제가 닫힌 상태에서는 자동 지급을 열 수 없습니다");
-                }
-            }
         }
 
-        // 단계 기본으로는 닫혀 있는 결제를 override 로 여는 것도 결제를 여는 전이다.
-        if (command.feature() == LaunchFeature.PAYMENTS && Boolean.TRUE.equals(command.enabled()) && !wasEnabled) {
+        // false override 해제(null)로 단계 기본값이 되살아나는 것도 기능을 여는 전이다.
+        if (command.feature() == LaunchFeature.PARTNER_PAYOUT
+                && (Boolean.TRUE.equals(command.enabled()) || becomesEnabled)) {
+            requirePartnerPayoutPrerequisites(before);
+        }
+        if (command.feature() == LaunchFeature.PAYMENTS && becomesEnabled) {
             requirePaymentReadiness();
         }
 
         Instant now = Instant.now(clock);
-        LaunchConfig after = before.withOverride(command.feature(), command.enabled(), now, command.actorId());
-        repository.save(after);
+        LaunchConfig candidate = before.withOverride(command.feature(), command.enabled(), now, command.actorId());
+        LaunchConfig after = savedOrCandidate(repository.save(candidate), candidate);
         history.append(new LaunchConfigChange(
                 UUID.randomUUID().toString(),
                 LaunchConfigChange.Type.FEATURE_OVERRIDE,
@@ -206,51 +207,13 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
         }
     }
 
-    private static LaunchStage executableStage(LaunchStage stored, Mode mode, boolean contractVerified) {
-        if (!stored.atLeast(LaunchStage.TRADING)) {
-            return stored;
+    private void requirePartnerPayoutPrerequisites(LaunchConfig before) {
+        if (before.stage() != LaunchStage.FULL || settlementMode.currentMode() != Mode.PROVIDER) {
+            throw new ConflictException("LAUNCH_PROVIDER_MODE_REQUIRED", "자동 지급은 Stage 3과 지급대행 모드가 모두 준비돼야 열 수 있습니다");
         }
-        if (mode == Mode.DISABLED || !contractVerified) {
-            return LaunchStage.BROWSE_ONLY;
+        if (!before.isEnabled(LaunchFeature.PAYMENTS)) {
+            throw new ConflictException("LAUNCH_PAYMENTS_REQUIRED", "결제가 닫힌 상태에서는 자동 지급을 열 수 없습니다");
         }
-        if (stored == LaunchStage.TRADING) {
-            return mode == Mode.MANUAL ? stored : LaunchStage.BROWSE_ONLY;
-        }
-        return mode == Mode.PROVIDER ? stored : LaunchStage.TRADING;
-    }
-
-    private LaunchConfig constrainBySettlement(LaunchConfig stored) {
-        LaunchStage executable =
-                executableStage(stored.stage(), settlementMode.currentMode(), settlementMode.payoutContractVerified());
-        return withExecutableStage(stored, executable);
-    }
-
-    /**
-     * 저장된 희망 단계가 높아도 결제 설정이 사라지거나 깨지면 공개 실행 단계는 즉시 Stage 1로
-     * 내려간다. 환경변수·정산 모드를 바꾼 뒤 과거 저장값이 자동으로 되살아나 결제가 열리는
-     * 경로까지 막기 위한 런타임 fail-closed 방어다.
-     */
-    private LaunchConfig constrainByPaymentReadiness(LaunchConfig candidate) {
-        if (!candidate.isEnabled(LaunchFeature.PAYMENTS)) {
-            return candidate;
-        }
-        Snapshot snapshot = paymentReadiness.getPaymentReadiness();
-        if (isReady(snapshot)) {
-            return candidate;
-        }
-        return withExecutableStage(candidate, LaunchStage.BROWSE_ONLY);
-    }
-
-    private static LaunchConfig withExecutableStage(LaunchConfig source, LaunchStage executable) {
-        if (source.stage() == executable) {
-            return source;
-        }
-        return new LaunchConfig(
-                executable, source.overrides(), source.updatedAt(), source.updatedBy(), source.version());
-    }
-
-    private LaunchConfig stored() {
-        return repository.load().orElseGet(LaunchConfig::unset);
     }
 
     /**
@@ -259,7 +222,13 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
      * <p>비밀값은 메시지에 담지 않는다 — 어떤 설정이 비었는지 이름만 알려준다.
      */
     private void requirePaymentReadiness() {
-        Snapshot snapshot = paymentReadiness.getPaymentReadiness();
+        Snapshot snapshot;
+        try {
+            snapshot = paymentReadiness.getPaymentReadiness();
+        } catch (RuntimeException readinessFailure) {
+            log.error("결제 준비 상태 조회 실패 — 결제 개방 전이를 거부함", readinessFailure);
+            throw new ConflictException("LAUNCH_PAYMENT_NOT_READY", "결제 준비 상태를 확인할 수 없어 이 단계로 올릴 수 없습니다");
+        }
         if (isReady(snapshot)) {
             return;
         }
@@ -295,6 +264,12 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
                     "LAUNCH_REASON_TOO_LONG", "변경 사유는 %d자를 넘을 수 없습니다".formatted(MAX_REASON_LENGTH));
         }
         return trimmed;
+    }
+
+    private static LaunchConfig savedOrCandidate(LaunchConfig saved, LaunchConfig candidate) {
+        // Mockito 기반 단위 테스트의 unstubbed save 는 null을 반환한다. 운영 어댑터는 항상
+        // 저장 후 낙관적 잠금 버전이 반영된 값을 돌려준다.
+        return saved == null ? candidate : saved;
     }
 
     /** 이력 표기: 최종 개방 여부와, 그것이 override 때문인지 단계 기본인지 함께 남긴다. */

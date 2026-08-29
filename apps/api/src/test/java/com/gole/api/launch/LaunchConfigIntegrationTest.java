@@ -116,6 +116,40 @@ class LaunchConfigIntegrationTest {
     }
 
     @Test
+    @DisplayName("실행 조건보다 높은 단계는 Stage 1로 영구 잠겨 환경 복구만으로 재개되지 않는다")
+    void runtimeSafetyClampIsPersisted() {
+        launchConfigRepository.save(new LaunchConfig(LaunchStage.FULL, Map.of(), Instant.now(), "admin-1"));
+
+        LaunchConfig effective = getLaunchConfig.current();
+        LaunchConfig persisted = launchConfigRepository.load().orElseThrow();
+
+        assertThat(effective.stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        assertThat(persisted.stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        assertThat(persisted.updatedBy()).isEqualTo("system:launch-safety-clamp");
+        assertThat(getLaunchConfig.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        assertThat(manageLaunchConfig.history(10)).singleElement().satisfies(change -> {
+            assertThat(change.before()).isEqualTo("3");
+            assertThat(change.after()).isEqualTo("1");
+            assertThat(change.actorId()).isEqualTo("system:launch-safety-clamp");
+            assertThat(change.reason()).contains("안전 잠금");
+        });
+    }
+
+    @Test
+    @DisplayName("안전 잠금 이력 저장이 실패하면 단계 하향도 같이 롤백된다")
+    void safetyClampHistoryFailureRollsBackStageTogether() {
+        launchConfigRepository.save(new LaunchConfig(LaunchStage.FULL, Map.of(), Instant.now(), "admin-1"));
+        transactionProbeHistory.failAfterNextAppend();
+
+        assertThatThrownBy(() -> getLaunchConfig.current()).isInstanceOf(TestHistoryWriteFailure.class);
+
+        LaunchConfig persisted = launchConfigRepository.load().orElseThrow();
+        assertThat(persisted.stage()).isEqualTo(LaunchStage.FULL);
+        assertThat(persisted.updatedBy()).isEqualTo("admin-1");
+        assertThat(transactionProbeHistory.findRecent(10)).isEmpty();
+    }
+
+    @Test
     @DisplayName("override 는 문자열로 저장됐다가 기능으로 되돌아온다")
     void featureOverrideSurvivesRoundTrip() {
         manageLaunchConfig.changeStage(

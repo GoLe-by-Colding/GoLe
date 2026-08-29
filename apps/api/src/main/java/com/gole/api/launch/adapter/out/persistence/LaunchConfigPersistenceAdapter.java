@@ -47,16 +47,17 @@ public class LaunchConfigPersistenceAdapter implements LaunchConfigRepositoryPor
     }
 
     @Override
-    public void save(LaunchConfig config) {
+    public LaunchConfig save(LaunchConfig config) {
         Map<String, Boolean> overrides = new LinkedHashMap<>();
         config.overrides().forEach((feature, enabled) -> overrides.put(feature.apiName(), enabled));
-        configs.save(new LaunchConfigDocument(
+        LaunchConfigDocument saved = configs.save(new LaunchConfigDocument(
                 LaunchConfigDocument.SINGLETON_ID,
                 config.stage().level(),
                 overrides,
                 config.updatedAt(),
                 config.updatedBy(),
                 config.version()));
+        return toDomain(saved);
     }
 
     @Override
