@@ -79,6 +79,15 @@ public class ListingService
     }
 
     @Override
+    public Listing getPublicById(String listingId) {
+        Listing listing = getById(listingId);
+        if (!listing.isPubliclyVisible()) {
+            throw new ListingNotFoundException(listingId);
+        }
+        return listing;
+    }
+
+    @Override
     public List<Listing> search(ListingSearchQuery query) {
         return listingRepository.search(query);
     }

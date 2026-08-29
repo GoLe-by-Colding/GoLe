@@ -4,8 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
@@ -20,7 +24,10 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
+import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
@@ -38,7 +45,9 @@ import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.ObjectMapper;
 
 class ChatControllerTest {
@@ -64,6 +73,7 @@ class ChatControllerTest {
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
         when(listings.getById("listing-1")).thenReturn(listing("real-seller"));
+        when(listings.getPublicById("listing-1")).thenReturn(listing("real-seller"));
         when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1"))
                 .thenReturn(Optional.empty());
         when(rooms.save(any(ChatRoomDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -87,10 +97,60 @@ class ChatControllerTest {
     }
 
     @Test
+    void createRoom_doesNotCreateRoomForHiddenListing() {
+        when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+                .thenReturn(Optional.empty());
+        when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
+
+        assertThatThrownBy(() -> controller.createOrGetRoom(
+                        new ChatController.CreateRoomRequest("deleted-listing", null, null),
+                        authenticated("real-buyer")))
+                .isInstanceOf(ListingNotFoundException.class);
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void hiddenListingNewRoomReturnsNotFoundAtHttpBoundary() throws Exception {
+        when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+                .thenReturn(Optional.empty());
+        when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
+        var mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
+                .build();
+
+        mvc.perform(post("/api/v1/chat/rooms")
+                        .requestAttr(UserAuthInterceptor.ATTR_ACCOUNT_ID, "real-buyer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listingId\":\"deleted-listing\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void createRoom_returnsExistingRoomAfterListingWasHidden() {
+        ChatRoomDocument existing =
+                new ChatRoomDocument("room-1", "deleted-listing", "real-buyer", "real-seller", Instant.now());
+        when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+                .thenReturn(Optional.of(existing));
+
+        var response = controller.createOrGetRoom(
+                new ChatController.CreateRoomRequest("deleted-listing", null, null), authenticated("real-buyer"));
+
+        assertThat(response.id()).isEqualTo("room-1");
+        verify(listings, never()).getPublicById("deleted-listing");
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
     void createRoom_returnsConcurrentWinnerWhenUniqueIndexWinsRace() {
         ChatRoomDocument winner =
                 new ChatRoomDocument("winner", "listing-1", "real-buyer", "real-seller", Instant.now());
         when(listings.getById("listing-1")).thenReturn(listing("real-seller"));
+        when(listings.getPublicById("listing-1")).thenReturn(listing("real-seller"));
         when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1"))
                 .thenReturn(Optional.empty(), Optional.of(winner));
         when(rooms.save(any(ChatRoomDocument.class))).thenThrow(new DuplicateKeyException("duplicate"));

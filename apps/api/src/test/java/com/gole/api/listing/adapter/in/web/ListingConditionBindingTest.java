@@ -1,9 +1,15 @@
 package com.gole.api.listing.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.listing.application.port.in.GetListingUseCase;
+import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,14 +29,17 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ListingConditionBindingTest {
 
     private MockMvc mvc;
+    private GetListingUseCase getListingUseCase;
 
     @BeforeEach
     void setUp() {
         FormattingConversionService conversionService = new FormattingConversionService();
         new ListingWebConfig().addFormatters(conversionService);
+        getListingUseCase = mock(GetListingUseCase.class);
 
         // 검색 use case는 빈 목록만 돌려주면 된다. 여기서 보는 것은 바인딩 결과지 검색 결과가 아니다.
-        ListingController controller = new ListingController(null, null, query -> List.of(), null, null, null);
+        ListingController controller =
+                new ListingController(null, getListingUseCase, query -> List.of(), null, null, null);
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(event -> {}))
@@ -86,5 +95,15 @@ class ListingConditionBindingTest {
                 .getResponse()
                 .getContentAsString();
         assertThat(body).contains("INVALID_PARAMETER").contains("condition");
+    }
+
+    @Test
+    void hiddenListingReturnsNotFoundAtHttpBoundary() throws Exception {
+        when(getListingUseCase.getPublicById("deleted-listing"))
+                .thenThrow(new ListingNotFoundException("deleted-listing"));
+
+        mvc.perform(get("/api/v1/listings/deleted-listing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
     }
 }

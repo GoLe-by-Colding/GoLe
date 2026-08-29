@@ -108,6 +108,9 @@ public class ChatController {
         return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
                 .map(RoomResponse::from)
                 .orElseGet(() -> {
+                    // 삭제 전 만들어진 거래방은 이력 보존을 위해 계속 반환하되,
+                    // 공개되지 않는 매물에 새 방을 만드는 것은 막는다.
+                    getListingUseCase.getPublicById(req.listingId());
                     ChatRoomDocument doc = new ChatRoomDocument(
                             UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
                     try {

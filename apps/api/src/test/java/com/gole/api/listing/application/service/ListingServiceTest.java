@@ -9,6 +9,7 @@ import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
+import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.exception.ListingStateException;
 import com.gole.api.listing.domain.exception.MissingPhotoException;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
@@ -93,6 +94,28 @@ class ListingServiceTest {
         service.markSold(id);
         assertThat(service.search(ListingSearchQuery.newestAll())).isEmpty();
         assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
+    }
+
+    @Test
+    void getPublicById_hidesDeletedListingWhileInternalLookupStillFindsIt() {
+        String id = service.create(validCommand());
+        service.delete(id);
+
+        assertThatThrownBy(() -> service.getPublicById(id)).isInstanceOf(ListingNotFoundException.class);
+        assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.DELETED);
+    }
+
+    @Test
+    void getPublicById_keepsActiveReservedAndSoldListingsVisible() {
+        String activeId = service.create(validCommand());
+        Listing reserved = listingWithStatus("reserved-1", ListingStatus.RESERVED);
+        Listing sold = listingWithStatus("sold-1", ListingStatus.SOLD);
+        repository.save(reserved);
+        repository.save(sold);
+
+        assertThat(service.getPublicById(activeId).getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        assertThat(service.getPublicById("reserved-1").getStatus()).isEqualTo(ListingStatus.RESERVED);
+        assertThat(service.getPublicById("sold-1").getStatus()).isEqualTo(ListingStatus.SOLD);
     }
 
     @Test
@@ -194,6 +217,22 @@ class ListingServiceTest {
 
         assertThat(service.bySeller("seller-1")).hasSize(1);
         assertThat(service.bySeller("seller-1").getFirst().getSellerId()).isEqualTo("seller-1");
+    }
+
+    private static Listing listingWithStatus(String id, ListingStatus status) {
+        return new Listing(
+                id,
+                "seller-1",
+                "에펠탑 10307",
+                "미개봉",
+                com.gole.api.listing.domain.model.Money.won(280_000),
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "10307",
+                com.gole.api.listing.domain.model.ListingCategory.SET,
+                status,
+                Instant.parse("2026-01-01T00:00:00Z"));
     }
 
     private static final class InMemoryListingRepository implements ListingRepositoryPort {

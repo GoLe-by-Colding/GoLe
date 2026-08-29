@@ -122,6 +122,16 @@ public final class Listing {
         return status == ListingStatus.ACTIVE;
     }
 
+    /**
+     * 공개 상세·문의·새 채팅에서 노출할 수 있는 상태인지 확인한다.
+     *
+     * <p>예약·판매 완료 매물은 기존 거래 기록과 대화를 위해 계속 보이지만, 셀러가 삭제하거나
+     * 운영자가 내린 매물은 공개 표면에서 숨긴다.
+     */
+    public boolean isPubliclyVisible() {
+        return status != ListingStatus.DELETED;
+    }
+
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");

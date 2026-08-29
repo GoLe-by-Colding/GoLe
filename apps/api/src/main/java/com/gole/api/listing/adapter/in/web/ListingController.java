@@ -129,7 +129,7 @@ public class ListingController {
 
     @GetMapping("/{listingId}")
     public ListingResponse get(@PathVariable String listingId) {
-        return ListingResponse.from(getListingUseCase.getById(listingId));
+        return ListingResponse.from(getListingUseCase.getPublicById(listingId));
     }
 
     @PostMapping("/{listingId}/sold")
