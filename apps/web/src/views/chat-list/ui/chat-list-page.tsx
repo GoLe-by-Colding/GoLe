@@ -25,6 +25,7 @@ import {
 import { ApiError } from "@shared/api";
 import { fetchLaunchConfig } from "@entities/launch";
 import { useSession } from "@entities/user";
+import { DirectTradeConfirmation } from "@features/chat-listing";
 import { ChatPanel } from "@widgets/chat-panel";
 import {
   Badge,
@@ -907,6 +908,7 @@ export function ChatListPage() {
                 ) : null}
                 {directTradeOpen && selected.kind === "LISTING" && blockedAccountIds !== null ? (
                   <DirectTradeConfirmation
+                    key={selected.room.id}
                     room={selected.room}
                     myId={myId}
                     busy={tradeBusy}
@@ -977,41 +979,6 @@ export function ChatListPage() {
         )}
       </div>
     </Container>
-  );
-}
-
-function DirectTradeConfirmation({
-  room,
-  myId,
-  busy,
-  onToggle,
-}: {
-  readonly room: ChatRoom;
-  readonly myId: string;
-  readonly busy: boolean;
-  readonly onToggle: () => void;
-}) {
-  const mine = room.buyerId === myId ? room.buyerConfirmedAt : room.sellerConfirmedAt;
-  const other = room.buyerId === myId ? room.sellerConfirmedAt : room.buyerConfirmedAt;
-  if (room.directTradeCompletedAt !== null) {
-    return (
-      <p className="border-b border-success/20 bg-success-soft px-5 py-3 text-sm font-semibold text-success">
-        양쪽이 확인해 거래가 완료됐어요.
-      </p>
-    );
-  }
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-brand-100 bg-brand-50/50 px-5 py-3">
-      <div>
-        <p className="text-sm font-semibold text-neutral-900">직거래 완료 확인</p>
-        <p className="text-xs text-neutral-500">
-          {other === null ? "상대방 확인을 기다리고 있어요" : "상대방이 거래 완료를 확인했어요"}
-        </p>
-      </div>
-      <Button size="sm" variant="secondary" disabled={busy} onClick={onToggle}>
-        {busy ? "처리 중" : mine === null ? "거래 완료" : "확인 취소"}
-      </Button>
-    </div>
   );
 }
 

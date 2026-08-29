@@ -94,6 +94,7 @@ async function mockChatDeepLinkApis(
     readonly roomResolveFailures?: number;
     readonly roomResolveFailureStatus?: number;
     readonly roomResolveRetryAfter?: string;
+    readonly counterpartyConfirmed?: boolean;
   } = {},
 ): Promise<{
   requestedMessageRoomIds: string[];
@@ -117,7 +118,9 @@ async function mockChatDeepLinkApis(
                 createdAt: "2026-08-30T08:00:00Z",
                 lastMessageAt: "2026-08-30T08:00:00Z",
                 buyerConfirmedAt: null,
-                sellerConfirmedAt: null,
+                sellerConfirmedAt: options.counterpartyConfirmed
+                  ? "2026-08-30T09:05:00Z"
+                  : null,
                 directTradeCompletedAt: null,
               },
             ],
@@ -180,7 +183,7 @@ async function mockChatDeepLinkApis(
           createdAt: "2026-08-30T08:00:00Z",
           lastMessageAt: "2026-08-30T08:00:00Z",
           buyerConfirmedAt: null,
-          sellerConfirmedAt: null,
+          sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
           directTradeCompletedAt: null,
         },
         socialRoom: null,
@@ -204,8 +207,10 @@ async function mockChatDeepLinkApis(
         createdAt: "2026-08-30T08:00:00Z",
         lastMessageAt: "2026-08-30T08:00:00Z",
         buyerConfirmedAt: "2026-08-30T09:10:00Z",
-        sellerConfirmedAt: null,
-        directTradeCompletedAt: null,
+        sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
+        directTradeCompletedAt: options.counterpartyConfirmed
+          ? "2026-08-30T09:10:00Z"
+          : null,
       },
     });
   });
@@ -314,6 +319,10 @@ test.describe("채팅 UX", () => {
     );
 
     await page.getByRole("button", { name: "거래 완료" }).click();
+    const confirmation = page.getByRole("dialog", { name: "거래 완료를 확인할까요?" });
+    await expect(confirmation).toBeVisible();
+    expect(mock.tradeConfirmations()).toBe(0);
+    await confirmation.getByRole("button", { name: "거래 완료 확인" }).click();
     await expect.poll(mock.tradeConfirmations).toBe(1);
     await expect(page.getByRole("button", { name: "확인 취소" })).toBeVisible();
   });
@@ -333,6 +342,37 @@ test.describe("채팅 UX", () => {
 
     await page.getByRole("button", { name: /account-peer/ }).click();
     await expect(page.getByRole("log", { name: "대화 메시지" })).toContainText("개인 대화");
+  });
+
+  test("상대방이 먼저 확인한 직거래는 되돌릴 수 없는 판매 완료를 다시 확인한다", async ({
+    page,
+  }) => {
+    const mock = await mockChatDeepLinkApis(page, {
+      includeResolvedRoomInList: false,
+      counterpartyConfirmed: true,
+    });
+    await page.goto("/chat?room=room-listing");
+
+    await page.getByRole("button", { name: "거래 완료" }).click();
+    const dialog = page.getByRole("dialog", { name: "이 거래를 최종 완료할까요?" });
+    await expect(dialog).toBeVisible();
+    expect(mock.tradeConfirmations()).toBe(0);
+    await expect(dialog.getByRole("button", { name: "돌아가기" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "판매 완료 확정" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "돌아가기" })).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "거래 완료" })).toBeFocused();
+    expect(mock.tradeConfirmations()).toBe(0);
+
+    await page.getByRole("button", { name: "거래 완료" }).click();
+    await dialog.getByRole("button", { name: "판매 완료 확정" }).click();
+
+    await expect.poll(mock.tradeConfirmations).toBe(1);
+    await expect(page.getByRole("status")).toContainText("양쪽이 확인해 거래가 완료됐어요");
   });
 
   test("단건 방 조회가 일시 실패하면 딥링크를 보존하고 복구 뒤 자동으로 연다", async ({ page }) => {

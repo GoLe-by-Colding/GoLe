@@ -5,6 +5,7 @@ import { useChatRoom, useRoomReadReceipt } from "@entities/chat";
 import { useSession } from "@entities/user";
 import { Button, LinkButton, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
+import { DirectTradeConfirmation } from "./direct-trade-confirmation";
 
 export interface ChatButtonProps {
   readonly listingId: string;
@@ -128,8 +129,6 @@ function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: Inli
 
   const myConfirmation =
     room === null ? null : myId === room.buyerId ? room.buyerConfirmedAt : room.sellerConfirmedAt;
-  const otherConfirmation =
-    room === null ? null : myId === room.buyerId ? room.sellerConfirmedAt : room.buyerConfirmedAt;
 
   async function toggleTradeConfirmation() {
     if (tradeBusy || room === null || room.directTradeCompletedAt !== null) return;
@@ -148,30 +147,15 @@ function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: Inli
   return (
     <div className="flex h-full flex-col">
       {directTradeEnabled ? (
-        <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3">
-          {room?.directTradeCompletedAt !== null && room !== null ? (
-            <p className="text-sm font-semibold text-success">양쪽이 확인해 거래가 완료됐어요</p>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-neutral-900">직거래 완료 확인</p>
-                <p className="text-xs text-neutral-500">
-                  {otherConfirmation === null
-                    ? "상대방 확인을 기다리고 있어요"
-                    : "상대방이 확인했어요"}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={tradeBusy || room === null}
-                onClick={() => void toggleTradeConfirmation()}
-                className="shrink-0 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 disabled:opacity-50"
-              >
-                {tradeBusy ? "처리 중" : myConfirmation === null ? "거래 완료" : "확인 취소"}
-              </button>
-            </div>
-          )}
-        </div>
+        room === null ? null : (
+          <DirectTradeConfirmation
+            key={room.id}
+            room={room}
+            myId={myId}
+            busy={tradeBusy}
+            onToggle={() => void toggleTradeConfirmation()}
+          />
+        )
       ) : null}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
         {messages.length === 0 ? (
