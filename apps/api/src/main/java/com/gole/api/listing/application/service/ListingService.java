@@ -82,6 +82,11 @@ public class ListingService
     }
 
     @Override
+    public boolean markDirectTradeSoldIfActive(String listingId) {
+        return listingRepository.markSoldIfActive(listingId);
+    }
+
+    @Override
     public Optional<Listing> reserve(String listingId) {
         return listingRepository.reserveIfActive(listingId);
     }

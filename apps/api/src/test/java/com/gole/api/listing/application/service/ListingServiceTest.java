@@ -221,6 +221,13 @@ class ListingServiceTest {
         }
 
         @Override
+        public boolean markSoldIfActive(String listingId) {
+            Optional<Listing> listing = findById(listingId).filter(Listing::isActive);
+            listing.ifPresent(Listing::markSold);
+            return listing.isPresent();
+        }
+
+        @Override
         public List<Listing> findActiveBySeller(String sellerId) {
             return store.stream()
                     .filter(Listing::isActive)

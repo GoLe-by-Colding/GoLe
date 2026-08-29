@@ -1,5 +1,6 @@
 package com.gole.api.admin.application.service;
 
+import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
@@ -33,8 +34,11 @@ public class ResolveReportTargetService {
         }
         if (report.getTargetType() == ReportTargetType.LISTING) {
             listings.takedown(report.getTargetId(), reason);
-        } else {
+        } else if (report.getTargetType() == ReportTargetType.POST) {
             posts.removeByModerator(report.getTargetId(), reason);
+        } else {
+            throw new BadRequestException(
+                    "CHAT_REPORT_MANUAL_ACTION_REQUIRED", "채팅 신고는 스냅샷을 검토한 뒤 계정 조치 또는 단순 완료를 선택해 주세요");
         }
         return reports.resolve(reportId);
     }

@@ -26,6 +26,9 @@ public interface ListingRepositoryPort {
      */
     Optional<Listing> reserveIfActive(String listingId);
 
+    /** ACTIVE → SOLD 원자 전이. 직거래와 주문 예약이 같은 매물을 동시에 선점하지 못하게 한다. */
+    boolean markSoldIfActive(String listingId);
+
     /** 특정 셀러의 활성 리스팅 목록. (요구사항 16) */
     List<Listing> findActiveBySeller(String sellerId);
 

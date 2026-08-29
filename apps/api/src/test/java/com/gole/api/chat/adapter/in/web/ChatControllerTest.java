@@ -8,11 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
-import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
+import com.gole.api.chat.application.ChatMessagingService;
+import com.gole.api.chat.application.DirectTradeService;
+import com.gole.api.chat.application.SocialChatService;
+import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
@@ -24,6 +26,7 @@ import com.gole.api.listing.domain.model.Money;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
@@ -37,11 +40,12 @@ import tools.jackson.databind.ObjectMapper;
 class ChatControllerTest {
 
     private final ChatRoomMongoRepository rooms = mock(ChatRoomMongoRepository.class);
-    private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
     private final RedisMessageListenerContainer listeners = mock(RedisMessageListenerContainer.class);
+    private final SocialChatService socialChats = mock(SocialChatService.class);
+    private final ChatMessagingService messaging = mock(ChatMessagingService.class);
     private final ChatController controller = new ChatController(
-            rooms, messages, mock(ChatRedisPublisher.class), listeners, listings, new ObjectMapper());
+            rooms, listeners, listings, new ObjectMapper(), mock(DirectTradeService.class), socialChats, messaging);
 
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
@@ -85,36 +89,34 @@ class ChatControllerTest {
 
     @Test
     void myRooms_usesAuthenticatedUserAndAppliesRepositoryLimit() {
-        when(rooms.findTop100ByBuyerIdOrSellerIdOrderByCreatedAtDesc("account-1", "account-1"))
+        when(rooms.findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1"))
                 .thenReturn(List.of());
 
         assertThat(controller.myRooms(authenticated("account-1"))).isEmpty();
 
-        verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByCreatedAtDesc("account-1", "account-1");
+        verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1");
     }
 
     @Test
     void messages_readsOnlyRecentBatchAndReturnsChronologicalOrder() {
-        when(rooms.findById("room-1"))
-                .thenReturn(Optional.of(new ChatRoomDocument(
-                        "room-1", "listing-1", "buyer", "seller", Instant.parse("2026-08-09T00:00:00Z"))));
-        ChatMessageDocument newest =
-                new ChatMessageDocument("message-2", "room-1", "seller", "new", Instant.parse("2026-08-09T00:02:00Z"));
-        ChatMessageDocument older =
-                new ChatMessageDocument("message-1", "room-1", "buyer", "old", Instant.parse("2026-08-09T00:01:00Z"));
-        when(messages.findTop60ByRoomIdOrderBySentAtDesc("room-1")).thenReturn(List.of(newest, older));
+        ChatMessage older =
+                new ChatMessage("message-1", "room-1", "buyer", "old", Instant.parse("2026-08-09T00:01:00Z"));
+        ChatMessage newest =
+                new ChatMessage("message-2", "room-1", "seller", "new", Instant.parse("2026-08-09T00:02:00Z"));
+        when(messaging.history("room-1", "buyer", null, null, 60)).thenReturn(List.of(older, newest));
 
-        var response = controller.messages("room-1", authenticated("buyer"));
+        var response = controller.messages("room-1", null, null, 60, authenticated("buyer"));
 
         assertThat(response).extracting(ChatController.MessageResponse::id).containsExactly("message-1", "message-2");
-        verify(messages).findTop60ByRoomIdOrderBySentAtDesc("room-1");
+        verify(messaging).history("room-1", "buyer", null, null, 60);
     }
 
     @Test
     void stream_removesRedisListenerWhenPayloadHandlingFails() {
-        when(rooms.findById("room-1"))
-                .thenReturn(Optional.of(new ChatRoomDocument("room-1", "listing-1", "buyer", "seller", Instant.now())));
-        controller.stream("room-1", authenticated("buyer"));
+        when(socialChats.requireReadable("room-1", "buyer"))
+                .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer", "seller", Instant.now()));
+        when(messaging.after("room-1", "buyer", null, 200)).thenReturn(List.of());
+        controller.stream("room-1", null, null, authenticated("buyer"));
 
         ArgumentCaptor<MessageListener> listener = ArgumentCaptor.forClass(MessageListener.class);
         ArgumentCaptor<ChannelTopic> topic = ArgumentCaptor.forClass(ChannelTopic.class);
@@ -125,6 +127,42 @@ class ChatControllerTest {
         listener.getValue().onMessage(invalid, null);
 
         verify(listeners).removeMessageListener(listener.getValue(), topic.getValue());
+    }
+
+    @Test
+    void stream_prefersLastEventIdWhenReplayingMissedMessages() {
+        when(socialChats.requireReadable("room-1", "buyer"))
+                .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer", "seller", Instant.now()));
+        when(messaging.after("room-1", "buyer", "last-delivered", 200)).thenReturn(List.of());
+
+        var emitter = controller.stream("room-1", "initial-history", "last-delivered", authenticated("buyer"));
+
+        verify(messaging).after("room-1", "buyer", "last-delivered", 200);
+        emitter.complete();
+    }
+
+    @Test
+    void stream_replaysEveryBatchAfterLastDeliveredMessage() {
+        when(socialChats.requireReadable("room-1", "buyer"))
+                .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer", "seller", Instant.now()));
+        List<ChatMessage> firstBatch = IntStream.rangeClosed(1, 200)
+                .mapToObj(index -> new ChatMessage(
+                        "m" + index,
+                        "room-1",
+                        "buyer",
+                        "message " + index,
+                        Instant.parse("2026-08-09T00:00:00Z").plusSeconds(index)))
+                .toList();
+        ChatMessage finalMessage =
+                new ChatMessage("m201", "room-1", "seller", "last", Instant.parse("2026-08-09T00:03:21Z"));
+        when(messaging.after("room-1", "buyer", "m0", 200)).thenReturn(firstBatch);
+        when(messaging.after("room-1", "buyer", "m200", 200)).thenReturn(List.of(finalMessage));
+
+        var emitter = controller.stream("room-1", "m0", null, authenticated("buyer"));
+
+        verify(messaging).after("room-1", "buyer", "m0", 200);
+        verify(messaging).after("room-1", "buyer", "m200", 200);
+        emitter.complete();
     }
 
     private static MockHttpServletRequest authenticated(String accountId) {

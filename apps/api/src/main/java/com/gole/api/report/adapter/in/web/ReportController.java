@@ -1,9 +1,11 @@
 package com.gole.api.report.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.report.adapter.in.web.ReportDtos.SubmitReportRequest;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
 import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
+import com.gole.api.report.domain.model.ReportTargetType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -32,6 +34,9 @@ public class ReportController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, String> submit(@Valid @RequestBody SubmitReportRequest request, HttpServletRequest http) {
+        if (request.targetType() == ReportTargetType.CHAT_MESSAGE) {
+            throw new BadRequestException("CHAT_REPORT_ROUTE_REQUIRED", "채팅 메시지는 대화 화면의 전용 신고 기능을 이용해 주세요");
+        }
         String id = submitReportUseCase.submit(new SubmitReportCommand(
                 AuthenticatedUser.id(http),
                 request.targetType(),

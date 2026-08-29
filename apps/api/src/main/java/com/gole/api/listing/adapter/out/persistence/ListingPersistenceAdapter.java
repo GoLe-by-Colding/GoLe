@@ -107,6 +107,16 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     }
 
     @Override
+    public boolean markSoldIfActive(String listingId) {
+        Query query =
+                new Query(Criteria.where("_id").is(listingId).and("status").is(ListingStatus.ACTIVE.name()));
+        return mongoTemplate
+                        .updateFirst(query, Update.update("status", ListingStatus.SOLD.name()), ListingDocument.class)
+                        .getModifiedCount()
+                == 1;
+    }
+
+    @Override
     public List<Listing> findActiveBySeller(String sellerId) {
         return repository.findBySellerIdAndStatus(sellerId, ListingStatus.ACTIVE.name()).stream()
                 .map(this::toDomain)
