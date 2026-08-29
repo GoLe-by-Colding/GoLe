@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
 import com.gole.api.listing.domain.exception.ListingStateException;
@@ -26,13 +27,15 @@ import org.junit.jupiter.api.Test;
 class ListingServiceTest {
 
     private InMemoryListingRepository repository;
+    private RecordingNewListingNotifier notifier;
     private ListingService service;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryListingRepository();
+        notifier = new RecordingNewListingNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new ListingService(repository, new SequentialIdGenerator(), clock);
+        service = new ListingService(repository, new SequentialIdGenerator(), notifier, clock);
     }
 
     private CreateListingCommand validCommand() {
@@ -53,6 +56,7 @@ class ListingServiceTest {
         Listing saved = service.getById(id);
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getPrice().amount()).isEqualTo(280_000);
+        assertThat(notifier.notifications).containsExactly(new NewListingNotice("seller-1", id, "에펠탑 10307"));
     }
 
     @Test
@@ -263,6 +267,17 @@ class ListingServiceTest {
         @Override
         public String newListingId() {
             return "listing-" + (++counter);
+        }
+    }
+
+    private record NewListingNotice(String sellerId, String listingId, String title) {}
+
+    private static final class RecordingNewListingNotifier implements NewListingNotifierPort {
+        private final List<NewListingNotice> notifications = new ArrayList<>();
+
+        @Override
+        public void notifyFollowers(String sellerId, String listingId, String title) {
+            notifications.add(new NewListingNotice(sellerId, listingId, title));
         }
     }
 }

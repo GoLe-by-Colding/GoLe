@@ -11,6 +11,7 @@ import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.model.Listing;
@@ -39,11 +40,17 @@ public class ListingService
 
     private final ListingRepositoryPort listingRepository;
     private final ListingIdGeneratorPort idGenerator;
+    private final NewListingNotifierPort newListingNotifier;
     private final Clock clock;
 
-    public ListingService(ListingRepositoryPort listingRepository, ListingIdGeneratorPort idGenerator, Clock clock) {
+    public ListingService(
+            ListingRepositoryPort listingRepository,
+            ListingIdGeneratorPort idGenerator,
+            NewListingNotifierPort newListingNotifier,
+            Clock clock) {
         this.listingRepository = listingRepository;
         this.idGenerator = idGenerator;
+        this.newListingNotifier = newListingNotifier;
         this.clock = clock;
     }
 
@@ -61,7 +68,9 @@ public class ListingService
                 command.catalogSetNumber(),
                 command.category(),
                 Instant.now(clock));
-        return listingRepository.save(listing).getId();
+        Listing saved = listingRepository.save(listing);
+        newListingNotifier.notifyFollowers(saved.getSellerId(), saved.getId(), saved.getTitle());
+        return saved.getId();
     }
 
     @Override

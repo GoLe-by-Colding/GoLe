@@ -89,6 +89,14 @@ class DiscoveryServiceTest {
                     .map(Follow::sellerId)
                     .toList();
         }
+
+        @Override
+        public List<String> findUserIdsBySeller(String sellerId) {
+            return store.stream()
+                    .filter(f -> f.sellerId().equals(sellerId))
+                    .map(Follow::userId)
+                    .toList();
+        }
     }
 
     private static final class InMemoryWishlist implements WishlistRepositoryPort {

@@ -45,6 +45,13 @@ public class FollowPersistenceAdapter implements FollowRepositoryPort {
                 .toList();
     }
 
+    @Override
+    public List<String> findUserIdsBySeller(String sellerId) {
+        return repository.findBySellerId(sellerId).stream()
+                .map(FollowDocument::getUserId)
+                .toList();
+    }
+
     private FollowDocument toDocument(Follow follow) {
         // id 는 MongoDB가 생성하도록 null 로 둔다.
         return new FollowDocument(null, follow.userId(), follow.sellerId());

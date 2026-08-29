@@ -19,4 +19,7 @@ public interface FollowRepositoryPort {
 
     /** 사용자가 팔로우한 셀러 id 목록. */
     List<String> findSellerIdsByUser(String userId);
+
+    /** 셀러를 팔로우한 사용자 id 목록. 새 매물 알림 수신자 조회에 사용한다. */
+    List<String> findUserIdsBySeller(String sellerId);
 }

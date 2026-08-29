@@ -8,5 +8,6 @@ public enum NotificationType {
     ORDER_PAID,
     COMMENT,
     FOLLOW,
+    NEW_LISTING,
     GENERAL
 }
