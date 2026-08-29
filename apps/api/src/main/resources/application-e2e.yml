@@ -1,0 +1,14 @@
+# Playwright 쓰기 플로우 전용 프로필. 로컬 개발 데이터와 컬렉션·미디어를 공유하지 않는다.
+spring:
+  data:
+    mongodb:
+      uri: "${MONGODB_URI:mongodb://localhost:${MONGODB_PORT:27017}/gole_e2e?replicaSet=rs0}"
+      database: "${MONGODB_DATABASE:gole_e2e}"
+    redis:
+      # 사용자 개발 세션(DB 0)과 E2E 고정 세션을 분리한다. Redis 자체를 공유하더라도
+      # 테스트 토큰이 실제 로그인 세션 공간에 섞이지 않는다.
+      database: ${REDIS_DATABASE:15}
+
+storage:
+  s3:
+    bucket: ${STORAGE_S3_BUCKET:gole-e2e}

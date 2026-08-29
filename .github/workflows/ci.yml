@@ -147,12 +147,16 @@ jobs:
           # 닫혀 있고, e2e 프로필+환경 조합이 아니면 API가 기동 자체를 거부한다.
           SPRING_PROFILES_ACTIVE: e2e
           GOLE_ENVIRONMENT: e2e
+          MONGODB_URI: mongodb://localhost:27017/gole_e2e?replicaSet=rs0
+          MONGODB_DATABASE: gole_e2e
+          REDIS_DATABASE: "15"
           PORTONE_ENABLED: "false"
           GOLE_SETTLEMENT_MODE: MANUAL
           GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED: "true"
           GOLE_SETTLEMENT_PAYOUT_HOLDBACK: PT0S
           # 앱이 러너 호스트에서 직접 뜨므로 컨테이너 전용 호스트명을 쓰면 안 된다.
           STORAGE_S3_ENDPOINT: http://localhost:9000
+          STORAGE_S3_BUCKET: gole-e2e
           # 이미지 공개 주소는 MinIO가 아니라 API 원점이다 — MediaService가
           # publicBaseUrl + /api/v1/media/ 로 조립하고 MediaController가 그 경로를 서빙한다.
           # MinIO 주소를 넣으면 브라우저 CSP(img-src)가 그 원점을 막아 이미지가 안 뜬다.
@@ -180,6 +184,9 @@ jobs:
       # 쓰기 플로우(create-listing·purchase)는 서버가 검증하는 실제 세션이 필요하다.
       # API가 뜬 뒤에 심는다 — 시더가 accounts 컬렉션을 만들어 둔 뒤여야 인덱스가 준비된다.
       - name: Seed E2E accounts and sessions
+        env:
+          MONGO_DB: gole_e2e
+          REDIS_DATABASE: "15"
         run: bash scripts/seed-e2e-accounts.sh
 
       # E2E_WITH_BACKEND: 관리자 API 가드 테스트는 이 값이 없으면 조용히 스킵된다.

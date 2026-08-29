@@ -10,6 +10,7 @@
     "e2e:web": "pnpm --filter web e2e",
     "e2e:seed": "bash scripts/seed-e2e-accounts.sh",
     "dev:api": "node scripts/gradle.mjs --local bootRun",
+    "dev:api:e2e": "SPRING_PROFILES_ACTIVE=e2e GOLE_ENVIRONMENT=e2e REDIS_DATABASE=15 PORTONE_ENABLED=false GOLE_SETTLEMENT_MODE=MANUAL GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED=true GOLE_SETTLEMENT_PAYOUT_HOLDBACK=PT0S node scripts/gradle.mjs bootRun",
     "build:api": "node scripts/gradle.mjs build",
     "test:api": "node scripts/gradle.mjs test",
     "infra:up": "docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init",

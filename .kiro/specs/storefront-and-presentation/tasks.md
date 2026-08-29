@@ -28,9 +28,7 @@
 - [x] 동적 sitemap(상세 URL) — `app/sitemap.ts`가 `/api/v1/listings`·`/api/v1/community/posts`를
       fetch해 각 100건까지 상세 URL 생성(`sitemap.ts:29-65`, `revalidate: 3600`)
 - [ ] 상품상세/시세/관리자 화면 모바일 정교화
-- [ ] **e2e 전용 테스트 DB 분리 — 실제 오염 확인됨(우선순위 상향).**
-      로컬 `gole` DB에서 테스트 잔여 데이터 발견:
-      `{title: "환불검증", price: 0, sellerId: "s", photoUrls: ["a.jpg"]}` 등이
-      `listings` 컬렉션에 남아 실제 매물 목록에 섞여 노출된다.
-      `t`/`t2`/`txncheck` 같은 테스트 컬렉션도 잔존.
-      `playwright.config.ts`에 DB 격리 설정이 없어 e2e가 개발 DB에 직접 쓴다.
+- [x] **e2e 전용 테스트 저장소 분리.** `application-e2e.yml`과 CI가 `gole_e2e` DB,
+      `gole-e2e` 버킷, Redis DB 15를 사용한다. 시더 기본 DB도 `gole_e2e`이며
+      `gole`·`admin`·`local` 및 Redis DB 0은 즉시 거부한다. 충돌 계정은 삭제하지 않고 오류로 중단해 개발 데이터가 보존된다.
+      로컬은 `pnpm dev:api:e2e` → `pnpm e2e:seed` 순서로 전용 런타임을 사용한다.
