@@ -1,5 +1,15 @@
 import { apiRequest } from "@shared/api";
+import { parseSellerFeePolicy, type SellerFeePolicy } from "../model/fee-policy";
 import type { Order } from "../model/types";
+
+/** 현재 플랫폼 결제 주문에 적용되는 공개 판매 수수료 정책. */
+export async function fetchSellerFeePolicy(signal?: AbortSignal): Promise<SellerFeePolicy> {
+  const payload = await apiRequest<unknown>("/api/v1/config/fees", {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+  return parseSellerFeePolicy(payload);
+}
 
 export function placeOrder(
   listingId: string,

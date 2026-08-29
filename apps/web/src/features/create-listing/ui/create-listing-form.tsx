@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ChangeEvent, useState } from "react";
+import { type FormEvent, type ChangeEvent, useEffect, useState } from "react";
 import {
   createListing,
   type ItemCondition,
@@ -11,12 +11,24 @@ import {
   ITEM_CONDITIONS,
   LISTING_CATEGORIES,
 } from "@entities/listing";
+import { calculateSellerPayout, fetchSellerFeePolicy, type SellerFeePolicy } from "@entities/order";
 import { ApiError, uploadImages } from "@shared/api";
+import { formatKrw } from "@shared/lib";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
 const CONDITIONS = ITEM_CONDITIONS;
 
 const COMPLETENESS: readonly Completeness[] = ["full_box", "no_box", "bulk"];
+
+const PERCENT_FORMATTER = new Intl.NumberFormat("ko-KR", {
+  style: "percent",
+  maximumFractionDigits: 2,
+});
+
+type FeePolicyState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly policy: SellerFeePolicy }
+  | { readonly status: "unavailable" };
 
 export interface CreateListingFormProps {
   readonly sellerId: string;
@@ -40,8 +52,37 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [feePolicyState, setFeePolicyState] = useState<FeePolicyState>({ status: "loading" });
+  const [feePolicyRequestKey, setFeePolicyRequestKey] = useState(0);
 
   const MAX_PHOTOS = 5;
+  const priceAmount = Number(price);
+  const payoutEstimate =
+    feePolicyState.status === "ready" &&
+    price.trim().length > 0 &&
+    Number.isSafeInteger(priceAmount) &&
+    priceAmount > 0
+      ? calculateSellerPayout(priceAmount, feePolicyState.policy)
+      : null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchSellerFeePolicy(controller.signal)
+      .then((policy) => setFeePolicyState({ status: "ready", policy }))
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setFeePolicyState({ status: "unavailable" });
+        }
+      });
+
+    return () => controller.abort();
+  }, [feePolicyRequestKey]);
+
+  function retryFeePolicy() {
+    setFeePolicyState({ status: "loading" });
+    setFeePolicyRequestKey((current) => current + 1);
+  }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(event.target.files ?? []);
@@ -169,6 +210,63 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
           />
         )}
       </Field>
+      <section
+        aria-labelledby="seller-fee-heading"
+        aria-live="polite"
+        className="rounded-xl border border-brand-100 bg-brand-50/60 p-4"
+      >
+        <h2 id="seller-fee-heading" className="text-sm font-bold text-brand-900">
+          판매 수수료와 예상 정산액
+        </h2>
+        {feePolicyState.status === "loading" ? (
+          <p className="mt-2 text-sm text-neutral-600">현재 수수료 정책을 확인하고 있어요.</p>
+        ) : feePolicyState.status === "unavailable" ? (
+          <div className="mt-2 flex flex-col items-start gap-2">
+            <p className="text-sm leading-relaxed text-neutral-600">
+              수수료와 예상 정산액을 불러오지 못했습니다. 상품 등록은 계속할 수 있어요. 거래 전
+              수수료를 다시 확인해 주세요.
+            </p>
+            <button
+              type="button"
+              className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+              onClick={retryFeePolicy}
+            >
+              다시 불러오기
+            </button>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2 text-sm">
+            <p className="text-neutral-600">
+              플랫폼 결제 거래 기준 판매 금액의{" "}
+              <strong className="text-neutral-900">
+                {PERCENT_FORMATTER.format(feePolicyState.policy.rate)}
+              </strong>
+              {feePolicyState.policy.minFee > 0
+                ? ` · 최소 ${formatKrw(feePolicyState.policy.minFee)}`
+                : ""}
+              {feePolicyState.policy.maxFee > 0
+                ? ` · 최대 ${formatKrw(feePolicyState.policy.maxFee)}`
+                : " · 상한 없음"}
+            </p>
+            {payoutEstimate === null ? (
+              <p className="font-medium text-brand-800">
+                가격을 입력하면 예상 정산액을 바로 확인할 수 있어요.
+              </p>
+            ) : (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-brand-100 pt-2 tabular-nums">
+                <dt className="text-neutral-600">예상 수수료</dt>
+                <dd className="text-right font-semibold text-neutral-900">
+                  {formatKrw(payoutEstimate.fee)}
+                </dd>
+                <dt className="text-neutral-600">예상 정산액</dt>
+                <dd className="text-right font-bold text-brand-800">
+                  {formatKrw(payoutEstimate.payout)}
+                </dd>
+              </dl>
+            )}
+          </div>
+        )}
+      </section>
       <Field label="상품 상태">
         {({ inputId }) => (
           <Select

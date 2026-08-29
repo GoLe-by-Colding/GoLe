@@ -1,6 +1,52 @@
 import { test, expect } from "@playwright/test";
 import { E2E_SELLER, signInAs } from "./support/e2e-session";
 
+test.describe("Seller fee disclosure", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAs(page, E2E_SELLER);
+  });
+
+  test("공개 수수료 정책으로 예상 정산액을 계산한다", async ({ page }) => {
+    await page.route("**/api/v1/config/fees", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ rate: 0.05, minFee: 1_000, maxFee: 50_000 }),
+      });
+    });
+
+    await page.goto("/sell");
+    await expect(page.getByText("판매 금액의 5% · 최소 ₩1,000 · 최대 ₩50,000")).toBeVisible();
+
+    await page.getByLabel("가격 (원)").fill("10000");
+    await expect(page.getByText("₩1,000", { exact: true })).toBeVisible();
+    await expect(page.getByText("₩9,000", { exact: true })).toBeVisible();
+
+    await page.getByLabel("가격 (원)").fill("2000000");
+    await expect(page.getByText("₩50,000", { exact: true })).toBeVisible();
+    await expect(page.getByText("₩1,950,000", { exact: true })).toBeVisible();
+  });
+
+  test("수수료 API가 실패해도 값을 꾸며내지 않고 상품 등록을 유지한다", async ({ page }) => {
+    await page.route("**/api/v1/config/fees", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "FEE_CONFIG_UNAVAILABLE",
+          message: "temporarily unavailable",
+        }),
+      });
+    });
+
+    await page.goto("/sell");
+
+    await expect(page.getByText(/수수료와 예상 정산액을 불러오지 못했습니다/)).toBeVisible();
+    await expect(page.getByText(/판매 금액의 \d/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "상품 등록" })).toBeEnabled();
+  });
+});
+
 // 백엔드(MongoDB + MinIO)가 떠 있는 로컬/테스트 환경 전용 풀 플로우 E2E.
 // 데이터를 생성하므로 배포(prod) 대상(E2E_BASE_URL)에서는 건너뛴다.
 // 사전 조건: scripts/seed-e2e-accounts.sh 로 계정·세션을 심어야 한다.
