@@ -110,21 +110,23 @@ logging:
   level:
     com.gole.api: ${GOLE_LOG_LEVEL:INFO}
 
-# 시드 데이터: 각 컬렉션이 비어 있을 때만 1회 적재(멱등). 테스트에서는 false로 비활성화한다.
+# 시드 데이터: 기본은 전부 꺼져 있다. 로컬 데모에서만 명시적으로 켠다.
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
   catalog:
-    seed-on-empty: ${GOLE_CATALOG_SEED:true}
+    seed-on-empty: ${GOLE_CATALOG_SEED:false}
   listing:
-    seed-on-empty: ${GOLE_LISTING_SEED:true}
+    seed-on-empty: ${GOLE_LISTING_SEED:false}
   pricing:
-    seed-on-empty: ${GOLE_PRICING_SEED:true}
+    seed-on-empty: ${GOLE_PRICING_SEED:false}
   community:
-    seed-on-empty: ${GOLE_COMMUNITY_SEED:true}
+    seed-on-empty: ${GOLE_COMMUNITY_SEED:false}
   report:
-    seed-on-empty: ${GOLE_REPORT_SEED:true}
+    seed-on-empty: ${GOLE_REPORT_SEED:false}
+  review:
+    seed-on-empty: ${GOLE_REVIEW_SEED:false}
   media:
-    seed-on-startup: ${GOLE_MEDIA_SEED:true}
+    seed-on-startup: ${GOLE_MEDIA_SEED:false}
   # 파이프라인 상태별 타임아웃(shipping-and-fees R9.1). 코드 상수 금지 — 전부 여기서.
   # 정상 거래는 운영자 개입 0으로 끝까지 흘러가고, 예외만 큐에 올라온다(R7).
   pipeline:

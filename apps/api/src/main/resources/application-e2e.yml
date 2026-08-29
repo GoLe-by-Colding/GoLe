@@ -12,3 +12,21 @@ spring:
 storage:
   s3:
     bucket: ${STORAGE_S3_BUCKET:gole-e2e}
+
+# e2e 프로필은 전용 Mongo/Redis/버킷만 사용하므로 화면 탐색용 샘플을 명시적으로 허용한다.
+# 기본 프로필과 공개 staging은 모두 false라 실제 데이터에 섞이지 않는다.
+gole:
+  catalog:
+    seed-on-empty: true
+  listing:
+    seed-on-empty: true
+  pricing:
+    seed-on-empty: true
+  community:
+    seed-on-empty: true
+  report:
+    seed-on-empty: true
+  review:
+    seed-on-empty: true
+  media:
+    seed-on-startup: true

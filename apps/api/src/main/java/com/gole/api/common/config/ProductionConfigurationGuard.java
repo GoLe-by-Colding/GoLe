@@ -17,12 +17,13 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
     public ProductionConfigurationGuard(
             @Value("${gole.environment:local}") String environment,
             @Value("${gole.verification.email.enabled:false}") boolean verificationEmailEnabled,
-            @Value("${gole.catalog.seed-on-empty:true}") boolean catalogSeed,
-            @Value("${gole.listing.seed-on-empty:true}") boolean listingSeed,
-            @Value("${gole.pricing.seed-on-empty:true}") boolean pricingSeed,
-            @Value("${gole.community.seed-on-empty:true}") boolean communitySeed,
-            @Value("${gole.report.seed-on-empty:true}") boolean reportSeed,
-            @Value("${gole.media.seed-on-startup:true}") boolean mediaSeed) {
+            @Value("${gole.catalog.seed-on-empty:false}") boolean catalogSeed,
+            @Value("${gole.listing.seed-on-empty:false}") boolean listingSeed,
+            @Value("${gole.pricing.seed-on-empty:false}") boolean pricingSeed,
+            @Value("${gole.community.seed-on-empty:false}") boolean communitySeed,
+            @Value("${gole.report.seed-on-empty:false}") boolean reportSeed,
+            @Value("${gole.review.seed-on-empty:false}") boolean reviewSeed,
+            @Value("${gole.media.seed-on-startup:false}") boolean mediaSeed) {
         this.environment = environment;
         this.verificationEmailEnabled = verificationEmailEnabled;
         this.seedFlags = Map.of(
@@ -31,17 +32,18 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
                 "pricing", pricingSeed,
                 "community", communitySeed,
                 "report", reportSeed,
+                "review", reviewSeed,
                 "media", mediaSeed);
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!isProduction()) {
-            return;
-        }
-        if (!verificationEmailEnabled) {
+        if (isProduction() && !verificationEmailEnabled) {
             throw new IllegalStateException(
                     "Production must enable verification email; refusing to log verification codes");
+        }
+        if (!isPublicEnvironment()) {
+            return;
         }
         String enabledSeeds = seedFlags.entrySet().stream()
                 .filter(Map.Entry::getValue)
@@ -56,5 +58,9 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
 
     private boolean isProduction() {
         return "production".equalsIgnoreCase(environment) || "prod".equalsIgnoreCase(environment);
+    }
+
+    private boolean isPublicEnvironment() {
+        return isProduction() || "staging".equalsIgnoreCase(environment);
     }
 }

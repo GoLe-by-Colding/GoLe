@@ -30,12 +30,21 @@ class ProductionConfigurationGuardTest {
     }
 
     @Test
+    void stagingAlsoRejectsAnySampleSeed() {
+        ProductionConfigurationGuard guard = guard("staging", false, true);
+
+        assertThatThrownBy(() -> guard.run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("sample data seeds");
+    }
+
+    @Test
     void localDefaultsAndHardenedProductionAreAllowed() {
         assertThatCode(() -> guard("local", false, true).run(NO_ARGS)).doesNotThrowAnyException();
         assertThatCode(() -> guard("production", true, false).run(NO_ARGS)).doesNotThrowAnyException();
     }
 
     private static ProductionConfigurationGuard guard(String environment, boolean email, boolean seeds) {
-        return new ProductionConfigurationGuard(environment, email, seeds, seeds, seeds, seeds, seeds, seeds);
+        return new ProductionConfigurationGuard(environment, email, seeds, seeds, seeds, seeds, seeds, seeds, seeds);
     }
 }
