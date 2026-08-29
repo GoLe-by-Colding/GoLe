@@ -8,3 +8,5 @@ export { AdminCommunityView } from "./ui/community-view";
 export { AdminAccountsView } from "./ui/accounts-view";
 export { AdminCatalogView } from "./ui/catalog-view";
 export { AdminAuditView } from "./ui/audit-view";
+export { AdminSupportView } from "./ui/support-view";
+export { AdminLaunchView } from "./ui/launch-view";

@@ -8,13 +8,14 @@ import { StarIcon } from "@shared/ui";
 
 export interface SellerMiniCardProps {
   readonly sellerId: string;
+  readonly reviewsOpen: boolean;
 }
 
 /**
  * 판매자 미니 프로필 — 매물 상세에서 신뢰 신호로 노출.
  * 아바타(이니셜) + 평균 평점·후기수 + 판매 중 매물 수 + 샵 링크.
  */
-export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
+export function SellerMiniCard({ sellerId, reviewsOpen }: SellerMiniCardProps) {
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [listingCount, setListingCount] = useState<number | null>(null);
 
@@ -23,7 +24,7 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
     const ctrl = new AbortController();
     void (async () => {
       const [r, shop] = await Promise.allSettled([
-        fetchSellerRating(sellerId, ctrl.signal),
+        reviewsOpen ? fetchSellerRating(sellerId, ctrl.signal) : Promise.resolve(null),
         fetchSellerShop(sellerId, ctrl.signal),
       ]);
       if (!active) return;
@@ -34,7 +35,7 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
       active = false;
       ctrl.abort();
     };
-  }, [sellerId]);
+  }, [reviewsOpen, sellerId]);
 
   const hasRating = rating !== null && rating.count > 0;
 
@@ -51,7 +52,7 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
           {sellerId.slice(0, 8)} 님의 샵
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500">
-          {hasRating ? (
+          {reviewsOpen && hasRating ? (
             <span
               className="inline-flex items-center gap-1 font-semibold text-warning"
               aria-label={`평점 ${rating.average.toFixed(1)}점, 후기 ${rating.count}개`}
@@ -60,9 +61,9 @@ export function SellerMiniCard({ sellerId }: SellerMiniCardProps) {
               <span aria-hidden="true">{rating.average.toFixed(1)}</span>
               <span className="ml-0.5 font-normal text-neutral-400">({rating.count})</span>
             </span>
-          ) : (
+          ) : reviewsOpen ? (
             <span className="text-neutral-400">아직 후기 없음</span>
-          )}
+          ) : null}
           {listingCount !== null ? (
             <>
               <span aria-hidden="true" className="text-neutral-300">

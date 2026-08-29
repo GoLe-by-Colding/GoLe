@@ -52,7 +52,7 @@ export async function generateMetadata({
   } catch {
     return {
       title: "매물",
-      description: "GoLe에서 레고 중고 매물을 안전결제로 거래하세요.",
+      description: "GoLe에서 레고 중고 매물을 찾고 판매자와 대화해 거래하세요.",
     };
   }
 }

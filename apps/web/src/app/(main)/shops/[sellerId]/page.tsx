@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { fetchSellerRating, type SellerRating } from "@entities/review";
+import { fetchLaunchConfig } from "@entities/launch";
 import { SellerShopPage } from "@views/seller-shop";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
@@ -12,11 +13,14 @@ interface PageParams {
 /** 셀러샵 동적 메타데이터. (SEO 스펙 R3.1) */
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   const { sellerId } = await params;
+  const launch = await fetchLaunchConfig();
   let rating: SellerRating | null = null;
-  try {
-    rating = await fetchSellerRating(sellerId);
-  } catch {
-    rating = null;
+  if (launch.features.reviews) {
+    try {
+      rating = await fetchSellerRating(sellerId);
+    } catch {
+      rating = null;
+    }
   }
 
   const title = `${sellerId} 판매자 샵`;
@@ -37,11 +41,14 @@ export default async function Page({ params }: PageParams) {
   const { sellerId } = await params;
 
   // 평점은 구조화 데이터용으로만 조회한다. 화면 렌더는 뷰가 자체 로딩한다.
+  const launch = await fetchLaunchConfig();
   let rating: SellerRating | null = null;
-  try {
-    rating = await fetchSellerRating(sellerId);
-  } catch {
-    rating = null;
+  if (launch.features.reviews) {
+    try {
+      rating = await fetchSellerRating(sellerId);
+    } catch {
+      rating = null;
+    }
   }
 
   const profile: Record<string, unknown> = {

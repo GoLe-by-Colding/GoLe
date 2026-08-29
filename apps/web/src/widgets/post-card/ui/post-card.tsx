@@ -63,12 +63,20 @@ export function PostCard({ post }: PostCardProps) {
         </Link>
         <div className="mt-auto flex items-center justify-between border-t border-neutral-100 pt-3">
           <LikeButton postId={post.id} initialLikeCount={post.likeCount} />
-          <Link
-            href={`/community/${post.id}`}
-            className="text-sm font-medium text-neutral-400 hover:text-brand-600"
-          >
-            자세히
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
+              className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+            >
+              대화
+            </Link>
+            <Link
+              href={`/community/${post.id}`}
+              className="text-sm font-medium text-neutral-400 hover:text-brand-600"
+            >
+              자세히
+            </Link>
+          </div>
         </div>
       </div>
     </Card>

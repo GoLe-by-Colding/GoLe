@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { env } from "@shared/config";
+import { fetchLaunchConfig } from "@entities/launch";
 import { Container, Logo } from "@shared/ui";
 
 const NAV: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/search", label: "탐색" },
   { href: "/prices", label: "시세" },
   { href: "/community", label: "커뮤니티" },
+  { href: "/chat", label: "대화" },
   { href: "/collection", label: "컬렉션" },
 ];
 
@@ -18,7 +19,9 @@ const LEGAL: ReadonlyArray<{ readonly href: string; readonly label: string }> = 
  * 전역 푸터 — 브랜드 다크 네이비 단색 표면.
  * 레고 상표 고지(비후원/비승인) + 이용약관/개인정보처리방침 링크 포함.
  */
-export function SiteFooter() {
+export async function SiteFooter() {
+  const launch = await fetchLaunchConfig();
+  const paymentsOpen = launch.features.payments;
   return (
     <footer className="mt-20 border-t border-brand-800 bg-brand-950 text-white">
       <Container width="xl">
@@ -35,20 +38,13 @@ export function SiteFooter() {
                   {n.label}
                 </Link>
               ))}
-              <a
-                href={env.discordInviteUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm font-semibold text-[#AEB4FF] transition-colors hover:text-white"
-              >
-                Discord 고래방 ↗
-              </a>
             </nav>
           </div>
 
           <p className="max-w-md text-sm leading-relaxed text-brand-200/70">
-            깊은 바다에서 건져 올린 브릭 — 체결가 시세와 구매확정 안전거래로 레고를 가장 합리적으로
-            거래하세요.
+            {paymentsOpen
+              ? "깊은 바다에서 건져 올린 브릭 — 체결가 시세와 구매확정 안전거래로 합리적으로 거래하세요."
+              : "깊은 바다에서 건져 올린 브릭 — 매물을 발견하고 판매자와 직접 이야기해 거래하세요."}
           </p>
 
           {/* LEGO® 상표 고지 (IP 안전 콘텐츠) */}
@@ -60,9 +56,9 @@ export function SiteFooter() {
 
           {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
           <p className="max-w-3xl text-xs leading-relaxed text-brand-300/50">
-            GoLe는 통신판매중개자로서 거래 당사자가 아니며, 판매자가 등록한 상품 정보 및 거래에 대한
-            책임은 각 판매자에게 있습니다. GoLe는 결제 승인 후 판매자 정산 보류와 분쟁 조정 절차를
-            통해 안전한 거래를 지원합니다.
+            {paymentsOpen
+              ? "GoLe는 통신판매중개자로서 거래 당사자가 아니며, 판매자가 등록한 상품 정보 및 거래에 대한 책임은 각 판매자에게 있습니다. 계약된 결제 처리와 구매확정·분쟁 접수 절차를 통해 거래를 지원합니다."
+              : "GoLe는 통신판매중개자로서 거래 당사자가 아니며, 판매자가 등록한 상품 정보 및 거래에 대한 책임은 각 판매자에게 있습니다. 현재는 플랫폼 결제 없이 이용자 간 채팅을 통한 직거래만 지원합니다. 거래 조건과 상품 상태를 직접 확인해 주세요."}
           </p>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">

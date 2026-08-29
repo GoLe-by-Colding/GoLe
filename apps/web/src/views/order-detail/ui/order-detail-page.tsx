@@ -12,10 +12,10 @@ import {
   type Order,
   type OrderStatus,
 } from "@entities/order";
+import { fetchLaunchConfig } from "@entities/launch";
 import { fetchShipment, refreshShipment, type Shipment } from "@entities/shipment";
 import { fetchMe, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { env } from "@shared/config";
 import {
   formatKrw,
   getPortOneConfigurationError,
@@ -126,6 +126,8 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   // 결제수단 선택. 카드 채널이 설정되지 않았으면 선택 UI 자체를 노출하지 않는다.
   const cardAvailable = isCardPaymentAvailable();
   const [paymentMethod, setPaymentMethod] = useState<PortOneMethod>("kakaopay");
@@ -146,9 +148,11 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     let active = true;
     void (async () => {
       try {
-        const data = await fetchOrder(orderId);
+        const [data, launch] = await Promise.all([fetchOrder(orderId), fetchLaunchConfig()]);
         if (active) {
           setOrder(data);
+          setPaymentsOpen(launch.features.payments);
+          setReviewsOpen(launch.features.reviews);
         }
       } catch {
         if (active) {
@@ -267,6 +271,10 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   // 성공 후 서버가 결제를 검증한다(payOrder). 미설정 시 서버 스텁 결제로 진행한다.
   const pay = useCallback(
     async (method: PortOneMethod, customer?: PortOneCustomer) => {
+      if (!paymentsOpen) {
+        setError("현재 신규 결제가 일시 중지되어 있습니다. 주문 상태는 보존됩니다.");
+        return;
+      }
       setError(undefined);
       setBusy(true);
       try {
@@ -309,7 +317,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         setBusy(false);
       }
     },
-    [orderId],
+    [orderId, paymentsOpen],
   );
 
   /**
@@ -441,7 +449,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </p>
         ) : null}
 
-        {paymentConfigurationError !== undefined ? (
+        {paymentsOpen && paymentConfigurationError !== undefined ? (
           <p className="rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-neutral-700">
             {paymentConfigurationError} 운영팀에 자동으로 전달된 설정을 확인해 주세요.
           </p>
@@ -452,7 +460,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           "결제를 마쳤는데 상태가 그대로라면"은 결제한 사람에게 할 말이다. 시도 전에는 다음에
           무엇을 할지만 알려준다.
         */}
-        {order.status === "payment_pending" && !paymentAttempted ? (
+        {paymentsOpen && order.status === "payment_pending" && !paymentAttempted ? (
           <OrderStatusNotice
             title="아직 결제하지 않았어요"
             description={
@@ -463,6 +471,26 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             refreshing={refreshing}
             onRefresh={refreshOrder}
           />
+        ) : null}
+
+        {!paymentsOpen && order.status === "payment_pending" && !paymentAttempted ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50 px-4 py-4">
+            <div className="flex flex-col gap-1">
+              <Text weight="semibold">신규 결제가 일시 중지됐어요</Text>
+              <Text size="sm" tone="secondary">
+                이 주문은 보존되지만 지금은 결제를 새로 시작할 수 없습니다. 매물 상세에서 판매자와
+                직접 거래를 상의하거나 운영팀에 문의해 주세요.
+              </Text>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <LinkButton href={`/listings/${order.listingId}`} size="sm" variant="secondary">
+                매물과 채팅 보기
+              </LinkButton>
+              <LinkButton href="/chat?compose=support" size="sm" variant="ghost">
+                운영팀 문의
+              </LinkButton>
+            </div>
+          </div>
         ) : null}
 
         {order.status === "payment_pending" && paymentAttempted ? (
@@ -481,7 +509,6 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description="금액 또는 PG 상태를 대조 중입니다. 중복 결제하지 마세요. 주문과 매물은 보존되며 확인 후 상태가 자동으로 갱신됩니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
-            showSupport
           />
         ) : null}
 
@@ -492,7 +519,6 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description="결제수단에 환불이 반영되기까지 시간이 걸릴 수 있습니다. 최대 1분 동안 자동으로 확인하며, 이후에도 직접 상태를 확인할 수 있습니다."
             refreshing={refreshing}
             onRefresh={refreshOrder}
-            showSupport
           />
         ) : null}
 
@@ -503,7 +529,6 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             description={`운영자가 배송 기록을 근거로 환불 또는 거래 완료를 판정합니다.${order.disputeReason ? ` (사유: ${DISPUTE_REASON_LABEL[order.disputeReason]})` : ""} 판정 결과는 알림으로 안내됩니다.`}
             refreshing={refreshing}
             onRefresh={refreshOrder}
-            showSupport
           />
         ) : null}
 
@@ -520,7 +545,6 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
               <LinkButton href={`/listings/${order.listingId}`} size="sm" variant="secondary">
                 매물 다시 보기
               </LinkButton>
-              <SupportLink />
             </div>
           </div>
         ) : null}
@@ -555,7 +579,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </Card>
         ) : null}
 
-        {order.status === "payment_pending" && !isSeller ? (
+        {paymentsOpen && order.status === "payment_pending" && !isSeller ? (
           <div className="flex flex-col gap-4">
             {cardAvailable ? (
               <fieldset className="flex flex-col gap-2" disabled={busy}>
@@ -696,9 +720,9 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
 
         {/* 통신판매중개자 고지 (전자상거래법 제20조) */}
         <p className="rounded-lg bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-500">
-          GoLe는 통신판매중개자로서 거래 당사자가 아니며, 상품 정보·거래에 대한 책임은 판매자에게
-          있습니다. 결제 승인 후 구매 확정 전까지 판매자 정산을 보류하며, 환불·분쟁 절차는 약관에
-          따라 처리합니다.
+          GoLe는 이용자 간 거래를 연결하는 중개 서비스이며 거래 당사자가 아닙니다. 상품 정보에 대한
+          책임은 판매자에게 있고, 결제가 활성화된 주문의 구매확정·환불·분쟁 처리는 주문 상태와
+          약관에 따릅니다.
         </p>
 
         <div className="flex flex-col gap-2">
@@ -716,7 +740,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         </div>
 
         {/* 자기거래 주문(차단 이전에 쌓인 건)에는 후기 동선을 열지 않는다. 서버도 거부한다. */}
-        {order.status === "completed" && order.buyerId !== order.sellerId ? (
+        {reviewsOpen && order.status === "completed" && order.buyerId !== order.sellerId ? (
           <Card padded className="flex flex-col gap-3">
             <Text weight="semibold">판매자 후기 남기기</Text>
             <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />
@@ -776,7 +800,6 @@ interface OrderStatusNoticeProps {
   readonly refreshing: boolean;
   readonly onRefresh: () => void;
   readonly tone?: "neutral" | "warning";
-  readonly showSupport?: boolean;
 }
 
 function OrderStatusNotice({
@@ -785,7 +808,6 @@ function OrderStatusNotice({
   refreshing,
   onRefresh,
   tone = "neutral",
-  showSupport = false,
 }: OrderStatusNoticeProps) {
   return (
     <div
@@ -804,22 +826,8 @@ function OrderStatusNotice({
         <Button size="sm" variant="secondary" disabled={refreshing} onClick={onRefresh}>
           {refreshing ? "확인 중..." : "상태 다시 확인"}
         </Button>
-        {showSupport ? <SupportLink /> : null}
       </div>
     </div>
-  );
-}
-
-function SupportLink() {
-  return (
-    <a
-      href={env.discordInviteUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm font-semibold text-[#5865F2] transition-colors hover:bg-[#F1F2FF] hover:text-[#4752C4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
-    >
-      고래방에 문의
-    </a>
   );
 }
 

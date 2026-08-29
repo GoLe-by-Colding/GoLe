@@ -8,6 +8,7 @@ export {
   HeartIcon,
   LoaderIcon,
   MessageCircleIcon,
+  SearchIcon,
   PackageIcon,
   ShoppingBagIcon,
   StarIcon,

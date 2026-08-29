@@ -3,20 +3,28 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useChatRoom } from "@entities/chat";
 import { useSession } from "@entities/user";
-import { Button, Skeleton } from "@shared/ui";
+import { Button, LinkButton, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 
 export interface ChatButtonProps {
   readonly listingId: string;
   readonly sellerId: string;
   readonly available: boolean;
+  readonly label?: string;
+  readonly directTradeEnabled?: boolean;
 }
 
 /**
  * 상품 상세 채팅하기 버튼. 로그인 구매자가 누르면 인라인 채팅 패널을 토글한다.
  * ChatPanel(widget)을 직접 import하면 FSD 위반이라 채팅 UI를 이 feature 안에 인라인한다.
  */
-export function ChatButton({ listingId, sellerId, available }: ChatButtonProps) {
+export function ChatButton({
+  listingId,
+  sellerId,
+  available,
+  label = "채팅하기",
+  directTradeEnabled = true,
+}: ChatButtonProps) {
   const { session } = useSession();
   const [open, setOpen] = useState(false);
 
@@ -25,23 +33,33 @@ export function ChatButton({ listingId, sellerId, available }: ChatButtonProps) 
 
   if (!session) {
     return (
-      <Button size="lg" variant="secondary" disabled>
-        채팅하기 (로그인 필요)
-      </Button>
+      <LinkButton
+        href={`/login?returnTo=${encodeURIComponent(`/listings/${listingId}`)}`}
+        size="lg"
+        variant="secondary"
+      >
+        로그인하고 {label}
+      </LinkButton>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
       <Button size="lg" variant="secondary" onClick={() => setOpen((v) => !v)}>
-        {open ? "채팅 닫기" : "채팅하기"}
+        {open ? "채팅 닫기" : label}
       </Button>
       {open ? (
         <div
           className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
           style={{ height: 420 }}
         >
-          <InlineChatPanel listingId={listingId} myId={session.accountId} sellerId={sellerId} />
+          <InlineChatPanel
+            key={`${session.accountId}:${listingId}:${sellerId}`}
+            listingId={listingId}
+            myId={session.accountId}
+            sellerId={sellerId}
+            directTradeEnabled={directTradeEnabled}
+          />
         </div>
       ) : null}
     </div>
@@ -52,17 +70,21 @@ interface InlineChatPanelProps {
   readonly listingId: string;
   readonly myId: string;
   readonly sellerId: string;
+  readonly directTradeEnabled: boolean;
 }
 
-function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
-  const { messages, send, loading, error } = useChatRoom({
-    listingId,
-    myId,
-    otherId: sellerId,
-    isBuyer: true,
-  });
+function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: InlineChatPanelProps) {
+  const { room, messages, send, confirmTrade, cancelTradeConfirmation, retry, loading, error } =
+    useChatRoom({
+      listingId,
+      myId,
+      otherId: sellerId,
+      isBuyer: true,
+    });
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [tradeBusy, setTradeBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,9 +95,12 @@ function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
     e.preventDefault();
     if (!input.trim() || sending) return;
     setSending(true);
+    setActionError(undefined);
     try {
       await send(input.trim());
       setInput("");
+    } catch {
+      setActionError("메시지를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSending(false);
     }
@@ -89,10 +114,64 @@ function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
       </div>
     );
   }
-  if (error) return <p className="p-4 text-sm text-danger">{error}</p>;
+  if (error) {
+    return (
+      <div className="flex min-h-40 flex-col items-center justify-center gap-3 p-4 text-center">
+        <p className="text-sm text-danger">{error}</p>
+        <Button type="button" size="sm" variant="secondary" onClick={retry}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
+
+  const myConfirmation =
+    room === null ? null : myId === room.buyerId ? room.buyerConfirmedAt : room.sellerConfirmedAt;
+  const otherConfirmation =
+    room === null ? null : myId === room.buyerId ? room.sellerConfirmedAt : room.buyerConfirmedAt;
+
+  async function toggleTradeConfirmation() {
+    if (tradeBusy || room === null || room.directTradeCompletedAt !== null) return;
+    setTradeBusy(true);
+    setActionError(undefined);
+    try {
+      if (myConfirmation === null) await confirmTrade();
+      else await cancelTradeConfirmation();
+    } catch {
+      setActionError("거래 확인 상태를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setTradeBusy(false);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
+      {directTradeEnabled ? (
+        <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3">
+          {room?.directTradeCompletedAt !== null && room !== null ? (
+            <p className="text-sm font-semibold text-success">양쪽이 확인해 거래가 완료됐어요</p>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-neutral-900">직거래 완료 확인</p>
+                <p className="text-xs text-neutral-500">
+                  {otherConfirmation === null
+                    ? "상대방 확인을 기다리고 있어요"
+                    : "상대방이 확인했어요"}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={tradeBusy || room === null}
+                onClick={() => void toggleTradeConfirmation()}
+                className="shrink-0 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 disabled:opacity-50"
+              >
+                {tradeBusy ? "처리 중" : myConfirmation === null ? "거래 완료" : "확인 취소"}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-center text-sm text-neutral-400">
@@ -139,6 +218,14 @@ function InlineChatPanel({ listingId, myId, sellerId }: InlineChatPanelProps) {
           전송
         </Button>
       </form>
+      {actionError ? (
+        <p
+          role="alert"
+          className="border-t border-danger/10 bg-danger/5 px-4 py-2 text-xs text-danger"
+        >
+          {actionError}
+        </p>
+      ) : null}
     </div>
   );
 }

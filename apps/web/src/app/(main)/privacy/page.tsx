@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           <Section title="2. 개인정보 수집 및 이용 목적">
             <ul className="list-disc space-y-1 pl-5">
               <li>회원 식별, 로그인, 계정 관리</li>
-              <li>중고거래 결제 승인·구매확정·판매자 정산 관리</li>
+              <li>중고거래 대화 및, 결제 기능 활성 시 결제 승인·구매확정·판매자 지급 관리</li>
               <li>거래 후기·시세 통계·커뮤니티 기능 제공</li>
               <li>부정 이용 방지 및 보안 운영</li>
             </ul>
@@ -67,8 +67,8 @@ export default function PrivacyPage() {
           <Section title="5. 개인정보 처리 위탁">
             <ul className="list-disc space-y-1 pl-5">
               <li>
-                결제 처리: PortOne(포트원) 및 결제대행사(카카오페이·KG이니시스) — 결제
-                승인·취소·환불 처리
+                결제 기능 활성 시: 결제 화면에 고지된 결제대행·결제수단 사업자 — 결제 승인·취소·환불
+                처리
               </li>
               <li>
                 이미지 저장: MinIO(자체 운영 서버) — 상품 사진·커뮤니티 이미지 보관. 이용자가

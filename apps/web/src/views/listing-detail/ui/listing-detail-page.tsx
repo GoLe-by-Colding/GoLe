@@ -8,6 +8,7 @@ import {
   LISTING_CATEGORY_LABEL,
   type Listing,
 } from "@entities/listing";
+import { fetchLaunchConfig } from "@entities/launch";
 import { ApiError } from "@shared/api";
 import { Badge, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
@@ -34,8 +35,9 @@ export interface ListingDetailPageProps {
 }
 
 export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
-  const listing = await loadListing(listingId);
+  const [listing, launch] = await Promise.all([loadListing(listingId), fetchLaunchConfig()]);
   const isAvailable = listing.status === "active";
+  const paymentsOpen = launch.features.payments && launch.stage >= 2;
 
   return (
     <Container width="lg">
@@ -78,18 +80,36 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             ) : null}
           </div>
           <div className="mt-2 flex gap-3">
-            <PurchaseButton
-              listingId={listing.id}
-              sellerId={listing.sellerId}
-              available={isAvailable}
-            />
+            {paymentsOpen ? (
+              <PurchaseButton
+                listingId={listing.id}
+                sellerId={listing.sellerId}
+                available={isAvailable}
+              />
+            ) : (
+              <div className="flex flex-col gap-1.5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3">
+                <span className="text-sm font-semibold text-brand-900">
+                  지금은 판매자와 직접 거래해요
+                </span>
+                <span className="text-sm leading-relaxed text-brand-700">
+                  채팅으로 상품 상태와 거래 장소 또는 배송 방법을 합의하세요. 플랫폼 결제는 아직
+                  받지 않으며, 안전결제가 열리면 찜한 매물로 알려드릴게요.
+                </span>
+              </div>
+            )}
           </div>
-          <ChatButton listingId={listing.id} sellerId={listing.sellerId} available={isAvailable} />
+          <ChatButton
+            listingId={listing.id}
+            sellerId={listing.sellerId}
+            available={isAvailable}
+            label={paymentsOpen ? "판매자와 채팅하기" : "거래 문의하기"}
+            directTradeEnabled={launch.tradeMode === "DIRECT_CHAT"}
+          />
           {listing.catalogSetNumber !== null ? (
             <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
           ) : null}
           <div className="mt-1 flex flex-col gap-2 border-t border-neutral-200 pt-4">
-            <SellerMiniCard sellerId={listing.sellerId} />
+            <SellerMiniCard sellerId={listing.sellerId} reviewsOpen={launch.features.reviews} />
             <div className="flex justify-end">
               <ReportButton targetType="LISTING" targetId={listing.id} />
             </div>

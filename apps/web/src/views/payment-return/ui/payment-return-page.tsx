@@ -108,9 +108,21 @@ export function PaymentReturnPage({ paymentId, code, message, pgMessage }: Payme
             <Text tone="secondary">{description}</Text>
           </div>
           {state !== "checking" ? (
-            <Button size="lg" fullWidth onClick={() => router.push(orderHref)}>
-              주문 상세로 이동
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
+              <Button size="lg" fullWidth onClick={() => router.push(orderHref)}>
+                주문 상세로 이동
+              </Button>
+              {state === "failed" ? (
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => router.push("/chat?compose=support")}
+                >
+                  운영팀 문의
+                </Button>
+              ) : null}
+            </div>
           ) : null}
           <Text tone="muted" size="sm">
             결제 결과는 브라우저 응답이 아닌 PortOne 원장을 서버에서 다시 확인합니다.

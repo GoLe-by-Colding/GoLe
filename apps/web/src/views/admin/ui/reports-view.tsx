@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   dismissAdminReport,
+  fetchAdminChatReportSnapshot,
   fetchAdminReports,
   resolveAdminReport,
   resolveAdminReportTarget,
+  type AdminChatReportSnapshot,
   type AdminReport,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
@@ -33,6 +35,8 @@ export function AdminReportsView() {
   // null = 아직 불러오지 않음. 로딩 상태를 파생시켜 effect 안에서 setState를 동기 호출하지 않는다.
   const [rows, setRows] = useState<readonly AdminReport[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [snapshot, setSnapshot] = useState<AdminChatReportSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
 
   const load = useCallback(() => {
     if (token === null) {
@@ -70,6 +74,20 @@ export function AdminReportsView() {
     }
   }
 
+  async function openSnapshot(reportId: string) {
+    if (token === null) return;
+    setSnapshotLoading(true);
+    setSnapshot(null);
+    setError(undefined);
+    try {
+      setSnapshot(await fetchAdminChatReportSnapshot(token, reportId));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "채팅 신고 문맥을 불러오지 못했습니다.");
+    } finally {
+      setSnapshotLoading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
@@ -103,16 +121,26 @@ export function AdminReportsView() {
         {(rows ?? []).map((r) => (
           <tr key={r.id} className="border-t border-neutral-100">
             <td className="px-3 py-2.5 font-medium">
-              <Link
-                href={
-                  r.targetType === "LISTING"
-                    ? `/listings/${r.targetId}`
-                    : `/community/${r.targetId}`
-                }
-                className="text-neutral-900 hover:text-brand-600"
-              >
-                {r.targetType === "LISTING" ? "매물" : "게시글"} {shortId(r.targetId)} →
-              </Link>
+              {r.targetType === "CHAT_MESSAGE" ? (
+                <button
+                  type="button"
+                  className="text-left text-neutral-900 hover:text-brand-600"
+                  onClick={() => void openSnapshot(r.id)}
+                >
+                  채팅 {shortId(r.targetId)} · 고정 문맥 보기 →
+                </button>
+              ) : (
+                <Link
+                  href={
+                    r.targetType === "LISTING"
+                      ? `/listings/${r.targetId}`
+                      : `/community/${r.targetId}`
+                  }
+                  className="text-neutral-900 hover:text-brand-600"
+                >
+                  {r.targetType === "LISTING" ? "매물" : "게시글"} {shortId(r.targetId)} →
+                </Link>
+              )}
             </td>
             <td className="px-3 py-2.5">
               <Badge tone={r.reason === "COUNTERFEIT" ? "danger" : "neutral"}>
@@ -132,29 +160,43 @@ export function AdminReportsView() {
             <td className="px-3 py-2.5 text-right">
               {r.status === "PENDING" ? (
                 <span className="inline-flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() =>
-                      targetAction.ask({
-                        title: r.targetType === "LISTING" ? "신고 매물 내리기" : "신고 게시글 삭제",
-                        target: `${r.targetType === "LISTING" ? "매물" : "게시글"} ${shortId(r.targetId)}`,
-                        confirmLabel: r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료",
-                        run: async (reason) => {
-                          await resolveAdminReportTarget(token ?? "", r.id, reason);
-                        },
-                      })
-                    }
-                  >
-                    {r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void handle(r.id, "resolve")}
-                  >
-                    이미 조치됨
-                  </Button>
+                  {r.targetType === "CHAT_MESSAGE" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handle(r.id, "resolve")}
+                    >
+                      검토 완료
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() =>
+                        targetAction.ask({
+                          title:
+                            r.targetType === "LISTING" ? "신고 매물 내리기" : "신고 게시글 삭제",
+                          target: `${r.targetType === "LISTING" ? "매물" : "게시글"} ${shortId(r.targetId)}`,
+                          confirmLabel:
+                            r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료",
+                          run: async (reason) => {
+                            await resolveAdminReportTarget(token ?? "", r.id, reason);
+                          },
+                        })
+                      }
+                    >
+                      {r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료"}
+                    </Button>
+                  )}
+                  {r.targetType !== "CHAT_MESSAGE" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handle(r.id, "resolve")}
+                    >
+                      이미 조치됨
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="ghost" onClick={() => void handle(r.id, "dismiss")}>
                     기각
                   </Button>
@@ -168,6 +210,66 @@ export function AdminReportsView() {
           </tr>
         ))}
       </AdminTable>
+
+      {snapshotLoading ? (
+        <div className="rounded-lg border border-brand-100 bg-brand-50 px-5 py-8 text-center text-sm text-brand-700">
+          신고 당시 대화 문맥을 확인하는 중…
+        </div>
+      ) : null}
+
+      {snapshot !== null ? (
+        <section
+          className="rounded-xl border border-neutral-200 bg-neutral-50 p-5"
+          aria-label="채팅 신고 스냅샷"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Heading level={3}>신고 당시 대화 문맥</Heading>
+                <Badge tone="warning">읽기 전용</Badge>
+              </div>
+              <Text className="mt-1" size="sm" tone="muted">
+                신고 시 서버가 고정한 앞뒤 메시지만 표시됩니다. 현재 채팅방의 추가 대화에는 접근하지
+                않습니다.
+              </Text>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setSnapshot(null)}>
+              닫기
+            </Button>
+          </div>
+          <ol className="mt-4 flex max-h-96 flex-col gap-2 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4">
+            {snapshot.messages.map((message) => {
+              const reported = message.messageId === snapshot.reportedMessageId;
+              return (
+                <li
+                  key={message.messageId}
+                  className={
+                    reported
+                      ? "rounded-lg border border-danger/30 bg-danger-soft p-3"
+                      : "rounded-lg border border-neutral-100 bg-neutral-50 p-3"
+                  }
+                >
+                  <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
+                    <span>작성자 {shortId(message.senderId)}</span>
+                    <time>{formatDateTime(message.sentAt)}</time>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-neutral-800">
+                    {message.content}
+                  </p>
+                  {reported ? (
+                    <Badge className="mt-2" tone="danger">
+                      신고된 메시지
+                    </Badge>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+          <p className="mt-3 text-xs text-neutral-500">
+            캡처 {formatDateTime(snapshot.capturedAt)} · 스냅샷 열람 기록이 감사 로그에 남았습니다.
+          </p>
+        </section>
+      ) : null}
 
       {targetAction.pending !== null ? (
         <ReasonPrompt

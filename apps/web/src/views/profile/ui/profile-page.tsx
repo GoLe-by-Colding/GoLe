@@ -3,8 +3,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fetchMyOrders, orderStatusLabel, type Order } from "@entities/order";
+import {
+  fetchMyOrders,
+  fetchMySales,
+  fetchMySettlements,
+  orderStatusLabel,
+  type Order,
+  type SellerSettlement,
+} from "@entities/order";
 import { fetchMyListings, type Listing } from "@entities/listing";
+import { fetchLaunchConfig, SAFE_LAUNCH_CONFIG, type LaunchConfig } from "@entities/launch";
 import { fetchMe, useSession, type Me } from "@entities/user";
 import { formatKrw } from "@shared/lib";
 import {
@@ -21,11 +29,21 @@ import {
   Text,
 } from "@shared/ui";
 
-type Tab = "info" | "orders" | "listings";
+/** 정산 표시용 짧은 날짜. 값이 없으면 미정으로 둔다(서버가 아직 시각을 못 정한 경우). */
+function formatSettlementDate(iso: string | null): string {
+  if (iso === null) return "미정";
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? "미정"
+    : `${at.getFullYear()}.${String(at.getMonth() + 1).padStart(2, "0")}.${String(at.getDate()).padStart(2, "0")}`;
+}
+
+type Tab = "info" | "orders" | "sales" | "listings";
 
 const TAB_LABEL: Record<Tab, string> = {
   info: "내 정보",
   orders: "구매 내역",
+  sales: "판매 관리",
   listings: "내 매물",
 };
 
@@ -56,6 +74,9 @@ export function ProfilePage() {
   const [me, setMe] = useState<Load<Me>>(LOADING);
   const [orders, setOrders] = useState<Load<readonly Order[]>>(LOADING);
   const [listings, setListings] = useState<Load<readonly Listing[]>>(LOADING);
+  const [sales, setSales] = useState<Load<readonly Order[]>>(LOADING);
+  const [settlements, setSettlements] = useState<Load<readonly SellerSettlement[]>>(LOADING);
+  const [launch, setLaunch] = useState<LaunchConfig>(SAFE_LAUNCH_CONFIG);
   const [attempt, setAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -63,6 +84,9 @@ export function ProfilePage() {
     setMe(LOADING);
     setOrders(LOADING);
     setListings(LOADING);
+    setSales(LOADING);
+    setSettlements(LOADING);
+    setLaunch(SAFE_LAUNCH_CONFIG);
     setAttempt((n) => n + 1);
   }, []);
 
@@ -98,6 +122,26 @@ export function ProfilePage() {
         if (!controller.signal.aborted) setListings(FAILED);
       });
 
+    fetchMySales(controller.signal)
+      .then((r) => {
+        if (!controller.signal.aborted) setSales({ status: "ready", data: r });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSales(FAILED);
+      });
+
+    fetchMySettlements(controller.signal)
+      .then((r) => {
+        if (!controller.signal.aborted) setSettlements({ status: "ready", data: r });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSettlements(FAILED);
+      });
+
+    fetchLaunchConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) setLaunch(config);
+    });
+
     return () => controller.abort();
   }, [session, token, attempt]);
 
@@ -122,6 +166,13 @@ export function ProfilePage() {
 
   const accountId = session.accountId;
   const email = me.status === "ready" ? me.data.email : null;
+  const showSettlements =
+    launch.features.payments || settlements.status !== "ready" || settlements.data.length > 0;
+  const settlementDescription = launch.features.partnerPayout
+    ? "지급대행사가 지급 가능 시각 이후 자동 처리를 시도합니다"
+    : launch.features.payments
+      ? "지급 가능 시각 이후 운영자가 송금 결과를 확인합니다"
+      : "플랫폼 결제가 닫히기 전에 생성된 정산 이력만 표시합니다";
 
   function handleSignOut() {
     signOut();
@@ -170,8 +221,8 @@ export function ProfilePage() {
         </div>
 
         {/* 탭 */}
-        <div className="grid grid-cols-3 border-b border-neutral-200">
-          {(["info", "orders", "listings"] as Tab[]).map((t) => (
+        <div className="grid grid-cols-4 border-b border-neutral-200">
+          {(["info", "orders", "sales", "listings"] as Tab[]).map((t) => (
             <button key={t} type="button" className={tabClass(t)} onClick={() => setTab(t)}>
               {TAB_LABEL[t]}
             </button>
@@ -257,6 +308,100 @@ export function ProfilePage() {
           </div>
         )}
 
+        {/* 판매 관리 — 받은 주문(발송 대기)과 정산 예정액. 판매자 루프의 진입점이다. */}
+        {tab === "sales" && (
+          <div className="flex flex-col gap-8">
+            <section className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <Heading level={2} className="text-lg">
+                  받은 주문
+                </Heading>
+                <Text tone="muted" size="sm">
+                  주문을 눌러 운송장을 등록하세요
+                </Text>
+              </div>
+              {sales.status === "loading" ? (
+                [1, 2].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+              ) : sales.status === "failed" ? (
+                <PanelFailure onRetry={reload} />
+              ) : sales.data.length === 0 ? (
+                <PanelEmpty
+                  icon={<PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+                  message="아직 받은 주문이 없어요"
+                />
+              ) : (
+                sales.data.map((o) => (
+                  <Link
+                    key={o.id}
+                    href={`/orders/${o.id}`}
+                    className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs text-neutral-400">{o.id.slice(0, 8)}</span>
+                      <span className="text-base font-semibold tabular-nums text-neutral-900">
+                        {formatKrw(o.amount)}
+                      </span>
+                    </div>
+                    <Badge tone={o.status === "completed" ? "success" : "warning"}>
+                      {orderStatusLabel(o.status)}
+                    </Badge>
+                  </Link>
+                ))
+              )}
+            </section>
+
+            {showSettlements ? (
+              <section className="flex flex-col gap-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <Heading level={2} className="text-lg">
+                    정산
+                  </Heading>
+                  <Text tone="muted" size="sm">
+                    {settlementDescription}
+                  </Text>
+                </div>
+                {settlements.status === "loading" ? (
+                  [1, 2].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+                ) : settlements.status === "failed" ? (
+                  <PanelFailure onRetry={reload} />
+                ) : settlements.data.length === 0 ? (
+                  <PanelEmpty
+                    icon={
+                      <ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
+                    }
+                    message="정산 예정 금액이 없어요"
+                  />
+                ) : (
+                  settlements.data.map((row) => (
+                    <div
+                      key={row.orderId}
+                      className="flex items-center justify-between gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3.5"
+                    >
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <Link
+                          href={`/orders/${row.orderId}`}
+                          className="font-mono text-xs text-neutral-400 hover:text-brand-600"
+                        >
+                          {row.orderId.slice(0, 8)}
+                        </Link>
+                        <span className="text-base font-semibold tabular-nums text-neutral-900">
+                          {formatKrw(row.payout)}
+                        </span>
+                        <span className="text-xs text-neutral-500 tabular-nums">
+                          거래액 {formatKrw(row.grossAmount)} · 수수료 {formatKrw(row.fee)}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <SettlementStatus row={row} />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </section>
+            ) : null}
+          </div>
+        )}
+
         {/* 내 매물 */}
         {tab === "listings" && (
           <div className="flex flex-col gap-3">
@@ -318,6 +463,49 @@ export function ProfilePage() {
         )}
       </div>
     </Container>
+  );
+}
+
+function SettlementStatus({ row }: Readonly<{ row: SellerSettlement }>) {
+  if (row.status === "PAID") {
+    return (
+      <>
+        <Badge tone="success">지급 완료</Badge>
+        <span className="text-xs text-neutral-400">{formatSettlementDate(row.paidAt)}</span>
+      </>
+    );
+  }
+  if (row.status === "PAYOUT_IN_PROGRESS") {
+    return (
+      <>
+        <Badge tone="brand">지급 처리 중</Badge>
+        <span className="text-xs text-neutral-500">중복 지급을 확인하고 있어요</span>
+      </>
+    );
+  }
+  if (row.status === "PAYOUT_FAILED") {
+    return (
+      <>
+        <Badge tone="danger">지급 재시도 예정</Badge>
+        <span className="text-xs text-neutral-500">
+          {formatSettlementDate(row.payoutNextAttemptAt)} 이후
+        </span>
+      </>
+    );
+  }
+  if (row.status === "PAYOUT_BLOCKED") {
+    return (
+      <>
+        <Badge tone="danger">지급 보류</Badge>
+        <span className="text-xs text-neutral-500">운영팀 확인이 필요해요</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <Badge tone="warning">지급 대기</Badge>
+      <span className="text-xs text-neutral-500">{formatSettlementDate(row.payableAt)} 이후</span>
+    </>
   );
 }
 

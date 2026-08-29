@@ -54,10 +54,49 @@ export interface AdminSettlement {
   readonly fee: number;
   readonly payout: number;
   readonly feeRate: number;
-  readonly status: "PENDING" | "PAID";
+  readonly status: "PENDING" | "PAYOUT_IN_PROGRESS" | "PAYOUT_FAILED" | "PAYOUT_BLOCKED" | "PAID";
   readonly paymentReference: string | null;
   readonly createdAt: string | null;
+  /** 운영 지급 유예가 끝나는 시각. 이 전에는 서버가 지급 완료 처리를 거부한다. */
+  readonly payableAt: string | null;
   readonly paidAt: string | null;
+  readonly payoutAttempts: number;
+  /** 수동 지급 작업을 원자적으로 배정받은 관리자 계정. 자동 지급 선점이면 null. */
+  readonly payoutOperatorId: string | null;
+  readonly payoutAttemptedAt: string | null;
+  readonly payoutNextAttemptAt: string | null;
+  readonly payoutError: string | null;
+}
+
+export interface AdminLaunchConfig {
+  readonly config: {
+    readonly stage: 0 | 1 | 2 | 3;
+    readonly tradeMode: "DIRECT_CHAT" | "MANUAL_SETTLEMENT" | "PARTNER_PAYOUT";
+    readonly features: {
+      readonly payments: boolean;
+      readonly reviews: boolean;
+      readonly partnerPayout: boolean;
+    };
+    readonly updatedAt: string | null;
+  };
+  /** 운영자가 저장한 단계. config.stage는 현재 정산 모드로 낮춘 실제 실행 단계다. */
+  readonly requestedStage: 0 | 1 | 2 | 3;
+  readonly overrides: Readonly<Partial<Record<"payments" | "reviews" | "partnerPayout", boolean>>>;
+  readonly updatedBy: string | null;
+  readonly settlementMode: "DISABLED" | "MANUAL" | "PROVIDER";
+  readonly payoutContractVerified: boolean;
+}
+
+export interface AdminLaunchChange {
+  readonly id: string;
+  readonly type: "STAGE" | "FEATURE_OVERRIDE";
+  readonly target: string;
+  readonly before: string;
+  readonly after: string;
+  readonly reason: string;
+  readonly actorId: string;
+  readonly actorEmail: string;
+  readonly occurredAt: string;
 }
 
 export interface AdminListing {
@@ -94,13 +133,58 @@ export interface AdminAccount {
 export interface AdminReport {
   readonly id: string;
   readonly reporterId: string;
-  readonly targetType: "LISTING" | "POST";
+  readonly targetType: "LISTING" | "POST" | "CHAT_MESSAGE";
   readonly targetId: string;
   readonly reason: string;
   readonly detail: string;
   readonly status: "PENDING" | "RESOLVED" | "DISMISSED";
   readonly createdAt: string | null;
   readonly handledAt: string | null;
+}
+
+export type AdminSupportStatus = "UNASSIGNED" | "IN_PROGRESS" | "WAITING_USER" | "RESOLVED";
+
+export interface AdminSupportTicket {
+  readonly roomId: string;
+  readonly requesterId: string;
+  readonly title: string;
+  readonly status: AdminSupportStatus;
+  readonly assigneeId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly resolvedAt: string | null;
+}
+
+export interface AdminSupportMessage {
+  readonly id: string;
+  readonly roomId: string;
+  readonly senderId: string;
+  readonly content: string;
+  readonly sentAt: string;
+}
+
+export interface AdminSupportNote {
+  readonly id: string;
+  readonly authorId: string;
+  readonly note: string;
+  readonly createdAt: string;
+}
+
+export interface AdminChatReportSnapshotMessage {
+  readonly messageId: string;
+  readonly senderId: string;
+  readonly content: string;
+  readonly sentAt: string;
+}
+
+export interface AdminChatReportSnapshot {
+  readonly id: string;
+  readonly reportId: string;
+  readonly roomId: string;
+  readonly reportedMessageId: string;
+  readonly reporterId: string;
+  readonly messages: readonly AdminChatReportSnapshotMessage[];
+  readonly capturedAt: string;
 }
 
 export interface AdminLegoSet {
@@ -204,6 +288,63 @@ export function markAdminSettlementPaid(
   });
 }
 
+export function claimAdminSettlement(token: string, orderId: string): Promise<AdminSettlement> {
+  return post<AdminSettlement>(token, `/api/admin/settlements/${orderId}/claim`);
+}
+
+export function reconcileAdminSettlement(
+  token: string,
+  orderId: string,
+  reason: string,
+): Promise<AdminSettlement> {
+  return post<AdminSettlement>(token, `/api/admin/settlements/${orderId}/reconcile`, { reason });
+}
+
+export function recoverAdminSettlement(
+  token: string,
+  orderId: string,
+  input: {
+    readonly alreadyPaid: boolean;
+    readonly paymentReference?: string;
+    readonly reason: string;
+  },
+): Promise<AdminSettlement> {
+  return post<AdminSettlement>(token, `/api/admin/settlements/${orderId}/recover`, input);
+}
+
+// ── 출시 단계 ────────────────────────────────────────────────
+
+export function fetchAdminLaunchConfig(token: string): Promise<AdminLaunchConfig> {
+  return get<AdminLaunchConfig>(token, "/api/admin/launch");
+}
+
+export function fetchAdminLaunchHistory(
+  token: string,
+  limit = 50,
+): Promise<readonly AdminLaunchChange[]> {
+  return get<readonly AdminLaunchChange[]>(token, `/api/admin/launch/history?limit=${limit}`);
+}
+
+export function changeAdminLaunchStage(
+  token: string,
+  stage: 0 | 1 | 2 | 3,
+  reason: string,
+): Promise<AdminLaunchConfig> {
+  return post<AdminLaunchConfig>(token, "/api/admin/launch/stage", { stage, reason });
+}
+
+export function setAdminLaunchFeature(
+  token: string,
+  feature: "payments" | "reviews" | "partnerPayout",
+  enabled: boolean | null,
+  reason: string,
+): Promise<AdminLaunchConfig> {
+  return post<AdminLaunchConfig>(token, `/api/admin/launch/features/${feature}`, {
+    enabled,
+    reason,
+  });
+}
+
 // ── 매물 ─────────────────────────────────────────────────────
 
 export function fetchAdminListings(
@@ -265,6 +406,102 @@ export function resolveAdminReportTarget(
 
 export function dismissAdminReport(token: string, reportId: string): Promise<AdminReport> {
   return post<AdminReport>(token, `/api/admin/reports/${reportId}/dismiss`);
+}
+
+/** 신고 시점에 서버가 고정한 최소 문맥만 조회한다. 조회 자체가 감사 로그에 남는다. */
+export function fetchAdminChatReportSnapshot(
+  token: string,
+  reportId: string,
+): Promise<AdminChatReportSnapshot> {
+  return get<AdminChatReportSnapshot>(token, `/api/admin/reports/${reportId}/chat-snapshot`);
+}
+
+// ── 운영 문의 ─────────────────────────────────────────────────
+
+export function fetchAdminSupportTickets(
+  token: string,
+  status?: AdminSupportStatus,
+  limit = 50,
+): Promise<readonly AdminSupportTicket[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  return get<readonly AdminSupportTicket[]>(token, `/api/admin/support?${params}`);
+}
+
+export function assignAdminSupportTicket(
+  token: string,
+  roomId: string,
+): Promise<AdminSupportTicket> {
+  return post<AdminSupportTicket>(token, `/api/admin/support/${roomId}/assign`);
+}
+
+export function transferAdminSupportTicket(
+  token: string,
+  roomId: string,
+  assigneeId: string,
+): Promise<AdminSupportTicket> {
+  return post<AdminSupportTicket>(token, `/api/admin/support/${roomId}/transfer`, { assigneeId });
+}
+
+export function takeoverAdminSupportTicket(
+  token: string,
+  roomId: string,
+  reason: string,
+): Promise<AdminSupportTicket> {
+  return post<AdminSupportTicket>(token, `/api/admin/support/${roomId}/takeover`, { reason });
+}
+
+export function resolveAdminSupportTicket(
+  token: string,
+  roomId: string,
+): Promise<AdminSupportTicket> {
+  return post<AdminSupportTicket>(token, `/api/admin/support/${roomId}/resolve`);
+}
+
+export function reopenAdminSupportTicket(
+  token: string,
+  roomId: string,
+): Promise<AdminSupportTicket> {
+  return post<AdminSupportTicket>(token, `/api/admin/support/${roomId}/reopen`);
+}
+
+export function fetchAdminSupportMessages(
+  token: string,
+  roomId: string,
+  cursor?: {
+    readonly beforeSentAt: string;
+    readonly beforeId: string;
+  },
+  limit = 60,
+): Promise<readonly AdminSupportMessage[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor !== undefined) {
+    params.set("beforeSentAt", cursor.beforeSentAt);
+    params.set("beforeId", cursor.beforeId);
+  }
+  return get<readonly AdminSupportMessage[]>(
+    token,
+    `/api/admin/support/${encodeURIComponent(roomId)}/messages?${params}`,
+  );
+}
+
+export function replyAdminSupport(
+  token: string,
+  roomId: string,
+  content: string,
+): Promise<AdminSupportMessage> {
+  return post<AdminSupportMessage>(token, `/api/admin/support/${roomId}/messages`, { content });
+}
+
+export function fetchAdminSupportNotes(
+  token: string,
+  roomId: string,
+): Promise<readonly AdminSupportNote[]> {
+  return get<readonly AdminSupportNote[]>(token, `/api/admin/support/${roomId}/notes`);
+}
+
+export function addAdminSupportNote(token: string, roomId: string, note: string): Promise<void> {
+  return post<void>(token, `/api/admin/support/${roomId}/notes`, { note });
 }
 
 // ── 회원 ─────────────────────────────────────────────────────

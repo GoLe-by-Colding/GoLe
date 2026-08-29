@@ -12,13 +12,15 @@ import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
 import { PostAuthorActions } from "@features/manage-post";
-import { Badge, Card, Container, Heading, Skeleton, Text } from "@shared/ui";
+import { useSession } from "@entities/user";
+import { Badge, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
 
 export interface CommunityPostPageProps {
   readonly postId: string;
 }
 
 export function CommunityPostPage({ postId }: CommunityPostPageProps) {
+  const { session } = useSession();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<readonly Comment[]>([]);
   const [missing, setMissing] = useState(false);
@@ -82,8 +84,19 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   return (
     <Container width="sm">
       <div className="flex flex-col gap-5 pt-8 pb-16">
-        <div className="flex items-center justify-between">
-          <Heading level={2}>{post.authorId.slice(0, 8)}</Heading>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Heading level={2}>{post.authorId.slice(0, 8)}</Heading>
+            {session?.accountId !== post.authorId ? (
+              <LinkButton
+                href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
+                size="sm"
+                variant="secondary"
+              >
+                1:1 대화
+              </LinkButton>
+            ) : null}
+          </div>
           <Badge tone={post.type === "moc" || post.type === "easter_egg" ? "brand" : "neutral"}>
             {POST_TOPIC_LABEL[post.type]}
           </Badge>

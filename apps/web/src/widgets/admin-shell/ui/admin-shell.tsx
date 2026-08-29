@@ -17,6 +17,8 @@ interface NavItem {
 
 const NAV: readonly NavItem[] = [
   { href: "/admin", label: "대시보드", exact: true },
+  { href: "/admin/launch", label: "출시 단계" },
+  { href: "/admin/support", label: "문의" },
   { href: "/admin/reports", label: "신고" },
   { href: "/admin/listings", label: "매물" },
   { href: "/admin/orders", label: "주문" },

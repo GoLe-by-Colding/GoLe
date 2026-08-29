@@ -4,7 +4,7 @@ import { SearchPage } from "@views/search";
 export const metadata: Metadata = {
   title: "레고 매물 검색",
   description:
-    "상태·가격·테마로 레고 중고 매물을 검색하세요. 미개봉 새상품부터 조립완성품까지 안전결제로 거래합니다.",
+    "상태·가격·테마로 레고 중고 매물을 검색하세요. 미개봉 새상품부터 조립완성품까지 판매자와 대화하고, 지원되는 경우 플랫폼 결제를 이용할 수 있습니다.",
   alternates: { canonical: "/search" },
 };
 

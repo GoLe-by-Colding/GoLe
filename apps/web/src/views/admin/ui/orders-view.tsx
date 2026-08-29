@@ -14,6 +14,7 @@ const STATUSES = [
   "PAYMENT_PENDING",
   "PAYMENT_REVIEW",
   "FUNDS_HELD",
+  "DISPUTED",
   "REFUND_PENDING",
   "COMPLETED",
   "REFUNDED",
@@ -70,19 +71,40 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Heading level={2}>주문 모니터링</Heading>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="주문·회원·세트번호 검색"
-            aria-label="주문 검색"
-            className="w-56"
-          />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
-            상태
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Heading level={2}>주문 모니터링</Heading>
+            <Text tone="muted" size="sm">
+              결제 흐름을 검색하고 상태별로 빠르게 좁혀보세요.
+            </Text>
+          </div>
+          {status !== "" ? (
+            <Button size="sm" variant="ghost" onClick={() => setStatus("")}>
+              필터 초기화
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5 max-sm:basis-full">
+            <span className="text-xs font-semibold text-neutral-600">통합 검색</span>
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="주문·회원·세트번호 검색"
+              aria-label="주문 검색"
+              className="w-full min-w-56 bg-white"
+            />
+          </label>
+          <label className="flex w-52 flex-col gap-1.5 max-sm:w-full">
+            <span className="text-xs font-semibold text-neutral-600">주문 상태</span>
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              aria-label="주문 상태 필터"
+              className="bg-white font-medium"
+            >
               <option value="">전체</option>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -91,6 +113,20 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
               ))}
             </Select>
           </label>
+          <div className="flex h-11 min-w-40 items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 max-sm:w-full">
+            <span className="text-xs text-neutral-500">현재 필터</span>
+            <Badge
+              tone={
+                status === "PAYMENT_REVIEW" || status === "PAYMENT_FAILED"
+                  ? "danger"
+                  : status === ""
+                    ? "neutral"
+                    : "brand"
+              }
+            >
+              {status === "" ? "전체" : (ORDER_STATUS_LABEL[status] ?? status)}
+            </Badge>
+          </div>
         </div>
       </div>
 
@@ -121,7 +157,7 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
                 tone={
                   o.status === "COMPLETED"
                     ? "success"
-                    : o.status === "PAYMENT_REVIEW"
+                    : o.status === "PAYMENT_REVIEW" || o.status === "DISPUTED"
                       ? "danger"
                       : "neutral"
                 }

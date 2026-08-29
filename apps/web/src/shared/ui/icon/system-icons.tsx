@@ -43,6 +43,15 @@ export function MessageCircleIcon(props: IconProps) {
   );
 }
 
+export function SearchIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m16 16 4 4" />
+    </IconFrame>
+  );
+}
+
 export function ShoppingBagIcon(props: IconProps) {
   return (
     <IconFrame {...props}>

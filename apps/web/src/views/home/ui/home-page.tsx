@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
 import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
+import { fetchLaunchConfig } from "@entities/launch";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, Heading, LinkButton, Logo, Text } from "@shared/ui";
@@ -95,12 +96,14 @@ function PriceTicker({ items }: { readonly items: readonly TrendingSet[] }) {
 }
 
 export async function HomePage() {
-  const [featured, trending, community, stats] = await Promise.all([
+  const [featured, trending, community, stats, launch] = await Promise.all([
     loadFeatured(),
     loadTrending(),
     loadCommunity(),
     loadStats(),
+    fetchLaunchConfig(),
   ]);
+  const paymentsOpen = launch.features.payments;
 
   return (
     <div className="flex flex-col">
@@ -115,7 +118,9 @@ export async function HomePage() {
                 레고를 <span className="text-accent-300">가장 합리적으로</span>
               </h1>
               <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
-                체결가 기반 시세 · 에스크로 안전거래 · 셀러 샵 · 컬렉션.
+                {paymentsOpen
+                  ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
+                  : "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."}
                 <br className="max-sm:hidden" />
                 흩어져 있던 레고 거래를 한곳에서.
               </p>
@@ -149,7 +154,9 @@ export async function HomePage() {
                     value:
                       stats.listings > 0
                         ? `${stats.listings.toLocaleString("ko-KR")}개`
-                        : "정산 전 보호",
+                        : paymentsOpen
+                          ? "정산 전 보호"
+                          : "판매자 대화 가능",
                   },
                   {
                     label: "체결 시세",
@@ -175,8 +182,13 @@ export async function HomePage() {
                 <LinkButton href="/search" variant="accent" size="lg" fullWidth>
                   상품 둘러보기
                 </LinkButton>
-                <LinkButton href="/prices" variant="inverse" size="lg" fullWidth>
-                  시세 확인하기
+                <LinkButton
+                  href={paymentsOpen ? "/prices" : "/chat"}
+                  variant="inverse"
+                  size="lg"
+                  fullWidth
+                >
+                  {paymentsOpen ? "시세 확인하기" : "대화 이어가기"}
                 </LinkButton>
               </div>
             </div>

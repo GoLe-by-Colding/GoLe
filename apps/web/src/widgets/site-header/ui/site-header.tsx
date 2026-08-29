@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "@entities/user";
 import { NotificationBell } from "@features/notification-bell";
-import { env } from "@shared/config";
 import { Button, Container, LinkButton, Logo } from "@shared/ui";
 import { HeaderSearch } from "./header-search";
 
@@ -65,14 +64,6 @@ export function SiteHeader() {
                 </Link>
               );
             })}
-            <a
-              href={env.discordInviteUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-[#5865F2] transition-colors hover:bg-[#F1F2FF] hover:text-[#4752C4]"
-            >
-              고래방 ↗
-            </a>
           </nav>
           {/* 스페이서는 항상 남겨 둔다. 이게 없으면 액션 영역이 왼쪽으로 붙는다. */}
           <div className="flex flex-1 justify-center px-4">
@@ -176,15 +167,6 @@ export function SiteHeader() {
                   </Link>
                 );
               })}
-              <a
-                href={env.discordInviteUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setMenuOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-base font-semibold text-[#5865F2] hover:bg-[#F1F2FF]"
-              >
-                Discord 고래방 ↗
-              </a>
             </nav>
             <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:hidden">
               {session ? (

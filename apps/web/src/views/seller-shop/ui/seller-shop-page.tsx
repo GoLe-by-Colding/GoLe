@@ -10,31 +10,35 @@ import {
   type SellerRating,
 } from "@entities/review";
 import { FollowButton } from "@features/follow-seller";
+import { useSession } from "@entities/user";
+import { fetchLaunchConfig } from "@entities/launch";
 import { formatKrw } from "@shared/lib";
-import { Badge, Card, Container, Heading, StarIcon, Text } from "@shared/ui";
+import { Badge, Card, Container, Heading, LinkButton, StarIcon, Text } from "@shared/ui";
 
 export interface SellerShopPageProps {
   readonly sellerId: string;
 }
 
 export function SellerShopPage({ sellerId }: SellerShopPageProps) {
+  const { session } = useSession();
   const [listings, setListings] = useState<readonly ListingSummary[]>([]);
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [reviews, setReviews] = useState<readonly Review[]>([]);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const [shop, ratingSummary, reviewList] = await Promise.all([
-          fetchSellerShop(sellerId),
-          fetchSellerRating(sellerId),
-          fetchSellerReviews(sellerId),
-        ]);
+        const [shop, launch] = await Promise.all([fetchSellerShop(sellerId), fetchLaunchConfig()]);
+        const [ratingSummary, reviewList] = launch.features.reviews
+          ? await Promise.all([fetchSellerRating(sellerId), fetchSellerReviews(sellerId)])
+          : ([null, []] as const);
         if (active) {
           setListings(shop);
           setRating(ratingSummary);
           setReviews(reviewList);
+          setReviewsOpen(launch.features.reviews);
         }
       } catch {
         /* ignore */
@@ -53,7 +57,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
             <Heading level={1}>{sellerId.slice(0, 8)} 님의 샵</Heading>
             <div className="flex items-center gap-3">
               <Text tone="secondary">판매 중인 상품 {listings.length}개</Text>
-              {rating !== null && rating.count > 0 ? (
+              {reviewsOpen && rating !== null && rating.count > 0 ? (
                 <Badge tone="warning" data-testid="seller-rating">
                   <span
                     className="inline-flex items-center gap-1"
@@ -65,12 +69,23 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                     </span>
                   </span>
                 </Badge>
-              ) : (
+              ) : reviewsOpen ? (
                 <Text tone="muted">후기 없음</Text>
-              )}
+              ) : null}
             </div>
           </div>
-          <FollowButton sellerId={sellerId} />
+          <div className="flex items-center gap-2">
+            {session?.accountId !== sellerId ? (
+              <LinkButton
+                href={`/chat?direct=${encodeURIComponent(sellerId)}`}
+                size="sm"
+                variant="secondary"
+              >
+                1:1 대화
+              </LinkButton>
+            ) : null}
+            <FollowButton sellerId={sellerId} />
+          </div>
         </div>
 
         {listings.length === 0 ? (
@@ -95,42 +110,44 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
           </div>
         )}
 
-        <section className="flex flex-col gap-3 pt-4">
-          <Heading level={2}>거래 후기</Heading>
-          {reviews.length === 0 ? (
-            <Text tone="muted">아직 등록된 후기가 없습니다.</Text>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {reviews.map((r) => (
-                <li key={r.id}>
-                  <Card padded className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span
-                        className="inline-flex items-center gap-0.5 text-warning"
-                        aria-label={`5점 만점에 ${r.rating}점`}
-                      >
-                        {Array.from({ length: 5 }, (_, index) => (
-                          <StarIcon
-                            key={index}
-                            className={`h-4 w-4 ${index < r.rating ? "" : "text-neutral-300"}`}
-                            filled={index < r.rating}
-                          />
-                        ))}
+        {reviewsOpen ? (
+          <section className="flex flex-col gap-3 pt-4">
+            <Heading level={2}>거래 후기</Heading>
+            {reviews.length === 0 ? (
+              <Text tone="muted">아직 등록된 후기가 없습니다.</Text>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {reviews.map((r) => (
+                  <li key={r.id}>
+                    <Card padded className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className="inline-flex items-center gap-0.5 text-warning"
+                          aria-label={`5점 만점에 ${r.rating}점`}
+                        >
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <StarIcon
+                              key={index}
+                              className={`h-4 w-4 ${index < r.rating ? "" : "text-neutral-300"}`}
+                              filled={index < r.rating}
+                            />
+                          ))}
+                        </span>
+                        <span className="text-xs text-neutral-400">
+                          {new Date(r.createdAt).toLocaleDateString("ko-KR")}
+                        </span>
+                      </div>
+                      <Text>{r.content}</Text>
+                      <span className="font-mono text-xs text-neutral-400">
+                        {r.reviewerId.slice(0, 8)}
                       </span>
-                      <span className="text-xs text-neutral-400">
-                        {new Date(r.createdAt).toLocaleDateString("ko-KR")}
-                      </span>
-                    </div>
-                    <Text>{r.content}</Text>
-                    <span className="font-mono text-xs text-neutral-400">
-                      {r.reviewerId.slice(0, 8)}
-                    </span>
-                  </Card>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
       </div>
     </Container>
   );
