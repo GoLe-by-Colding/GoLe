@@ -30,6 +30,6 @@ public class MongoTransactionConfig {
 
     @Bean
     public MongoTransactionManager mongoTransactionManager(MongoDatabaseFactory dbFactory) {
-        return new MongoTransactionManager(dbFactory);
+        return new RetryingMongoTransactionManager(dbFactory);
     }
 }

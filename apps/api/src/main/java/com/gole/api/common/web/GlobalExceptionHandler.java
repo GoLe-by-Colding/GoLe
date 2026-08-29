@@ -21,7 +21,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.UncategorizedMongoDbException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -49,8 +51,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    public ResponseEntity<?> handleNotFound(NotFoundException ex, HttpServletRequest request) {
+        return clientError(HttpStatus.NOT_FOUND, new ErrorResponse(ex.getCode(), ex.getMessage()), request);
     }
 
     @ExceptionHandler(BadRequestException.class)
@@ -71,13 +73,13 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    public ResponseEntity<?> handleUnauthorized(UnauthorizedException ex, HttpServletRequest request) {
+        return clientError(HttpStatus.UNAUTHORIZED, new ErrorResponse(ex.getCode(), ex.getMessage()), request);
     }
 
     @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    public ResponseEntity<?> handleForbidden(ForbiddenException ex, HttpServletRequest request) {
+        return clientError(HttpStatus.FORBIDDEN, new ErrorResponse(ex.getCode(), ex.getMessage()), request);
     }
 
     @ExceptionHandler(DomainException.class)
@@ -222,5 +224,19 @@ public class GlobalExceptionHandler {
                         "예외 종류", ex.getClass().getSimpleName()),
                 Instant.now()));
         return errorReference;
+    }
+
+    private static ResponseEntity<?> clientError(HttpStatus status, ErrorResponse error, HttpServletRequest request) {
+        String accept = request.getHeader(HttpHeaders.ACCEPT);
+        if (accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE)) {
+            // EventSource는 Accept: text/event-stream만 보내므로 JSON 바디를 강제하면
+            // 원래 401/403/404가 HttpMediaTypeNotAcceptableException으로 다시 500이 된다.
+            // 비정상 상태에서는 브라우저가 body를 소비하지 않지만, 변환 가능한 SSE 문자열을
+            // 제공해 원래 상태 코드와 운영 로그 의미를 보존한다.
+            return ResponseEntity.status(status)
+                    .contentType(MediaType.TEXT_EVENT_STREAM)
+                    .body("event: error\ndata: " + error.code() + "\n\n");
+        }
+        return ResponseEntity.status(status).body(error);
     }
 }

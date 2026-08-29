@@ -4,6 +4,7 @@ import type {
   ChatReportReason,
   ChatRoom,
   ChatUnreadCounts,
+  ResolvedChatRoom,
   SocialChatRoom,
 } from "../model/types";
 
@@ -22,6 +23,12 @@ export function createOrGetRoom(
 
 export function fetchMyRooms(): Promise<readonly ChatRoom[]> {
   return apiRequest<readonly ChatRoom[]>(`${BASE}/rooms`, {
+    cache: "no-store",
+  });
+}
+
+export function fetchChatRoom(roomId: string): Promise<ResolvedChatRoom> {
+  return apiRequest<ResolvedChatRoom>(`${BASE}/rooms/${encodeURIComponent(roomId)}`, {
     cache: "no-store",
   });
 }

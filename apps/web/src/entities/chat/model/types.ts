@@ -38,4 +38,16 @@ export interface SocialChatRoom {
   readonly assigneeId: string | null;
 }
 
+export type ResolvedChatRoom =
+  | {
+      readonly kind: "LISTING";
+      readonly listingRoom: ChatRoom;
+      readonly socialRoom: null;
+    }
+  | {
+      readonly kind: "SOCIAL";
+      readonly listingRoom: null;
+      readonly socialRoom: SocialChatRoom;
+    };
+
 export type ChatReportReason = "FRAUD" | "INAPPROPRIATE" | "OTHER";

@@ -9,12 +9,14 @@ export interface ApiErrorBody {
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly retryAfterMs: number | null;
 
-  constructor(status: number, body: ApiErrorBody) {
+  constructor(status: number, body: ApiErrorBody, retryAfterMs: number | null = null) {
     super(body.message);
     this.name = "ApiError";
     this.status = status;
     this.code = body.code;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -69,7 +71,11 @@ export async function apiRequest<TResponse>(
       message: `Request failed with status ${response.status}`,
     };
     const parsed = (await response.json().catch(() => fallback)) as ApiErrorBody;
-    throw new ApiError(response.status, parsed);
+    throw new ApiError(
+      response.status,
+      parsed,
+      parseRetryAfter(response.headers.get("Retry-After")),
+    );
   }
 
   if (response.status === 204) {
@@ -77,4 +83,14 @@ export async function apiRequest<TResponse>(
   }
 
   return (await response.json()) as TResponse;
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (value === null) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
+
+  const retryAt = Date.parse(value);
+  if (Number.isNaN(retryAt)) return null;
+  return Math.max(0, retryAt - Date.now());
 }

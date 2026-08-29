@@ -14,8 +14,11 @@ import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.ChatReadService;
 import com.gole.api.chat.application.DirectTradeService;
 import com.gole.api.chat.application.SocialChatService;
+import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportStatus;
+import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
@@ -46,6 +49,7 @@ class ChatControllerTest {
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final ChatMessagingService messaging = mock(ChatMessagingService.class);
     private final ChatReadService reads = mock(ChatReadService.class);
+    private final SupportTicketRepositoryPort supportTickets = mock(SupportTicketRepositoryPort.class);
     private final ChatController controller = new ChatController(
             rooms,
             listeners,
@@ -54,7 +58,8 @@ class ChatControllerTest {
             mock(DirectTradeService.class),
             socialChats,
             messaging,
-            reads);
+            reads,
+            supportTickets);
 
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
@@ -104,6 +109,38 @@ class ChatControllerTest {
         assertThat(controller.myRooms(authenticated("account-1"))).isEmpty();
 
         verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1");
+    }
+
+    @Test
+    void roomResolvesListingOutsideTheRecentRoomWindowAfterPermissionCheck() {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        ChatRoomDocument listing = new ChatRoomDocument("room-old", "listing-1", "account-1", "seller-1", now);
+        when(socialChats.requireReadable("room-old", "account-1"))
+                .thenReturn(SocialChatRoom.listing("room-old", "listing-1", "account-1", "seller-1", now));
+        when(rooms.findById("room-old")).thenReturn(Optional.of(listing));
+
+        var response = controller.room("room-old", authenticated("account-1"));
+
+        assertThat(response.kind()).isEqualTo("LISTING");
+        assertThat(response.listingRoom().id()).isEqualTo("room-old");
+        assertThat(response.socialRoom()).isNull();
+        verify(socialChats).requireReadable("room-old", "account-1");
+    }
+
+    @Test
+    void roomResolvesSupportUsingCurrentTicketState() {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        SocialChatRoom support = SocialChatRoom.support("support-old", "account-1", "정산 문의", now);
+        SupportTicket ticket =
+                new SupportTicket("support-old", "account-1", SupportStatus.IN_PROGRESS, "admin-1", now, now, null);
+        when(socialChats.requireReadable("support-old", "account-1")).thenReturn(support);
+        when(supportTickets.findByRoomId("support-old")).thenReturn(Optional.of(ticket));
+
+        var response = controller.room("support-old", authenticated("account-1"));
+
+        assertThat(response.kind()).isEqualTo("SOCIAL");
+        assertThat(response.socialRoom().supportStatus()).isEqualTo("IN_PROGRESS");
+        assertThat(response.listingRoom()).isNull();
     }
 
     @Test

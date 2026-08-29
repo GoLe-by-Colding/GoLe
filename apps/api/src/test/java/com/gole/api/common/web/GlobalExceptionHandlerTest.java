@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
@@ -14,9 +18,14 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.core.MethodParameter;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class GlobalExceptionHandlerTest {
 
@@ -76,5 +85,27 @@ class GlobalExceptionHandlerTest {
         verify(events).publish(event.capture());
         assertThat(event.getValue().title()).isEqualTo("캐시 서버 연결 장애");
         assertThat(event.getValue().fields()).containsKeys("오류 참조", "요청 경로", "예외 종류");
+    }
+
+    @Test
+    void forbiddenSseHandshakeKeepsOriginalStatusWithoutContentNegotiationFailure() throws Exception {
+        var mvc = MockMvcBuilders.standaloneSetup(new ForbiddenStreamController())
+                .setControllerAdvice(handler)
+                .build();
+
+        mvc.perform(get("/stream-test").accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(content().string("event: error\ndata: CHAT_ROOM_ACCESS_DENIED\n\n"));
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    @RestController
+    private static final class ForbiddenStreamController {
+
+        @GetMapping(value = "/stream-test", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        SseEmitter stream() {
+            throw new ForbiddenException("CHAT_ROOM_ACCESS_DENIED", "참여 중인 채팅방만 볼 수 있습니다");
+        }
     }
 }

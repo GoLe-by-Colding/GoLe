@@ -2,7 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   createDirectRoom,
   createGroupRoom,
@@ -10,6 +10,7 @@ import {
   blockChatUser,
   cancelDirectTradeConfirmation,
   confirmDirectTrade,
+  fetchChatRoom,
   fetchBlockedChatUserIds,
   fetchMyRooms,
   fetchMySocialRooms,
@@ -21,6 +22,7 @@ import {
   type SocialChatRoom,
   type ChatUnreadCounts,
 } from "@entities/chat";
+import { ApiError } from "@shared/api";
 import { fetchLaunchConfig } from "@entities/launch";
 import { useSession } from "@entities/user";
 import { ChatPanel } from "@widgets/chat-panel";
@@ -42,21 +44,37 @@ type Conversation =
 
 type ComposerMode = "DIRECT" | "GROUP" | "SUPPORT";
 
+interface RoomResolveIssue {
+  readonly message: string;
+  readonly action: "LOGIN" | "RETRY" | null;
+}
+
+const MAX_ROOM_RESOLVE_RETRIES = 3;
+
 export function ChatListPage() {
   const { session } = useSession();
   const sessionAccountId = session?.accountId ?? null;
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const requestedPeerId = searchParams.get("direct")?.trim() ?? "";
   const requestedComposer = searchParams.get("compose")?.trim().toLowerCase() ?? "";
+  const requestedRoomId = searchParams.get("room")?.trim() ?? "";
   const [listingRooms, setListingRooms] = useState<readonly ChatRoom[] | null>(null);
   const [socialRooms, setSocialRooms] = useState<readonly SocialChatRoom[] | null>(null);
   const [roomsOwnerId, setRoomsOwnerId] = useState<string | null>(null);
+  const [resolvedConversation, setResolvedConversation] = useState<Conversation | null>(null);
+  const [resolvedConversationOwnerId, setResolvedConversationOwnerId] = useState<string | null>(
+    null,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [composer, setComposer] = useState<ComposerMode | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteAccountId, setInviteAccountId] = useState("");
   const [roomActionError, setRoomActionError] = useState<string | undefined>();
   const [loadWarning, setLoadWarning] = useState<string | undefined>();
+  const [roomResolveIssue, setRoomResolveIssue] = useState<RoomResolveIssue | null>(null);
+  const [roomResolveRetryNonce, setRoomResolveRetryNonce] = useState(0);
   const [tradeBusy, setTradeBusy] = useState(false);
   const [directTradeOpen, setDirectTradeOpen] = useState(false);
   const [blockedAccountIds, setBlockedAccountIds] = useState<readonly string[] | null>(null);
@@ -70,13 +88,21 @@ export function ChatListPage() {
   const [blockActionBusy, setBlockActionBusy] = useState(false);
   const listingRoomsRef = useRef<readonly ChatRoom[] | null>(null);
   const socialRoomsRef = useRef<readonly SocialChatRoom[] | null>(null);
+  const resolvedConversationRef = useRef<Conversation | null>(null);
+  const resolvedConversationOwnerIdRef = useRef<string | null>(null);
   const blockedAccountIdsRef = useRef<readonly string[] | null>(null);
   const unreadMutationVersionRef = useRef(0);
   const sessionAccountIdRef = useRef(sessionAccountId);
+  const handledRoomRequestRef = useRef<string | null>(null);
+  const suppressDefaultSelectionRef = useRef(requestedRoomId.length > 0);
 
   useEffect(() => {
     sessionAccountIdRef.current = sessionAccountId;
   }, [sessionAccountId]);
+
+  useEffect(() => {
+    if (requestedRoomId.length > 0) suppressDefaultSelectionRef.current = true;
+  }, [requestedRoomId]);
 
   useEffect(() => {
     if (session === null) return;
@@ -91,6 +117,8 @@ export function ChatListPage() {
     if (sessionAccountId === null) {
       listingRoomsRef.current = null;
       socialRoomsRef.current = null;
+      resolvedConversationRef.current = null;
+      resolvedConversationOwnerIdRef.current = null;
       blockedAccountIdsRef.current = null;
       unreadMutationVersionRef.current = 0;
       return;
@@ -103,6 +131,8 @@ export function ChatListPage() {
     // 계정이 바뀌는 순간부터 이전 계정의 스냅샷을 새 요청의 폴백으로도 사용하지 않는다.
     listingRoomsRef.current = null;
     socialRoomsRef.current = null;
+    resolvedConversationRef.current = null;
+    resolvedConversationOwnerIdRef.current = null;
     blockedAccountIdsRef.current = null;
     unreadMutationVersionRef.current = 0;
 
@@ -110,15 +140,26 @@ export function ChatListPage() {
       if (!active || requestRunning || document.visibilityState !== "visible") return;
       requestRunning = true;
       const unreadVersionAtStart = unreadMutationVersionRef.current;
+      const resolvedAtStart =
+        resolvedConversationOwnerIdRef.current === sessionAccountId
+          ? resolvedConversationRef.current
+          : null;
       try {
-        const [listingResult, socialResult, launchResult, blockedResult, unreadResult] =
-          await Promise.allSettled([
-            fetchMyRooms(),
-            fetchMySocialRooms(),
-            fetchLaunchConfig(),
-            fetchBlockedChatUserIds(),
-            fetchUnreadCounts(),
-          ]);
+        const [
+          listingResult,
+          socialResult,
+          launchResult,
+          blockedResult,
+          unreadResult,
+          resolvedResult,
+        ] = await Promise.allSettled([
+          fetchMyRooms(),
+          fetchMySocialRooms(),
+          fetchLaunchConfig(),
+          fetchBlockedChatUserIds(),
+          fetchUnreadCounts(),
+          resolvedAtStart === null ? Promise.resolve(null) : fetchChatRoom(resolvedAtStart.room.id),
+        ]);
         if (!active) return;
 
         const nextListing =
@@ -166,15 +207,40 @@ export function ChatListPage() {
           ...nextSocial.map((room) => room.id),
           ...nextListing.map((room) => room.id),
         ]);
+        let currentResolved =
+          resolvedConversationOwnerIdRef.current === sessionAccountId
+            ? resolvedConversationRef.current
+            : null;
+        if (resolvedResult.status === "fulfilled" && resolvedResult.value !== null) {
+          currentResolved =
+            resolvedResult.value.kind === "LISTING"
+              ? { kind: "LISTING", room: resolvedResult.value.listingRoom }
+              : { kind: "SOCIAL", room: resolvedResult.value.socialRoom };
+          resolvedConversationRef.current = currentResolved;
+          setResolvedConversation(currentResolved);
+        } else if (
+          resolvedResult.status === "rejected" &&
+          resolvedResult.reason instanceof ApiError &&
+          (resolvedResult.reason.status === 403 || resolvedResult.reason.status === 404)
+        ) {
+          currentResolved = null;
+          resolvedConversationRef.current = null;
+          resolvedConversationOwnerIdRef.current = null;
+          setResolvedConversation(null);
+          setResolvedConversationOwnerId(null);
+        }
+        if (currentResolved !== null) availableIds.add(currentResolved.room.id);
         const first = [
           ...nextSocial.map((room) => ({ kind: "SOCIAL" as const, room })),
           ...nextListing.map((room) => ({ kind: "LISTING" as const, room })),
+          ...(currentResolved === null ? [] : [currentResolved]),
         ].toSorted(
           (left, right) =>
             new Date(activityAt(right)).getTime() - new Date(activityAt(left)).getTime(),
         )[0];
         setSelectedId((current) => {
           if (current !== null && availableIds.has(current)) return current;
+          if (suppressDefaultSelectionRef.current) return null;
           return window.innerWidth >= 768 ? (first?.room.id ?? null) : null;
         });
       } finally {
@@ -213,22 +279,139 @@ export function ChatListPage() {
   const visibleListingRooms = roomsBelongToCurrentAccount ? listingRooms : null;
   const visibleSocialRooms = roomsBelongToCurrentAccount ? socialRooms : null;
   const visibleUnreadCounts = unreadOwnerId === sessionAccountId ? unreadCounts : null;
+  const visibleResolvedConversation =
+    resolvedConversationOwnerId === sessionAccountId ? resolvedConversation : null;
+  const loading = visibleListingRooms === null || visibleSocialRooms === null;
 
   const conversations = useMemo<readonly Conversation[]>(() => {
-    if (visibleListingRooms === null || visibleSocialRooms === null) return [];
     const rows: Conversation[] = [
-      ...visibleSocialRooms.map((room) => ({ kind: "SOCIAL" as const, room })),
-      ...visibleListingRooms.map((room) => ({ kind: "LISTING" as const, room })),
+      ...(visibleSocialRooms ?? []).map((room) => ({ kind: "SOCIAL" as const, room })),
+      ...(visibleListingRooms ?? []).map((room) => ({ kind: "LISTING" as const, room })),
     ];
+    if (
+      visibleResolvedConversation !== null &&
+      !rows.some((conversation) => conversation.room.id === visibleResolvedConversation.room.id)
+    ) {
+      rows.push(visibleResolvedConversation);
+    }
     return rows.toSorted(
       (a, b) => new Date(activityAt(b)).getTime() - new Date(activityAt(a)).getTime(),
     );
-  }, [visibleListingRooms, visibleSocialRooms]);
+  }, [visibleListingRooms, visibleResolvedConversation, visibleSocialRooms]);
 
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.room.id === selectedId) ?? null,
     [conversations, selectedId],
   );
+
+  useEffect(() => {
+    if (requestedRoomId.length === 0) {
+      handledRoomRequestRef.current = null;
+      return;
+    }
+    if (sessionAccountId === null) return;
+
+    const requestKey = `${sessionAccountId}:${requestedRoomId}`;
+    if (handledRoomRequestRef.current === requestKey) return;
+    let active = true;
+    let retryTimer: number | undefined;
+    let automaticRetryCount = 0;
+
+    const consumeRoomQuery = () => {
+      const nextSearchParams = new URLSearchParams(searchParamsString);
+      nextSearchParams.delete("room");
+      const nextQuery = nextSearchParams.toString();
+      router.replace(`/chat${nextQuery.length > 0 ? `?${nextQuery}` : ""}`, { scroll: false });
+    };
+
+    const resolveRoom = async () => {
+      try {
+        const response = await fetchChatRoom(requestedRoomId);
+        if (!active) return;
+        const conversation: Conversation =
+          response.kind === "LISTING"
+            ? { kind: "LISTING", room: response.listingRoom }
+            : { kind: "SOCIAL", room: response.socialRoom };
+        handledRoomRequestRef.current = requestKey;
+        suppressDefaultSelectionRef.current = false;
+        resolvedConversationRef.current = conversation;
+        resolvedConversationOwnerIdRef.current = sessionAccountId;
+        setResolvedConversation(conversation);
+        setResolvedConversationOwnerId(sessionAccountId);
+        setRoomResolveIssue(null);
+        setSelectedId(requestedRoomId);
+        consumeRoomQuery();
+      } catch (failure) {
+        if (!active) return;
+        if (failure instanceof ApiError && (failure.status === 403 || failure.status === 404)) {
+          handledRoomRequestRef.current = requestKey;
+          suppressDefaultSelectionRef.current = true;
+          resolvedConversationRef.current = null;
+          resolvedConversationOwnerIdRef.current = null;
+          setResolvedConversation(null);
+          setResolvedConversationOwnerId(null);
+          setRoomResolveIssue(null);
+          setSelectedId(null);
+          consumeRoomQuery();
+          return;
+        }
+        if (failure instanceof ApiError && failure.status === 400) {
+          handledRoomRequestRef.current = requestKey;
+          setRoomResolveIssue({
+            message: "알림의 대화 링크 형식이 올바르지 않습니다.",
+            action: null,
+          });
+          consumeRoomQuery();
+          return;
+        }
+        if (failure instanceof ApiError && failure.status === 401) {
+          setRoomResolveIssue({
+            message: "로그인이 만료되어 알림의 대화방을 열지 못했습니다.",
+            action: "LOGIN",
+          });
+          return;
+        }
+        if (
+          failure instanceof ApiError &&
+          failure.status >= 400 &&
+          failure.status < 500 &&
+          failure.status !== 429
+        ) {
+          setRoomResolveIssue({
+            message: "현재 상태에서는 알림의 대화방을 열 수 없습니다.",
+            action: null,
+          });
+          return;
+        }
+
+        if (automaticRetryCount >= MAX_ROOM_RESOLVE_RETRIES) {
+          setRoomResolveIssue({
+            message: "알림의 대화방 연결이 계속 지연되고 있습니다.",
+            action: "RETRY",
+          });
+          return;
+        }
+
+        const retryDelayMs =
+          failure instanceof ApiError && failure.status === 429
+            ? (failure.retryAfterMs ?? 5_000)
+            : Math.min(1_000 * 2 ** automaticRetryCount + Math.floor(Math.random() * 250), 30_000);
+        automaticRetryCount += 1;
+        setRoomResolveIssue({
+          message: "알림의 대화방을 확인하지 못했습니다. 연결이 복구되면 자동으로 다시 열게요.",
+          action: null,
+        });
+        retryTimer = window.setTimeout(() => void resolveRoom(), retryDelayMs);
+      }
+    };
+
+    void resolveRoom();
+    return () => {
+      active = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [requestedRoomId, roomResolveRetryNonce, router, searchParamsString, sessionAccountId]);
+
   const selectedBlockTarget = selected === null ? null : blockTargetId(selected, sessionAccountId);
   const selectedTargetBlocked =
     selectedBlockTarget !== null && (blockedAccountIds?.includes(selectedBlockTarget) ?? false);
@@ -269,7 +452,6 @@ export function ChatListPage() {
     );
   }
 
-  const loading = visibleListingRooms === null || visibleSocialRooms === null;
   const myId = session.accountId;
 
   function addSocialRoom(room: SocialChatRoom) {
@@ -294,6 +476,12 @@ export function ChatListPage() {
         socialRoomsRef.current = next;
         return next;
       });
+      if (resolvedConversationRef.current?.room.id === roomId) {
+        resolvedConversationRef.current = null;
+        resolvedConversationOwnerIdRef.current = null;
+        setResolvedConversation(null);
+        setResolvedConversationOwnerId(null);
+      }
       setSelectedId(null);
     } catch {
       setRoomActionError("그룹에서 나가지 못했습니다. 잠시 후 다시 시도해 주세요.");
@@ -316,6 +504,11 @@ export function ChatListPage() {
         socialRoomsRef.current = next;
         return next;
       });
+      if (resolvedConversationRef.current?.room.id === updated.id) {
+        const conversation: Conversation = { kind: "SOCIAL", room: updated };
+        resolvedConversationRef.current = conversation;
+        setResolvedConversation(conversation);
+      }
       setInviteAccountId("");
       setInviteOpen(false);
     } catch {
@@ -342,6 +535,11 @@ export function ChatListPage() {
         listingRoomsRef.current = next;
         return next;
       });
+      if (resolvedConversationRef.current?.room.id === updated.id) {
+        const conversation: Conversation = { kind: "LISTING", room: updated };
+        resolvedConversationRef.current = conversation;
+        setResolvedConversation(conversation);
+      }
     } catch {
       setRoomActionError(
         "거래 완료 상태를 바꾸지 못했습니다. 매물 상태와 공개 단계를 확인해 주세요.",
@@ -440,6 +638,36 @@ export function ChatListPage() {
           </p>
         ) : null}
 
+        {roomResolveIssue && roomsBelongToCurrentAccount ? (
+          <div
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-warning-soft px-4 py-2 text-sm text-neutral-700"
+          >
+            <span>{roomResolveIssue.message}</span>
+            {roomResolveIssue.action === "LOGIN" ? (
+              <LinkButton
+                size="sm"
+                variant="secondary"
+                href={`/login?returnTo=${encodeURIComponent(`/chat?${searchParamsString}`)}`}
+              >
+                다시 로그인
+              </LinkButton>
+            ) : null}
+            {roomResolveIssue.action === "RETRY" ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setRoomResolveIssue(null);
+                  setRoomResolveRetryNonce((current) => current + 1);
+                }}
+              >
+                다시 시도
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         {blockStateWarning && roomsBelongToCurrentAccount ? (
           <p
             role="status"
@@ -487,7 +715,10 @@ export function ChatListPage() {
                       <button
                         type="button"
                         aria-current={active ? "true" : undefined}
-                        onClick={() => setSelectedId(conversation.room.id)}
+                        onClick={() => {
+                          suppressDefaultSelectionRef.current = false;
+                          setSelectedId(conversation.room.id);
+                        }}
                         className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-[background-color,transform] duration-200 motion-safe:active:scale-[0.99] ${
                           active ? "bg-brand-50" : "hover:bg-neutral-50"
                         }`}

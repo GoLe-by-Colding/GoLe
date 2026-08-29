@@ -7,8 +7,13 @@ import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.ChatReadService;
 import com.gole.api.chat.application.DirectTradeService;
 import com.gole.api.chat.application.SocialChatService;
+import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatRoomType;
+import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -67,6 +72,7 @@ public class ChatController {
     private final SocialChatService socialChats;
     private final ChatMessagingService messaging;
     private final ChatReadService reads;
+    private final SupportTicketRepositoryPort supportTickets;
 
     public ChatController(
             ChatRoomMongoRepository roomRepo,
@@ -76,7 +82,8 @@ public class ChatController {
             DirectTradeService directTrades,
             SocialChatService socialChats,
             ChatMessagingService messaging,
-            ChatReadService reads) {
+            ChatReadService reads,
+            SupportTicketRepositoryPort supportTickets) {
         this.roomRepo = roomRepo;
         this.listenerContainer = listenerContainer;
         this.getListingUseCase = getListingUseCase;
@@ -85,6 +92,7 @@ public class ChatController {
         this.socialChats = socialChats;
         this.messaging = messaging;
         this.reads = reads;
+        this.supportTickets = supportTickets;
     }
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
@@ -118,6 +126,21 @@ public class ChatController {
         return roomRepo.findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc(actorId, actorId).stream()
                 .map(RoomResponse::from)
                 .toList();
+    }
+
+    @Operation(summary = "읽을 수 있는 채팅방 단건 조회", description = "알림 딥링크가 최근 100개 밖의 방도 안전하게 열 수 있도록 멤버십을 다시 검사합니다.")
+    @GetMapping("/rooms/{roomId}")
+    public ResolvedRoomResponse room(@PathVariable String roomId, HttpServletRequest http) {
+        SocialChatRoom readable = socialChats.requireReadable(roomId, AuthenticatedUser.id(http));
+        if (readable.type() == ChatRoomType.LISTING) {
+            ChatRoomDocument listingRoom = roomRepo.findById(roomId)
+                    .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
+            return ResolvedRoomResponse.listing(RoomResponse.from(listingRoom));
+        }
+        SupportTicket ticket = readable.type() == ChatRoomType.SUPPORT
+                ? supportTickets.findByRoomId(roomId).orElse(null)
+                : null;
+        return ResolvedRoomResponse.social(SocialChatController.SocialRoomResponse.from(readable, ticket));
     }
 
     @GetMapping("/unread-counts")
@@ -298,6 +321,18 @@ public class ChatController {
 
         private static String instant(Instant value) {
             return value == null ? null : value.toString();
+        }
+    }
+
+    public record ResolvedRoomResponse(
+            String kind, RoomResponse listingRoom, SocialChatController.SocialRoomResponse socialRoom) {
+
+        static ResolvedRoomResponse listing(RoomResponse room) {
+            return new ResolvedRoomResponse("LISTING", room, null);
+        }
+
+        static ResolvedRoomResponse social(SocialChatController.SocialRoomResponse room) {
+            return new ResolvedRoomResponse("SOCIAL", null, room);
         }
     }
 

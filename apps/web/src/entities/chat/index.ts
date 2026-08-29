@@ -2,6 +2,7 @@ export type {
   ChatRoom,
   ChatMessage,
   ChatUnreadCounts,
+  ResolvedChatRoom,
   ChatRoomType,
   SocialChatRoom,
   SupportStatus,
@@ -10,6 +11,7 @@ export type {
 export {
   createOrGetRoom,
   fetchMyRooms,
+  fetchChatRoom,
   fetchMySocialRooms,
   fetchUnreadCounts,
   markRoomRead,
