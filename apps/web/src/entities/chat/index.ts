@@ -1,6 +1,7 @@
 export type {
   ChatRoom,
   ChatMessage,
+  ChatUnreadCounts,
   ChatRoomType,
   SocialChatRoom,
   SupportStatus,
@@ -10,6 +11,8 @@ export {
   createOrGetRoom,
   fetchMyRooms,
   fetchMySocialRooms,
+  fetchUnreadCounts,
+  markRoomRead,
   fetchMessages,
   sendMessage,
   createDirectRoom,
@@ -28,3 +31,5 @@ export { useChatRoom } from "./model/use-chat-room";
 export type { UseChatRoomOptions, UseChatRoomResult } from "./model/use-chat-room";
 export { useConversation } from "./model/use-conversation";
 export type { UseConversationResult } from "./model/use-conversation";
+export { useRoomReadReceipt } from "./model/use-room-read-receipt";
+export type { UseRoomReadReceiptOptions } from "./model/use-room-read-receipt";

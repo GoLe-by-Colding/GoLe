@@ -14,6 +14,9 @@ public interface SocialChatRoomRepositoryPort {
 
     Optional<SocialChatRoom> findById(String roomId);
 
+    /** 여러 방을 컬렉션별 한 번씩 조회한다. SUPPORT 권한 보강 등 배치 경로에서 사용한다. */
+    List<SocialChatRoom> findByIds(List<String> roomIds);
+
     /** DIRECT 멱등 조회. 참여자 정렬 키로 찾는다. */
     Optional<SocialChatRoom> findByDedupeKey(String dedupeKey);
 

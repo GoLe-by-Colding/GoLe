@@ -4,6 +4,7 @@ import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
+import com.gole.api.chat.application.ChatReadService;
 import com.gole.api.chat.application.DirectTradeService;
 import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
@@ -17,6 +18,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -64,6 +66,7 @@ public class ChatController {
     private final DirectTradeService directTrades;
     private final SocialChatService socialChats;
     private final ChatMessagingService messaging;
+    private final ChatReadService reads;
 
     public ChatController(
             ChatRoomMongoRepository roomRepo,
@@ -72,7 +75,8 @@ public class ChatController {
             ObjectMapper objectMapper,
             DirectTradeService directTrades,
             SocialChatService socialChats,
-            ChatMessagingService messaging) {
+            ChatMessagingService messaging,
+            ChatReadService reads) {
         this.roomRepo = roomRepo;
         this.listenerContainer = listenerContainer;
         this.getListingUseCase = getListingUseCase;
@@ -80,6 +84,7 @@ public class ChatController {
         this.directTrades = directTrades;
         this.socialChats = socialChats;
         this.messaging = messaging;
+        this.reads = reads;
     }
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
@@ -113,6 +118,18 @@ public class ChatController {
         return roomRepo.findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc(actorId, actorId).stream()
                 .map(RoomResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/unread-counts")
+    public Map<String, Long> unreadCounts(HttpServletRequest http) {
+        return reads.unreadCounts(AuthenticatedUser.id(http));
+    }
+
+    @PostMapping("/rooms/{roomId}/read")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markRead(
+            @PathVariable String roomId, @Valid @RequestBody MarkReadRequest req, HttpServletRequest http) {
+        reads.markRead(roomId, AuthenticatedUser.id(http), req.lastMessageId());
     }
 
     @GetMapping("/rooms/{roomId}/messages")
@@ -241,6 +258,8 @@ public class ChatController {
 
     public record SendMessageRequest(
             String senderId, @NotBlank @jakarta.validation.constraints.Size(max = 2000) String content) {}
+
+    public record MarkReadRequest(@NotBlank String lastMessageId) {}
 
     private record PubSubMessage(String id, String senderId, String content, String sentAt) {
 

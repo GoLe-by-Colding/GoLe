@@ -3,6 +3,7 @@ package com.gole.api.chat.application;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatBlock;
@@ -18,7 +19,10 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +34,7 @@ public class SocialChatService {
     private final ChatBlockRepositoryPort blocks;
     private final SupportTicketRepositoryPort supportTickets;
     private final AccountRepositoryPort accounts;
+    private final ChatReadStatePort readStates;
     private final Clock clock;
 
     public SocialChatService(
@@ -37,17 +42,58 @@ public class SocialChatService {
             ChatBlockRepositoryPort blocks,
             SupportTicketRepositoryPort supportTickets,
             AccountRepositoryPort accounts,
+            ChatReadStatePort readStates,
             Clock clock) {
         this.rooms = rooms;
         this.blocks = blocks;
         this.supportTickets = supportTickets;
         this.accounts = accounts;
+        this.readStates = readStates;
         this.clock = clock;
     }
 
     public List<SocialChatRoom> mySocialRooms(String actorId, int limit) {
         requireAccount(actorId);
-        return rooms.findSocialByMember(actorId, limit);
+        return readableRooms(actorId, limit, rooms.findSocialByMember(actorId, limit));
+    }
+
+    /** 레거시 매물 방까지 합치되 SUPPORT 권한은 현재 티켓 담당자로 한 번에 재검사한다. */
+    public List<SocialChatRoom> myReadableRooms(String actorId, int limit) {
+        requireAccount(actorId);
+        return readableRooms(actorId, limit, rooms.findByMember(actorId, limit));
+    }
+
+    /**
+     * 방 문서의 SUPPORT 멤버 배열은 담당자 이관 직후 잠시 오래된 값일 수 있다. 따라서
+     * 소셜 방 목록과 전체 읽기 목록 모두 현재 티켓을 권위 데이터로 사용해 이전 담당자를
+     * 제거하고, 아직 방 문서에 반영되지 않은 현재 담당자는 보강한다.
+     */
+    private List<SocialChatRoom> readableRooms(String actorId, int limit, List<SocialChatRoom> memberRooms) {
+        List<SupportTicket> participantTickets = supportTickets.findByParticipant(actorId, limit);
+        LinkedHashSet<String> participantSupportRoomIds = participantTickets.stream()
+                .map(SupportTicket::roomId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, SocialChatRoom> candidatesById = memberRooms.stream()
+                .collect(Collectors.toMap(
+                        SocialChatRoom::id,
+                        Function.identity(),
+                        (first, ignored) -> first,
+                        java.util.LinkedHashMap::new));
+        rooms.findByIds(List.copyOf(participantSupportRoomIds))
+                .forEach(room -> candidatesById.putIfAbsent(room.id(), room));
+        List<String> supportRoomIds = candidatesById.values().stream()
+                .filter(room -> room.type() == ChatRoomType.SUPPORT)
+                .map(SocialChatRoom::id)
+                .toList();
+        Map<String, SupportTicket> ticketsByRoom = new java.util.LinkedHashMap<>();
+        participantTickets.forEach(ticket -> ticketsByRoom.put(ticket.roomId(), ticket));
+        supportTickets.findByRoomIds(supportRoomIds).forEach(ticket -> ticketsByRoom.put(ticket.roomId(), ticket));
+        return candidatesById.values().stream()
+                .filter(room ->
+                        room.type() != ChatRoomType.SUPPORT || canReadSupport(ticketsByRoom.get(room.id()), actorId))
+                .sorted(java.util.Comparator.comparing(SocialChatRoom::lastMessageAt)
+                        .reversed())
+                .toList();
     }
 
     public SocialChatRoom createDirect(String actorId, String peerId) {
@@ -92,6 +138,7 @@ public class SocialChatService {
         return new SupportConversation(room, ticket);
     }
 
+    @Transactional
     public SocialChatRoom invite(String roomId, String actorId, String inviteeId) {
         requireRegularAccount(actorId);
         requireRegularAccount(inviteeId);
@@ -100,7 +147,13 @@ public class SocialChatService {
             throw new BadRequestException("CHAT_INVITE_NOT_ALLOWED", "그룹 대화방에만 초대할 수 있습니다");
         }
         ensureNoBlockedPair(List.of(inviteeId), room.memberIds());
-        return rooms.save(room.invite(actorId, inviteeId, Instant.now(clock)));
+        boolean joining = !room.isMember(inviteeId);
+        Instant now = Instant.now(clock);
+        SocialChatRoom updated = rooms.save(room.invite(actorId, inviteeId, now));
+        if (joining) {
+            readStates.initializeAtLatest(roomId, inviteeId, now);
+        }
+        return updated;
     }
 
     public SocialChatRoom leave(String roomId, String actorId) {
@@ -228,6 +281,10 @@ public class SocialChatService {
         return supportTickets
                 .findByRoomId(roomId)
                 .orElseThrow(() -> new NotFoundException("SUPPORT_TICKET_NOT_FOUND", "운영팀 문의를 찾을 수 없습니다"));
+    }
+
+    private static boolean canReadSupport(SupportTicket ticket, String actorId) {
+        return ticket != null && (actorId.equals(ticket.requesterId()) || actorId.equals(ticket.assigneeId()));
     }
 
     private Account requireAccount(String accountId) {

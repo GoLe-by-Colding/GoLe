@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useChatRoom } from "@entities/chat";
+import { useChatRoom, useRoomReadReceipt } from "@entities/chat";
 import { useSession } from "@entities/user";
 import { Button, LinkButton, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
@@ -86,6 +86,7 @@ function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: Inli
   const [tradeBusy, setTradeBusy] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
+  useRoomReadReceipt({ roomId: room?.id ?? null, myId, messages });
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

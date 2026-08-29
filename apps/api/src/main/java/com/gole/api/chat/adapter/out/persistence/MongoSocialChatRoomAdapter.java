@@ -45,6 +45,21 @@ public class MongoSocialChatRoomAdapter implements SocialChatRoomRepositoryPort 
     }
 
     @Override
+    public List<SocialChatRoom> findByIds(List<String> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, SocialChatRoom> unique = new LinkedHashMap<>();
+        socialRooms.findAllById(roomIds).stream()
+                .map(MongoSocialChatRoomAdapter::toDomain)
+                .forEach(room -> unique.put(room.id(), room));
+        legacyRooms.findAllById(roomIds).stream()
+                .map(MongoSocialChatRoomAdapter::toDomain)
+                .forEach(room -> unique.putIfAbsent(room.id(), room));
+        return List.copyOf(unique.values());
+    }
+
+    @Override
     public Optional<SocialChatRoom> findByDedupeKey(String dedupeKey) {
         return socialRooms.findByDedupeKey(dedupeKey).map(MongoSocialChatRoomAdapter::toDomain);
     }
@@ -63,9 +78,10 @@ public class MongoSocialChatRoomAdapter implements SocialChatRoomRepositoryPort 
                 .map(MongoSocialChatRoomAdapter::toDomain)
                 .forEach(room -> unique.putIfAbsent(room.id(), room));
 
+        // 화면은 신규 소셜 방과 레거시 매물 방을 각각 최대 safeLimit개 노출한다.
+        // 합친 뒤 다시 자르면 화면에는 있는데 unread 집계에서 빠지는 방이 생긴다.
         return unique.values().stream()
                 .sorted(Comparator.comparing(SocialChatRoom::lastMessageAt).reversed())
-                .limit(safeLimit)
                 .toList();
     }
 

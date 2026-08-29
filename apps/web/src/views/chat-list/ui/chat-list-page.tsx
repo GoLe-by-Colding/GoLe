@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -13,11 +13,13 @@ import {
   fetchBlockedChatUserIds,
   fetchMyRooms,
   fetchMySocialRooms,
+  fetchUnreadCounts,
   inviteGroupMember,
   leaveGroupRoom,
   unblockChatUser,
   type ChatRoom,
   type SocialChatRoom,
+  type ChatUnreadCounts,
 } from "@entities/chat";
 import { fetchLaunchConfig } from "@entities/launch";
 import { useSession } from "@entities/user";
@@ -58,6 +60,8 @@ export function ChatListPage() {
   const [tradeBusy, setTradeBusy] = useState(false);
   const [directTradeOpen, setDirectTradeOpen] = useState(false);
   const [blockedAccountIds, setBlockedAccountIds] = useState<readonly string[] | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<ChatUnreadCounts | null>(null);
+  const [unreadOwnerId, setUnreadOwnerId] = useState<string | null>(null);
   const [blockStateWarning, setBlockStateWarning] = useState<string | undefined>();
   const [blockRetryBusy, setBlockRetryBusy] = useState(false);
   const [blockManageRoomId, setBlockManageRoomId] = useState<string | null>(null);
@@ -67,6 +71,7 @@ export function ChatListPage() {
   const listingRoomsRef = useRef<readonly ChatRoom[] | null>(null);
   const socialRoomsRef = useRef<readonly SocialChatRoom[] | null>(null);
   const blockedAccountIdsRef = useRef<readonly string[] | null>(null);
+  const unreadMutationVersionRef = useRef(0);
   const sessionAccountIdRef = useRef(sessionAccountId);
 
   useEffect(() => {
@@ -87,6 +92,7 @@ export function ChatListPage() {
       listingRoomsRef.current = null;
       socialRoomsRef.current = null;
       blockedAccountIdsRef.current = null;
+      unreadMutationVersionRef.current = 0;
       return;
     }
 
@@ -98,14 +104,21 @@ export function ChatListPage() {
     listingRoomsRef.current = null;
     socialRoomsRef.current = null;
     blockedAccountIdsRef.current = null;
+    unreadMutationVersionRef.current = 0;
 
     const loadRooms = async () => {
       if (!active || requestRunning || document.visibilityState !== "visible") return;
       requestRunning = true;
+      const unreadVersionAtStart = unreadMutationVersionRef.current;
       try {
-        const [listingResult, socialResult, launchResult, blockedResult] = await Promise.allSettled(
-          [fetchMyRooms(), fetchMySocialRooms(), fetchLaunchConfig(), fetchBlockedChatUserIds()],
-        );
+        const [listingResult, socialResult, launchResult, blockedResult, unreadResult] =
+          await Promise.allSettled([
+            fetchMyRooms(),
+            fetchMySocialRooms(),
+            fetchLaunchConfig(),
+            fetchBlockedChatUserIds(),
+            fetchUnreadCounts(),
+          ]);
         if (!active) return;
 
         const nextListing =
@@ -123,6 +136,13 @@ export function ChatListPage() {
         setListingRooms(nextListing);
         setSocialRooms(nextSocial);
         setBlockedAccountIds(nextBlocked);
+        if (
+          unreadResult.status === "fulfilled" &&
+          unreadMutationVersionRef.current === unreadVersionAtStart
+        ) {
+          setUnreadCounts(unreadResult.value);
+          setUnreadOwnerId(sessionAccountId);
+        }
         setBlockStateWarning(
           blockedResult.status === "rejected"
             ? nextBlocked === null
@@ -132,7 +152,9 @@ export function ChatListPage() {
         );
         setRoomsOwnerId(sessionAccountId);
         setLoadWarning(
-          listingResult.status === "rejected" || socialResult.status === "rejected"
+          listingResult.status === "rejected" ||
+            socialResult.status === "rejected" ||
+            unreadResult.status === "rejected"
             ? "일부 대화를 불러오지 못했습니다. 보이는 대화는 그대로 사용할 수 있어요."
             : undefined,
         );
@@ -190,6 +212,7 @@ export function ChatListPage() {
     sessionAccountId !== null && roomsOwnerId === sessionAccountId;
   const visibleListingRooms = roomsBelongToCurrentAccount ? listingRooms : null;
   const visibleSocialRooms = roomsBelongToCurrentAccount ? socialRooms : null;
+  const visibleUnreadCounts = unreadOwnerId === sessionAccountId ? unreadCounts : null;
 
   const conversations = useMemo<readonly Conversation[]>(() => {
     if (visibleListingRooms === null || visibleSocialRooms === null) return [];
@@ -213,6 +236,15 @@ export function ChatListPage() {
   const managedBlockTarget = blockManageOpen ? blockManageTargetId : null;
   const managedTargetBlocked =
     managedBlockTarget !== null && (blockedAccountIds?.includes(managedBlockTarget) ?? false);
+
+  const handleRoomRead = useCallback((roomId: string) => {
+    unreadMutationVersionRef.current += 1;
+    setUnreadCounts((current) => {
+      if (current === null) return current;
+      const next = { ...current, [roomId]: 0 };
+      return next;
+    });
+  }, []);
 
   if (!session) {
     return (
@@ -449,10 +481,12 @@ export function ChatListPage() {
                 {conversations.map((conversation) => {
                   const active = conversation.room.id === selectedId;
                   const title = conversationTitle(conversation, myId);
+                  const unread = visibleUnreadCounts?.[conversation.room.id] ?? 0;
                   return (
                     <li key={conversation.room.id}>
                       <button
                         type="button"
+                        aria-current={active ? "true" : undefined}
                         onClick={() => setSelectedId(conversation.room.id)}
                         className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-[background-color,transform] duration-200 motion-safe:active:scale-[0.99] ${
                           active ? "bg-brand-50" : "hover:bg-neutral-50"
@@ -465,7 +499,9 @@ export function ChatListPage() {
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col gap-1">
                           <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-neutral-900">
+                            <span
+                              className={`truncate text-sm text-neutral-900 ${unread > 0 ? "font-extrabold" : "font-semibold"}`}
+                            >
                               {title}
                             </span>
                             <RoomBadge conversation={conversation} />
@@ -474,9 +510,17 @@ export function ChatListPage() {
                             {conversationSubtitle(conversation, myId)}
                           </span>
                         </span>
-                        <time className="shrink-0 text-[11px] text-neutral-400">
-                          {shortDate(activityAt(conversation))}
-                        </time>
+                        <span className="flex shrink-0 flex-col items-end gap-1.5">
+                          <time className="text-[11px] text-neutral-400">
+                            {shortDate(activityAt(conversation))}
+                          </time>
+                          {unread > 0 ? (
+                            <span className="grid min-h-5 min-w-5 place-items-center rounded-full bg-brand-600 px-1.5 text-[10px] font-extrabold tabular-nums text-white">
+                              <span aria-hidden="true">{unread > 99 ? "99+" : unread}</span>
+                              <span className="sr-only">읽지 않은 메시지 {unread}개</span>
+                            </span>
+                          ) : null}
+                        </span>
                       </button>
                     </li>
                   );
@@ -662,6 +706,7 @@ export function ChatListPage() {
                       key={selected.room.id}
                       roomId={selected.room.id}
                       myId={myId}
+                      onRoomRead={handleRoomRead}
                       hiddenSenderIds={blockedAccountIds}
                       showSenderIdentity={
                         selected.kind === "SOCIAL" && selected.room.type === "GROUP"

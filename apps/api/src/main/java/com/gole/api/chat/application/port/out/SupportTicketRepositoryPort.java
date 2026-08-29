@@ -13,6 +13,9 @@ public interface SupportTicketRepositoryPort {
     /** 사용자 방 목록에 붙일 문의 상태를 한 번에 읽어 N+1 조회를 막는다. */
     List<SupportTicket> findByRoomIds(List<String> roomIds);
 
+    /** 문의자 또는 현재 담당자인 티켓을 한 번에 찾아 stale 방 멤버 배열을 보완한다. */
+    List<SupportTicket> findByParticipant(String accountId, int limit);
+
     SupportTicket save(SupportTicket ticket);
 
     /** 관리자 인박스. {@code status} 가 null 이면 전체. */

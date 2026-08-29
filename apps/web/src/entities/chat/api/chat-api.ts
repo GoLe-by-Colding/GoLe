@@ -1,5 +1,11 @@
 import { apiRequest } from "@shared/api";
-import type { ChatMessage, ChatReportReason, ChatRoom, SocialChatRoom } from "../model/types";
+import type {
+  ChatMessage,
+  ChatReportReason,
+  ChatRoom,
+  ChatUnreadCounts,
+  SocialChatRoom,
+} from "../model/types";
 
 const BASE = "/api/v1/chat";
 
@@ -22,6 +28,17 @@ export function fetchMyRooms(): Promise<readonly ChatRoom[]> {
 
 export function fetchMySocialRooms(): Promise<readonly SocialChatRoom[]> {
   return apiRequest<readonly SocialChatRoom[]>(`${BASE}/social/rooms`, { cache: "no-store" });
+}
+
+export function fetchUnreadCounts(): Promise<ChatUnreadCounts> {
+  return apiRequest<ChatUnreadCounts>(`${BASE}/unread-counts`, { cache: "no-store" });
+}
+
+export function markRoomRead(roomId: string, lastMessageId: string): Promise<void> {
+  return apiRequest<void>(`${BASE}/rooms/${encodeURIComponent(roomId)}/read`, {
+    method: "POST",
+    body: { lastMessageId },
+  });
 }
 
 export function createDirectRoom(peerId: string): Promise<SocialChatRoom> {

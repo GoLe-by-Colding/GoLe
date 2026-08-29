@@ -1,7 +1,12 @@
 "use client";
 
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
-import { reportChatMessage, useConversation, type ChatReportReason } from "@entities/chat";
+import {
+  reportChatMessage,
+  useConversation,
+  useRoomReadReceipt,
+  type ChatReportReason,
+} from "@entities/chat";
 import { Button, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 
@@ -12,6 +17,7 @@ export interface ChatPanelProps {
   readonly hiddenSenderIds?: readonly string[];
   readonly showSenderIdentity?: boolean;
   readonly onManageSender?: (senderId: string) => void;
+  readonly onRoomRead?: (roomId: string) => void;
 }
 
 /**
@@ -24,9 +30,16 @@ export function ChatPanel({
   hiddenSenderIds = [],
   showSenderIdentity = false,
   onManageSender,
+  onRoomRead,
 }: ChatPanelProps) {
   const { messages, send, loadOlder, retry, hasOlder, loadingOlder, olderError, loading, error } =
     useConversation(roomId);
+  useRoomReadReceipt({
+    roomId,
+    myId,
+    messages,
+    ...(onRoomRead === undefined ? {} : { onRead: onRoomRead }),
+  });
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);

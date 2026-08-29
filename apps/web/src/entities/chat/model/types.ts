@@ -18,6 +18,8 @@ export interface ChatMessage {
   readonly sentAt: string;
 }
 
+export type ChatUnreadCounts = Readonly<Record<string, number>>;
+
 export type ChatRoomType = "DIRECT" | "GROUP" | "SUPPORT";
 
 export type SupportStatus = "UNASSIGNED" | "IN_PROGRESS" | "WAITING_USER" | "RESOLVED";

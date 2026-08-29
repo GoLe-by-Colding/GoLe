@@ -3,6 +3,7 @@ package com.gole.api.chat.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -15,6 +16,7 @@ import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.SocialChatRoom;
@@ -37,8 +39,9 @@ class SocialChatServiceTest {
     private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
     private final AccountRepositoryPort accounts = mock(AccountRepositoryPort.class);
+    private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
     private final SocialChatService service =
-            new SocialChatService(rooms, blocks, tickets, accounts, Clock.fixed(NOW, ZoneOffset.UTC));
+            new SocialChatService(rooms, blocks, tickets, accounts, readStates, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void accounts() {
@@ -48,6 +51,7 @@ class SocialChatServiceTest {
         when(accounts.findById("user-4")).thenReturn(Optional.of(account("user-4", Role.USER)));
         when(accounts.findById("admin-1")).thenReturn(Optional.of(account("admin-1", Role.ADMIN)));
         when(accounts.findById("admin-2")).thenReturn(Optional.of(account("admin-2", Role.ADMIN)));
+        when(tickets.findByParticipant(anyString(), anyInt())).thenReturn(List.of());
     }
 
     @Test
@@ -59,6 +63,28 @@ class SocialChatServiceTest {
 
         verify(rooms).findSocialByMember("user-1", 100);
         verify(rooms, never()).findByMember("user-1", 100);
+    }
+
+    @Test
+    void socialRoomListUsesCurrentSupportTicketInsteadOfStaleMembers() {
+        SocialChatRoom stale = SocialChatRoom.support("stale", "user-1", "이관됨", NOW)
+                .withSupportAgent(null, "admin-2")
+                .withSupportAgent("admin-2", "admin-1");
+        SocialChatRoom current =
+                SocialChatRoom.support("current", "user-2", "담당 중", NOW).withSupportAgent(null, "admin-1");
+        SupportTicket staleTicket = SupportTicket.opened("stale", "user-1", NOW).assignTo("admin-1", NOW);
+        SupportTicket currentTicket =
+                SupportTicket.opened("current", "user-2", NOW).assignTo("admin-2", NOW);
+        when(rooms.findSocialByMember("admin-2", 100)).thenReturn(List.of(stale));
+        when(tickets.findByParticipant("admin-2", 100)).thenReturn(List.of(currentTicket));
+        when(rooms.findByIds(List.of("current"))).thenReturn(List.of(current));
+        when(tickets.findByRoomIds(List.of("stale", "current"))).thenReturn(List.of(staleTicket, currentTicket));
+
+        assertThat(service.mySocialRooms("admin-2", 100)).containsExactly(current);
+
+        verify(rooms).findSocialByMember("admin-2", 100);
+        verify(rooms, never()).findByMember("admin-2", 100);
+        verify(tickets, never()).findByRoomId(anyString());
     }
 
     @Test
@@ -79,6 +105,42 @@ class SocialChatServiceTest {
 
         assertThatThrownBy(() -> service.requireReadable("room-1", "admin-1")).isInstanceOf(ForbiddenException.class);
         assertThat(service.requireReadable("room-1", "admin-2")).isSameAs(stale);
+    }
+
+    @Test
+    void readableRoomListBatchFiltersStaleSupportAssignments() {
+        SocialChatRoom stale = SocialChatRoom.support("stale", "user-1", "이관됨", NOW)
+                .withSupportAgent(null, "admin-1")
+                .withSupportAgent("admin-1", "admin-2");
+        SocialChatRoom current =
+                SocialChatRoom.support("current", "user-2", "담당 중", NOW).withSupportAgent(null, "admin-1");
+        when(rooms.findByMember("admin-1", 100)).thenReturn(List.of(stale, current));
+        when(rooms.findByIds(List.of())).thenReturn(List.of());
+        when(tickets.findByRoomIds(List.of("stale", "current")))
+                .thenReturn(List.of(
+                        SupportTicket.opened("stale", "user-1", NOW).assignTo("admin-2", NOW),
+                        SupportTicket.opened("current", "user-2", NOW).assignTo("admin-1", NOW)));
+
+        assertThat(service.myReadableRooms("admin-1", 100)).containsExactly(current);
+
+        verify(tickets).findByRoomIds(List.of("stale", "current"));
+        verify(tickets, never()).findByRoomId(anyString());
+    }
+
+    @Test
+    void readableRoomListAddsCurrentAssigneeEvenWhenRoomMembersAreStale() {
+        SocialChatRoom staleMembers =
+                SocialChatRoom.support("support-1", "user-1", "이관됨", NOW).withSupportAgent(null, "admin-1");
+        SupportTicket current = SupportTicket.opened("support-1", "user-1", NOW).assignTo("admin-2", NOW);
+        when(rooms.findByMember("admin-2", 100)).thenReturn(List.of());
+        when(tickets.findByParticipant("admin-2", 100)).thenReturn(List.of(current));
+        when(rooms.findByIds(List.of("support-1"))).thenReturn(List.of(staleMembers));
+        when(tickets.findByRoomIds(List.of("support-1"))).thenReturn(List.of(current));
+
+        assertThat(service.myReadableRooms("admin-2", 100)).containsExactly(staleMembers);
+
+        verify(rooms).findByIds(List.of("support-1"));
+        verify(tickets, never()).findByRoomId(anyString());
     }
 
     @Test
@@ -126,6 +188,29 @@ class SocialChatServiceTest {
         verify(blocks).blockedBetweenAny(List.of("user-4"), group.memberIds());
         verify(blocks, never()).blockedBetween(anyString(), anyString());
         verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void newGroupMemberStartsUnreadAtInviteTimeInsteadOfHistoricalBacklog() {
+        SocialChatRoom group = SocialChatRoom.group("room-1", "user-1", List.of("user-2", "user-3"), "모임", NOW);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(group));
+        when(rooms.save(any(SocialChatRoom.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SocialChatRoom updated = service.invite("room-1", "user-1", "user-4");
+
+        assertThat(updated.memberIds()).contains("user-4");
+        verify(readStates).initializeAtLatest("room-1", "user-4", NOW);
+    }
+
+    @Test
+    void idempotentInviteDoesNotClearExistingMembersUnreadState() {
+        SocialChatRoom group = SocialChatRoom.group("room-1", "user-1", List.of("user-2", "user-3"), "모임", NOW);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(group));
+        when(rooms.save(any(SocialChatRoom.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.invite("room-1", "user-1", "user-2");
+
+        verify(readStates, never()).initializeAtLatest(anyString(), anyString(), any());
     }
 
     @Test

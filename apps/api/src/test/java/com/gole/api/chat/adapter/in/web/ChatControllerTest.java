@@ -11,6 +11,7 @@ import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
+import com.gole.api.chat.application.ChatReadService;
 import com.gole.api.chat.application.DirectTradeService;
 import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
@@ -44,8 +45,16 @@ class ChatControllerTest {
     private final RedisMessageListenerContainer listeners = mock(RedisMessageListenerContainer.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final ChatMessagingService messaging = mock(ChatMessagingService.class);
+    private final ChatReadService reads = mock(ChatReadService.class);
     private final ChatController controller = new ChatController(
-            rooms, listeners, listings, new ObjectMapper(), mock(DirectTradeService.class), socialChats, messaging);
+            rooms,
+            listeners,
+            listings,
+            new ObjectMapper(),
+            mock(DirectTradeService.class),
+            socialChats,
+            messaging,
+            reads);
 
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
@@ -95,6 +104,17 @@ class ChatControllerTest {
         assertThat(controller.myRooms(authenticated("account-1"))).isEmpty();
 
         verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1");
+    }
+
+    @Test
+    void unreadCounts_andMarkRead_useOnlyAuthenticatedAccount() {
+        when(reads.unreadCounts("account-1")).thenReturn(java.util.Map.of("room-1", 3L));
+
+        assertThat(controller.unreadCounts(authenticated("account-1"))).containsEntry("room-1", 3L);
+        controller.markRead("room-1", new ChatController.MarkReadRequest("message-1"), authenticated("account-1"));
+
+        verify(reads).unreadCounts("account-1");
+        verify(reads).markRead("room-1", "account-1", "message-1");
     }
 
     @Test

@@ -36,6 +36,14 @@ public class MongoSupportTicketAdapter implements SupportTicketRepositoryPort {
     }
 
     @Override
+    public List<SupportTicket> findByParticipant(String accountId, int limit) {
+        var page = PageRequest.of(0, Math.clamp(limit, 1, 100), Sort.by(Sort.Direction.DESC, "updatedAt"));
+        return tickets.findByParticipant(accountId, page).stream()
+                .map(MongoSupportTicketAdapter::toDomain)
+                .toList();
+    }
+
+    @Override
     public SupportTicket save(SupportTicket ticket) {
         try {
             return toDomain(tickets.save(toDocument(ticket)));
