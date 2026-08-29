@@ -1,10 +1,13 @@
 package com.gole.api.common.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.OrderUtils;
 
 class ProductionConfigurationGuardTest {
 
@@ -36,6 +39,12 @@ class ProductionConfigurationGuardTest {
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("sample data seeds");
+    }
+
+    @Test
+    void guardRunsBeforeEverySeederCanMutateData() {
+        assertThat(OrderUtils.getOrder(ProductionConfigurationGuard.class, Ordered.LOWEST_PRECEDENCE))
+                .isEqualTo(Ordered.HIGHEST_PRECEDENCE);
     }
 
     @Test

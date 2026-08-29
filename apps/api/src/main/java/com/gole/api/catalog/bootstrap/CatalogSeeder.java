@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(1)
-@ConditionalOnProperty(name = "gole.catalog.seed-on-empty", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.catalog.seed-on-empty", havingValue = "true")
 public class CatalogSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogSeeder.class);

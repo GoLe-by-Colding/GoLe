@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(6)
-@ConditionalOnProperty(name = "gole.review.seed-on-empty", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.review.seed-on-empty", havingValue = "true")
 public class ReviewSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ReviewSeeder.class);

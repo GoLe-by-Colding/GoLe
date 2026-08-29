@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(4)
-@ConditionalOnProperty(name = "gole.community.seed-on-empty", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.community.seed-on-empty", havingValue = "true")
 public class CommunitySeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CommunitySeeder.class);

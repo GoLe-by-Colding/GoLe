@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(7)
-@ConditionalOnProperty(name = "gole.report.seed-on-empty", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.report.seed-on-empty", havingValue = "true")
 public class ReportSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ReportSeeder.class);

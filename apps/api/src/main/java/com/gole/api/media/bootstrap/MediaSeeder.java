@@ -24,7 +24,7 @@ import org.springframework.util.StreamUtils;
  */
 @Component
 @Order(0)
-@ConditionalOnProperty(name = "gole.media.seed-on-startup", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.media.seed-on-startup", havingValue = "true")
 public class MediaSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(MediaSeeder.class);

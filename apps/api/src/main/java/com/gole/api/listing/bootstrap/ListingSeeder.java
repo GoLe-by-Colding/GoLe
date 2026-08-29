@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(2)
-@ConditionalOnProperty(name = "gole.listing.seed-on-empty", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "gole.listing.seed-on-empty", havingValue = "true")
 public class ListingSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ListingSeeder.class);

@@ -4,10 +4,13 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /** 로컬 전용 어댑터와 샘플 데이터가 운영에서 실수로 활성화되는 것을 기동 단계에서 차단한다. */
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ProductionConfigurationGuard implements ApplicationRunner {
 
     private final String environment;
