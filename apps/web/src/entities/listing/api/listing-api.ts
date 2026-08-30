@@ -63,6 +63,13 @@ export function fetchMyListings(signal?: AbortSignal): Promise<readonly Listing[
   });
 }
 
+/** 로그인한 셀러가 자신의 매물을 판매 중지한다. 서버가 소유권과 예약 상태를 다시 검증한다. */
+export function deleteListing(listingId: string): Promise<void> {
+  return apiRequest<void>(`/api/v1/listings/${encodeURIComponent(listingId)}`, {
+    method: "DELETE",
+  });
+}
+
 export type ListingSort = "newest" | "price_asc" | "price_desc";
 
 export interface SearchListingsParams {

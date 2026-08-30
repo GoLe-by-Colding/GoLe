@@ -11,10 +11,11 @@ import {
   type Order,
   type SellerSettlement,
 } from "@entities/order";
-import { fetchMyListings, type Listing } from "@entities/listing";
+import { deleteListing, fetchMyListings, type Listing } from "@entities/listing";
 import { fetchLaunchConfig, SAFE_LAUNCH_CONFIG, type LaunchConfig } from "@entities/launch";
 import { fetchMe, useSession, type Me } from "@entities/user";
 import { formatKrw } from "@shared/lib";
+import { ApiError } from "@shared/api";
 import {
   AlertCircleIcon,
   Badge,
@@ -80,6 +81,13 @@ export function ProfilePage() {
   const [launch, setLaunch] = useState<LaunchConfig>(SAFE_LAUNCH_CONFIG);
   const [attempt, setAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [pendingListingStop, setPendingListingStop] = useState<string | null>(null);
+  const [stoppingListing, setStoppingListing] = useState<string | null>(null);
+  const [listingStopError, setListingStopError] = useState<{
+    readonly listingId: string;
+    readonly message: string;
+  } | null>(null);
+  const [listingNotice, setListingNotice] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     setMe(LOADING);
@@ -186,6 +194,31 @@ export function ProfilePage() {
       setCopied(true);
     } catch {
       // 클립보드를 못 쓰는 환경(비보안 컨텍스트 등)에서는 조용히 넘긴다 — 값은 화면에 이미 있다.
+    }
+  }
+
+  async function stopListing(listingId: string) {
+    if (stoppingListing !== null) return;
+    setStoppingListing(listingId);
+    setListingStopError(null);
+    setListingNotice(null);
+    try {
+      await deleteListing(listingId);
+      setListings((current) =>
+        current.status === "ready"
+          ? { status: "ready", data: current.data.filter((listing) => listing.id !== listingId) }
+          : current,
+      );
+      setPendingListingStop(null);
+      setListingNotice("매물 판매를 중지했어요.");
+    } catch (error) {
+      const message =
+        error instanceof ApiError && error.code === "LISTING_ORDER_IN_PROGRESS"
+          ? "진행 중인 주문이 있어 판매를 중지할 수 없어요."
+          : "판매 중지에 실패했어요. 잠시 후 다시 시도해 주세요.";
+      setListingStopError({ listingId, message });
+    } finally {
+      setStoppingListing(null);
     }
   }
 
@@ -411,6 +444,14 @@ export function ProfilePage() {
                 매물 등록
               </LinkButton>
             </div>
+            {listingNotice ? (
+              <p
+                role="status"
+                className="rounded-lg bg-success-soft px-4 py-3 text-sm text-success"
+              >
+                {listingNotice}
+              </p>
+            ) : null}
             {listings.status === "loading" ? (
               [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
             ) : listings.status === "failed" ? (
@@ -426,39 +467,98 @@ export function ProfilePage() {
                 }
               />
             ) : (
-              listings.data.map((l) => (
-                <Link
-                  key={l.id}
-                  href={`/listings/${l.id}`}
-                  className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
-                >
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate font-medium text-neutral-900">{l.title}</span>
-                    <span className="text-sm tabular-nums text-neutral-500">
-                      {formatKrw(l.price)}
-                    </span>
-                  </div>
-                  <Badge
-                    tone={
-                      l.status === "active"
-                        ? "success"
-                        : l.status === "reserved"
-                          ? "warning"
-                          : l.status === "sold"
-                            ? "neutral"
-                            : "danger"
-                    }
+              listings.data.map((l) => {
+                const confirmingStop = pendingListingStop === l.id;
+                const stopping = stoppingListing === l.id;
+                const stopError =
+                  listingStopError?.listingId === l.id ? listingStopError.message : null;
+                return (
+                  <article
+                    key={l.id}
+                    className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
                   >
-                    {l.status === "active"
-                      ? "판매중"
-                      : l.status === "reserved"
-                        ? "예약중"
-                        : l.status === "sold"
-                          ? "판매완료"
-                          : "삭제됨"}
-                  </Badge>
-                </Link>
-              ))
+                    <Link
+                      href={`/listings/${l.id}`}
+                      className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-neutral-50"
+                    >
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate font-medium text-neutral-900">{l.title}</span>
+                        <span className="text-sm tabular-nums text-neutral-500">
+                          {formatKrw(l.price)}
+                        </span>
+                      </div>
+                      <Badge
+                        tone={
+                          l.status === "active"
+                            ? "success"
+                            : l.status === "reserved"
+                              ? "warning"
+                              : l.status === "sold"
+                                ? "neutral"
+                                : "danger"
+                        }
+                      >
+                        {l.status === "active"
+                          ? "판매중"
+                          : l.status === "reserved"
+                            ? "예약중"
+                            : l.status === "sold"
+                              ? "판매완료"
+                              : "삭제됨"}
+                      </Badge>
+                    </Link>
+                    {l.status === "active" ? (
+                      <div className="border-t border-neutral-100 px-4 py-3">
+                        {confirmingStop ? (
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm text-neutral-700">
+                              판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.
+                            </p>
+                            <div className="flex shrink-0 gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={stopping}
+                                onClick={() => setPendingListingStop(null)}
+                              >
+                                취소
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                disabled={stopping}
+                                onClick={() => void stopListing(l.id)}
+                              >
+                                {stopping ? "중지 중…" : "중지하기"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setPendingListingStop(l.id);
+                              setListingStopError(null);
+                              setListingNotice(null);
+                            }}
+                          >
+                            판매 중지
+                          </Button>
+                        )}
+                        {stopError ? (
+                          <p role="alert" className="mt-2 text-sm text-danger">
+                            {stopError}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
             )}
           </div>
         )}

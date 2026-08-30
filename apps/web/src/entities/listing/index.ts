@@ -5,6 +5,7 @@ export type { ListingGalleryProps } from "./ui/listing-gallery";
 export {
   fetchActiveListings,
   fetchMyListings,
+  deleteListing,
   fetchListingsBySet,
   searchListings,
   fetchListingById,

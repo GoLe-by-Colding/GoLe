@@ -37,6 +37,14 @@ async function mockProfileApis(page: Page): Promise<void> {
     route.fulfill({
       json: [
         {
+          id: "listing-active-1",
+          sellerId: "acc-1",
+          title: "밀레니엄 팰컨 75192",
+          price: 980000,
+          status: "active",
+          photoUrls: [],
+        },
+        {
           id: "listing-sold-1",
           sellerId: "acc-1",
           title: "에펠탑 10307",
@@ -73,6 +81,47 @@ test.describe("내 정보", () => {
     await expect(page.getByRole("link", { name: /에펠탑 10307/ })).toBeVisible();
     // 검색 API는 활성 매물만 준다. 판매완료가 보인다는 건 전용 조회를 타고 있다는 뜻이다.
     await expect(page.getByText("판매완료")).toBeVisible();
+  });
+
+  test("활성 매물은 재확인 후 판매를 중지하고 목록에서 즉시 사라진다", async ({ page }) => {
+    let deleteCalls = 0;
+    await page.route("**/api/v1/listings/listing-active-1", (route) => {
+      deleteCalls += 1;
+      return route.fulfill({ status: 204 });
+    });
+    await page.goto("/profile");
+    await page.getByRole("button", { name: "내 매물" }).click();
+
+    await page.getByRole("button", { name: "판매 중지" }).click();
+    expect(deleteCalls).toBe(0);
+    await expect(page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.")).toBeVisible();
+
+    await page.getByRole("button", { name: "취소" }).click();
+    await expect(page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "판매 중지" }).click();
+    await page.getByRole("button", { name: "중지하기" }).click();
+
+    await expect.poll(() => deleteCalls).toBe(1);
+    await expect(page.getByRole("link", { name: /밀레니엄 팰컨 75192/ })).toHaveCount(0);
+    await expect(page.getByRole("status")).toHaveText("매물 판매를 중지했어요.");
+  });
+
+  test("판매 중지 실패 시 매물을 유지하고 다시 시도할 수 있다", async ({ page }) => {
+    await page.route("**/api/v1/listings/listing-active-1", (route) =>
+      route.fulfill({
+        status: 409,
+        json: { code: "LISTING_ORDER_IN_PROGRESS", message: "예약 중" },
+      }),
+    );
+    await page.goto("/profile");
+    await page.getByRole("button", { name: "내 매물" }).click();
+    await page.getByRole("button", { name: "판매 중지" }).click();
+    await page.getByRole("button", { name: "중지하기" }).click();
+
+    await expect(page.getByText("진행 중인 주문이 있어 판매를 중지할 수 없어요.")).toBeVisible();
+    await expect(page.getByRole("link", { name: /밀레니엄 팰컨 75192/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "중지하기" })).toBeEnabled();
   });
 
   test("구매 내역 탭이 스켈레톤에 머무르지 않는다", async ({ page }) => {
