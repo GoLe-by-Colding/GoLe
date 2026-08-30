@@ -118,13 +118,13 @@ export async function HomePage() {
     <div className="flex flex-col">
       <section className="border-b border-brand-900 bg-brand-950 text-white">
         <Container width="xl">
-          <div className="grid gap-12 py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:items-center max-sm:py-14">
+          <div className="grid gap-10 py-16 min-[960px]:grid-cols-[minmax(0,1.25fr)_minmax(330px,0.75fr)] min-[960px]:items-center min-[960px]:gap-8 xl:gap-12 max-sm:py-14">
             <div className="flex flex-col gap-7">
               <span className="self-start border-l-2 border-accent-400 pl-3 text-sm font-semibold text-accent-300">
                 깊은 바다에서 건져 올린 브릭
               </span>
-              <h1 className="max-w-[18ch] text-[clamp(2.6rem,6vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
-                레고를 <span className="text-accent-300">가장 합리적으로</span>
+              <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
+                레고를 <span className="inline-block text-accent-300">가장 합리적으로</span>
               </h1>
               <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
                 {paymentsOpen
@@ -140,8 +140,12 @@ export async function HomePage() {
 
             {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
                 CTA(그래서 무엇을 하는가) 순으로 한 줄기 시선을 만든다. */}
-            <div className="gole-hero-flow flex min-w-0 flex-col gap-6 max-lg:gap-5">
-              <div className="flex min-h-52 items-center justify-center max-lg:order-2 max-sm:min-h-40">
+            <div className="gole-hero-flow flex min-w-0 flex-col gap-5 rounded-[1.75rem] border border-white/10 bg-white/[0.035] p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6">
+              <div className="relative flex min-h-48 items-center justify-center sm:max-[959px]:row-span-2 max-sm:min-h-40">
+                <span
+                  aria-hidden="true"
+                  className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-700 to-transparent"
+                />
                 <Logo
                   size={286}
                   showWordmark={false}
@@ -151,7 +155,10 @@ export async function HomePage() {
               </div>
 
               {liveStats.length > 0 ? (
-                <div className="divide-y divide-white/15 border-y border-white/20 max-lg:order-3">
+                <div
+                  aria-label="실시간 거래 현황"
+                  className="divide-y divide-white/15 border-y border-white/20"
+                >
                   <div className="flex items-center gap-2 py-2.5">
                     <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
                     <span className="text-xs font-semibold tracking-wide text-accent-300">
@@ -174,7 +181,7 @@ export async function HomePage() {
                 </div>
               ) : null}
 
-              <div className="flex flex-col gap-3 max-lg:order-1 sm:max-lg:flex-row">
+              <div className="flex flex-col gap-3 xl:flex-row">
                 <LinkButton href="/search" variant="accent" size="lg" fullWidth>
                   상품 둘러보기
                 </LinkButton>
