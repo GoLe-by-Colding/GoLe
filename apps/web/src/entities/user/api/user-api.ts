@@ -1,5 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type { Me, OnboardingStatus, RegisterResult, Session } from "../model/types";
+import type { InterestTag, Me, OnboardingStatus, RegisterResult, Session } from "../model/types";
 
 export function registerAccount(email: string, password: string): Promise<RegisterResult> {
   return apiRequest<RegisterResult>("/api/v1/accounts", {
@@ -122,8 +122,9 @@ export function fetchOnboardingStatus(signal?: AbortSignal): Promise<OnboardingS
  * 경로의 `account`가 단수인 것은 스펙(D8) 표기를 그대로 따른 것이다 —
  * 나머지 온보딩 엔드포인트는 복수(`accounts`)다.
  */
-export async function fetchInterestTags(signal?: AbortSignal): Promise<readonly string[]> {
-  const res = await apiRequest<{ readonly tags: readonly string[] }>(
+export async function fetchInterestTags(signal?: AbortSignal): Promise<readonly InterestTag[]> {
+  // 최상위가 배열이 아니라 객체다 — 나중에 필드를 덧붙일 수 있게 서버가 감싸서 준다.
+  const res = await apiRequest<{ readonly tags: readonly InterestTag[] }>(
     "/api/v1/account/interest-tags",
     {
       cache: "no-store",
@@ -169,7 +170,7 @@ export function confirmPhoneVerification(code: string): Promise<void> {
   });
 }
 
-/** 관심 태그 선택(R6). 1~5개 범위는 서버가 재검증한다. */
+/** 관심 태그 선택(R6). 값은 label이 아니라 key다. 1~5개 범위는 서버가 재검증한다. */
 export function setInterestTags(tags: readonly string[]): Promise<void> {
   return apiRequest<void>(`${ONBOARDING_BASE}/interest-tags`, {
     method: "PUT",
@@ -179,11 +180,11 @@ export function setInterestTags(tags: readonly string[]): Promise<void> {
 
 /** 약관 동의 제출(R7). 개인정보 동의는 필수이고 false면 서버가 거부한다. */
 export function submitOnboardingConsent(
-  privacyAgreed: boolean,
-  marketingAgreed: boolean,
+  privacyConsented: boolean,
+  marketingConsented: boolean,
 ): Promise<void> {
   return apiRequest<void>(`${ONBOARDING_BASE}/consent`, {
     method: "POST",
-    body: { privacyAgreed, marketingAgreed },
+    body: { privacyConsented, marketingConsented },
   });
 }

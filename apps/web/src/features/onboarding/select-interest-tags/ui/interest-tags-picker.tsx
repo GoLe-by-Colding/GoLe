@@ -5,12 +5,15 @@ import {
   fetchInterestTags,
   INTEREST_TAG_MAX,
   INTEREST_TAG_MIN,
+  type InterestTag,
   setInterestTags,
 } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Skeleton } from "@shared/ui";
 
 export interface InterestTagsPickerProps {
+  /** 이전에 고른 태그 key 목록. 재개 시 선택 상태를 되살린다. */
+  readonly initialSelected?: readonly string[];
   /** 저장이 끝나면 호출된다. */
   readonly onCompleted: () => void;
 }
@@ -21,10 +24,10 @@ export interface InterestTagsPickerProps {
  * 목록은 백엔드가 관리하는 curated 상수다(D8) — 프론트에 하드코딩하지 않고 받아 쓴다.
  * 개수 제한은 화면에서 먼저 막지만 최종 판정은 서버가 다시 한다.
  */
-export function InterestTagsPicker({ onCompleted }: InterestTagsPickerProps) {
-  // 서버는 표시용 라벨 없이 태그 문자열만 내려준다.
-  const [tags, setTags] = useState<readonly string[] | null>(null);
-  const [selected, setSelected] = useState<readonly string[]>([]);
+export function InterestTagsPicker({ initialSelected = [], onCompleted }: InterestTagsPickerProps) {
+  // 목록은 {key, label}이고, 계정에 저장되는 값은 key다.
+  const [tags, setTags] = useState<readonly InterestTag[] | null>(null);
+  const [selected, setSelected] = useState<readonly string[]>(initialSelected);
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
@@ -94,20 +97,20 @@ export function InterestTagsPicker({ onCompleted }: InterestTagsPickerProps) {
       ) : (
         <div className="flex flex-wrap gap-2" role="group" aria-label="관심 태그">
           {tags.map((tag) => {
-            const active = selected.includes(tag);
+            const active = selected.includes(tag.key);
             return (
               <button
-                key={tag}
+                key={tag.key}
                 type="button"
                 aria-pressed={active}
-                onClick={() => toggle(tag)}
+                onClick={() => toggle(tag.key)}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "border-brand-600 bg-brand-600 text-white"
                     : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50"
                 }`}
               >
-                {tag}
+                {tag.label}
               </button>
             );
           })}

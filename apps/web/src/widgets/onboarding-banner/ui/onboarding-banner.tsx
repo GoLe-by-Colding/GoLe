@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { fetchOnboardingStatus, useSession } from "@entities/user";
+import { fetchOnboardingStatus, isOnboardingComplete, useSession } from "@entities/user";
 
 const DISMISS_KEY = "gole.onboardingBanner.dismissed";
 
@@ -31,7 +31,10 @@ export function OnboardingBanner() {
     void fetchOnboardingStatus(controller.signal)
       .then((status) => {
         if (!controller.signal.aborted) {
-          setVisible(status.required && status.legacyExempt);
+          // `required`가 아니라 단계 플래그로 판정한다 — 면제 계정은 단계가 남아 있어도
+          // `required`가 false로 내려올 수 있어서, 그걸 조건에 쓰면 정작 배너를 보여야 할
+          // 대상에게 영영 뜨지 않는다.
+          setVisible(status.legacyExempt && !isOnboardingComplete(status));
         }
       })
       .catch(() => undefined);

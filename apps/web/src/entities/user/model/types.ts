@@ -36,6 +36,7 @@ export interface OnboardingStatus {
   readonly phoneCompleted: boolean;
   readonly maskedPhoneNumber: string | null;
   readonly interestTagsCompleted: boolean;
+  /** 이미 고른 태그의 key 목록. 재개 시 선택 상태를 되살리는 데 쓴다. */
   readonly interestTags: readonly string[];
   /**
    * 동의 단계에는 완료 플래그가 따로 없다. 개인정보 동의만 필수이므로
@@ -43,6 +44,17 @@ export interface OnboardingStatus {
    */
   readonly privacyConsented: boolean;
   readonly marketingConsented: boolean;
+}
+
+/**
+ * 서버가 내려주는 curated 관심 태그 한 항목(D8).
+ *
+ * 계정에는 `key`만 저장한다 — 표시 문구(label)를 저장하면 문구를 고칠 때마다
+ * 사용자 데이터를 마이그레이션해야 한다.
+ */
+export interface InterestTag {
+  readonly key: string;
+  readonly label: string;
 }
 
 /** 관심 태그 선택 개수 제한(D8, R6). */

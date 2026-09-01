@@ -1,15 +1,10 @@
-import type { OnboardingStatus } from "@entities/user";
+import type { OnboardingStep } from "@entities/user";
 
-/** 온보딩 단계. 순서가 곧 위저드 진행 순서다. */
-export type OnboardingStep = "nickname" | "phone" | "interestTags" | "consent";
-
-export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
-  "nickname",
-  "phone",
-  "interestTags",
-  "consent",
-];
-
+/**
+ * 단계별 화면 문구. 단계 판정 자체는 entities/user가 갖는다 —
+ * 어떤 계정 필드가 채워져야 완료인지는 화면이 아니라 도메인 지식이고,
+ * 배너 위젯도 같은 판정을 써야 하기 때문이다.
+ */
 const STEP_TITLE: Record<OnboardingStep, string> = {
   nickname: "닉네임을 정해 주세요",
   phone: "휴대폰 번호를 인증해 주세요",
@@ -19,47 +14,4 @@ const STEP_TITLE: Record<OnboardingStep, string> = {
 
 export function stepTitle(step: OnboardingStep): string {
   return STEP_TITLE[step];
-}
-
-/** 상태 응답에서 해당 단계의 완료 여부를 읽는다. */
-export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep): boolean {
-  switch (step) {
-    case "nickname":
-      return status.nicknameCompleted;
-    case "phone":
-      return status.phoneCompleted;
-    case "interestTags":
-      return status.interestTagsCompleted;
-    case "consent":
-      // 동의 단계에는 완료 플래그가 따로 없다. 개인정보 동의만 필수라 이 값이 곧 완료
-      // 여부이고, 선택 항목인 마케팅 동의는 판정에 넣지 않는다.
-      return status.privacyConsented;
-  }
-}
-
-/**
- * 아직 끝나지 않은 첫 단계를 돌려준다(R11). 전부 끝났으면 null.
- *
- * 완료 여부는 서버가 계정 필드 유무로 파생시킨 값이므로(D1), 이탈 후 다시 들어와도
- * 같은 응답으로 같은 지점에서 재개된다.
- */
-export function nextIncompleteStep(status: OnboardingStatus): OnboardingStep | null {
-  return ONBOARDING_STEPS.find((step) => !isStepCompleted(status, step)) ?? null;
-}
-
-/** 한 단계를 완료 처리한 새 상태를 만든다. 재조회 없이 다음 단계로 넘어가기 위한 것이다. */
-export function withStepCompleted(
-  status: OnboardingStatus,
-  step: OnboardingStep,
-): OnboardingStatus {
-  switch (step) {
-    case "nickname":
-      return { ...status, nicknameCompleted: true };
-    case "phone":
-      return { ...status, phoneCompleted: true };
-    case "interestTags":
-      return { ...status, interestTagsCompleted: true };
-    case "consent":
-      return { ...status, privacyConsented: true };
-  }
 }

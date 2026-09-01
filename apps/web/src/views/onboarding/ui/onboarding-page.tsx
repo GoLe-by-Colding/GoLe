@@ -2,7 +2,15 @@
 
 import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { fetchOnboardingStatus, type OnboardingStatus } from "@entities/user";
+import {
+  fetchOnboardingStatus,
+  isOnboardingComplete,
+  nextIncompleteStep,
+  ONBOARDING_STEPS,
+  type OnboardingStatus,
+  type OnboardingStep,
+  withStepCompleted,
+} from "@entities/user";
 import { OnboardingConsentForm } from "@features/onboarding/agree-onboarding-terms";
 import { InterestTagsPicker } from "@features/onboarding/select-interest-tags";
 import { SetNicknameForm } from "@features/onboarding/set-nickname";
@@ -11,13 +19,7 @@ import { AuthCard } from "@widgets/auth-layout";
 import { ApiError } from "@shared/api";
 import { resolveReturnTo } from "@shared/lib";
 import { LinkButton, Text } from "@shared/ui";
-import {
-  nextIncompleteStep,
-  ONBOARDING_STEPS,
-  type OnboardingStep,
-  stepTitle,
-  withStepCompleted,
-} from "../model/steps";
+import { stepTitle } from "../model/steps";
 
 /**
  * 최초 로그인 온보딩 위저드(R11).
@@ -75,8 +77,12 @@ function OnboardingContent() {
   }, []);
 
   // 이미 온보딩을 마친 계정이 주소로 직접 들어온 경우 되돌려보낸다.
+  //
+  // 판정에 `required`를 쓰지 않는다 — 면제(legacyExempt) 계정은 단계가 남아 있어도
+  // `required`가 false로 내려올 수 있어서, 배너를 보고 자발적으로 완성하러 들어온
+  // 사용자를 입구에서 되돌려보내게 된다.
   useEffect(() => {
-    if (status !== null && !status.required) {
+    if (status !== null && isOnboardingComplete(status)) {
       finish();
     }
   }, [status, finish]);
@@ -129,7 +135,10 @@ function OnboardingContent() {
         ) : null}
         {current === "phone" ? <VerifyPhoneForm onCompleted={() => completeStep("phone")} /> : null}
         {current === "interestTags" ? (
-          <InterestTagsPicker onCompleted={() => completeStep("interestTags")} />
+          <InterestTagsPicker
+            initialSelected={status.interestTags}
+            onCompleted={() => completeStep("interestTags")}
+          />
         ) : null}
         {current === "consent" ? <OnboardingConsentForm onCompleted={finish} /> : null}
       </div>
