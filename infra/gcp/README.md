@@ -23,8 +23,9 @@ Google Trust Services Public CA이며 Load Balancer는 필요하지 않다.
 
 최초 발급을 실행하는 VM에는 Google Cloud CLI가 설치되고 인증되어 있어야 한다.
 Terraform 실행 주체에는 Public CA API를 켤 수 있는 `serviceusage.services.enable`
-권한이 필요하고, VM의 서비스 계정에는 `roles/publicca.externalAccountKeyCreator`
-역할만 필요하다. `GCP_PROJECT_ID`는 인증서를 연결할 결제 사용 설정 프로젝트를
+권한이 필요하다. 첫 발급 때만 `grant_gts_eab_creator=true`로 적용해 VM 전용 계정에
+`roles/publicca.externalAccountKeyCreator`를 임시 부여하고, 발급 직후 다시 `false`로
+적용해 회수한다. `GCP_PROJECT_ID`는 인증서를 연결할 결제 사용 설정 프로젝트를
 명시한다. 자세한 계정 요구사항은
 [Google Public CA 공식 절차](https://cloud.google.com/certificate-manager/docs/public-ca-tutorial)를
 따른다. 이 권한들은 최초 계정 등록 후 갱신 작업에는 필요하지 않다.
@@ -54,24 +55,47 @@ printf '' | openssl s_client -connect gole.co.kr:443 -servername gole.co.kr 2>/d
   | openssl x509 -noout -issuer -dates -ext subjectAltName
 ```
 
-## 크레딧 비용 경보
+## 크레딧 비용 가드
 
-2026-09-01 Cloud Billing KRW Custom SKU 기준 e2-custom-4-8192(4 vCPU, 8 GiB)는
-시간당 약 `206.2740원`, 100 GiB pd-balanced disk는 시간당 약 `24.9759원`으로
-고정비 합계는 `231.2499원/시간`이다. 57일 연속 실행 예상 고정비는 약
-`316,350원`이며, 기준 잔여 크레딧 `395,600.60원` 대비 약 `79,251원`을
-네트워크 전송량과 변동 비용 여유로 남긴다.
-계산에는 Custom Core `F10F-0364-8D62`, Custom RAM `B5E6-7318-DBF9`,
-pd-balanced `5666-EFB4-5C79` SKU 단가를 사용한다.
-외부 IPv4는 결제 계정별 월 720 IP-hour 무료 범위에 단일 VM만 있으면 증분 비용이 없다.
+Cloud Billing Budget은 비용을 강제로 차단하지 않고 실제비용 보고도 지연될 수 있다.
+따라서 Budget은 보조 입력으로만 쓰고, VM 내부의 독립 스레드가 호스트 경과시간과
+`ens4` 송신 바이트를 10초 주기로 계산한다. Budget `costAmount`는 게시된 세금이
+포함될 수 있는 값으로 취급하고, 세전 SKU 기반 로컬 모델에만 VAT를 한 번 더한다.
 
-실제 사용비용은 `370,000원` custom-period Cloud Billing Budget으로 막판 여유분을
-남겨 감시한다. Budget은 비용을 강제로 차단하지 않으므로 50%·75%·90%·100% 실제
-비용과 매일 1회 현황을 Pub/Sub pull relay가 기존 GoLe 운영 Discord 웹훅에 보낸다.
-relay는 VM 기본 서비스 계정만 사용하고 서비스 계정 키나 Discord 웹훅을 로그에 남기지 않는다.
+2026-09-01 Cloud Billing KRW SKU 기준 현재 고정비는 다음과 같다.
 
-현재 프로젝트 또는 새 3개월 프로젝트에서 다음 스크립트로 topic, subscription, 최소 IAM,
-Budget 연결을 멱등 구성한다.
+- e2-custom-4-8192 CPU·RAM: `206.2740원/시간` 세전
+- 100 GiB pd-balanced disk: `24.9759원/시간` 세전
+- 합계: `231.249894200원/시간` 세전, `254.374883620원/시간` VAT 포함
+- 외부 송신: 목적지와 관계없이 최고 단가 `318.154399937원/GiB` 세전으로 계산
+- VM 정지 후 디스크·미사용 고정 IP: `45.725088879원/시간` 세전으로 계산
+
+현재 크레딧 `395,600.60원`에 대해 다음 다중 상한을 사용한다.
+
+| 항목 | 경고 | 위험 | 자동 정지 |
+|---|---:|---:|---:|
+| VAT·정지 후 비용 포함 총액 | 330,000원 | 340,000원 | 350,000원 |
+| 누적 호스트 송신량 | 15 GiB | 25 GiB | 30 GiB |
+| VM 생성 후 경과시간 | 1,200시간 | 1,296시간 | 1,320시간 |
+| 유효한 현재 Budget 실제비용 | - | - | 320,000원 |
+
+절대 종료 시각은 `2026-10-26 19:50 KST`다. VM 생성 시각부터 이때까지의
+고정비, 송신 30 GiB, `2026-10-28 23:59:59 KST`까지의 정지 자원 비용과 VAT를
+모두 합친 보수 최악값은 약 `348,868원`이고, 크레딧 여유는 약 `46,733원`이다.
+VM이 정지해도 디스크와 미사용 고정 IP 비용은 계속 발생하므로 이전 완료 후 별도
+삭제가 필요하다.
+
+비용 가드는 계측 파일을 읽지 못하거나 어느 정지선이든 넘으면 Discord보다 먼저
+Compute Stop API를 호출한다. 정지 상태는 영구 볼륨에 남아 수동 재시작도 다시 막는다.
+전용 키 없는 서비스 계정에는 해당 subscription 소비와 해당 VM 정지 권한만 준다.
+Compose heartbeat가 35초 넘게 끊기면 컨테이너가 `unhealthy`가 되고, 호스트의
+`gole-cost-guard-watchdog.timer`가 30초 간격으로 이를 확인해 두 번 연속 비정상이면
+VM을 직접 종료한다. 전체 배포가 실패했을 때도 기존 비용 가드가 건강하지 않으면
+배포 스크립트가 Discord에 알린 뒤 같은 fail-closed 정지를 수행한다.
+
+현재 프로젝트 또는 새 프로젝트에서 다음 스크립트로 topic, subscription, custom role,
+85%·95%를 포함한 Budget 임계치를 멱등 구성한다. 출력된 실제 Budget ID를 반드시
+GitHub variable에 사용한다.
 
 ```bash
 PROJECT_ID=YOUR_PROJECT_ID \
@@ -81,9 +105,17 @@ BUDGET_END_DATE=2026-10-28 \
 infra/gcp/scripts/setup-budget-alerts.sh
 ```
 
-계정을 옮길 때 GitHub repository variables의 `GCP_PROJECT_ID`,
-`GCP_CREDIT_AMOUNT_KRW`, `GCP_CREDIT_DEADLINE`, `GCP_FIXED_HOURLY_COST_KRW`,
-`GCP_BUDGET_PUBSUB_SUBSCRIPTION`도 함께 갱신한다. relay 로그는 다음으로 확인한다.
+계정을 옮길 때 GitHub repository variables의 다음 값을 함께 갱신한다.
+
+- `GCP_PROJECT_ID`, `GCP_INSTANCE_ZONE`, `GCP_INSTANCE_NAME`
+- `GCP_CREDIT_AMOUNT_KRW`, `GCP_CREDIT_DEADLINE`, `GCP_FIXED_HOURLY_COST_KRW`
+- `GCP_HARD_STOP_BUDGET_ID`, `GCP_HARD_STOP_BILLING_ACCOUNT_ID`
+- `GCP_HARD_STOP_PERIOD_START`, `GCP_VM_COST_START`, `GCP_HARD_STOP_AT`
+- 이전과 다른 `GCP_HARD_STOP_ARM_ID`
+- `GCP_COST_GUARD_*`, 네트워크·가동시간 정지선, VAT·송신·정지자원 단가
+- `GCP_COST_GUARD_INTERVAL_SECONDS`, `GCP_HARD_STOP_RETRY_SECONDS`
+
+relay 로그는 다음으로 확인한다.
 
 ```bash
 docker compose -f infra/gcp/docker-compose.yml logs -f budget-relay

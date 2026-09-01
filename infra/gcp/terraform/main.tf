@@ -1,4 +1,3 @@
-data "google_compute_default_service_account" "default" {}
 data "google_project" "current" {
   project_id = var.project_id
 }
@@ -18,10 +17,44 @@ resource "google_project_service" "public_ca" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "iam" {
+  service            = "iam.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_service_account" "production_runtime" {
+  account_id   = var.runtime_service_account_id
+  display_name = "GoLe production runtime"
+  description  = "Runtime identity for the GoLe production VM"
+
+  depends_on = [google_project_service.iam]
+}
+
+resource "google_project_iam_custom_role" "budget_subscription_consumer" {
+  role_id     = "goleBudgetSubscriptionConsumer"
+  title       = "GoLe budget subscription consumer"
+  description = "Consumes only the GoLe billing budget Pub/Sub subscription"
+  permissions = ["pubsub.subscriptions.consume"]
+  stage       = "GA"
+
+  depends_on = [google_project_service.iam]
+}
+
+resource "google_project_iam_custom_role" "production_instance_stopper" {
+  role_id     = "goleProductionInstanceStopper"
+  title       = "GoLe production instance stopper"
+  description = "Stops only the GoLe production Compute Engine instance"
+  permissions = ["compute.instances.stop"]
+  stage       = "GA"
+
+  depends_on = [google_project_service.iam]
+}
+
 resource "google_project_iam_member" "gts_eab_creator" {
+  count   = var.grant_gts_eab_creator ? 1 : 0
   project = var.project_id
   role    = "roles/publicca.externalAccountKeyCreator"
-  member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
+  member  = "serviceAccount:${google_service_account.production_runtime.email}"
 
   depends_on = [google_project_service.public_ca]
 }
@@ -58,10 +91,11 @@ resource "google_compute_firewall" "ssh_iap" {
 }
 
 resource "google_compute_instance" "gole" {
-  name         = "gole-production"
-  machine_type = var.machine_type
-  zone         = var.zone
-  tags         = ["gole-web", "gole-ssh-iap"]
+  name                      = "gole-production"
+  machine_type              = var.machine_type
+  zone                      = var.zone
+  allow_stopping_for_update = var.allow_stopping_for_update
+  tags                      = ["gole-web", "gole-ssh-iap"]
 
   labels = {
     app         = "gole"
@@ -85,7 +119,7 @@ resource "google_compute_instance" "gole" {
   }
 
   service_account {
-    email  = data.google_compute_default_service_account.default.email
+    email  = google_service_account.production_runtime.email
     scopes = ["cloud-platform"]
   }
 
@@ -114,6 +148,11 @@ resource "google_compute_instance" "gole" {
     on_host_maintenance = "MIGRATE"
   }
 
+  depends_on = [
+    google_project_iam_member.gts_eab_creator,
+    google_pubsub_subscription_iam_member.budget_relay_subscriber,
+  ]
+
   lifecycle {
     prevent_destroy = true
   }
@@ -133,8 +172,16 @@ resource "google_pubsub_subscription" "billing_budget_discord" {
 
 resource "google_pubsub_subscription_iam_member" "budget_relay_subscriber" {
   subscription = google_pubsub_subscription.billing_budget_discord.name
-  role         = "roles/pubsub.subscriber"
-  member       = "serviceAccount:${data.google_compute_default_service_account.default.email}"
+  role         = google_project_iam_custom_role.budget_subscription_consumer.name
+  member       = "serviceAccount:${google_service_account.production_runtime.email}"
+}
+
+resource "google_compute_instance_iam_member" "production_instance_stopper" {
+  project       = var.project_id
+  zone          = google_compute_instance.gole.zone
+  instance_name = google_compute_instance.gole.name
+  role          = google_project_iam_custom_role.production_instance_stopper.name
+  member        = "serviceAccount:${google_service_account.production_runtime.email}"
 }
 
 resource "google_billing_budget" "gole_credit_guard" {
@@ -169,7 +216,9 @@ resource "google_billing_budget" "gole_credit_guard" {
 
   threshold_rules { threshold_percent = 0.50 }
   threshold_rules { threshold_percent = 0.75 }
+  threshold_rules { threshold_percent = 0.85 }
   threshold_rules { threshold_percent = 0.90 }
+  threshold_rules { threshold_percent = 0.95 }
   threshold_rules { threshold_percent = 1.00 }
   all_updates_rule {
     pubsub_topic                    = google_pubsub_topic.billing_budget.id

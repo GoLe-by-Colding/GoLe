@@ -12,6 +12,8 @@ BUDGET_START_DATE="${BUDGET_START_DATE:-2026-09-01}"
 BUDGET_END_DATE="${BUDGET_END_DATE:-2026-10-28}"
 TOPIC_NAME="${TOPIC_NAME:-gole-billing-budget}"
 SUBSCRIPTION_NAME="${SUBSCRIPTION_NAME:-gole-billing-budget-discord}"
+PUBSUB_CONSUMER_ROLE_ID="${PUBSUB_CONSUMER_ROLE_ID:-goleBudgetSubscriptionConsumer}"
+INSTANCE_STOPPER_ROLE_ID="${INSTANCE_STOPPER_ROLE_ID:-goleProductionInstanceStopper}"
 
 for required_command in gcloud jq curl; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
@@ -40,12 +42,64 @@ COMPUTE_SERVICE_ACCOUNT="${COMPUTE_SERVICE_ACCOUNT:-$(
   gcloud compute instances describe "$INSTANCE_NAME" --zone "$ZONE" \
     --format='value(serviceAccounts[0].email)'
 )}"
+EXPECTED_RUNTIME_SERVICE_ACCOUNT="${EXPECTED_RUNTIME_SERVICE_ACCOUNT:-gole-production-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
 
-echo "▶ Billing Budget/Pub/Sub API 활성화"
+if [ -z "$COMPUTE_SERVICE_ACCOUNT" ]; then
+  echo "${INSTANCE_NAME} VM에 연결된 서비스 계정을 찾지 못했습니다." >&2
+  exit 1
+fi
+if [ "$COMPUTE_SERVICE_ACCOUNT" != "$EXPECTED_RUNTIME_SERVICE_ACCOUNT" ]; then
+  echo "${INSTANCE_NAME} VM이 전용 runtime 서비스 계정을 사용하지 않습니다." >&2
+  echo "현재: ${COMPUTE_SERVICE_ACCOUNT}" >&2
+  echo "예상: ${EXPECTED_RUNTIME_SERVICE_ACCOUNT}" >&2
+  echo "서비스 계정을 먼저 교체한 뒤 Budget IAM을 구성하세요." >&2
+  exit 1
+fi
+
+echo "▶ Billing Budget/Pub/Sub/IAM API 활성화"
 gcloud services enable \
   billingbudgets.googleapis.com \
+  iam.googleapis.com \
   pubsub.googleapis.com \
   --project "$PROJECT_ID"
+
+ensure_custom_role() {
+  local role_id="$1"
+  local title="$2"
+  local description="$3"
+  local permissions="$4"
+
+  if gcloud iam roles describe "$role_id" --project "$PROJECT_ID" >/dev/null 2>&1; then
+    gcloud iam roles update "$role_id" \
+      --project "$PROJECT_ID" \
+      --title "$title" \
+      --description "$description" \
+      --permissions "$permissions" \
+      --stage=GA >/dev/null
+  else
+    gcloud iam roles create "$role_id" \
+      --project "$PROJECT_ID" \
+      --title "$title" \
+      --description "$description" \
+      --permissions "$permissions" \
+      --stage=GA >/dev/null
+  fi
+}
+
+echo "▶ 자동 비용 정지용 최소 권한 custom role 준비"
+ensure_custom_role \
+  "$PUBSUB_CONSUMER_ROLE_ID" \
+  'GoLe budget subscription consumer' \
+  'Consumes only the GoLe billing budget Pub/Sub subscription' \
+  'pubsub.subscriptions.consume'
+ensure_custom_role \
+  "$INSTANCE_STOPPER_ROLE_ID" \
+  'GoLe production instance stopper' \
+  'Stops only the GoLe production Compute Engine instance' \
+  'compute.instances.stop'
+
+PUBSUB_CONSUMER_ROLE="projects/${PROJECT_ID}/roles/${PUBSUB_CONSUMER_ROLE_ID}"
+INSTANCE_STOPPER_ROLE="projects/${PROJECT_ID}/roles/${INSTANCE_STOPPER_ROLE_ID}"
 
 echo "▶ 비용 알림 Pub/Sub topic/subscription 준비"
 if ! gcloud pubsub topics describe "$TOPIC_NAME" --project "$PROJECT_ID" >/dev/null 2>&1; then
@@ -63,7 +117,33 @@ fi
 gcloud pubsub subscriptions add-iam-policy-binding "$SUBSCRIPTION_NAME" \
   --project "$PROJECT_ID" \
   --member="serviceAccount:${COMPUTE_SERVICE_ACCOUNT}" \
-  --role='roles/pubsub.subscriber' >/dev/null
+  --role="$PUBSUB_CONSUMER_ROLE" >/dev/null
+
+# 같은 subscription에 남아 있는 기존 predefined subscriber 권한은 custom role로 대체한다.
+legacy_subscriber_member="serviceAccount:${COMPUTE_SERVICE_ACCOUNT}"
+subscription_policy="$(
+  gcloud pubsub subscriptions get-iam-policy "$SUBSCRIPTION_NAME" \
+    --project "$PROJECT_ID" \
+    --format=json
+)"
+if jq -e \
+  --arg member "$legacy_subscriber_member" \
+  '.bindings[]? |
+   select(.role == "roles/pubsub.subscriber") |
+   (.members // []) |
+   index($member)' <<<"$subscription_policy" >/dev/null; then
+  gcloud pubsub subscriptions remove-iam-policy-binding "$SUBSCRIPTION_NAME" \
+    --project "$PROJECT_ID" \
+    --member="$legacy_subscriber_member" \
+    --role='roles/pubsub.subscriber' >/dev/null
+fi
+
+# 자동 정지는 이 VM 한 대에만 허용한다. 프로젝트의 다른 인스턴스는 정지할 수 없다.
+gcloud compute instances add-iam-policy-binding "$INSTANCE_NAME" \
+  --project "$PROJECT_ID" \
+  --zone "$ZONE" \
+  --member="serviceAccount:${COMPUTE_SERVICE_ACCOUNT}" \
+  --role="$INSTANCE_STOPPER_ROLE" >/dev/null
 
 TOPIC_RESOURCE="projects/${PROJECT_ID}/topics/${TOPIC_NAME}"
 PROJECT_RESOURCE="projects/${PROJECT_NUMBER}"
@@ -80,7 +160,9 @@ create_budget() {
     --credit-types-treatment=exclude-all-credits \
     --threshold-rule=percent=0.5,basis=current-spend \
     --threshold-rule=percent=0.75,basis=current-spend \
+    --threshold-rule=percent=0.85,basis=current-spend \
     --threshold-rule=percent=0.9,basis=current-spend \
+    --threshold-rule=percent=0.95,basis=current-spend \
     --threshold-rule=percent=1.0,basis=current-spend \
     --notifications-rule-pubsub-topic "$TOPIC_RESOURCE" \
     --format=json
@@ -172,7 +254,9 @@ payload="$(jq -nc \
     thresholdRules: [
       {thresholdPercent: 0.5, spendBasis: "CURRENT_SPEND"},
       {thresholdPercent: 0.75, spendBasis: "CURRENT_SPEND"},
+      {thresholdPercent: 0.85, spendBasis: "CURRENT_SPEND"},
       {thresholdPercent: 0.9, spendBasis: "CURRENT_SPEND"},
+      {thresholdPercent: 0.95, spendBasis: "CURRENT_SPEND"},
       {thresholdPercent: 1.0, spendBasis: "CURRENT_SPEND"}
     ],
     notificationsRule: {
@@ -188,4 +272,14 @@ curl -fsS --request PATCH \
   "https://billingbudgets.googleapis.com/v1/${BUDGET_RESOURCE}?updateMask=displayName,amount,thresholdRules,notificationsRule" \
   --data "$payload" >/dev/null
 
+final_budget="$(gcloud billing budgets describe "$BUDGET_RESOURCE" --format=json)"
+actual_budget_resource="$(jq -r '.name // empty' <<<"$final_budget")"
+if [ -z "$actual_budget_resource" ]; then
+  echo "갱신된 budget의 실제 리소스 ID를 확인하지 못했습니다." >&2
+  exit 1
+fi
+actual_budget_id="${actual_budget_resource##*/}"
+
+echo "✔ Budget resource: ${actual_budget_resource}"
+echo "✔ Budget ID: ${actual_budget_id}"
 echo "✔ ${SUBSCRIPTION_NAME} → Discord relay 입력 준비 완료"

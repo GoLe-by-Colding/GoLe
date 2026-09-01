@@ -18,7 +18,7 @@
 | Backend | Spring Boot 4 (Spring Framework 7), Java 21 LTS, 헥사고날 + AOP |
 | Data | MongoDB (primary, replica set `rs0` → 멀티도큐먼트 트랜잭션), Redis (캐시/랭킹) |
 | Storage | MinIO (S3 호환) — 이미지 업로드 |
-| Infra | Docker(Colima) + PM2, nginx 리버스 프록시, Let's Encrypt HTTPS, pnpm workspace |
+| Infra | Docker Compose, GCP Compute Engine, Nginx 리버스 프록시, Google Trust Services HTTPS, self-hosted GitHub Actions CD |
 
 > **저장소 전략**: 초기엔 MongoDB + Redis. 정산 도메인이 강한 관계형 정합성을 요구하면, 헥사고날 포트/어댑터 덕분에 해당 컨텍스트에만 PostgreSQL 어댑터를 추가할 수 있다.
 
@@ -149,7 +149,7 @@ web dev 서버는 Playwright가 자동 기동한다. 쓰기 플로우(`create-li
 
 1. 각 provider 콘솔에서 OAuth 앱 생성 → redirect URI `https://gole.co.kr/auth/callback/{google|kakao|naver}` 등록.
 2. 백엔드 컨테이너 환경변수 주입: `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (카카오·네이버는 `KAKAO_*`/`NAVER_*`).
-3. `pm2 restart gole-backend --update-env` → 해당 버튼 자동 활성화. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
+3. 운영 서버의 `/etc/gole/gole.env`에 값을 추가한 뒤 **Actions → CD → Run workflow**로 Compose 컨테이너를 재배포하면 해당 버튼이 자동 활성화된다. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
 
 ### 결제(PortOne) 활성화
 
@@ -158,8 +158,8 @@ web dev 서버는 Playwright가 자동 기동한다. 쓰기 플로우(`create-li
 아래를 설정해야 한다. (운영 환경에서 스텁으로 기동하는 것은 `PaymentConfigurationGuard`가 막는다.)
 
 > ⚠️ **프론트 키는 빌드 타임에 번들에 박힌다.** `NEXT_PUBLIC_*`은 `next build` 시점의 환경변수를
-> 읽어 정적 인라인되므로, pm2 `env`나 `--update-env`로는 **반영되지 않는다**. 소셜 로그인처럼
-> "환경변수 넣고 재시작"이 통하지 않는 유일한 항목이다. 반드시 **재빌드**해야 한다.
+> 읽어 정적 인라인되므로, 실행 중인 컨테이너의 환경변수만 바꿔서는 **반영되지 않는다**.
+> GitHub repository variables를 변경한 뒤 CD에서 프론트 이미지를 반드시 **재빌드**해야 한다.
 
 | 변수 | 위치 | 주입 시점 | 비고 |
 |---|---|---|---|
@@ -180,30 +180,25 @@ web dev 서버는 Playwright가 자동 기동한다. 쓰기 플로우(`create-li
 포트원에 조회해 결제 기록이 없으므로 결제가 진행되지 않는다.
 
 ```bash
-# 1) 프론트 키를 서버의 apps/web/.env.production 에 둔다 (.gitignore 대상)
+# 1) 프론트 공개 키를 GitHub repository variables에 등록한다
 NEXT_PUBLIC_PAYMENT_MODE=portone-test
 NEXT_PUBLIC_PORTONE_STORE_ID=store-...
 NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-key-...
 
-# 2) 프론트 재빌드 (반드시 빌드를 다시 해야 반영된다)
-bash /app/scripts/deploy.sh frontend
+# 2) 서버 전용 비밀값은 운영 서버의 /etc/gole/gole.env에 등록한다
+sudoedit /etc/gole/gole.env
 
-# 3) 백엔드 환경변수 주입 후 재시작
+# 3) 다음 값을 추가한다
 PORTONE_ENABLED=true
 PORTONE_API_SECRET=...
 PORTONE_WEBHOOK_SECRET=...
 PORTONE_STORE_ID=store-...
 PORTONE_CHANNEL_KEY=channel-key-...
-pm2 restart gole-backend --update-env
 
-# 4) 포트원 콘솔에 웹훅 등록
+# 4) Actions → CD → Run workflow로 전체 Compose 이미지를 재빌드·재배포한다
+
+# 5) 포트원 콘솔에 웹훅 등록
 #    https://<도메인>/api/v1/payments/portone/webhook
-```
-
-확인:
-
-```bash
-pm2 env gole-backend | grep -i portone   # 비어 있으면 스텁으로 동작 중
 ```
 
 관리자 대시보드의 결제 준비 상태(`GET /admin/overview`의 `paymentReadiness`)로도 설정 누락을
@@ -232,11 +227,11 @@ PG의 하위 판매자 정산 대행을 먼저 검토해야 한다.
 
 백엔드는 회원가입, 주문·결제·환불, PortOne 웹훅 이상, 애플리케이션 기동, 처리되지 않은 500 오류를
 구조화된 Discord embed로 전송한다. 비밀번호·세션 토큰·이메일·결제 비밀값은 전송하지 않는다.
-앱이 완전히 내려간 경우에는 `.github/workflows/production-health.yml`을 수동 실행해 readiness를 외부에서 확인한다.
-정기 실행은 CI 실패 메일과 Discord 중복 알림을 만들지 않도록 비활성화되어 있다.
+앱이 완전히 내려간 경우까지 감지하도록 `.github/workflows/production-health.yml`이 매시간 외부에서
+readiness를 확인한다. 성공 알림은 보내지 않고 실패할 때만 운영 Discord로 알려 중복 알림을 줄인다.
 
 ```bash
-# 백엔드/PM2 환경변수
+# 백엔드 컨테이너 환경변수(`/etc/gole/gole.env`)
 GOLE_DISCORD_ALERTS_ENABLED=true
 GOLE_ENVIRONMENT=production
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...             # 공통 fallback
@@ -249,14 +244,15 @@ DISCORD_DEDUPLICATION_WINDOW=PT5M                               # 같은 애플�
 - GitHub Actions secret `DISCORD_CI_WEBHOOK_URL`: main CI 결과 알림
 - GitHub Actions secret `DISCORD_OPERATIONS_WEBHOOK_URL`: 운영 헬스체크 실패 알림
 - GitHub Actions secrets `DISCORD_ACCOUNT_WEBHOOK_URL`, `DISCORD_PAYMENT_WEBHOOK_URL`: 운영 배포 시 백엔드 가입·결제 알림 경로로 주입
-- 서버 환경변수 `DISCORD_DEPLOY_WEBHOOK_URL`: 배포 스크립트 알림(미설정 시 operations URL 사용)
+- GitHub Actions secret `DISCORD_DEPLOY_WEBHOOK_URL`: 배포 스크립트 알림(미설정 시 operations URL 사용)
 - webhook URL은 Discord 채널 설정 → 연동 → 웹후크에서 만들며 저장소나 채팅에 붙여 넣지 않는다.
 
 `CD` 워크플로가 `main`의 CI 성공 뒤 자동 실행되며, 위 비밀값을 배포 시점에만 환경변수로 넘긴다.
-`deploy.sh`의 `pm2 reload --update-env`가 이 값을 앱 프로세스에 반영한다. 서버에 영구 저장하지
-않으므로, 서버에서 손으로 `pm2 restart`를 하면 알림 경로가 조용히 사라진다 — 재배포로 복구한다.
+`deploy.sh`가 Docker Compose 이미지를 빌드하고 컨테이너를 재생성하면서 이 값을 반영한다.
+배포용 Discord 값은 서버 환경 파일에 영구 저장하지 않으므로, 컨테이너를 손으로 재생성하지
+말고 self-hosted CD를 통해 배포한다.
 
-현재 공개 서버는 SMTP와 PortOne 운영 비밀값이 GitHub Actions에 등록되기 전까지
+현재 공개 서버는 SMTP와 PortOne 운영 비밀값이 운영 환경에 등록되기 전까지
 `GOLE_ENVIRONMENT=staging`으로 배포한다. `production`으로 전환하려면 SMTP 설정과
 `PORTONE_ENABLED=true`, PortOne API·웹훅·스토어·채널 키를 먼저 등록해야 하며, 백엔드의
 기동 가드가 누락된 구성을 거부한다.
@@ -284,16 +280,22 @@ DISCORD_DEDUPLICATION_WINDOW=PT5M                               # 같은 애플�
 
 ## 배포
 
-GCP `gole-production` VM에서 PM2(`gole-backend`, `gole-frontend`)로 구동하고 Nginx가 `gole.co.kr`을 프록시한다. 재현·이전 절차는 `infra/gcp/README.md`에 있다.
+GCP `gole-production` VM에서 Backend, Frontend, MongoDB, Redis, MinIO, Nginx,
+Certbot, 비용 릴레이를 Docker Compose로 구동한다. Nginx가 `gole.co.kr`을 프록시하고
+Google Trust Services 인증서를 제공한다. 재현·이전 절차는 `infra/gcp/README.md`에 있다.
 
-`main` 브랜치의 CI가 성공하면 GCP VM의 저장소 전용 self-hosted runner가 CD를 자동 실행한다. GitHub의 **Actions → CD → Run workflow**에서 수동 배포도 가능하다.
+`main` 브랜치의 CI가 성공하면 GCP VM의 저장소 전용 self-hosted runner가 성공한 커밋 SHA를
+정확히 checkout하고 `scripts/deploy.sh all`을 실행한다. 이 스크립트는 Compose 이미지를 빌드하고
+컨테이너를 `--wait`로 갱신한 뒤 내부·HTTPS readiness를 검증한다. GitHub의
+**Actions → CD → Run workflow**에서 수동 재배포도 가능하다.
 
 ```bash
 # 로컬: 커밋 → push
 git push origin main
-# GCP VM: git pull → 빌드 → pm2 reload → health
+
+# GCP VM: 현재 Compose 상태와 로그 확인
 gcloud compute ssh gole-production --zone asia-northeast3-a -- \
-  'cd /app && bash scripts/deploy.sh all'
+  'cd /app && sudo docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f infra/gcp/docker-compose.yml ps'
 ```
 
 GoLe 운영 Ubuntu에는 IAP SSH로 접속한다.
@@ -307,4 +309,13 @@ cd /app
 
 ## 커밋 컨벤션
 
-`<type>(<scope>): <한국어 설명>` — type: `feat|fix|refactor|docs|chore`, scope: `backend|frontend|infra|spec`. 백엔드/프론트는 **레이어별로 커밋을 분리**한다. 상세는 `.kiro/steering/dev-conventions.md`.
+제목은 `인프라: 운영 배포 검증을 강화`처럼 변경 영역과 내용을 **한국어로** 작성한다.
+본문의 모든 항목은 `- `로 시작하고 `함`으로 끝낸다. 백엔드/프론트는 **레이어별로 커밋을
+분리**한다. 상세는 `.kiro/steering/dev-conventions.md`에 있다.
+
+```text
+인프라: 운영 배포 검증을 강화
+
+- Compose 설정의 유효성을 CI에서 확인함
+- 운영 readiness를 매시간 외부에서 확인함
+```

@@ -36,11 +36,64 @@ on_deploy_exit() {
     "${COMPOSE[@]}" ps || true
     "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
     notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
+    if [ "$TARGET" = "all" ]; then
+      notify_discord "🛑 전체 배포가 실패해 새 비용 가드 무장을 보장할 수 없으므로 GCP VM을 안전 정지합니다 · gole.co.kr"
+      sudo systemctl poweroff --no-block || true
+    fi
   fi
 }
 trap on_deploy_exit EXIT
 
 notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.co.kr"
+
+if [ "$TARGET" = "all" ]; then
+  required_cost_guard_variables=(
+    GCP_BUDGET_PUBSUB_SUBSCRIPTION
+    GCP_PROJECT_ID
+    GCP_CREDIT_AMOUNT_KRW
+    GCP_CREDIT_DEADLINE
+    GCP_FIXED_HOURLY_COST_KRW
+    GCP_HARD_STOP_ENABLED
+    GCP_HARD_STOP_DRY_RUN
+    GCP_HARD_STOP_BILLING_COST_KRW
+    GCP_HARD_STOP_MIN_RESERVE_KRW
+    GCP_HARD_STOP_ALL_IN_COST_KRW
+    GCP_COST_GUARD_WARNING_KRW
+    GCP_COST_GUARD_DANGER_KRW
+    GCP_HARD_STOP_NETWORK_GIB
+    GCP_COST_GUARD_NETWORK_WARNING_GIB
+    GCP_COST_GUARD_NETWORK_DANGER_GIB
+    GCP_HARD_STOP_MAX_RUNTIME_HOURS
+    GCP_COST_GUARD_RUNTIME_WARNING_HOURS
+    GCP_COST_GUARD_RUNTIME_DANGER_HOURS
+    GCP_HARD_STOP_EXPECTED_BUDGET_KRW
+    GCP_HARD_STOP_BUDGET_ID
+    GCP_HARD_STOP_BILLING_ACCOUNT_ID
+    GCP_HARD_STOP_BUDGET_DISPLAY_NAME
+    GCP_HARD_STOP_PERIOD_START
+    GCP_VM_COST_START
+    GCP_HARD_STOP_AT
+    GCP_HARD_STOP_ARM_ID
+    GCP_INSTANCE_ZONE
+    GCP_INSTANCE_NAME
+    GCP_VAT_RATE
+    GCP_NETWORK_EGRESS_KRW_PER_GIB
+    GCP_STOPPED_RESOURCE_HOURLY_COST_KRW
+    GCP_COST_GUARD_INTERVAL_SECONDS
+    GCP_HARD_STOP_RETRY_SECONDS
+    BUDGET_HTTP_TIMEOUT_SECONDS
+  )
+  for variable_name in "${required_cost_guard_variables[@]}"; do
+    if [ -z "${!variable_name:-}" ]; then
+      echo "필수 비용 가드 repository variable 누락: ${variable_name}" >&2
+      exit 1
+    fi
+  done
+  if [ "$GCP_HARD_STOP_ENABLED" != "true" ] || [ "$GCP_HARD_STOP_DRY_RUN" != "false" ]; then
+    echo "운영 비용 가드는 enabled=true, dry_run=false로 명시적으로 무장해야 합니다." >&2
+    exit 1
+  fi
+fi
 
 log "CI가 검증한 origin/main 동기화"
 git fetch --prune origin main
@@ -108,6 +161,18 @@ curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
   https://gole.co.kr/actuator/health/readiness >/dev/null
 curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
   https://gole.co.kr/icon.svg >/dev/null
+
+if [ "$TARGET" = "all" ]; then
+  log "비용 가드 호스트 watchdog 활성화"
+  sudo install -m 0755 infra/gcp/scripts/cost-guard-watchdog.sh \
+    /usr/local/sbin/gole-cost-guard-watchdog
+  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.service \
+    /etc/systemd/system/gole-cost-guard-watchdog.service
+  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.timer \
+    /etc/systemd/system/gole-cost-guard-watchdog.timer
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now gole-cost-guard-watchdog.timer
+fi
 
 "${COMPOSE[@]}" ps
 notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"

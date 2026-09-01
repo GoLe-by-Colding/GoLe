@@ -53,6 +53,24 @@ variable "machine_type" {
   default = "e2-custom-4-8192"
 }
 
+variable "runtime_service_account_id" {
+  type        = string
+  description = "Account ID for the dedicated production VM runtime service account"
+  default     = "gole-production-runtime"
+}
+
+variable "allow_stopping_for_update" {
+  type        = bool
+  description = "Allow Terraform to stop the VM when an in-place update requires it, including service account changes"
+  default     = true
+}
+
+variable "grant_gts_eab_creator" {
+  type        = bool
+  description = "Temporarily allow the runtime account to create the one-time Google Trust Services EAB during first certificate issuance"
+  default     = false
+}
+
 variable "disk_size_gb" {
   type    = number
   default = 100

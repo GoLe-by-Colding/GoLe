@@ -2,6 +2,9 @@ name: Production health
 
 on:
   workflow_dispatch:
+  schedule:
+    # 매시간 정각 부하를 피해 외부에서 readiness를 확인한다.
+    - cron: "17 * * * *"
 
 permissions:
   contents: read
@@ -14,11 +17,12 @@ jobs:
   health:
     name: gole.co.kr readiness
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     env:
       HEALTH_URL: https://gole.co.kr/actuator/health/readiness
       DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
       DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
-      DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
+      DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_HEALTH_SUPPRESS_NOTIFICATIONS || 'false' }}
     steps:
       - name: Check production API
         id: check

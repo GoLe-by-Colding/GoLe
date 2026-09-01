@@ -12,3 +12,18 @@ output "dns_records" {
 output "billing_budget_subscription" {
   value = google_pubsub_subscription.billing_budget_discord.name
 }
+
+output "production_runtime_service_account" {
+  value = google_service_account.production_runtime.email
+}
+
+output "automatic_cost_guard_roles" {
+  value = {
+    subscription_consumer = google_project_iam_custom_role.budget_subscription_consumer.name
+    instance_stopper      = google_project_iam_custom_role.production_instance_stopper.name
+  }
+}
+
+output "billing_budget_id" {
+  value = try(google_billing_budget.gole_credit_guard[0].id, null)
+}

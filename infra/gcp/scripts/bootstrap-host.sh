@@ -31,6 +31,9 @@ sed "s/__DOMAIN__/${DOMAIN//\//\\/}/g" "$APP_ROOT/infra/gcp/nginx-http.conf.temp
 chmod 0644 /etc/gole/nginx.conf
 install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cert-renew.service" /etc/systemd/system/gole-cert-renew.service
 install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cert-renew.timer" /etc/systemd/system/gole-cert-renew.timer
+install -m 0755 "$APP_ROOT/infra/gcp/scripts/cost-guard-watchdog.sh" /usr/local/sbin/gole-cost-guard-watchdog
+install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cost-guard-watchdog.service" /etc/systemd/system/gole-cost-guard-watchdog.service
+install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cost-guard-watchdog.timer" /etc/systemd/system/gole-cost-guard-watchdog.timer
 systemctl daemon-reload
 systemctl enable --now gole-cert-renew.timer
 systemctl enable --now docker

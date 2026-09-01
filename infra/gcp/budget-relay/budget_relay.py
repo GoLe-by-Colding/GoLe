@@ -10,6 +10,7 @@ been delivered and durable deduplication state has been written.
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import json
 import logging
@@ -17,10 +18,12 @@ import os
 import random
 import signal
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -31,7 +34,9 @@ from typing import Any, Callable, Iterable
 LOG = logging.getLogger("gole-budget-relay")
 METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1"
 PUBSUB_ROOT = "https://pubsub.googleapis.com/v1"
+COMPUTE_ROOT = "https://compute.googleapis.com/compute/v1"
 STATE_VERSION = 1
+GIB = Decimal(1024**3)
 
 
 class ConfigurationError(ValueError):
@@ -69,6 +74,26 @@ def _parse_rfc3339(value: str, field: str) -> datetime:
 
 def _format_rfc3339(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _boolean(value: str, field: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigurationError(f"{field} must be true or false")
+
+
+def _synchronized(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Serialize access to the small shared state object."""
+
+    @functools.wraps(method)
+    def wrapper(self: "StateStore", *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 @dataclass(frozen=True)
@@ -157,6 +182,69 @@ class BudgetNotification:
 
 
 @dataclass(frozen=True)
+class HardStopPolicy:
+    enabled: bool
+    dry_run: bool
+    billing_cost_limit_krw: Decimal
+    all_in_cost_limit_krw: Decimal
+    all_in_warning_krw: Decimal
+    all_in_danger_krw: Decimal
+    network_limit_bytes: int
+    network_warning_bytes: int
+    network_danger_bytes: int
+    max_runtime_hours: Decimal
+    runtime_warning_hours: Decimal
+    runtime_danger_hours: Decimal
+    minimum_reserve_krw: Decimal
+    expected_budget_amount_krw: Decimal
+    expected_budget_id: str
+    billing_account_id: str
+    budget_display_name: str
+    period_start: date
+    vm_cost_start: datetime
+    stop_at: datetime
+    arm_id: str
+    project_id: str
+    zone: str
+    instance_name: str
+    vat_rate: Decimal
+    network_egress_krw_per_gib: Decimal
+    stopped_resource_hourly_cost_krw: Decimal
+    tx_bytes_path: Path
+    boot_id_path: Path
+    check_interval_seconds: float
+    retry_seconds: float
+
+    def validate_message(
+        self,
+        budget: BudgetNotification,
+        attributes: Any,
+    ) -> str | None:
+        """Return a safe reason when a message is not the armed production Budget."""
+        if not self.enabled:
+            return None
+        if not isinstance(attributes, dict):
+            return "missing attributes"
+        expected = {
+            "budgetId": self.expected_budget_id,
+            "billingAccountId": self.billing_account_id,
+            "schemaVersion": "1.0",
+        }
+        for key, value in expected.items():
+            if attributes.get(key) != value:
+                return f"unexpected {key}"
+        if budget.display_name != self.budget_display_name:
+            return "unexpected budget display name"
+        if budget.currency_code != "KRW":
+            return "unexpected currency"
+        if budget.budget_amount != self.expected_budget_amount_krw:
+            return "unexpected budget amount"
+        if budget.interval_start.date() != self.period_start:
+            return "unexpected budget period"
+        return None
+
+
+@dataclass(frozen=True)
 class Config:
     subscription: str
     webhook_url: str
@@ -170,6 +258,7 @@ class Config:
     pull_interval_seconds: float
     http_timeout_seconds: float
     project_id: str | None = None
+    hard_stop: HardStopPolicy | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -181,12 +270,23 @@ class Config:
                 raise ConfigurationError(f"{name} is required")
             return value
 
+        hard_stop_enabled = _boolean(
+            values.get("GCP_HARD_STOP_ENABLED", "false"),
+            "GCP_HARD_STOP_ENABLED",
+        )
         subscription = required("GCP_BUDGET_PUBSUB_SUBSCRIPTION")
-        webhook_url = required("DISCORD_OPERATIONS_WEBHOOK_URL")
-        if not webhook_url.startswith("https://discord.com/api/webhooks/") and not webhook_url.startswith(
-            "https://discordapp.com/api/webhooks/"
-        ):
-            raise ConfigurationError("DISCORD_OPERATIONS_WEBHOOK_URL is not a Discord webhook")
+        webhook_url = values.get("DISCORD_OPERATIONS_WEBHOOK_URL", "").strip()
+        webhook_valid = webhook_url.startswith(
+            "https://discord.com/api/webhooks/"
+        ) or webhook_url.startswith("https://discordapp.com/api/webhooks/")
+        if not webhook_valid:
+            if not hard_stop_enabled:
+                raise ConfigurationError(
+                    "DISCORD_OPERATIONS_WEBHOOK_URL is not a Discord webhook"
+                )
+            if webhook_url:
+                LOG.error("유효하지 않은 Discord webhook을 비활성화합니다")
+            webhook_url = ""
 
         credit = _decimal(required("GCP_CREDIT_AMOUNT_KRW"), "GCP_CREDIT_AMOUNT_KRW")
         hourly = _decimal(
@@ -217,6 +317,171 @@ class Config:
                 "GCP_CREDIT_DEADLINE must be YYYY-MM-DD or ISO8601"
             ) from exc
 
+        project_id = values.get("GCP_PROJECT_ID", "").strip() or None
+        hard_stop_dry_run = _boolean(
+            values.get("GCP_HARD_STOP_DRY_RUN", "false"),
+            "GCP_HARD_STOP_DRY_RUN",
+        )
+
+        def hard_required(name: str) -> str:
+            value = values.get(name, "").strip()
+            if hard_stop_enabled and not value:
+                raise ConfigurationError(f"{name} is required when hard stop is enabled")
+            return value
+
+        def hard_decimal(name: str, default: str) -> Decimal:
+            return _decimal(values.get(name, default), name)
+
+        def hard_datetime(name: str) -> datetime:
+            raw = hard_required(name)
+            if not raw:
+                return datetime(1970, 1, 1, tzinfo=local_tz)
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ConfigurationError(f"{name} must be ISO8601") from exc
+            if parsed.tzinfo is None:
+                raise ConfigurationError(f"{name} must include a timezone")
+            return parsed.astimezone(local_tz)
+
+        try:
+            period_start_text = hard_required("GCP_HARD_STOP_PERIOD_START")
+            period_start = (
+                date.fromisoformat(period_start_text)
+                if period_start_text
+                else date(1970, 1, 1)
+            )
+        except ValueError as exc:
+            raise ConfigurationError(
+                "GCP_HARD_STOP_PERIOD_START must be YYYY-MM-DD"
+            ) from exc
+
+        billing_limit = hard_decimal("GCP_HARD_STOP_BILLING_COST_KRW", "320000")
+        all_in_limit = hard_decimal("GCP_HARD_STOP_ALL_IN_COST_KRW", "350000")
+        all_in_warning = hard_decimal("GCP_COST_GUARD_WARNING_KRW", "330000")
+        all_in_danger = hard_decimal("GCP_COST_GUARD_DANGER_KRW", "340000")
+        minimum_reserve = hard_decimal("GCP_HARD_STOP_MIN_RESERVE_KRW", "75000")
+        network_limit_gib = hard_decimal("GCP_HARD_STOP_NETWORK_GIB", "30")
+        network_warning_gib = hard_decimal("GCP_COST_GUARD_NETWORK_WARNING_GIB", "15")
+        network_danger_gib = hard_decimal("GCP_COST_GUARD_NETWORK_DANGER_GIB", "25")
+        runtime_limit = hard_decimal("GCP_HARD_STOP_MAX_RUNTIME_HOURS", "1320")
+        runtime_warning = hard_decimal("GCP_COST_GUARD_RUNTIME_WARNING_HOURS", "1200")
+        runtime_danger = hard_decimal("GCP_COST_GUARD_RUNTIME_DANGER_HOURS", "1296")
+        vat_rate = hard_decimal("GCP_VAT_RATE", "0.10")
+        egress_rate = hard_decimal(
+            "GCP_NETWORK_EGRESS_KRW_PER_GIB", "318.154399937"
+        )
+        stopped_hourly = hard_decimal(
+            "GCP_STOPPED_RESOURCE_HOURLY_COST_KRW", "45.725088879"
+        )
+        expected_budget = hard_decimal(
+            "GCP_HARD_STOP_EXPECTED_BUDGET_KRW", "370000"
+        )
+        guard_interval = float(values.get("GCP_COST_GUARD_INTERVAL_SECONDS", "10"))
+        guard_retry = float(values.get("GCP_HARD_STOP_RETRY_SECONDS", "300"))
+        vm_cost_start = hard_datetime("GCP_VM_COST_START")
+        stop_at = hard_datetime("GCP_HARD_STOP_AT")
+        expected_budget_id = hard_required("GCP_HARD_STOP_BUDGET_ID")
+        billing_account_id = hard_required("GCP_HARD_STOP_BILLING_ACCOUNT_ID")
+        arm_id = hard_required("GCP_HARD_STOP_ARM_ID")
+        instance_zone = hard_required("GCP_INSTANCE_ZONE")
+        instance_name = hard_required("GCP_INSTANCE_NAME")
+        budget_display_name = values.get(
+            "GCP_HARD_STOP_BUDGET_DISPLAY_NAME",
+            "GoLe production credit guard",
+        ).strip()
+
+        if hard_stop_enabled:
+            if not project_id:
+                raise ConfigurationError(
+                    "GCP_PROJECT_ID is required when hard stop is enabled"
+                )
+            if not (
+                Decimal("0") < all_in_warning < all_in_danger < all_in_limit
+            ):
+                raise ConfigurationError(
+                    "all-in warning, danger, and stop values must be increasing"
+                )
+            if not (
+                Decimal("0")
+                < network_warning_gib
+                < network_danger_gib
+                < network_limit_gib
+            ):
+                raise ConfigurationError(
+                    "network warning, danger, and stop values must be increasing"
+                )
+            if not (
+                Decimal("0") < runtime_warning < runtime_danger < runtime_limit
+            ):
+                raise ConfigurationError(
+                    "runtime warning, danger, and stop values must be increasing"
+                )
+            if billing_limit <= 0 or billing_limit >= credit:
+                raise ConfigurationError(
+                    "billing hard-stop cost must be positive and lower than credit"
+                )
+            if credit - billing_limit < minimum_reserve:
+                raise ConfigurationError(
+                    "billing hard-stop cost does not leave the minimum reserve"
+                )
+            if expected_budget <= 0 or vat_rate < 0 or vat_rate > 1:
+                raise ConfigurationError("budget and VAT settings are invalid")
+            if egress_rate < 0 or stopped_hourly < 0:
+                raise ConfigurationError("guard hourly costs cannot be negative")
+            if guard_interval <= 0 or guard_retry <= 0:
+                raise ConfigurationError("guard intervals must be positive")
+            if not budget_display_name:
+                raise ConfigurationError(
+                    "GCP_HARD_STOP_BUDGET_DISPLAY_NAME cannot be empty"
+                )
+            if vm_cost_start >= stop_at or stop_at > deadline:
+                raise ConfigurationError(
+                    "VM cost start, hard stop, and credit deadline must be ordered"
+                )
+            if period_start > vm_cost_start.date():
+                raise ConfigurationError(
+                    "budget period cannot start after VM cost accounting"
+                )
+
+        hard_stop = HardStopPolicy(
+            enabled=hard_stop_enabled,
+            dry_run=hard_stop_dry_run,
+            billing_cost_limit_krw=billing_limit,
+            all_in_cost_limit_krw=all_in_limit,
+            all_in_warning_krw=all_in_warning,
+            all_in_danger_krw=all_in_danger,
+            network_limit_bytes=int(network_limit_gib * GIB),
+            network_warning_bytes=int(network_warning_gib * GIB),
+            network_danger_bytes=int(network_danger_gib * GIB),
+            max_runtime_hours=runtime_limit,
+            runtime_warning_hours=runtime_warning,
+            runtime_danger_hours=runtime_danger,
+            minimum_reserve_krw=minimum_reserve,
+            expected_budget_amount_krw=expected_budget,
+            expected_budget_id=expected_budget_id,
+            billing_account_id=billing_account_id,
+            budget_display_name=budget_display_name,
+            period_start=period_start,
+            vm_cost_start=vm_cost_start,
+            stop_at=stop_at,
+            arm_id=arm_id,
+            project_id=project_id or "",
+            zone=instance_zone,
+            instance_name=instance_name,
+            vat_rate=vat_rate,
+            network_egress_krw_per_gib=egress_rate,
+            stopped_resource_hourly_cost_krw=stopped_hourly,
+            tx_bytes_path=Path(
+                values.get("GCP_NETWORK_TX_BYTES_PATH", "/host-metrics/tx_bytes")
+            ),
+            boot_id_path=Path(
+                values.get("GCP_HOST_BOOT_ID_PATH", "/host-metrics/boot_id")
+            ),
+            check_interval_seconds=guard_interval,
+            retry_seconds=guard_retry,
+        )
+
         raw_thresholds = values.get(
             "GCP_BUDGET_WARNING_THRESHOLDS", "0.50,0.75,0.90,1.00"
         )
@@ -231,7 +496,9 @@ class Config:
 
         max_messages = int(values.get("PUBSUB_PULL_MAX_MESSAGES", "10"))
         pull_interval = float(values.get("PUBSUB_PULL_INTERVAL_SECONDS", "15"))
-        timeout = float(values.get("BUDGET_HTTP_TIMEOUT_SECONDS", "30"))
+        # Keep every synchronous remote request shorter than the local guard
+        # cadence so an unavailable Pub/Sub endpoint cannot starve cost checks.
+        timeout = float(values.get("BUDGET_HTTP_TIMEOUT_SECONDS", "5"))
         if not 1 <= max_messages <= 100:
             raise ConfigurationError("PUBSUB_PULL_MAX_MESSAGES must be 1..100")
         if pull_interval < 0 or timeout <= 0:
@@ -249,7 +516,8 @@ class Config:
             max_messages=max_messages,
             pull_interval_seconds=pull_interval,
             http_timeout_seconds=timeout,
-            project_id=values.get("GCP_PROJECT_ID", "").strip() or None,
+            project_id=project_id,
+            hard_stop=hard_stop,
         )
 
     @property
@@ -273,13 +541,17 @@ class StateStore:
         self.state_dir = state_dir
         self.path = state_dir / "budget-relay-state.json"
         self.max_seen = max_seen
+        self._lock = threading.RLock()
+        self.load_error: str | None = None
         self.data: dict[str, Any] = {
             "version": STATE_VERSION,
             "seen_message_ids": [],
             "periods": {},
+            "cost_guards": {},
         }
         self._load()
 
+    @_synchronized
     def _load(self) -> None:
         if not self.path.exists():
             return
@@ -291,13 +563,176 @@ class StateStore:
                 loaded.get("periods"), dict
             ):
                 raise ValueError("invalid state shape")
+            if "cost_guards" in loaded and not isinstance(
+                loaded["cost_guards"], dict
+            ):
+                raise ValueError("invalid cost guard state")
+            loaded.setdefault("cost_guards", {})
             self.data = loaded
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"cannot load budget relay state: {type(exc).__name__}") from exc
+            # A corrupt/unreadable state must arm a fail-closed VM stop instead
+            # of crash-looping the container while the instance keeps spending.
+            self.load_error = f"cannot load budget relay state: {type(exc).__name__}"
+            LOG.critical("%s", self.load_error)
 
+    @_synchronized
     def is_seen(self, message_id: str) -> bool:
         return message_id in self.data["seen_message_ids"]
 
+    def _remember_message(self, message_id: str) -> None:
+        seen: list[str] = self.data["seen_message_ids"]
+        if message_id not in seen:
+            seen.append(message_id)
+            del seen[:-self.max_seen]
+
+    @_synchronized
+    def mark_seen(self, message_id: str) -> None:
+        self._remember_message(message_id)
+        self._save()
+
+    @_synchronized
+    def latest_cost(self, period_start: date, currency_code: str = "KRW") -> Decimal:
+        latest_time: datetime | None = None
+        latest_cost = Decimal("0")
+        for period in self.data["periods"].values():
+            try:
+                interval = _parse_rfc3339(period["interval_start"], "interval_start")
+                published = _parse_rfc3339(
+                    period["latest_publish_time"], "latest_publish_time"
+                )
+                cost = _decimal(period["latest_cost_amount"], "latest_cost_amount")
+            except (KeyError, TypeError, ValueError):
+                continue
+            if interval.date() != period_start:
+                continue
+            if period.get("currency_code") != currency_code:
+                continue
+            if latest_time is None or published > latest_time:
+                latest_time = published
+                latest_cost = cost
+        return latest_cost
+
+    def _guard(self, arm_id: str) -> dict[str, Any]:
+        guards: dict[str, Any] = self.data.setdefault("cost_guards", {})
+        return guards.setdefault(
+            arm_id,
+            {
+                "announced": False,
+                "events": [],
+                "meter": {
+                    "boot_id": None,
+                    "last_tx_bytes": None,
+                    "cumulative_tx_bytes": 0,
+                },
+                "tripped": None,
+                "last_stop_attempt": None,
+                "stop_attempts": 0,
+                "stop_accepted": False,
+            },
+        )
+
+    @_synchronized
+    def update_network_meter(
+        self, arm_id: str, boot_id: str, current_tx_bytes: int
+    ) -> int:
+        if current_tx_bytes < 0:
+            raise ValueError("network byte counter cannot be negative")
+        meter = self._guard(arm_id).setdefault("meter", {})
+        previous_boot = meter.get("boot_id")
+        previous_tx = meter.get("last_tx_bytes")
+        cumulative = int(meter.get("cumulative_tx_bytes", 0))
+        if previous_tx is None:
+            # The host counter starts at boot, so the first sample also covers
+            # traffic sent before the guard container was deployed.
+            cumulative += current_tx_bytes
+        else:
+            previous_tx = int(previous_tx)
+            if previous_boot == boot_id and current_tx_bytes >= previous_tx:
+                cumulative += current_tx_bytes - previous_tx
+            elif previous_boot != boot_id:
+                # A reboot reset the host NIC counter. Count all bytes observed in
+                # the new boot; the persistent Docker volume retains older boots.
+                cumulative += current_tx_bytes
+        meter.update(
+            {
+                "boot_id": boot_id,
+                "last_tx_bytes": current_tx_bytes,
+                "cumulative_tx_bytes": cumulative,
+            }
+        )
+        self._save()
+        return cumulative
+
+    @_synchronized
+    def guard_announced(self, arm_id: str) -> bool:
+        return bool(self._guard(arm_id).get("announced", False))
+
+    @_synchronized
+    def mark_guard_announced(self, arm_id: str) -> None:
+        self._guard(arm_id)["announced"] = True
+        self._save()
+
+    @_synchronized
+    def unseen_guard_events(self, arm_id: str, events: Iterable[str]) -> tuple[str, ...]:
+        seen = set(self._guard(arm_id).get("events", []))
+        return tuple(event for event in events if event not in seen)
+
+    @_synchronized
+    def mark_guard_events(self, arm_id: str, events: Iterable[str]) -> None:
+        guard = self._guard(arm_id)
+        notified = set(guard.get("events", []))
+        notified.update(events)
+        guard["events"] = sorted(notified)
+        self._save()
+
+    @_synchronized
+    def trip_guard(self, arm_id: str, reason: str, now: datetime) -> None:
+        guard = self._guard(arm_id)
+        if guard.get("tripped") is None:
+            guard["tripped"] = {
+                "reason": reason,
+                "at": _format_rfc3339(now),
+            }
+            self._save()
+
+    @_synchronized
+    def guard_trip_reason(self, arm_id: str) -> str | None:
+        tripped = self._guard(arm_id).get("tripped")
+        return str(tripped.get("reason")) if isinstance(tripped, dict) else None
+
+    @_synchronized
+    def guard_network_bytes(self, arm_id: str) -> int:
+        meter = self._guard(arm_id).get("meter", {})
+        try:
+            return max(0, int(meter.get("cumulative_tx_bytes", 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @_synchronized
+    def stop_attempt_due(
+        self, arm_id: str, now: datetime, retry_seconds: float
+    ) -> bool:
+        raw = self._guard(arm_id).get("last_stop_attempt")
+        if not raw:
+            return True
+        last = _parse_rfc3339(str(raw), "last_stop_attempt")
+        return (now.astimezone(timezone.utc) - last).total_seconds() >= retry_seconds
+
+    @_synchronized
+    def record_stop_attempt(self, arm_id: str, now: datetime) -> int:
+        guard = self._guard(arm_id)
+        guard["last_stop_attempt"] = _format_rfc3339(now)
+        attempt = int(guard.get("stop_attempts", 0)) + 1
+        guard["stop_attempts"] = attempt
+        self._save()
+        return attempt
+
+    @_synchronized
+    def mark_stop_accepted(self, arm_id: str) -> None:
+        self._guard(arm_id)["stop_accepted"] = True
+        self._save()
+
+    @_synchronized
     def plan(
         self,
         message_id: str,
@@ -341,6 +776,7 @@ class StateStore:
             observed_level=observed,
         )
 
+    @_synchronized
     def commit(
         self,
         message_id: str,
@@ -348,10 +784,7 @@ class StateStore:
         budget: BudgetNotification,
         plan: NotificationPlan,
     ) -> None:
-        seen: list[str] = self.data["seen_message_ids"]
-        if message_id not in seen:
-            seen.append(message_id)
-            del seen[:-self.max_seen]
+        self._remember_message(message_id)
 
         periods: dict[str, Any] = self.data["periods"]
         period = periods.setdefault(
@@ -391,22 +824,28 @@ class StateStore:
 
         self._save()
 
+    @_synchronized
     def _save(self) -> None:
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(
-            prefix=".budget-relay-", suffix=".json", dir=self.state_dir
-        )
+        temporary: str | None = None
         try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            fd, temporary = tempfile.mkstemp(
+                prefix=".budget-relay-", suffix=".json", dir=self.state_dir
+            )
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(self.data, handle, ensure_ascii=False, sort_keys=True)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.path)
+        except OSError as exc:
+            self.load_error = f"cannot persist budget relay state: {type(exc).__name__}"
+            raise
         finally:
-            try:
-                os.unlink(temporary)
-            except FileNotFoundError:
-                pass
+            if temporary is not None:
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
 
 
 def _threshold_token(kind: str, threshold: Decimal) -> str:
@@ -424,11 +863,162 @@ def _percentage(value: Decimal) -> str:
     return f"{value * 100:.1f}%"
 
 
+@dataclass(frozen=True)
+class CostGuardSnapshot:
+    observed_billing_gross: Decimal
+    modeled_fixed_pre_tax: Decimal
+    network_bytes: int
+    modeled_network_pre_tax: Decimal
+    estimated_current_gross: Decimal
+    stopped_resources_remaining_pre_tax: Decimal
+    all_in_if_stopped_gross: Decimal
+    projected_running_gross: Decimal
+    runtime_hours: Decimal
+    remaining_hours: Decimal
+    warning_events: tuple[str, ...]
+    stop_reason: str | None
+
+    @property
+    def network_gib(self) -> Decimal:
+        return Decimal(self.network_bytes) / GIB
+
+
+def calculate_cost_guard_snapshot(
+    config: Config,
+    now: datetime,
+    observed_billing_gross: Decimal,
+    network_bytes: int,
+) -> CostGuardSnapshot:
+    policy = config.hard_stop
+    if policy is None:
+        raise ConfigurationError("hard-stop policy is missing")
+    now_local = now.astimezone(config.local_timezone)
+    runtime_seconds = max(
+        0.0, (now_local - policy.vm_cost_start).total_seconds()
+    )
+    runtime_hours = Decimal(str(runtime_seconds / 3600))
+    remaining_seconds = max(
+        0.0, (config.credit_deadline - now_local).total_seconds()
+    )
+    remaining_hours = Decimal(str(remaining_seconds / 3600))
+    modeled_fixed = config.fixed_hourly_cost_krw * runtime_hours
+    modeled_network = (
+        Decimal(network_bytes) / GIB * policy.network_egress_krw_per_gib
+    )
+    vat_multiplier = Decimal("1") + policy.vat_rate
+    modeled_current_gross = (modeled_fixed + modeled_network) * vat_multiplier
+    # Budget costAmount can already include posted taxes. Compare it with the
+    # VAT-inclusive local model instead of taxing the Billing value twice.
+    estimated_current_gross = max(
+        observed_billing_gross, modeled_current_gross
+    )
+    stopped_remaining = (
+        policy.stopped_resource_hourly_cost_krw * remaining_hours
+    )
+    all_in_if_stopped = estimated_current_gross + (
+        stopped_remaining * vat_multiplier
+    )
+    projected_running = (
+        estimated_current_gross
+        + config.fixed_hourly_cost_krw * remaining_hours * vat_multiplier
+    )
+
+    warnings: list[str] = []
+    if all_in_if_stopped >= policy.all_in_warning_krw:
+        warnings.append("all-in-warning")
+    if all_in_if_stopped >= policy.all_in_danger_krw:
+        warnings.append("all-in-danger")
+    if network_bytes >= policy.network_warning_bytes:
+        warnings.append("network-warning")
+    if network_bytes >= policy.network_danger_bytes:
+        warnings.append("network-danger")
+    if runtime_hours >= policy.runtime_warning_hours:
+        warnings.append("runtime-warning")
+    if runtime_hours >= policy.runtime_danger_hours:
+        warnings.append("runtime-danger")
+
+    stop_reason: str | None = None
+    if now_local >= policy.stop_at:
+        stop_reason = "absolute-cutoff"
+    elif runtime_hours >= policy.max_runtime_hours:
+        stop_reason = "runtime-limit"
+    elif network_bytes >= policy.network_limit_bytes:
+        stop_reason = "network-limit"
+    elif observed_billing_gross >= policy.billing_cost_limit_krw:
+        stop_reason = "billing-limit"
+    elif all_in_if_stopped >= policy.all_in_cost_limit_krw:
+        stop_reason = "all-in-limit"
+
+    return CostGuardSnapshot(
+        observed_billing_gross=observed_billing_gross,
+        modeled_fixed_pre_tax=modeled_fixed,
+        network_bytes=network_bytes,
+        modeled_network_pre_tax=modeled_network,
+        estimated_current_gross=estimated_current_gross,
+        stopped_resources_remaining_pre_tax=stopped_remaining,
+        all_in_if_stopped_gross=all_in_if_stopped,
+        projected_running_gross=projected_running,
+        runtime_hours=runtime_hours,
+        remaining_hours=remaining_hours,
+        warning_events=tuple(warnings),
+        stop_reason=stop_reason,
+    )
+
+
+def render_cost_guard_message(
+    kind: str,
+    snapshot: CostGuardSnapshot,
+    config: Config,
+    reason: str | None = None,
+) -> str:
+    policy = config.hard_stop
+    if policy is None:
+        raise ConfigurationError("hard-stop policy is missing")
+    reason_names = {
+        "absolute-cutoff": "크레딧 이전 절대 종료 시각 도달",
+        "runtime-limit": "최대 가동시간 도달",
+        "network-limit": "송신 트래픽 상한 도달",
+        "billing-limit": "Cloud Billing 실제비용 정지선 도달",
+        "all-in-limit": "VAT·정지 후 비용 포함 상한 도달",
+        "meter-unavailable": "호스트 비용 계측기 확인 실패",
+        "state-unavailable": "비용 가드 상태 저장소 확인 실패",
+        "previous-trip": "이전 비용 가드 정지 잠금 유지",
+    }
+    if kind == "activation":
+        heading = "🛡️ **GoLe GCP 실시간 비용 가드 활성화**"
+    elif kind == "warning":
+        heading = "⚠️ **GoLe GCP 로컬 비용 가드 경고**"
+    else:
+        mode = "드라이런" if policy.dry_run else "자동 정지"
+        heading = f"🛑 **GoLe GCP 비용 가드 · {mode}**"
+
+    lines = [
+        heading,
+        f"- 로컬 고정비 추정: {_money(snapshot.modeled_fixed_pre_tax, 'KRW')}",
+        f"- 호스트 송신량: {snapshot.network_gib:.2f} GiB / {Decimal(policy.network_limit_bytes) / GIB:.0f} GiB",
+        f"- 송신비 보수 추정: {_money(snapshot.modeled_network_pre_tax, 'KRW')}",
+        f"- 최신 Billing 비용(세금 게시분 포함): {_money(snapshot.observed_billing_gross, 'KRW')}",
+        f"- 지금 정지할 때 만료까지 총액(VAT 포함): **{_money(snapshot.all_in_if_stopped_gross, 'KRW')}**",
+        f"- 계속 운영 예상액(VAT 포함): {_money(snapshot.projected_running_gross, 'KRW')}",
+        f"- 가동시간: {snapshot.runtime_hours:.1f} / {policy.max_runtime_hours:.0f}시간",
+        f"- 자동 정지선: Billing {_money(policy.billing_cost_limit_krw, 'KRW')} · all-in {_money(policy.all_in_cost_limit_krw, 'KRW')}",
+        f"- 절대 종료: {policy.stop_at.isoformat()}",
+        f"- 가드 ID: `{policy.arm_id}`",
+    ]
+    if reason:
+        lines.insert(1, f"- 사유: **{reason_names.get(reason, reason)}**")
+    lines.append(
+        "_Billing 값은 지연될 수 있어 호스트 시간·송신 바이트 상한 계산을 함께 사용합니다._"
+    )
+    return "\n".join(lines)[:1990]
+
+
 def render_discord_message(
     budget: BudgetNotification,
     plan: NotificationPlan,
     config: Config,
     now: datetime,
+    guard_snapshot: CostGuardSnapshot | None = None,
 ) -> str:
     now_local = now.astimezone(config.local_timezone)
     deadline = config.credit_deadline.astimezone(config.local_timezone)
@@ -438,16 +1028,34 @@ def render_discord_message(
     future_fixed = config.fixed_hourly_cost_krw * remaining_hours
 
     if budget.currency_code == "KRW":
-        current_credit_remaining = config.credit_amount_krw - budget.cost_amount
-        projected_total = budget.cost_amount + future_fixed
+        if guard_snapshot is not None:
+            current_cost = guard_snapshot.estimated_current_gross
+            projected_total = guard_snapshot.projected_running_gross
+            vat_multiplier = Decimal("1") + (
+                config.hard_stop.vat_rate if config.hard_stop else Decimal("0")
+            )
+            future_fixed_display = future_fixed * vat_multiplier
+        else:
+            current_cost = budget.cost_amount
+            projected_total = budget.cost_amount + future_fixed
+            future_fixed_display = future_fixed
+        current_credit_remaining = config.credit_amount_krw - current_cost
         projected_credit_remaining = config.credit_amount_krw - projected_total
         projection_lines = [
             f"- 설정 크레딧: {_money(config.credit_amount_krw, 'KRW')}",
             f"- 현재 비용 차감 잔액: {_money(current_credit_remaining, 'KRW')}",
-            f"- 만료일까지 예상 추가 고정비: {_money(future_fixed, 'KRW')}",
-            f"- 만료 시점 예상 총비용: {_money(projected_total, 'KRW')}",
+            f"- 만료일까지 예상 추가 고정비: {_money(future_fixed_display, 'KRW')}",
+            f"- 만료 시점 예상 총비용(VAT 포함): {_money(projected_total, 'KRW')}",
             f"- 예상 크레딧 잔액: {_money(projected_credit_remaining, 'KRW')}",
         ]
+        if guard_snapshot is not None:
+            projection_lines.extend(
+                [
+                    f"- 로컬 고정비 추정: {_money(guard_snapshot.modeled_fixed_pre_tax, 'KRW')}",
+                    f"- 호스트 송신량: {guard_snapshot.network_gib:.2f} GiB",
+                    f"- 지금 정지할 때 총액(VAT 포함): {_money(guard_snapshot.all_in_if_stopped_gross, 'KRW')}",
+                ]
+            )
         overrun = projected_credit_remaining < 0
     else:
         projection_lines = [
@@ -599,6 +1207,8 @@ class DiscordClient:
         self.timeout = timeout
 
     def send(self, content: str) -> None:
+        if not self._webhook_url:
+            raise RemoteServiceError("Discord webhook is not configured")
         request = urllib.request.Request(
             self._webhook_url,
             data=json.dumps(
@@ -629,6 +1239,304 @@ class DiscordClient:
             ) from exc
 
 
+class ComputeClient:
+    def __init__(
+        self,
+        project_id: str,
+        zone: str,
+        instance_name: str,
+        credentials: MetadataCredentials,
+        timeout: float,
+    ) -> None:
+        self.project_id = project_id
+        self.zone = zone
+        self.instance_name = instance_name
+        self.credentials = credentials
+        self.timeout = timeout
+
+    def stop(self, request_id: str) -> None:
+        query = urllib.parse.urlencode({"requestId": request_id})
+        endpoint = (
+            f"{COMPUTE_ROOT}/projects/{urllib.parse.quote(self.project_id, safe='')}"
+            f"/zones/{urllib.parse.quote(self.zone, safe='')}"
+            f"/instances/{urllib.parse.quote(self.instance_name, safe='')}/stop?{query}"
+        )
+        for attempt in range(2):
+            token = self.credentials.access_token(force_refresh=attempt > 0)
+            request = urllib.request.Request(
+                endpoint,
+                data=b"",
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Length": "0",
+                    "User-Agent": "GoLe-Cost-Guard/1.0",
+                },
+            )
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=self.timeout
+                ) as response:
+                    if not 200 <= response.status < 300:
+                        raise RemoteServiceError(
+                            f"Compute stop failed (HTTP {response.status})"
+                        )
+                    return
+            except urllib.error.HTTPError as exc:
+                if exc.code == 401 and attempt == 0:
+                    continue
+                raise RemoteServiceError(
+                    f"Compute stop failed (HTTP {exc.code})"
+                ) from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                raise RemoteServiceError(
+                    f"Compute stop failed ({type(exc).__name__})"
+                ) from exc
+        raise RemoteServiceError("Compute stop authorization failed")
+
+
+class CostGuard:
+    def __init__(
+        self,
+        config: Config,
+        state: StateStore,
+        discord: DiscordClient,
+        compute: ComputeClient,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        if config.hard_stop is None or not config.hard_stop.enabled:
+            raise ConfigurationError("cost guard requires an enabled hard-stop policy")
+        self.config = config
+        self.policy = config.hard_stop
+        self.state = state
+        self.discord = discord
+        self.compute = compute
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._check_lock = threading.RLock()
+        self._last_discord_warning = 0.0
+
+    def _read_host_counter(self) -> tuple[str, int]:
+        try:
+            boot_id = self.policy.boot_id_path.read_text(encoding="utf-8").strip()
+            tx_text = self.policy.tx_bytes_path.read_text(encoding="utf-8").strip()
+            tx_bytes = int(tx_text)
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(
+                f"cannot read host cost meter ({type(exc).__name__})"
+            ) from exc
+        if not boot_id or tx_bytes < 0:
+            raise RuntimeError("host cost meter returned invalid data")
+        return boot_id, tx_bytes
+
+    def snapshot(
+        self,
+        now: datetime | None = None,
+        billing_override: Decimal | None = None,
+    ) -> CostGuardSnapshot:
+        with self._check_lock:
+            sampled_at = (now or self.clock()).astimezone(
+                self.config.local_timezone
+            )
+            boot_id, current_tx = self._read_host_counter()
+            cumulative_tx = self.state.update_network_meter(
+                self.policy.arm_id, boot_id, current_tx
+            )
+            observed = self.state.latest_cost(self.policy.period_start)
+            if billing_override is not None:
+                observed = max(observed, billing_override)
+            return calculate_cost_guard_snapshot(
+                self.config,
+                sampled_at,
+                observed,
+                cumulative_tx,
+            )
+
+    def _notify_best_effort(self, content: str) -> bool:
+        try:
+            self.discord.send(content)
+            return True
+        except RemoteServiceError as exc:
+            now_monotonic = time.monotonic()
+            if now_monotonic - self._last_discord_warning >= 3600:
+                LOG.warning("비용 가드 Discord 전송 실패: %s", exc)
+                self._last_discord_warning = now_monotonic
+            return False
+
+    def _enforce_stop(
+        self,
+        snapshot: CostGuardSnapshot,
+        reason: str,
+        now: datetime,
+    ) -> None:
+        if not self.policy.dry_run:
+            # Persist the lock before any network request. A manual restart of a
+            # tripped VM therefore cannot silently resume spending.
+            try:
+                self.state.trip_guard(self.policy.arm_id, reason, now)
+            except (OSError, RuntimeError, ValueError) as exc:
+                # Persistence is desirable for restart locking, but losing the
+                # state volume must never prevent the immediate Compute stop.
+                LOG.critical(
+                    "비용 가드 정지 잠금 저장 실패, VM 정지를 계속합니다 (%s)",
+                    type(exc).__name__,
+                )
+        event = f"stop-notified:{reason}"
+
+        if self.policy.dry_run:
+            try:
+                event_unseen = event in self.state.unseen_guard_events(
+                    self.policy.arm_id, [event]
+                )
+            except (OSError, RuntimeError, ValueError):
+                event_unseen = True
+            if event_unseen:
+                if self._notify_best_effort(
+                    render_cost_guard_message("stop", snapshot, self.config, reason)
+                ):
+                    try:
+                        self.state.mark_guard_events(self.policy.arm_id, [event])
+                    except (OSError, RuntimeError, ValueError):
+                        pass
+            dry_event = f"dry-run:{reason}"
+            try:
+                unseen = self.state.unseen_guard_events(
+                    self.policy.arm_id, [dry_event]
+                )
+            except (OSError, RuntimeError, ValueError):
+                unseen = (dry_event,)
+            if dry_event in unseen:
+                try:
+                    self.state.mark_guard_events(self.policy.arm_id, [dry_event])
+                except (OSError, RuntimeError, ValueError):
+                    pass
+                LOG.warning("비용 가드 드라이런 정지 조건 충족: %s", reason)
+            return
+
+        stop_error: RemoteServiceError | None = None
+        try:
+            stop_due = self.state.stop_attempt_due(
+                self.policy.arm_id, now, self.policy.retry_seconds
+            )
+        except (OSError, RuntimeError, ValueError):
+            stop_due = True
+        if stop_due:
+            try:
+                stop_attempt = self.state.record_stop_attempt(
+                    self.policy.arm_id, now
+                )
+            except (OSError, RuntimeError, ValueError):
+                # A unique persisted sequence is unavailable. The timestamp is
+                # still unique enough for a fail-closed retry request ID.
+                stop_attempt = int(now.timestamp() * 1_000_000)
+            request_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    ":".join(
+                        (
+                            "gole-cost-guard",
+                            self.policy.project_id,
+                            self.policy.zone,
+                            self.policy.instance_name,
+                            self.policy.arm_id,
+                            str(stop_attempt),
+                        )
+                    ),
+                )
+            )
+            try:
+                # Attempt the protective action before any optional webhook
+                # delivery. Discord latency or failure cannot hold the VM open.
+                self.compute.stop(request_id)
+            except RemoteServiceError as exc:
+                stop_error = exc
+            else:
+                try:
+                    self.state.mark_stop_accepted(self.policy.arm_id)
+                except (OSError, RuntimeError, ValueError):
+                    pass
+                LOG.critical("비용 가드가 VM 자동 정지 요청을 수락받았습니다")
+
+        try:
+            event_unseen = event in self.state.unseen_guard_events(
+                self.policy.arm_id, [event]
+            )
+        except (OSError, RuntimeError, ValueError):
+            event_unseen = True
+        if event_unseen:
+            if self._notify_best_effort(
+                render_cost_guard_message("stop", snapshot, self.config, reason)
+            ):
+                try:
+                    self.state.mark_guard_events(self.policy.arm_id, [event])
+                except (OSError, RuntimeError, ValueError):
+                    pass
+        if stop_error is not None:
+            raise stop_error
+
+    def check(
+        self, billing_override: Decimal | None = None
+    ) -> CostGuardSnapshot:
+        with self._check_lock:
+            return self._check(billing_override)
+
+    def _check(
+        self, billing_override: Decimal | None = None
+    ) -> CostGuardSnapshot:
+        now = self.clock().astimezone(self.config.local_timezone)
+        persisted_reason = self.state.guard_trip_reason(self.policy.arm_id)
+        try:
+            snapshot = self.snapshot(now, billing_override=billing_override)
+        except (RuntimeError, OSError) as exc:
+            # The safety latch and Billing hard stop remain enforceable even if
+            # the host metric bind mount disappears. Meter loss itself fails
+            # closed because otherwise network spend would become unbounded.
+            observed = self.state.latest_cost(self.policy.period_start)
+            if billing_override is not None:
+                observed = max(observed, billing_override)
+            snapshot = calculate_cost_guard_snapshot(
+                self.config,
+                now,
+                observed,
+                self.state.guard_network_bytes(self.policy.arm_id),
+            )
+            LOG.error("호스트 비용 계측기 실패로 VM을 안전 정지합니다: %s", exc)
+            if persisted_reason:
+                fallback_reason = "previous-trip"
+            elif self.state.load_error:
+                fallback_reason = "state-unavailable"
+            else:
+                fallback_reason = "meter-unavailable"
+            self._enforce_stop(snapshot, fallback_reason, now)
+            return snapshot
+        if self.state.load_error:
+            self._enforce_stop(snapshot, "state-unavailable", now)
+            return snapshot
+        reason = persisted_reason or snapshot.stop_reason
+        if reason:
+            self._enforce_stop(
+                snapshot,
+                reason if persisted_reason is None else "previous-trip",
+                now,
+            )
+            return snapshot
+
+        if not self.state.guard_announced(self.policy.arm_id):
+            if self._notify_best_effort(
+                render_cost_guard_message("activation", snapshot, self.config)
+            ):
+                self.state.mark_guard_announced(self.policy.arm_id)
+
+        events = self.state.unseen_guard_events(
+            self.policy.arm_id, snapshot.warning_events
+        )
+        if events:
+            if self._notify_best_effort(
+                render_cost_guard_message("warning", snapshot, self.config)
+            ):
+                self.state.mark_guard_events(self.policy.arm_id, events)
+        return snapshot
+
+
 class Relay:
     def __init__(
         self,
@@ -637,12 +1545,14 @@ class Relay:
         discord: DiscordClient,
         state: StateStore,
         clock: Callable[[], datetime] | None = None,
+        cost_guard: CostGuard | None = None,
     ) -> None:
         self.config = config
         self.pubsub = pubsub
         self.discord = discord
         self.state = state
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.cost_guard = cost_guard
 
     def process(self, received: dict[str, Any]) -> bool:
         """Process one message, returning True only if it was acknowledged."""
@@ -669,7 +1579,30 @@ class Relay:
             self.pubsub.acknowledge([ack_id])
             return True
 
+        policy = self.config.hard_stop
+        mismatch = (
+            policy.validate_message(budget, message.get("attributes"))
+            if policy is not None
+            else None
+        )
+        if mismatch:
+            # The old August Budget actually produced a misleading alert during
+            # migration. Only the explicitly armed Budget may now reach Discord
+            # or the automatic stop path.
+            LOG.warning(
+                "현재 비용 가드 대상이 아닌 Budget 메시지를 ACK합니다: %s",
+                mismatch,
+            )
+            self.state.mark_seen(message_id)
+            self.pubsub.acknowledge([ack_id])
+            return True
+
         now = self.clock().astimezone(self.config.local_timezone)
+        if self.cost_guard is not None:
+            # Enforce the independently authenticated actual-cost stop line
+            # before a Discord delivery. An unavailable webhook must never
+            # prevent a valid Billing message from stopping the VM.
+            self.cost_guard.check(billing_override=budget.cost_amount)
         plan = self.state.plan(
             message_id,
             publish_time,
@@ -678,7 +1611,21 @@ class Relay:
             now,
         )
         if plan.should_send:
-            content = render_discord_message(budget, plan, self.config, now)
+            guard_snapshot: CostGuardSnapshot | None = None
+            if self.cost_guard is not None:
+                try:
+                    guard_snapshot = self.cost_guard.snapshot(
+                        now, billing_override=budget.cost_amount
+                    )
+                except RuntimeError as exc:
+                    LOG.warning("로컬 비용 추정을 생략합니다: %s", exc)
+            content = render_discord_message(
+                budget,
+                plan,
+                self.config,
+                now,
+                guard_snapshot=guard_snapshot,
+            )
             self.discord.send(content)
 
         # State is durable before ACK. If ACK fails, redelivery is deduplicated.
@@ -722,35 +1669,80 @@ def run() -> None:
         credentials,
         config.http_timeout_seconds,
     )
+    state = StateStore(config.state_dir)
+    discord = DiscordClient(config.webhook_url, config.http_timeout_seconds)
+    cost_guard: CostGuard | None = None
+    if config.hard_stop is not None and config.hard_stop.enabled:
+        compute = ComputeClient(
+            config.hard_stop.project_id,
+            config.hard_stop.zone,
+            config.hard_stop.instance_name,
+            credentials,
+            config.http_timeout_seconds,
+        )
+        cost_guard = CostGuard(config, state, discord, compute)
     relay = Relay(
         config,
         pubsub,
-        DiscordClient(config.webhook_url, config.http_timeout_seconds),
-        StateStore(config.state_dir),
+        discord,
+        state,
+        cost_guard=cost_guard,
     )
     stopping = False
+    guard_stop = threading.Event()
 
     def stop(_signum: int, _frame: Any) -> None:
         nonlocal stopping
         stopping = True
+        guard_stop.set()
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     LOG.info("GoLe GCP 예산 릴레이를 시작합니다")
+    guard_thread: threading.Thread | None = None
+    if cost_guard is not None:
+        def guard_loop() -> None:
+            next_check = time.monotonic()
+            while not guard_stop.is_set():
+                wait_seconds = max(0.0, next_check - time.monotonic())
+                if guard_stop.wait(wait_seconds):
+                    return
+                try:
+                    cost_guard.check()
+                    Path("/tmp/gole-cost-guard-heartbeat").touch()
+                except (RemoteServiceError, RuntimeError, OSError, ValueError) as exc:
+                    LOG.error("실시간 비용 가드 점검 실패: %s", exc)
+                next_check += cost_guard.policy.check_interval_seconds
+                if next_check < time.monotonic():
+                    next_check = time.monotonic()
+
+        guard_thread = threading.Thread(
+            target=guard_loop,
+            name="gole-cost-guard",
+            daemon=True,
+        )
+        guard_thread.start()
+
     failures = 0
     while not stopping:
+        loop_delay = config.pull_interval_seconds
         try:
             messages = pubsub.pull(config.max_messages)
             failures = 0
             if messages:
                 relay.process_batch(messages)
-            if config.pull_interval_seconds:
-                time.sleep(config.pull_interval_seconds)
         except RemoteServiceError as exc:
             failures += 1
-            delay = min(60.0, 2 ** min(failures, 5)) + random.random()
-            LOG.warning("Pub/Sub pull 실패, %.1f초 후 재시도: %s", delay, exc)
-            time.sleep(delay)
+            loop_delay = min(60.0, 2 ** min(failures, 5)) + random.random()
+            LOG.warning(
+                "Pub/Sub pull 실패, %.1f초 후 재시도: %s", loop_delay, exc
+            )
+
+        if loop_delay:
+            guard_stop.wait(loop_delay)
+    guard_stop.set()
+    if guard_thread is not None:
+        guard_thread.join(timeout=10)
     LOG.info("GoLe GCP 예산 릴레이를 종료합니다")
 
 
