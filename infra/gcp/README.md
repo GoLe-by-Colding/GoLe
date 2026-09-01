@@ -143,7 +143,9 @@ curl -H 'Host: gole.co.kr' http://NEW_IP/
 - MongoDB, Redis, MinIO 포트는 루프백에만 바인딩한다.
 - Nginx는 TLS와 라우팅만 담당한다. CORS, 헤더/본문 크기 제한, 보안 정책은 앱에서 관리한다.
 - 운영 로그는 `docker compose -f infra/gcp/docker-compose.yml logs -f backend`로 본다.
-- SSH는 IAP 대역만 허용한다. 필요할 때만 관리 IP `/32` 규칙을 임시 추가한다.
+- IAP SSH 허용은 우선순위 800, 외부 SSH/RDP 차단은 우선순위 900으로 적용한다.
+  default VPC의 전역 허용 규칙이 남아 있어도 GoLe VM 관리 포트는 공개되지 않는다.
+  필요할 때만 차단보다 높은 우선순위로 관리 IP `/32` 규칙을 임시 추가한다.
 - 데이터 디스크와 인스턴스 스냅샷 정책은 프로젝트의 보존 정책에 맞게 별도 설정한다.
 - PortOne API/Webhook secret과 SMTP가 준비되기 전에는 `GOLE_ENVIRONMENT=staging`,
   `PORTONE_ENABLED=false`를 유지한다.

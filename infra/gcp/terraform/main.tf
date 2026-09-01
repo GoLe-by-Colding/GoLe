@@ -78,8 +78,9 @@ resource "google_compute_firewall" "web" {
 }
 
 resource "google_compute_firewall" "ssh_iap" {
-  name    = "gole-ssh-iap"
-  network = "default"
+  name     = "gole-ssh-iap"
+  network  = "default"
+  priority = 800
 
   allow {
     protocol = "tcp"
@@ -87,6 +88,24 @@ resource "google_compute_firewall" "ssh_iap" {
   }
 
   source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["gole-ssh-iap"]
+}
+
+# 새 프로젝트의 default VPC에는 0.0.0.0/0 SSH/RDP 허용 규칙이 자동으로
+# 남을 수 있다. IAP 허용 규칙을 더 높은 우선순위로 둔 뒤 GoLe VM의 관리
+# 포트는 명시적으로 차단해 계정 이전 때도 기본 규칙에 노출되지 않게 한다.
+resource "google_compute_firewall" "deny_public_admin" {
+  name      = "gole-deny-public-admin"
+  network   = "default"
+  direction = "INGRESS"
+  priority  = 900
+
+  deny {
+    protocol = "tcp"
+    ports    = ["22", "3389"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
   target_tags   = ["gole-ssh-iap"]
 }
 
