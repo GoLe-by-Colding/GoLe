@@ -2,6 +2,7 @@ import base64
 import json
 import tempfile
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -17,6 +18,7 @@ from budget_relay import (  # noqa: E402
     ConfigurationError,
     CostGuard,
     DiscordClient,
+    PubSubClient,
     Relay,
     RemoteServiceError,
     StateStore,
@@ -164,7 +166,29 @@ class FakeCompute:
             raise self.failure
 
 
+class FakeCredentials:
+    def access_token(self, force_refresh=False):
+        return "test-token"
+
+
 class BudgetRelayTests(unittest.TestCase):
+    def test_empty_pubsub_pull_timeout_is_an_idle_poll(self):
+        client = PubSubClient(
+            "subscription",
+            "test-project",
+            FakeCredentials(),
+            timeout=5,
+        )
+        for error in (
+            TimeoutError(),
+            urllib.error.URLError(TimeoutError()),
+        ):
+            with self.subTest(error=type(error).__name__):
+                with patch(
+                    "budget_relay.urllib.request.urlopen", side_effect=error
+                ):
+                    self.assertEqual(client.pull(10), [])
+
     def test_discord_client_uses_explicit_user_agent(self):
         class Response:
             status = 204

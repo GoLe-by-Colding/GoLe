@@ -47,6 +47,10 @@ class RemoteServiceError(RuntimeError):
     """A safe-to-log remote error that never contains a credential URL."""
 
 
+class PullIdleTimeout(RemoteServiceError):
+    """The bounded unary pull returned no message before the client deadline."""
+
+
 def _decimal(value: Any, field: str) -> Decimal:
     if isinstance(value, bool):
         raise ValueError(f"{field} must be numeric")
@@ -1182,6 +1186,14 @@ class PubSubClient:
                     continue
                 raise RemoteServiceError(f"Pub/Sub {action} failed (HTTP {exc.code})") from exc
             except (urllib.error.URLError, TimeoutError) as exc:
+                reason = getattr(exc, "reason", None)
+                if action == "pull" and (
+                    isinstance(exc, TimeoutError)
+                    or isinstance(reason, TimeoutError)
+                ):
+                    raise PullIdleTimeout(
+                        "Pub/Sub pull reached its idle deadline"
+                    ) from exc
                 raise RemoteServiceError(
                     f"Pub/Sub {action} failed ({type(exc).__name__})"
                 ) from exc
@@ -1190,7 +1202,13 @@ class PubSubClient:
         raise RemoteServiceError(f"Pub/Sub {action} authorization failed")
 
     def pull(self, max_messages: int) -> list[dict[str, Any]]:
-        response = self._post("pull", {"maxMessages": max_messages})
+        try:
+            response = self._post("pull", {"maxMessages": max_messages})
+        except PullIdleTimeout:
+            # Unary Pull may wait for a bounded period when the backlog is
+            # empty. Our shorter HTTP deadline is an ordinary idle poll, not a
+            # relay outage; the independent cost-guard thread keeps running.
+            return []
         messages = response.get("receivedMessages", [])
         if not isinstance(messages, list):
             raise RemoteServiceError("Pub/Sub pull returned an invalid message list")
