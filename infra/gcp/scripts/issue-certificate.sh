@@ -16,6 +16,7 @@ rendered="$(mktemp)"
 trap 'rm -f "$rendered"' EXIT
 sed "s/__DOMAIN__/${DOMAIN//\//\\/}/g" "$ROOT/infra/gcp/nginx-https.conf.template" > "$rendered"
 sudo install -m 0644 "$rendered" /etc/gole/nginx.conf
+# install(1)은 파일 inode를 교체한다. bind mount가 새 파일을 보도록 컨테이너를 재생성한다.
+"${COMPOSE[@]}" up -d --no-deps --force-recreate nginx
 "${COMPOSE[@]}" exec nginx nginx -t
-"${COMPOSE[@]}" exec nginx nginx -s reload
 

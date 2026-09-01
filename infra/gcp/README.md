@@ -25,6 +25,9 @@ gcloud compute ssh gole-production --zone asia-northeast3-a -- \
   infra/gcp/scripts/issue-certificate.sh'
 ```
 
+`gole-cert-renew.timer`가 하루 두 번 Compose의 Certbot 컨테이너로 갱신 여부를 확인하고,
+갱신된 인증서를 읽도록 Nginx를 무중단 리로드한다.
+
 ## 프로젝트 이전
 
 기존 서버에서 백업을 만들고 새 서버에 복원한다. 백업에는 계정과 거래 데이터가 포함되므로

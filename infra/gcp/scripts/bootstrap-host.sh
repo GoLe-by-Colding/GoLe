@@ -29,6 +29,10 @@ if [ ! -f /etc/gole/infra.env ]; then
 fi
 sed "s/__DOMAIN__/${DOMAIN//\//\\/}/g" "$APP_ROOT/infra/gcp/nginx-http.conf.template" > /etc/gole/nginx.conf
 chmod 0644 /etc/gole/nginx.conf
+install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cert-renew.service" /etc/systemd/system/gole-cert-renew.service
+install -m 0644 "$APP_ROOT/infra/gcp/systemd/gole-cert-renew.timer" /etc/systemd/system/gole-cert-renew.timer
+systemctl daemon-reload
+systemctl enable --now gole-cert-renew.timer
 systemctl enable --now docker
 
 echo "Host bootstrap complete. Create /etc/gole/gole.env, then run /app/scripts/deploy.sh."
