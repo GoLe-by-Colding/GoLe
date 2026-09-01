@@ -1,5 +1,6 @@
 package com.gole.api.account.application.port.in;
 
+import com.gole.api.account.domain.model.InterestTag;
 import java.util.List;
 
 /**
@@ -10,5 +11,5 @@ import java.util.List;
  */
 public interface ListInterestTagsUseCase {
 
-    List<String> availableTags();
+    List<InterestTag> availableTags();
 }

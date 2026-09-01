@@ -20,8 +20,9 @@ public final class OnboardingRequests {
 
     public record ConfirmPhoneVerificationRequest(@NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
+    /** 태그는 표시 문구가 아니라 {@code GET /api/v1/account/interest-tags}가 준 {@code key}로 보낸다. */
     public record SelectInterestTagsRequest(@NotEmpty @Size(max = 5) Set<@NotBlank @Size(max = 30) String> tags) {}
 
-    /** {@code privacyAgreed=false}는 400이 아니라 도메인에서 거부한다(R7). */
-    public record SubmitConsentRequest(boolean privacyAgreed, boolean marketingAgreed) {}
+    /** {@code privacyConsented=false}는 400이 아니라 도메인에서 거부한다(R7). */
+    public record SubmitConsentRequest(boolean privacyConsented, boolean marketingConsented) {}
 }

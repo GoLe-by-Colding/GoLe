@@ -89,7 +89,7 @@ public class OnboardingController {
     @Operation(summary = "선택 가능한 관심 태그", description = "온보딩에서 고를 수 있는 curated 레고 테마 목록입니다. 로그인 없이 조회할 수 있습니다.")
     @GetMapping("/api/v1/account/interest-tags")
     public InterestTagsResponse interestTags() {
-        return new InterestTagsResponse(listInterestTagsUseCase.availableTags());
+        return InterestTagsResponse.from(listInterestTagsUseCase.availableTags());
     }
 
     @Operation(summary = "닉네임 설정", description = "2~12자 한글·영문·숫자. 대소문자를 무시하고 유일해야 합니다.")
@@ -127,8 +127,8 @@ public class OnboardingController {
     @PostMapping("/api/v1/accounts/me/onboarding/consent")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void submitConsent(@Valid @RequestBody SubmitConsentRequest request, HttpServletRequest http) {
-        submitOnboardingConsentUseCase.submit(
-                new SubmitConsentCommand(currentAccountId(http), request.privacyAgreed(), request.marketingAgreed()));
+        submitOnboardingConsentUseCase.submit(new SubmitConsentCommand(
+                currentAccountId(http), request.privacyConsented(), request.marketingConsented()));
     }
 
     private String currentAccountId(HttpServletRequest http) {

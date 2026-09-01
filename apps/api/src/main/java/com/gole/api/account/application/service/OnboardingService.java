@@ -14,6 +14,7 @@ import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.domain.exception.PhoneVerificationUnavailableException;
 import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.model.Account;
+import com.gole.api.account.domain.model.InterestTag;
 import com.gole.api.account.domain.model.InterestTagCatalog;
 import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.OnboardingProfile;
@@ -98,7 +99,7 @@ public class OnboardingService
     }
 
     @Override
-    public List<String> availableTags() {
+    public List<InterestTag> availableTags() {
         return InterestTagCatalog.tags();
     }
 
@@ -177,7 +178,7 @@ public class OnboardingService
     @Override
     public void submit(SubmitConsentCommand command) {
         Account account = require(command.accountId());
-        account.consent(command.privacyAgreed(), command.marketingAgreed(), Instant.now(clock));
+        account.consent(command.privacyConsented(), command.marketingConsented(), Instant.now(clock));
         accountRepository.save(account);
     }
 

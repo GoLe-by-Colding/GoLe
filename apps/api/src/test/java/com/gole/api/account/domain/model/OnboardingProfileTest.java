@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Instant;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -57,7 +58,7 @@ class OnboardingProfileTest {
         // phoneVerifiedAt이 유일한 근거다 — 번호 존재만으로 인증됐다고 세면
         // 남의 번호를 적어 넣는 것만으로 게이트를 통과할 수 있다.
         OnboardingProfile profile = new OnboardingProfile(
-                new Nickname("고레"), new PhoneNumber("01012345678"), null, Set.of("테크닉"), NOW, null, false);
+                new Nickname("고레"), new PhoneNumber("01012345678"), null, Set.of("technic"), NOW, null, false);
 
         assertThat(profile.isPhoneVerified()).isFalse();
         assertThat(profile.isRequired()).isTrue();
@@ -79,7 +80,7 @@ class OnboardingProfileTest {
                 .asLegacyExempt()
                 .withNickname(new Nickname("고레"))
                 .withVerifiedPhone(new PhoneNumber("01012345678"), NOW)
-                .withInterestTags(Set.of("테크닉"))
+                .withInterestTags(Set.of("technic"))
                 .withConsents(NOW, null);
 
         assertThat(profile.legacyExempt()).isTrue();
@@ -88,10 +89,13 @@ class OnboardingProfileTest {
 
     @Test
     void interestTagSelectionIsBoundedToOneThroughFive() {
+        Set<String> sixKeys = InterestTagCatalog.tags().subList(0, 6).stream()
+                .map(InterestTag::key)
+                .collect(Collectors.toSet());
+
         assertThatThrownBy(() -> InterestTagCatalog.validateSelection(Set.of()))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> InterestTagCatalog.validateSelection(
-                        Set.copyOf(InterestTagCatalog.tags().subList(0, 6))))
+        assertThatThrownBy(() -> InterestTagCatalog.validateSelection(sixKeys))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("1~5개");
     }
@@ -102,8 +106,25 @@ class OnboardingProfileTest {
                 .isInstanceOf(BadRequestException.class);
     }
 
+    @Test
+    void interestTagLabelIsNotAcceptedAsAKey() {
+        // 저장되는 값은 key다. label을 그대로 돌려보내면 문구를 고치는 순간 저장된 선택이 깨진다.
+        assertThatThrownBy(() -> InterestTagCatalog.validateSelection(Set.of("테크닉")))
+                .isInstanceOf(BadRequestException.class);
+        assertThat(InterestTagCatalog.validateSelection(Set.of("technic"))).containsExactly("technic");
+    }
+
+    @Test
+    void everyCatalogTagHasAStableKeyAndLabel() {
+        assertThat(InterestTagCatalog.tags()).hasSizeBetween(10, 15).allSatisfy(tag -> {
+            assertThat(tag.key()).matches("[a-z][a-z-]*");
+            assertThat(tag.label()).isNotBlank();
+        });
+        assertThat(InterestTagCatalog.tags()).extracting(InterestTag::key).doesNotHaveDuplicates();
+    }
+
     private static OnboardingProfile complete() {
         return new OnboardingProfile(
-                new Nickname("고레"), new PhoneNumber("01012345678"), NOW, Set.of("테크닉"), NOW, null, false);
+                new Nickname("고레"), new PhoneNumber("01012345678"), NOW, Set.of("technic"), NOW, null, false);
     }
 }

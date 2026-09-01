@@ -108,7 +108,7 @@ class OnboardingGuardInterceptorTest {
                 true,
                 "010-****-5678",
                 true,
-                List.of("테크닉"),
+                List.of("technic"),
                 true,
                 false,
                 required,

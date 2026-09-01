@@ -4,6 +4,7 @@ import com.gole.api.common.exception.BadRequestException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 온보딩에서 고를 수 있는 관심 태그 목록. (onboarding D8)
@@ -21,30 +22,44 @@ public final class InterestTagCatalog {
 
     public static final int MAX_SELECTION = 5;
 
-    private static final List<String> TAGS = List.of(
-            "스타워즈", "테크닉", "크리에이터", "아키텍처", "시티", "닌자고", "해리포터", "아이디어", "슈퍼히어로", "프렌즈", "듀플로", "아이콘", "스피드챔피언",
-            "마인크래프트");
+    private static final List<InterestTag> TAGS = List.of(
+            new InterestTag("star-wars", "스타워즈"),
+            new InterestTag("technic", "테크닉"),
+            new InterestTag("creator", "크리에이터"),
+            new InterestTag("architecture", "아키텍처"),
+            new InterestTag("city", "시티"),
+            new InterestTag("ninjago", "닌자고"),
+            new InterestTag("harry-potter", "해리포터"),
+            new InterestTag("ideas", "아이디어"),
+            new InterestTag("super-heroes", "슈퍼히어로"),
+            new InterestTag("friends", "프렌즈"),
+            new InterestTag("duplo", "듀플로"),
+            new InterestTag("icons", "아이콘"),
+            new InterestTag("speed-champions", "스피드챔피언"),
+            new InterestTag("minecraft", "마인크래프트"));
+
+    private static final Set<String> KEYS = TAGS.stream().map(InterestTag::key).collect(Collectors.toUnmodifiableSet());
 
     private InterestTagCatalog() {}
 
-    /** 노출용 전체 목록. */
-    public static List<String> tags() {
+    /** 노출용 전체 목록(키 + 표시 문구). */
+    public static List<InterestTag> tags() {
         return TAGS;
     }
 
     /**
-     * 선택값 검증 후 정규화한다. 중복은 제거하고 입력 순서를 보존한다.
+     * 선택된 <b>키</b>를 검증하고 정규화한다. 중복은 제거하고 입력 순서를 보존한다.
      *
-     * @throws BadRequestException 개수가 범위를 벗어나거나 목록에 없는 태그가 섞인 경우
+     * @throws BadRequestException 개수가 범위를 벗어나거나 목록에 없는 키가 섞인 경우
      */
-    public static Set<String> validateSelection(Set<String> selected) {
-        if (selected == null || selected.isEmpty()) {
+    public static Set<String> validateSelection(Set<String> selectedKeys) {
+        if (selectedKeys == null || selectedKeys.isEmpty()) {
             throw new BadRequestException("INVALID_INTEREST_TAGS", "관심 태그를 1개 이상 선택해 주세요");
         }
         Set<String> normalized = new LinkedHashSet<>();
-        for (String tag : selected) {
-            String trimmed = tag == null ? "" : tag.trim();
-            if (!TAGS.contains(trimmed)) {
+        for (String key : selectedKeys) {
+            String trimmed = key == null ? "" : key.trim();
+            if (!KEYS.contains(trimmed)) {
                 throw new BadRequestException("INVALID_INTEREST_TAGS", "선택할 수 없는 관심 태그입니다: " + trimmed);
             }
             normalized.add(trimmed);

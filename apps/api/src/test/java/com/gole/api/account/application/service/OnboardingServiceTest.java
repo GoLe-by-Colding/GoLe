@@ -14,6 +14,7 @@ import com.gole.api.account.domain.exception.PhoneVerificationUnavailableExcepti
 import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.InterestTag;
 import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PhoneNumber;
@@ -145,7 +146,7 @@ class OnboardingServiceTest {
     void phoneEnteredButUnverifiedByAnotherAccountDoesNotBlock() {
         // 인증하지 않은 입력까지 점유로 치면 남의 번호를 적어 두는 것만으로 영구히 막을 수 있다.
         Account other = account(OTHER_ACCOUNT_ID, "other@gole.test");
-        other.selectInterestTags(Set.of("테크닉"));
+        other.selectInterestTags(Set.of("technic"));
         accounts.save(other);
 
         assertThat(service.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"))
@@ -289,10 +290,10 @@ class OnboardingServiceTest {
 
     @Test
     void interestTagsArePersistedImmediately() {
-        service.select(new SelectInterestTagsCommand(ACCOUNT_ID, Set.of("테크닉", "스타워즈")));
+        service.select(new SelectInterestTagsCommand(ACCOUNT_ID, Set.of("technic", "star-wars")));
 
         assertThat(accounts.findById(ACCOUNT_ID).orElseThrow().getInterestTags())
-                .containsExactlyInAnyOrder("테크닉", "스타워즈");
+                .containsExactlyInAnyOrder("technic", "star-wars");
     }
 
     @Test
@@ -323,7 +324,8 @@ class OnboardingServiceTest {
 
     @Test
     void availableTagsAreTheCuratedCatalog() {
-        assertThat(service.availableTags()).hasSizeBetween(10, 15).contains("테크닉");
+        // 화면은 key로 저장하고 label로 보여준다 — 둘 다 실려야 한다.
+        assertThat(service.availableTags()).hasSizeBetween(10, 15).contains(new InterestTag("technic", "테크닉"));
     }
 
     // --- 헬퍼 ---
@@ -332,7 +334,7 @@ class OnboardingServiceTest {
         service.setNickname(new SetNicknameCommand(accountId, "고레마스터"));
         service.request(new RequestPhoneVerificationCommand(accountId, "01012345678"));
         service.confirm(new ConfirmPhoneVerificationCommand(accountId, "123456"));
-        service.select(new SelectInterestTagsCommand(accountId, Set.of("테크닉")));
+        service.select(new SelectInterestTagsCommand(accountId, Set.of("technic")));
         service.submit(new SubmitConsentCommand(accountId, true, false));
     }
 
