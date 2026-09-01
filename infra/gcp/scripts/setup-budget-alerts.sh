@@ -68,49 +68,11 @@ gcloud pubsub subscriptions add-iam-policy-binding "$SUBSCRIPTION_NAME" \
 TOPIC_RESOURCE="projects/${PROJECT_ID}/topics/${TOPIC_NAME}"
 PROJECT_RESOURCE="projects/${PROJECT_NUMBER}"
 
-BUDGET_RESOURCE="$(
-  gcloud billing budgets list --billing-account "$BILLING_ACCOUNT" --format=json |
-    jq -r --arg current "$BUDGET_DISPLAY_NAME" --arg legacy 'HE Testbed free-trial guardrail' \
-      '[.[] | select(.displayName == $current or .displayName == $legacy)] | .[0].name // empty'
-)"
-
-if [ -n "$BUDGET_RESOURCE" ]; then
-  echo "▶ 기존 budget 기간을 유지하고 총 ${BUDGET_AMOUNT_KRW} KRW guardrail/Discord 연결 갱신"
-  # gcloud 583에도 기존 custom-period budget updateMask 버그가 있어 REST PATCH를 쓴다.
-  # 기존 기간은 이미 발생한 비용을 누락하지 않도록 유지하고 금액/경보 연결만 갱신한다.
-  access_token="$(gcloud auth print-access-token)"
-  payload="$(jq -nc \
-    --arg name "$BUDGET_RESOURCE" \
-    --arg display_name "$BUDGET_DISPLAY_NAME" \
-    --arg amount "$BUDGET_AMOUNT_KRW" \
-    --arg topic "$TOPIC_RESOURCE" \
-    '{
-      name: $name,
-      displayName: $display_name,
-      amount: {specifiedAmount: {currencyCode: "KRW", units: $amount}},
-      thresholdRules: [
-        {thresholdPercent: 0.5, spendBasis: "CURRENT_SPEND"},
-        {thresholdPercent: 0.75, spendBasis: "CURRENT_SPEND"},
-        {thresholdPercent: 0.9, spendBasis: "CURRENT_SPEND"},
-        {thresholdPercent: 1.0, spendBasis: "CURRENT_SPEND"}
-      ],
-      notificationsRule: {
-        pubsubTopic: $topic,
-        schemaVersion: "1.0",
-        enableProjectLevelRecipients: true
-      }
-    }')"
-  curl -fsS --request PATCH \
-    -H "Authorization: Bearer ${access_token}" \
-    -H "x-goog-user-project: ${PROJECT_ID}" \
-    -H 'Content-Type: application/json' \
-    "https://billingbudgets.googleapis.com/v1/${BUDGET_RESOURCE}?updateMask=displayName,amount,thresholdRules,notificationsRule" \
-    --data "$payload" >/dev/null
-else
-  echo "▶ ${BUDGET_START_DATE}~${BUDGET_END_DATE} 총 ${BUDGET_AMOUNT_KRW} KRW guardrail 생성"
+create_budget() {
+  local display_name="$1"
   gcloud billing budgets create \
     --billing-account "$BILLING_ACCOUNT" \
-    --display-name "$BUDGET_DISPLAY_NAME" \
+    --display-name "$display_name" \
     --budget-amount="${BUDGET_AMOUNT_KRW}KRW" \
     --start-date "$BUDGET_START_DATE" \
     --end-date "$BUDGET_END_DATE" \
@@ -120,7 +82,110 @@ else
     --threshold-rule=percent=0.75,basis=current-spend \
     --threshold-rule=percent=0.9,basis=current-spend \
     --threshold-rule=percent=1.0,basis=current-spend \
-    --notifications-rule-pubsub-topic "$TOPIC_RESOURCE"
+    --notifications-rule-pubsub-topic "$TOPIC_RESOURCE" \
+    --format=json
+}
+
+budget_matches_target() {
+  jq -e \
+    --arg project "$PROJECT_RESOURCE" \
+    --arg start_date "$BUDGET_START_DATE" \
+    --arg end_date "$BUDGET_END_DATE" \
+    '($start_date | split("-") | map(tonumber)) as $start |
+     ($end_date | split("-") | map(tonumber)) as $end |
+     (.budgetFilter.projects == [$project]) and
+     (.budgetFilter.creditTypesTreatment == "EXCLUDE_ALL_CREDITS") and
+     ([.budgetFilter.customPeriod.startDate.year,
+       .budgetFilter.customPeriod.startDate.month,
+       .budgetFilter.customPeriod.startDate.day] == $start) and
+     ([.budgetFilter.customPeriod.endDate.year,
+       .budgetFilter.customPeriod.endDate.month,
+       .budgetFilter.customPeriod.endDate.day] == $end)' >/dev/null
+}
+
+REPLACEMENT_DISPLAY="${BUDGET_DISPLAY_NAME} (${BUDGET_START_DATE})"
+BUDGET_LIST="$(gcloud billing budgets list --billing-account "$BILLING_ACCOUNT" --format=json)"
+BUDGET_RESOURCE="$(
+  jq -r \
+    --arg current "$BUDGET_DISPLAY_NAME" \
+    --arg legacy 'HE Testbed free-trial guardrail' \
+    --arg replacement "$REPLACEMENT_DISPLAY" \
+    --arg project "$PROJECT_RESOURCE" \
+    '[.[] |
+      select(.displayName == $current or .displayName == $legacy or .displayName == $replacement) |
+      select((.budgetFilter.projects // []) | index($project)) |
+      {name, rank: (if .displayName == $replacement then 1 else 0 end)}] |
+     sort_by(.rank) | .[0].name // empty' <<<"$BUDGET_LIST"
+)"
+
+if [ -z "$BUDGET_RESOURCE" ]; then
+  echo "▶ ${BUDGET_START_DATE}~${BUDGET_END_DATE} 총 ${BUDGET_AMOUNT_KRW} KRW guardrail 생성"
+  created_budget="$(create_budget "$BUDGET_DISPLAY_NAME")"
+  BUDGET_RESOURCE="$(jq -r '.name // empty' <<<"$created_budget")"
+  if [ -z "$BUDGET_RESOURCE" ] || ! budget_matches_target <<<"$created_budget"; then
+    echo "생성된 budget이 요청한 기간/프로젝트와 일치하지 않습니다." >&2
+    exit 1
+  fi
+else
+  existing_budget="$(gcloud billing budgets describe "$BUDGET_RESOURCE" --format=json)"
+  if ! budget_matches_target <<<"$existing_budget"; then
+    echo "▶ immutable 기간이 다른 기존 budget을 무중단 교체"
+    replacement_resource="$(
+      jq -r \
+        --arg replacement "$REPLACEMENT_DISPLAY" \
+        --arg project "$PROJECT_RESOURCE" \
+        '[.[] |
+          select(.displayName == $replacement) |
+          select((.budgetFilter.projects // []) | index($project))] |
+         .[0].name // empty' <<<"$BUDGET_LIST"
+    )"
+    if [ -z "$replacement_resource" ]; then
+      replacement_budget="$(create_budget "$REPLACEMENT_DISPLAY")"
+      replacement_resource="$(jq -r '.name // empty' <<<"$replacement_budget")"
+    else
+      replacement_budget="$(gcloud billing budgets describe "$replacement_resource" --format=json)"
+    fi
+    if [ -z "$replacement_resource" ] || ! budget_matches_target <<<"$replacement_budget"; then
+      echo "교체 budget 검증에 실패해 기존 budget을 유지합니다." >&2
+      exit 1
+    fi
+
+    # 새 budget과 Pub/Sub 연결을 먼저 검증한 뒤에만 이전 budget을 제거한다.
+    gcloud billing budgets delete "$BUDGET_RESOURCE" --quiet
+    BUDGET_RESOURCE="$replacement_resource"
+  fi
 fi
+
+echo "▶ 기존 budget의 금액/임계치/Discord 연결 갱신"
+# customPeriod 날짜는 immutable이다. 위에서 필요하면 create-first로 교체하고,
+# 여기서는 gcloud 583 updateMask 버그를 피하려고 변경 가능한 필드만 REST PATCH한다.
+access_token="$(gcloud auth print-access-token)"
+payload="$(jq -nc \
+  --arg name "$BUDGET_RESOURCE" \
+  --arg display_name "$BUDGET_DISPLAY_NAME" \
+  --arg amount "$BUDGET_AMOUNT_KRW" \
+  --arg topic "$TOPIC_RESOURCE" \
+  '{
+    name: $name,
+    displayName: $display_name,
+    amount: {specifiedAmount: {currencyCode: "KRW", units: $amount}},
+    thresholdRules: [
+      {thresholdPercent: 0.5, spendBasis: "CURRENT_SPEND"},
+      {thresholdPercent: 0.75, spendBasis: "CURRENT_SPEND"},
+      {thresholdPercent: 0.9, spendBasis: "CURRENT_SPEND"},
+      {thresholdPercent: 1.0, spendBasis: "CURRENT_SPEND"}
+    ],
+    notificationsRule: {
+      pubsubTopic: $topic,
+      schemaVersion: "1.0",
+      enableProjectLevelRecipients: true
+    }
+  }')"
+curl -fsS --request PATCH \
+  -H "Authorization: Bearer ${access_token}" \
+  -H "x-goog-user-project: ${PROJECT_ID}" \
+  -H 'Content-Type: application/json' \
+  "https://billingbudgets.googleapis.com/v1/${BUDGET_RESOURCE}?updateMask=displayName,amount,thresholdRules,notificationsRule" \
+  --data "$payload" >/dev/null
 
 echo "✔ ${SUBSCRIPTION_NAME} → Discord relay 입력 준비 완료"
