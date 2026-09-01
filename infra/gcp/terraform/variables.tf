@@ -50,7 +50,7 @@ variable "domain" {
 
 variable "machine_type" {
   type    = string
-  default = "e2-standard-4"
+  default = "e2-custom-4-8192"
 }
 
 variable "disk_size_gb" {

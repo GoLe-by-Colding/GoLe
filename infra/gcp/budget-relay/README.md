@@ -12,7 +12,7 @@ operations Discord webhook and persists delivery state in `/state`.
 | `DISCORD_OPERATIONS_WEBHOOK_URL` | secret | Existing GoLe operations-channel webhook |
 | `GCP_CREDIT_AMOUNT_KRW` | `400000` | Budget period 시작 시점의 promotional credit ceiling |
 | `GCP_CREDIT_DEADLINE` | `2026-10-28` | Credit expiration date; a date counts through 23:59:59 KST |
-| `GCP_FIXED_HOURLY_COST_KRW` | `262.805211144` | Fixed e2-standard-4 + 100 GiB pd-balanced hourly projection |
+| `GCP_FIXED_HOURLY_COST_KRW` | `231.249894200` | Fixed e2-custom-4-8192 + 100 GiB pd-balanced hourly projection |
 
 Optional variables:
 

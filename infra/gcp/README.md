@@ -56,9 +56,13 @@ printf '' | openssl s_client -connect gole.co.kr:443 -servername gole.co.kr 2>/d
 
 ## 크레딧 비용 경보
 
-2026-09-01 Cloud Billing KRW SKU 기준 e2-standard-4는 시간당 약 `237.8293원`,
-100 GiB pd-balanced disk는 시간당 약 `24.9759원`으로 고정비 합계는
-`262.8052원/시간`이다. 57일 연속 실행 예상 고정비는 약 `359,518원`이다.
+2026-09-01 Cloud Billing KRW Custom SKU 기준 e2-custom-4-8192(4 vCPU, 8 GiB)는
+시간당 약 `206.2740원`, 100 GiB pd-balanced disk는 시간당 약 `24.9759원`으로
+고정비 합계는 `231.2499원/시간`이다. 57일 연속 실행 예상 고정비는 약
+`316,350원`이며, 기준 잔여 크레딧 `395,600.60원` 대비 약 `79,251원`을
+네트워크 전송량과 변동 비용 여유로 남긴다.
+계산에는 Custom Core `F10F-0364-8D62`, Custom RAM `B5E6-7318-DBF9`,
+pd-balanced `5666-EFB4-5C79` SKU 단가를 사용한다.
 외부 IPv4는 결제 계정별 월 720 IP-hour 무료 범위에 단일 VM만 있으면 증분 비용이 없다.
 
 실제 사용비용은 `370,000원` custom-period Cloud Billing Budget으로 막판 여유분을

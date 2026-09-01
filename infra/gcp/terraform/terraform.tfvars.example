@@ -4,5 +4,5 @@ billing_account_id = ""
 region       = "asia-northeast3"
 zone         = "asia-northeast3-a"
 domain       = "gole.co.kr"
-machine_type = "e2-standard-4"
+machine_type = "e2-custom-4-8192"
 disk_size_gb = 100

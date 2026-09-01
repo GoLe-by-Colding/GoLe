@@ -45,7 +45,7 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'project-72a52bf1-06aa-4519-b2c' }}
           GCP_CREDIT_AMOUNT_KRW: ${{ vars.GCP_CREDIT_AMOUNT_KRW || '400000' }}
           GCP_CREDIT_DEADLINE: ${{ vars.GCP_CREDIT_DEADLINE || '2026-10-28' }}
-          GCP_FIXED_HOURLY_COST_KRW: ${{ vars.GCP_FIXED_HOURLY_COST_KRW || '262.805211144' }}
+          GCP_FIXED_HOURLY_COST_KRW: ${{ vars.GCP_FIXED_HOURLY_COST_KRW || '231.249894200' }}
           # 운영 런타임의 무음 여부를 배포 시점에 명시한다. 이 값을 넘기지 않으면
           # application.yml의 기본값(true)이 이겨서 ERROR 경보까지 푸시 없이 나간다.
           # 야간 검증 때만 repository variable을 true로 올리고, 평시에는 false다.
