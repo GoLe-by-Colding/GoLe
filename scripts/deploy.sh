@@ -41,8 +41,18 @@ trap on_deploy_exit EXIT
 
 notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.co.kr"
 
-log "git pull --ff-only origin main"
-git pull --ff-only origin main
+log "CI가 검증한 origin/main 동기화"
+git fetch --prune origin main
+
+# 운영 checkout에 수동 변경이 있으면 덮어쓰지 않는다. 깨끗한 경우에만 원격 main을
+# 정확히 반영해, 승인된 force push나 계정 이전 뒤에도 배포가 막히지 않게 한다.
+if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+  echo "운영 checkout에 커밋되지 않은 변경이 있어 배포를 중단한다" >&2
+  git status --short >&2
+  exit 1
+fi
+
+git reset --hard origin/main
 
 case "$TARGET" in
   backend)
