@@ -3,6 +3,7 @@ package com.gole.api.account.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import com.gole.api.account.adapter.in.web.OnboardingGuardInterceptor;
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,8 @@ class UserWebConfigTest {
     @Test
     void sessionGuard_matchesV2CommunityPatchWithoutChangingV1WebhookExceptions() {
         InspectableInterceptorRegistry registry = new InspectableInterceptorRegistry();
-        new UserWebConfig(mock(UserAuthInterceptor.class)).addInterceptors(registry);
+        new UserWebConfig(mock(UserAuthInterceptor.class), mock(OnboardingGuardInterceptor.class))
+                .addInterceptors(registry);
         MappedInterceptor guard = (MappedInterceptor) registry.registered().getFirst();
 
         assertThat(guard.matches(request("PATCH", "/api/v2/community/posts/post-1")))

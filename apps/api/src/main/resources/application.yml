@@ -113,6 +113,11 @@ logging:
 # 시드 데이터: 기본은 전부 꺼져 있다. 로컬 데모에서만 명시적으로 켠다.
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
+  onboarding:
+    # 전화번호 인증코드 알림톡 템플릿. 카카오 승인은 코드 밖 운영 과제라 기본값이 비어 있고,
+    # 비어 있는 동안 인증 요청은 PHONE_VERIFICATION_UNAVAILABLE로 명시적으로 거부된다. (onboarding D3)
+    phone-verification-template-id: ${GOLE_ONBOARDING_PHONE_TEMPLATE_ID:}
+    phone-verification-code-variable: ${GOLE_ONBOARDING_PHONE_CODE_VARIABLE:'#{인증번호}'}
   catalog:
     seed-on-empty: ${GOLE_CATALOG_SEED:false}
   listing:
