@@ -10,5 +10,16 @@ public interface GetCurrentSessionUseCase {
 
     Optional<CurrentSession> resolve(String sessionToken);
 
-    record CurrentSession(String accountId, String email, Role role) {}
+    /**
+     * @param onboardingRequired 아직 온보딩을 요구해야 하는가. (onboarding R8)
+     *     세션 해석이 이미 계정을 읽으므로 여기서 함께 실어 보낸다 — {@code /me}마다 계정을
+     *     한 번 더 조회하지 않기 위해서다.
+     */
+    record CurrentSession(String accountId, String email, Role role, boolean onboardingRequired) {
+
+        /** 온보딩 판정이 필요 없는 호출부(권한 가드 등)를 위한 축약 생성자. */
+        public CurrentSession(String accountId, String email, Role role) {
+            this(accountId, email, role, false);
+        }
+    }
 }
