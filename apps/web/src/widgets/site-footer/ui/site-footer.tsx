@@ -63,7 +63,7 @@ export async function SiteFooter() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">
             <span className="text-xs text-brand-300/60">
-              © {new Date().getFullYear()} GoLe. 레고 중고거래 · 커뮤니티 플랫폼.
+              © {new Date().getFullYear()} GoLe. 브릭 중고거래 · 커뮤니티 플랫폼.
             </span>
             <nav className="flex flex-wrap gap-x-4 gap-y-1">
               {LEGAL.map((l) => (
