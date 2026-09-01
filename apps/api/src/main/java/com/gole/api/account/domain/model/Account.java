@@ -6,6 +6,7 @@ import com.gole.api.account.domain.exception.VerificationException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 계정 애그리거트 루트. 인증 상태/로그인 잠금 등 불변식을 캡슐화한다.
@@ -29,6 +30,7 @@ public final class Account {
     private Instant failureWindowStartedAt; // nullable
     private Instant lockedUntil; // nullable
     private String suspendedReason; // nullable (SUSPENDED일 때만 의미 있음)
+    private OnboardingProfile onboarding; // never null — 미착수 계정은 empty() (onboarding R1)
 
     /** 영속성 복원용 생성자. */
     public Account(
@@ -93,6 +95,35 @@ public final class Account {
             Instant failureWindowStartedAt,
             Instant lockedUntil,
             String suspendedReason) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationCode,
+                verificationFailedAttempts,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                suspendedReason,
+                OnboardingProfile.empty());
+    }
+
+    /** 영속성 복원용 전체 생성자(온보딩 프로필 포함). (onboarding R1) */
+    public Account(
+            String id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Role role,
+            VerificationCode verificationCode,
+            int verificationFailedAttempts,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason,
+            OnboardingProfile onboarding) {
         this.id = Objects.requireNonNull(id, "id");
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
@@ -104,6 +135,7 @@ public final class Account {
         this.failureWindowStartedAt = failureWindowStartedAt;
         this.lockedUntil = lockedUntil;
         this.suspendedReason = suspendedReason;
+        this.onboarding = onboarding == null ? OnboardingProfile.empty() : onboarding;
     }
 
     /** 신규 가입: 미인증 + 일반(USER) 권한 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
@@ -181,6 +213,85 @@ public final class Account {
     /** 권한 변경. (admin-console 요구사항 6.7) */
     public void changeRole(Role newRole) {
         this.role = Objects.requireNonNull(newRole, "newRole");
+    }
+
+    // --- 온보딩 (onboarding R1~R7) ---
+    // 각 단계는 성공하는 즉시 저장된다(D1). 끝에서 한 번에 저장하면 중간 이탈한 사용자가
+    // 다음 로그인에서 처음부터 다시 해야 한다.
+
+    /** 닉네임 설정/변경. 유일성은 애그리거트 밖(리포지토리)에서 확인한다. (R3) */
+    public void changeNickname(Nickname nickname) {
+        this.onboarding = onboarding.withNickname(Objects.requireNonNull(nickname, "nickname"));
+    }
+
+    /** 전화번호 소유 확인 완료. 인증 시각까지 함께 남겨야 "인증됨"으로 센다. (R5) */
+    public void markPhoneVerified(PhoneNumber phoneNumber, Instant verifiedAt) {
+        this.onboarding = onboarding.withVerifiedPhone(
+                Objects.requireNonNull(phoneNumber, "phoneNumber"), Objects.requireNonNull(verifiedAt, "verifiedAt"));
+    }
+
+    /** 관심 태그 선택. 개수·목록 검증은 {@link InterestTagCatalog}가 이미 마쳤다고 본다. (R6) */
+    public void selectInterestTags(Set<String> tags) {
+        this.onboarding = onboarding.withInterestTags(tags);
+    }
+
+    /**
+     * 약관 동의 기록. 개인정보 동의는 필수라 거부하면 예외, 마케팅 동의는 선택이다. (R7)
+     *
+     * <p>동의 철회 시 타임스탬프를 지우기 위해 마케팅 쪽은 {@code false}도 받는다.
+     */
+    public void consent(boolean privacyAgreed, boolean marketingAgreed, Instant now) {
+        if (!privacyAgreed) {
+            throw new VerificationException("PRIVACY_CONSENT_REQUIRED", "개인정보 수집·이용 동의는 필수입니다");
+        }
+        Objects.requireNonNull(now, "now");
+        Instant privacyAt = onboarding.privacyConsentedAt() == null ? now : onboarding.privacyConsentedAt();
+        Instant marketingAt = marketingAgreed
+                ? (onboarding.marketingConsentedAt() == null ? now : onboarding.marketingConsentedAt())
+                : null;
+        this.onboarding = onboarding.withConsents(privacyAt, marketingAt);
+    }
+
+    /** 이 스펙 배포 이전 가입자 표시. 1회성 마이그레이션 전용. (D6, R10) */
+    public void markLegacyExempt() {
+        this.onboarding = onboarding.asLegacyExempt();
+    }
+
+    /** 온보딩을 더 요구해야 하는가. 저장된 플래그가 아니라 필드 조합에서 파생한다. (D1) */
+    public boolean isOnboardingRequired() {
+        return onboarding.isRequired();
+    }
+
+    public OnboardingProfile getOnboarding() {
+        return onboarding;
+    }
+
+    public Nickname getNickname() {
+        return onboarding.nickname();
+    }
+
+    public PhoneNumber getPhoneNumber() {
+        return onboarding.phoneNumber();
+    }
+
+    public Instant getPhoneVerifiedAt() {
+        return onboarding.phoneVerifiedAt();
+    }
+
+    public Set<String> getInterestTags() {
+        return onboarding.interestTags();
+    }
+
+    public Instant getPrivacyConsentedAt() {
+        return onboarding.privacyConsentedAt();
+    }
+
+    public Instant getMarketingConsentedAt() {
+        return onboarding.marketingConsentedAt();
+    }
+
+    public boolean isLegacyExempt() {
+        return onboarding.legacyExempt();
     }
 
     public boolean isSuspended() {
