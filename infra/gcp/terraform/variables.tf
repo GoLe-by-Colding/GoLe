@@ -3,6 +3,36 @@ variable "project_id" {
   description = "GCP project ID"
 }
 
+variable "billing_account_id" {
+  type        = string
+  description = "Billing account ID. Leave empty to provision everything except the Billing Budget."
+  default     = ""
+}
+
+variable "budget_amount_krw" {
+  type        = number
+  description = "Gross-spend guardrail, intentionally lower than the remaining promotional credit"
+  default     = 370000
+}
+
+variable "budget_period_start" {
+  type = object({
+    year  = number
+    month = number
+    day   = number
+  })
+  default = { year = 2026, month = 9, day = 1 }
+}
+
+variable "budget_period_end" {
+  type = object({
+    year  = number
+    month = number
+    day   = number
+  })
+  default = { year = 2026, month = 10, day = 28 }
+}
+
 variable "region" {
   type    = string
   default = "asia-northeast3"
@@ -32,4 +62,3 @@ variable "repository_url" {
   type    = string
   default = "https://github.com/GoLe-by-Colding/GoLe.git"
 }
-

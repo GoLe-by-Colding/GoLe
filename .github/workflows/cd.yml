@@ -26,9 +26,8 @@ jobs:
     runs-on: [self-hosted, Linux, X64, gole-gcp-production]
     timeout-minutes: 30
     steps:
-      # Discord 라우팅 값은 서버에 영구 저장하지 않고 배포 시점에만 주입한다.
-      # deploy.sh의 `pm2 reload --update-env`가 이 환경변수를 앱 프로세스로 넘긴다.
-      # 그래서 서버에서 손으로 `pm2 restart`를 하면 알림이 조용히 꺼진다 — 재배포로 복구한다.
+      # Discord 라우팅 값은 서버 환경파일에 저장하지 않고 배포 시점에만 주입한다.
+      # Compose가 이 실행의 환경변수를 backend 컨테이너에 전달한다.
       - name: Deploy latest main
         id: deploy
         env:
@@ -37,6 +36,13 @@ jobs:
           DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
           DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
           GOLE_DISCORD_ALERTS_ENABLED: "true"
+          # Billing Budget의 실제비용을 Pub/Sub에서 받아 GoLe 운영 Discord로 중계한다.
+          # 계정 이동 시에는 아래 repository variables만 새 프로젝트/크레딧 기간으로 바꾼다.
+          GCP_BUDGET_PUBSUB_SUBSCRIPTION: ${{ vars.GCP_BUDGET_PUBSUB_SUBSCRIPTION || 'gole-billing-budget-discord' }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'project-72a52bf1-06aa-4519-b2c' }}
+          GCP_CREDIT_AMOUNT_KRW: ${{ vars.GCP_CREDIT_AMOUNT_KRW || '400000' }}
+          GCP_CREDIT_DEADLINE: ${{ vars.GCP_CREDIT_DEADLINE || '2026-10-28' }}
+          GCP_FIXED_HOURLY_COST_KRW: ${{ vars.GCP_FIXED_HOURLY_COST_KRW || '262.805211144' }}
           # 운영 런타임의 무음 여부를 배포 시점에 명시한다. 이 값을 넘기지 않으면
           # application.yml의 기본값(true)이 이겨서 ERROR 경보까지 푸시 없이 나간다.
           # 야간 검증 때만 repository variable을 true로 올리고, 평시에는 false다.

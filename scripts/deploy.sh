@@ -33,7 +33,7 @@ on_deploy_exit() {
   local status=$?
   if [ "$status" -ne 0 ]; then
     "${COMPOSE[@]}" ps || true
-    "${COMPOSE[@]}" logs --tail=100 backend frontend nginx || true
+    "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
     notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
   fi
 }
@@ -52,7 +52,7 @@ case "$TARGET" in
     SERVICES=(frontend nginx)
     ;;
   all)
-    SERVICES=(backend frontend nginx)
+    SERVICES=(backend frontend budget-relay nginx)
     ;;
   *)
     echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2

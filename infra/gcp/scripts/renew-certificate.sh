@@ -5,7 +5,6 @@ cd "$(dirname "$0")/../../.."
 ROOT="$(pwd)"
 COMPOSE=(docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f "$ROOT/infra/gcp/docker-compose.yml")
 
-"${COMPOSE[@]}" --profile certificate run --rm certbot renew --quiet
-"${COMPOSE[@]}" exec nginx nginx -t
-"${COMPOSE[@]}" exec nginx nginx -s reload
-
+"${COMPOSE[@]}" --profile certificate run --rm --no-deps -T certbot renew --quiet
+"${COMPOSE[@]}" exec -T nginx nginx -t
+"${COMPOSE[@]}" exec -T nginx nginx -s reload

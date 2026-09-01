@@ -90,6 +90,22 @@ services:
       MONGODB_URI: mongodb://mongo:27017/gole?replicaSet=rs0
       REDIS_HOST: redis
       STORAGE_S3_ENDPOINT: http://minio:9000
+      GOLE_ENVIRONMENT: ${GOLE_ENVIRONMENT:-staging}
+      GOLE_CATALOG_SEED: ${GOLE_CATALOG_SEED:-false}
+      GOLE_LISTING_SEED: ${GOLE_LISTING_SEED:-false}
+      GOLE_PRICING_SEED: ${GOLE_PRICING_SEED:-false}
+      GOLE_PRICING_INCLUDE_DEMO: ${GOLE_PRICING_INCLUDE_DEMO:-false}
+      GOLE_PRICING_INCLUDE_LEGACY: ${GOLE_PRICING_INCLUDE_LEGACY:-false}
+      GOLE_COMMUNITY_SEED: ${GOLE_COMMUNITY_SEED:-false}
+      GOLE_REPORT_SEED: ${GOLE_REPORT_SEED:-false}
+      GOLE_REVIEW_SEED: ${GOLE_REVIEW_SEED:-false}
+      GOLE_MEDIA_SEED: ${GOLE_MEDIA_SEED:-false}
+      GOLE_DISCORD_ALERTS_ENABLED: ${GOLE_DISCORD_ALERTS_ENABLED:-false}
+      DISCORD_DEPLOY_WEBHOOK_URL: ${DISCORD_DEPLOY_WEBHOOK_URL:-}
+      DISCORD_OPERATIONS_WEBHOOK_URL: ${DISCORD_OPERATIONS_WEBHOOK_URL:-}
+      DISCORD_ACCOUNT_WEBHOOK_URL: ${DISCORD_ACCOUNT_WEBHOOK_URL:-}
+      DISCORD_PAYMENT_WEBHOOK_URL: ${DISCORD_PAYMENT_WEBHOOK_URL:-}
+      DISCORD_SUPPRESS_NOTIFICATIONS: ${DISCORD_SUPPRESS_NOTIFICATIONS:-true}
     depends_on:
       mongo-init:
         condition: service_completed_successfully
@@ -104,6 +120,24 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  budget-relay:
+    build:
+      context: ./budget-relay
+      dockerfile: Dockerfile
+    image: gole/budget-relay:local
+    container_name: gole-budget-relay
+    restart: unless-stopped
+    environment:
+      GCP_BUDGET_PUBSUB_SUBSCRIPTION: ${GCP_BUDGET_PUBSUB_SUBSCRIPTION:-gole-billing-budget-discord}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-project-72a52bf1-06aa-4519-b2c}
+      GCP_CREDIT_AMOUNT_KRW: ${GCP_CREDIT_AMOUNT_KRW:-400000}
+      GCP_CREDIT_DEADLINE: ${GCP_CREDIT_DEADLINE:-2026-10-28}
+      GCP_FIXED_HOURLY_COST_KRW: ${GCP_FIXED_HOURLY_COST_KRW:-262.805211144}
+      GCP_BUDGET_WARNING_THRESHOLDS: ${GCP_BUDGET_WARNING_THRESHOLDS:-0.50,0.75,0.90,1.00}
+      DISCORD_OPERATIONS_WEBHOOK_URL: ${DISCORD_OPERATIONS_WEBHOOK_URL:-}
+    volumes:
+      - budget-relay-state:/state
 
   frontend:
     build:
@@ -163,3 +197,5 @@ volumes:
     name: gole_certbot-webroot
   letsencrypt:
     name: gole_letsencrypt
+  budget-relay-state:
+    name: gole_budget-relay-state

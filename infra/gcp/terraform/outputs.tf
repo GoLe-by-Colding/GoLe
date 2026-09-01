@@ -9,3 +9,6 @@ output "dns_records" {
   }
 }
 
+output "billing_budget_subscription" {
+  value = google_pubsub_subscription.billing_budget_discord.name
+}

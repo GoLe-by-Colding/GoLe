@@ -25,6 +25,10 @@ apps/api/bin/
 .gradle/
 build/
 
+# Python (GCP budget relay tests/runtime)
+__pycache__/
+*.py[cod]
+
 # IDE / OS
 .idea/
 *.iml
