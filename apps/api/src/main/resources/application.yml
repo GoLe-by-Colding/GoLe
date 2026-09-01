@@ -70,6 +70,8 @@ oauth:
 
 server:
   port: ${SERVER_PORT:8080}
+  # 프록시에서 조용히 버리지 않고 애플리케이션이 제한·로그를 소유한다.
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:32768}
 
 springdoc:
   api-docs:
