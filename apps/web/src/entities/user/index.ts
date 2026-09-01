@@ -1,4 +1,5 @@
-export type { Session, RegisterResult, Me, OnboardingStatus, InterestTag } from "./model/types";
+export type { Session, RegisterResult, Me, OnboardingStatus } from "./model/types";
+export type { PhoneVerificationRequestResult } from "./api/user-api";
 export { INTEREST_TAG_MIN, INTEREST_TAG_MAX } from "./model/types";
 export { saveSession, loadSession, clearSession } from "./model/session-store";
 export { useSession } from "./model/use-session";

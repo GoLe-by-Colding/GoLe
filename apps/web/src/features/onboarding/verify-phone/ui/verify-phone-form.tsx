@@ -54,9 +54,9 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
     setNotice(undefined);
     setSending(true);
     try {
-      await requestPhoneVerification(normalizePhoneNumber(phoneNumber));
+      const sentTo = await requestPhoneVerification(normalizePhoneNumber(phoneNumber));
       setSent(true);
-      setNotice("카카오톡으로 인증 코드를 보냈습니다.");
+      setNotice(`${sentTo.maskedPhoneNumber}로 카카오톡 인증 코드를 보냈습니다.`);
       setResendAfter(RESEND_COOLDOWN_SECONDS);
     } catch (cause) {
       setError(
@@ -72,7 +72,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
     setError(undefined);
     setSubmitting(true);
     try {
-      await confirmPhoneVerification(normalizePhoneNumber(phoneNumber), code);
+      await confirmPhoneVerification(code);
       onCompleted();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "인증 중 오류가 발생했습니다.");

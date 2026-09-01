@@ -32,15 +32,17 @@ export interface OnboardingStatus {
   /** 스펙 배포 이전 계정(D6). true면 강제 리다이렉트 대신 배너만 노출한다. */
   readonly legacyExempt: boolean;
   readonly nicknameCompleted: boolean;
+  readonly nickname: string | null;
   readonly phoneCompleted: boolean;
+  readonly maskedPhoneNumber: string | null;
   readonly interestTagsCompleted: boolean;
-  readonly consentCompleted: boolean;
-}
-
-/** 서버가 내려주는 curated 관심 태그 목록의 한 항목(D8). */
-export interface InterestTag {
-  readonly key: string;
-  readonly label: string;
+  readonly interestTags: readonly string[];
+  /**
+   * 동의 단계에는 완료 플래그가 따로 없다. 개인정보 동의만 필수이므로
+   * 이 값이 곧 단계 완료 여부이고, 마케팅 동의는 선택이라 판정에 넣지 않는다.
+   */
+  readonly privacyConsented: boolean;
+  readonly marketingConsented: boolean;
 }
 
 /** 관심 태그 선택 개수 제한(D8, R6). */

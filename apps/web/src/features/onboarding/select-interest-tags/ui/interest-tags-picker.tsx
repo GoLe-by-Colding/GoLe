@@ -5,7 +5,6 @@ import {
   fetchInterestTags,
   INTEREST_TAG_MAX,
   INTEREST_TAG_MIN,
-  type InterestTag,
   setInterestTags,
 } from "@entities/user";
 import { ApiError } from "@shared/api";
@@ -23,7 +22,8 @@ export interface InterestTagsPickerProps {
  * 개수 제한은 화면에서 먼저 막지만 최종 판정은 서버가 다시 한다.
  */
 export function InterestTagsPicker({ onCompleted }: InterestTagsPickerProps) {
-  const [tags, setTags] = useState<readonly InterestTag[] | null>(null);
+  // 서버는 표시용 라벨 없이 태그 문자열만 내려준다.
+  const [tags, setTags] = useState<readonly string[] | null>(null);
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
@@ -94,20 +94,20 @@ export function InterestTagsPicker({ onCompleted }: InterestTagsPickerProps) {
       ) : (
         <div className="flex flex-wrap gap-2" role="group" aria-label="관심 태그">
           {tags.map((tag) => {
-            const active = selected.includes(tag.key);
+            const active = selected.includes(tag);
             return (
               <button
-                key={tag.key}
+                key={tag}
                 type="button"
                 aria-pressed={active}
-                onClick={() => toggle(tag.key)}
+                onClick={() => toggle(tag)}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "border-brand-600 bg-brand-600 text-white"
                     : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50"
                 }`}
               >
-                {tag.label}
+                {tag}
               </button>
             );
           })}

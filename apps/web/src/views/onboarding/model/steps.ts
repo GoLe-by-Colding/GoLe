@@ -31,7 +31,9 @@ export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep):
     case "interestTags":
       return status.interestTagsCompleted;
     case "consent":
-      return status.consentCompleted;
+      // 동의 단계에는 완료 플래그가 따로 없다. 개인정보 동의만 필수라 이 값이 곧 완료
+      // 여부이고, 선택 항목인 마케팅 동의는 판정에 넣지 않는다.
+      return status.privacyConsented;
   }
 }
 
@@ -58,6 +60,6 @@ export function withStepCompleted(
     case "interestTags":
       return { ...status, interestTagsCompleted: true };
     case "consent":
-      return { ...status, consentCompleted: true };
+      return { ...status, privacyConsented: true };
   }
 }

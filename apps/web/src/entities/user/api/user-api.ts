@@ -1,5 +1,5 @@
 import { apiRequest } from "@shared/api";
-import type { InterestTag, Me, OnboardingStatus, RegisterResult, Session } from "../model/types";
+import type { Me, OnboardingStatus, RegisterResult, Session } from "../model/types";
 
 export function registerAccount(email: string, password: string): Promise<RegisterResult> {
   return apiRequest<RegisterResult>("/api/v1/accounts", {
@@ -122,11 +122,15 @@ export function fetchOnboardingStatus(signal?: AbortSignal): Promise<OnboardingS
  * 경로의 `account`가 단수인 것은 스펙(D8) 표기를 그대로 따른 것이다 —
  * 나머지 온보딩 엔드포인트는 복수(`accounts`)다.
  */
-export function fetchInterestTags(signal?: AbortSignal): Promise<readonly InterestTag[]> {
-  return apiRequest<readonly InterestTag[]>("/api/v1/account/interest-tags", {
-    cache: "no-store",
-    ...(signal === undefined ? {} : { signal }),
-  });
+export async function fetchInterestTags(signal?: AbortSignal): Promise<readonly string[]> {
+  const res = await apiRequest<{ readonly tags: readonly string[] }>(
+    "/api/v1/account/interest-tags",
+    {
+      cache: "no-store",
+      ...(signal === undefined ? {} : { signal }),
+    },
+  );
+  return res.tags;
 }
 
 /** 닉네임 설정(R3). 2~12자·한글/영문/숫자·중복 불가는 서버가 최종 판정한다(D9). */
@@ -137,19 +141,31 @@ export function setNickname(nickname: string): Promise<void> {
   });
 }
 
+/** 인증코드 발송 결과(R4). 서버가 마스킹한 번호와 코드 유효시간을 돌려준다. */
+export interface PhoneVerificationRequestResult {
+  readonly maskedPhoneNumber: string;
+  readonly expiresInSeconds: number;
+}
+
 /** 전화번호 인증코드 발송 요청(R4). 쿨다운·일일 한도·번호 중복은 서버가 판정한다. */
-export function requestPhoneVerification(phoneNumber: string): Promise<void> {
-  return apiRequest<void>(`${ONBOARDING_BASE}/phone/verification`, {
+export function requestPhoneVerification(
+  phoneNumber: string,
+): Promise<PhoneVerificationRequestResult> {
+  return apiRequest<PhoneVerificationRequestResult>(`${ONBOARDING_BASE}/phone/verification`, {
     method: "POST",
     body: { phoneNumber },
   });
 }
 
-/** 전화번호 인증코드 확인(R5). 성공 시 서버가 phoneVerifiedAt을 저장한다. */
-export function confirmPhoneVerification(phoneNumber: string, code: string): Promise<void> {
+/**
+ * 전화번호 인증코드 확인(R5). 성공 시 서버가 phoneVerifiedAt을 저장한다.
+ *
+ * 번호는 서버가 발송 시점에 세션과 함께 들고 있으므로 코드만 보낸다.
+ */
+export function confirmPhoneVerification(code: string): Promise<void> {
   return apiRequest<void>(`${ONBOARDING_BASE}/phone/verification/confirm`, {
     method: "POST",
-    body: { phoneNumber, code },
+    body: { code },
   });
 }
 
@@ -163,11 +179,11 @@ export function setInterestTags(tags: readonly string[]): Promise<void> {
 
 /** 약관 동의 제출(R7). 개인정보 동의는 필수이고 false면 서버가 거부한다. */
 export function submitOnboardingConsent(
-  privacyConsented: boolean,
-  marketingConsented: boolean,
+  privacyAgreed: boolean,
+  marketingAgreed: boolean,
 ): Promise<void> {
   return apiRequest<void>(`${ONBOARDING_BASE}/consent`, {
     method: "POST",
-    body: { privacyConsented, marketingConsented },
+    body: { privacyAgreed, marketingAgreed },
   });
 }
