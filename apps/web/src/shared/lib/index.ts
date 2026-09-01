@@ -12,6 +12,7 @@ export {
 } from "./portone";
 export { paymentMethodLabel } from "./payment-method";
 export type { PaymentMethod } from "./payment-method";
+export { resolveReturnTo, isAdminPath } from "./return-to";
 export { schemaAvailability, schemaItemCondition, absoluteUrl, breadcrumbJsonLd } from "./seo";
 export type { BreadcrumbItem } from "./seo";
 export type { PortOneCustomer, PortOneMethod, PortOnePayParams } from "./portone";
