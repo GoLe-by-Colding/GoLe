@@ -173,7 +173,7 @@ public class AccountService
         // 요구사항 1.6: 세션 토큰 발급 + Redis 세션 저장(실제 검증 가능 세션)
         String token = sessionToken.issue(account);
         sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
-        return new SignInResult(account.getId(), token, account.getRole());
+        return new SignInResult(account.getId(), token, account.getRole(), account.isOnboardingRequired());
     }
 
     @Override
@@ -196,8 +196,11 @@ public class AccountService
                 .resolve(token)
                 .flatMap(p -> accountRepository.findById(p.accountId()))
                 .filter(account -> !account.isSuspended())
-                .map(account ->
-                        new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
+                .map(account -> new CurrentSession(
+                        account.getId(),
+                        account.getEmail().value(),
+                        account.getRole(),
+                        account.isOnboardingRequired()));
     }
 
     private static int utf8Length(String value) {
