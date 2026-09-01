@@ -40,7 +40,7 @@ storage:
     secret-key: ${STORAGE_S3_SECRET_KEY:minioadmin}
     region: ${STORAGE_S3_REGION:us-east-1}
     bucket: ${STORAGE_S3_BUCKET:gole}
-  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.kscold.com}
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.co.kr}
   max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
 
 # 소셜 로그인(OAuth2). client-id/secret만 env로 주입하면 활성화된다(미설정 provider는 비활성).
@@ -175,7 +175,7 @@ gole:
   verification:
     email:
       enabled: ${GOLE_VERIFICATION_EMAIL_ENABLED:false}
-      from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.kscold.com}
+      from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.co.kr}
   session:
     cookie-secure: ${GOLE_SESSION_COOKIE_SECURE:auto}
   # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
@@ -187,7 +187,7 @@ gole:
     payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
     operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
     # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
-    avatar-url: ${DISCORD_AVATAR_URL:https://gole.kscold.com/icon.svg}
+    avatar-url: ${DISCORD_AVATAR_URL:https://gole.co.kr/icon.svg}
     # 야간·초기 연동 중에는 Discord 메시지를 보내되 푸시 알림은 울리지 않는다.
     suppress-notifications: ${DISCORD_SUPPRESS_NOTIFICATIONS:true}
     # 같은 APPLICATION 장애는 요청 경로가 달라도 예외 종류별 한 건으로 묶어 알림 폭주를 막는다.

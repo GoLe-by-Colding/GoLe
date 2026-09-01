@@ -50,7 +50,7 @@ public class OpenApiConfig {
                         .contact(new Contact().name("GoLe Team").url("https://gole.kscold.com"))
                         .license(new License().name("Private")))
                 .servers(List.of(
-                        new Server().url("https://gole.kscold.com").description("Production"),
+                        new Server().url("https://gole.co.kr").description("Production"),
                         new Server().url("http://localhost:8080").description("Local")))
                 .components(new Components()
                         .addSecuritySchemes(

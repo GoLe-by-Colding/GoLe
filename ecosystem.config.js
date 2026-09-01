@@ -15,12 +15,15 @@ module.exports = {
       name: "gole-backend",
       cwd: APP_ROOT,
       script: "/usr/bin/bash",
-      args: ["-c", "java -Xmx512m -jar /app/apps/api/build/libs/api-0.0.1-SNAPSHOT.jar"],
+      args: [
+        "-c",
+        "if [ -f /etc/gole/gole.env ]; then set -a; . /etc/gole/gole.env; set +a; fi; exec java -Xmx1536m -jar /app/apps/api/build/libs/api-0.0.1-SNAPSHOT.jar",
+      ],
       interpreter: "none",
       exec_mode: "fork",
       autorestart: true,
-      max_memory_restart: "700M",
-      // 백엔드는 application.yml 기본값(localhost Mongo/Redis)을 사용한다.
+      max_memory_restart: "2G",
+      // 운영 서버에서는 /etc/gole/gole.env를 읽고, 로컬에서는 기존 기본값을 사용한다.
     },
     {
       name: "gole-frontend",
