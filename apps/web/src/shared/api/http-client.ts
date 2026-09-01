@@ -1,5 +1,6 @@
 import { env } from "@shared/config";
 import { readSessionAuthorization } from "./session-auth";
+import { ONBOARDING_REQUIRED_CODE, redirectToOnboarding } from "./onboarding-guard";
 
 export interface ApiErrorBody {
   readonly code: string;
@@ -73,11 +74,17 @@ export async function apiRequest<TResponse>(
       message: `Request failed with status ${response.status}`,
     };
     const parsed = (await response.json().catch(() => fallback)) as ApiErrorBody;
-    throw new ApiError(
+    const error = new ApiError(
       response.status,
       parsed,
       parseRetryAfter(response.headers.get("Retry-After")),
     );
+    // 거래성 액션이 서버 온보딩 가드에 막힌 경우(R13). 호출부가 에러를 어떻게 보여주든
+    // 사용자는 남은 온보딩 단계로 안내받아야 하므로 공용 래퍼에서 한 번에 처리한다.
+    if (isOnboardingRequiredError(error)) {
+      redirectToOnboarding();
+    }
+    throw error;
   }
 
   if (response.status === 204) {
@@ -85,6 +92,13 @@ export async function apiRequest<TResponse>(
   }
 
   return (await response.json()) as TResponse;
+}
+
+/** 서버 온보딩 가드(R9)가 거부한 응답인지 판정한다. */
+export function isOnboardingRequiredError(error: unknown): boolean {
+  return (
+    error instanceof ApiError && error.status === 403 && error.code === ONBOARDING_REQUIRED_CODE
+  );
 }
 
 function parseRetryAfter(value: string | null): number | null {
