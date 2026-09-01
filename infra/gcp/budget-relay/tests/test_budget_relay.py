@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 import sys
 
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from budget_relay import (  # noqa: E402
     BudgetNotification,
     Config,
+    DiscordClient,
     Relay,
     RemoteServiceError,
     StateStore,
@@ -82,6 +84,28 @@ class FakeDiscord:
 
 
 class BudgetRelayTests(unittest.TestCase):
+    def test_discord_client_uses_explicit_user_agent(self):
+        class Response:
+            status = 204
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        def open_request(request, timeout):
+            self.assertEqual(timeout, 5)
+            self.assertEqual(
+                request.get_header("User-agent"), "GoLe-Budget-Relay/1.0"
+            )
+            return Response()
+
+        with patch("budget_relay.urllib.request.urlopen", side_effect=open_request):
+            DiscordClient(
+                "https://discord.com/api/webhooks/id/token", timeout=5
+            ).send("test")
+
     def test_decodes_official_budget_payload(self):
         budget = BudgetNotification.from_pubsub_data(encoded_budget())
         self.assertEqual(budget.display_name, "GoLe production budget")

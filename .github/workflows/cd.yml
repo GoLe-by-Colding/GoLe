@@ -31,6 +31,9 @@ jobs:
       - name: Deploy latest main
         id: deploy
         env:
+          # workflow_run에서 성공한 바로 그 커밋만 배포한다. main이 그사이 갱신돼도
+          # 아직 CI를 통과하지 않은 새 커밋을 앞질러 배포하지 않는다.
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
           DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}

@@ -91,10 +91,6 @@ if ! gts_account_exists; then
     die "set GCP_PROJECT_ID or configure a default gcloud project"
   fi
 
-  gcloud services enable publicca.googleapis.com \
-    --project "$GCP_PROJECT_ID" \
-    --quiet
-
   eab_file="$(umask 077; mktemp "${TMPDIR:-/tmp}/gole-gts-eab.XXXXXX")"
   chmod 0600 "$eab_file"
   if ! CLOUDSDK_CORE_LOG_HTTP=false gcloud publicca external-account-keys create \

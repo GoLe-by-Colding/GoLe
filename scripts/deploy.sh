@@ -4,6 +4,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 TARGET="${1:-all}"
+DEPLOY_SHA="${DEPLOY_SHA:-}"
 COMPOSE=(docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f "$ROOT/infra/gcp/docker-compose.yml")
 
 log() { printf '\n▶ %s\n' "$*"; }
@@ -52,7 +53,24 @@ if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
   exit 1
 fi
 
-git reset --hard origin/main
+deploy_ref="origin/main"
+if [ -n "$DEPLOY_SHA" ]; then
+  if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "DEPLOY_SHA는 40자리 Git SHA여야 한다" >&2
+    exit 1
+  fi
+  if ! git cat-file -e "${DEPLOY_SHA}^{commit}" 2>/dev/null; then
+    git fetch --no-tags origin "$DEPLOY_SHA"
+  fi
+  git cat-file -e "${DEPLOY_SHA}^{commit}"
+  deploy_ref="$DEPLOY_SHA"
+fi
+
+git reset --hard "$deploy_ref"
+if [ -n "$DEPLOY_SHA" ] && [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
+  echo "CI가 검증한 커밋으로 checkout하지 못했다" >&2
+  exit 1
+fi
 
 case "$TARGET" in
   backend)
@@ -76,10 +94,20 @@ log "Docker Compose build"
 log "Docker Compose rolling update"
 "${COMPOSE[@]}" up -d --remove-orphans --wait "${SERVICES[@]}"
 
+# backend/frontend 컨테이너가 재생성되면 내부 IP가 바뀔 수 있다. Nginx도 매번
+# 재생성해 Docker DNS를 다시 조회하게 하고, 오래된 upstream으로 인한 502를 막는다.
+log "Nginx upstream refresh"
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait nginx
+"${COMPOSE[@]}" exec -T nginx nginx -t
+
 log "runtime smoke checks"
 curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null
 curl -fsS --max-time 15 http://127.0.0.1:8080/api/v1/catalog/sets/featured >/dev/null
 curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null
+curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+  https://gole.co.kr/actuator/health/readiness >/dev/null
+curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+  https://gole.co.kr/icon.svg >/dev/null
 
 "${COMPOSE[@]}" ps
 notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"

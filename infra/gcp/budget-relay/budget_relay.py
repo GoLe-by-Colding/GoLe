@@ -606,7 +606,12 @@ class DiscordClient:
                 ensure_ascii=False,
             ).encode("utf-8"),
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                # Discord/Cloudflare는 Python urllib의 기본 User-Agent를 403으로
+                # 거부할 수 있으므로 운영 릴레이를 명시적으로 식별한다.
+                "User-Agent": "GoLe-Budget-Relay/1.0",
+            },
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:

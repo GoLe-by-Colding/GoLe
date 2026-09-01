@@ -22,9 +22,10 @@ VM에 도달하는 것을 확인한 다음 HTTPS를 발급한다. 기본 발급�
 Google Trust Services Public CA이며 Load Balancer는 필요하지 않다.
 
 최초 발급을 실행하는 VM에는 Google Cloud CLI가 설치되고 인증되어 있어야 한다.
-활성 주체에는 Public CA API를 켤 수 있는 `serviceusage.services.enable` 권한과
-`roles/publicca.externalAccountKeyCreator` 역할이 필요하다. `GCP_PROJECT_ID`는
-인증서를 연결할 결제 사용 설정 프로젝트를 명시한다. 자세한 계정 요구사항은
+Terraform 실행 주체에는 Public CA API를 켤 수 있는 `serviceusage.services.enable`
+권한이 필요하고, VM의 서비스 계정에는 `roles/publicca.externalAccountKeyCreator`
+역할만 필요하다. `GCP_PROJECT_ID`는 인증서를 연결할 결제 사용 설정 프로젝트를
+명시한다. 자세한 계정 요구사항은
 [Google Public CA 공식 절차](https://cloud.google.com/certificate-manager/docs/public-ca-tutorial)를
 따른다. 이 권한들은 최초 계정 등록 후 갱신 작업에는 필요하지 않다.
 
@@ -35,8 +36,9 @@ gcloud compute ssh gole-production --zone asia-northeast3-a -- \
   infra/gcp/scripts/issue-certificate.sh'
 ```
 
-발급 스크립트는 `publicca.googleapis.com`을 활성화하고, Google Public CA의 일회용
-EAB 값을 `0600` 임시 파일에만 받아 Certbot 컨테이너에 읽기 전용으로 전달한다.
+Terraform이 `publicca.googleapis.com`을 먼저 활성화한다. 발급 스크립트는 서비스
+활성화 권한을 요구하지 않고 Google Public CA의 일회용 EAB 값을 `0600` 임시 파일에
+받아 Certbot 컨테이너에 읽기 전용으로 전달한다.
 EAB 값은 출력하거나 영구 볼륨에 저장하지 않으며 계정 등록 직후 삭제한다. 이미
 GTS 계정이 있으면 새 EAB를 요청하지 않는다. 기존 Let's Encrypt lineage가 있으면
 같은 `gole.co.kr` lineage를 GTS로 한 번 강제 재발급한 뒤 Nginx를 재생성한다.
