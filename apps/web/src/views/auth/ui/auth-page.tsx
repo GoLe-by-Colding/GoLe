@@ -52,9 +52,22 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
   // 형태 검증만 통과한 값. 실제 이동 직전에 역할 게이트를 한 번 더 적용한다.
   const returnTo = resolveReturnTo(searchParams.get("returnTo"));
 
-  /** 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다. */
-  function goAfterAuth(role: "USER" | "ADMIN" | null | undefined): void {
-    router.replace(applyRoleGuard(returnTo, role) ?? "/");
+  /**
+   * 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다.
+   *
+   * 온보딩이 남은 계정은 목적지 대신 온보딩으로 보내고, 원래 가려던 곳을 `returnTo`로
+   * 넘겨 끝난 뒤 이어서 도착하게 한다(R12).
+   */
+  function goAfterAuth(
+    role: "USER" | "ADMIN" | null | undefined,
+    onboardingRequired = false,
+  ): void {
+    const target = applyRoleGuard(returnTo, role) ?? "/";
+    if (onboardingRequired) {
+      router.replace(`/onboarding?${new URLSearchParams({ returnTo: target }).toString()}`);
+      return;
+    }
+    router.replace(target);
   }
 
   if (welcome) {
@@ -68,7 +81,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
             size="lg"
             fullWidth
             disabled={session === null}
-            onClick={() => goAfterAuth(session?.role ?? null)}
+            onClick={() => goAfterAuth(session?.role ?? null, session?.onboardingRequired ?? false)}
           >
             {session === null ? "세션 확인 중…" : "시작하기"}
           </Button>
@@ -124,7 +137,9 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
         </div>
 
         {mode === "signin" ? (
-          <SignInForm onSignedIn={(signedIn) => goAfterAuth(signedIn.role)} />
+          <SignInForm
+            onSignedIn={(signedIn) => goAfterAuth(signedIn.role, signedIn.onboardingRequired)}
+          />
         ) : (
           <SignUpForm
             onRegistered={(email) => {

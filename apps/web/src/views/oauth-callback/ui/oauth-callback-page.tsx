@@ -50,6 +50,12 @@ export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
           returnedState,
         );
         saveSession(session);
+        // 구글 신규가입만 온보딩 위저드로 보낸다(onboarding D7, R12).
+        // 카카오·네이버는 이번 스코프 밖이라 기존 동작(환영 화면/홈)을 그대로 둔다.
+        if (newAccount && provider === "google") {
+          router.replace("/onboarding");
+          return;
+        }
         // 신규(소셜 첫 가입)는 회원가입 온보딩 화면으로, 기존 회원은 홈으로.
         router.replace(newAccount ? "/signup?welcome=1" : "/");
       } catch (cause) {
