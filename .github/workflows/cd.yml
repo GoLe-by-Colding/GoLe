@@ -56,6 +56,14 @@ jobs:
           GOLE_REVIEW_SEED: "false"
           # 번들 SVG는 classpath에서 직접 제공하므로 MinIO 시드 재업로드가 필요 없다.
           GOLE_MEDIA_SEED: "false"
+          # NEXT_PUBLIC_*은 Next.js 빌드 타임에 번들로 인라인된다. 컨테이너가 재생성돼
+          # .env.production이 없어져도 repository variables에서 매번 동일하게 주입한다.
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_PAYMENT_MODE: ${{ vars.NEXT_PUBLIC_PAYMENT_MODE }}
+          NEXT_PUBLIC_PORTONE_STORE_ID: ${{ vars.NEXT_PUBLIC_PORTONE_STORE_ID }}
+          NEXT_PUBLIC_PORTONE_CHANNEL_KEY: ${{ vars.NEXT_PUBLIC_PORTONE_CHANNEL_KEY }}
+          NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: ${{ vars.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY }}
         run: bash /app/scripts/deploy.sh all
 
       - name: Verify production readiness
