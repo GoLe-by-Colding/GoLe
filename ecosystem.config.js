@@ -1,4 +1,4 @@
-// GoLe PM2 프로세스 정의 (infra-as-code) — ubuntu-gole 컨테이너 전용.
+// GoLe PM2 프로세스 정의 (infra-as-code) — /app에 배치된 Linux 운영 호스트용.
 //
 // 현재 운영 중인 프로세스 정의를 그대로 코드화한 것이다.
 //   - gole-backend : Spring Boot 실행 jar (Java 21)

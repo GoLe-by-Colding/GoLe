@@ -12,12 +12,12 @@ concurrency:
 
 jobs:
   health:
-    name: gole.kscold.com readiness
+    name: gole.co.kr readiness
     runs-on: ubuntu-latest
     env:
-      HEALTH_URL: https://gole.kscold.com/actuator/health/readiness
+      HEALTH_URL: https://gole.co.kr/actuator/health/readiness
       DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
-      DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+      DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
       DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
     steps:
       - name: Check production API

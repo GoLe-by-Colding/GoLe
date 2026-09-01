@@ -232,7 +232,7 @@ jobs:
       contents: read
     env:
       DISCORD_CI_WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK_URL }}
-      DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+      DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
       DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
       WEB_RESULT: ${{ needs.web.result }}
       API_RESULT: ${{ needs.api.result }}

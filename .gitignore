@@ -36,6 +36,14 @@ build/
 npm-debug.log*
 pnpm-debug.log*
 
+# Terraform local state and provider cache
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
 # Kiro 로컬 스펙 메타데이터(머신별 specId) — 추적하지 않는다
 .kiro/specs/**/.config.kiro
 

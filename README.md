@@ -4,7 +4,7 @@
 
 > **GoLe = 고래(Whale) × 레고(Brick)** — 깊은 바다(Cobalt)와 브릭 옐로의 톤. 자세한 컨셉은 `.kiro/steering/brand-identity.md`.
 
-- 🌐 운영: **https://gole.kscold.com**
+- 🌐 운영: **https://gole.co.kr**
 - 🧩 아키텍처: 백엔드 **헥사고날(Hexagonal)** + 프론트 **FSD(Feature-Sliced Design)**
 - 📐 개발 방식: **SDD(Spec-Driven Development)** — 모든 기능은 `.kiro/specs/<기능>/`에 스펙 먼저
 
@@ -147,7 +147,7 @@ web dev 서버는 Playwright가 자동 기동한다. 쓰기 플로우(`create-li
 
 ### 소셜 로그인 활성화 (토큰만 주입하면 동작)
 
-1. 각 provider 콘솔에서 OAuth 앱 생성 → redirect URI `https://gole.kscold.com/auth/callback/{google|kakao|naver}` 등록.
+1. 각 provider 콘솔에서 OAuth 앱 생성 → redirect URI `https://gole.co.kr/auth/callback/{google|kakao|naver}` 등록.
 2. 백엔드 컨테이너 환경변수 주입: `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (카카오·네이버는 `KAKAO_*`/`NAVER_*`).
 3. `pm2 restart gole-backend --update-env` → 해당 버튼 자동 활성화. (전체 키: `apps/api/src/main/resources/application.yml`의 `oauth.providers`)
 
@@ -284,23 +284,24 @@ DISCORD_DEDUPLICATION_WINDOW=PT5M                               # 같은 애플�
 
 ## 배포
 
-`ubuntu-gole` 컨테이너에서 PM2(`gole-backend`, `gole-frontend`)로 구동, nginx가 `gole.kscold.com`을 프록시(HTTPS). 표준 절차·명령은 `.kiro/steering/deploy.md`.
+GCP `gole-production` VM에서 PM2(`gole-backend`, `gole-frontend`)로 구동하고 Nginx가 `gole.co.kr`을 프록시한다. 재현·이전 절차는 `infra/gcp/README.md`에 있다.
 
-`main` 브랜치의 CI가 성공하면 저장소 전용 self-hosted runner가 `ubuntu-gole` 내부에서 CD를 자동 실행한다. GitHub의 **Actions → CD → Run workflow**에서 수동 배포도 가능하다.
+`main` 브랜치의 CI가 성공하면 GCP VM의 저장소 전용 self-hosted runner가 CD를 자동 실행한다. GitHub의 **Actions → CD → Run workflow**에서 수동 배포도 가능하다.
 
 ```bash
 # 로컬: 커밋 → push
 git push origin main
-# 컨테이너: git pull → 빌드 → pm2 reload → health
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -lc "cd /app && bash scripts/deploy.sh all"
+# GCP VM: git pull → 빌드 → pm2 reload → health
+gcloud compute ssh gole-production --zone asia-northeast3-a -- \
+  'cd /app && bash scripts/deploy.sh all'
 ```
 
-GoLe Ubuntu에 직접 접속할 때는 다른 인스턴스 포트가 아닌 `2223`만 사용한다.
+GoLe 운영 Ubuntu에는 IAP SSH로 접속한다.
 
 ```bash
-ssh -p 2223 root@localhost              # Mac mini 내부
-ssh -p 2223 root@kscold.iptime.org      # 외부(공유기 포트포워딩 필요)
+gcloud compute ssh gole-production \
+  --project project-72a52bf1-06aa-4519-b2c \
+  --zone asia-northeast3-a --tunnel-through-iap
 cd /app
 ```
 

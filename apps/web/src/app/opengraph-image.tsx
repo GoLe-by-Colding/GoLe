@@ -49,7 +49,7 @@ export default function OpengraphImage() {
         </div>
       </div>
 
-      <div style={{ fontSize: "28px", opacity: 0.7 }}>gole.kscold.com</div>
+      <div style={{ fontSize: "28px", opacity: 0.7 }}>gole.co.kr</div>
     </div>,
     size,
   );

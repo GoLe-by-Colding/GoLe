@@ -47,7 +47,7 @@ public class OpenApiConfig {
                                 { "code": "BUSINESS_ERROR_CODE", "message": "설명" }
                                 ```
                                 """)
-                        .contact(new Contact().name("GoLe Team").url("https://gole.kscold.com"))
+                        .contact(new Contact().name("GoLe Team").url("https://gole.co.kr"))
                         .license(new License().name("Private")))
                 .servers(List.of(
                         new Server().url("https://gole.co.kr").description("Production"),

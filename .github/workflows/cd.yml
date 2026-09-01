@@ -16,14 +16,14 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to ubuntu-gole
+    name: Deploy to GCP production
     # PR용 CI 완료 이벤트는 배포하지 않고, main push의 성공한 CI만 배포한다.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.conclusion == 'success')
-    runs-on: [self-hosted, Linux, ARM64, gole-production]
+    runs-on: [self-hosted, Linux, X64, gole-gcp-production]
     timeout-minutes: 30
     steps:
       # Discord 라우팅 값은 서버에 영구 저장하지 않고 배포 시점에만 주입한다.
@@ -67,7 +67,7 @@ jobs:
         run: bash /app/scripts/deploy.sh all
 
       - name: Verify production readiness
-        run: curl -fsS --max-time 15 https://gole.kscold.com/actuator/health/readiness
+        run: curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness
 
       # deploy.sh가 실패했다면 그쪽에서 이미 실패 알림을 한 건 보냈다. 여기서 또 보내지
       # 않도록 "배포는 성공했는데 공개 readiness가 죽은" 경우로만 좁힌다. 배포 실패 알림은
@@ -77,7 +77,7 @@ jobs:
         env:
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
-          DISCORD_AVATAR_URL: https://gole.kscold.com/icon.svg
+          DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
           DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
         run: |
           webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
@@ -91,7 +91,7 @@ jobs:
           fi
           # self-hosted 러너에 jq가 있다고 가정하지 않는다(deploy.sh와 같은 이유).
           # content는 전부 우리가 만든 값이라 JSON 이스케이프가 필요한 문자가 없다.
-          content="❌ GoLe 배포 후 readiness 검증 실패 · gole.kscold.com · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          content="❌ GoLe 배포 후 readiness 검증 실패 · gole.co.kr · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           curl -fsS --max-time 10 \
             -H 'Content-Type: application/json' \
             --data "{\"content\":\"${content}\",\"avatar_url\":\"${DISCORD_AVATAR_URL}\",\"allowed_mentions\":{\"parse\":[]}${flags}}" \

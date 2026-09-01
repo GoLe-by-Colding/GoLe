@@ -58,7 +58,7 @@ function readSiteUrl(): string {
     return raw.replace(/\/+$/, "");
   }
   return process.env.NODE_ENV === "production"
-    ? "https://gole.kscold.com"
+    ? "https://gole.co.kr"
     : "http://localhost:3000";
 }
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# GoLe 표준 배포 스크립트 (infra-as-code) — ubuntu-gole 컨테이너 내부 /app 에서 실행.
+# GoLe 표준 배포 스크립트 (infra-as-code) — Linux 운영 호스트의 /app에서 실행.
 #
 #   사용법:  bash scripts/deploy.sh [all|backend|frontend]   (기본: all)
 #
 # 흐름: git pull(ff-only) → 빌드 → pm2 reload(ecosystem.config.js) → health check.
-# 이 스크립트는 ubuntu-gole 컨테이너 한정으로 동작하며, 다른 컨테이너/호스트에 영향을 주지 않는다.
+# 이 스크립트는 현재 저장소와 ecosystem.config.js에 정의된 PM2 앱만 변경한다.
 #
 # -E(errtrace): ERR 트랩을 셸 함수·서브셸 안까지 상속시킨다. 지금 실패 알림은 아래
 # EXIT 트랩이 맡지만(이유는 그쪽 주석), 이후 ERR 트랩을 붙이더라도 build_backend 같은
@@ -23,7 +23,7 @@ log() { printf '\n▶ %s\n' "$*"; }
 # URL은 DISCORD_DEPLOY_WEBHOOK_URL(우선) 또는 DISCORD_OPERATIONS_WEBHOOK_URL로만 주입한다.
 notify_discord() {
   local webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
-  local avatar_url="${DISCORD_AVATAR_URL:-https://gole.kscold.com/icon.svg}"
+  local avatar_url="${DISCORD_AVATAR_URL:-https://gole.co.kr/icon.svg}"
   local notification_flags=""
   local message="$1"
   if [ -z "$webhook_url" ]; then return 0; fi
@@ -59,12 +59,12 @@ notify_deploy_result_once() {
 on_deploy_exit() {
   local status=$?
   if [ "$status" -ne 0 ]; then
-    notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.kscold.com"
+    notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
   fi
 }
 trap on_deploy_exit EXIT
 
-notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.kscold.com"
+notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.co.kr"
 
 log "git pull --ff-only origin main"
 git pull --ff-only origin main
@@ -135,4 +135,4 @@ printf '\n'
 
 log "✔ 배포 완료"
 pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true
-notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.kscold.com"
+notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"
