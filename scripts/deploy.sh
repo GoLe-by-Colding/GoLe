@@ -69,7 +69,7 @@ log "Docker Compose rolling update"
 log "runtime smoke checks"
 curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null
 curl -fsS --max-time 15 http://127.0.0.1:8080/api/v1/catalog/sets/featured >/dev/null
-curl -fsS --max-time 15 http://127.0.0.1:3000/ >/dev/null
+curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null
 
 "${COMPOSE[@]}" ps
 notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"
