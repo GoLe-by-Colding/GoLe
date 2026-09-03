@@ -71,6 +71,9 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
+    // 링크 안에 버튼을 중첩하면 포인터·키보드 활성화가 브라우저마다 달라진다.
+    // CTA 하나가 하나의 링크 역할만 갖는지 계약으로 고정한다.
+    await expect(page.locator("a button, button a")).toHaveCount(0);
   });
 
   test("비로그인 사용자에게 콘솔 하위 경로도 동일하게 차단된다 (R1.3)", async ({ page }) => {
@@ -347,6 +350,39 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
+  });
+
+  test("운영자 메뉴의 모든 항목이 해당 콘솔 화면으로 이동한다", async ({ page }) => {
+    // 이 테스트는 내비게이션 계약만 확인한다. 각 화면의 데이터 요청은 실패 화면으로
+    // 안전하게 떨어뜨려, 합성 토큰의 401이 세션을 지우는 외부 효과를 차단한다.
+    await page.route("**/api/admin/**", (route) => route.abort("failed"));
+    await page.goto("/admin");
+
+    const routes = [
+      ["대시보드", "/admin"],
+      ["출시 단계", "/admin/launch"],
+      ["문의", "/admin/support"],
+      ["신고", "/admin/reports"],
+      ["매물", "/admin/listings"],
+      ["주문", "/admin/orders"],
+      ["예외 큐", "/admin/exceptions"],
+      ["정산", "/admin/settlements"],
+      ["커뮤니티", "/admin/community"],
+      ["회원", "/admin/accounts"],
+      ["카탈로그", "/admin/catalog"],
+      ["감사 로그", "/admin/audit"],
+    ] as const;
+
+    for (const [label, href] of routes) {
+      const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+      await navigation.locator(`a[href="${href}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`${href.replace("/", "\\/")}$`));
+      await expect(navigation.locator(`a[href="${href}"]`)).toHaveAttribute("aria-current", "page");
+      await expect(
+        navigation.locator(`a[href="${href}"]`),
+        `${label} 메뉴가 보여야 함`,
+      ).toBeVisible();
+    }
   });
 
   test("비활성 메뉴는 Figma Admin/Navigation Item 규격을 따른다", async ({ page }) => {

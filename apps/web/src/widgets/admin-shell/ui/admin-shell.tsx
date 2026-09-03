@@ -342,9 +342,7 @@ function Gate({
     <GateFrame>
       <Heading level={2}>{title}</Heading>
       <Text tone="muted">{body}</Text>
-      <Link href={href}>
-        <Button>{cta}</Button>
-      </Link>
+      <LinkButton href={href}>{cta}</LinkButton>
     </GateFrame>
   );
 }

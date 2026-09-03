@@ -131,6 +131,11 @@ test.describe("Mobile — 결제·운영 화면", () => {
    */
   test("어드민 주문 표는 페이지를 밀지 않고 표 안에서만 스크롤된다", async ({ page }) => {
     await signInAs(page, { ...E2E_SELLER, role: "ADMIN" });
+    // 합성 관리자 세션에는 실제 HttpOnly 쿠키가 없다. 헤더의 독립적인 알림 폴링이
+    // 로컬 API에서 INVALID_SESSION을 받아 화면 세션을 지우지 않도록 테스트 범위 밖 요청을 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
     // 콘솔 게이트는 로컬 세션의 role을 믿지 않고 서버에 다시 묻는다(fail closed). 이 응답을
     // 심어주지 않으면 게이트가 열리지 않아 표가 아예 렌더되지 않는다 — 스크롤을 재기도 전에
     // 실패한다. 여기서 확인하려는 건 권한이 아니라 좁은 화면의 표 스크롤이다.
