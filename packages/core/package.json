@@ -1,0 +1,17 @@
+{
+  "name": "@gole/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GoLe 웹·앱 공유 코어 — 엔티티 모델과 API 호출. 플랫폼 중립.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -5,6 +5,7 @@
   "description": "GoLe - LEGO Marketplace monorepo",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile start",
     "build:web": "pnpm --filter web build",
     "test:web": "pnpm --filter web test",
     "e2e:web": "pnpm --filter web e2e",

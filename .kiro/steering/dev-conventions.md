@@ -143,6 +143,8 @@ cd /app && pnpm --filter web build
 |---|---|
 | `(backend)` | Spring Boot 백엔드 |
 | `(frontend)` | Next.js 프론트엔드 |
+| `(mobile)` | React Native(Expo) 앱 |
+| `(core)` | packages/core — 웹·앱 공유 코어 |
 | `(infra)` | Docker, nginx, 배포 |
 | `(spec)` | .kiro 스펙 문서 |
 
