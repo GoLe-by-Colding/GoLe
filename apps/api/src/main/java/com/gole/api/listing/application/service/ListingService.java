@@ -127,8 +127,8 @@ public class ListingService
     }
 
     @Override
-    public List<Listing> activeBySellers(List<String> sellerIds) {
-        return listingRepository.findActiveBySellers(sellerIds);
+    public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+        return listingRepository.findActiveBySellers(sellerIds, limit);
     }
 
     @Override

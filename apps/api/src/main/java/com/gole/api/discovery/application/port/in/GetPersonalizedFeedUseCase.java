@@ -8,5 +8,5 @@ import java.util.List;
  */
 public interface GetPersonalizedFeedUseCase {
 
-    List<Listing> feed(String userId);
+    List<Listing> feed(String userId, int limit);
 }

@@ -13,6 +13,7 @@ import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetReadinessCheckCommand;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
@@ -20,6 +21,7 @@ import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ChannelType;
@@ -77,7 +79,20 @@ class LaunchConfigServiceTest {
     }
 
     private void stored(LaunchStage stage) {
-        when(repository.load()).thenReturn(Optional.of(new LaunchConfig(stage, Map.of(), null, "admin-0")));
+        when(repository.load())
+                .thenReturn(Optional.of(new LaunchConfig(stage, Map.of(), allReadiness(), null, "admin-0", null)));
+    }
+
+    private static Map<LaunchReadinessCheck, Boolean> allReadiness() {
+        return Map.of(
+                LaunchReadinessCheck.BUSINESS_DISCLOSURE,
+                true,
+                LaunchReadinessCheck.TERMS_PRIVACY,
+                true,
+                LaunchReadinessCheck.PAYMENT_FLOW,
+                true,
+                LaunchReadinessCheck.PAYOUT_FLOW,
+                true);
     }
 
     @Test
@@ -141,14 +156,15 @@ class LaunchConfigServiceTest {
     @Test
     @DisplayName("준비 상태가 회복돼도 자동 재개하지 않고 관리자 명시 전환을 기다린다")
     void recoveredReadinessDoesNotResumeWithoutExplicitAdminChange() {
-        AtomicReference<LaunchConfig> persisted =
-                new AtomicReference<>(new LaunchConfig(LaunchStage.FULL, Map.of(), null, "admin-0", 0L));
+        AtomicReference<LaunchConfig> persisted = new AtomicReference<>(
+                new LaunchConfig(LaunchStage.FULL, Map.of(), allReadiness(), null, "admin-0", 0L));
         when(repository.load()).thenAnswer(ignored -> Optional.of(persisted.get()));
         when(repository.save(any(LaunchConfig.class))).thenAnswer(invocation -> {
             LaunchConfig candidate = invocation.getArgument(0);
             LaunchConfig saved = new LaunchConfig(
                     candidate.stage(),
                     candidate.overrides(),
+                    candidate.readiness(),
                     candidate.updatedAt(),
                     candidate.updatedBy(),
                     persisted.get().version() + 1);
@@ -254,6 +270,83 @@ class LaunchConfigServiceTest {
                 .hasMessageContaining("결제 설정이 준비되지 않아");
 
         // 거부된 전이는 저장도 이력도 남기지 않는다.
+        verify(repository, never()).save(any());
+        verify(history, never()).append(any());
+    }
+
+    @Test
+    @DisplayName("Stage 2 상향은 사업·약관·결제 흐름 운영 승인이 모두 필요하다")
+    void openingTradingRequiresOperationalReadiness() {
+        when(repository.load())
+                .thenReturn(Optional.of(new LaunchConfig(
+                        LaunchStage.BROWSE_ONLY,
+                        Map.of(),
+                        Map.of(
+                                LaunchReadinessCheck.BUSINESS_DISCLOSURE,
+                                true,
+                                LaunchReadinessCheck.TERMS_PRIVACY,
+                                true),
+                        null,
+                        "admin-0",
+                        null)));
+
+        assertThatThrownBy(() -> service.changeStage(
+                        new ChangeStageCommand(LaunchStage.TRADING, "결제 오픈", "admin-1", "a@gole.local")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("paymentFlow");
+
+        verify(readiness, never()).getPaymentReadiness();
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("운영 준비 확인은 사유·조치자와 함께 구조화 이력에 남는다")
+    void readinessConfirmationIsAudited() {
+        when(repository.load()).thenReturn(Optional.of(LaunchConfig.unset()));
+
+        var result = service.setReadinessCheck(new SetReadinessCheckCommand(
+                LaunchReadinessCheck.BUSINESS_DISCLOSURE, true, "사업자 정보 푸터 대조 완료", "admin-1", "a@gole.local"));
+
+        assertThat(result.changed()).isTrue();
+        assertThat(result.safetyLowered()).isFalse();
+        assertThat(result.config().isConfirmed(LaunchReadinessCheck.BUSINESS_DISCLOSURE))
+                .isTrue();
+        ArgumentCaptor<LaunchConfigChange> change = ArgumentCaptor.forClass(LaunchConfigChange.class);
+        verify(history).append(change.capture());
+        assertThat(change.getValue().type()).isEqualTo(LaunchConfigChange.Type.READINESS);
+        assertThat(change.getValue().target()).isEqualTo("businessDisclosure");
+        assertThat(change.getValue().before()).isEqualTo("false");
+        assertThat(change.getValue().after()).isEqualTo("true");
+    }
+
+    @Test
+    @DisplayName("고단계에서 필수 운영 확인을 취소하면 Stage 1로 함께 안전 잠근다")
+    void revokingRequiredReadinessLowersStage() {
+        stored(LaunchStage.FULL);
+        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+
+        var result = service.setReadinessCheck(new SetReadinessCheckCommand(
+                LaunchReadinessCheck.PAYOUT_FLOW, false, "지급 재처리 검증 만료", "admin-1", "a@gole.local"));
+
+        assertThat(result.changed()).isTrue();
+        assertThat(result.safetyLowered()).isTrue();
+        assertThat(result.config().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
+        ArgumentCaptor<LaunchConfigChange> changes = ArgumentCaptor.forClass(LaunchConfigChange.class);
+        verify(history, org.mockito.Mockito.times(2)).append(changes.capture());
+        assertThat(changes.getAllValues())
+                .extracting(LaunchConfigChange::type)
+                .containsExactly(LaunchConfigChange.Type.READINESS, LaunchConfigChange.Type.STAGE);
+    }
+
+    @Test
+    @DisplayName("동일한 운영 확인 재요청은 저장과 이력을 늘리지 않는다")
+    void sameReadinessIsNoop() {
+        stored(LaunchStage.BROWSE_ONLY);
+
+        var result = service.setReadinessCheck(new SetReadinessCheckCommand(
+                LaunchReadinessCheck.BUSINESS_DISCLOSURE, true, "상태 재확인", "admin-1", "a@gole.local"));
+
+        assertThat(result.changed()).isFalse();
         verify(repository, never()).save(any());
         verify(history, never()).append(any());
     }
@@ -367,8 +460,13 @@ class LaunchConfigServiceTest {
     @DisplayName("Stage 2에서 override 로 결제를 다시 여는 것도 준비 검증을 거친다")
     void enablingPaymentsByOverrideAtTradingAlsoRequiresReadiness() {
         when(repository.load())
-                .thenReturn(Optional.of(
-                        new LaunchConfig(LaunchStage.TRADING, Map.of(LaunchFeature.PAYMENTS, false), null, "admin-0")));
+                .thenReturn(Optional.of(new LaunchConfig(
+                        LaunchStage.TRADING,
+                        Map.of(LaunchFeature.PAYMENTS, false),
+                        allReadiness(),
+                        null,
+                        "admin-0",
+                        null)));
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThatThrownBy(() -> service.setFeatureOverride(
@@ -383,8 +481,13 @@ class LaunchConfigServiceTest {
     @DisplayName("결제 비활성 override 해제로 기본 결제가 되살아날 때도 준비 검증을 거친다")
     void clearingDisabledPaymentOverrideRequiresReadiness() {
         when(repository.load())
-                .thenReturn(Optional.of(
-                        new LaunchConfig(LaunchStage.TRADING, Map.of(LaunchFeature.PAYMENTS, false), null, "admin-0")));
+                .thenReturn(Optional.of(new LaunchConfig(
+                        LaunchStage.TRADING,
+                        Map.of(LaunchFeature.PAYMENTS, false),
+                        allReadiness(),
+                        null,
+                        "admin-0",
+                        null)));
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThatThrownBy(() -> service.setFeatureOverride(new SetFeatureOverrideCommand(

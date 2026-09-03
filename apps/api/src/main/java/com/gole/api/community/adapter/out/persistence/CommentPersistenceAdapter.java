@@ -3,6 +3,7 @@ package com.gole.api.community.adapter.out.persistence;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.domain.model.Comment;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -25,15 +26,26 @@ public class CommentPersistenceAdapter implements CommentRepositoryPort {
     }
 
     @Override
+    public Optional<Comment> findById(String commentId) {
+        return repository.findById(commentId).map(this::toDomain);
+    }
+
+    @Override
     public List<Comment> findByPostId(String postId, int limit) {
-        return repository.findByPostIdOrderByCreatedAtAsc(postId, PageRequest.of(0, limit)).stream()
+        return repository.findByPostIdAndHiddenAtIsNullOrderByCreatedAtAsc(postId, PageRequest.of(0, limit)).stream()
                 .map(this::toDomain)
                 .toList();
     }
 
     private CommentDocument toDocument(Comment comment) {
         return new CommentDocument(
-                comment.id(), comment.postId(), comment.authorId(), comment.content(), comment.createdAt());
+                comment.id(),
+                comment.postId(),
+                comment.authorId(),
+                comment.content(),
+                comment.createdAt(),
+                comment.hiddenAt(),
+                comment.hiddenReason());
     }
 
     private Comment toDomain(CommentDocument document) {
@@ -42,6 +54,8 @@ public class CommentPersistenceAdapter implements CommentRepositoryPort {
                 document.getPostId(),
                 document.getAuthorId(),
                 document.getContent(),
-                document.getCreatedAt());
+                document.getCreatedAt(),
+                document.getHiddenAt(),
+                document.getHiddenReason());
     }
 }

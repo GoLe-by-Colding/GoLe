@@ -25,6 +25,7 @@ public record LaunchConfigChange(
 
     public enum Type {
         STAGE,
-        FEATURE_OVERRIDE
+        FEATURE_OVERRIDE,
+        READINESS
     }
 }

@@ -1,4 +1,7 @@
 import type { Session } from "./types";
+import { clearStoredSession, SESSION_CHANGE_EVENT, SESSION_STORAGE_KEY } from "@shared/api";
+
+export const SESSION_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 
 /**
  * 클라이언트에는 계정 ID·권한 등 화면 상태만 저장한다.
@@ -6,15 +9,12 @@ import type { Session } from "./types";
  * useSyncExternalStore와 연동되도록 subscribe/getSnapshot을 제공하고,
  * 같은 탭에서도 변경이 전파되도록 커스텀 이벤트를 발행한다.
  */
-const STORAGE_KEY = "gole.session";
-const CHANGE_EVENT = "gole:session-change";
-
 // 스냅샷 캐시: 동일 raw 문자열이면 같은 객체 참조를 반환해 무한 렌더를 방지한다.
 let cachedRaw: string | null = null;
 let cachedSession: Session | null = null;
 
 function emitChange(): void {
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
 }
 
 export function saveSession(session: Session): void {
@@ -22,7 +22,14 @@ export function saveSession(session: Session): void {
     return;
   }
   // 인증 토큰은 HttpOnly 쿠키에만 보관한다. 로컬 저장소에는 화면 복원에 필요한 비민감 메타데이터만 둔다.
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...session, sessionToken: "" }));
+  window.localStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify({
+      ...session,
+      sessionToken: "",
+      refreshAfter: session.refreshAfter ?? Date.now() + SESSION_REFRESH_INTERVAL_MS,
+    }),
+  );
   emitChange();
 }
 
@@ -30,15 +37,14 @@ export function clearSession(): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.removeItem(STORAGE_KEY);
-  emitChange();
+  clearStoredSession();
 }
 
 export function loadSession(): Session | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
   if (raw === cachedRaw) {
     return cachedSession;
   }
@@ -60,11 +66,11 @@ export function subscribeSession(onChange: () => void): () => void {
   if (typeof window === "undefined") {
     return () => undefined;
   }
-  window.addEventListener(CHANGE_EVENT, onChange);
+  window.addEventListener(SESSION_CHANGE_EVENT, onChange);
   window.addEventListener("storage", onChange);
   window.addEventListener("focus", onChange);
   return () => {
-    window.removeEventListener(CHANGE_EVENT, onChange);
+    window.removeEventListener(SESSION_CHANGE_EVENT, onChange);
     window.removeEventListener("storage", onChange);
     window.removeEventListener("focus", onChange);
   };

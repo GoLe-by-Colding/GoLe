@@ -16,6 +16,14 @@ export function writeReview(payload: WriteReviewPayload): Promise<Review> {
   });
 }
 
+/** 후기를 받은 판매자의 공개 답글. 서버가 로그인 계정과 revieweeId 일치를 검증한다. */
+export function replyToReview(reviewId: string, content: string): Promise<Review> {
+  return apiRequest<Review>(`/api/v1/reviews/${reviewId}/reply`, {
+    method: "POST",
+    body: { content },
+  });
+}
+
 /** 특정 셀러의 후기 목록(최신순). (요구사항 R3.1) */
 export function fetchSellerReviews(
   sellerId: string,

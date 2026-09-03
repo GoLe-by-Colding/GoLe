@@ -89,6 +89,10 @@ public class LaunchConfigSafetyClampWriter {
             return stored.stage();
         }
 
+        if (!stored.hasRequiredReadiness(stored.stage())) {
+            return LaunchStage.BROWSE_ONLY;
+        }
+
         Mode mode = settlementMode.currentMode();
         if (!settlementMode.payoutContractVerified()) {
             return LaunchStage.BROWSE_ONLY;

@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const e2eBaseUrl = process.env.E2E_BASE_URL;
+const isRemoteTarget =
+  e2eBaseUrl !== undefined &&
+  !/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/.test(e2eBaseUrl);
+
 /**
  * 내 정보 화면이 실제로 데이터를 채우는지 본다.
  *
@@ -25,12 +30,50 @@ async function seedCookieSession(page: Page): Promise<void> {
 
 /** 쿠키로 인증되는 정상 응답을 흉내 낸다. 백엔드 없이 화면 계약만 본다. */
 async function mockProfileApis(page: Page): Promise<void> {
+  // 헤더 폴링도 같은 인증 클라이언트를 쓴다. 이 응답을 실백엔드 401에 맡기면 프로필 mock이
+  // 정상이어도 전역 stale-session 정리가 먼저 실행되어 테스트가 로그인 화면으로 바뀐다.
+  await page.route("**/api/v1/users/acc-1/notifications/unread-count", (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
   await page.route("**/api/v1/accounts/me", (route) =>
     route.fulfill({ json: { accountId: "acc-1", email: "seller@gole.test", role: "USER" } }),
   );
-  await page.route("**/api/v1/orders**", (route) =>
+  await page.route("**/api/v1/config/launch", (route) =>
+    route.fulfill({
+      json: {
+        stage: 2,
+        tradeMode: "MANUAL_SETTLEMENT",
+        features: { payments: true, reviews: true, partnerPayout: false },
+        updatedAt: "2026-09-03T00:00:00Z",
+      },
+    }),
+  );
+  await page.route("**/api/v1/orders?buyerId=**", (route) =>
     route.fulfill({
       json: [{ id: "ORD-PROFILE-1", status: "completed", amount: 280000 }],
+    }),
+  );
+  await page.route("**/api/v1/orders/sales", (route) =>
+    route.fulfill({
+      json: [{ id: "ORD-SALE-1", status: "funds_held", amount: 310000 }],
+    }),
+  );
+  await page.route("**/api/v1/orders/settlements", (route) =>
+    route.fulfill({
+      json: [
+        {
+          orderId: "ORD-SALE-1",
+          grossAmount: 310000,
+          fee: 15500,
+          payout: 294500,
+          feeRate: 0.05,
+          status: "PENDING",
+          createdAt: "2026-09-02T00:00:00Z",
+          payableAt: "2026-09-05T00:00:00Z",
+          paidAt: null,
+          payoutNextAttemptAt: null,
+        },
+      ],
     }),
   );
   await page.route("**/api/v1/listings/mine**", (route) =>
@@ -58,7 +101,7 @@ async function mockProfileApis(page: Page): Promise<void> {
 }
 
 test.describe("내 정보", () => {
-  test.skip(!!process.env.E2E_BASE_URL, "응답 가로채기 기반 — 로컬 프론트 전용");
+  test.skip(isRemoteTarget, "응답 가로채기 기반 — 로컬 프론트 전용");
 
   test.beforeEach(async ({ page }) => {
     await seedCookieSession(page);
@@ -94,10 +137,14 @@ test.describe("내 정보", () => {
 
     await page.getByRole("button", { name: "판매 중지" }).click();
     expect(deleteCalls).toBe(0);
-    await expect(page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.")).toBeVisible();
+    await expect(
+      page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요."),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "취소" }).click();
-    await expect(page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.")).toHaveCount(0);
+    await expect(page.getByText("판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.")).toHaveCount(
+      0,
+    );
 
     await page.getByRole("button", { name: "판매 중지" }).click();
     await page.getByRole("button", { name: "중지하기" }).click();
@@ -129,6 +176,44 @@ test.describe("내 정보", () => {
     await page.getByRole("button", { name: "구매 내역" }).click();
 
     await expect(page.getByRole("link", { name: /ORD-PROF/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /후기 작성/ })).toHaveAttribute(
+      "href",
+      "/orders/ORD-PROFILE-1#review",
+    );
+  });
+
+  test("판매 관리 탭이 받은 주문과 정산을 서로 다른 응답으로 채운다", async ({ page }) => {
+    await page.goto("/profile");
+    await page.getByRole("button", { name: "판매 관리" }).click();
+
+    await expect(page.getByRole("heading", { name: "받은 주문" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "정산" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /ORD-SALE ₩310,000/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "ORD-SALE", exact: true })).toBeVisible();
+    await expect(page.getByText("₩294,500")).toBeVisible();
+    await expect(page.getByText("불러오지 못했어요")).toHaveCount(0);
+  });
+
+  test("서버가 세션을 거부하면 stale 로그인 표시를 지우고 재로그인을 안내한다", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/accounts/me", (route) =>
+      route.fulfill({
+        status: 401,
+        json: { code: "INVALID_SESSION", message: "로그인이 필요합니다" },
+      }),
+    );
+
+    await page.goto("/profile");
+
+    await expect(page.getByText("로그인이 필요합니다.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "로그인하러 가기" })).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Fprofile",
+    );
+    await expect
+      .poll(() => page.evaluate(() => window.localStorage.getItem("gole.session")))
+      .toBeNull();
   });
 
   test("조회에 실패하면 로딩이 아니라 실패라고 말하고 다시 시도를 준다", async ({ page }) => {
@@ -142,5 +227,31 @@ test.describe("내 정보", () => {
     await expect(page.getByText("불러오지 못했어요")).toBeVisible();
     await expect(page.getByText("불러오는 중")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+  });
+
+  test("비밀번호 변경은 모든 세션 종료를 안내하고 완료 후 재로그인으로 보낸다", async ({
+    page,
+  }) => {
+    let changeBody: unknown;
+    await page.route("**/api/v1/accounts/password", async (route) => {
+      changeBody = route.request().postDataJSON();
+      await route.fulfill({ status: 204 });
+    });
+
+    await page.goto("/profile");
+    await page.getByRole("link", { name: "비밀번호 변경" }).click();
+    await expect(page.getByRole("heading", { name: "계정 보안" })).toBeVisible();
+    await expect(page.getByText("모든 기기에서 로그아웃됩니다")).toBeVisible();
+
+    await page.getByLabel("현재 비밀번호").fill("old-password");
+    await page.getByLabel("새 비밀번호", { exact: true }).fill("new-password");
+    await page.getByLabel("새 비밀번호 확인").fill("new-password");
+    await page.getByRole("button", { name: "비밀번호 변경" }).click();
+
+    expect(changeBody).toEqual({ currentPassword: "old-password", newPassword: "new-password" });
+    await expect(page).toHaveURL(/\/login\?passwordChanged=1&returnTo=%2Fprofile/);
+    await expect
+      .poll(() => page.evaluate(() => window.localStorage.getItem("gole.session")))
+      .toBeNull();
   });
 });

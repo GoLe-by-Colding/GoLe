@@ -1,43 +1,28 @@
 #!/usr/bin/env bash
-#
-# GoLe 표준 배포 스크립트 (infra-as-code) — ubuntu-gole 컨테이너 내부 /app 에서 실행.
-#
-#   사용법:  bash scripts/deploy.sh [all|backend|frontend]   (기본: all)
-#
-# 흐름: git pull(ff-only) → 빌드 → pm2 reload(ecosystem.config.js) → health check.
-# 이 스크립트는 ubuntu-gole 컨테이너 한정으로 동작하며, 다른 컨테이너/호스트에 영향을 주지 않는다.
-#
-# -E(errtrace): ERR 트랩을 셸 함수·서브셸 안까지 상속시킨다. 지금 실패 알림은 아래
-# EXIT 트랩이 맡지만(이유는 그쪽 주석), 이후 ERR 트랩을 붙이더라도 build_backend 같은
-# 함수 안에서 정상 동작하도록 errtrace를 켜 둔다.
 set -Eeuo pipefail
 
-# repo 루트로 이동 (이 스크립트는 scripts/ 하위에 있다)
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 TARGET="${1:-all}"
+DEPLOY_SHA="${DEPLOY_SHA:-}"
+COMPOSE=(docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f "$ROOT/infra/gcp/docker-compose.yml")
 
 log() { printf '\n▶ %s\n' "$*"; }
 
-# 배포 자체가 실패하면 애플리케이션 내부 알림도 뜰 수 없으므로 스크립트가 직접 알린다.
-# URL은 DISCORD_DEPLOY_WEBHOOK_URL(우선) 또는 DISCORD_OPERATIONS_WEBHOOK_URL로만 주입한다.
 notify_discord() {
   local webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
-  local avatar_url="${DISCORD_AVATAR_URL:-https://gole.kscold.com/icon.svg}"
+  local avatar_url="${DISCORD_AVATAR_URL:-https://gole.co.kr/icon.svg}"
   local notification_flags=""
   local message="$1"
   if [ -z "$webhook_url" ]; then return 0; fi
   if [ "${DISCORD_SUPPRESS_NOTIFICATIONS:-true}" = "true" ]; then
     notification_flags=',"flags":4096'
   fi
-  curl -fsS --max-time 5 \
-    -H 'Content-Type: application/json' \
+  curl -fsS --max-time 5 -H 'Content-Type: application/json' \
     --data "{\"content\":\"${message}\",\"avatar_url\":\"${avatar_url}\",\"allowed_mentions\":{\"parse\":[]}${notification_flags}}" \
     "$webhook_url" >/dev/null || true
 }
 
-# 배포 결과(성공/실패) 알림은 실행당 정확히 한 번만 나간다. 성공 경로와 아래 EXIT
-# 트랩이 같은 실행에서 겹쳐도 이 가드가 중복 발송을 막는다.
 DEPLOY_RESULT_NOTIFIED=0
 notify_deploy_result_once() {
   if [ "$DEPLOY_RESULT_NOTIFIED" = "1" ]; then return 0; fi
@@ -45,94 +30,149 @@ notify_deploy_result_once() {
   notify_discord "$1"
 }
 
-# 실패 알림은 ERR이 아니라 EXIT 트랩에서 보낸다. ERR 트랩만으로는 두 방향으로 어긋난다.
-#
-#   1. 놓친다 — bash는 명시적인 `exit`에서 ERR을 발화하지 않는다. readiness 실패 경로가
-#      정확히 그 모양이라 지금까지 조용히 끝났다.
-#   2. 두 번 보낸다 — `set -E`는 ERR 트랩을 서브셸까지 상속시키는데, 서브셸은 위의
-#      단발 가드를 복사본으로 갖는다. `(cd apps/api && ./gradlew ...)` 가 실패하면
-#      서브셸에서 한 번, 부모의 최종 그물에서 또 한 번 나간다.
-#
-# EXIT 트랩은 서브셸이 상속하지 않고, 함수 내부 실패·명시적 exit·예기치 못한 종료를
-# 모두 잡는다. 그래서 실행당 배포 결과 알림이 정확히 한 건으로 수렴한다.
-# (`-E` 자체는 유지한다 — 이후 ERR 트랩을 추가하더라도 함수 안에서 동작하도록.)
 on_deploy_exit() {
   local status=$?
   if [ "$status" -ne 0 ]; then
-    notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.kscold.com"
+    "${COMPOSE[@]}" ps || true
+    "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
+    notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
+    if [ "$TARGET" = "all" ]; then
+      notify_discord "🛑 전체 배포가 실패해 새 비용 가드 무장을 보장할 수 없으므로 GCP VM을 안전 정지합니다 · gole.co.kr"
+      sudo systemctl poweroff --no-block || true
+    fi
   fi
 }
 trap on_deploy_exit EXIT
 
-notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.kscold.com"
+notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.co.kr"
 
-log "git pull --ff-only origin main"
-git pull --ff-only origin main
-
-build_backend() {
-  log "backend 빌드: gradlew bootJar (Java 21)"
-  (cd "$ROOT/apps/api" && ./gradlew bootJar --no-daemon -q)
-}
-
-build_frontend() {
-  log "frontend 빌드: pnpm install(frozen) + next build (Node 22)"
-  pnpm install --frozen-lockfile --prefer-offline
-  pnpm --filter web build
-}
-
-case "$TARGET" in
-  backend) build_backend ;;
-  frontend) build_frontend ;;
-  all) build_backend; build_frontend ;;
-  *) echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2; exit 1 ;;
-esac
-
-log "pm2 reload (ecosystem.config.js)"
-# 최초 1회는 프로세스가 없을 수 있으니 reload 실패 시 start 로 폴백.
-pm2 reload "$ROOT/ecosystem.config.js" --update-env || pm2 start "$ROOT/ecosystem.config.js"
-pm2 save
-
-wait_for_url() {
-  local label="$1"
-  local url="$2"
-  local attempts="${3:-30}"
-  local response_file
-  response_file="$(mktemp)"
-
-  for _ in $(seq 1 "$attempts"); do
-    if curl -fsS --max-time 10 -o "$response_file" "$url"; then
-      printf '  %s: OK\n' "$label"
-      rm -f "$response_file"
-      return 0
+if [ "$TARGET" = "all" ]; then
+  required_cost_guard_variables=(
+    GCP_BUDGET_PUBSUB_SUBSCRIPTION
+    GCP_PROJECT_ID
+    GCP_CREDIT_AMOUNT_KRW
+    GCP_CREDIT_DEADLINE
+    GCP_FIXED_HOURLY_COST_KRW
+    GCP_HARD_STOP_ENABLED
+    GCP_HARD_STOP_DRY_RUN
+    GCP_HARD_STOP_BILLING_COST_KRW
+    GCP_HARD_STOP_MIN_RESERVE_KRW
+    GCP_HARD_STOP_ALL_IN_COST_KRW
+    GCP_COST_GUARD_WARNING_KRW
+    GCP_COST_GUARD_DANGER_KRW
+    GCP_HARD_STOP_NETWORK_GIB
+    GCP_COST_GUARD_NETWORK_WARNING_GIB
+    GCP_COST_GUARD_NETWORK_DANGER_GIB
+    GCP_HARD_STOP_MAX_RUNTIME_HOURS
+    GCP_COST_GUARD_RUNTIME_WARNING_HOURS
+    GCP_COST_GUARD_RUNTIME_DANGER_HOURS
+    GCP_HARD_STOP_EXPECTED_BUDGET_KRW
+    GCP_HARD_STOP_BUDGET_ID
+    GCP_HARD_STOP_BILLING_ACCOUNT_ID
+    GCP_HARD_STOP_BUDGET_DISPLAY_NAME
+    GCP_HARD_STOP_PERIOD_START
+    GCP_VM_COST_START
+    GCP_HARD_STOP_AT
+    GCP_HARD_STOP_ARM_ID
+    GCP_INSTANCE_ZONE
+    GCP_INSTANCE_NAME
+    GCP_VAT_RATE
+    GCP_NETWORK_EGRESS_KRW_PER_GIB
+    GCP_STOPPED_RESOURCE_HOURLY_COST_KRW
+    GCP_COST_GUARD_INTERVAL_SECONDS
+    GCP_HARD_STOP_RETRY_SECONDS
+    BUDGET_HTTP_TIMEOUT_SECONDS
+  )
+  for variable_name in "${required_cost_guard_variables[@]}"; do
+    if [ -z "${!variable_name:-}" ]; then
+      echo "필수 비용 가드 repository variable 누락: ${variable_name}" >&2
+      exit 1
     fi
-    sleep 2
   done
-
-  printf '✖ %s 실패 (%s)\n' "$label" "$url" >&2
-  if [ -s "$response_file" ]; then
-    sed -n '1,20p' "$response_file" >&2
+  if [ "$GCP_HARD_STOP_ENABLED" != "true" ] || [ "$GCP_HARD_STOP_DRY_RUN" != "false" ]; then
+    echo "운영 비용 가드는 enabled=true, dry_run=false로 명시적으로 무장해야 합니다." >&2
+    exit 1
   fi
-  rm -f "$response_file"
-  return 1
-}
+fi
 
-log "runtime smoke checks"
-# readiness 그룹은 MongoDB·Redis를 포함한다. MinIO는 전체 health에서 별도로 DOWN을
-# 보고하되 번들 미디어 fallback이 있으므로 업로드 기능만 degraded 상태로 둔다.
-if ! wait_for_url "backend + core dependencies" "http://localhost:8080/actuator/health/readiness" 30; then
-  pm2 logs gole-backend --lines 50 --nostream || true
+log "CI가 검증한 origin/main 동기화"
+git fetch --prune origin main
+
+# 운영 checkout에 수동 변경이 있으면 덮어쓰지 않는다. 깨끗한 경우에만 원격 main을
+# 정확히 반영해, 승인된 force push나 계정 이전 뒤에도 배포가 막히지 않게 한다.
+if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+  echo "운영 checkout에 커밋되지 않은 변경이 있어 배포를 중단한다" >&2
+  git status --short >&2
   exit 1
 fi
 
-# 실제 공개 API와 번들 SVG를 호출해 라우팅/직렬화/미디어 응답 회귀까지 함께 막는다.
-wait_for_url "catalog API" "http://localhost:8080/api/v1/catalog/sets/featured" 3
-wait_for_url "bundled media" "http://localhost:8080/api/v1/media/catalog/10294.svg" 3
-wait_for_url "frontend" "http://localhost:3000/" 15
+deploy_ref="origin/main"
+if [ -n "$DEPLOY_SHA" ]; then
+  if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "DEPLOY_SHA는 40자리 Git SHA여야 한다" >&2
+    exit 1
+  fi
+  if ! git cat-file -e "${DEPLOY_SHA}^{commit}" 2>/dev/null; then
+    git fetch --no-tags origin "$DEPLOY_SHA"
+  fi
+  git cat-file -e "${DEPLOY_SHA}^{commit}"
+  deploy_ref="$DEPLOY_SHA"
+fi
 
-printf '  optional dependencies: '
-curl -sS --max-time 10 http://localhost:8080/actuator/health || true
-printf '\n'
+git reset --hard "$deploy_ref"
+if [ -n "$DEPLOY_SHA" ] && [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
+  echo "CI가 검증한 커밋으로 checkout하지 못했다" >&2
+  exit 1
+fi
 
-log "✔ 배포 완료"
-pm2 list --no-color | grep -E 'gole-(backend|frontend)' || true
-notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.kscold.com"
+case "$TARGET" in
+  backend)
+    SERVICES=(backend nginx)
+    ;;
+  frontend)
+    SERVICES=(frontend nginx)
+    ;;
+  all)
+    SERVICES=(backend frontend budget-relay nginx)
+    ;;
+  *)
+    echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2
+    exit 1
+    ;;
+esac
+
+log "Docker Compose build"
+"${COMPOSE[@]}" build "${SERVICES[@]}"
+
+log "Docker Compose rolling update"
+"${COMPOSE[@]}" up -d --remove-orphans --wait "${SERVICES[@]}"
+
+# backend/frontend 컨테이너가 재생성되면 내부 IP가 바뀔 수 있다. Nginx도 매번
+# 재생성해 Docker DNS를 다시 조회하게 하고, 오래된 upstream으로 인한 502를 막는다.
+log "Nginx upstream refresh"
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait nginx
+"${COMPOSE[@]}" exec -T nginx nginx -t
+
+log "runtime smoke checks"
+curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null
+curl -fsS --max-time 15 http://127.0.0.1:8080/api/v1/catalog/sets/featured >/dev/null
+curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null
+curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+  https://gole.co.kr/actuator/health/readiness >/dev/null
+curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+  https://gole.co.kr/icon.svg >/dev/null
+
+if [ "$TARGET" = "all" ]; then
+  log "비용 가드 호스트 watchdog 활성화"
+  sudo install -m 0755 infra/gcp/scripts/cost-guard-watchdog.sh \
+    /usr/local/sbin/gole-cost-guard-watchdog
+  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.service \
+    /etc/systemd/system/gole-cost-guard-watchdog.service
+  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.timer \
+    /etc/systemd/system/gole-cost-guard-watchdog.timer
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now gole-cost-guard-watchdog.timer
+fi
+
+"${COMPOSE[@]}" ps
+notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"

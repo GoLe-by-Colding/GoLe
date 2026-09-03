@@ -70,8 +70,13 @@ public class DiscoveryService
     }
 
     @Override
-    public List<Listing> feed(String userId) {
-        return listingQuery.activeBySellers(followRepository.findSellerIdsByUser(userId));
+    public List<Listing> feed(String userId, int limit) {
+        List<String> sellerIds = followRepository.findSellerIdsByUser(userId);
+        if (sellerIds.isEmpty()) {
+            return List.of();
+        }
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        return listingQuery.activeBySellers(sellerIds, boundedLimit);
     }
 
     @Override

@@ -18,6 +18,27 @@ export const ITEM_CONDITIONS: readonly ItemCondition[] = [
   "used_fair",
   "damaged",
 ];
+
+const LEGACY_ITEM_CONDITIONS: Readonly<Record<string, ItemCondition>> = {
+  used_complete: "used_good",
+  used_incomplete: "used_fair",
+};
+
+/**
+ * URL·저장 링크에서 넘어온 상태 키를 현재 5단계 등급으로 정규화한다.
+ * 백엔드가 흡수하는 레거시 3단계 키와 같은 규칙을 써야 오래된 검색 링크가
+ * 필터 없이 전체 결과를 보여 주는 일을 막을 수 있다.
+ */
+export function parseItemCondition(value: string | undefined): ItemCondition | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === undefined || normalized.length === 0) {
+    return undefined;
+  }
+  if (ITEM_CONDITIONS.includes(normalized as ItemCondition)) {
+    return normalized as ItemCondition;
+  }
+  return LEGACY_ITEM_CONDITIONS[normalized];
+}
 export type Completeness = "full_box" | "no_box" | "bulk";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
 export type ListingCategory = "set" | "parts" | "minifig" | "moc";

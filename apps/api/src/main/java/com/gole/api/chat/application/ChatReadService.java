@@ -2,6 +2,7 @@ package com.gole.api.chat.application;
 
 import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
+import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
@@ -20,16 +21,19 @@ public class ChatReadService {
 
     private final ChatMessageMongoRepository messages;
     private final ChatReadStatePort readStates;
+    private final ChatBlockRepositoryPort blocks;
     private final SocialChatService socialChats;
     private final Clock clock;
 
     public ChatReadService(
             ChatMessageMongoRepository messages,
             ChatReadStatePort readStates,
+            ChatBlockRepositoryPort blocks,
             SocialChatService socialChats,
             Clock clock) {
         this.messages = messages;
         this.readStates = readStates;
+        this.blocks = blocks;
         this.socialChats = socialChats;
         this.clock = clock;
     }
@@ -39,7 +43,8 @@ public class ChatReadService {
                 .map(room -> room.id())
                 .distinct()
                 .toList();
-        Map<String, Long> storedCounts = readStates.countUnread(actorId, readableRoomIds);
+        List<String> blockedSenderIds = blocks.blockedTargets(actorId);
+        Map<String, Long> storedCounts = readStates.countUnread(actorId, readableRoomIds, blockedSenderIds);
         LinkedHashMap<String, Long> response = new LinkedHashMap<>();
         for (String roomId : readableRoomIds) {
             response.put(roomId, Math.max(0L, storedCounts.getOrDefault(roomId, 0L)));

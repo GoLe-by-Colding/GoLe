@@ -38,7 +38,18 @@ export interface Post {
   readonly imageUrls: readonly string[];
   readonly type: PostType;
   readonly likeCount: number;
+  readonly likedByViewer: boolean;
   readonly createdAt: string;
+}
+
+export interface PostFeedCursor {
+  readonly beforeCreatedAt: string;
+  readonly beforeId: string;
+}
+
+export interface PostFeedPage {
+  readonly items: readonly Post[];
+  readonly nextCursor: PostFeedCursor | null;
 }
 
 export interface Comment {

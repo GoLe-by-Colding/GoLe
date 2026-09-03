@@ -10,6 +10,7 @@ import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.SupportChatService;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,10 +57,11 @@ public class AdminSupportController {
     @GetMapping
     public List<TicketResponse> inbox(
             @RequestParam(required = false) SupportStatus status,
+            @RequestParam(required = false) SupportCategory category,
             @RequestParam(defaultValue = "50") int limit,
             HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        return support.inbox(actor.id(), status, limit).stream()
+        return support.inbox(actor.id(), status, category, limit).stream()
                 .map(this::response)
                 .toList();
     }
@@ -186,22 +188,28 @@ public class AdminSupportController {
             String roomId,
             String requesterId,
             String title,
+            String category,
             String status,
             String assigneeId,
             String createdAt,
             String updatedAt,
-            String resolvedAt) {
+            String resolvedAt,
+            String responseDueAt) {
 
         static TicketResponse from(SupportTicket ticket, String title) {
             return new TicketResponse(
                     ticket.roomId(),
                     ticket.requesterId(),
                     title,
+                    ticket.category().name(),
                     ticket.status().name(),
                     ticket.assigneeId(),
                     ticket.createdAt().toString(),
                     ticket.updatedAt().toString(),
-                    ticket.resolvedAt() == null ? null : ticket.resolvedAt().toString());
+                    ticket.resolvedAt() == null ? null : ticket.resolvedAt().toString(),
+                    ticket.responseDueAt() == null
+                            ? null
+                            : ticket.responseDueAt().toString());
         }
     }
 

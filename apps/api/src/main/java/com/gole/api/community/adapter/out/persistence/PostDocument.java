@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -14,6 +15,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * <p>{@code type}/{@code status} 열거형은 이름 문자열로 저장한다.
  */
 @Document(collection = "posts")
+@CompoundIndex(name = "post_feed_cursor_idx", def = "{'status': 1, 'createdAt': -1, '_id': -1}")
+@CompoundIndex(name = "post_feed_topic_cursor_idx", def = "{'status': 1, 'type': 1, 'createdAt': -1, '_id': -1}")
 public class PostDocument {
 
     @Id

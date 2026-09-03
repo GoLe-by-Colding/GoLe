@@ -89,6 +89,11 @@ db.launch_config.updateOne(
     \$set: {
       stage: 2,
       overrides: {},
+      readiness: {
+        businessDisclosure: true,
+        termsPrivacy: true,
+        paymentFlow: true,
+      },
       updatedAt: new Date(),
       updatedBy: "system:e2e-seed",
     },

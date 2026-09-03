@@ -12,9 +12,9 @@
 - [x] 3. `ListingDocument` 분해 필드 + `ListingPersistenceAdapter` 매핑(레거시 보정)
 - [x] 4. `CreateListingUseCase.Command` + `ListingResponse` + 컨트롤러 DTO 확장/검증
 - [x] 5. `ListingSeeder` 다양한 상태 조합 — 5등급 전부 등장
-- [ ] 6. **고지 불변식 테스트 — 여전히 없음.** `ConditionDisclosure`의 누락노트 필수
+- [x] 6. **고지 불변식 테스트.** `ConditionDisclosure`의 누락노트 필수
       (`hasMissingParts && missingPartsNote.isBlank()` → 예외)과 1000자 상한을 검증하는
-      테스트가 한 건도 없다. 등급 확장과는 별개 공백이라 이번에 손대지 않았다.
+      경계·정규화·보수적 레거시 기본값을 `ConditionDisclosureTest`에서 검증한다.
 
 ## 백엔드 (pricing) — 등급별 시세 분리
 - [x] 12. `ConditionGroup` { SEALED, COMPLETE, INCOMPLETE } 도입. 고지 축(5등급)과 집계 축(3그룹) 분리.
@@ -61,8 +61,8 @@
       > 여전히 안 되며(`ListingSortOrder`), 웹앱은 대문자로 보내므로 영향 없다.
 
 ## 검증/배포
-- [ ] 10. **e2e 미갱신.** `tests-e2e/` 어디에도 `completeness`/누락/풀박스/등급 관련 단언이 없다.
-      5등급 확장에 대한 e2e도 없다.
+- [x] 10. **상태 고지 e2e.** 레거시 `used_complete` URL이 `used_good`으로 이어지는지와,
+      실제 시드 매물 상세에서 5등급·구성·누락 배지·누락 상세가 함께 노출되는지 검증한다.
 - [x] 11. 커밋+push, 배포, listings 재시드 — 프로덕션 응답에 고지 필드 반영 확인
 - [ ] 22. 배포 후 프로덕션에서 레거시 키 재매핑 로그 확인(`[seed] pricing: ... 레거시 키 N건 재매핑`)
 
@@ -74,5 +74,5 @@
       enum 단위로는 덮여 있지만 `criteria.and("condition").in(...)`과
       `findBySetNumberAndConditionIn...`은 무검증이다. `PricingServiceTest`의 인메모리 페이크는
       도메인 enum으로 필터해서 저장 키 경로를 타지 않는다.
-- [ ] 프론트 레거시 URL 매핑 — `/search?condition=used_complete`가 지금은 필터가 조용히 사라진다
-      (`search-page.tsx:27` `parseCondition`). 백엔드는 흡수하는데 프론트에서 끊긴다.
+- [x] 프론트 레거시 URL 매핑 — `parseItemCondition`에서 백엔드와 동일하게
+      `used_complete → used_good`, `used_incomplete → used_fair`를 흡수한다.

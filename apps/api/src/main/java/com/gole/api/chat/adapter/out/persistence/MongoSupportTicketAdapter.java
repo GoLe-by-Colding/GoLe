@@ -1,6 +1,7 @@
 package com.gole.api.chat.adapter.out.persistence;
 
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ConflictException;
@@ -60,10 +61,28 @@ public class MongoSupportTicketAdapter implements SupportTicketRepositoryPort {
         return rows.stream().map(MongoSupportTicketAdapter::toDomain).toList();
     }
 
+    @Override
+    public List<SupportTicket> findByStatusAndCategory(SupportStatus status, SupportCategory category, int limit) {
+        var page = PageRequest.of(0, Math.clamp(limit, 1, 100), Sort.by(Sort.Direction.DESC, "updatedAt"));
+        if (category == null) {
+            return findByStatus(status, limit);
+        }
+        List<SupportTicketDocument> rows;
+        if (category == SupportCategory.GENERAL) {
+            rows = status == null ? tickets.findGeneral(page) : tickets.findGeneralByStatus(status.name(), page);
+        } else {
+            rows = status == null
+                    ? tickets.findByCategory(category.name(), page)
+                    : tickets.findByStatusAndCategory(status.name(), category.name(), page);
+        }
+        return rows.stream().map(MongoSupportTicketAdapter::toDomain).toList();
+    }
+
     private static SupportTicketDocument toDocument(SupportTicket ticket) {
         return new SupportTicketDocument(
                 ticket.roomId(),
                 ticket.requesterId(),
+                ticket.category().name(),
                 ticket.status().name(),
                 ticket.assigneeId(),
                 ticket.createdAt(),
@@ -76,6 +95,9 @@ public class MongoSupportTicketAdapter implements SupportTicketRepositoryPort {
         return new SupportTicket(
                 document.getRoomId(),
                 document.getRequesterId(),
+                document.getCategory() == null
+                        ? SupportCategory.GENERAL
+                        : SupportCategory.valueOf(document.getCategory()),
                 SupportStatus.valueOf(document.getStatus()),
                 document.getAssigneeId(),
                 document.getCreatedAt(),

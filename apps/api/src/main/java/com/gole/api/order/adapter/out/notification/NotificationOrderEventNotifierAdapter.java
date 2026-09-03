@@ -33,7 +33,7 @@ public class NotificationOrderEventNotifierAdapter implements OrderEventNotifier
             send(buyerId, "분쟁이 환불로 판정됐어요. 결제 금액이 환불됩니다", orderId);
             send(sellerId, "분쟁이 환불로 판정됐어요. 자세한 내용은 주문을 확인해 주세요", orderId);
         } else {
-            send(buyerId, "분쟁 검토 결과 거래가 완료 처리됐어요", orderId);
+            sendReviewLink(buyerId, "분쟁 검토 결과 거래가 완료 처리됐어요. 판매자 후기를 남겨보세요", orderId);
             send(sellerId, "분쟁 검토 결과 거래가 완료 처리됐어요. 정산이 진행됩니다", orderId);
         }
     }
@@ -51,14 +51,27 @@ public class NotificationOrderEventNotifierAdapter implements OrderEventNotifier
 
     @Override
     public void autoCompleted(String buyerId, String sellerId, String orderId) {
-        send(buyerId, "배송 완료 후 7일이 지나 구매가 자동 확정됐어요", orderId);
+        sendReviewLink(buyerId, "배송 완료 후 7일이 지나 구매가 자동 확정됐어요. 판매자 후기를 남겨보세요", orderId);
         send(sellerId, "구매가 자동 확정됐어요. 정산이 진행됩니다", orderId);
     }
 
+    @Override
+    public void completed(String buyerId, String sellerId, String orderId) {
+        sendReviewLink(buyerId, "구매가 확정됐어요. 판매자 후기를 남겨보세요", orderId);
+        send(sellerId, "구매자가 거래를 확정했어요. 정산이 진행됩니다", orderId);
+    }
+
     private void send(String recipientId, String message, String orderId) {
+        send(recipientId, message, "/orders/" + orderId, orderId);
+    }
+
+    private void sendReviewLink(String recipientId, String message, String orderId) {
+        send(recipientId, message, "/orders/" + orderId + "#review", orderId);
+    }
+
+    private void send(String recipientId, String message, String link, String orderId) {
         try {
-            notifyUseCase.notify(
-                    new NotifyCommand(recipientId, NotificationType.GENERAL, message, "/orders/" + orderId));
+            notifyUseCase.notify(new NotifyCommand(recipientId, NotificationType.GENERAL, message, link));
         } catch (RuntimeException e) {
             log.warn("주문 이벤트 알림 실패 recipientId={} orderId={}: {}", recipientId, orderId, e.getMessage());
         }

@@ -13,6 +13,7 @@ import com.gole.api.listing.domain.model.Money;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -134,8 +135,15 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     }
 
     @Override
-    public List<Listing> findActiveBySellers(List<String> sellerIds) {
-        return repository.findBySellerIdInAndStatus(sellerIds, ListingStatus.ACTIVE.name()).stream()
+    public List<Listing> findActiveBySellers(List<String> sellerIds, int limit) {
+        if (sellerIds.isEmpty()) {
+            return List.of();
+        }
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        return repository
+                .findBySellerIdInAndStatusOrderByCreatedAtDesc(
+                        sellerIds, ListingStatus.ACTIVE.name(), PageRequest.of(0, boundedLimit))
+                .stream()
                 .map(this::toDomain)
                 .toList();
     }

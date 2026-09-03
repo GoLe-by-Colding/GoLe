@@ -4,6 +4,7 @@ import com.gole.api.review.application.port.out.ReviewRepositoryPort;
 import com.gole.api.review.domain.exception.DuplicateReviewException;
 import com.gole.api.review.domain.model.Review;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
@@ -35,8 +36,13 @@ public class ReviewPersistenceAdapter implements ReviewRepositoryPort {
     }
 
     @Override
+    public Optional<Review> findById(String reviewId) {
+        return repository.findById(reviewId).map(this::toDomain);
+    }
+
+    @Override
     public List<Review> findByRevieweeIdRecentFirst(String revieweeId) {
-        return repository.findTop100ByRevieweeIdOrderByCreatedAtDesc(revieweeId).stream()
+        return repository.findTop100ByRevieweeIdAndHiddenAtIsNullOrderByCreatedAtDesc(revieweeId).stream()
                 .map(this::toDomain)
                 .toList();
     }
@@ -49,7 +55,11 @@ public class ReviewPersistenceAdapter implements ReviewRepositoryPort {
                 review.getRevieweeId(),
                 review.getRating(),
                 review.getContent(),
-                review.getCreatedAt());
+                review.getCreatedAt(),
+                review.getReply(),
+                review.getRepliedAt(),
+                review.getHiddenAt(),
+                review.getHiddenReason());
     }
 
     private Review toDomain(ReviewDocument document) {
@@ -60,6 +70,10 @@ public class ReviewPersistenceAdapter implements ReviewRepositoryPort {
                 document.getRevieweeId(),
                 document.getRating(),
                 document.getContent(),
-                document.getCreatedAt());
+                document.getCreatedAt(),
+                document.getReply(),
+                document.getRepliedAt(),
+                document.getHiddenAt(),
+                document.getHiddenReason());
     }
 }

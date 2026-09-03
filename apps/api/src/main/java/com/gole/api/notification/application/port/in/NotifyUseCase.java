@@ -15,5 +15,11 @@ public interface NotifyUseCase {
      * @param message     표시 메시지
      * @param link        클릭 시 이동 경로(nullable)
      */
-    record NotifyCommand(String recipientId, NotificationType type, String message, String link) {}
+    record NotifyCommand(
+            String recipientId, NotificationType type, String message, String link, String deduplicationKey) {
+
+        public NotifyCommand(String recipientId, NotificationType type, String message, String link) {
+            this(recipientId, type, message, link, null);
+        }
+    }
 }

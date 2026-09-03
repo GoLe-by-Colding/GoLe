@@ -1,10 +1,12 @@
 package com.gole.api.account.adapter.out.oauth;
 
 import com.gole.api.account.application.port.out.OAuthStateStorePort;
-import com.gole.api.account.domain.model.AuthProvider;
 import java.time.Duration;
+import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Redis 기반 OAuth state 저장소. key {@code oauth:state:<state>} → provider key. 1회 소비(get+delete).
@@ -16,30 +18,39 @@ public class RedisOAuthStateStoreAdapter implements OAuthStateStorePort {
     private static final String KEY_PREFIX = "oauth:state:";
 
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
-    public RedisOAuthStateStoreAdapter(StringRedisTemplate redisTemplate) {
+    public RedisOAuthStateStoreAdapter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
-    public void save(String state, AuthProvider provider, String redirectUri, Duration ttl) {
-        redisTemplate.opsForValue().set(key(state), value(provider, redirectUri), ttl);
-    }
-
-    @Override
-    public boolean consume(String state, AuthProvider provider, String redirectUri) {
-        if (state == null || state.isBlank()) {
-            return false;
+    public void save(String state, OAuthStateContext context, Duration ttl) {
+        try {
+            redisTemplate.opsForValue().set(key(state), objectMapper.writeValueAsString(context), ttl);
+        } catch (JacksonException invalidContext) {
+            throw new IllegalStateException("OAuth 요청 문맥을 저장할 수 없습니다", invalidContext);
         }
-        String storedProvider = redisTemplate.opsForValue().getAndDelete(key(state));
-        return storedProvider != null && storedProvider.equals(value(provider, redirectUri));
+    }
+
+    @Override
+    public Optional<OAuthStateContext> consume(String state) {
+        if (state == null || state.isBlank()) {
+            return Optional.empty();
+        }
+        String stored = redisTemplate.opsForValue().getAndDelete(key(state));
+        if (stored == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(objectMapper.readValue(stored, OAuthStateContext.class));
+        } catch (JacksonException corruptState) {
+            return Optional.empty();
+        }
     }
 
     private static String key(String state) {
         return KEY_PREFIX + state;
-    }
-
-    private static String value(AuthProvider provider, String redirectUri) {
-        return provider.key() + "\n" + redirectUri;
     }
 }

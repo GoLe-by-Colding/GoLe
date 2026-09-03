@@ -25,6 +25,7 @@ import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.SupportChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -92,6 +93,23 @@ class AdminSupportControllerTest {
                         AdminTargetType.SUPPORT_TICKET,
                         "room-1",
                         "previousAssignee=admin-1; reason=기존 담당자 계정 정지"));
+    }
+
+    @Test
+    void privacyInboxExposesCategoryAndResponseTarget() throws Exception {
+        SupportTicket ticket =
+                SupportTicket.opened("room-privacy", "user-1", SupportCategory.PRIVACY_CORRECTION_DELETION, NOW);
+        SocialChatRoom room = SocialChatRoom.support("room-privacy", "user-1", "삭제 요청", NOW);
+        when(support.inbox("admin-2", null, SupportCategory.PRIVACY_CORRECTION_DELETION, 50))
+                .thenReturn(List.of(ticket));
+        when(rooms.requireRoom("room-privacy")).thenReturn(room);
+
+        mvc.perform(get("/api/admin/support")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("category", "PRIVACY_CORRECTION_DELETION"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].category").value("PRIVACY_CORRECTION_DELETION"))
+                .andExpect(jsonPath("$[0].responseDueAt").value("2026-09-09T09:00:00Z"));
     }
 
     @Test

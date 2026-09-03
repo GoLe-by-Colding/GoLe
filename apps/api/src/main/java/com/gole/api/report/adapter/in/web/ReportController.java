@@ -18,9 +18,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Inbound 어댑터(REST): 신고 접수 — 가품·IP 도용·사기 매물/게시글 notice & takedown 입구.
+ * Inbound 어댑터(REST): 신고 접수 — 가품·IP 도용·사기 매물/게시글 및 부적절한 후기 조치 입구.
  */
-@Tag(name = "Report", description = "매물·게시글 신고 접수")
+@Tag(name = "Report", description = "매물·게시글·후기 신고 접수")
 @RestController
 @RequestMapping("/api/v1/reports")
 public class ReportController {
@@ -36,6 +36,9 @@ public class ReportController {
     public Map<String, String> submit(@Valid @RequestBody SubmitReportRequest request, HttpServletRequest http) {
         if (request.targetType() == ReportTargetType.CHAT_MESSAGE) {
             throw new BadRequestException("CHAT_REPORT_ROUTE_REQUIRED", "채팅 메시지는 대화 화면의 전용 신고 기능을 이용해 주세요");
+        }
+        if (request.targetType() == ReportTargetType.COMMENT) {
+            throw new BadRequestException("COMMENT_REPORT_ROUTE_REQUIRED", "댓글은 게시글 화면의 전용 신고 기능을 이용해 주세요");
         }
         String id = submitReportUseCase.submit(new SubmitReportCommand(
                 AuthenticatedUser.id(http),

@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { POST_TOPIC_LABEL, type Post } from "@entities/community";
+import { useSession } from "@entities/user";
 import { LikeButton } from "@features/like-post";
 import { Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
@@ -9,12 +12,18 @@ export interface PostCardProps {
 }
 
 export function PostCard({ post }: PostCardProps) {
+  const { session } = useSession();
   const cover = post.imageUrls[0];
   const topicLabel = POST_TOPIC_LABEL[post.type];
   const accentTopic = post.type === "moc" || post.type === "easter_egg";
 
   return (
-    <Card padded={false} className="flex flex-col">
+    <Card
+      padded={false}
+      className="flex flex-col"
+      data-testid="post-card"
+      data-author-id={post.authorId}
+    >
       {cover !== undefined ? (
         <Link href={`/community/${post.id}`} className="relative block overflow-hidden">
           <MediaImage
@@ -37,14 +46,18 @@ export function PostCard({ post }: PostCardProps) {
       ) : null}
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/shops/${encodeURIComponent(post.authorId)}`}
+            className="flex min-w-0 items-center gap-2 rounded-sm outline-none hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-400"
+            aria-label={`${post.authorId.slice(0, 8)} 프로필 보기`}
+          >
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">
               {post.authorId.slice(0, 1).toUpperCase()}
             </span>
             <span className="truncate text-sm font-semibold text-neutral-900">
               {post.authorId.slice(0, 8)}
             </span>
-          </div>
+          </Link>
           {cover === undefined ? (
             <span
               className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${
@@ -62,14 +75,20 @@ export function PostCard({ post }: PostCardProps) {
           {post.content}
         </Link>
         <div className="mt-auto flex items-center justify-between border-t border-neutral-100 pt-3">
-          <LikeButton postId={post.id} initialLikeCount={post.likeCount} />
+          <LikeButton
+            postId={post.id}
+            initialLikeCount={post.likeCount}
+            initialLiked={post.likedByViewer}
+          />
           <div className="flex items-center gap-3">
-            <Link
-              href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
-              className="text-sm font-semibold text-brand-600 hover:text-brand-700"
-            >
-              대화
-            </Link>
+            {session?.accountId !== post.authorId ? (
+              <Link
+                href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
+                className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+              >
+                대화
+              </Link>
+            ) : null}
             <Link
               href={`/community/${post.id}`}
               className="text-sm font-medium text-neutral-400 hover:text-brand-600"

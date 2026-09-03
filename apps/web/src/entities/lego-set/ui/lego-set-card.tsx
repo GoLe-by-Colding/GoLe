@@ -2,6 +2,7 @@ import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
 import { isRetired } from "../model/types";
+import { OfficialLegoLink } from "./official-lego-link";
 
 export interface LegoSetCardProps {
   readonly set: LegoSet;
@@ -47,14 +48,11 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
             <dd>{set.releaseYear}</dd>
           </div>
         </dl>
-        <a
-          href={`https://www.lego.com/ko-kr/search?q=${encodeURIComponent(set.setNumber)}`}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
+        <OfficialLegoLink
+          setNumber={set.setNumber}
+          label="레고 공식 페이지"
           className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
-        >
-          레고 공식 페이지 ↗
-        </a>
+        />
       </div>
     </Card>
   );

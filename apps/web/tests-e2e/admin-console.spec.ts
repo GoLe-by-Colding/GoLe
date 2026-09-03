@@ -33,13 +33,47 @@ async function mockMe(
       body: JSON.stringify(result.body ?? { code: "UNAUTHORIZED", message: "unauthorized" }),
     });
   });
+  // HttpOnly 쿠키를 직접 심지 않는 화면 게이트 테스트에서는 헤더의 전역 알림 폴링이
+  // 실제 API로 새면 INVALID_SESSION이 합성 로컬 세션을 지운다. 게이트와 무관한 요청은
+  // 모든 mockMe 호출에서 함께 격리해 테스트가 권한 응답 하나만 관찰하게 한다.
+  await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
+  // 권한 확인을 통과한 직후 셸이 요청하는 집계도 격리한다. 합성 세션에는 HttpOnly
+  // 쿠키가 없으므로 실제 API로 새면 INVALID_SESSION 401이 localStorage를 지워
+  // 게이트 테스트가 비결정적으로 로그인 화면으로 되돌아간다. 각 테스트가 뒤에서
+  // 등록하는 더 구체적인 overview 핸들러가 이 기본 응답을 덮어쓸 수 있다.
+  await page.route("**/api/admin/overview", (route) =>
+    route.fulfill({
+      json: {
+        counts: {},
+        gmv: 0,
+        ordersByStatus: {},
+        activeListings: 0,
+        pendingReports: 0,
+        pendingSettlements: 0,
+      },
+    }),
+  );
 }
+
+test.beforeEach(async ({ page }) => {
+  // 대부분의 화면 게이트 테스트는 HttpOnly 쿠키 없이 localStorage 메타데이터와 /me
+  // 응답만 합성한다. 사이트 헤더의 독립적인 알림 폴링까지 실제 API로 보내면 그 401이
+  // 세션을 정리하므로, 이 스펙 전체에서 전역 요청을 격리한다.
+  await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
+});
 
 test.describe("운영자 콘솔 — 화면 게이트", () => {
   test("비로그인 사용자에게 /admin은 로그인 안내를 보여준다 (R1.3)", async ({ page }) => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
+    // 링크 안에 버튼을 중첩하면 포인터·키보드 활성화가 브라우저마다 달라진다.
+    // CTA 하나가 하나의 링크 역할만 갖는지 계약으로 고정한다.
+    await expect(page.locator("a button, button a")).toHaveCount(0);
   });
 
   test("비로그인 사용자에게 콘솔 하위 경로도 동일하게 차단된다 (R1.3)", async ({ page }) => {
@@ -153,8 +187,18 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
       });
     });
     await page.route("**/api/admin/overview", async (route) => {
-      await route.fulfill({ contentType: "application/json", body: '{"pendingReports":0}' });
+      await route.fulfill({
+        json: {
+          counts: {},
+          gmv: 0,
+          ordersByStatus: {},
+          activeListings: 0,
+          pendingReports: 0,
+          pendingSettlements: 0,
+        },
+      });
     });
+    await page.route("**/api/admin/audit?limit=8", (route) => route.fulfill({ json: [] }));
 
     await page.goto("/admin");
     await page.getByRole("button", { name: "다시 시도" }).click();
@@ -168,17 +212,71 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
       status: 200,
       body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
     });
+    // 헤더의 알림 폴링까지 실제 API로 새면 INVALID_SESSION이 로컬 테스트 세션을
+    // 정리해 관리자 게이트가 닫힌다. 셸과 무관한 전역 요청도 명시적으로 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
     await page.route("**/api/admin/overview", async (route) => {
       await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ pendingReports: 0, ordersByStatus: {} }),
+        json: {
+          counts: {},
+          gmv: 0,
+          ordersByStatus: {},
+          activeListings: 0,
+          pendingReports: 0,
+          pendingSettlements: 0,
+        },
       });
     });
+    await page.route("**/api/admin/audit?limit=8", (route) => route.fulfill({ json: [] }));
 
     await page.goto("/admin");
 
     await expect(page.getByRole("heading", { name: "운영자 콘솔" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+  });
+
+  test("운영 문의는 개인정보 권리 유형과 처리 목표를 표시하고 유형으로 필터한다", async ({
+    page,
+  }) => {
+    await seedLocalSession(page, { accountId: "admin-1", sessionToken: "", role: "ADMIN" });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
+    });
+    const requestedUrls: string[] = [];
+    await page.route(/\/api\/admin\/support(?:\?.*)?$/, async (route) => {
+      requestedUrls.push(route.request().url());
+      await route.fulfill({
+        json: [
+          {
+            roomId: "privacy-room",
+            requesterId: "user-privacy",
+            title: "내 정보 열람",
+            category: "PRIVACY_ACCESS",
+            status: "UNASSIGNED",
+            assigneeId: null,
+            createdAt: "2026-09-03T09:00:00Z",
+            updatedAt: "2026-09-03T09:00:00Z",
+            resolvedAt: null,
+            responseDueAt: "2099-09-13T09:00:00Z",
+          },
+        ],
+      });
+    });
+
+    await page.goto("/admin/support");
+
+    await expect(page.getByRole("heading", { name: "운영 문의" })).toBeVisible();
+    const inbox = page.getByRole("complementary");
+    await expect(inbox.getByText("개인정보 열람", { exact: true })).toBeVisible();
+    await expect(inbox.getByText(/일 남음/)).toBeVisible();
+
+    await page.getByRole("combobox", { name: "유형" }).selectOption("PRIVACY_ACCESS");
+    await expect
+      .poll(() => requestedUrls.some((url) => url.includes("category=PRIVACY_ACCESS")))
+      .toBe(true);
   });
 
   test("콘솔 로그인 안내는 원래 경로를 returnTo로 전달한다", async ({ page }) => {
@@ -211,6 +309,11 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       status: 200,
       body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
     });
+    // 헤더의 알림 폴링까지 실제 API로 새면 INVALID_SESSION이 로컬 테스트 세션을
+    // 정리해 관리자 게이트가 닫힌다. 셸과 무관한 전역 요청도 명시적으로 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
     await page.route("**/api/admin/overview", async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -247,6 +350,39 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
+  });
+
+  test("운영자 메뉴의 모든 항목이 해당 콘솔 화면으로 이동한다", async ({ page }) => {
+    // 이 테스트는 내비게이션 계약만 확인한다. 각 화면의 데이터 요청은 실패 화면으로
+    // 안전하게 떨어뜨려, 합성 토큰의 401이 세션을 지우는 외부 효과를 차단한다.
+    await page.route("**/api/admin/**", (route) => route.abort("failed"));
+    await page.goto("/admin");
+
+    const routes = [
+      ["대시보드", "/admin"],
+      ["출시 단계", "/admin/launch"],
+      ["문의", "/admin/support"],
+      ["신고", "/admin/reports"],
+      ["매물", "/admin/listings"],
+      ["주문", "/admin/orders"],
+      ["예외 큐", "/admin/exceptions"],
+      ["정산", "/admin/settlements"],
+      ["커뮤니티", "/admin/community"],
+      ["회원", "/admin/accounts"],
+      ["카탈로그", "/admin/catalog"],
+      ["감사 로그", "/admin/audit"],
+    ] as const;
+
+    for (const [label, href] of routes) {
+      const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+      await navigation.locator(`a[href="${href}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`${href.replace("/", "\\/")}$`));
+      await expect(navigation.locator(`a[href="${href}"]`)).toHaveAttribute("aria-current", "page");
+      await expect(
+        navigation.locator(`a[href="${href}"]`),
+        `${label} 메뉴가 보여야 함`,
+      ).toBeVisible();
+    }
   });
 
   test("비활성 메뉴는 Figma Admin/Navigation Item 규격을 따른다", async ({ page }) => {
@@ -309,11 +445,73 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin");
 
-    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+    const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+    await expect(navigation).toBeVisible();
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
+
+    const navigationBounds = await navigation.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(navigationBounds.scrollWidth).toBeLessThanOrEqual(navigationBounds.clientWidth);
+
+    const [dashboardBox, reportsBox] = await Promise.all([
+      navigation.getByRole("link", { name: "대시보드", exact: true }).boundingBox(),
+      navigation.getByRole("link", { name: /신고/ }).boundingBox(),
+    ]);
+    expect(dashboardBox).not.toBeNull();
+    expect(reportsBox).not.toBeNull();
+    expect(reportsBox!.y).toBeGreaterThan(dashboardBox!.y + dashboardBox!.height);
+  });
+
+  test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route("**/api/admin/catalog/sets**", async (route) => {
+      await route.fulfill({
+        json: [
+          {
+            setNumber: "10307",
+            name: "Eiffel Tower",
+            theme: "Icons",
+            pieceCount: 10001,
+            releaseYear: 2022,
+            retirementStatus: "ACTIVE",
+            imageUrl: null,
+            featured: true,
+          },
+        ],
+      });
+    });
+
+    await page.goto("/admin/catalog");
+    await expect(page.getByRole("table", { name: /레고 세트 카탈로그 목록/ })).toBeVisible();
+
+    const pieceCount = page.getByRole("spinbutton", { name: "피스 수" });
+    const releaseYear = page.getByRole("spinbutton", { name: "출시 연도" });
+    const [pieceBox, yearBox] = await Promise.all([
+      pieceCount.boundingBox(),
+      releaseYear.boundingBox(),
+    ]);
+    expect(pieceBox).not.toBeNull();
+    expect(yearBox).not.toBeNull();
+    expect(yearBox!.y).toBeGreaterThan(pieceBox!.y + pieceBox!.height);
+
+    const tableScroller = page
+      .getByRole("table", { name: /레고 세트 카탈로그 목록/ })
+      .locator("..");
+    const dimensions = await tableScroller.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+    expect(dimensions.pageScrollWidth - dimensions.pageClientWidth).toBeLessThanOrEqual(1);
   });
 
   test("카탈로그를 번호·이름·테마로 즉시 찾는다", async ({ page }) => {
@@ -357,6 +555,206 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("검색 결과 1개 / 조회 2개")).toBeVisible();
   });
 
+  test("결제·판매자 지급이 준비되지 않으면 Stage 2 상향을 잠근다", async ({ page }) => {
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({
+        json: {
+          counts: {},
+          activeListings: 0,
+          gmv: 0,
+          ordersByStatus: {},
+          pendingReports: 0,
+          pendingSettlements: 0,
+          paymentReadiness: {
+            enabled: false,
+            ready: false,
+            state: "DISABLED",
+            channelType: "UNKNOWN",
+            methods: ["KAKAOPAY"],
+            currency: "KRW",
+            issues: [],
+          },
+        },
+      });
+    });
+    await page.route("**/api/admin/launch/history**", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/admin/launch", (route) =>
+      route.fulfill({
+        json: {
+          config: {
+            stage: 1,
+            tradeMode: "DIRECT_CHAT",
+            features: { payments: false, reviews: false, partnerPayout: false },
+            updatedAt: "2026-09-03T01:00:00Z",
+          },
+          requestedStage: 1,
+          overrides: {},
+          readiness: {
+            businessDisclosure: false,
+            termsPrivacy: false,
+            paymentFlow: false,
+            payoutFlow: false,
+          },
+          updatedBy: "admin-1",
+          settlementMode: "DISABLED",
+          payoutContractVerified: false,
+        },
+      }),
+    );
+
+    await page.goto("/admin/launch");
+
+    await expect(page.getByRole("heading", { name: "출시 단계" })).toBeVisible();
+    await expect(page.getByText("PortOne · 카카오페이")).toBeVisible();
+    await expect(page.getByText("비활성", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("판매자 지급 계약").locator("..").getByText("미준비"),
+    ).toBeVisible();
+
+    const paymentStage = page.getByRole("group", { name: "Stage 2 · 결제" });
+    await expect(paymentStage.getByText("지급 계약 서면 확인이 필요함")).toBeVisible();
+    await expect(paymentStage.getByRole("button", { name: "전환" })).toBeDisabled();
+  });
+
+  test("운영 승인 세 항목을 기록해야 Stage 2 전환이 열린다", async ({ page }) => {
+    const readiness: Record<string, boolean> = {
+      businessDisclosure: false,
+      termsPrivacy: false,
+      paymentFlow: false,
+      payoutFlow: false,
+    };
+    const payload = () => ({
+      config: {
+        stage: 1,
+        tradeMode: "DIRECT_CHAT",
+        features: { payments: false, reviews: false, partnerPayout: false },
+        updatedAt: "2026-09-03T01:00:00Z",
+      },
+      requestedStage: 1,
+      overrides: {},
+      readiness,
+      updatedBy: "admin-1",
+      settlementMode: "MANUAL",
+      payoutContractVerified: true,
+    });
+    const submitted: { check: string; confirmed: boolean; reason: string }[] = [];
+    await page.route("**/api/admin/overview", (route) =>
+      route.fulfill({
+        json: {
+          counts: {},
+          activeListings: 0,
+          gmv: 0,
+          ordersByStatus: {},
+          pendingReports: 0,
+          pendingSettlements: 0,
+          paymentReadiness: {
+            enabled: true,
+            ready: true,
+            state: "READY",
+            channelType: "TEST",
+            methods: ["KAKAOPAY"],
+            currency: "KRW",
+            issues: [],
+          },
+        },
+      }),
+    );
+    await page.route("**/api/admin/launch/history**", (route) =>
+      route.fulfill({
+        json: submitted
+          .map((entry, index) => ({
+            id: `readiness-${index}`,
+            type: "READINESS",
+            target: entry.check,
+            before: "false",
+            after: String(entry.confirmed),
+            reason: entry.reason,
+            actorId: "admin-1",
+            actorEmail: "admin@gole.local",
+            occurredAt: `2026-09-03T01:0${index}:00Z`,
+          }))
+          .reverse(),
+      }),
+    );
+    await page.route("**/api/admin/launch/readiness/**", async (route) => {
+      const check = new URL(route.request().url()).pathname.split("/").at(-1) ?? "";
+      const body = route.request().postDataJSON() as { confirmed: boolean; reason: string };
+      readiness[check] = body.confirmed;
+      submitted.push({ check, ...body });
+      await route.fulfill({ json: payload() });
+    });
+    await page.route("**/api/admin/launch", (route) => route.fulfill({ json: payload() }));
+
+    await page.goto("/admin/launch");
+
+    const paymentStage = page.getByRole("group", { name: "Stage 2 · 결제" });
+    await expect(paymentStage.getByText(/운영 승인 미확인/)).toBeVisible();
+    for (const [title, check] of [
+      ["사업자·고객센터 고지", "businessDisclosure"],
+      ["약관·개인정보 검토", "termsPrivacy"],
+      ["결제·웹훅·환불 실거래", "paymentFlow"],
+    ] as const) {
+      await page.getByLabel("변경 사유").fill(`${title} 증빙 확인`);
+      await page
+        .getByRole("group", { name: title })
+        .getByRole("button", { name: "확인 완료" })
+        .click();
+      await expect(page.getByRole("group", { name: title }).getByText("승인됨")).toBeVisible();
+      await expect(
+        page.getByRole("group", { name: title }).getByText(`${title} 증빙 확인`),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("group", { name: title }).getByText(/admin@gole\.local/),
+      ).toBeVisible();
+      expect(submitted.at(-1)).toEqual({ check, confirmed: true, reason: `${title} 증빙 확인` });
+    }
+
+    await expect(paymentStage.getByRole("button", { name: "전환" })).toBeEnabled();
+  });
+
+  test("결제 진단 API가 실패해도 긴급 단계 하향 통로를 유지한다", async ({ page }) => {
+    await page.route("**/api/admin/overview", (route) => route.abort("failed"));
+    await page.route("**/api/admin/launch/history**", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/admin/launch", (route) =>
+      route.fulfill({
+        json: {
+          config: {
+            stage: 2,
+            tradeMode: "MANUAL_SETTLEMENT",
+            features: { payments: true, reviews: true, partnerPayout: false },
+            updatedAt: "2026-09-03T01:00:00Z",
+          },
+          requestedStage: 2,
+          overrides: {},
+          readiness: {
+            businessDisclosure: true,
+            termsPrivacy: true,
+            paymentFlow: true,
+            payoutFlow: false,
+          },
+          updatedBy: "admin-1",
+          settlementMode: "MANUAL",
+          payoutContractVerified: true,
+        },
+      }),
+    );
+
+    await page.goto("/admin/launch");
+
+    await expect(page.getByRole("heading", { name: "출시 단계" })).toBeVisible();
+    await expect(page.getByText("상태 확인 불가")).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Stage 1 · 커뮤니티" }).getByRole("button", {
+        name: "전환",
+      }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("group", { name: "Stage 3 · 지급대행" }).getByRole("button", {
+        name: "전환",
+      }),
+    ).toBeDisabled();
+  });
+
   test("정산 원장에서 지급 증빙을 입력해 완료 처리한다", async ({ page }) => {
     let markedPaid = false;
     let settlementStatus: "PENDING" | "PAYOUT_IN_PROGRESS" = "PENDING";
@@ -389,6 +787,12 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
           },
           requestedStage: 2,
           overrides: {},
+          readiness: {
+            businessDisclosure: true,
+            termsPrivacy: true,
+            paymentFlow: true,
+            payoutFlow: false,
+          },
           updatedBy: "admin-1",
           settlementMode: "MANUAL",
           payoutContractVerified: true,

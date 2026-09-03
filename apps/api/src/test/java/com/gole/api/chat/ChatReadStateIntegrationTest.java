@@ -14,19 +14,24 @@ import com.gole.api.chat.adapter.out.persistence.ChatReadCursorMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.SocialChatRoomMongoRepository;
 import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
+import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -79,6 +84,12 @@ class ChatReadStateIntegrationTest {
     SocialChatService socialChats;
 
     @Autowired
+    SocialChatRoomRepositoryPort roomRepository;
+
+    @Autowired
+    MongoTemplate mongoTemplate;
+
+    @Autowired
     PlatformTransactionManager transactionManager;
 
     @BeforeEach
@@ -86,6 +97,7 @@ class ChatReadStateIntegrationTest {
         messages.deleteAll();
         cursors.deleteAll();
         socialRooms.deleteAll();
+        mongoTemplate.getDb().getCollection("chat_rooms").deleteMany(new Document());
         mongoAccounts.deleteAll();
         messages.saveAll(List.of(
                 message("m-001", "peer", T0),
@@ -96,11 +108,11 @@ class ChatReadStateIntegrationTest {
 
     @Test
     void countsOnlyIncomingMessagesStrictlyAfterSentAtAndIdCursor() {
-        assertThat(readStates.countUnread("me", List.of("room-1"))).containsEntry("room-1", 3L);
+        assertThat(readStates.countUnread("me", List.of("room-1"), List.of())).containsEntry("room-1", 3L);
 
         readStates.advance("room-1", "me", "m-002", T1, T2);
 
-        assertThat(readStates.countUnread("me", List.of("room-1"))).containsEntry("room-1", 2L);
+        assertThat(readStates.countUnread("me", List.of("room-1"), List.of())).containsEntry("room-1", 2L);
     }
 
     @RepeatedTest(10)
@@ -118,7 +130,7 @@ class ChatReadStateIntegrationTest {
         pool.shutdownNow();
         readStates.advance("room-1", "me", "m-001", T0, T2.plusSeconds(1));
 
-        assertThat(readStates.countUnread("me", List.of("room-1"))).doesNotContainKey("room-1");
+        assertThat(readStates.countUnread("me", List.of("room-1"), List.of())).doesNotContainKey("room-1");
         assertThat(cursors.findByAccountIdAndRoomIdIn("me", List.of("room-1")))
                 .singleElement()
                 .satisfies(cursor -> {
@@ -131,11 +143,13 @@ class ChatReadStateIntegrationTest {
     void invitedMemberStartsAtCurrentTailAndOnlySeesFutureMessagesAsUnread() {
         readStates.initializeAtLatest("room-1", "invitee", T2);
 
-        assertThat(readStates.countUnread("invitee", List.of("room-1"))).doesNotContainKey("room-1");
+        assertThat(readStates.countUnread("invitee", List.of("room-1"), List.of()))
+                .doesNotContainKey("room-1");
 
         messages.save(message("m-005", "peer", T2.plusSeconds(1)));
 
-        assertThat(readStates.countUnread("invitee", List.of("room-1"))).containsEntry("room-1", 1L);
+        assertThat(readStates.countUnread("invitee", List.of("room-1"), List.of()))
+                .containsEntry("room-1", 1L);
     }
 
     @Test
@@ -146,7 +160,7 @@ class ChatReadStateIntegrationTest {
                 .executeWithoutResult(
                         ignored -> readStates.initializeAtLatest("room-1", "returning-member", T2.plusSeconds(1)));
 
-        assertThat(readStates.countUnread("returning-member", List.of("room-1")))
+        assertThat(readStates.countUnread("returning-member", List.of("room-1"), List.of()))
                 .doesNotContainKey("room-1");
         assertThat(cursors.findByAccountIdAndRoomIdIn("returning-member", List.of("room-1")))
                 .singleElement()
@@ -167,12 +181,63 @@ class ChatReadStateIntegrationTest {
         SocialChatRoom rejoined = socialChats.invite(group.id(), "owner", "returning-member");
 
         assertThat(rejoined.memberIds()).contains("returning-member");
-        assertThat(readStates.countUnread("returning-member", List.of(group.id())))
+        assertThat(readStates.countUnread("returning-member", List.of(group.id()), List.of()))
                 .doesNotContainKey(group.id());
 
         messages.save(message("group-003", group.id(), "active-member", T2.plusSeconds(1)));
-        assertThat(readStates.countUnread("returning-member", List.of(group.id())))
+        assertThat(readStates.countUnread("returning-member", List.of(group.id()), List.of()))
                 .containsEntry(group.id(), 1L);
+    }
+
+    @Test
+    void blockedSendersDoNotCreateGhostUnreadCounts() {
+        assertThat(readStates.countUnread("me", List.of("room-1"), List.of("peer")))
+                .doesNotContainKey("room-1");
+    }
+
+    @Test
+    void oneHundredConcurrentDirectRoomRequestsConvergeToOneRoom() throws Exception {
+        saveUser("direct-a");
+        saveUser("direct-b");
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(16);
+        try {
+            List<Future<SocialChatRoom>> futures = java.util.stream.IntStream.range(0, 100)
+                    .mapToObj(ignored -> pool.submit(() -> {
+                        start.await(20, TimeUnit.SECONDS);
+                        return socialChats.createDirect("direct-a", "direct-b");
+                    }))
+                    .toList();
+            start.countDown();
+
+            Set<String> roomIds = new java.util.LinkedHashSet<>();
+            for (Future<SocialChatRoom> future : futures) {
+                roomIds.add(future.get(20, TimeUnit.SECONDS).id());
+            }
+
+            assertThat(roomIds).singleElement();
+            assertThat(socialRooms.count()).isEqualTo(1L);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void legacyListingRoomIsReadWithoutMigration() {
+        mongoTemplate
+                .getDb()
+                .getCollection("chat_rooms")
+                .insertOne(new Document("_id", "legacy-room")
+                        .append("listingId", "listing-1")
+                        .append("buyerId", "buyer-1")
+                        .append("sellerId", "seller-1")
+                        .append("createdAt", java.util.Date.from(T0)));
+
+        SocialChatRoom room = roomRepository.findById("legacy-room").orElseThrow();
+
+        assertThat(room.type()).isEqualTo(ChatRoomType.LISTING);
+        assertThat(room.listingId()).isEqualTo("listing-1");
+        assertThat(room.memberIds()).containsExactly("buyer-1", "seller-1");
     }
 
     private void advanceAfter(CountDownLatch start, CountDownLatch done, String messageId, Instant sentAt) {

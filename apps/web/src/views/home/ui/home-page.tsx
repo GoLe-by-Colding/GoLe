@@ -9,6 +9,7 @@ import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
+import { serverSessionHeaders } from "@shared/api/server-session-headers";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
@@ -28,7 +29,7 @@ async function loadTrending(): Promise<readonly TrendingSet[]> {
 
 async function loadCommunity(): Promise<readonly Post[]> {
   try {
-    const posts = await fetchFeed();
+    const posts = await fetchFeed({ headers: await serverSessionHeaders(), limit: 4 });
     return posts.slice(0, 4);
   } catch {
     return [];
@@ -124,14 +125,14 @@ export async function HomePage() {
                 깊은 바다에서 건져 올린 브릭
               </span>
               <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
-                레고를 <span className="inline-block text-accent-300">가장 합리적으로</span>
+                브릭을 <span className="inline-block text-accent-300">가장 합리적으로</span>
               </h1>
               <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
                 {paymentsOpen
                   ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
                   : "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."}
                 <br className="max-sm:hidden" />
-                흩어져 있던 레고 거래를 한곳에서.
+                흩어져 있던 브릭 거래를 한곳에서.
               </p>
               <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
                 가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.

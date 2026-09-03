@@ -6,6 +6,7 @@ import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -80,7 +81,7 @@ public class SocialChatController {
     @Transactional
     public SocialRoomResponse createSupport(@Valid @RequestBody CreateSupportRequest request, HttpServletRequest http) {
         String actorId = AuthenticatedUser.id(http);
-        var conversation = chats.createSupport(actorId, request.title());
+        var conversation = chats.createSupport(actorId, request.title(), request.category());
         messaging.send(conversation.room().id(), actorId, request.message());
         return SocialRoomResponse.from(conversation.room(), conversation.ticket());
     }
@@ -132,7 +133,14 @@ public class SocialChatController {
             @NotBlank @Size(max = 80) String title, @Size(min = 2, max = 49) List<@NotBlank String> memberIds) {}
 
     public record CreateSupportRequest(
-            @NotBlank @Size(max = 100) String title, @NotBlank @Size(max = 2000) String message) {}
+            @NotBlank @Size(max = 100) String title,
+            @NotBlank @Size(max = 2000) String message,
+            SupportCategory category) {
+
+        public CreateSupportRequest(String title, String message) {
+            this(title, message, SupportCategory.GENERAL);
+        }
+    }
 
     public record InviteMemberRequest(@NotBlank String accountId) {}
 
@@ -149,7 +157,9 @@ public class SocialChatController {
             String lastMessageAt,
             String closedAt,
             String supportStatus,
-            String assigneeId) {
+            String assigneeId,
+            String supportCategory,
+            String responseDueAt) {
 
         static SocialRoomResponse from(SocialChatRoom room, SupportTicket ticket) {
             return new SocialRoomResponse(
@@ -163,7 +173,9 @@ public class SocialChatController {
                     room.lastMessageAt().toString(),
                     instant(room.closedAt()),
                     ticket == null ? null : ticket.status().name(),
-                    ticket == null ? null : ticket.assigneeId());
+                    ticket == null ? null : ticket.assigneeId(),
+                    ticket == null ? null : ticket.category().name(),
+                    ticket == null ? null : instant(ticket.responseDueAt()));
         }
 
         private static String instant(Instant value) {

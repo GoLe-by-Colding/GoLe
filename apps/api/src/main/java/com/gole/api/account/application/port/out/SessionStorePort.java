@@ -2,6 +2,7 @@ package com.gole.api.account.application.port.out;
 
 import com.gole.api.account.domain.model.Role;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -13,8 +14,21 @@ public interface SessionStorePort {
     /** 토큰→(계정,권한) 매핑을 TTL과 함께 저장한다. */
     void store(String token, String accountId, Role role, Duration ttl);
 
+    /** 최초 발급·직전 회전 시각을 함께 저장한다. 레거시 구현은 기존 저장 계약으로 폴백한다. */
+    default void store(String token, String accountId, Role role, Instant issuedAt, Instant rotatedAt, Duration ttl) {
+        store(token, accountId, role, ttl);
+    }
+
     /** 토큰을 해석한다. 없거나 만료면 비어있음. */
     Optional<SessionPrincipal> resolve(String token);
+
+    /** 활성 요청의 유휴 만료 시간을 연장한다. 레거시 구현에서는 안전하게 아무 일도 하지 않는다. */
+    default void touch(String token, Duration ttl) {}
+
+    /** 계정 인덱스까지 함께 연장할 수 있는 확장 계약. 기존 구현은 토큰 TTL 갱신으로 폴백한다. */
+    default void touch(String token, String accountId, Duration ttl) {
+        touch(token, ttl);
+    }
 
     /** 토큰을 폐기한다(로그아웃). */
     void revoke(String token);
@@ -27,5 +41,10 @@ public interface SessionStorePort {
     void revokeAllForAccount(String accountId);
 
     /** 인증된 호출자 식별 정보. */
-    record SessionPrincipal(String accountId, Role role) {}
+    record SessionPrincipal(String accountId, Role role, Instant issuedAt, Instant rotatedAt) {
+        /** 기존 테스트·어댑터와의 호환용 생성자. 메타데이터가 없는 세션은 다음 갱신 때 v2로 승격된다. */
+        public SessionPrincipal(String accountId, Role role) {
+            this(accountId, role, null, null);
+        }
+    }
 }

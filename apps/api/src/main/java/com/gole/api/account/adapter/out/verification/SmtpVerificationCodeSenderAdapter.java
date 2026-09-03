@@ -32,4 +32,14 @@ public class SmtpVerificationCodeSenderAdapter implements VerificationCodeSender
         message.setText("GoLe 이메일 인증 코드는 " + code.code() + " 입니다.\n\n10분 안에 입력해 주세요.");
         mailSender.send(message);
     }
+
+    @Override
+    public void sendPasswordReset(Email email, VerificationCode code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(email.value());
+        message.setSubject("[GoLe] 비밀번호 재설정 코드");
+        message.setText("GoLe 비밀번호 재설정 코드는 " + code.code() + " 입니다.\n\n10분 안에 입력해 주세요. 요청하지 않았다면 이 메일을 무시해 주세요.");
+        mailSender.send(message);
+    }
 }

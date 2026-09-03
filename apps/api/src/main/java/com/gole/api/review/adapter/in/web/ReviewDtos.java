@@ -18,6 +18,8 @@ public final class ReviewDtos {
             @Min(1) @Max(5) int rating,
             @NotBlank @Size(max = 1000) String content) {}
 
+    public record ReplyReviewRequest(@NotBlank @Size(max = 1000) String content) {}
+
     public record ReviewResponse(
             String id,
             String orderId,
@@ -25,7 +27,9 @@ public final class ReviewDtos {
             String revieweeId,
             int rating,
             String content,
-            Instant createdAt) {
+            Instant createdAt,
+            String reply,
+            Instant repliedAt) {
 
         public static ReviewResponse from(Review review) {
             return new ReviewResponse(
@@ -35,7 +39,9 @@ public final class ReviewDtos {
                     review.getRevieweeId(),
                     review.getRating(),
                     review.getContent(),
-                    review.getCreatedAt());
+                    review.getCreatedAt(),
+                    review.getReply(),
+                    review.getRepliedAt());
         }
     }
 

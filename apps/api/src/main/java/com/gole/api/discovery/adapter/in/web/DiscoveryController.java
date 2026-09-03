@@ -74,8 +74,9 @@ public class DiscoveryController {
     }
 
     @GetMapping("/users/{userId}/feed")
-    public List<ListingSummaryResponse> feed(@PathVariable String userId, HttpServletRequest http) {
-        return getPersonalizedFeedUseCase.feed(AuthenticatedUser.id(http)).stream()
+    public List<ListingSummaryResponse> feed(
+            @PathVariable String userId, @RequestParam(defaultValue = "24") int limit, HttpServletRequest http) {
+        return getPersonalizedFeedUseCase.feed(AuthenticatedUser.id(http), limit).stream()
                 .map(ListingSummaryResponse::from)
                 .toList();
     }

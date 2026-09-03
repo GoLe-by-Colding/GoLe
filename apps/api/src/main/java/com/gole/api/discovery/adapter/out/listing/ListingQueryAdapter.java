@@ -28,7 +28,7 @@ public class ListingQueryAdapter implements ListingQueryPort {
     }
 
     @Override
-    public List<Listing> activeBySellers(List<String> sellerIds) {
-        return browseListings.activeBySellers(sellerIds);
+    public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+        return browseListings.activeBySellers(sellerIds, limit);
     }
 }

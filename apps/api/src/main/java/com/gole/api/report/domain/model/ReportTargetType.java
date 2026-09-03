@@ -4,5 +4,7 @@ package com.gole.api.report.domain.model;
 public enum ReportTargetType {
     LISTING,
     POST,
+    COMMENT,
+    REVIEW,
     CHAT_MESSAGE
 }

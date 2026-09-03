@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   dismissAdminReport,
+  fetchAdminCommentReportContext,
   fetchAdminChatReportSnapshot,
   fetchAdminReports,
   resolveAdminReport,
   resolveAdminReportTarget,
   type AdminChatReportSnapshot,
+  type AdminCommentReportContext,
   type AdminReport,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
@@ -26,6 +28,28 @@ import { AdminStatus, AdminTable } from "./table";
 
 type StatusFilter = "ALL" | AdminReport["status"];
 
+function targetLabel(type: AdminReport["targetType"]): string {
+  if (type === "LISTING") return "매물";
+  if (type === "POST") return "게시글";
+  if (type === "COMMENT") return "댓글";
+  if (type === "REVIEW") return "후기";
+  return "채팅";
+}
+
+function targetHref(report: AdminReport): string | null {
+  if (report.targetType === "LISTING") return `/listings/${report.targetId}`;
+  if (report.targetType === "POST") return `/community/${report.targetId}`;
+  return null;
+}
+
+function targetActionLabel(type: AdminReport["targetType"]): string {
+  if (type === "LISTING") return "내리고 완료";
+  if (type === "POST") return "삭제하고 완료";
+  if (type === "COMMENT") return "블라인드 후 완료";
+  if (type === "REVIEW") return "블라인드 후 완료";
+  return "검토 완료";
+}
+
 /** 신고 큐 — 접수된 신고를 확인하고 조치/기각한다. (요구사항 3) */
 export function AdminReportsView() {
   const { session } = useSession();
@@ -37,6 +61,8 @@ export function AdminReportsView() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [snapshot, setSnapshot] = useState<AdminChatReportSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [commentContext, setCommentContext] = useState<AdminCommentReportContext | null>(null);
+  const [commentContextLoading, setCommentContextLoading] = useState(false);
 
   const load = useCallback(() => {
     if (token === null) {
@@ -88,6 +114,20 @@ export function AdminReportsView() {
     }
   }
 
+  async function openCommentContext(reportId: string) {
+    if (token === null) return;
+    setCommentContextLoading(true);
+    setCommentContext(null);
+    setError(undefined);
+    try {
+      setCommentContext(await fetchAdminCommentReportContext(token, reportId));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "댓글 신고 문맥을 불러오지 못했습니다.");
+    } finally {
+      setCommentContextLoading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
@@ -129,17 +169,22 @@ export function AdminReportsView() {
                 >
                   채팅 {shortId(r.targetId)} · 고정 문맥 보기 →
                 </button>
-              ) : (
-                <Link
-                  href={
-                    r.targetType === "LISTING"
-                      ? `/listings/${r.targetId}`
-                      : `/community/${r.targetId}`
-                  }
-                  className="text-neutral-900 hover:text-brand-600"
+              ) : r.targetType === "COMMENT" ? (
+                <button
+                  type="button"
+                  className="text-left text-neutral-900 hover:text-brand-600"
+                  onClick={() => void openCommentContext(r.id)}
                 >
-                  {r.targetType === "LISTING" ? "매물" : "게시글"} {shortId(r.targetId)} →
+                  댓글 {shortId(r.targetId)} · 원문 보기 →
+                </button>
+              ) : targetHref(r) !== null ? (
+                <Link href={targetHref(r) ?? "#"} className="text-neutral-900 hover:text-brand-600">
+                  {targetLabel(r.targetType)} {shortId(r.targetId)} →
                 </Link>
+              ) : (
+                <span className="text-neutral-900">
+                  {targetLabel(r.targetType)} {shortId(r.targetId)}
+                </span>
               )}
             </td>
             <td className="px-3 py-2.5">
@@ -175,17 +220,18 @@ export function AdminReportsView() {
                       onClick={() =>
                         targetAction.ask({
                           title:
-                            r.targetType === "LISTING" ? "신고 매물 내리기" : "신고 게시글 삭제",
-                          target: `${r.targetType === "LISTING" ? "매물" : "게시글"} ${shortId(r.targetId)}`,
-                          confirmLabel:
-                            r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료",
+                            r.targetType === "REVIEW"
+                              ? "신고 후기 블라인드"
+                              : `신고 ${targetLabel(r.targetType)} 조치`,
+                          target: `${targetLabel(r.targetType)} ${shortId(r.targetId)}`,
+                          confirmLabel: targetActionLabel(r.targetType),
                           run: async (reason) => {
                             await resolveAdminReportTarget(token ?? "", r.id, reason);
                           },
                         })
                       }
                     >
-                      {r.targetType === "LISTING" ? "내리고 완료" : "삭제하고 완료"}
+                      {targetActionLabel(r.targetType)}
                     </Button>
                   )}
                   {r.targetType !== "CHAT_MESSAGE" ? (
@@ -210,6 +256,48 @@ export function AdminReportsView() {
           </tr>
         ))}
       </AdminTable>
+
+      {commentContextLoading ? (
+        <div className="rounded-lg border border-brand-100 bg-brand-50 px-5 py-8 text-center text-sm text-brand-700">
+          신고 댓글 원문을 확인하는 중…
+        </div>
+      ) : null}
+
+      {commentContext !== null ? (
+        <section
+          className="rounded-xl border border-neutral-200 bg-neutral-50 p-5"
+          aria-label="댓글 신고 문맥"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Heading level={3}>신고 댓글 원문</Heading>
+                {commentContext.hidden ? (
+                  <Badge tone="warning">블라인드됨</Badge>
+                ) : (
+                  <Badge tone="neutral">공개 중</Badge>
+                )}
+              </div>
+              <Text className="mt-1" size="sm" tone="muted">
+                작성자 {shortId(commentContext.authorId)} ·{" "}
+                {formatDateTime(commentContext.createdAt)}
+              </Text>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setCommentContext(null)}>
+              닫기
+            </Button>
+          </div>
+          <blockquote className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-neutral-200 bg-white p-4 text-sm leading-relaxed text-neutral-800">
+            {commentContext.content}
+          </blockquote>
+          <Link
+            href={`/community/${encodeURIComponent(commentContext.postId)}#comment-${encodeURIComponent(commentContext.id)}`}
+            className="mt-3 inline-flex text-sm font-semibold text-brand-700 hover:underline"
+          >
+            부모 게시글에서 보기 →
+          </Link>
+        </section>
+      ) : null}
 
       {snapshotLoading ? (
         <div className="rounded-lg border border-brand-100 bg-brand-50 px-5 py-8 text-center text-sm text-brand-700">

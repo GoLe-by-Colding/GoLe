@@ -71,7 +71,7 @@ export default async function OpengraphImage({
         ) : null}
       </div>
 
-      <div style={{ fontSize: "24px", opacity: 0.7 }}>gole.kscold.com</div>
+      <div style={{ fontSize: "24px", opacity: 0.7 }}>gole.co.kr</div>
     </div>,
     size,
   );

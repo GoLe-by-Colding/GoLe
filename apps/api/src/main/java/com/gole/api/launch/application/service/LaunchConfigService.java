@@ -4,6 +4,7 @@ import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ReadinessChangeResult;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
@@ -12,6 +13,7 @@ import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
@@ -103,6 +105,9 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
             return new StageChangeResult(before, false);
         }
         requireCompatibleSettlementMode(command.stage());
+        if (command.stage().level() > before.stage().level()) {
+            requireOperationalReadiness(before, command.stage());
+        }
         // 결제가 새로 열리는 방향일 때만 검증한다. 단계를 내리는 조치(사고 대응)는 막지 않는다.
         if (opensPayments(before, command.stage())) {
             requirePaymentReadiness();
@@ -150,6 +155,7 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
             requirePartnerPayoutPrerequisites(before);
         }
         if (command.feature() == LaunchFeature.PAYMENTS && becomesEnabled) {
+            requireOperationalReadiness(before, LaunchStage.TRADING);
             requirePaymentReadiness();
         }
 
@@ -177,6 +183,59 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
     }
 
     @Override
+    @Transactional
+    public ReadinessChangeResult setReadinessCheck(SetReadinessCheckCommand command) {
+        if (command.check() == null) {
+            throw new BadRequestException("LAUNCH_READINESS_REQUIRED", "변경할 운영 준비 항목을 지정해야 합니다");
+        }
+        String reason = requireReason(command.reason());
+        LaunchConfig before = safetyClamp.enforce();
+        boolean wasConfirmed = before.isConfirmed(command.check());
+        if (wasConfirmed == command.confirmed()) {
+            return new ReadinessChangeResult(before, false, false);
+        }
+
+        Instant now = Instant.now(clock);
+        LaunchConfig candidate = before.withReadiness(command.check(), command.confirmed(), now, command.actorId());
+        boolean safetyLowered = !candidate.hasRequiredReadiness(candidate.stage());
+        if (safetyLowered) {
+            candidate = candidate.withStage(LaunchStage.BROWSE_ONLY, now, command.actorId());
+        }
+        LaunchConfig after = savedOrCandidate(repository.save(candidate), candidate);
+        history.append(new LaunchConfigChange(
+                UUID.randomUUID().toString(),
+                LaunchConfigChange.Type.READINESS,
+                command.check().apiName(),
+                Boolean.toString(wasConfirmed),
+                Boolean.toString(command.confirmed()),
+                reason,
+                command.actorId(),
+                command.actorEmail(),
+                now));
+        if (safetyLowered) {
+            history.append(new LaunchConfigChange(
+                    UUID.randomUUID().toString(),
+                    LaunchConfigChange.Type.STAGE,
+                    "stage",
+                    Integer.toString(before.stage().level()),
+                    Integer.toString(after.stage().level()),
+                    "운영 준비 확인 취소로 Stage 1에 안전 잠금: " + command.check().apiName(),
+                    command.actorId(),
+                    command.actorEmail(),
+                    now));
+        }
+        log.info(
+                "운영 준비 확인 변경 {} {} -> {} actor={} safetyLowered={} reason={}",
+                command.check().apiName(),
+                wasConfirmed,
+                command.confirmed(),
+                command.actorId(),
+                safetyLowered,
+                reason);
+        return new ReadinessChangeResult(after, true, safetyLowered);
+    }
+
+    @Override
     public List<LaunchConfigChange> history(int limit) {
         return history.findRecent(Math.max(1, Math.min(limit, MAX_HISTORY)));
     }
@@ -186,9 +245,26 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
         if (before.isEnabled(LaunchFeature.PAYMENTS)) {
             return false;
         }
-        LaunchConfig projected =
-                new LaunchConfig(target, before.overrides(), before.updatedAt(), before.updatedBy(), before.version());
+        LaunchConfig projected = new LaunchConfig(
+                target,
+                before.overrides(),
+                before.readiness(),
+                before.updatedAt(),
+                before.updatedBy(),
+                before.version());
         return projected.isEnabled(LaunchFeature.PAYMENTS);
+    }
+
+    private void requireOperationalReadiness(LaunchConfig config, LaunchStage target) {
+        List<String> missing = java.util.Arrays.stream(LaunchReadinessCheck.values())
+                .filter(check -> check.requiredAt(target) && !config.isConfirmed(check))
+                .map(LaunchReadinessCheck::apiName)
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new ConflictException(
+                    "LAUNCH_OPERATIONAL_READINESS_REQUIRED",
+                    "운영 준비 확인이 끝나지 않아 이 단계나 기능을 열 수 없습니다 (미확인=%s)".formatted(String.join(", ", missing)));
+        }
     }
 
     private void requireCompatibleSettlementMode(LaunchStage target) {
@@ -214,6 +290,7 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
         if (!before.isEnabled(LaunchFeature.PAYMENTS)) {
             throw new ConflictException("LAUNCH_PAYMENTS_REQUIRED", "결제가 닫힌 상태에서는 자동 지급을 열 수 없습니다");
         }
+        requireOperationalReadiness(before, LaunchStage.FULL);
     }
 
     /**

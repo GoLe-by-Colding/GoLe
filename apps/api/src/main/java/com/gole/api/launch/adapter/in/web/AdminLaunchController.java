@@ -9,14 +9,18 @@ import com.gole.api.launch.adapter.in.web.LaunchDtos.AdminLaunchConfigResponse;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ChangeStageRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.FeatureOverrideRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchChangeRow;
+import com.gole.api.launch.adapter.in.web.LaunchDtos.ReadinessCheckRequest;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ReadinessChangeResult;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetReadinessCheckCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,7 +81,11 @@ public class AdminLaunchController {
         // 실제 상태가 바뀐 성공만 감사 기록을 남긴다. 같은 단계 재요청은 성공 응답이지만
         // 운영 조치가 아니므로 이력과 관리자 감사 로그 모두 늘리지 않는다.
         if (result.changed()) {
-            record(actor, "stage=" + updated.stage().level(), request.reason());
+            record(
+                    actor,
+                    AdminActionType.LAUNCH_STAGE_CHANGE,
+                    "stage=" + updated.stage().level(),
+                    request.reason());
         }
         return current();
     }
@@ -90,7 +98,29 @@ public class AdminLaunchController {
         LaunchFeature target = LaunchFeature.of(feature);
         LaunchConfig updated = manageLaunchConfig.setFeatureOverride(
                 new SetFeatureOverrideCommand(target, request.enabled(), request.reason(), actor.id(), actor.email()));
-        record(actor, target.apiName() + "=" + updated.isEnabled(target), request.reason());
+        record(
+                actor,
+                AdminActionType.LAUNCH_STAGE_CHANGE,
+                target.apiName() + "=" + updated.isEnabled(target),
+                request.reason());
+        return current();
+    }
+
+    @Operation(summary = "운영 준비 항목 확인", description = "사업·법무·실거래 검증 결과를 사유와 함께 저장한다. 필수 확인을 취소하면 Stage 1로 안전 잠금한다.")
+    @PostMapping("/readiness/{check}")
+    public AdminLaunchConfigResponse setReadiness(
+            @PathVariable String check, @Valid @RequestBody ReadinessCheckRequest request, HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        LaunchReadinessCheck target = LaunchReadinessCheck.of(check);
+        ReadinessChangeResult result = manageLaunchConfig.setReadinessCheck(
+                new SetReadinessCheckCommand(target, request.confirmed(), request.reason(), actor.id(), actor.email()));
+        if (result.changed()) {
+            record(
+                    actor,
+                    AdminActionType.LAUNCH_READINESS_CHANGE,
+                    target.apiName() + "=" + request.confirmed(),
+                    request.reason());
+        }
         return current();
     }
 
@@ -102,14 +132,9 @@ public class AdminLaunchController {
                 .toList();
     }
 
-    private void record(AdminActor actor, String targetId, String reason) {
+    private void record(AdminActor actor, AdminActionType type, String targetId, String reason) {
         audit.record(new RecordAdminActionCommand(
-                actor.id(),
-                actor.email(),
-                AdminActionType.LAUNCH_STAGE_CHANGE,
-                AdminTargetType.LAUNCH_CONFIG,
-                targetId,
-                reason));
+                actor.id(), actor.email(), type, AdminTargetType.LAUNCH_CONFIG, targetId, reason));
     }
 
     private AdminLaunchConfigResponse response(LaunchConfig effective, LaunchConfig requested) {

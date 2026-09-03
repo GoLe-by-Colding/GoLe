@@ -1,17 +1,23 @@
-import { fetchFeed, type Post } from "@entities/community";
+import { fetchFeedPage, type PostFeedPage } from "@entities/community";
+import { serverSessionHeaders } from "@shared/api/server-session-headers";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 import { CommunityFeed } from "./community-feed";
 
-async function loadFeed(): Promise<readonly Post[]> {
+const INITIAL_FEED_ROWS = 6;
+
+async function loadFeed(): Promise<PostFeedPage> {
   try {
-    return await fetchFeed();
+    return await fetchFeedPage({
+      headers: await serverSessionHeaders(),
+      limit: INITIAL_FEED_ROWS,
+    });
   } catch {
-    return [];
+    return { items: [], nextCursor: null };
   }
 }
 
 export async function CommunityPage() {
-  const posts = await loadFeed();
+  const page = await loadFeed();
 
   return (
     <Container width="xl">
@@ -26,10 +32,10 @@ export async function CommunityPage() {
           <LinkButton href="/community/new">글쓰기</LinkButton>
         </div>
 
-        {posts.length === 0 ? (
+        {page.items.length === 0 ? (
           <Text tone="muted">아직 게시글이 없습니다. 첫 글을 남겨보세요!</Text>
         ) : (
-          <CommunityFeed posts={posts} />
+          <CommunityFeed initialPage={page} pageSize={INITIAL_FEED_ROWS} />
         )}
       </div>
     </Container>

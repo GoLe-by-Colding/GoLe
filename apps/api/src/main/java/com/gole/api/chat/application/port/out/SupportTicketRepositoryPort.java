@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.port.out;
 
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import java.util.List;
@@ -20,4 +21,11 @@ public interface SupportTicketRepositoryPort {
 
     /** 관리자 인박스. {@code status} 가 null 이면 전체. */
     List<SupportTicket> findByStatus(SupportStatus status, int limit);
+
+    /** 관리자 인박스 복합 필터. null인 축은 전체를 뜻한다. */
+    default List<SupportTicket> findByStatusAndCategory(SupportStatus status, SupportCategory category, int limit) {
+        return findByStatus(status, limit).stream()
+                .filter(ticket -> category == null || ticket.category() == category)
+                .toList();
+    }
 }

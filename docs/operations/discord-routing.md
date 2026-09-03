@@ -1,7 +1,7 @@
 # Discord 운영 라우팅
 
 GoLe 운영 Discord는 비밀 URL을 코드에 저장하지 않고 역할별 webhook 환경변수로만
-연결합니다. 모든 커스텀 webhook은 `https://gole.kscold.com/icon.svg` 파비콘을 프로필로
+연결합니다. 모든 커스텀 webhook은 `https://gole.co.kr/icon.svg` 파비콘을 프로필로
 사용하고 `allowed_mentions`를 비워 사용자·역할 멘션을 만들지 않습니다.
 
 ## 채널과 발신자

@@ -30,6 +30,29 @@ class UserAuthInterceptorTest {
     }
 
     @Test
+    void publicGetAttachesViewerWhenValidSessionIsPresent() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/community/posts");
+        request.addHeader("Authorization", "Bearer session-1");
+        when(sessions.resolve("session-1"))
+                .thenReturn(Optional.of(new CurrentSession("account-1", "member@gole.test", Role.USER)));
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isTrue();
+        assertThat(request.getAttribute(UserAuthInterceptor.ATTR_ACCOUNT_ID)).isEqualTo("account-1");
+    }
+
+    @Test
+    void publicGetIgnoresExpiredSessionInsteadOfBlockingPage() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/community/posts");
+        request.addHeader("Authorization", "Bearer expired");
+        when(sessions.resolve("expired")).thenReturn(Optional.empty());
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isTrue();
+        assertThat(request.getAttribute(UserAuthInterceptor.ATTR_ACCOUNT_ID)).isNull();
+    }
+
+    @Test
     void publicFeeConfigDoesNotRequireSession() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/config/fees");
 
@@ -62,6 +85,15 @@ class UserAuthInterceptorTest {
     @Test
     void orderReadRequiresSession() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/orders/order-1");
+        when(sessions.resolve("")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void followingCommunityFeedRequiresSession() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/community/feed/following");
         when(sessions.resolve("")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))

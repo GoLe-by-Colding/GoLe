@@ -7,6 +7,7 @@ import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -45,8 +46,12 @@ public class SupportChatService {
     }
 
     public List<SupportTicket> inbox(String adminId, SupportStatus status, int limit) {
+        return inbox(adminId, status, null, limit);
+    }
+
+    public List<SupportTicket> inbox(String adminId, SupportStatus status, SupportCategory category, int limit) {
         requireAdmin(adminId);
-        return tickets.findByStatus(status, limit);
+        return tickets.findByStatusAndCategory(status, category, limit);
     }
 
     @Transactional

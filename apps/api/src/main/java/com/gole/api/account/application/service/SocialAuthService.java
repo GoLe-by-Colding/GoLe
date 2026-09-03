@@ -2,9 +2,8 @@ package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.in.SocialLoginUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
 import com.gole.api.account.application.port.out.OAuthStateStorePort;
-import com.gole.api.account.application.port.out.PasswordHasherPort;
+import com.gole.api.account.application.port.out.OAuthStateStorePort.OAuthStateContext;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.SocialIdentityProviderPort;
@@ -13,12 +12,13 @@ import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
-import com.gole.api.account.domain.model.Role;
+import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -34,35 +34,40 @@ import org.springframework.stereotype.Service;
 @Service
 public class SocialAuthService implements SocialLoginUseCase {
 
-    private static final Duration SESSION_TTL = Duration.ofDays(7);
     private static final Duration STATE_TTL = Duration.ofMinutes(10);
 
     private final SocialIdentityProviderPort identityProvider;
     private final AccountRepositoryPort accountRepository;
-    private final IdentifierGeneratorPort identifierGenerator;
-    private final PasswordHasherPort passwordHasher;
     private final SessionTokenPort sessionToken;
     private final SessionStorePort sessionStore;
     private final OAuthStateStorePort stateStore;
     private final OperationalEventPublisher operationalEventPublisher;
+    private final Clock clock;
+    private final SessionPolicyProperties sessionPolicy;
+    private final PolicyAcceptanceService policyAcceptances;
+    private final SocialAccountProvisioner socialAccountProvisioner;
 
     public SocialAuthService(
             SocialIdentityProviderPort identityProvider,
             AccountRepositoryPort accountRepository,
-            IdentifierGeneratorPort identifierGenerator,
-            PasswordHasherPort passwordHasher,
             SessionTokenPort sessionToken,
             SessionStorePort sessionStore,
             OAuthStateStorePort stateStore,
-            OperationalEventPublisher operationalEventPublisher) {
+            OperationalEventPublisher operationalEventPublisher,
+            Clock clock,
+            SessionPolicyProperties sessionPolicy,
+            PolicyAcceptanceService policyAcceptances,
+            SocialAccountProvisioner socialAccountProvisioner) {
         this.identityProvider = identityProvider;
         this.accountRepository = accountRepository;
-        this.identifierGenerator = identifierGenerator;
-        this.passwordHasher = passwordHasher;
         this.sessionToken = sessionToken;
         this.sessionStore = sessionStore;
         this.stateStore = stateStore;
         this.operationalEventPublisher = operationalEventPublisher;
+        this.clock = clock;
+        this.sessionPolicy = sessionPolicy;
+        this.policyAcceptances = policyAcceptances;
+        this.socialAccountProvisioner = socialAccountProvisioner;
     }
 
     @Override
@@ -73,11 +78,15 @@ public class SocialAuthService implements SocialLoginUseCase {
     }
 
     @Override
-    public String authorizeUrl(AuthProvider provider, String redirectUri) {
+    public String authorizeUrl(
+            AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance) {
         requireConfigured(provider);
+        if (signupPolicyAcceptance != null) {
+            policyAcceptances.validate(signupPolicyAcceptance);
+        }
         // 서버가 state를 발급·저장한다(콜백에서 1회 소비해 CSRF 방지).
         String state = UUID.randomUUID().toString();
-        stateStore.save(state, provider, redirectUri, STATE_TTL);
+        stateStore.save(state, new OAuthStateContext(provider, redirectUri, signupPolicyAcceptance), STATE_TTL);
         return identityProvider.authorizeUrl(provider, redirectUri, state);
     }
 
@@ -86,7 +95,10 @@ public class SocialAuthService implements SocialLoginUseCase {
         requireConfigured(command.provider());
 
         // CSRF: 서버가 발급한 state인지 검증(1회 소비).
-        if (!stateStore.consume(command.state(), command.provider(), command.redirectUri())) {
+        OAuthStateContext state = stateStore
+                .consume(command.state())
+                .orElseThrow(() -> new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다"));
+        if (state.provider() != command.provider() || !state.redirectUri().equals(command.redirectUri())) {
             throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
         }
 
@@ -109,13 +121,15 @@ public class SocialAuthService implements SocialLoginUseCase {
             newAccount = false;
         } else {
             try {
-                account = createSocialAccount(email);
+                account = socialAccountProvisioner.provision(email, command.provider(), state.signupPolicyAcceptance());
                 newAccount = true;
             } catch (EmailAlreadyRegisteredException concurrentSignup) {
                 account = accountRepository.findByEmail(email).orElseThrow(() -> concurrentSignup);
                 newAccount = false;
             }
         }
+        // 이메일 로그인과 동일하게 정지된 계정은 기존 OAuth 연결로도 우회할 수 없다.
+        account.ensureNotSuspended();
 
         if (newAccount) {
             operationalEventPublisher.publish(new OperationalEvent(
@@ -132,17 +146,12 @@ public class SocialAuthService implements SocialLoginUseCase {
         }
 
         String token = sessionToken.issue(account);
-        sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
+        Instant issuedAt = Instant.now(clock);
+        Duration ttl = sessionPolicy.getIdleTtl().compareTo(sessionPolicy.getAbsoluteTtl()) < 0
+                ? sessionPolicy.getIdleTtl()
+                : sessionPolicy.getAbsoluteTtl();
+        sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, ttl);
         return new SocialLoginResult(account.getId(), token, account.getRole(), newAccount);
-    }
-
-    /** 소셜 신규 계정: 인증완료(VERIFIED)·USER·임의 비밀번호(소셜 전용, 암호 로그인 불가). */
-    private Account createSocialAccount(Email email) {
-        String id = identifierGenerator.newAccountId();
-        // 임의의 추측 불가 비밀번호 → 소셜 사용자는 패스워드 로그인을 사용하지 않는다.
-        var hash = passwordHasher.hash(UUID.randomUUID().toString());
-        Account account = Account.provisioned(id, email, hash, Role.USER);
-        return accountRepository.save(account);
     }
 
     private void requireConfigured(AuthProvider provider) {

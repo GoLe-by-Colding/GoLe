@@ -40,7 +40,7 @@ storage:
     secret-key: ${STORAGE_S3_SECRET_KEY:minioadmin}
     region: ${STORAGE_S3_REGION:us-east-1}
     bucket: ${STORAGE_S3_BUCKET:gole}
-  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.kscold.com}
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.co.kr}
   max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
 
 # 소셜 로그인(OAuth2). client-id/secret만 env로 주입하면 활성화된다(미설정 provider는 비활성).
@@ -70,6 +70,8 @@ oauth:
 
 server:
   port: ${SERVER_PORT:8080}
+  # 프록시에서 조용히 버리지 않고 애플리케이션이 제한·로그를 소유한다.
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:32768}
 
 springdoc:
   api-docs:
@@ -113,6 +115,12 @@ logging:
 # 시드 데이터: 기본은 전부 꺼져 있다. 로컬 데모에서만 명시적으로 켠다.
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
+  # 가입 당시의 정책 버전을 별도 append-only 이력으로 남긴다. 약관/처리방침을 바꾸면
+  # 문서의 시행일과 이 값을 함께 올려 오래된 가입 화면의 제출을 fail-closed 한다.
+  policy:
+    terms-version: ${GOLE_TERMS_VERSION:2026-09-03}
+    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-03}
+    minimum-age: ${GOLE_MINIMUM_SIGNUP_AGE:14}
   catalog:
     seed-on-empty: ${GOLE_CATALOG_SEED:false}
   listing:
@@ -132,6 +140,9 @@ gole:
     seed-on-empty: ${GOLE_REVIEW_SEED:false}
   media:
     seed-on-startup: ${GOLE_MEDIA_SEED:false}
+    upload-rate-limit:
+      maximum-images: ${GOLE_MEDIA_UPLOAD_RATE_MAX_IMAGES:30}
+      window: ${GOLE_MEDIA_UPLOAD_RATE_WINDOW:PT10M}
   # 파이프라인 상태별 타임아웃(shipping-and-fees R9.1). 코드 상수 금지 — 전부 여기서.
   # 정상 거래는 운영자 개입 0으로 끝까지 흘러가고, 예외만 큐에 올라온다(R7).
   pipeline:
@@ -175,9 +186,13 @@ gole:
   verification:
     email:
       enabled: ${GOLE_VERIFICATION_EMAIL_ENABLED:false}
-      from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.kscold.com}
+      from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.co.kr}
   session:
     cookie-secure: ${GOLE_SESSION_COOKIE_SECURE:auto}
+    # 브라우저 쿠키 수명과 별개로 Redis에서 유휴·절대 만료를 함께 강제한다.
+    absolute-ttl: ${GOLE_SESSION_ABSOLUTE_TTL:P7D}
+    idle-ttl: ${GOLE_SESSION_IDLE_TTL:P1D}
+    rotation-age: ${GOLE_SESSION_ROTATION_AGE:PT12H}
   # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
   discord:
     enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}
@@ -187,7 +202,7 @@ gole:
     payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
     operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
     # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
-    avatar-url: ${DISCORD_AVATAR_URL:https://gole.kscold.com/icon.svg}
+    avatar-url: ${DISCORD_AVATAR_URL:https://gole.co.kr/icon.svg}
     # 야간·초기 연동 중에는 Discord 메시지를 보내되 푸시 알림은 울리지 않는다.
     suppress-notifications: ${DISCORD_SUPPRESS_NOTIFICATIONS:true}
     # 같은 APPLICATION 장애는 요청 경로가 달라도 예외 종류별 한 건으로 묶어 알림 폭주를 막는다.

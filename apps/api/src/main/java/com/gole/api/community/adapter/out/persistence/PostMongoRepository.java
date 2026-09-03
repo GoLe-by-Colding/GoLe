@@ -10,5 +10,9 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 public interface PostMongoRepository extends MongoRepository<PostDocument, String> {
 
     /** 특정 상태의 게시글을 최신→오래된 순으로 조회한다. (피드) */
-    List<PostDocument> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
+    List<PostDocument> findByStatusOrderByCreatedAtDescIdDesc(String status, Pageable pageable);
+
+    /** 특정 작성자 집합의 게시글을 최신순으로 조회한다(팔로잉 피드). */
+    List<PostDocument> findByStatusAndAuthorIdInOrderByCreatedAtDesc(
+            String status, List<String> authorIds, Pageable pageable);
 }

@@ -48,7 +48,7 @@ export function AdminBar() {
   const action = useModerationAction(refresh);
 
   useEffect(() => {
-    if (token === null || !isAdmin) {
+    if (token === null || !isAdmin || pathname.startsWith("/admin")) {
       return;
     }
     let active = true;

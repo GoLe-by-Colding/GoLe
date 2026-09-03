@@ -20,6 +20,7 @@ import {
   unblockChatUser,
   type ChatRoom,
   type SocialChatRoom,
+  type SupportCategory,
   type ChatUnreadCounts,
 } from "@entities/chat";
 import { ApiError } from "@shared/api";
@@ -35,6 +36,7 @@ import {
   Heading,
   LinkButton,
   MessageCircleIcon,
+  Select,
   Skeleton,
   Text,
 } from "@shared/ui";
@@ -44,6 +46,18 @@ type Conversation =
   | { readonly kind: "SOCIAL"; readonly room: SocialChatRoom };
 
 type ComposerMode = "DIRECT" | "GROUP" | "SUPPORT";
+
+const SUPPORT_CATEGORY_LABEL: Record<SupportCategory, string> = {
+  GENERAL: "일반 이용 문의",
+  TRADE: "거래·직거래 문의",
+  PAYMENT: "결제·환불 문의",
+  PRODUCT_FEEDBACK: "기능 제안·불편 신고",
+  PRIVACY_ACCESS: "개인정보 열람 요청",
+  PRIVACY_CORRECTION_DELETION: "개인정보 정정·삭제 요청",
+  PRIVACY_PROCESSING_STOP: "개인정보 처리정지·동의 철회",
+};
+
+const SUPPORT_CATEGORIES = Object.keys(SUPPORT_CATEGORY_LABEL) as SupportCategory[];
 
 interface RoomResolveIssue {
   readonly message: string;
@@ -60,6 +74,7 @@ export function ChatListPage() {
   const searchParamsString = searchParams.toString();
   const requestedPeerId = searchParams.get("direct")?.trim() ?? "";
   const requestedComposer = searchParams.get("compose")?.trim().toLowerCase() ?? "";
+  const requestedSupportCategory = supportCategory(searchParams.get("category"));
   const requestedRoomId = searchParams.get("room")?.trim() ?? "";
   const [listingRooms, setListingRooms] = useState<readonly ChatRoom[] | null>(null);
   const [socialRooms, setSocialRooms] = useState<readonly SocialChatRoom[] | null>(null);
@@ -622,9 +637,16 @@ export function ChatListPage() {
 
         {composer && roomsBelongToCurrentAccount ? (
           <ConversationComposer
-            key={composer === "DIRECT" ? `${composer}:${requestedPeerId}` : composer}
+            key={
+              composer === "DIRECT"
+                ? `${composer}:${requestedPeerId}`
+                : composer === "SUPPORT"
+                  ? `${composer}:${requestedSupportCategory}`
+                  : composer
+            }
             mode={composer}
             initialPeerId={composer === "DIRECT" ? requestedPeerId : ""}
+            initialSupportCategory={requestedSupportCategory}
             onClose={() => setComposer(null)}
             onCreated={addSocialRoom}
           />
@@ -985,16 +1007,21 @@ export function ChatListPage() {
 function ConversationComposer({
   mode,
   initialPeerId,
+  initialSupportCategory,
   onClose,
   onCreated,
 }: {
   readonly mode: ComposerMode;
   readonly initialPeerId: string;
+  readonly initialSupportCategory: SupportCategory;
   readonly onClose: () => void;
   readonly onCreated: (room: SocialChatRoom) => void;
 }) {
   const [peerId, setPeerId] = useState(initialPeerId);
-  const [title, setTitle] = useState(mode === "SUPPORT" ? "서비스 이용 문의" : "");
+  const [category, setCategory] = useState(initialSupportCategory);
+  const [title, setTitle] = useState(
+    mode === "SUPPORT" ? SUPPORT_CATEGORY_LABEL[initialSupportCategory] : "",
+  );
   const [members, setMembers] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1015,7 +1042,7 @@ function ConversationComposer({
           .filter(Boolean);
         onCreated(await createGroupRoom(title.trim(), memberIds));
       } else {
-        onCreated(await createSupportRoom(title.trim(), message.trim()));
+        onCreated(await createSupportRoom(title.trim(), message.trim(), category));
       }
     } catch {
       setError(
@@ -1074,6 +1101,25 @@ function ConversationComposer({
       ) : null}
       {mode === "SUPPORT" ? (
         <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold text-neutral-700">
+            문의 유형
+            <Select
+              value={category}
+              onChange={(event) => {
+                const next = event.target.value as SupportCategory;
+                if (title.trim().length === 0 || title === SUPPORT_CATEGORY_LABEL[category]) {
+                  setTitle(SUPPORT_CATEGORY_LABEL[next]);
+                }
+                setCategory(next);
+              }}
+            >
+              {SUPPORT_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {SUPPORT_CATEGORY_LABEL[value]}
+                </option>
+              ))}
+            </Select>
+          </label>
           <LabeledInput
             label="문의 제목"
             value={title}
@@ -1092,6 +1138,13 @@ function ConversationComposer({
               className="resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </label>
+          {category.startsWith("PRIVACY_") ? (
+            <p className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
+              로그인된 본인 계정으로 접수되며 운영팀은 10일 안의 첫 처리 안내를 목표로 합니다.
+              법령상 보존이 필요한 거래·분쟁 기록은 바로 삭제되지 않을 수 있고, 그 사유를 이
+              대화에서 안내합니다.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -1184,7 +1237,10 @@ function conversationSubtitle(conversation: Conversation, myId: string): string 
   if (conversation.room.type === "DIRECT") return "개인 대화";
   if (conversation.room.type === "GROUP")
     return `${conversation.room.memberIds.length}명이 함께하는 대화`;
-  return supportLabel(conversation.room.supportStatus);
+  const category = conversation.room.supportCategory;
+  return category === null
+    ? supportLabel(conversation.room.supportStatus)
+    : `${SUPPORT_CATEGORY_LABEL[category]} · ${supportLabel(conversation.room.supportStatus)}`;
 }
 
 function partnerId(room: ChatRoom, myId: string): string {
@@ -1218,7 +1274,13 @@ function roomAvatarTone(conversation: Conversation): string {
 
 function RoomBadge({ conversation }: { readonly conversation: Conversation }) {
   if (conversation.kind === "LISTING") return <Badge tone="warning">거래</Badge>;
-  if (conversation.room.type === "SUPPORT") return <Badge tone="brand">운영팀</Badge>;
+  if (conversation.room.type === "SUPPORT") {
+    return (
+      <Badge tone={conversation.room.supportCategory?.startsWith("PRIVACY_") ? "warning" : "brand"}>
+        {conversation.room.supportCategory?.startsWith("PRIVACY_") ? "권리 요청" : "운영팀"}
+      </Badge>
+    );
+  }
   if (conversation.room.type === "GROUP") return <Badge tone="neutral">그룹</Badge>;
   return null;
 }
@@ -1254,4 +1316,10 @@ function composerDescription(mode: ComposerMode): string {
   if (mode === "DIRECT") return "판매자나 커뮤니티 작성자의 계정 ID로 1:1 대화를 시작합니다.";
   if (mode === "GROUP") return "본인을 포함해 3명 이상이면 그룹 대화를 만들 수 있습니다.";
   return "별도 디스코드로 이동하지 않고 이 대화방에서 답변과 진행 상황을 확인합니다.";
+}
+
+function supportCategory(value: string | null): SupportCategory {
+  return SUPPORT_CATEGORIES.includes(value as SupportCategory)
+    ? (value as SupportCategory)
+    : "GENERAL";
 }

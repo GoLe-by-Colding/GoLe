@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew GoLe TLS certificate through Docker Compose
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/app
+ExecStart=/app/infra/gcp/scripts/renew-certificate.sh
+

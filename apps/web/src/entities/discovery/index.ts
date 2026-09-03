@@ -2,6 +2,7 @@ export type { ListingSummary, WishlistEntry, WishlistTargetType } from "./model/
 export {
   fetchSellerShop,
   fetchFollowing,
+  fetchPersonalizedFeed,
   followSeller,
   unfollowSeller,
   fetchWishlist,

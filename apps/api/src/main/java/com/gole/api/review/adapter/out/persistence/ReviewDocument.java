@@ -33,6 +33,14 @@ public class ReviewDocument {
 
     private Instant createdAt;
 
+    private String reply;
+
+    private Instant repliedAt;
+
+    private Instant hiddenAt;
+
+    private String hiddenReason;
+
     protected ReviewDocument() {
         // MongoDB 매핑용
     }
@@ -45,6 +53,21 @@ public class ReviewDocument {
             int rating,
             String content,
             Instant createdAt) {
+        this(id, orderId, reviewerId, revieweeId, rating, content, createdAt, null, null, null, null);
+    }
+
+    public ReviewDocument(
+            String id,
+            String orderId,
+            String reviewerId,
+            String revieweeId,
+            int rating,
+            String content,
+            Instant createdAt,
+            String reply,
+            Instant repliedAt,
+            Instant hiddenAt,
+            String hiddenReason) {
         this.id = id;
         this.orderId = orderId;
         this.reviewerId = reviewerId;
@@ -52,6 +75,10 @@ public class ReviewDocument {
         this.rating = rating;
         this.content = content;
         this.createdAt = createdAt;
+        this.reply = reply;
+        this.repliedAt = repliedAt;
+        this.hiddenAt = hiddenAt;
+        this.hiddenReason = hiddenReason;
     }
 
     public String getId() {
@@ -80,5 +107,21 @@ public class ReviewDocument {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public String getReply() {
+        return reply;
+    }
+
+    public Instant getRepliedAt() {
+        return repliedAt;
+    }
+
+    public Instant getHiddenAt() {
+        return hiddenAt;
+    }
+
+    public String getHiddenReason() {
+        return hiddenReason;
     }
 }

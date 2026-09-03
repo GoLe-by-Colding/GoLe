@@ -36,8 +36,9 @@ public class NotificationService implements NotifyUseCase, GetNotificationsUseCa
                 command.type(),
                 command.message(),
                 command.link(),
+                command.deduplicationKey(),
                 Instant.now(clock));
-        return repository.save(notification).getId();
+        return repository.saveOnce(notification).getId();
     }
 
     @Override

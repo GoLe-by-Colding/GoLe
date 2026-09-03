@@ -151,8 +151,8 @@ export function AdminCatalogView() {
       <Heading level={2}>카탈로그 관리</Heading>
       <AdminStatus error={error} loading={sets === null} />
 
-      <div className="grid gap-6 xl:[grid-template-columns:320px_1fr]">
-        <Card padded className="flex h-fit flex-col gap-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 xl:[grid-template-columns:320px_minmax(0,1fr)]">
+        <Card padded className="flex min-w-0 h-fit flex-col gap-4 max-sm:p-4">
           <Heading level={3}>{editing !== null ? `세트 수정 · #${editing}` : "세트 등록"}</Heading>
           <Field label="세트 번호">
             {({ inputId }) => (
@@ -182,7 +182,7 @@ export function AdminCatalogView() {
               />
             )}
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="피스 수">
               {({ inputId }) => (
                 <Input
@@ -235,12 +235,17 @@ export function AdminCatalogView() {
             />
             홈 추천(featured)으로 노출
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button disabled={busy || validationError !== undefined} onClick={submit} fullWidth>
               {busy ? "저장 중..." : editing !== null ? "수정 저장" : "세트 등록"}
             </Button>
             {editing !== null ? (
-              <Button variant="secondary" onClick={cancelEdit} disabled={busy}>
+              <Button
+                variant="secondary"
+                onClick={cancelEdit}
+                disabled={busy}
+                className="max-sm:w-full"
+              >
                 취소
               </Button>
             ) : null}
@@ -252,19 +257,21 @@ export function AdminCatalogView() {
           ) : null}
         </Card>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <Field label="번호·이름·테마 검색">
-              {({ inputId }) => (
-                <Input
-                  id={inputId}
-                  type="search"
-                  value={query}
-                  placeholder="예: 10307, Eiffel, Icons"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              )}
-            </Field>
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+            <div className="w-full sm:max-w-md">
+              <Field label="번호·이름·테마 검색">
+                {({ inputId }) => (
+                  <Input
+                    id={inputId}
+                    type="search"
+                    value={query}
+                    placeholder="예: 10307, Eiffel, Icons"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                )}
+              </Field>
+            </div>
             <Text tone="muted" size="sm">
               {normalizedQuery === ""
                 ? `최근 등록 세트 ${visibleSets.length}개`

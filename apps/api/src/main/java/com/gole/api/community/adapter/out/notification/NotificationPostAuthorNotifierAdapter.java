@@ -32,4 +32,18 @@ public class NotificationPostAuthorNotifierAdapter implements PostAuthorNotifier
             log.warn("댓글 알림 발송 실패 authorId={} postId={}: {}", authorId, postId, e.getMessage());
         }
     }
+
+    @Override
+    public void notifyLike(String authorId, String postId, String actorId) {
+        try {
+            notifyUseCase.notify(new NotifyCommand(
+                    authorId,
+                    NotificationType.POST_LIKED,
+                    "누군가 내 글을 좋아해요",
+                    "/community/" + postId,
+                    "community-like:" + postId + ":" + actorId));
+        } catch (RuntimeException e) {
+            log.warn("좋아요 알림 발송 실패 authorId={} postId={} actorId={}: {}", authorId, postId, actorId, e.getMessage());
+        }
+    }
 }

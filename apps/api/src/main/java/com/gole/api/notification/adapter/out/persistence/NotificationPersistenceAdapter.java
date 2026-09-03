@@ -5,6 +5,7 @@ import com.gole.api.notification.domain.model.Notification;
 import com.gole.api.notification.domain.model.NotificationType;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -29,6 +30,27 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
     @Override
     public Notification save(Notification notification) {
         return toDomain(repository.save(toDocument(notification)));
+    }
+
+    @Override
+    public Notification saveOnce(Notification notification) {
+        String key = notification.getDeduplicationKey();
+        if (key == null) {
+            return save(notification);
+        }
+        Optional<NotificationDocument> existing =
+                repository.findByRecipientIdAndDeduplicationKey(notification.getRecipientId(), key);
+        if (existing.isPresent()) {
+            return toDomain(existing.orElseThrow());
+        }
+        try {
+            return save(notification);
+        } catch (DuplicateKeyException concurrentInsert) {
+            return repository
+                    .findByRecipientIdAndDeduplicationKey(notification.getRecipientId(), key)
+                    .map(this::toDomain)
+                    .orElseThrow(() -> concurrentInsert);
+        }
     }
 
     @Override
@@ -66,6 +88,7 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
                 n.getType().name(),
                 n.getMessage(),
                 n.getLink(),
+                n.getDeduplicationKey(),
                 n.isRead(),
                 n.getCreatedAt());
     }
@@ -77,6 +100,7 @@ public class NotificationPersistenceAdapter implements NotificationRepositoryPor
                 NotificationType.valueOf(d.getType()),
                 d.getMessage(),
                 d.getLink(),
+                d.getDeduplicationKey(),
                 d.isRead(),
                 d.getCreatedAt());
     }

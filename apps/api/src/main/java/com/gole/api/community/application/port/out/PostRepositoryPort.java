@@ -1,6 +1,8 @@
 package com.gole.api.community.application.port.out;
 
 import com.gole.api.community.domain.model.Post;
+import com.gole.api.community.domain.model.PostType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,4 +19,13 @@ public interface PostRepositoryPort {
 
     /** 게시된(PUBLISHED) 글을 최신→오래된 순으로 조회한다. (요구사항 12.6) */
     List<Post> findPublishedRecentFirst(int limit);
+
+    /** createdAt/id 내림차순 키셋 커서로 게시글을 조회한다. */
+    List<Post> findPublishedPage(
+            int limit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> query);
+
+    /** 지정 작성자의 게시된 글만 최신순으로 조회한다(팔로잉 피드). */
+    List<Post> findPublishedByAuthorIdsRecentFirst(List<String> authorIds, int limit);
+
+    record FeedCursor(Instant createdAt, String postId) {}
 }

@@ -4,6 +4,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -14,16 +15,33 @@ import org.springframework.stereotype.Component;
 public class SessionCookie {
 
     public static final String NAME = "gole_session";
-    private static final Duration TTL = Duration.ofDays(7);
     private final String secureMode;
+    private final Duration absoluteTtl;
 
-    public SessionCookie(@Value("${gole.session.cookie-secure:auto}") String secureMode) {
+    @Autowired
+    public SessionCookie(
+            @Value("${gole.session.cookie-secure:auto}") String secureMode,
+            @Value("${gole.session.absolute-ttl:P7D}") Duration absoluteTtl) {
         this.secureMode = secureMode;
+        this.absoluteTtl = absoluteTtl;
+    }
+
+    /** 독립 단위 테스트에서 운영 기본 수명을 재사용하는 편의 생성자. */
+    public SessionCookie(String secureMode) {
+        this(secureMode, Duration.ofDays(7));
     }
 
     public void issue(HttpServletRequest request, HttpServletResponse response, String token) {
         response.addHeader(
-                HttpHeaders.SET_COOKIE, cookie(token, TTL, isSecure(request)).toString());
+                HttpHeaders.SET_COOKIE,
+                cookie(token, absoluteTtl, isSecure(request)).toString());
+    }
+
+    public void issue(
+            HttpServletRequest request, HttpServletResponse response, String token, Duration remainingLifetime) {
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                cookie(token, remainingLifetime, isSecure(request)).toString());
     }
 
     public void clear(HttpServletRequest request, HttpServletResponse response) {
@@ -47,6 +65,10 @@ public class SessionCookie {
             }
         }
         return "";
+    }
+
+    public boolean usesBearer(HttpServletRequest request) {
+        return !bearer(request.getHeader(HttpHeaders.AUTHORIZATION)).isBlank();
     }
 
     private ResponseCookie cookie(String value, Duration maxAge, boolean secure) {

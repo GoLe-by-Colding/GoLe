@@ -10,11 +10,13 @@ import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetReadinessCheckCommand;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import com.gole.api.launch.domain.model.TradeMode;
 import java.time.Instant;
@@ -179,6 +181,26 @@ class LaunchConfigIntegrationTest {
         LaunchConfig reloaded = getLaunchConfig.current();
         assertThat(reloaded.overrides()).doesNotContainKey(LaunchFeature.REVIEWS);
         assertThat(reloaded.isEnabled(LaunchFeature.REVIEWS)).isFalse();
+    }
+
+    @Test
+    @DisplayName("운영 준비 확인은 문자열 키로 저장됐다가 도메인 enum으로 되돌아온다")
+    void readinessCheckSurvivesRoundTrip() {
+        manageLaunchConfig.setReadinessCheck(new SetReadinessCheckCommand(
+                LaunchReadinessCheck.TERMS_PRIVACY, true, "약관과 개인정보처리방침 대조 완료", "admin-1", "admin@gole.local"));
+
+        LaunchConfig reloaded = launchConfigRepository.load().orElseThrow();
+
+        assertThat(reloaded.isConfirmed(LaunchReadinessCheck.TERMS_PRIVACY)).isTrue();
+        assertThat(reloaded.isConfirmed(LaunchReadinessCheck.PAYMENT_FLOW)).isFalse();
+        Document raw = mongoTemplate
+                .getDb()
+                .getCollection("launch_config")
+                .find(new Document("_id", LaunchConfigDocument.SINGLETON_ID))
+                .first();
+        assertThat(raw).isNotNull();
+        assertThat(raw.get("readiness", Document.class).getBoolean("termsPrivacy"))
+                .isTrue();
     }
 
     @Test
