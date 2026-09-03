@@ -891,7 +891,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         isBuyer &&
         order.status === "completed" &&
         order.buyerId !== order.sellerId ? (
-          <Card padded className="flex flex-col gap-3">
+          <Card id="review" padded className="scroll-mt-24 flex flex-col gap-3">
             <Text weight="semibold">판매자 후기 남기기</Text>
             <WriteReviewForm orderId={order.id} reviewerId={order.buyerId} />
           </Card>

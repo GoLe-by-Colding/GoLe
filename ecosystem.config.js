@@ -1,4 +1,4 @@
-// GoLe PM2 프로세스 정의 (infra-as-code) — ubuntu-gole 컨테이너 전용.
+// GoLe PM2 프로세스 정의 (infra-as-code) — /app에 배치된 Linux 운영 호스트용.
 //
 // 현재 운영 중인 프로세스 정의를 그대로 코드화한 것이다.
 //   - gole-backend : Spring Boot 실행 jar (Java 21)
@@ -15,12 +15,15 @@ module.exports = {
       name: "gole-backend",
       cwd: APP_ROOT,
       script: "/usr/bin/bash",
-      args: ["-c", "java -Xmx512m -jar /app/apps/api/build/libs/api-0.0.1-SNAPSHOT.jar"],
+      args: [
+        "-c",
+        "if [ -f /etc/gole/gole.env ]; then set -a; . /etc/gole/gole.env; set +a; fi; exec java -Xmx1536m -jar /app/apps/api/build/libs/api-0.0.1-SNAPSHOT.jar",
+      ],
       interpreter: "none",
       exec_mode: "fork",
       autorestart: true,
-      max_memory_restart: "700M",
-      // 백엔드는 application.yml 기본값(localhost Mongo/Redis)을 사용한다.
+      max_memory_restart: "2G",
+      // 운영 서버에서는 /etc/gole/gole.env를 읽고, 로컬에서는 기존 기본값을 사용한다.
     },
     {
       name: "gole-frontend",

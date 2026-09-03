@@ -9,6 +9,7 @@ import {
   type Listing,
 } from "@entities/listing";
 import { fetchLaunchConfig } from "@entities/launch";
+import { OfficialLegoLink } from "@entities/lego-set";
 import { ApiError } from "@shared/api";
 import { Badge, Container, Heading } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
@@ -32,9 +33,10 @@ async function loadListing(id: string): Promise<Listing> {
 
 export interface ListingDetailPageProps {
   readonly listingId: string;
+  readonly openChat?: boolean;
 }
 
-export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
+export async function ListingDetailPage({ listingId, openChat = false }: ListingDetailPageProps) {
   const [listing, launch] = await Promise.all([loadListing(listingId), fetchLaunchConfig()]);
   const isAvailable = listing.status === "active";
   const paymentsOpen = launch.features.payments && launch.stage >= 2;
@@ -78,6 +80,16 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             {listing.defectsNote.length > 0 ? (
               <p className="text-neutral-600">하자/손상: {listing.defectsNote}</p>
             ) : null}
+            <p className="border-t border-neutral-200 pt-2 text-xs leading-relaxed text-neutral-500">
+              사진은 판매자가 직접 등록한 실물 이미지입니다. GoLe는 LEGO 공식 제품 이미지를 복제해
+              제공하지 않습니다.
+            </p>
+            {listing.catalogSetNumber !== null ? (
+              <OfficialLegoLink
+                setNumber={listing.catalogSetNumber}
+                className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-brand-700 hover:underline"
+              />
+            ) : null}
           </div>
           <div className="mt-2 flex gap-3">
             {paymentsOpen ? (
@@ -104,6 +116,7 @@ export async function ListingDetailPage({ listingId }: ListingDetailPageProps) {
             available={isAvailable}
             label={paymentsOpen ? "판매자와 채팅하기" : "거래 문의하기"}
             directTradeEnabled={launch.tradeMode === "DIRECT_CHAT"}
+            initialOpen={openChat}
           />
           {listing.catalogSetNumber !== null ? (
             <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />

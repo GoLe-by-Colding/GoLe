@@ -1,5 +1,7 @@
 package com.gole.api.community.domain.model;
 
+import java.util.Optional;
+
 /**
  * 게시글 주제. 자랑/창작(MOC)/리뷰/질문/팁/이스터에그/자유 등 다양한 공유·토론을 지원한다.
  * 레거시 호환을 위해 GENERAL/MOC 값을 유지한다(저장 문자열 그대로 매핑).
@@ -20,14 +22,19 @@ public enum PostType {
 
     /** 키 → enum. null/미상은 GENERAL(자유)로 간주. */
     public static PostType fromKey(String key) {
-        if (key == null) {
-            return GENERAL;
+        return findByKey(key).orElse(GENERAL);
+    }
+
+    /** 외부 필터처럼 미상 값을 조용히 자유 주제로 바꾸면 안 되는 곳에서 사용하는 엄격 조회. */
+    public static Optional<PostType> findByKey(String key) {
+        if (key == null || key.isBlank()) {
+            return Optional.empty();
         }
         for (PostType t : values()) {
             if (t.key().equalsIgnoreCase(key) || t.name().equalsIgnoreCase(key)) {
-                return t;
+                return Optional.of(t);
             }
         }
-        return GENERAL;
+        return Optional.empty();
     }
 }

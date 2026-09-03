@@ -5,6 +5,7 @@ import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -50,10 +51,13 @@ public class LaunchConfigPersistenceAdapter implements LaunchConfigRepositoryPor
     public LaunchConfig save(LaunchConfig config) {
         Map<String, Boolean> overrides = new LinkedHashMap<>();
         config.overrides().forEach((feature, enabled) -> overrides.put(feature.apiName(), enabled));
+        Map<String, Boolean> readiness = new LinkedHashMap<>();
+        config.readiness().forEach((check, confirmed) -> readiness.put(check.apiName(), confirmed));
         LaunchConfigDocument saved = configs.save(new LaunchConfigDocument(
                 LaunchConfigDocument.SINGLETON_ID,
                 config.stage().level(),
                 overrides,
+                readiness,
                 config.updatedAt(),
                 config.updatedBy(),
                 config.version()));
@@ -97,9 +101,23 @@ public class LaunchConfigPersistenceAdapter implements LaunchConfigRepositoryPor
                 }
             });
         }
+        Map<LaunchReadinessCheck, Boolean> readiness = new EnumMap<>(LaunchReadinessCheck.class);
+        if (document.getReadiness() != null) {
+            document.getReadiness().forEach((name, confirmed) -> {
+                if (confirmed == null) {
+                    return;
+                }
+                try {
+                    readiness.put(LaunchReadinessCheck.of(name), confirmed);
+                } catch (IllegalArgumentException unknownCheck) {
+                    log.warn("알 수 없는 운영 준비 항목을 무시함: {}", name);
+                }
+            });
+        }
         return new LaunchConfig(
                 stageOf(document.getStage()),
                 overrides,
+                readiness,
                 document.getUpdatedAt(),
                 document.getUpdatedBy(),
                 document.getVersion());

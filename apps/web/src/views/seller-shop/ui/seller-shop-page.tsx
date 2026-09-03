@@ -6,14 +6,26 @@ import { fetchSellerShop, type ListingSummary } from "@entities/discovery";
 import {
   fetchSellerRating,
   fetchSellerReviews,
+  replyToReview,
   type Review,
   type SellerRating,
 } from "@entities/review";
 import { FollowButton } from "@features/follow-seller";
+import { ReportButton } from "@features/report-content";
 import { useSession } from "@entities/user";
 import { fetchLaunchConfig } from "@entities/launch";
 import { formatKrw } from "@shared/lib";
-import { Badge, Card, Container, Heading, LinkButton, StarIcon, Text } from "@shared/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Container,
+  Heading,
+  LinkButton,
+  StarIcon,
+  Text,
+  Textarea,
+} from "@shared/ui";
 
 export interface SellerShopPageProps {
   readonly sellerId: string;
@@ -138,9 +150,32 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                         </span>
                       </div>
                       <Text>{r.content}</Text>
-                      <span className="font-mono text-xs text-neutral-400">
-                        {r.reviewerId.slice(0, 8)}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-xs text-neutral-400">
+                          {r.reviewerId.slice(0, 8)}
+                        </span>
+                        {session?.accountId !== r.reviewerId ? (
+                          <ReportButton targetType="REVIEW" targetId={r.id} />
+                        ) : null}
+                      </div>
+                      {typeof r.reply === "string" ? (
+                        <div className="rounded-lg bg-neutral-50 px-4 py-3">
+                          <p className="text-xs font-semibold text-neutral-500">판매자 답글</p>
+                          <Text className="mt-1" size="sm">
+                            {r.reply}
+                          </Text>
+                        </div>
+                      ) : null}
+                      {session?.accountId === sellerId ? (
+                        <SellerReplyEditor
+                          review={r}
+                          onUpdated={(updated) =>
+                            setReviews((current) =>
+                              current.map((item) => (item.id === updated.id ? updated : item)),
+                            )
+                          }
+                        />
+                      ) : null}
                     </Card>
                   </li>
                 ))}
@@ -150,5 +185,81 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
         ) : null}
       </div>
     </Container>
+  );
+}
+
+interface SellerReplyEditorProps {
+  readonly review: Review;
+  readonly onUpdated: (review: Review) => void;
+}
+
+function SellerReplyEditor({ review, onUpdated }: SellerReplyEditorProps) {
+  const hasReply = typeof review.reply === "string";
+  const [editing, setEditing] = useState(false);
+  const [content, setContent] = useState(review.reply ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const value = content.trim();
+    if (value.length === 0 || busy) {
+      setError("답글 내용을 입력해 주세요.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await replyToReview(review.id, value);
+      onUpdated(updated);
+      setContent(updated.reply ?? "");
+      setEditing(false);
+    } catch {
+      setError("답글을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+          {hasReply ? "답글 수정" : "답글 남기기"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-3">
+      <Textarea
+        value={content}
+        maxLength={1000}
+        rows={3}
+        aria-label="판매자 답글"
+        placeholder="거래 후기에 정중하게 답해 주세요"
+        invalid={error !== null}
+        disabled={busy}
+        onChange={(event) => setContent(event.target.value)}
+      />
+      {error !== null ? <p className="text-xs text-danger">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            setContent(review.reply ?? "");
+            setError(null);
+            setEditing(false);
+          }}
+        >
+          취소
+        </Button>
+        <Button size="sm" disabled={busy} onClick={() => void submit()}>
+          {busy ? "저장 중" : "답글 저장"}
+        </Button>
+      </div>
+    </div>
   );
 }

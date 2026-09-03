@@ -1,18 +1,40 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   clearSession,
   getServerSessionSnapshot,
   loadSession,
+  saveSession,
+  SESSION_REFRESH_INTERVAL_MS,
   subscribeSession,
 } from "./session-store";
-import { logout } from "../api/user-api";
+import { logout, refreshSession } from "../api/user-api";
 import type { Session } from "./types";
 
 export interface UseSessionResult {
   readonly session: Session | null;
   readonly signOut: () => void;
+}
+
+let refreshInFlight: Promise<void> | null = null;
+
+function refreshBrowserSession(): Promise<void> {
+  if (refreshInFlight !== null) return refreshInFlight;
+  refreshInFlight = refreshSession()
+    .then((refreshed) => {
+      saveSession({
+        accountId: refreshed.accountId,
+        sessionToken: "",
+        role: refreshed.role,
+        refreshAfter: Date.now() + SESSION_REFRESH_INTERVAL_MS,
+      });
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      refreshInFlight = null;
+    });
+  return refreshInFlight;
 }
 
 /**
@@ -21,6 +43,15 @@ export interface UseSessionResult {
  */
 export function useSession(): UseSessionResult {
   const session = useSyncExternalStore(subscribeSession, loadSession, getServerSessionSnapshot);
+
+  useEffect(() => {
+    if (session?.refreshAfter === undefined) return;
+    const delay = Math.max(0, session.refreshAfter - Date.now());
+    const timer = window.setTimeout(() => {
+      void refreshBrowserSession();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [session?.accountId, session?.refreshAfter]);
 
   const signOut = useCallback(() => {
     const current = loadSession();

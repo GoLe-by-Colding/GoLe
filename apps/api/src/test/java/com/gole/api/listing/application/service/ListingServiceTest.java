@@ -287,10 +287,11 @@ class ListingServiceTest {
         }
 
         @Override
-        public List<Listing> findActiveBySellers(List<String> sellerIds) {
+        public List<Listing> findActiveBySellers(List<String> sellerIds, int limit) {
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> sellerIds.contains(l.getSellerId()))
+                    .limit(limit)
                     .toList();
         }
 

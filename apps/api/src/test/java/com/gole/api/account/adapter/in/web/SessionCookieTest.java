@@ -29,9 +29,11 @@ class SessionCookieTest {
         request.setCookies(new Cookie(SessionCookie.NAME, "cookie-token"));
 
         assertThat(sessions.resolve(request)).isEqualTo("cookie-token");
+        assertThat(sessions.usesBearer(request)).isFalse();
 
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer header-token");
         assertThat(sessions.resolve(request)).isEqualTo("header-token");
+        assertThat(sessions.usesBearer(request)).isTrue();
     }
 
     @Test
@@ -46,6 +48,18 @@ class SessionCookieTest {
     }
 
     @Test
+    void autoModeKeepsLocalHttpCookieCredentialedButNotSecure() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        new SessionCookie("auto").issue(request, response, "secret-token");
+
+        assertThat(response.getHeader(HttpHeaders.SET_COOKIE))
+                .contains("gole_session=secret-token", "Path=/", "HttpOnly", "SameSite=Lax")
+                .doesNotContain("Secure", "Domain=");
+    }
+
+    @Test
     void clearExpiresCookieImmediately() {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -53,5 +67,18 @@ class SessionCookieTest {
         new SessionCookie("true").clear(request, response);
 
         assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).contains("gole_session=", "Max-Age=0");
+    }
+
+    @Test
+    void refreshCookieUsesRemainingAbsoluteLifetime() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        new SessionCookie("false", java.time.Duration.ofDays(7))
+                .issue(request, response, "rotated-token", java.time.Duration.ofHours(6));
+
+        assertThat(response.getHeader(HttpHeaders.SET_COOKIE))
+                .contains("gole_session=rotated-token", "Max-Age=21600")
+                .doesNotContain("Secure");
     }
 }

@@ -16,6 +16,11 @@ async function mockMe(page: Page, role: "USER" | "ADMIN"): Promise<void> {
       body: JSON.stringify({ accountId: "acc-1", email: "tester@gole.test", role }),
     });
   });
+  // 이 스펙은 권한/복귀 경로가 대상이다. HttpOnly 쿠키가 없는 합성 세션에서 헤더의
+  // 알림 폴링이 실제 API 401을 받아 세션을 지우지 않도록 전역 요청을 격리한다.
+  await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
 }
 
 /** 로그인 API를 흉내 내 실제 폼 제출로 복귀 동작까지 확인한다. */
@@ -216,6 +221,15 @@ test.describe("컬렉션 로그인 왕복", () => {
   });
 
   test("회원가입과 이메일 인증을 거쳐도 컬렉션 복귀 경로를 유지한다", async ({ page }) => {
+    await page.route("**/api/v1/policies/current", (route) =>
+      route.fulfill({
+        json: {
+          termsVersion: "2026-09-03",
+          privacyVersion: "2026-09-03",
+          minimumAge: 14,
+        },
+      }),
+    );
     await page.route("**/api/v1/accounts", async (route) => {
       await route.fulfill({ contentType: "application/json", body: '{"accountId":"acc-1"}' });
     });
@@ -230,6 +244,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     );
 
     await page.goto(`/signup?returnTo=${encodeURIComponent("/collection")}`);
+    await page.getByRole("checkbox", { name: /이용약관/ }).check();
+    await page.getByRole("checkbox", { name: /개인정보처리방침/ }).check();
+    await page.getByRole("checkbox", { name: /만 14세 이상/ }).check();
     await page.getByLabel("이메일").fill("new@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
     await page.getByRole("button", { name: "가입하기" }).click();

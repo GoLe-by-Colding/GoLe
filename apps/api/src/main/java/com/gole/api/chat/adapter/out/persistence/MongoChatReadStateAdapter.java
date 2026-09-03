@@ -34,7 +34,7 @@ public class MongoChatReadStateAdapter implements ChatReadStatePort {
     }
 
     @Override
-    public Map<String, Long> countUnread(String accountId, List<String> roomIds) {
+    public Map<String, Long> countUnread(String accountId, List<String> roomIds, List<String> excludedSenderIds) {
         List<String> distinctRoomIds = roomIds.stream().distinct().toList();
         if (distinctRoomIds.isEmpty()) {
             return Map.of();
@@ -46,8 +46,13 @@ public class MongoChatReadStateAdapter implements ChatReadStatePort {
         Criteria[] roomBranches = distinctRoomIds.stream()
                 .map(roomId -> afterCursor(roomId, byRoom.get(roomId)))
                 .toArray(Criteria[]::new);
+        List<String> hiddenSenders = java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of(accountId), excludedSenderIds.stream())
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
         Criteria match = new Criteria()
-                .andOperator(Criteria.where("senderId").ne(accountId), new Criteria().orOperator(roomBranches));
+                .andOperator(Criteria.where("senderId").nin(hiddenSenders), new Criteria().orOperator(roomBranches));
         Aggregation aggregation = Aggregation.newAggregation(
                 Aggregation.match(match), Aggregation.group("roomId").count().as("count"));
 

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.review.application.port.in.ReplyToReviewUseCase.ReplyToReviewCommand;
 import com.gole.api.review.application.port.in.WriteReviewUseCase.WriteReviewCommand;
 import com.gole.api.review.application.port.out.OrderQueryPort;
 import com.gole.api.review.application.port.out.ReviewIdGeneratorPort;
@@ -125,6 +126,37 @@ class ReviewServiceTest {
         assertThat(summary.average()).isZero();
     }
 
+    @Test
+    void reply_byReviewee_isPersisted() {
+        orders.put("order-1", "buyer-1", "seller-1", true);
+        Review review = service.write(new WriteReviewCommand("order-1", "buyer-1", 5, "잘 받았어요"));
+
+        Review replied = service.reply(new ReplyToReviewCommand(review.getId(), "seller-1", "거래 감사합니다"));
+
+        assertThat(replied.getReply()).isEqualTo("거래 감사합니다");
+        assertThat(replied.getRepliedAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
+    @Test
+    void reply_byOtherAccount_isForbidden() {
+        orders.put("order-1", "buyer-1", "seller-1", true);
+        Review review = service.write(new WriteReviewCommand("order-1", "buyer-1", 5, "잘 받았어요"));
+
+        assertThatThrownBy(() -> service.reply(new ReplyToReviewCommand(review.getId(), "intruder", "가짜 답글")))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void hiddenReview_isExcludedFromPublicListAndRating() {
+        orders.put("order-1", "buyer-1", "seller-1", true);
+        Review review = service.write(new WriteReviewCommand("order-1", "buyer-1", 1, "부적절한 후기"));
+
+        service.hide(review.getId(), "운영 정책 위반");
+
+        assertThat(service.bySeller("seller-1")).isEmpty();
+        assertThat(service.ratingOf("seller-1").count()).isZero();
+    }
+
     private static final class InMemoryReviews implements ReviewRepositoryPort {
         private final List<Review> store = new ArrayList<>();
 
@@ -141,9 +173,15 @@ class ReviewServiceTest {
         }
 
         @Override
+        public Optional<Review> findById(String reviewId) {
+            return store.stream().filter(r -> r.getId().equals(reviewId)).findFirst();
+        }
+
+        @Override
         public List<Review> findByRevieweeIdRecentFirst(String revieweeId) {
             return store.stream()
                     .filter(r -> r.getRevieweeId().equals(revieweeId))
+                    .filter(r -> !r.isHidden())
                     .sorted(Comparator.comparing(Review::getCreatedAt).reversed())
                     .toList();
         }

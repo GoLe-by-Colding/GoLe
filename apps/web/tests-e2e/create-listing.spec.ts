@@ -4,6 +4,11 @@ import { E2E_SELLER, signInAs } from "./support/e2e-session";
 test.describe("Seller fee disclosure", () => {
   test.beforeEach(async ({ page }) => {
     await signInAs(page, E2E_SELLER);
+    // 수수료 UI 스펙은 실제 Redis 세션에 의존하지 않는다. 헤더 알림 폴링의 401이
+    // 합성 세션을 지우지 않도록 대상과 무관한 전역 요청을 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
   });
 
   test("공개 수수료 정책으로 예상 정산액을 계산한다", async ({ page }) => {

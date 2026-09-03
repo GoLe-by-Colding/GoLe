@@ -21,6 +21,10 @@ public final class Review {
     private final int rating;
     private final String content;
     private final Instant createdAt;
+    private String reply;
+    private Instant repliedAt;
+    private Instant hiddenAt;
+    private String hiddenReason;
 
     public Review(
             String id,
@@ -30,6 +34,21 @@ public final class Review {
             int rating,
             String content,
             Instant createdAt) {
+        this(id, orderId, reviewerId, revieweeId, rating, content, createdAt, null, null, null, null);
+    }
+
+    public Review(
+            String id,
+            String orderId,
+            String reviewerId,
+            String revieweeId,
+            int rating,
+            String content,
+            Instant createdAt,
+            String reply,
+            Instant repliedAt,
+            Instant hiddenAt,
+            String hiddenReason) {
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = requireText(orderId, "orderId");
         this.reviewerId = requireText(reviewerId, "reviewerId");
@@ -37,12 +56,28 @@ public final class Review {
         this.rating = requireValidRating(rating);
         this.content = requireContent(content);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+        this.reply = normalizeOptionalContent(reply);
+        this.repliedAt = repliedAt;
+        this.hiddenAt = hiddenAt;
+        this.hiddenReason = hiddenReason;
     }
 
     /** 신규 후기 작성. revieweeId(판매자)는 주문에서 파생되어 전달된다. (요구사항 R1.1, R1.4) */
     public static Review write(
             String id, String orderId, String reviewerId, String revieweeId, int rating, String content, Instant now) {
         return new Review(id, orderId, reviewerId, revieweeId, rating, content, now);
+    }
+
+    /** 판매자 답글은 한 개만 유지하며 다시 작성하면 최신 내용으로 교체한다. */
+    public void reply(String content, Instant now) {
+        this.reply = requireContent(content);
+        this.repliedAt = Objects.requireNonNull(now, "now");
+    }
+
+    /** 신고 조치된 후기는 공개 목록과 평점 집계에서 제외한다. 원문은 감사 목적으로 보존한다. */
+    public void hide(String reason, Instant now) {
+        this.hiddenReason = requireText(reason, "reason");
+        this.hiddenAt = Objects.requireNonNull(now, "now");
     }
 
     private static int requireValidRating(int rating) {
@@ -60,6 +95,10 @@ public final class Review {
             throw new IllegalArgumentException("content must not exceed " + MAX_CONTENT_LENGTH + " chars");
         }
         return content;
+    }
+
+    private static String normalizeOptionalContent(String content) {
+        return content == null || content.isBlank() ? null : requireContent(content);
     }
 
     private static String requireText(String value, String field) {
@@ -95,5 +134,25 @@ public final class Review {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public String getReply() {
+        return reply;
+    }
+
+    public Instant getRepliedAt() {
+        return repliedAt;
+    }
+
+    public Instant getHiddenAt() {
+        return hiddenAt;
+    }
+
+    public String getHiddenReason() {
+        return hiddenReason;
+    }
+
+    public boolean isHidden() {
+        return hiddenAt != null;
     }
 }

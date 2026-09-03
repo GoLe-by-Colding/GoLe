@@ -11,6 +11,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
  */
 @Document(collection = "notifications")
 @CompoundIndex(name = "recipient_created_at_idx", def = "{'recipientId': 1, 'createdAt': -1}")
+@CompoundIndex(
+        name = "recipient_deduplication_key_unique_idx",
+        def = "{'recipientId': 1, 'deduplicationKey': 1}",
+        unique = true,
+        partialFilter = "{'deduplicationKey': {'$type': 'string'}}")
 public class NotificationDocument {
 
     @Id
@@ -22,6 +27,7 @@ public class NotificationDocument {
     private String type;
     private String message;
     private String link;
+    private String deduplicationKey;
     private boolean read;
 
     @Indexed
@@ -32,12 +38,20 @@ public class NotificationDocument {
     }
 
     public NotificationDocument(
-            String id, String recipientId, String type, String message, String link, boolean read, Instant createdAt) {
+            String id,
+            String recipientId,
+            String type,
+            String message,
+            String link,
+            String deduplicationKey,
+            boolean read,
+            Instant createdAt) {
         this.id = id;
         this.recipientId = recipientId;
         this.type = type;
         this.message = message;
         this.link = link;
+        this.deduplicationKey = deduplicationKey;
         this.read = read;
         this.createdAt = createdAt;
     }
@@ -60,6 +74,10 @@ public class NotificationDocument {
 
     public String getLink() {
         return link;
+    }
+
+    public String getDeduplicationKey() {
+        return deduplicationKey;
     }
 
     public boolean isRead() {

@@ -6,6 +6,7 @@ export type {
   ChatRoomType,
   SocialChatRoom,
   SupportStatus,
+  SupportCategory,
   ChatReportReason,
 } from "./model/types";
 export {

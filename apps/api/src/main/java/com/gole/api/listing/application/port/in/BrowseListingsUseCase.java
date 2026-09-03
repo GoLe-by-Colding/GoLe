@@ -19,7 +19,7 @@ public interface BrowseListingsUseCase {
      */
     List<Listing> bySeller(String sellerId);
 
-    List<Listing> activeBySellers(List<String> sellerIds);
+    List<Listing> activeBySellers(List<String> sellerIds, int limit);
 
     List<Listing> byIds(List<String> ids);
 }

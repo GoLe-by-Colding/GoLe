@@ -95,7 +95,10 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
           />
         )}
       </Field>
-      <Field label="이미지 (선택)" hint={`최대 ${MAX_IMAGES}장 · 질문/토론은 사진 없이도 OK`}>
+      <Field
+        label="이미지 (선택)"
+        hint={`최대 ${MAX_IMAGES}장 · 직접 촬영하거나 제작한 이미지만 올려주세요. LEGO 공식 제품·카탈로그 이미지 도용은 금지됩니다.`}
+      >
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input

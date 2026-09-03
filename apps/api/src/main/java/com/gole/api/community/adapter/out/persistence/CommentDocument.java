@@ -24,16 +24,29 @@ public class CommentDocument {
 
     private Instant createdAt;
 
+    private Instant hiddenAt;
+
+    private String hiddenReason;
+
     protected CommentDocument() {
         // MongoDB 매핑용
     }
 
-    public CommentDocument(String id, String postId, String authorId, String content, Instant createdAt) {
+    public CommentDocument(
+            String id,
+            String postId,
+            String authorId,
+            String content,
+            Instant createdAt,
+            Instant hiddenAt,
+            String hiddenReason) {
         this.id = id;
         this.postId = postId;
         this.authorId = authorId;
         this.content = content;
         this.createdAt = createdAt;
+        this.hiddenAt = hiddenAt;
+        this.hiddenReason = hiddenReason;
     }
 
     public String getId() {
@@ -54,5 +67,13 @@ public class CommentDocument {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getHiddenAt() {
+        return hiddenAt;
+    }
+
+    public String getHiddenReason() {
+        return hiddenReason;
     }
 }

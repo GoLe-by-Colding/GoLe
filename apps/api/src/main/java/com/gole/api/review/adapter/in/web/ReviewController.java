@@ -1,10 +1,13 @@
 package com.gole.api.review.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.review.adapter.in.web.ReviewDtos.ReplyReviewRequest;
 import com.gole.api.review.adapter.in.web.ReviewDtos.ReviewResponse;
 import com.gole.api.review.adapter.in.web.ReviewDtos.SellerRatingResponse;
 import com.gole.api.review.adapter.in.web.ReviewDtos.WriteReviewRequest;
 import com.gole.api.review.application.port.in.GetSellerReviewsUseCase;
+import com.gole.api.review.application.port.in.ReplyToReviewUseCase;
+import com.gole.api.review.application.port.in.ReplyToReviewUseCase.ReplyToReviewCommand;
 import com.gole.api.review.application.port.in.WriteReviewUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase.WriteReviewCommand;
 import com.gole.api.review.domain.model.Review;
@@ -31,10 +34,15 @@ public class ReviewController {
 
     private final WriteReviewUseCase writeReviewUseCase;
     private final GetSellerReviewsUseCase getSellerReviewsUseCase;
+    private final ReplyToReviewUseCase replyToReviewUseCase;
 
-    public ReviewController(WriteReviewUseCase writeReviewUseCase, GetSellerReviewsUseCase getSellerReviewsUseCase) {
+    public ReviewController(
+            WriteReviewUseCase writeReviewUseCase,
+            GetSellerReviewsUseCase getSellerReviewsUseCase,
+            ReplyToReviewUseCase replyToReviewUseCase) {
         this.writeReviewUseCase = writeReviewUseCase;
         this.getSellerReviewsUseCase = getSellerReviewsUseCase;
+        this.replyToReviewUseCase = replyToReviewUseCase;
     }
 
     @PostMapping("/reviews")
@@ -43,6 +51,13 @@ public class ReviewController {
         Review review = writeReviewUseCase.write(new WriteReviewCommand(
                 request.orderId(), AuthenticatedUser.id(http), request.rating(), request.content()));
         return ReviewResponse.from(review);
+    }
+
+    @PostMapping("/reviews/{reviewId}/reply")
+    public ReviewResponse reply(
+            @PathVariable String reviewId, @Valid @RequestBody ReplyReviewRequest request, HttpServletRequest http) {
+        return ReviewResponse.from(replyToReviewUseCase.reply(
+                new ReplyToReviewCommand(reviewId, AuthenticatedUser.id(http), request.content())));
     }
 
     @GetMapping("/sellers/{sellerId}/reviews")

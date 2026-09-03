@@ -2,6 +2,7 @@ package com.gole.api.account.application.port.in;
 
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Role;
+import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import java.util.List;
 
 /**
@@ -13,7 +14,7 @@ public interface SocialLoginUseCase {
     List<AuthProvider> enabledProviders();
 
     /** provider 동의 화면 URL을 만든다. 서버가 state를 발급·저장한다(CSRF). (S4) */
-    String authorizeUrl(AuthProvider provider, String redirectUri);
+    String authorizeUrl(AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance);
 
     /** code를 교환해 프로필을 얻고 find-or-create 후 세션을 발급한다. state 검증 포함. (S5, S6) */
     SocialLoginResult login(SocialLoginCommand command);

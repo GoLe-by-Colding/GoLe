@@ -5,6 +5,7 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.DomainException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.common.exception.TooManyRequestsException;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
@@ -80,6 +81,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<?> handleForbidden(ForbiddenException ex, HttpServletRequest request) {
         return clientError(HttpStatus.FORBIDDEN, new ErrorResponse(ex.getCode(), ex.getMessage()), request);
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyRequests(TooManyRequestsException ex) {
+        long seconds = Math.max(1, (ex.getRetryAfter().toMillis() + 999) / 1_000);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+                .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(DomainException.class)

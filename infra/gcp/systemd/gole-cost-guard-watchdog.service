@@ -1,0 +1,11 @@
+[Unit]
+Description=GoLe cost guard fail-closed watchdog
+After=docker.service
+Wants=docker.service
+OnFailure=poweroff.target
+OnFailureJobMode=replace-irreversibly
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gole-cost-guard-watchdog
+TimeoutStartSec=15s

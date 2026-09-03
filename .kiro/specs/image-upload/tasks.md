@@ -22,20 +22,16 @@
 - [x] D3 MinIO `gole` 버킷 + 스트리밍 검증 — 프로덕션 `GET /api/v1/listings` 응답의
       `photoUrls`가 `/api/v1/media/community/moc-lighthouse.svg` 형태로 서빙 중
 
-## 로컬 개발 환경 갭 (2026-08-03 실측 발견)
-- [ ] L1 **`docker-compose.yml`에 MinIO 서비스가 없다**(grep 0건). 로컬에서 `infra:up`만
-      실행하면 9000 포트가 비어 `MediaSeeder`가 전부 실패한다
-      (`[seed] media: 'community/titanic.svg' 업로드 실패: UnknownHostException`).
-      로컬 개발자는 이미지가 전부 깨진 상태로 작업하게 된다. MinIO 서비스 + 버킷 초기화를
-      compose에 추가해야 한다.
-- [ ] L2 `storage.s3.endpoint` 기본값이 `http://host.docker.internal:9000`이라
-      호스트에서 직접 `bootRun` 할 때 해석되지 않는다. 로컬 기본값 정리 필요.
+## 로컬 개발 환경 갭 (2026-08-03 실측 발견, 해소됨)
+- [x] L1 `docker-compose.yml`에 MinIO + healthcheck + `minio-init` 버킷/익명 읽기 초기화 추가.
+- [x] L2 호스트 `bootRun` 기본 endpoint를 `http://localhost:9000`으로 정리하고,
+      컨테이너 실행은 `STORAGE_S3_ENDPOINT=http://minio:9000`으로 명시하도록 분리.
 
 ## 후속 백로그
-- [ ] N1 업로드 인증(세션 토큰) + 사용자별 레이트리밋
-      ※ 실측 확인: `MediaController`의 `POST /images`·`POST /images/batch`에 인증·레이트리밋이
-      **전혀 없다**(세션/Authorization 참조 0건). 누구나 무제한 업로드 가능한 상태이므로
-      후속이 아니라 **보안 우선순위 항목**으로 취급해야 한다.
+- [x] N1 업로드 인증 + 사용자별 레이트리밋 — 전역 `UserAuthInterceptor`가 모든 미디어 POST에
+      인증 계정 속성을 주입하고, Redis 고정 시간창으로 기본 10분당 30장을 제한한다. 배치 요청은
+      요청 횟수가 아니라 실제 파일 수만큼 차감하며 초과 시 `429 MEDIA_UPLOAD_RATE_LIMITED`와
+      `Retry-After`를 반환한다. 공개 이미지 GET은 그대로 인증 없이 제공한다.
 - [x] N2 다중 이미지 업로드 — 배치 엔드포인트 `POST /api/v1/media/images/batch`(최대 10장) + 프론트 다중 선택/미리보기/삭제(create-listing·create-post)
 - [x] N2a 이미지 썸네일(온더플라이 리사이즈 ?w= + MinIO 캐시); 프론트 카드 thumbnailUrl
 - [ ] N3 presigned URL/CDN 전환(트래픽 확장 시)

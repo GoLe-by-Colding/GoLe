@@ -5,11 +5,13 @@ import com.gole.api.account.adapter.in.web.AccountRequests.ResendVerificationReq
 import com.gole.api.account.adapter.in.web.AccountRequests.SignInRequest;
 import com.gole.api.account.adapter.in.web.AccountRequests.VerifyEmailRequest;
 import com.gole.api.account.adapter.in.web.AccountResponses.MeResponse;
+import com.gole.api.account.adapter.in.web.AccountResponses.RefreshSessionResponse;
 import com.gole.api.account.adapter.in.web.AccountResponses.RegisterResponse;
 import com.gole.api.account.adapter.in.web.AccountResponses.SignInResponse;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.application.port.in.LogoutUseCase;
+import com.gole.api.account.application.port.in.RefreshSessionUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
 import com.gole.api.account.application.port.in.ResendVerificationUseCase;
@@ -19,6 +21,7 @@ import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
+import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -50,6 +53,7 @@ public class AccountController {
     private final SignInUseCase signInUseCase;
     private final GetCurrentSessionUseCase getCurrentSessionUseCase;
     private final LogoutUseCase logoutUseCase;
+    private final RefreshSessionUseCase refreshSessionUseCase;
     private final SessionCookie sessionCookie;
 
     public AccountController(
@@ -59,6 +63,7 @@ public class AccountController {
             SignInUseCase signInUseCase,
             GetCurrentSessionUseCase getCurrentSessionUseCase,
             LogoutUseCase logoutUseCase,
+            RefreshSessionUseCase refreshSessionUseCase,
             SessionCookie sessionCookie) {
         this.registerAccountUseCase = registerAccountUseCase;
         this.resendVerificationUseCase = resendVerificationUseCase;
@@ -66,6 +71,7 @@ public class AccountController {
         this.signInUseCase = signInUseCase;
         this.getCurrentSessionUseCase = getCurrentSessionUseCase;
         this.logoutUseCase = logoutUseCase;
+        this.refreshSessionUseCase = refreshSessionUseCase;
         this.sessionCookie = sessionCookie;
     }
 
@@ -77,8 +83,15 @@ public class AccountController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
-        String accountId =
-                registerAccountUseCase.register(new RegisterAccountCommand(request.email(), request.password()));
+        String accountId = registerAccountUseCase.register(new RegisterAccountCommand(
+                request.email(),
+                request.password(),
+                new SignupPolicyAcceptance(
+                        request.termsVersion(),
+                        request.privacyVersion(),
+                        request.termsAccepted(),
+                        request.privacyAcknowledged(),
+                        request.minimumAgeConfirmed())));
         return new RegisterResponse(accountId);
     }
 
@@ -109,6 +122,23 @@ public class AccountController {
         sessionCookie.issue(http, response, result.sessionToken());
         return new SignInResponse(
                 result.accountId(), result.sessionToken(), result.role().name(), result.onboardingRequired());
+    }
+
+    @Operation(summary = "세션 갱신", description = "현재 세션을 재검증하고 회전 주기가 지난 불투명 토큰만 교체합니다. 최초 발급 시각은 보존됩니다.")
+    @PostMapping("/sessions/refresh")
+    public RefreshSessionResponse refreshSession(HttpServletRequest request, HttpServletResponse response) {
+        var result = refreshSessionUseCase
+                .refresh(sessionCookie.resolve(request))
+                .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
+        boolean bearerClient = sessionCookie.usesBearer(request);
+        if (result.rotated() && !bearerClient) {
+            sessionCookie.issue(request, response, result.sessionToken(), result.remainingLifetime());
+        }
+        return new RefreshSessionResponse(
+                result.accountId(),
+                bearerClient ? result.sessionToken() : "",
+                result.role().name(),
+                result.rotated());
     }
 
     @Operation(

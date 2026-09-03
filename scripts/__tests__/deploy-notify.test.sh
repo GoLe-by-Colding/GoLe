@@ -21,23 +21,27 @@ failures=0
 
 # 가짜 배포 대상을 만들고 deploy.sh 를 그 안에서 실행한다.
 #   $1 = deploy.sh 인자 (all|backend|frontend)
-#   환경변수 GRADLEW_EXIT / FAIL_URL_SUBSTR 로 실패 지점을 주입한다.
+#   환경변수 DOCKER_BUILD_EXIT / FAIL_URL_SUBSTR 로 실패 지점을 주입한다.
 run_deploy() {
   local target="$1"
   local sandbox bin
   sandbox="$(mktemp -d)"
   bin="$sandbox/bin"
-  mkdir -p "$bin" "$sandbox/scripts" "$sandbox/apps/api"
+  mkdir -p "$bin" "$sandbox/scripts" "$sandbox/infra/gcp"
   cp "$DEPLOY_SH" "$sandbox/scripts/deploy.sh"
+  touch "$sandbox/infra/gcp/docker-compose.yml"
   CAPTURE="$sandbox/sent.txt"
   : >"$CAPTURE"
 
-  # 빌드 스텁: GRADLEW_EXIT 로 성공/실패를 고른다.
-  cat >"$sandbox/apps/api/gradlew" <<GRADLEW
+  # Compose 빌드 스텁: DOCKER_BUILD_EXIT 로 성공/실패를 고른다.
+  cat >"$bin/docker" <<DOCKER
 #!/usr/bin/env bash
-exit ${GRADLEW_EXIT:-0}
-GRADLEW
-  chmod +x "$sandbox/apps/api/gradlew"
+for arg in "\$@"; do
+  if [ "\$arg" = "build" ]; then exit ${DOCKER_BUILD_EXIT:-0}; fi
+done
+exit 0
+DOCKER
+  chmod +x "$bin/docker"
 
   # curl 스텁: 마지막 인자가 URL이다. webhook 이면 payload 를 캡처하고,
   # 그 외에는 헬스체크로 보고 FAIL_URL_SUBSTR 에 걸릴 때만 실패시킨다.
@@ -64,7 +68,7 @@ CURL
   chmod +x "$bin/curl"
 
   # 나머지 외부 명령은 무해한 no-op. sleep 을 죽여 재시도 루프가 즉시 끝나게 한다.
-  for stub in git pnpm pm2 sleep; do
+  for stub in git sleep; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$bin/$stub"
     chmod +x "$bin/$stub"
   done
@@ -96,28 +100,28 @@ expect_eq() {
 }
 
 printf '\n[1] 백엔드 빌드 실패 → 배포 실패 알림 1건\n'
-GRADLEW_EXIT=1 FAIL_URL_SUBSTR="" run_deploy backend
+DOCKER_BUILD_EXIT=1 FAIL_URL_SUBSTR="" run_deploy backend
 expect_eq "종료 코드 비정상" "yes" "$([ "$DEPLOY_STATUS" -ne 0 ] && echo yes || echo no)"
 expect_eq "배포 실패 알림 건수" 1 "$(count_matching '배포 실패')"
 expect_eq "완료 알림 건수" 0 "$(count_matching '배포 및 헬스체크 완료')"
 
 printf '\n[2] readiness 실패(exit 1) → 배포 실패 알림 1건\n'
-GRADLEW_EXIT=0 FAIL_URL_SUBSTR="health/readiness" run_deploy backend
+DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="health/readiness" run_deploy backend
 expect_eq "종료 코드 비정상" "yes" "$([ "$DEPLOY_STATUS" -ne 0 ] && echo yes || echo no)"
 expect_eq "배포 실패 알림 건수" 1 "$(count_matching '배포 실패')"
 expect_eq "완료 알림 건수" 0 "$(count_matching '배포 및 헬스체크 완료')"
 
 printf '\n[3] 정상 배포 → 완료 알림 1건, 실패 알림 0건\n'
-GRADLEW_EXIT=0 FAIL_URL_SUBSTR="" run_deploy backend
+DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="" run_deploy backend
 expect_eq "종료 코드 정상" 0 "$DEPLOY_STATUS"
 expect_eq "시작 알림 건수" 1 "$(count_matching '배포 시작')"
 expect_eq "완료 알림 건수" 1 "$(count_matching '배포 및 헬스체크 완료')"
 expect_eq "배포 실패 알림 건수" 0 "$(count_matching '배포 실패')"
 
 printf '\n[4] 무음 플래그는 설정을 그대로 따른다\n'
-GRADLEW_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=true run_deploy backend
+DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=true run_deploy backend
 expect_eq "suppress=true 이면 flags:4096 포함" 2 "$(count_matching '"flags":4096')"
-GRADLEW_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=false run_deploy backend
+DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=false run_deploy backend
 expect_eq "suppress=false 이면 flags 없음" 0 "$(count_matching '"flags":4096')"
 
 printf '\n'

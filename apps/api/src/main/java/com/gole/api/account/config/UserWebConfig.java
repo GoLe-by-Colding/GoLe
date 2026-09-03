@@ -23,7 +23,11 @@ public class UserWebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(userAuthInterceptor)
                 .addPathPatterns("/api/v1/**", "/api/v2/**")
-                .excludePathPatterns("/api/v1/accounts/**", "/api/v1/auth/**", "/api/v1/payments/portone/webhook");
+                .excludePathPatterns(
+                        "/api/v1/accounts/**",
+                        "/api/v1/auth/**",
+                        "/api/v1/policies/**",
+                        "/api/v1/payments/portone/webhook");
         // 인증 가드 뒤에 온다 — 계정 속성이 채워진 뒤라야 온보딩 상태를 물어볼 수 있다.
         // 대상 선별은 경로가 아니라 @RequiresOnboarding 애노테이션이 한다(D5).
         registry.addInterceptor(onboardingGuardInterceptor).addPathPatterns("/api/v1/**", "/api/v2/**");

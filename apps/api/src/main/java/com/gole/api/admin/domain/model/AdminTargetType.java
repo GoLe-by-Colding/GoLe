@@ -6,8 +6,10 @@ package com.gole.api.admin.domain.model;
 public enum AdminTargetType {
     LISTING,
     POST,
+    COMMENT,
     ACCOUNT,
     REPORT,
+    REVIEW,
     CATALOG_SET,
     ORDER,
     SETTLEMENT,

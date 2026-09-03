@@ -1,6 +1,7 @@
 package com.gole.api.listing.adapter.out.persistence;
 
 import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 /**
@@ -17,8 +18,9 @@ public interface ListingMongoRepository extends MongoRepository<ListingDocument,
     /** 특정 셀러의 리스팅 중 특정 상태를 제외한 것(최신순). 본인 "내 매물" 조회용. */
     List<ListingDocument> findBySellerIdAndStatusNotOrderByCreatedAtDesc(String sellerId, String status);
 
-    /** 여러 셀러의 특정 상태 리스팅. */
-    List<ListingDocument> findBySellerIdInAndStatus(List<String> sellerIds, String status);
+    /** 여러 셀러의 특정 상태 리스팅을 최신순·제한 조회. */
+    List<ListingDocument> findBySellerIdInAndStatusOrderByCreatedAtDesc(
+            List<String> sellerIds, String status, Pageable pageable);
 
     /** id 목록으로 조회. */
     List<ListingDocument> findByIdIn(List<String> ids);

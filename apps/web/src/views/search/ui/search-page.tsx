@@ -1,6 +1,6 @@
 import {
   searchListings,
-  ITEM_CONDITIONS,
+  parseItemCondition,
   type ItemCondition,
   type Listing,
   type ListingCategory,
@@ -20,12 +20,11 @@ export interface SearchPageProps {
   readonly sort?: string | undefined;
 }
 
-const CONDITIONS = ITEM_CONDITIONS;
 const CATEGORIES: readonly ListingCategory[] = ["set", "parts", "minifig", "moc"];
 const SORTS: readonly ListingSort[] = ["newest", "price_asc", "price_desc"];
 
 function parseCondition(value: string | undefined): ItemCondition | undefined {
-  return CONDITIONS.find((c) => c === value);
+  return parseItemCondition(value);
 }
 
 function parseCategory(value: string | undefined): ListingCategory | undefined {
@@ -89,7 +88,7 @@ export async function SearchPage(props: SearchPageProps) {
             <span className="font-bold text-brand-600">{listings.length}</span>개
           </Text>
         </div>
-        <div className="sticky top-16 z-30 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
+        <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
         </div>
         <ListingGrid

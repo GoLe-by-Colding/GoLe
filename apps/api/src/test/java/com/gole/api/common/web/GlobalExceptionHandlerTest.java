@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.TooManyRequestsException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.MethodParameter;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -97,6 +99,17 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(content().string("event: error\ndata: CHAT_ROOM_ACCESS_DENIED\n\n"));
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void rateLimitReturnsRetryAfterWithoutOperationalAlert() {
+        var response = handler.handleTooManyRequests(new TooManyRequestsException(
+                "MEDIA_UPLOAD_RATE_LIMITED", "잠시 후 다시 시도해 주세요", java.time.Duration.ofMillis(1_001)));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("2");
+        assertThat(response.getBody().code()).isEqualTo("MEDIA_UPLOAD_RATE_LIMITED");
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 

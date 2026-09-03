@@ -82,14 +82,22 @@ export interface AdminLaunchConfig {
   /** 운영자가 저장한 단계. config.stage는 현재 정산 모드로 낮춘 실제 실행 단계다. */
   readonly requestedStage: 0 | 1 | 2 | 3;
   readonly overrides: Readonly<Partial<Record<"payments" | "reviews" | "partnerPayout", boolean>>>;
+  /** 구버전 API와 롤링 배포 중에는 없을 수 있어 UI가 미확인으로 fail-closed 한다. */
+  readonly readiness?: Readonly<Partial<Record<AdminLaunchReadinessKey, boolean>>>;
   readonly updatedBy: string | null;
   readonly settlementMode: "DISABLED" | "MANUAL" | "PROVIDER";
   readonly payoutContractVerified: boolean;
 }
 
+export type AdminLaunchReadinessKey =
+  | "businessDisclosure"
+  | "termsPrivacy"
+  | "paymentFlow"
+  | "payoutFlow";
+
 export interface AdminLaunchChange {
   readonly id: string;
-  readonly type: "STAGE" | "FEATURE_OVERRIDE";
+  readonly type: "STAGE" | "FEATURE_OVERRIDE" | "READINESS";
   readonly target: string;
   readonly before: string;
   readonly after: string;
@@ -133,7 +141,7 @@ export interface AdminAccount {
 export interface AdminReport {
   readonly id: string;
   readonly reporterId: string;
-  readonly targetType: "LISTING" | "POST" | "CHAT_MESSAGE";
+  readonly targetType: "LISTING" | "POST" | "COMMENT" | "REVIEW" | "CHAT_MESSAGE";
   readonly targetId: string;
   readonly reason: string;
   readonly detail: string;
@@ -142,17 +150,37 @@ export interface AdminReport {
   readonly handledAt: string | null;
 }
 
+export interface AdminCommentReportContext {
+  readonly id: string;
+  readonly postId: string;
+  readonly authorId: string;
+  readonly content: string;
+  readonly createdAt: string;
+  readonly hidden: boolean;
+}
+
 export type AdminSupportStatus = "UNASSIGNED" | "IN_PROGRESS" | "WAITING_USER" | "RESOLVED";
+
+export type AdminSupportCategory =
+  | "GENERAL"
+  | "TRADE"
+  | "PAYMENT"
+  | "PRODUCT_FEEDBACK"
+  | "PRIVACY_ACCESS"
+  | "PRIVACY_CORRECTION_DELETION"
+  | "PRIVACY_PROCESSING_STOP";
 
 export interface AdminSupportTicket {
   readonly roomId: string;
   readonly requesterId: string;
   readonly title: string;
+  readonly category: AdminSupportCategory;
   readonly status: AdminSupportStatus;
   readonly assigneeId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly resolvedAt: string | null;
+  readonly responseDueAt: string | null;
 }
 
 export interface AdminSupportMessage {
@@ -345,6 +373,18 @@ export function setAdminLaunchFeature(
   });
 }
 
+export function setAdminLaunchReadiness(
+  token: string,
+  check: AdminLaunchReadinessKey,
+  confirmed: boolean,
+  reason: string,
+): Promise<AdminLaunchConfig> {
+  return post<AdminLaunchConfig>(token, `/api/admin/launch/readiness/${check}`, {
+    confirmed,
+    reason,
+  });
+}
+
 // ── 매물 ─────────────────────────────────────────────────────
 
 export function fetchAdminListings(
@@ -416,15 +456,25 @@ export function fetchAdminChatReportSnapshot(
   return get<AdminChatReportSnapshot>(token, `/api/admin/reports/${reportId}/chat-snapshot`);
 }
 
+/** 댓글은 수정 기능이 없으므로 저장된 불변 원문과 부모 게시글을 신고 문맥으로 조회한다. */
+export function fetchAdminCommentReportContext(
+  token: string,
+  reportId: string,
+): Promise<AdminCommentReportContext> {
+  return get<AdminCommentReportContext>(token, `/api/admin/reports/${reportId}/comment-context`);
+}
+
 // ── 운영 문의 ─────────────────────────────────────────────────
 
 export function fetchAdminSupportTickets(
   token: string,
   status?: AdminSupportStatus,
+  category?: AdminSupportCategory,
   limit = 50,
 ): Promise<readonly AdminSupportTicket[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set("status", status);
+  if (category) params.set("category", category);
   return get<readonly AdminSupportTicket[]>(token, `/api/admin/support?${params}`);
 }
 

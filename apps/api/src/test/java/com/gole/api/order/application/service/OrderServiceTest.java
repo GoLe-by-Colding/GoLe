@@ -2,12 +2,15 @@ package com.gole.api.order.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
+import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
@@ -43,6 +46,7 @@ class OrderServiceTest {
     private FakeReservation reservation;
     private CountingSettlement settlement;
     private RecordingPublisher events;
+    private OrderEventNotifierPort orderEventNotifier;
     private OrderService service;
 
     @BeforeEach
@@ -51,6 +55,7 @@ class OrderServiceTest {
         reservation = new FakeReservation();
         settlement = new CountingSettlement();
         events = new RecordingPublisher();
+        orderEventNotifier = mock(OrderEventNotifierPort.class);
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
                 orders,
@@ -59,6 +64,7 @@ class OrderServiceTest {
                 settlement,
                 (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
+                orderEventNotifier,
                 new SequentialIds(),
                 clock,
                 new OrderPaymentTransitionService(orders, reservation),
@@ -146,6 +152,7 @@ class OrderServiceTest {
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(settlement.calls.get()).isEqualTo(1);
         assertThat(reservation.sold).isTrue();
+        verify(orderEventNotifier).completed("buyer-1", "seller-1", id);
     }
 
     @Test
@@ -166,6 +173,7 @@ class OrderServiceTest {
                 settlement,
                 recorder,
                 (sellerId, orderId, amount) -> {},
+                orderEventNotifier,
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),
@@ -407,6 +415,7 @@ class OrderServiceTest {
                 settlement,
                 (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
+                orderEventNotifier,
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),
@@ -489,6 +498,7 @@ class OrderServiceTest {
                 settlement,
                 (o, s, p, q, t, c, e) -> {},
                 (sellerId, orderId, amount) -> {},
+                orderEventNotifier,
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),

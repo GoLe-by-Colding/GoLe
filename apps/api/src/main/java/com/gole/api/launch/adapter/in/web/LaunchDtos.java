@@ -4,6 +4,7 @@ import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -53,6 +54,7 @@ public final class LaunchDtos {
             LaunchConfigResponse config,
             int requestedStage,
             java.util.Map<String, Boolean> overrides,
+            java.util.Map<String, Boolean> readiness,
             String updatedBy,
             String settlementMode,
             boolean payoutContractVerified) {
@@ -61,10 +63,15 @@ public final class LaunchDtos {
                 LaunchConfig effective, LaunchConfig requested, Mode settlementMode, boolean payoutContractVerified) {
             java.util.Map<String, Boolean> overrides = new java.util.LinkedHashMap<>();
             requested.overrides().forEach((feature, enabled) -> overrides.put(feature.apiName(), enabled));
+            java.util.Map<String, Boolean> readiness = new java.util.LinkedHashMap<>();
+            for (LaunchReadinessCheck check : LaunchReadinessCheck.values()) {
+                readiness.put(check.apiName(), requested.isConfirmed(check));
+            }
             return new AdminLaunchConfigResponse(
                     LaunchConfigResponse.from(effective),
                     requested.stage().level(),
                     overrides,
+                    readiness,
                     requested.updatedBy(),
                     settlementMode.name(),
                     payoutContractVerified);
@@ -83,6 +90,11 @@ public final class LaunchDtos {
      */
     public record FeatureOverrideRequest(
             Boolean enabled, @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
+
+    /** 서버가 자동 판정할 수 없는 운영 준비 항목 확인 또는 확인 취소 요청. */
+    public record ReadinessCheckRequest(
+            @NotNull(message = "확인 여부를 지정해야 합니다") Boolean confirmed,
+            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
 
     /** 변경 이력 1행. */
     public record LaunchChangeRow(

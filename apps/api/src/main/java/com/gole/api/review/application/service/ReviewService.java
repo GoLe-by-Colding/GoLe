@@ -4,6 +4,8 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.review.application.port.in.GetSellerReviewsUseCase;
+import com.gole.api.review.application.port.in.ModerateReviewUseCase;
+import com.gole.api.review.application.port.in.ReplyToReviewUseCase;
 import com.gole.api.review.application.port.in.WriteReviewUseCase;
 import com.gole.api.review.application.port.out.OrderQueryPort;
 import com.gole.api.review.application.port.out.OrderQueryPort.OrderSnapshot;
@@ -23,7 +25,8 @@ import org.springframework.stereotype.Service;
  * 작성 자격(주문 완료/구매자 일치/주문당 1회)을 검증한 뒤 후기를 저장한다. (요구사항 R1, R2, R3)
  */
 @Service
-public class ReviewService implements WriteReviewUseCase, GetSellerReviewsUseCase {
+public class ReviewService
+        implements WriteReviewUseCase, GetSellerReviewsUseCase, ReplyToReviewUseCase, ModerateReviewUseCase {
 
     private final ReviewRepositoryPort reviewRepository;
     private final OrderQueryPort orderQuery;
@@ -90,5 +93,31 @@ public class ReviewService implements WriteReviewUseCase, GetSellerReviewsUseCas
     @Override
     public SellerRatingSummary ratingOf(String sellerId) {
         return SellerRatingSummary.of(sellerId, reviewRepository.findByRevieweeIdRecentFirst(sellerId));
+    }
+
+    @Override
+    public Review reply(ReplyToReviewCommand command) {
+        Review review = findReview(command.reviewId());
+        if (review.isHidden()) {
+            throw new ConflictException("REVIEW_HIDDEN", "숨김 처리된 후기에는 답글을 남길 수 없습니다");
+        }
+        if (!review.getRevieweeId().equals(command.sellerId())) {
+            throw new ForbiddenException("NOT_REVIEW_SELLER", "후기를 받은 판매자만 답글을 남길 수 있습니다");
+        }
+        review.reply(command.content(), Instant.now(clock));
+        return reviewRepository.save(review);
+    }
+
+    @Override
+    public void hide(String reviewId, String reason) {
+        Review review = findReview(reviewId);
+        review.hide(reason, Instant.now(clock));
+        reviewRepository.save(review);
+    }
+
+    private Review findReview(String reviewId) {
+        return reviewRepository
+                .findById(reviewId)
+                .orElseThrow(() -> new NotFoundException("REVIEW_NOT_FOUND", "후기를 찾을 수 없습니다"));
     }
 }

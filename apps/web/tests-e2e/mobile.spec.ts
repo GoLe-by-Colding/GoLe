@@ -51,6 +51,29 @@ test.describe("Mobile responsive", () => {
     await expect(page).toHaveURL(/\/prices$/);
   });
 
+  test("모바일 메뉴가 검색 필터를 덮고 배경 스크롤을 잠근다", async ({ page }) => {
+    await page.goto("/search");
+    await page.evaluate(() => window.scrollTo(0, 400));
+
+    const burger = page.getByRole("button", { name: "메뉴 열기" });
+    await burger.click();
+
+    const menu = page.getByRole("dialog", { name: "전체 메뉴" });
+    await expect(menu).toBeVisible();
+    await expect(page.getByRole("button", { name: "메뉴 닫기" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+
+    const menuBox = await menu.boundingBox();
+    expect(menuBox).not.toBeNull();
+    expect(menuBox!.y).toBe(64);
+    expect(menuBox!.height).toBeGreaterThanOrEqual(page.viewportSize()!.height - 64);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole("button", { name: "메뉴 열기" })).toBeFocused();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+  });
+
   test("모바일에서 데스크톱 인라인 네비는 숨겨진다", async ({ page }) => {
     await page.goto("/");
     // 데스크톱 nav 링크(헤더의 '탐색')는 max-sm에서 hidden
@@ -108,6 +131,11 @@ test.describe("Mobile — 결제·운영 화면", () => {
    */
   test("어드민 주문 표는 페이지를 밀지 않고 표 안에서만 스크롤된다", async ({ page }) => {
     await signInAs(page, { ...E2E_SELLER, role: "ADMIN" });
+    // 합성 관리자 세션에는 실제 HttpOnly 쿠키가 없다. 헤더의 독립적인 알림 폴링이
+    // 로컬 API에서 INVALID_SESSION을 받아 화면 세션을 지우지 않도록 테스트 범위 밖 요청을 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
     // 콘솔 게이트는 로컬 세션의 role을 믿지 않고 서버에 다시 묻는다(fail closed). 이 응답을
     // 심어주지 않으면 게이트가 열리지 않아 표가 아예 렌더되지 않는다 — 스크롤을 재기도 전에
     // 실패한다. 여기서 확인하려는 건 권한이 아니라 좁은 화면의 표 스크롤이다.

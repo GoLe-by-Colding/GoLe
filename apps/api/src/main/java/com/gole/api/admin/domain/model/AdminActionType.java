@@ -8,11 +8,13 @@ package com.gole.api.admin.domain.model;
 public enum AdminActionType {
     LISTING_TAKEDOWN,
     POST_REMOVE,
+    COMMENT_HIDE,
     ACCOUNT_SUSPEND,
     ACCOUNT_REINSTATE,
     ACCOUNT_ROLE_CHANGE,
     REPORT_RESOLVE,
     REPORT_DISMISS,
+    REVIEW_HIDE,
     CATALOG_SET_CREATE,
     CATALOG_SET_UPDATE,
     CATALOG_SET_FEATURE,
@@ -33,6 +35,10 @@ public enum AdminActionType {
     SUPPORT_INTERNAL_NOTE,
     /** 신고에 고정된 채팅 문맥 열람. 실시간 방 접근과 구분해 별도 감사한다. */
     CHAT_REPORT_SNAPSHOT_VIEW,
+    /** 신고된 공개 댓글 원문 열람. 블라인드 후에도 원문 접근을 추적한다. */
+    COMMENT_REPORT_CONTEXT_VIEW,
     /** 서비스 공개 단계·기능 개방 변경. 서비스 전체를 열고 닫는 조치다. */
-    LAUNCH_STAGE_CHANGE
+    LAUNCH_STAGE_CHANGE,
+    /** 결제·정산 개방 전 사업·법무·실거래 준비 확인 또는 확인 취소. */
+    LAUNCH_READINESS_CHANGE
 }

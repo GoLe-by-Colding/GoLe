@@ -29,7 +29,7 @@ export function AdminTable({
   children,
 }: AdminTableProps) {
   return (
-    <Card padded={false} className="overflow-x-auto">
+    <Card padded={false} className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full border-collapse text-sm" style={{ minWidth }}>
         <caption className="sr-only">
           {caption} · {rowCount.toLocaleString("ko-KR")}개 결과

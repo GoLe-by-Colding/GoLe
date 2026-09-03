@@ -10,11 +10,18 @@ import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchStage;
+import com.gole.api.order.adapter.in.web.OrderController;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 class LaunchGateInterceptorTest {
 
@@ -71,6 +78,36 @@ class LaunchGateInterceptorTest {
                     .as("단계 %s의 구매확정", directStage)
                     .isTrue();
         }
+    }
+
+    @Test
+    @DisplayName("주문 POST 매핑은 신규 결제 또는 기존 거래 후속 조치로 빠짐없이 분류한다")
+    void orderPostMappingsRequireExplicitLaunchGateReview() {
+        Map<String, Boolean> expectedMoneyInByPath = Map.of(
+                "/api/v1/orders", true,
+                "/api/v1/orders/{orderId}/payment", true,
+                "/api/v1/orders/{orderId}/completion", false,
+                "/api/v1/orders/{orderId}/refund", false,
+                "/api/v1/orders/{orderId}/dispute", false);
+
+        Set<String> actualMappings = orderPostMappings();
+        assertThat(actualMappings)
+                .as("새 주문 POST를 추가하면 돈이 들어오는 요청인지 후속 조치인지 게이트 분류를 검토해야 한다")
+                .containsExactlyInAnyOrderElementsOf(expectedMoneyInByPath.keySet());
+
+        stage(LaunchStage.BROWSE_ONLY);
+        expectedMoneyInByPath.forEach((template, moneyIn) -> {
+            String path = template.replace("{orderId}", "order-1");
+            if (moneyIn) {
+                assertThatThrownBy(() -> interceptor.preHandle(request("POST", path), response, new Object()))
+                        .as(path)
+                        .isInstanceOf(ForbiddenException.class);
+            } else {
+                assertThat(interceptor.preHandle(request("POST", path), response, new Object()))
+                        .as(path)
+                        .isTrue();
+            }
+        });
     }
 
     @Test
@@ -138,5 +175,30 @@ class LaunchGateInterceptorTest {
         preflight.addHeader("Access-Control-Request-Method", "POST");
 
         assertThat(interceptor.preHandle(preflight, response, new Object())).isTrue();
+    }
+
+    private static Set<String> orderPostMappings() {
+        RequestMapping root = OrderController.class.getAnnotation(RequestMapping.class);
+        String base = Stream.concat(Arrays.stream(root.value()), Arrays.stream(root.path()))
+                .filter(value -> !value.isBlank())
+                .findFirst()
+                .orElseThrow();
+        Set<String> mappings = new LinkedHashSet<>();
+        Arrays.stream(OrderController.class.getDeclaredMethods()).forEach(method -> {
+            PostMapping mapping = method.getAnnotation(PostMapping.class);
+            if (mapping == null) {
+                return;
+            }
+            String[] paths = Stream.concat(Arrays.stream(mapping.value()), Arrays.stream(mapping.path()))
+                    .filter(value -> !value.isBlank())
+                    .distinct()
+                    .toArray(String[]::new);
+            if (paths.length == 0) {
+                mappings.add(base);
+                return;
+            }
+            Arrays.stream(paths).map(base::concat).forEach(mappings::add);
+        });
+        return mappings;
     }
 }

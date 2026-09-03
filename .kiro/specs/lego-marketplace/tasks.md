@@ -21,7 +21,10 @@
 - [x] 1.6 adapter-in: `AccountController` + Request/Response DTO
 - [x] 1.7 테스트: `AccountServiceTest`
 - [x] 1.8 비밀번호 해시 BCrypt 전환 + 레거시 SHA-256 호환 검증 + 로그인 시 자동 승격 (요구사항 1.12) — `BCryptPasswordHasherAdapter`(@Primary), `Account.upgradePasswordHash`, `BCryptPasswordHasherAdapterTest`
-- [ ] 1.9 (후속) 세션 만료/회전 정책 강화
+- [x] 1.8a 비밀번호 변경·재설정 — 현재 암호 재확인, Redis 일회용 challenge, 코드 해시·TTL·시도 제한,
+      성공 시 계정 전체 세션 폐기, 로그인/프로필 복구 UI와 E2E
+- [x] 1.9 세션 만료/회전 정책 강화 — Redis v2 발급·회전 메타데이터, 24시간 유휴/7일 절대 만료,
+      12시간 회전 API, 이전 토큰 폐기, 레거시 세션 호환, HttpOnly 쿠키 잔여 수명 제한
 
 ## 2. catalog (요구사항 2)
 
@@ -101,7 +104,7 @@
 - [x] 11.2 entities + api: lego-set, listing, order, user(session-store), pricing, collection, community, discovery
 - [x] 11.3 features: sign-in/up, verify-email, create-listing, purchase, create-post, comment-post, like-post, follow-seller, wishlist-toggle, listing-filter
 - [x] 11.4 widgets: site-header, listing-grid, post-card, price-chart, auth-layout
-- [x] 11.5 views + app routes: home, search, sell, prices, collection, community(+상세/작성), listing-detail, order-detail, seller-shop, sign-in/up, verify
+- [x] 11.5 views + app routes: home, feed(팔로잉 새 글·매물·대화), search, sell, prices, collection, community(+상세/작성), listing-detail, order-detail, seller-shop, sign-in/up, verify
 - [x] 11.6 Playwright E2E 설정
 
 ## 12. 인프라 / 배포
@@ -114,7 +117,7 @@
 ## 13. 후속 백로그 (Not started)
 
 - [x] 13.1 비밀번호 해시 강화(BCrypt) + 레거시 호환 + 로그인 시 자동 승격 (요구사항 1.12)
-- [ ] 13.1a (후속) 세션 만료/회전 정책 강화
+- [x] 13.1a 세션 만료/회전 정책 강화 (1.9, 요구사항 1.13~1.15)
 - [ ] 13.2 실 결제 PG 연동(`PaymentGatewayPort` 실구현) (4.7)
 - [x] 13.3 이미지 업로드 MinIO(S3) 연동 — 완료. `media` 컨텍스트(`MediaService`/`S3ObjectStorageAdapter`),
       배치 업로드 + 온더플라이 썸네일까지 구현. 프론트 `create-listing-form`/`create-post-form` 연동.

@@ -26,5 +26,10 @@ export type {
   ListingStatus,
   ListingCategory,
 } from "./model/types";
-export { conditionLabel, completenessLabel, formatPriceKrw } from "./model/types";
+export {
+  conditionLabel,
+  completenessLabel,
+  formatPriceKrw,
+  parseItemCondition,
+} from "./model/types";
 export { ITEM_CONDITIONS, LISTING_CATEGORIES, LISTING_CATEGORY_LABEL } from "./model/types";

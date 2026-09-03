@@ -232,7 +232,9 @@ public class AdminModerationController {
         return row;
     }
 
-    @Operation(summary = "신고 대상 조치 후 완료", description = "매물 내림·게시글 삭제 전용입니다. 채팅 신고는 스냅샷 검토 후 별도 계정 조치를 사용합니다.")
+    @Operation(
+            summary = "신고 대상 조치 후 완료",
+            description = "매물 내림·게시글 삭제·댓글/후기 블라인드 전용입니다. 채팅 신고는 스냅샷 검토 후 별도 계정 조치를 사용합니다.")
     @PostMapping("/reports/{reportId}/resolve-target")
     public ReportRow resolveReportTarget(
             @PathVariable String reportId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
@@ -246,6 +248,10 @@ public class AdminModerationController {
                     request.reason());
         } else if (report.getTargetType() == ReportTargetType.POST) {
             record(http, AdminActionType.POST_REMOVE, AdminTargetType.POST, report.getTargetId(), request.reason());
+        } else if (report.getTargetType() == ReportTargetType.COMMENT) {
+            record(http, AdminActionType.COMMENT_HIDE, AdminTargetType.COMMENT, report.getTargetId(), request.reason());
+        } else if (report.getTargetType() == ReportTargetType.REVIEW) {
+            record(http, AdminActionType.REVIEW_HIDE, AdminTargetType.REVIEW, report.getTargetId(), request.reason());
         }
         ReportRow row = ReportRow.from(report);
         record(http, AdminActionType.REPORT_RESOLVE, AdminTargetType.REPORT, reportId, request.reason());

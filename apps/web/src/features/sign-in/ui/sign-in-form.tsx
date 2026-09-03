@@ -8,9 +8,10 @@ import { Button, Field, Input } from "@shared/ui";
 
 export interface SignInFormProps {
   readonly onSignedIn: (session: Session) => void;
+  readonly resetHref?: string;
 }
 
-export function SignInForm({ onSignedIn }: SignInFormProps) {
+export function SignInForm({ onSignedIn, resetHref = "/forgot-password" }: SignInFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -77,6 +78,14 @@ export function SignInForm({ onSignedIn }: SignInFormProps) {
           />
         )}
       </Field>
+      <div className="-mt-2 flex justify-end">
+        <Link
+          href={resetHref}
+          className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+        >
+          비밀번호를 잊으셨나요?
+        </Link>
+      </div>
       <Button type="submit" size="lg" fullWidth disabled={submitting}>
         {submitting ? "로그인 중..." : "로그인"}
       </Button>

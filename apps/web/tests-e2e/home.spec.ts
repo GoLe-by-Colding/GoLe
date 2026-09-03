@@ -1,11 +1,26 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Home", () => {
-  test("홈 히어로와 추천 세트가 렌더된다", async ({ page }) => {
+  test("브릭 브랜드 메타데이터와 히어로가 렌더된다", async ({ page }) => {
     await page.goto("/");
 
+    await expect(page).toHaveTitle("GoLe — 브릭 중고거래 플랫폼");
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
+      "content",
+      "GoLe — 브릭 중고거래 플랫폼",
+    );
+    await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+      "content",
+      "GoLe — Brick Marketplace",
+    );
+
     // 히어로 헤드라인(브랜드 카피)
-    await expect(page.getByRole("heading", { name: /합리적으로/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "브릭을 가장 합리적으로" })).toBeVisible();
+  });
+
+  test("추천 세트가 렌더된다", async ({ page }) => {
+    await page.goto("/");
+
     await expect(page.getByRole("heading", { name: "오늘의 추천" })).toBeVisible();
 
     // 시드된 추천 세트 카드가 최소 1개 보이고, 대표 세트(에펠탑/#10307)가 노출된다

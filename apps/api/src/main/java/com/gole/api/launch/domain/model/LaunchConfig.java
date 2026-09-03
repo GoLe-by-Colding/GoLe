@@ -17,17 +17,28 @@ public final class LaunchConfig {
 
     private final LaunchStage stage;
     private final Map<LaunchFeature, Boolean> overrides;
+    private final Map<LaunchReadinessCheck, Boolean> readiness;
     private final Instant updatedAt;
     private final String updatedBy;
     private final Long version;
 
     public LaunchConfig(LaunchStage stage, Map<LaunchFeature, Boolean> overrides, Instant updatedAt, String updatedBy) {
-        this(stage, overrides, updatedAt, updatedBy, null);
+        this(stage, overrides, Map.of(), updatedAt, updatedBy, null);
     }
 
     public LaunchConfig(
             LaunchStage stage,
             Map<LaunchFeature, Boolean> overrides,
+            Instant updatedAt,
+            String updatedBy,
+            Long version) {
+        this(stage, overrides, Map.of(), updatedAt, updatedBy, version);
+    }
+
+    public LaunchConfig(
+            LaunchStage stage,
+            Map<LaunchFeature, Boolean> overrides,
+            Map<LaunchReadinessCheck, Boolean> readiness,
             Instant updatedAt,
             String updatedBy,
             Long version) {
@@ -41,6 +52,15 @@ public final class LaunchConfig {
             });
         }
         this.overrides = Collections.unmodifiableMap(copy);
+        EnumMap<LaunchReadinessCheck, Boolean> readinessCopy = new EnumMap<>(LaunchReadinessCheck.class);
+        if (readiness != null) {
+            readiness.forEach((check, confirmed) -> {
+                if (check != null && confirmed != null) {
+                    readinessCopy.put(check, confirmed);
+                }
+            });
+        }
+        this.readiness = Collections.unmodifiableMap(readinessCopy);
         this.updatedAt = updatedAt;
         this.updatedBy = updatedBy;
         this.version = version;
@@ -62,6 +82,10 @@ public final class LaunchConfig {
 
     public Map<LaunchFeature, Boolean> overrides() {
         return overrides;
+    }
+
+    public Map<LaunchReadinessCheck, Boolean> readiness() {
+        return readiness;
     }
 
     public Instant updatedAt() {
@@ -118,7 +142,7 @@ public final class LaunchConfig {
     }
 
     public LaunchConfig withStage(LaunchStage newStage, Instant at, String actorId) {
-        return new LaunchConfig(newStage, overrides, at, actorId, version);
+        return new LaunchConfig(newStage, overrides, readiness, at, actorId, version);
     }
 
     /** override 를 지정하거나({@code enabled != null}) 해제한다({@code enabled == null}). */
@@ -132,6 +156,31 @@ public final class LaunchConfig {
         } else {
             next.put(feature, enabled);
         }
-        return new LaunchConfig(stage, next, at, actorId, version);
+        return new LaunchConfig(stage, next, readiness, at, actorId, version);
+    }
+
+    public boolean isConfirmed(LaunchReadinessCheck check) {
+        return Boolean.TRUE.equals(readiness.get(check));
+    }
+
+    public boolean hasRequiredReadiness(LaunchStage targetStage) {
+        return LaunchReadinessCheck.requiredFor(targetStage).stream().allMatch(this::isConfirmed);
+    }
+
+    public java.util.Set<LaunchReadinessCheck> missingReadiness(LaunchStage targetStage) {
+        java.util.EnumSet<LaunchReadinessCheck> missing = java.util.EnumSet.noneOf(LaunchReadinessCheck.class);
+        for (LaunchReadinessCheck check : LaunchReadinessCheck.requiredFor(targetStage)) {
+            if (!isConfirmed(check)) {
+                missing.add(check);
+            }
+        }
+        return java.util.Set.copyOf(missing);
+    }
+
+    public LaunchConfig withReadiness(LaunchReadinessCheck check, boolean confirmed, Instant at, String actorId) {
+        EnumMap<LaunchReadinessCheck, Boolean> next = new EnumMap<>(LaunchReadinessCheck.class);
+        next.putAll(readiness);
+        next.put(check, confirmed);
+        return new LaunchConfig(stage, overrides, next, at, actorId, version);
     }
 }

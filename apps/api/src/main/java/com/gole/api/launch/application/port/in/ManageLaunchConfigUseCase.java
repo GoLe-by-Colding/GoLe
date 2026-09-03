@@ -3,6 +3,7 @@ package com.gole.api.launch.application.port.in;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
+import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
 import java.util.List;
 
@@ -28,6 +29,8 @@ public interface ManageLaunchConfigUseCase {
 
     LaunchConfig setFeatureOverride(SetFeatureOverrideCommand command);
 
+    ReadinessChangeResult setReadinessCheck(SetReadinessCheckCommand command);
+
     List<LaunchConfigChange> history(int limit);
 
     /**
@@ -37,9 +40,14 @@ public interface ManageLaunchConfigUseCase {
 
     record StageChangeResult(LaunchConfig config, boolean changed) {}
 
+    record ReadinessChangeResult(LaunchConfig config, boolean changed, boolean safetyLowered) {}
+
     /**
      * @param enabled {@code null} 이면 override 를 해제하고 단계 기본값으로 되돌린다.
      */
     record SetFeatureOverrideCommand(
             LaunchFeature feature, Boolean enabled, String reason, String actorId, String actorEmail) {}
+
+    record SetReadinessCheckCommand(
+            LaunchReadinessCheck check, boolean confirmed, String reason, String actorId, String actorEmail) {}
 }

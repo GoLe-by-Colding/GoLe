@@ -28,6 +28,7 @@ class UserWebConfigTest {
         assertThat(guard.matches(request("POST", "/api/v1/payments/portone/webhook")))
                 .isFalse();
         assertThat(guard.matches(request("POST", "/api/v1/auth/login"))).isFalse();
+        assertThat(guard.matches(request("GET", "/api/v1/policies/current"))).isFalse();
     }
 
     private static MockHttpServletRequest request(String method, String path) {

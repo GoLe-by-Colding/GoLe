@@ -25,6 +25,9 @@ public class LaunchConfigDocument {
     /** 기능 apiName -> 개방 여부. 지정되지 않은 기능은 단계 기본을 따른다. */
     private Map<String, Boolean> overrides;
 
+    /** 운영 준비 항목 apiName -> 확인 여부. 기존 문서에 없으면 모두 미확인으로 읽는다. */
+    private Map<String, Boolean> readiness;
+
     private Instant updatedAt;
     private String updatedBy;
 
@@ -37,14 +40,26 @@ public class LaunchConfigDocument {
 
     public LaunchConfigDocument(
             String id, int stage, Map<String, Boolean> overrides, Instant updatedAt, String updatedBy) {
-        this(id, stage, overrides, updatedAt, updatedBy, null);
+        this(id, stage, overrides, Map.of(), updatedAt, updatedBy, null);
     }
 
     public LaunchConfigDocument(
             String id, int stage, Map<String, Boolean> overrides, Instant updatedAt, String updatedBy, Long version) {
+        this(id, stage, overrides, Map.of(), updatedAt, updatedBy, version);
+    }
+
+    public LaunchConfigDocument(
+            String id,
+            int stage,
+            Map<String, Boolean> overrides,
+            Map<String, Boolean> readiness,
+            Instant updatedAt,
+            String updatedBy,
+            Long version) {
         this.id = id;
         this.stage = stage;
         this.overrides = overrides;
+        this.readiness = readiness;
         this.updatedAt = updatedAt;
         this.updatedBy = updatedBy;
         this.version = version;
@@ -60,6 +75,10 @@ public class LaunchConfigDocument {
 
     public Map<String, Boolean> getOverrides() {
         return overrides;
+    }
+
+    public Map<String, Boolean> getReadiness() {
+        return readiness;
     }
 
     public Instant getUpdatedAt() {

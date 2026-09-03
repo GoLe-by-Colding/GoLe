@@ -9,6 +9,16 @@ public interface SupportTicketMongoRepository extends MongoRepository<SupportTic
 
     List<SupportTicketDocument> findByStatus(String status, Pageable pageable);
 
+    List<SupportTicketDocument> findByCategory(String category, Pageable pageable);
+
+    List<SupportTicketDocument> findByStatusAndCategory(String status, String category, Pageable pageable);
+
+    @Query("{ 'category': { $in: [ null, 'GENERAL' ] } }")
+    List<SupportTicketDocument> findGeneral(Pageable pageable);
+
+    @Query("{ 'status': ?0, 'category': { $in: [ null, 'GENERAL' ] } }")
+    List<SupportTicketDocument> findGeneralByStatus(String status, Pageable pageable);
+
     List<SupportTicketDocument> findBy(Pageable pageable);
 
     @Query("{ $or: [ { 'requesterId': ?0 }, { 'assigneeId': ?0 } ] }")

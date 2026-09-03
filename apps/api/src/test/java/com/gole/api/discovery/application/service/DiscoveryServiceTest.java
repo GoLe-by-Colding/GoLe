@@ -55,6 +55,22 @@ class DiscoveryServiceTest {
     }
 
     @Test
+    void feed_isEmptyWithoutFollowingAndBoundsRequestedLimit() {
+        RecordingListingQuery listings = new RecordingListingQuery();
+        service = new DiscoveryService(follows, wishlist, listings, (sellerId, followerId) -> {});
+
+        assertThat(service.feed("u1", 24)).isEmpty();
+        assertThat(listings.requestedSellerIds).isEmpty();
+
+        service.follow("u1", "s1");
+        service.follow("u1", "s2");
+        service.feed("u1", 1_000);
+
+        assertThat(listings.requestedSellerIds).containsExactly("s1", "s2");
+        assertThat(listings.requestedLimit).isEqualTo(100);
+    }
+
+    @Test
     void wishlist_add_dup_remove() {
         service.add("u1", WishlistTargetType.LISTING, "l1");
         assertThatThrownBy(() -> service.add("u1", WishlistTargetType.LISTING, "l1"))
@@ -135,7 +151,24 @@ class DiscoveryServiceTest {
         }
 
         @Override
-        public List<Listing> activeBySellers(List<String> sellerIds) {
+        public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+            return List.of();
+        }
+    }
+
+    private static final class RecordingListingQuery implements ListingQueryPort {
+        private List<String> requestedSellerIds = List.of();
+        private int requestedLimit;
+
+        @Override
+        public List<Listing> activeBySeller(String sellerId) {
+            return List.of();
+        }
+
+        @Override
+        public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+            requestedSellerIds = List.copyOf(sellerIds);
+            requestedLimit = limit;
             return List.of();
         }
     }

@@ -1,6 +1,7 @@
 package com.gole.api.notification.adapter.out.persistence;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 /**
@@ -11,4 +12,6 @@ public interface NotificationMongoRepository extends MongoRepository<Notificatio
     List<NotificationDocument> findTop100ByRecipientIdOrderByCreatedAtDesc(String recipientId);
 
     long countByRecipientIdAndReadIsFalse(String recipientId);
+
+    Optional<NotificationDocument> findByRecipientIdAndDeduplicationKey(String recipientId, String deduplicationKey);
 }

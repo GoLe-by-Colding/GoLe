@@ -13,6 +13,7 @@ public final class Notification {
     private final NotificationType type;
     private final String message;
     private final String link; // nullable
+    private final String deduplicationKey; // nullable — 동일 사건 알림의 멱등 키
     private boolean read;
     private final Instant createdAt;
 
@@ -22,6 +23,7 @@ public final class Notification {
             NotificationType type,
             String message,
             String link,
+            String deduplicationKey,
             boolean read,
             Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
@@ -29,14 +31,21 @@ public final class Notification {
         this.type = Objects.requireNonNull(type, "type");
         this.message = requireText(message, "message");
         this.link = link;
+        this.deduplicationKey = normalizeNullableText(deduplicationKey);
         this.read = read;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
     }
 
     /** 신규 알림: 읽지 않음 상태로 생성. */
     public static Notification create(
-            String id, String recipientId, NotificationType type, String message, String link, Instant now) {
-        return new Notification(id, recipientId, type, message, link, false, now);
+            String id,
+            String recipientId,
+            NotificationType type,
+            String message,
+            String link,
+            String deduplicationKey,
+            Instant now) {
+        return new Notification(id, recipientId, type, message, link, deduplicationKey, false, now);
     }
 
     public void markRead() {
@@ -48,6 +57,10 @@ public final class Notification {
             throw new IllegalArgumentException(field + " must not be blank");
         }
         return value;
+    }
+
+    private static String normalizeNullableText(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     public String getId() {
@@ -68,6 +81,10 @@ public final class Notification {
 
     public String getLink() {
         return link;
+    }
+
+    public String getDeduplicationKey() {
+        return deduplicationKey;
     }
 
     public boolean isRead() {

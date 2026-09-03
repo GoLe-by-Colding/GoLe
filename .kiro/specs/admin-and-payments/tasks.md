@@ -32,8 +32,10 @@
 
 ## 후속 (TODO) — 2026-08-03 실측 감사 반영
 - [x] 매물/주문/회원/게시글 모더레이션 API + UI — **1차 완료 후 `admin-console` 스펙으로 재설계·이관.**
-- [ ] 비밀번호 변경/재설정 — 미구현 확인(`changePassword`/`resetPassword` 심볼 0건).
-      `Account.java`의 `upgradePasswordHash`는 해시 표현 교체용 마이그레이션이지 사용자 비밀번호 변경이 아니다.
+- [x] 비밀번호 변경/재설정 — 변경 시 현재 비밀번호 재확인 + 모든 기기 세션 폐기. 재설정은
+      회원가입 인증과 분리된 Redis challenge(10분 TTL, BCrypt 코드 해시, 5회 실패 제한,
+      1회 원자 소비, 60초 재요청 제한)로 구현. 요청 API는 계정 존재 여부를 노출하지 않는다.
+      프론트 `/forgot-password`와 `/profile/security`, 단위·Redis 통합·브라우저 테스트까지 포함.
 - [ ] 포트원 라이브 자격증명 주입 및 실결제 검증
 
 ## admin-console 스펙에서 대체된 항목 (2026-08-04)

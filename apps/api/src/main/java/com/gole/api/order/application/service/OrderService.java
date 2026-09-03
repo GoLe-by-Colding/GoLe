@@ -14,6 +14,7 @@ import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.ListingReservationPort.ReservedListing;
+import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
@@ -58,6 +59,7 @@ public class OrderService
     private final SettlementPort settlement;
     private final ExecutedPriceRecorderPort executedPriceRecorder;
     private final SellerNotifierPort sellerNotifier;
+    private final OrderEventNotifierPort orderEventNotifier;
     private final OrderIdGeneratorPort idGenerator;
     private final Clock clock;
     private final OrderPaymentTransitionService paymentTransitions;
@@ -70,6 +72,7 @@ public class OrderService
             SettlementPort settlement,
             ExecutedPriceRecorderPort executedPriceRecorder,
             SellerNotifierPort sellerNotifier,
+            OrderEventNotifierPort orderEventNotifier,
             OrderIdGeneratorPort idGenerator,
             Clock clock,
             OrderPaymentTransitionService paymentTransitions,
@@ -80,6 +83,7 @@ public class OrderService
         this.settlement = settlement;
         this.executedPriceRecorder = executedPriceRecorder;
         this.sellerNotifier = sellerNotifier;
+        this.orderEventNotifier = orderEventNotifier;
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.paymentTransitions = paymentTransitions;
@@ -153,6 +157,7 @@ public class OrderService
     public void complete(String orderId) {
         Order order = getById(orderId);
         completeAndRecord(order, Instant.now(clock));
+        orderEventNotifier.completed(order.getBuyerId(), order.getSellerId(), orderId);
     }
 
     @Override
