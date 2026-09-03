@@ -409,11 +409,26 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin");
 
-    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+    const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+    await expect(navigation).toBeVisible();
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
+
+    const navigationBounds = await navigation.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(navigationBounds.scrollWidth).toBeLessThanOrEqual(navigationBounds.clientWidth);
+
+    const [dashboardBox, reportsBox] = await Promise.all([
+      navigation.getByRole("link", { name: "대시보드", exact: true }).boundingBox(),
+      navigation.getByRole("link", { name: /신고/ }).boundingBox(),
+    ]);
+    expect(dashboardBox).not.toBeNull();
+    expect(reportsBox).not.toBeNull();
+    expect(reportsBox!.y).toBeGreaterThan(dashboardBox!.y + dashboardBox!.height);
   });
 
   test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({

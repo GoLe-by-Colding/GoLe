@@ -199,9 +199,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       nav={
         <nav
           aria-label="운영자 메뉴"
-          className="border-b border-neutral-200/70 bg-white p-4 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
+          className="border-b border-neutral-200/70 bg-white p-3 sm:p-4 lg:border-r lg:border-b-0"
         >
-          <ul className="flex gap-2 lg:sticky lg:top-20 lg:flex-col">
+          <ul className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col">
             {NAV.map((item) => {
               const active =
                 item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
@@ -286,7 +286,7 @@ function AdminNavigationItem({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-10 w-[200px] items-center justify-between gap-2 whitespace-nowrap rounded-lg p-3 text-sm font-medium transition-colors motion-reduce:transition-none",
+        "flex h-10 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors motion-reduce:transition-none lg:w-[200px] lg:justify-between lg:p-3",
         active
           ? "bg-brand-600 text-white shadow-brand"
           : "bg-surface-raised text-text-secondary hover:bg-neutral-100 hover:text-neutral-900",
