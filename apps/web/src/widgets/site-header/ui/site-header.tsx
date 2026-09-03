@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "@entities/user";
@@ -23,6 +23,60 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { session, signOut } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const restoreButton = menuButtonRef.current;
+    const previousOverflow = document.body.style.overflow;
+    const desktopMedia = window.matchMedia("(min-width: 1024px)");
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true }));
+
+    const closeOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) setMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const menu = mobileMenuRef.current;
+      if (menu === null) return;
+      const focusable = Array.from(
+        menu.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable.at(0);
+      const last = focusable.at(-1);
+      if (first === undefined || last === undefined) return;
+
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !menu.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !menu.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    desktopMedia.addEventListener("change", closeOnDesktop);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      desktopMedia.removeEventListener("change", closeOnDesktop);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      window.requestAnimationFrame(() => {
+        if (restoreButton?.offsetParent !== null) restoreButton?.focus();
+      });
+    };
+  }, [menuOpen]);
 
   function isActive(href: string): boolean {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -35,7 +89,9 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
+    <header
+      className={`sticky top-0 border-b border-neutral-200 bg-white ${menuOpen ? "z-[60]" : "z-40"}`}
+    >
       <Container width="xl">
         <div className="flex h-16 items-center gap-8">
           <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
@@ -122,10 +178,12 @@ export function SiteHeader() {
 
           {/* 모바일 햄버거 */}
           <button
+            ref={menuButtonRef}
             type="button"
-            aria-label="메뉴 열기"
+            aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
             aria-expanded={menuOpen}
             aria-controls="mobile-menu"
+            aria-haspopup="dialog"
             onClick={() => setMenuOpen((v) => !v)}
             className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-700 hover:bg-neutral-100 max-lg:inline-flex"
           >
@@ -145,82 +203,92 @@ export function SiteHeader() {
 
         {/* 모바일 메뉴 패널 */}
         {menuOpen ? (
-          <div id="mobile-menu" className="flex flex-col gap-1 pb-4 lg:hidden">
-            <div className="px-1 pb-3">
-              <HeaderSearch fullWidth onSubmitted={() => setMenuOpen(false)} />
-            </div>
-            <nav className="flex flex-col">
-              {NAV_ITEMS.map((item) => {
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => setMenuOpen(false)}
-                    className={`rounded-lg px-3 py-2.5 text-base font-medium ${
-                      active
-                        ? "bg-brand-50 text-brand-700"
-                        : "text-neutral-700 hover:bg-neutral-100"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:hidden">
-              {session ? (
-                <>
-                  {session.role === "ADMIN" ? (
+          <div
+            ref={mobileMenuRef}
+            id="mobile-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="전체 메뉴"
+            tabIndex={-1}
+            className="fixed inset-x-0 bottom-0 top-16 overflow-y-auto overscroll-contain border-t border-neutral-200 bg-white shadow-[0_18px_44px_rgba(9,26,58,0.16)] outline-none lg:hidden"
+          >
+            <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-1 px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
+              <div className="px-1 pb-3">
+                <HeaderSearch fullWidth onSubmitted={() => setMenuOpen(false)} />
+              </div>
+              <nav aria-label="모바일 주 메뉴" className="flex flex-col">
+                {NAV_ITEMS.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => setMenuOpen(false)}
+                      className={`rounded-lg px-3 py-2.5 text-base font-medium ${
+                        active
+                          ? "bg-brand-50 text-brand-700"
+                          : "text-neutral-700 hover:bg-neutral-100"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:hidden">
+                {session ? (
+                  <>
+                    {session.role === "ADMIN" ? (
+                      <LinkButton
+                        href="/admin"
+                        fullWidth
+                        variant="ghost"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        관리자
+                      </LinkButton>
+                    ) : null}
                     <LinkButton
-                      href="/admin"
+                      href="/sell"
+                      fullWidth
+                      variant="accent"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      판매하기
+                    </LinkButton>
+                    <LinkButton
+                      href="/profile"
                       fullWidth
                       variant="ghost"
                       onClick={() => setMenuOpen(false)}
                     >
-                      관리자
+                      내 정보
                     </LinkButton>
-                  ) : null}
-                  <LinkButton
-                    href="/sell"
+                    <LinkButton
+                      href="/notifications"
+                      fullWidth
+                      variant="ghost"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      알림
+                    </LinkButton>
+                    <Button fullWidth variant="ghost" onClick={handleSignOut}>
+                      로그아웃
+                    </Button>
+                  </>
+                ) : (
+                  <Button
                     fullWidth
-                    variant="accent"
-                    onClick={() => setMenuOpen(false)}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      router.push("/login");
+                    }}
                   >
-                    판매하기
-                  </LinkButton>
-                  <LinkButton
-                    href="/profile"
-                    fullWidth
-                    variant="ghost"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    내 정보
-                  </LinkButton>
-                  <LinkButton
-                    href="/notifications"
-                    fullWidth
-                    variant="ghost"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    알림
-                  </LinkButton>
-                  <Button fullWidth variant="ghost" onClick={handleSignOut}>
-                    로그아웃
+                    로그인
                   </Button>
-                </>
-              ) : (
-                <Button
-                  fullWidth
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push("/login");
-                  }}
-                >
-                  로그인
-                </Button>
-              )}
+                )}
+              </div>
             </div>
           </div>
         ) : null}

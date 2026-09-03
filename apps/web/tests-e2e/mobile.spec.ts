@@ -51,6 +51,29 @@ test.describe("Mobile responsive", () => {
     await expect(page).toHaveURL(/\/prices$/);
   });
 
+  test("모바일 메뉴가 검색 필터를 덮고 배경 스크롤을 잠근다", async ({ page }) => {
+    await page.goto("/search");
+    await page.evaluate(() => window.scrollTo(0, 400));
+
+    const burger = page.getByRole("button", { name: "메뉴 열기" });
+    await burger.click();
+
+    const menu = page.getByRole("dialog", { name: "전체 메뉴" });
+    await expect(menu).toBeVisible();
+    await expect(page.getByRole("button", { name: "메뉴 닫기" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+
+    const menuBox = await menu.boundingBox();
+    expect(menuBox).not.toBeNull();
+    expect(menuBox!.y).toBe(64);
+    expect(menuBox!.height).toBeGreaterThanOrEqual(page.viewportSize()!.height - 64);
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole("button", { name: "메뉴 열기" })).toBeFocused();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+  });
+
   test("모바일에서 데스크톱 인라인 네비는 숨겨진다", async ({ page }) => {
     await page.goto("/");
     // 데스크톱 nav 링크(헤더의 '탐색')는 max-sm에서 hidden
