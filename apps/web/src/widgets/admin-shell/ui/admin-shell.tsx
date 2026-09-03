@@ -245,7 +245,7 @@ function ConsoleFrame({
           {badge}
         </div>
 
-        <div className="grid overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_1fr]">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_minmax(0,1fr)]">
           {nav ?? (
             <div
               aria-hidden="true"

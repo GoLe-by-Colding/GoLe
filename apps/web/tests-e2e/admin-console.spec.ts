@@ -416,6 +416,53 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(hasPageOverflow).toBe(false);
   });
 
+  test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route("**/api/admin/catalog/sets**", async (route) => {
+      await route.fulfill({
+        json: [
+          {
+            setNumber: "10307",
+            name: "Eiffel Tower",
+            theme: "Icons",
+            pieceCount: 10001,
+            releaseYear: 2022,
+            retirementStatus: "ACTIVE",
+            imageUrl: null,
+            featured: true,
+          },
+        ],
+      });
+    });
+
+    await page.goto("/admin/catalog");
+    await expect(page.getByRole("table", { name: /레고 세트 카탈로그 목록/ })).toBeVisible();
+
+    const pieceCount = page.getByRole("spinbutton", { name: "피스 수" });
+    const releaseYear = page.getByRole("spinbutton", { name: "출시 연도" });
+    const [pieceBox, yearBox] = await Promise.all([
+      pieceCount.boundingBox(),
+      releaseYear.boundingBox(),
+    ]);
+    expect(pieceBox).not.toBeNull();
+    expect(yearBox).not.toBeNull();
+    expect(yearBox!.y).toBeGreaterThan(pieceBox!.y + pieceBox!.height);
+
+    const tableScroller = page
+      .getByRole("table", { name: /레고 세트 카탈로그 목록/ })
+      .locator("..");
+    const dimensions = await tableScroller.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+    expect(dimensions.pageScrollWidth - dimensions.pageClientWidth).toBeLessThanOrEqual(1);
+  });
+
   test("카탈로그를 번호·이름·테마로 즉시 찾는다", async ({ page }) => {
     await page.route("**/api/admin/catalog/sets**", async (route) => {
       await route.fulfill({
