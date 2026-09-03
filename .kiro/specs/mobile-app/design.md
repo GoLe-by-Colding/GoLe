@@ -246,10 +246,18 @@ notification/adapter/in/web/DeviceTokenController.java   # POST·DELETE /api/v1/
 
 ## 리스크
 
-**pnpm × Metro (최우선).** RN/Metro는 전통적으로 hoisted `node_modules`를 전제한다. 루트에
-`node-linker=hoisted`를 켜면 웹까지 영향을 받으므로, **다른 작업을 시작하기 전에** 현재 Expo가
-이 워크스페이스의 pnpm 링커에서 도는지 스파이크로 확정한다. 여기서 막히면 구조 자체를 다시 잡아야
-한다 — 그래서 작업 1번이다.
+**pnpm × Metro — 해소됨(스파이크 완료).** RN/Metro가 hoisted `node_modules`를 전제하던 문제는
+현재 조합에서 재현되지 않는다. 실측:
+
+| 항목 | 결과 |
+|---|---|
+| `pnpm install` (기본 isolated 링커) | 통과. `node-linker` 조정 불필요 |
+| `@gole/core` 링크 | `link:../../packages/core` 심링크 |
+| Metro 해석 | `expo export --platform ios` 성공, Hermes 번들에 코어 코드 포함 확인 |
+| React 버전 | RN 0.86.3 peer `react ^19.2.3` ↔ 웹 19.2.4 — 충돌 없음 |
+| TypeScript | 앱 6.0.3 / 웹·코어 5.x. 코어 소스를 양쪽이 문제없이 읽는다 |
+
+버전 기준선: Expo SDK 57.0.19, expo-router 57.0.18, RN 0.86.3, React 19.2.3.
 
 **웹 회귀.** 마이그레이션은 화면을 바꾸지 않는다(R1.7). 파사드 덕에 상위 75파일이 그대로이므로
 품질 게이트 5종 + 기존 Playwright 스위트 통과가 곧 완료 기준이다.

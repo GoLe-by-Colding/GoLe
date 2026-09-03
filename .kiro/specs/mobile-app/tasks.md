@@ -5,11 +5,11 @@
 
 ## 0. 스파이크 — pnpm × Metro
 
-- [ ] 0.1 임시 Expo 앱을 워크스페이스 안에 만들어 `pnpm install` → iOS·Android 기동 확인
-- [ ] 0.2 워크스페이스 패키지(심링크)를 import했을 때 Metro가 해석하는지 확인
-- [ ] 0.3 `node-linker` 조정이 필요하면 **웹·API 잡에 미치는 영향**까지 확인
-- [ ] 0.4 React 버전 충돌 여부 확인 (웹 19.2.4 vs Expo가 고정하는 버전)
-- [ ] 0.5 결과를 `design.md` 리스크 절에 반영하고 스파이크 앱은 지운다
+- [x] 0.1 `apps/mobile`에 Expo 스캐폴드 → `pnpm install` → `expo export` 번들 성공
+- [x] 0.2 워크스페이스 패키지(심링크)를 import했을 때 Metro가 해석하는지 확인
+- [x] 0.3 `node-linker` 조정이 필요하면 **웹·API 잡에 미치는 영향**까지 확인
+- [x] 0.4 React 버전 충돌 여부 확인 (웹 19.2.4 vs Expo가 고정하는 버전)
+- [x] 0.5 결과를 `design.md` 리스크 절에 반영 (스파이크 앱을 그대로 `apps/mobile`로 승격)
 
 ## 1. `packages/core` — 런타임
 
@@ -43,10 +43,10 @@
 
 ## 4. `apps/mobile` — 셸
 
-- [ ] 4.1 Expo + expo-router 스캐폴드, `@gole/core` 워크스페이스 의존 (R2.1)
-- [ ] 4.2 `shared/theme/tokens.ts` — `globals.css` `@theme` 값 이식. `rise`/`fall` 포함 (R2.3)
+- [x] 4.1 Expo + expo-router 스캐폴드, `@gole/core` 워크스페이스 의존 (R2.1)
+- [x] 4.2 `shared/theme/tokens.ts` — `globals.css` `@theme` 값 이식. `rise`/`fall` 포함 (R2.3)
 - [ ] 4.3 부트스트랩 — `configureCore()` + SecureStore `SessionStore` 구현 (R3.2)
-- [ ] 4.4 하단 탭 5개 (R2.2)
+- [x] 4.4 하단 탭 5개 (R2.2)
 - [ ] 4.5 공통 오류·로딩·빈 상태 컴포넌트 (R5.4)
 - [ ] 4.6 iOS·Android 빌드 확인 (R2.4)
 
