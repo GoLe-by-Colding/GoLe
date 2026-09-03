@@ -13,6 +13,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.service.ResolveReportTargetService;
+import com.gole.api.community.application.port.in.ModerateCommentUseCase;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
@@ -24,6 +25,7 @@ import com.gole.api.report.domain.model.Report;
 import com.gole.api.report.domain.model.ReportReason;
 import com.gole.api.report.domain.model.ReportStatus;
 import com.gole.api.report.domain.model.ReportTargetType;
+import com.gole.api.review.application.port.in.ModerateReviewUseCase;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,11 +37,14 @@ class AdminModerationControllerTest {
 
     private final ModerateListingUseCase listings = mock(ModerateListingUseCase.class);
     private final ModeratePostUseCase posts = mock(ModeratePostUseCase.class);
+    private final ModerateCommentUseCase comments = mock(ModerateCommentUseCase.class);
     private final ManageReportsUseCase reports = mock(ManageReportsUseCase.class);
+    private final ModerateReviewUseCase reviews = mock(ModerateReviewUseCase.class);
     private final ManageSettlementsUseCase settlements = mock(ManageSettlementsUseCase.class);
     private final PayOrderUseCase payments = mock(PayOrderUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
-    private final ResolveReportTargetService resolveTarget = new ResolveReportTargetService(reports, listings, posts);
+    private final ResolveReportTargetService resolveTarget =
+            new ResolveReportTargetService(reports, listings, posts, comments, reviews);
     private final AdminModerationController controller = new AdminModerationController(
             mock(AdminReadModelPort.class), listings, posts, reports, settlements, payments, audit, resolveTarget);
 
@@ -90,6 +95,44 @@ class AdminModerationControllerTest {
         verify(posts, never()).removeByModerator(any(), any());
         verify(reports, never()).resolve(any());
         verify(audit, never()).record(any());
+    }
+
+    @Test
+    @DisplayName("신고 후기를 블라인드하고 신고 완료와 감사 로그를 남긴다")
+    void resolvesReviewTarget() {
+        Report report = pendingReport(ReportTargetType.REVIEW, "review-1");
+        when(reports.get("report-1")).thenReturn(report);
+        when(reports.resolve("report-1")).thenAnswer(ignored -> {
+            report.resolve(NOW.plusSeconds(1));
+            return report;
+        });
+
+        var result =
+                controller.resolveReportTarget("report-1", new ReasonRequest("욕설 포함"), new MockHttpServletRequest());
+
+        assertThat(result.status()).isEqualTo(ReportStatus.RESOLVED.name());
+        verify(reviews).hide("review-1", "욕설 포함");
+        verify(reports).resolve("report-1");
+        verify(audit, times(2)).record(any());
+    }
+
+    @Test
+    @DisplayName("신고 댓글을 블라인드하고 신고 완료와 감사 로그를 남긴다")
+    void resolvesCommentTarget() {
+        Report report = pendingReport(ReportTargetType.COMMENT, "comment-1");
+        when(reports.get("report-1")).thenReturn(report);
+        when(reports.resolve("report-1")).thenAnswer(ignored -> {
+            report.resolve(NOW.plusSeconds(1));
+            return report;
+        });
+
+        var result =
+                controller.resolveReportTarget("report-1", new ReasonRequest("욕설 포함"), new MockHttpServletRequest());
+
+        assertThat(result.status()).isEqualTo(ReportStatus.RESOLVED.name());
+        verify(comments).hide("comment-1", "욕설 포함");
+        verify(reports).resolve("report-1");
+        verify(audit, times(2)).record(any());
     }
 
     private static Report pendingReport(ReportTargetType type, String targetId) {

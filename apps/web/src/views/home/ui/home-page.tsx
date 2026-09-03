@@ -9,6 +9,7 @@ import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
 import { env } from "@shared/config";
+import { serverSessionHeaders } from "@shared/api/server-session-headers";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
@@ -28,7 +29,7 @@ async function loadTrending(): Promise<readonly TrendingSet[]> {
 
 async function loadCommunity(): Promise<readonly Post[]> {
   try {
-    const posts = await fetchFeed();
+    const posts = await fetchFeed({ headers: await serverSessionHeaders(), limit: 4 });
     return posts.slice(0, 4);
   } catch {
     return [];

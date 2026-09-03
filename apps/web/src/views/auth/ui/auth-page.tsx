@@ -2,11 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInForm } from "@features/sign-in";
 import { SignUpForm } from "@features/sign-up";
 import { SocialLoginButtons } from "@features/social-login";
-import { useSession } from "@entities/user";
+import {
+  fetchCurrentSignupPolicy,
+  type CurrentSignupPolicy,
+  type SignupPolicyAcceptance,
+  useSession,
+} from "@entities/user";
 import { AuthCard } from "@widgets/auth-layout";
 import { Button } from "@shared/ui";
 import { applyRoleGuard, resolveReturnTo, returnToLabel } from "../model/return-to";
@@ -51,6 +56,40 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
 
   // 형태 검증만 통과한 값. 실제 이동 직전에 역할 게이트를 한 번 더 적용한다.
   const returnTo = resolveReturnTo(searchParams.get("returnTo"));
+  const passwordChanged =
+    searchParams.get("passwordChanged") === "1" || searchParams.get("passwordReset") === "1";
+  const [signupPolicy, setSignupPolicy] = useState<CurrentSignupPolicy | undefined>(undefined);
+  const [signupPolicyError, setSignupPolicyError] = useState<string | undefined>(undefined);
+  const [signupPolicyAcceptance, setSignupPolicyAcceptance] = useState<SignupPolicyAcceptance>({
+    termsVersion: "",
+    privacyVersion: "",
+    termsAccepted: false,
+    privacyAcknowledged: false,
+    minimumAgeConfirmed: false,
+  });
+
+  useEffect(() => {
+    if (mode !== "signup" || signupPolicy !== undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchCurrentSignupPolicy(controller.signal)
+      .then((policy) => {
+        setSignupPolicy(policy);
+        setSignupPolicyAcceptance((current) => ({
+          ...current,
+          termsVersion: policy.termsVersion,
+          privacyVersion: policy.privacyVersion,
+        }));
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setSignupPolicyError("최신 정책을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      });
+    return () => controller.abort();
+  }, [mode, signupPolicy]);
 
   /** 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다. */
   function goAfterAuth(role: "USER" | "ADMIN" | null | undefined): void {
@@ -99,6 +138,11 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     >
       <div className="flex flex-col gap-5">
         {returnTo === null ? null : <ReturnToNotice target={returnTo} />}
+        {passwordChanged ? (
+          <p role="status" className="rounded-md bg-success-soft p-3 text-sm text-success">
+            비밀번호가 변경됐어요. 새 비밀번호로 로그인해 주세요.
+          </p>
+        ) : null}
 
         <div
           role="tablist"
@@ -124,9 +168,20 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
         </div>
 
         {mode === "signin" ? (
-          <SignInForm onSignedIn={(signedIn) => goAfterAuth(signedIn.role)} />
+          <SignInForm
+            resetHref={
+              returnTo === null
+                ? "/forgot-password"
+                : `/forgot-password?returnTo=${encodeURIComponent(returnTo)}`
+            }
+            onSignedIn={(signedIn) => goAfterAuth(signedIn.role)}
+          />
         ) : (
           <SignUpForm
+            policy={signupPolicy}
+            policyError={signupPolicyError}
+            policyAcceptance={signupPolicyAcceptance}
+            onPolicyAcceptanceChange={setSignupPolicyAcceptance}
             onRegistered={(email) => {
               const next = new URLSearchParams({ email });
               if (returnTo !== null) {
@@ -137,7 +192,10 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
           />
         )}
 
-        <SocialLoginButtons />
+        <SocialLoginButtons
+          mode={mode}
+          signupPolicyAcceptance={mode === "signup" ? signupPolicyAcceptance : undefined}
+        />
       </div>
     </AuthCard>
   );

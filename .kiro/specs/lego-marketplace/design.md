@@ -94,7 +94,7 @@ com.gole.api.<context>/
 
 #### discovery
 - `Follow`(userId→sellerId, 중복방지), `WishlistEntry`(`LISTING`/`CATALOG_SET`, 중복방지).
-- 개인화 피드: 팔로우 셀러들의 매물을 `ListingQueryPort`로 취합.
+- 개인화 피드: 팔로우 셀러들의 매물을 `ListingQueryPort`로 취합하고 Mongo에서 최신순·최대 100개로 제한한다. 프론트 `/feed`는 이 매물 피드와 커뮤니티 팔로잉 글 피드를 함께 보여주고 프로필·매물 대화로 연결한다.
 
 #### review
 - `Review`(orderId, reviewerId, rating, content) + 셀러 평점 집계(`SellerRating`).
@@ -132,7 +132,7 @@ com.gole.api.<context>/
 
 | 컨텍스트 | 메서드 & 경로 |
 |---|---|
-| account | `POST /api/v1/accounts`, `POST /api/v1/accounts/verification`, `POST /api/v1/accounts/sessions`, `GET /api/v1/accounts/me` |
+| account | `POST /api/v1/accounts`, `POST /api/v1/accounts/verification`, `POST /api/v1/accounts/sessions`, `POST /api/v1/accounts/sessions/refresh`, `GET /api/v1/accounts/me` |
 | catalog | `GET /api/v1/catalog/sets/featured`, `GET /api/v1/catalog/sets/{setNumber}`, `GET /api/v1/catalog/sets?query=` |
 | listing | `POST /api/v1/listings`, `GET /api/v1/listings?query&condition&minPrice&maxPrice&sort`, `GET /api/v1/listings/{id}`, `POST /api/v1/listings/{id}/sold`, `DELETE /api/v1/listings/{id}` |
 | order | `POST /api/v1/orders`, `POST /api/v1/orders/{id}/payment`, `POST /api/v1/orders/{id}/completion`, `POST /api/v1/orders/{id}/refund`, `GET /api/v1/orders/{id}` |
@@ -166,11 +166,11 @@ shared   → ui kit(button,input,card,badge,...), api(http-client, apiRequest), 
 - `shared/api/http-client.ts`의 `apiRequest<T>(path, options)`가 단일 진입점.
 - 베이스 URL은 `shared/config/env.ts`의 `env.apiBaseUrl`(`NEXT_PUBLIC_API_BASE_URL`, 미설정 시 `http://localhost:8080`).
 - 오류는 `ApiError{status, code}`로 표준화. 각 entities의 `api/*-api.ts`가 백엔드 계약과 1:1 매핑.
-- 세션 토큰은 `entities/user/model/session-store.ts`(zustand)에서 관리.
+- 인증 토큰은 HttpOnly 쿠키로만 보관한다. `entities/user/model/session-store.ts`에는 accountId·role·다음 회전 시각만 저장하고, 모든 API 요청은 `credentials: include`로 쿠키를 전송한다.
 
 ## 6. 보안 / 운영 고려
 
-- 현재 인증은 **불투명 세션 토큰 + BCrypt 비밀번호 해시**(`BCryptPasswordHasherAdapter`, @Primary). 레거시 SHA-256 해시는 `Sha256PasswordHasherAdapter`로 검증하고 로그인 성공 시 BCrypt로 자동 승격한다(요구사항 1.12). 추가 강화 시 Argon2 + 토큰 만료/회전으로 교체 가능(포트 추상화로 어댑터만 교체).
+- 현재 인증은 **회전 가능한 불투명 세션 토큰 + BCrypt 비밀번호 해시**(`BCryptPasswordHasherAdapter`, @Primary)다. Redis 세션은 24시간 유휴/7일 절대 만료를 적용하고, 브라우저는 12시간 주기로 `POST /sessions/refresh`를 호출한다. 회전해도 최초 발급 시각을 보존해 절대 만료를 우회할 수 없다. 레거시 SHA-256 비밀번호 해시는 로그인 성공 시 BCrypt로 자동 승격하고, 레거시 Redis 세션도 남은 TTL 동안 호환한다(요구사항 1.12~1.15).
 - 결제/정산은 Stub 어댑터(`StubPaymentGatewayAdapter`, `StubSettlementAdapter`). 실 PG 연동 시 포트 구현체만 추가.
 - `/api/admin/**`는 ADMIN 강제. 그 외 쓰기 API의 호출자 검증(작성자/소유자)은 도메인/서비스에서 수행.
 - 이미지 업로드는 MinIO(S3 호환) 사용 예정(`.kiro/steering/minio.md`). 현재 매물/게시글은 URL 문자열로 사진을 받는다.

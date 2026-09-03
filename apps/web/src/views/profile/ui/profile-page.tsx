@@ -167,7 +167,7 @@ export function ProfilePage() {
         <div className="flex flex-col items-start gap-4 pt-12 pb-16">
           <Heading level={1}>내 정보</Heading>
           <Text tone="secondary">로그인이 필요합니다.</Text>
-          <LinkButton href="/login">로그인하러 가기</LinkButton>
+          <LinkButton href="/login?returnTo=%2Fprofile">로그인하러 가기</LinkButton>
         </div>
       </Container>
     );
@@ -287,6 +287,24 @@ export function ProfilePage() {
                   </Button>
                 </div>
               </InfoRow>
+
+              <InfoRow label="계정 보안">
+                <Link
+                  href="/profile/security"
+                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                >
+                  비밀번호 변경
+                </Link>
+              </InfoRow>
+
+              <InfoRow label="개인정보 권리">
+                <Link
+                  href="/chat?compose=support&category=PRIVACY_ACCESS"
+                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                >
+                  열람·정정·삭제·처리정지 요청
+                </Link>
+              </InfoRow>
             </Card>
 
             {/* 헤더에도 로그아웃이 있다. 여기서는 눈에 덜 띄게 두고 오른쪽으로 뺀다. */}
@@ -314,7 +332,7 @@ export function ProfilePage() {
               orders.data.map((o) => (
                 <Link
                   key={o.id}
-                  href={`/orders/${o.id}`}
+                  href={`/orders/${o.id}${o.status === "completed" && launch.features.reviews ? "#review" : ""}`}
                   className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
                 >
                   <div className="flex flex-col gap-0.5">
@@ -323,19 +341,24 @@ export function ProfilePage() {
                       {formatKrw(o.amount)}
                     </span>
                   </div>
-                  <Badge
-                    tone={
-                      o.status === "completed"
-                        ? "success"
-                        : o.status === "payment_review" || o.status === "refund_pending"
-                          ? "warning"
-                          : o.status === "refunded" || o.status === "payment_failed"
-                            ? "danger"
-                            : "brand"
-                    }
-                  >
-                    {orderStatusLabel(o.status)}
-                  </Badge>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge
+                      tone={
+                        o.status === "completed"
+                          ? "success"
+                          : o.status === "payment_review" || o.status === "refund_pending"
+                            ? "warning"
+                            : o.status === "refunded" || o.status === "payment_failed"
+                              ? "danger"
+                              : "brand"
+                      }
+                    >
+                      {orderStatusLabel(o.status)}
+                    </Badge>
+                    {o.status === "completed" && launch.features.reviews ? (
+                      <span className="text-xs font-semibold text-brand-600">후기 작성</span>
+                    ) : null}
+                  </div>
                 </Link>
               ))
             )}

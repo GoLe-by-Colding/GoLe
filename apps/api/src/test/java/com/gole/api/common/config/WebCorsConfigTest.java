@@ -13,12 +13,15 @@ class WebCorsConfigTest {
     @Test
     void exposesRetryAfterSoTheBrowserCanHonorRateLimitBackoff() {
         var registry = new InspectableCorsRegistry();
-        new WebCorsConfig(new String[] {"http://localhost:3010"}).addCorsMappings(registry);
+        new WebCorsConfig(new String[] {"http://localhost:3000", "http://localhost:3010"}).addCorsMappings(registry);
 
         CorsConfiguration api = registry.configurations().get("/api/**");
 
         assertThat(api).isNotNull();
         assertThat(api.getExposedHeaders()).contains(HttpHeaders.RETRY_AFTER);
+        assertThat(api.getAllowedOrigins()).containsExactly("http://localhost:3000", "http://localhost:3010");
+        assertThat(api.getAllowedOrigins()).doesNotContain("*");
+        assertThat(api.getAllowCredentials()).isTrue();
     }
 
     private static final class InspectableCorsRegistry extends CorsRegistry {

@@ -115,6 +115,12 @@ logging:
 # 시드 데이터: 기본은 전부 꺼져 있다. 로컬 데모에서만 명시적으로 켠다.
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
+  # 가입 당시의 정책 버전을 별도 append-only 이력으로 남긴다. 약관/처리방침을 바꾸면
+  # 문서의 시행일과 이 값을 함께 올려 오래된 가입 화면의 제출을 fail-closed 한다.
+  policy:
+    terms-version: ${GOLE_TERMS_VERSION:2026-09-03}
+    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-03}
+    minimum-age: ${GOLE_MINIMUM_SIGNUP_AGE:14}
   catalog:
     seed-on-empty: ${GOLE_CATALOG_SEED:false}
   listing:
@@ -134,6 +140,9 @@ gole:
     seed-on-empty: ${GOLE_REVIEW_SEED:false}
   media:
     seed-on-startup: ${GOLE_MEDIA_SEED:false}
+    upload-rate-limit:
+      maximum-images: ${GOLE_MEDIA_UPLOAD_RATE_MAX_IMAGES:30}
+      window: ${GOLE_MEDIA_UPLOAD_RATE_WINDOW:PT10M}
   # 파이프라인 상태별 타임아웃(shipping-and-fees R9.1). 코드 상수 금지 — 전부 여기서.
   # 정상 거래는 운영자 개입 0으로 끝까지 흘러가고, 예외만 큐에 올라온다(R7).
   pipeline:
@@ -180,6 +189,10 @@ gole:
       from: ${GOLE_VERIFICATION_EMAIL_FROM:no-reply@gole.co.kr}
   session:
     cookie-secure: ${GOLE_SESSION_COOKIE_SECURE:auto}
+    # 브라우저 쿠키 수명과 별개로 Redis에서 유휴·절대 만료를 함께 강제한다.
+    absolute-ttl: ${GOLE_SESSION_ABSOLUTE_TTL:P7D}
+    idle-ttl: ${GOLE_SESSION_IDLE_TTL:P1D}
+    rotation-age: ${GOLE_SESSION_ROTATION_AGE:PT12H}
   # Discord 운영 관제. webhook URL은 저장소에 넣지 말고 배포 환경변수로만 주입한다.
   discord:
     enabled: ${GOLE_DISCORD_ALERTS_ENABLED:false}

@@ -19,6 +19,10 @@ public class UserWebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(userAuthInterceptor)
                 .addPathPatterns("/api/v1/**", "/api/v2/**")
-                .excludePathPatterns("/api/v1/accounts/**", "/api/v1/auth/**", "/api/v1/payments/portone/webhook");
+                .excludePathPatterns(
+                        "/api/v1/accounts/**",
+                        "/api/v1/auth/**",
+                        "/api/v1/policies/**",
+                        "/api/v1/payments/portone/webhook");
     }
 }

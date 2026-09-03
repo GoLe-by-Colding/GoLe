@@ -1,5 +1,5 @@
 /** 신고 대상 유형 (백엔드 ReportTargetType 미러) */
-export type ReportTargetType = "LISTING" | "POST";
+export type ReportTargetType = "LISTING" | "POST" | "COMMENT" | "REVIEW";
 
 /** 신고 사유 (백엔드 ReportReason 미러) */
 export type ReportReason = "COUNTERFEIT" | "IP_INFRINGEMENT" | "FRAUD" | "INAPPROPRIATE" | "OTHER";

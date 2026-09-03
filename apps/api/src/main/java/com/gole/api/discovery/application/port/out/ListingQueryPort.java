@@ -14,6 +14,6 @@ public interface ListingQueryPort {
     /** 특정 셀러의 활성 리스팅. */
     List<Listing> activeBySeller(String sellerId);
 
-    /** 여러 셀러의 활성 리스팅. */
-    List<Listing> activeBySellers(List<String> sellerIds);
+    /** 여러 셀러의 활성 리스팅을 최신순으로 제한해 조회한다. */
+    List<Listing> activeBySellers(List<String> sellerIds, int limit);
 }

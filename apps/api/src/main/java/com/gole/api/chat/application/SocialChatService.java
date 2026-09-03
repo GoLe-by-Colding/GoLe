@@ -9,6 +9,7 @@ import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatBlock;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
@@ -130,29 +131,36 @@ public class SocialChatService {
 
     @Transactional
     public SupportConversation createSupport(String actorId, String title) {
+        return createSupport(actorId, title, SupportCategory.GENERAL);
+    }
+
+    @Transactional
+    public SupportConversation createSupport(String actorId, String title, SupportCategory rawCategory) {
         requireAccount(actorId);
+        SupportCategory category = rawCategory == null ? SupportCategory.GENERAL : rawCategory;
         Instant now = Instant.now(clock);
         SocialChatRoom room =
                 rooms.save(SocialChatRoom.support(UUID.randomUUID().toString(), actorId, title, now));
-        SupportTicket ticket = supportTickets.save(SupportTicket.opened(room.id(), actorId, now));
+        SupportTicket ticket = supportTickets.save(SupportTicket.opened(room.id(), actorId, category, now));
         return new SupportConversation(room, ticket);
     }
 
     @Transactional
     public SocialChatRoom invite(String roomId, String actorId, String inviteeId) {
         requireRegularAccount(actorId);
-        requireRegularAccount(inviteeId);
         SocialChatRoom room = requireRoom(roomId);
         if (room.type() != ChatRoomType.GROUP) {
             throw new BadRequestException("CHAT_INVITE_NOT_ALLOWED", "그룹 대화방에만 초대할 수 있습니다");
         }
+        room.requireMember(actorId);
+        if (room.isMember(inviteeId)) {
+            return room;
+        }
+        requireRegularAccount(inviteeId);
         ensureNoBlockedPair(List.of(inviteeId), room.memberIds());
-        boolean joining = !room.isMember(inviteeId);
         Instant now = Instant.now(clock);
         SocialChatRoom updated = rooms.save(room.invite(actorId, inviteeId, now));
-        if (joining) {
-            readStates.initializeAtLatest(roomId, inviteeId, now);
-        }
+        readStates.initializeAtLatest(roomId, inviteeId, now);
         return updated;
     }
 
@@ -204,23 +212,29 @@ public class SocialChatService {
         requireReadable(roomId, actorId);
         room.requireCanSend(actorId);
         Account actor = requireAccount(actorId);
-        if (actor.isAdmin()) {
-            // 관리자 답변은 감사 로그를 남기는 /api/admin/support 전용 경로만 쓴다.
-            throw new ForbiddenException("CHAT_ADMIN_SEND_NOT_ALLOWED", "관리자 답변은 운영팀 문의 콘솔에서 보내야 합니다");
+        if (room.type() == ChatRoomType.SUPPORT) {
+            SupportTicket ticket = requireSupportTicket(room.id());
+            if (actorId.equals(ticket.requesterId())) {
+                // 운영자도 서비스 이용자로서 문의를 만들 수 있다. 이 경우에는 문의자이므로
+                // 사용자 채팅 경로를 쓴다. 담당 운영자의 답변은 아래에서 계속 차단해
+                // 감사 로그가 묶이는 /api/admin/support 경로를 우회하지 못하게 한다.
+                return room;
+            }
+            if (actor.isAdmin()) {
+                throw new ForbiddenException("CHAT_ADMIN_SEND_NOT_ALLOWED", "관리자 답변은 운영팀 문의 콘솔에서 보내야 합니다");
+            }
+            throw new ForbiddenException("SUPPORT_REQUESTER_ONLY", "문의자는 사용자 채팅 화면에서 답변해야 합니다");
         }
-        if (room.type() != ChatRoomType.SUPPORT && (!actor.isVerified() || actor.isSuspended())) {
+        if (actor.isAdmin()) {
+            throw new ForbiddenException("CHAT_ADMIN_SEND_NOT_ALLOWED", "관리자는 일반 대화방에서 메시지를 보낼 수 없습니다");
+        }
+        if (!actor.isVerified() || actor.isSuspended()) {
             throw new ForbiddenException("CHAT_ACCOUNT_UNAVAILABLE", "현재 메시지를 보낼 수 없는 계정입니다");
         }
         // 차단은 1:1 대화를 양방향으로 멈춘다. 이미 존재하는 GROUP 전체를 한 쌍의
         // 차단 때문에 얼리지는 않는다. 대신 그룹 생성·초대 때 모든 멤버 쌍을 검사한다.
         if (room.type() == ChatRoomType.DIRECT || room.type() == ChatRoomType.LISTING) {
             ensureNotBlocked(room.memberIds().get(0), room.memberIds().get(1));
-        }
-        if (room.type() == ChatRoomType.SUPPORT) {
-            SupportTicket ticket = requireSupportTicket(room.id());
-            if (!actorId.equals(ticket.requesterId())) {
-                throw new ForbiddenException("SUPPORT_REQUESTER_ONLY", "문의자는 사용자 채팅 화면에서 답변해야 합니다");
-            }
         }
         return room;
     }

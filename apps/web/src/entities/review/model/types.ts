@@ -9,6 +9,8 @@ export interface Review {
   readonly rating: number;
   readonly content: string;
   readonly createdAt: string;
+  readonly reply: string | null;
+  readonly repliedAt: string | null;
 }
 
 export interface SellerRating {

@@ -1,5 +1,7 @@
 package com.gole.api.media.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.media.application.port.in.AcquireMediaUploadQuotaUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase.LoadedImage;
 import com.gole.api.media.application.port.in.UploadImageUseCase;
@@ -8,6 +10,7 @@ import com.gole.api.media.domain.exception.InvalidImageException;
 import com.gole.api.media.domain.model.StoredImage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -37,10 +40,15 @@ public class MediaController {
 
     private final UploadImageUseCase uploadImageUseCase;
     private final LoadImageUseCase loadImageUseCase;
+    private final AcquireMediaUploadQuotaUseCase uploadQuota;
 
-    public MediaController(UploadImageUseCase uploadImageUseCase, LoadImageUseCase loadImageUseCase) {
+    public MediaController(
+            UploadImageUseCase uploadImageUseCase,
+            LoadImageUseCase loadImageUseCase,
+            AcquireMediaUploadQuotaUseCase uploadQuota) {
         this.uploadImageUseCase = uploadImageUseCase;
         this.loadImageUseCase = loadImageUseCase;
+        this.uploadQuota = uploadQuota;
     }
 
     @Operation(
@@ -48,20 +56,23 @@ public class MediaController {
             description = "이미지 파일을 MinIO에 업로드하고 공개 URL을 반환합니다. Content-Type: multipart/form-data")
     @PostMapping("/images")
     @ResponseStatus(HttpStatus.CREATED)
-    public UploadResponse upload(@RequestParam("file") MultipartFile file) {
+    public UploadResponse upload(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
+        uploadQuota.acquire(AuthenticatedUser.id(request), 1);
         return storeOne(file);
     }
 
     /** 다중 이미지 업로드. 매물 사진 등 여러 장을 한 번에 올린다. (요구사항 M1, N2) */
     @PostMapping("/images/batch")
     @ResponseStatus(HttpStatus.CREATED)
-    public List<UploadResponse> uploadBatch(@RequestParam("files") List<MultipartFile> files) {
+    public List<UploadResponse> uploadBatch(
+            @RequestParam("files") List<MultipartFile> files, HttpServletRequest request) {
         if (files == null || files.isEmpty()) {
             throw new InvalidImageException("No files were uploaded");
         }
         if (files.size() > MAX_BATCH_SIZE) {
             throw new InvalidImageException("Too many files: max " + MAX_BATCH_SIZE + " per request");
         }
+        uploadQuota.acquire(AuthenticatedUser.id(request), files.size());
         return files.stream().map(this::storeOne).toList();
     }
 

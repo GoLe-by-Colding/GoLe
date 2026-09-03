@@ -13,6 +13,7 @@ export interface ChatButtonProps {
   readonly available: boolean;
   readonly label?: string;
   readonly directTradeEnabled?: boolean;
+  readonly initialOpen?: boolean;
 }
 
 /**
@@ -25,9 +26,10 @@ export function ChatButton({
   available,
   label = "채팅하기",
   directTradeEnabled = true,
+  initialOpen = false,
 }: ChatButtonProps) {
   const { session } = useSession();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   if (!available) return null;
   if (session?.accountId === sellerId) return null;
@@ -35,7 +37,7 @@ export function ChatButton({
   if (!session) {
     return (
       <LinkButton
-        href={`/login?returnTo=${encodeURIComponent(`/listings/${listingId}`)}`}
+        href={`/login?returnTo=${encodeURIComponent(`/listings/${listingId}?chat=1`)}`}
         size="lg"
         variant="secondary"
       >
@@ -146,6 +148,18 @@ function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: Inli
 
   return (
     <div className="flex h-full flex-col">
+      {room === null ? null : (
+        <div className="flex items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50/70 px-4 py-2.5">
+          <span className="text-xs font-semibold text-neutral-600">판매자와 거래 대화</span>
+          <LinkButton
+            href={`/chat?room=${encodeURIComponent(room.id)}&source=listing`}
+            size="sm"
+            variant="ghost"
+          >
+            전체 대화에서 보기
+          </LinkButton>
+        </div>
+      )}
       {directTradeEnabled ? (
         room === null ? null : (
           <DirectTradeConfirmation

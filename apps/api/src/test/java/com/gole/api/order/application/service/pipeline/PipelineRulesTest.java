@@ -284,6 +284,9 @@ class PipelineRulesTest {
         public void autoCompleted(String buyerId, String sellerId, String orderId) {
             autoCompletes.add(orderId);
         }
+
+        @Override
+        public void completed(String buyerId, String sellerId, String orderId) {}
     }
 
     static class RecordingRefund implements RefundOrderUseCase {

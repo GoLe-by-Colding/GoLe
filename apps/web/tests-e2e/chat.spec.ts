@@ -17,6 +17,14 @@ async function seedSession(page: Page): Promise<void> {
   }, SESSION);
 }
 
+test.beforeEach(async ({ page }) => {
+  // 채팅 스펙은 API 호출을 페이지 단위로 합성하고 HttpOnly 쿠키는 만들지 않는다.
+  // 독립적인 헤더 알림 폴링의 실제 401이 합성 세션을 지우지 않도록 격리한다.
+  await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
+});
+
 async function mockChatApis(
   page: Page,
 ): Promise<{ readRequests: Array<{ lastMessageId?: string }> }> {
@@ -118,9 +126,7 @@ async function mockChatDeepLinkApis(
                 createdAt: "2026-08-30T08:00:00Z",
                 lastMessageAt: "2026-08-30T08:00:00Z",
                 buyerConfirmedAt: null,
-                sellerConfirmedAt: options.counterpartyConfirmed
-                  ? "2026-08-30T09:05:00Z"
-                  : null,
+                sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
                 directTradeCompletedAt: null,
               },
             ],
@@ -208,9 +214,7 @@ async function mockChatDeepLinkApis(
         lastMessageAt: "2026-08-30T08:00:00Z",
         buyerConfirmedAt: "2026-08-30T09:10:00Z",
         sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
-        directTradeCompletedAt: options.counterpartyConfirmed
-          ? "2026-08-30T09:10:00Z"
-          : null,
+        directTradeCompletedAt: options.counterpartyConfirmed ? "2026-08-30T09:10:00Z" : null,
       },
     });
   });
@@ -262,6 +266,53 @@ test.describe("채팅 UX", () => {
 
     await expect(page).toHaveURL(/\/chat\?direct=account-b$/);
     await expect(peerInput).toHaveValue("account-b");
+  });
+
+  test("개인정보 권리 요청은 유형과 운영 응답 목표 안내를 함께 접수한다", async ({ page }) => {
+    await mockChatApis(page);
+    const requests: unknown[] = [];
+    await page.route("**/api/v1/chat/social/rooms/support", async (route) => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: "room-privacy",
+          type: "SUPPORT",
+          memberIds: ["account-me"],
+          ownerId: "account-me",
+          title: "개인정보 열람 요청",
+          listingId: null,
+          createdAt: "2026-09-03T09:00:00Z",
+          lastMessageAt: "2026-09-03T09:00:00Z",
+          closedAt: null,
+          supportStatus: "UNASSIGNED",
+          assigneeId: null,
+          supportCategory: "PRIVACY_ACCESS",
+          responseDueAt: "2026-09-13T09:00:00Z",
+        },
+      });
+    });
+    await page.route("**/api/v1/chat/rooms/room-privacy/messages**", (route) =>
+      route.fulfill({ json: [] }),
+    );
+    await page.route("**/api/v1/chat/rooms/room-privacy/stream**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
+    );
+
+    await page.goto("/chat?compose=support&category=PRIVACY_ACCESS");
+
+    await expect(page.getByRole("combobox", { name: "문의 유형" })).toHaveValue("PRIVACY_ACCESS");
+    await expect(page.getByText(/10일 안의 첫 처리 안내/)).toBeVisible();
+    await page
+      .getByRole("textbox", { name: "문의 내용" })
+      .fill("보유 중인 개인정보를 확인하고 싶습니다.");
+    await page.getByRole("button", { name: "문의 시작" }).click();
+
+    await expect.poll(() => requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      title: "개인정보 열람 요청",
+      category: "PRIVACY_ACCESS",
+    });
   });
 
   test("메시지 목록과 입력창이 보조기술에 명확한 이름과 갱신 방식을 제공한다", async ({ page }) => {

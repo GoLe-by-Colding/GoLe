@@ -156,6 +156,16 @@ class SocialChatServiceTest {
     }
 
     @Test
+    void adminRequesterCanSendThroughUserSupportConversation() {
+        SocialChatRoom room = SocialChatRoom.support("room-1", "admin-1", "내 계정 문의", NOW);
+        SupportTicket ticket = SupportTicket.opened("room-1", "admin-1", NOW);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room));
+        when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(ticket));
+
+        assertThat(service.requireSendable("room-1", "admin-1")).isSameAs(room);
+    }
+
+    @Test
     void supportRoomCannotUseGenericLeave() {
         SocialChatRoom room = SocialChatRoom.support("room-1", "user-1", "문의", NOW);
         when(rooms.findById("room-1")).thenReturn(Optional.of(room));
@@ -208,9 +218,11 @@ class SocialChatServiceTest {
         when(rooms.findById("room-1")).thenReturn(Optional.of(group));
         when(rooms.save(any(SocialChatRoom.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.invite("room-1", "user-1", "user-2");
+        assertThat(service.invite("room-1", "user-1", "user-2")).isSameAs(group);
 
         verify(readStates, never()).initializeAtLatest(anyString(), anyString(), any());
+        verify(blocks, never()).blockedBetweenAny(any(), any());
+        verify(rooms, never()).save(any());
     }
 
     @Test

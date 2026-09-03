@@ -36,7 +36,7 @@ public interface ListingRepositoryPort {
     List<Listing> findBySeller(String sellerId);
 
     /** 여러 셀러의 활성 리스팅 목록(피드 구성 등). (요구사항 17) */
-    List<Listing> findActiveBySellers(List<String> sellerIds);
+    List<Listing> findActiveBySellers(List<String> sellerIds, int limit);
 
     /** id 목록으로 리스팅을 조회한다(위시리스트 등). */
     List<Listing> findByIds(List<String> ids);

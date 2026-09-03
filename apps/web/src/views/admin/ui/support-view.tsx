@@ -14,6 +14,7 @@ import {
   transferAdminSupportTicket,
   type AdminSupportMessage,
   type AdminSupportNote,
+  type AdminSupportCategory,
   type AdminSupportStatus,
   type AdminSupportTicket,
 } from "@entities/admin";
@@ -24,6 +25,17 @@ import { Badge, Button, Heading, Input, Select, Text, Textarea } from "@shared/u
 import { formatDateTime, shortId } from "../model/labels";
 
 type StatusFilter = "ALL" | AdminSupportStatus;
+type CategoryFilter = "ALL" | AdminSupportCategory;
+
+const CATEGORY_LABEL: Record<AdminSupportCategory, string> = {
+  GENERAL: "일반",
+  TRADE: "거래",
+  PAYMENT: "결제·환불",
+  PRODUCT_FEEDBACK: "제품 피드백",
+  PRIVACY_ACCESS: "개인정보 열람",
+  PRIVACY_CORRECTION_DELETION: "개인정보 정정·삭제",
+  PRIVACY_PROCESSING_STOP: "개인정보 처리정지",
+};
 
 const STATUS_LABEL: Record<AdminSupportStatus, string> = {
   UNASSIGNED: "미배정",
@@ -39,12 +51,41 @@ const STATUS_TONE: Record<AdminSupportStatus, "neutral" | "brand" | "warning" | 
   RESOLVED: "success",
 };
 
+function PrivacyDueBadge({
+  ticket,
+  nowMs,
+}: {
+  readonly ticket: AdminSupportTicket;
+  readonly nowMs: number | null;
+}) {
+  if (ticket.responseDueAt === null) return null;
+  const dueAt = new Date(ticket.responseDueAt).getTime();
+  if (!Number.isFinite(dueAt)) return null;
+  if (ticket.status === "RESOLVED") {
+    const resolvedAt =
+      ticket.resolvedAt === null ? Number.NaN : new Date(ticket.resolvedAt).getTime();
+    const late = Number.isFinite(resolvedAt) && resolvedAt > dueAt;
+    return (
+      <Badge tone={late ? "danger" : "success"}>{late ? "기한 후 처리" : "기한 내 처리"}</Badge>
+    );
+  }
+  if (nowMs === null) {
+    return <Badge tone="brand">응답 목표 {formatDateTime(ticket.responseDueAt)}</Badge>;
+  }
+  const remainingDays = Math.ceil((dueAt - nowMs) / 86_400_000);
+  if (remainingDays < 0) {
+    return <Badge tone="danger">{Math.abs(remainingDays)}일 지남</Badge>;
+  }
+  return <Badge tone={remainingDays <= 2 ? "warning" : "brand"}>{remainingDays}일 남음</Badge>;
+}
+
 /** 문의 인박스. 운영자는 배정받은 문의의 본문만 읽고 답할 수 있다. */
 export function AdminSupportView() {
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
   const accountId = session?.accountId ?? null;
   const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [category, setCategory] = useState<CategoryFilter>("ALL");
   const [tickets, setTickets] = useState<readonly AdminSupportTicket[] | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<readonly AdminSupportMessage[]>([]);
@@ -59,6 +100,7 @@ export function AdminSupportView() {
   const [listError, setListError] = useState<string | undefined>();
   const [conversationError, setConversationError] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const selectedRoomRef = useRef<string | null>(null);
   const ticketsGenerationRef = useRef(0);
   const conversationScopeGenerationRef = useRef(0);
@@ -100,10 +142,21 @@ export function AdminSupportView() {
   );
   const isMine = selected !== null && selected.assigneeId === accountId;
 
+  useEffect(() => {
+    const updateNow = () => setNowMs(Date.now());
+    updateNow();
+    const refresh = window.setInterval(updateNow, 60_000);
+    return () => window.clearInterval(refresh);
+  }, []);
+
   const loadTickets = useCallback(() => {
     if (token === null) return;
     const generation = ++ticketsGenerationRef.current;
-    void fetchAdminSupportTickets(token, status === "ALL" ? undefined : status)
+    void fetchAdminSupportTickets(
+      token,
+      status === "ALL" ? undefined : status,
+      category === "ALL" ? undefined : category,
+    )
       .then((next) => {
         if (ticketsGenerationRef.current !== generation) return;
         setListError(undefined);
@@ -124,7 +177,7 @@ export function AdminSupportView() {
         setTickets((current) => current ?? []);
         setListError(messageOf(cause, "문의 목록을 새로고치지 못했습니다."));
       });
-  }, [accountId, invalidateConversation, selectRoom, status, token]);
+  }, [accountId, category, invalidateConversation, selectRoom, status, token]);
 
   const loadConversation = useCallback(() => {
     const scopeGeneration = conversationScopeGenerationRef.current;
@@ -340,7 +393,7 @@ export function AdminSupportView() {
             먼저 배정받은 뒤 필요한 대화만 확인합니다. 답변·이관·메모·열람은 감사 로그에 남습니다.
           </Text>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-neutral-600">
             상태
             <Select
@@ -352,6 +405,20 @@ export function AdminSupportView() {
               <option value="IN_PROGRESS">답변 중</option>
               <option value="WAITING_USER">사용자 답변 대기</option>
               <option value="RESOLVED">해결</option>
+            </Select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            유형
+            <Select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as CategoryFilter)}
+            >
+              <option value="ALL">전체</option>
+              {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </Select>
           </label>
           <Button size="sm" variant="ghost" onClick={loadTickets}>
@@ -397,6 +464,12 @@ export function AdminSupportView() {
                     </span>
                     <Badge tone={STATUS_TONE[ticket.status]}>{STATUS_LABEL[ticket.status]}</Badge>
                   </span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone={ticket.category.startsWith("PRIVACY_") ? "warning" : "neutral"}>
+                      {CATEGORY_LABEL[ticket.category]}
+                    </Badge>
+                    <PrivacyDueBadge ticket={ticket} nowMs={nowMs} />
+                  </span>
                   <span className="flex w-full justify-between text-xs text-neutral-500">
                     <span>문의자 {shortId(ticket.requesterId)}</span>
                     <time>{formatDateTime(ticket.updatedAt)}</time>
@@ -439,6 +512,10 @@ export function AdminSupportView() {
                     <Badge tone={STATUS_TONE[selected.status]}>
                       {STATUS_LABEL[selected.status]}
                     </Badge>
+                    <Badge tone={selected.category.startsWith("PRIVACY_") ? "warning" : "neutral"}>
+                      {CATEGORY_LABEL[selected.category]}
+                    </Badge>
+                    <PrivacyDueBadge ticket={selected} nowMs={nowMs} />
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
                     문의자 {shortId(selected.requesterId)} · 담당{" "}

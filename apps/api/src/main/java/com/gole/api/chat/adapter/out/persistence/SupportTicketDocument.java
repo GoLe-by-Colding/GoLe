@@ -19,6 +19,7 @@ public class SupportTicketDocument {
     private String roomId;
 
     private String requesterId;
+    private String category;
     private String status;
     private String assigneeId;
     private Instant createdAt;
@@ -33,6 +34,7 @@ public class SupportTicketDocument {
     public SupportTicketDocument(
             String roomId,
             String requesterId,
+            String category,
             String status,
             String assigneeId,
             Instant createdAt,
@@ -41,6 +43,7 @@ public class SupportTicketDocument {
             long version) {
         this.roomId = roomId;
         this.requesterId = requesterId;
+        this.category = category;
         this.status = status;
         this.assigneeId = assigneeId;
         this.createdAt = createdAt;
@@ -55,6 +58,10 @@ public class SupportTicketDocument {
 
     public String getRequesterId() {
         return requesterId;
+    }
+
+    public String getCategory() {
+        return category;
     }
 
     public String getStatus() {

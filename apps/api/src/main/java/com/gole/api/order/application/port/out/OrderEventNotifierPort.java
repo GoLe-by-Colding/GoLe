@@ -22,4 +22,7 @@ public interface OrderEventNotifierPort {
 
     /** 자동 구매확정 → 양 당사자에게. (R3.2) */
     void autoCompleted(String buyerId, String sellerId, String orderId);
+
+    /** 구매자가 직접 구매확정 → 양 당사자에게. 구매자는 후기 작성 동선으로 연결한다. */
+    void completed(String buyerId, String sellerId, String orderId);
 }

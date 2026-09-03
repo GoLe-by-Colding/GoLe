@@ -11,5 +11,7 @@ public final class AccountResponses {
 
     public record SignInResponse(String accountId, String sessionToken, String role) {}
 
+    public record RefreshSessionResponse(String accountId, String sessionToken, String role, boolean rotated) {}
+
     public record MeResponse(String accountId, String email, String role) {}
 }

@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchSocialAuthorizeUrl, fetchSocialProviders } from "@entities/user";
+import {
+  fetchSocialAuthorizeUrl,
+  fetchSocialProviders,
+  type SignupPolicyAcceptance,
+} from "@entities/user";
 
 interface ProviderMeta {
   readonly key: string;
@@ -37,7 +41,15 @@ const PROVIDERS: readonly ProviderMeta[] = [
  * 백엔드에 토큰(client-id)이 설정된 provider만 활성화되고, 미설정 provider는 "준비 중"으로 비활성.
  * 클릭 시 state를 생성·저장하고 동의 화면으로 이동한다(CSRF 방지).
  */
-export function SocialLoginButtons() {
+export interface SocialLoginButtonsProps {
+  readonly mode?: "signin" | "signup";
+  readonly signupPolicyAcceptance: SignupPolicyAcceptance | undefined;
+}
+
+export function SocialLoginButtons({
+  mode = "signin",
+  signupPolicyAcceptance,
+}: SocialLoginButtonsProps) {
   const [enabled, setEnabled] = useState<readonly string[]>([]);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -55,13 +67,24 @@ export function SocialLoginButtons() {
     setPending(provider);
     try {
       const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
-      const { url } = await fetchSocialAuthorizeUrl(provider, redirectUri);
+      const { url } = await fetchSocialAuthorizeUrl(
+        provider,
+        redirectUri,
+        mode === "signup" ? signupPolicyAcceptance : undefined,
+      );
       window.location.assign(url);
     } catch {
       setError("소셜 로그인을 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.");
       setPending(undefined);
     }
   }
+
+  const signupPolicyReady =
+    mode !== "signup" ||
+    (signupPolicyAcceptance !== undefined &&
+      signupPolicyAcceptance.termsAccepted &&
+      signupPolicyAcceptance.privacyAcknowledged &&
+      signupPolicyAcceptance.minimumAgeConfirmed);
 
   return (
     <div className="flex flex-col gap-3">
@@ -70,6 +93,15 @@ export function SocialLoginButtons() {
         또는
         <span className="h-px flex-1 bg-neutral-200" />
       </div>
+      {mode === "signin" ? (
+        <p className="text-center text-xs leading-relaxed text-neutral-500">
+          처음 가입한다면 회원가입 탭에서 정책을 먼저 확인해 주세요.
+        </p>
+      ) : !signupPolicyReady ? (
+        <p className="text-center text-xs leading-relaxed text-neutral-500">
+          위 필수 항목을 모두 확인하면 소셜 가입도 사용할 수 있어요.
+        </p>
+      ) : null}
       {error ? (
         <p className="rounded-md bg-danger-soft p-2 text-sm text-danger" role="alert">
           {error}
@@ -81,9 +113,13 @@ export function SocialLoginButtons() {
           <button
             key={provider.key}
             type="button"
-            disabled={!isEnabled || pending !== undefined}
+            disabled={!isEnabled || pending !== undefined || !signupPolicyReady}
             onClick={() => start(provider.key)}
-            aria-label={isEnabled ? provider.label : `${provider.label} (준비 중)`}
+            aria-label={
+              isEnabled
+                ? `${provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")}`
+                : `${provider.label} (준비 중)`
+            }
             className="relative inline-flex h-12 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-12 text-sm font-semibold text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span
@@ -95,7 +131,7 @@ export function SocialLoginButtons() {
             {pending === provider.key
               ? "이동 중..."
               : isEnabled
-                ? provider.label
+                ? provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")
                 : `${provider.label} (준비 중)`}
           </button>
         );

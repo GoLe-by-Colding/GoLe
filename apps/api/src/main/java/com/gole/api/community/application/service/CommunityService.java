@@ -2,10 +2,15 @@ package com.gole.api.community.application.service;
 
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase;
+import com.gole.api.community.application.port.in.DeleteCommentUseCase;
+import com.gole.api.community.application.port.in.DeleteCommentUseCase.DeleteCommentCommand;
 import com.gole.api.community.application.port.in.DeletePostUseCase;
 import com.gole.api.community.application.port.in.EditPostUseCase;
 import com.gole.api.community.application.port.in.GetFeedUseCase;
+import com.gole.api.community.application.port.in.GetFeedUseCase.FeedCursor;
+import com.gole.api.community.application.port.in.GetFeedUseCase.FeedPage;
 import com.gole.api.community.application.port.in.LikePostUseCase;
+import com.gole.api.community.application.port.in.ModerateCommentUseCase;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.community.application.port.in.PatchPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
@@ -17,9 +22,11 @@ import com.gole.api.community.domain.exception.PostNotFoundException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
 import com.gole.api.community.domain.model.PostStatus;
+import com.gole.api.community.domain.model.PostType;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
@@ -32,11 +39,14 @@ public class CommunityService
                 LikePostUseCase,
                 GetFeedUseCase,
                 DeletePostUseCase,
+                DeleteCommentUseCase,
                 EditPostUseCase,
                 PatchPostUseCase,
-                ModeratePostUseCase {
+                ModeratePostUseCase,
+                ModerateCommentUseCase {
 
     private static final int MAX_FEED_ROWS = 100;
+    private static final int MAX_FEED_PAGE_ROWS = 50;
     private static final int MAX_COMMENT_ROWS = 200;
 
     private final PostRepositoryPort postRepository;
@@ -88,11 +98,34 @@ public class CommunityService
         Post post = requirePublished(postId);
         post.like(userId); // 중복 시 예외
         postRepository.save(post);
+        if (!userId.equals(post.getAuthorId())) {
+            postAuthorNotifier.notifyLike(post.getAuthorId(), post.getId(), userId);
+        }
+    }
+
+    @Override
+    public void unlike(String postId, String userId) {
+        Post post = requirePublished(postId);
+        post.unlike(userId);
+        postRepository.save(post);
     }
 
     @Override
     public List<Post> feed(int limit) {
         return postRepository.findPublishedRecentFirst(clamp(limit, MAX_FEED_ROWS));
+    }
+
+    @Override
+    public FeedPage feedPage(
+            int requestedLimit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> query) {
+        int limit = clamp(requestedLimit, MAX_FEED_PAGE_ROWS);
+        Optional<PostRepositoryPort.FeedCursor> repositoryCursor =
+                before.map(cursor -> new PostRepositoryPort.FeedCursor(cursor.createdAt(), cursor.postId()));
+        Optional<String> normalizedQuery = query.map(String::strip).filter(value -> !value.isEmpty());
+        List<Post> fetched = postRepository.findPublishedPage(limit + 1, repositoryCursor, topic, normalizedQuery);
+        boolean hasMore = fetched.size() > limit;
+        List<Post> items = fetched.subList(0, Math.min(limit, fetched.size()));
+        return new FeedPage(List.copyOf(items), hasMore);
     }
 
     @Override
@@ -104,6 +137,34 @@ public class CommunityService
     public List<Comment> comments(String postId, int limit) {
         requirePublished(postId);
         return commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS));
+    }
+
+    @Override
+    public Comment getForModeration(String commentId) {
+        return commentRepository
+                .findById(commentId)
+                .orElseThrow(() ->
+                        new com.gole.api.common.exception.NotFoundException("COMMENT_NOT_FOUND", "댓글을 찾을 수 없습니다"));
+    }
+
+    @Override
+    public void deleteComment(DeleteCommentCommand command) {
+        Comment comment = commentRepository
+                .findById(command.commentId())
+                .filter(candidate -> candidate.postId().equals(command.postId()))
+                .filter(candidate -> !candidate.isHidden())
+                .orElseThrow(() ->
+                        new com.gole.api.common.exception.NotFoundException("COMMENT_NOT_FOUND", "댓글을 찾을 수 없습니다"));
+        if (!comment.authorId().equals(command.requesterId())) {
+            throw new ForbiddenException("NOT_COMMENT_AUTHOR", "본인이 작성한 댓글만 삭제할 수 있습니다");
+        }
+        commentRepository.save(comment.hide("작성자가 삭제함", Instant.now(clock)));
+    }
+
+    @Override
+    public void hide(String commentId, String reason) {
+        Comment comment = getForModeration(commentId);
+        commentRepository.save(comment.hide(reason, Instant.now(clock)));
     }
 
     @Override

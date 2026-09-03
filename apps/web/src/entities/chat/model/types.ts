@@ -24,6 +24,15 @@ export type ChatRoomType = "DIRECT" | "GROUP" | "SUPPORT";
 
 export type SupportStatus = "UNASSIGNED" | "IN_PROGRESS" | "WAITING_USER" | "RESOLVED";
 
+export type SupportCategory =
+  | "GENERAL"
+  | "TRADE"
+  | "PAYMENT"
+  | "PRODUCT_FEEDBACK"
+  | "PRIVACY_ACCESS"
+  | "PRIVACY_CORRECTION_DELETION"
+  | "PRIVACY_PROCESSING_STOP";
+
 export interface SocialChatRoom {
   readonly id: string;
   readonly type: ChatRoomType;
@@ -36,6 +45,8 @@ export interface SocialChatRoom {
   readonly closedAt: string | null;
   readonly supportStatus: SupportStatus | null;
   readonly assigneeId: string | null;
+  readonly supportCategory: SupportCategory | null;
+  readonly responseDueAt: string | null;
 }
 
 export type ResolvedChatRoom =

@@ -9,8 +9,10 @@ import static org.mockito.Mockito.when;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ChangeStageRequest;
+import com.gole.api.launch.adapter.in.web.LaunchDtos.ReadinessCheckRequest;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
+import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ReadinessChangeResult;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
@@ -54,6 +56,17 @@ class AdminLaunchControllerTest {
         when(manageLaunchConfig.changeStageWithResult(any())).thenReturn(new StageChangeResult(browseOnly, true));
 
         controller.changeStage(new ChangeStageRequest(1, "커뮤니티 공개"), adminRequest());
+
+        verify(audit).record(any());
+    }
+
+    @Test
+    @DisplayName("운영 준비 확인이 실제로 바뀐 경우만 관리자 감사 로그를 남긴다")
+    void readinessChangeRecordsAuditOnlyWhenChanged() {
+        when(manageLaunchConfig.setReadinessCheck(any()))
+                .thenReturn(new ReadinessChangeResult(browseOnly, true, false));
+
+        controller.setReadiness("businessDisclosure", new ReadinessCheckRequest(true, "사업자 고지 확인"), adminRequest());
 
         verify(audit).record(any());
     }

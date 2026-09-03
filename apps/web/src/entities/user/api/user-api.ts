@@ -1,10 +1,27 @@
 import { apiRequest } from "@shared/api";
-import type { Me, RegisterResult, Session } from "../model/types";
+import type {
+  CurrentSignupPolicy,
+  Me,
+  RegisterResult,
+  Session,
+  SignupPolicyAcceptance,
+} from "../model/types";
 
-export function registerAccount(email: string, password: string): Promise<RegisterResult> {
+export function fetchCurrentSignupPolicy(signal?: AbortSignal): Promise<CurrentSignupPolicy> {
+  return apiRequest<CurrentSignupPolicy>("/api/v1/policies/current", {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+export function registerAccount(
+  email: string,
+  password: string,
+  policyAcceptance: SignupPolicyAcceptance,
+): Promise<RegisterResult> {
   return apiRequest<RegisterResult>("/api/v1/accounts", {
     method: "POST",
-    body: { email, password },
+    body: { email, password, ...policyAcceptance },
   });
 }
 
@@ -29,6 +46,44 @@ export function signIn(email: string, password: string): Promise<Session> {
   });
 }
 
+export interface RefreshSessionResult extends Session {
+  readonly rotated: boolean;
+}
+
+/** 유효한 쿠키 세션의 유휴 수명을 갱신하고, 회전 주기가 지났으면 서버 토큰을 교체한다. */
+export function refreshSession(): Promise<RefreshSessionResult> {
+  return apiRequest<RefreshSessionResult>("/api/v1/accounts/sessions/refresh", {
+    method: "POST",
+  });
+}
+
+/** 로그인한 계정의 비밀번호를 바꾸고 서버의 모든 세션을 폐기한다. */
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/password", {
+    method: "PUT",
+    body: { currentPassword, newPassword },
+  });
+}
+
+/** 계정 존재 여부와 무관하게 같은 응답을 받는다. */
+export function requestPasswordReset(email: string): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/password-reset", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function confirmPasswordReset(
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/password-reset/confirmation", {
+    method: "POST",
+    body: { email, code, newPassword },
+  });
+}
+
 const OAUTH_BASE = "/api/v1/auth/oauth";
 
 /** 설정(활성)된 소셜 provider 키 목록(google/kakao/naver). */
@@ -43,8 +98,16 @@ export function fetchSocialProviders(signal?: AbortSignal): Promise<readonly str
 export function fetchSocialAuthorizeUrl(
   provider: string,
   redirectUri: string,
+  signupPolicyAcceptance?: SignupPolicyAcceptance,
 ): Promise<{ readonly url: string }> {
-  const query = new URLSearchParams({ redirectUri }).toString();
+  const query = new URLSearchParams({ redirectUri });
+  if (signupPolicyAcceptance !== undefined) {
+    query.set("termsVersion", signupPolicyAcceptance.termsVersion);
+    query.set("privacyVersion", signupPolicyAcceptance.privacyVersion);
+    query.set("termsAccepted", String(signupPolicyAcceptance.termsAccepted));
+    query.set("privacyAcknowledged", String(signupPolicyAcceptance.privacyAcknowledged));
+    query.set("minimumAgeConfirmed", String(signupPolicyAcceptance.minimumAgeConfirmed));
+  }
   return apiRequest<{ readonly url: string }>(`${OAUTH_BASE}/${provider}/authorize-url?${query}`, {
     cache: "no-store",
   });

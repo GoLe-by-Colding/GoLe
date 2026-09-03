@@ -83,10 +83,15 @@ function listingJsonLd(listing: Listing): Record<string, unknown> {
 
 export default async function Page({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ readonly id: string }>;
+  readonly searchParams: Promise<{ readonly chat?: string | readonly string[] }>;
 }) {
   const { id } = await params;
+  const requestedChat = (await searchParams).chat;
+  const openChat =
+    requestedChat === "1" || (Array.isArray(requestedChat) && requestedChat[0] === "1");
 
   // 구조화 데이터용으로만 조회한다. 실패하면 화면은 그대로 두고 JSON-LD만 생략한다.
   let listing: Listing | null = null;
@@ -112,7 +117,7 @@ export default async function Page({
 
   return (
     <>
-      <ListingDetailPage listingId={id} />
+      <ListingDetailPage listingId={id} openChat={openChat} />
       {listing === null ? null : (
         <>
           <JsonLd data={listingJsonLd(listing)} />

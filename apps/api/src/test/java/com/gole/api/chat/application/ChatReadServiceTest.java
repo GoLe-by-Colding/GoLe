@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
+import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.common.exception.BadRequestException;
@@ -26,15 +27,17 @@ class ChatReadServiceTest {
 
     private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
+    private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final ChatReadService service =
-            new ChatReadService(messages, readStates, socialChats, Clock.fixed(NOW, ZoneOffset.UTC));
+            new ChatReadService(messages, readStates, blocks, socialChats, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void unreadCounts_rechecksEveryRoomAndExcludesStaleSupportAssignee() {
         SocialChatRoom direct = SocialChatRoom.direct("direct", "me", "peer", NOW);
         when(socialChats.myReadableRooms("me", 100)).thenReturn(List.of(direct));
-        when(readStates.countUnread("me", List.of("direct"))).thenReturn(Map.of("direct", 2L));
+        when(blocks.blockedTargets("me")).thenReturn(List.of());
+        when(readStates.countUnread("me", List.of("direct"), List.of())).thenReturn(Map.of("direct", 2L));
 
         assertThat(service.unreadCounts("me")).containsExactly(Map.entry("direct", 2L));
         verify(socialChats).myReadableRooms("me", 100);
@@ -44,7 +47,8 @@ class ChatReadServiceTest {
     void unreadCounts_returnsExplicitZeroForReadableRoom() {
         SocialChatRoom direct = SocialChatRoom.direct("direct", "me", "peer", NOW);
         when(socialChats.myReadableRooms("me", 100)).thenReturn(List.of(direct));
-        when(readStates.countUnread("me", List.of("direct"))).thenReturn(Map.of());
+        when(blocks.blockedTargets("me")).thenReturn(List.of());
+        when(readStates.countUnread("me", List.of("direct"), List.of())).thenReturn(Map.of());
 
         assertThat(service.unreadCounts("me")).containsExactly(Map.entry("direct", 0L));
     }
@@ -56,12 +60,24 @@ class ChatReadServiceTest {
                 .toList();
         List<String> visibleIds = visibleRooms.stream().map(SocialChatRoom::id).toList();
         when(socialChats.myReadableRooms("me", 100)).thenReturn(visibleRooms);
-        when(readStates.countUnread("me", visibleIds)).thenReturn(Map.of("room-199", 4L));
+        when(blocks.blockedTargets("me")).thenReturn(List.of());
+        when(readStates.countUnread("me", visibleIds, List.of())).thenReturn(Map.of("room-199", 4L));
 
         assertThat(service.unreadCounts("me"))
                 .hasSize(200)
                 .containsEntry("room-0", 0L)
                 .containsEntry("room-199", 4L);
+    }
+
+    @Test
+    void unreadCountsExcludeMessagesFromUsersTheActorBlocked() {
+        SocialChatRoom group = SocialChatRoom.group("group", "me", List.of("peer", "another"), "빌더 모임", NOW);
+        when(socialChats.myReadableRooms("me", 100)).thenReturn(List.of(group));
+        when(blocks.blockedTargets("me")).thenReturn(List.of("peer"));
+        when(readStates.countUnread("me", List.of("group"), List.of("peer"))).thenReturn(Map.of());
+
+        assertThat(service.unreadCounts("me")).containsExactly(Map.entry("group", 0L));
+        verify(readStates).countUnread("me", List.of("group"), List.of("peer"));
     }
 
     @Test

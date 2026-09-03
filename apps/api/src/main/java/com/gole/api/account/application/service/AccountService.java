@@ -2,6 +2,7 @@ package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.LogoutUseCase;
+import com.gole.api.account.application.port.in.RefreshSessionUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.ResendVerificationUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
@@ -23,6 +24,7 @@ import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
+import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
 import com.gole.api.account.domain.model.VerificationCode;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalSignal;
@@ -32,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 계정 유스케이스 구현(가입/인증/로그인/세션해석). inbound port를 구현하고 outbound port에만 의존한다.
@@ -44,11 +47,11 @@ public class AccountService
                 VerifyEmailUseCase,
                 SignInUseCase,
                 LogoutUseCase,
-                GetCurrentSessionUseCase {
+                GetCurrentSessionUseCase,
+                RefreshSessionUseCase {
 
     private static final int MIN_PASSWORD_LENGTH = 8; // 요구사항 1.3
     private static final int MAX_PASSWORD_BYTES = 72; // BCrypt 입력 한계
-    private static final Duration SESSION_TTL = Duration.ofDays(7);
 
     private final AccountRepositoryPort accountRepository;
     private final PasswordHasherPort passwordHasher;
@@ -58,6 +61,8 @@ public class AccountService
     private final SessionTokenPort sessionToken;
     private final SessionStorePort sessionStore;
     private final Clock clock;
+    private final SessionPolicyProperties sessionPolicy;
+    private final PolicyAcceptanceService policyAcceptances;
 
     public AccountService(
             AccountRepositoryPort accountRepository,
@@ -67,7 +72,9 @@ public class AccountService
             IdentifierGeneratorPort identifierGenerator,
             SessionTokenPort sessionToken,
             SessionStorePort sessionStore,
-            Clock clock) {
+            Clock clock,
+            SessionPolicyProperties sessionPolicy,
+            PolicyAcceptanceService policyAcceptances) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.verificationCodeSender = verificationCodeSender;
@@ -76,6 +83,8 @@ public class AccountService
         this.sessionToken = sessionToken;
         this.sessionStore = sessionStore;
         this.clock = clock;
+        this.sessionPolicy = sessionPolicy;
+        this.policyAcceptances = policyAcceptances;
     }
 
     @Override
@@ -84,7 +93,9 @@ public class AccountService
             title = "새 이메일 회원가입",
             description = "이메일 인증 대기 계정이 생성되었습니다.",
             includeResult = true)
+    @Transactional
     public String register(RegisterAccountCommand command) {
+        policyAcceptances.validate(command.policyAcceptance());
         Email email = new Email(command.email());
 
         // 요구사항 1.3: 비밀번호 길이 검증
@@ -104,6 +115,7 @@ public class AccountService
 
         Account account = Account.register(identifierGenerator.newAccountId(), email, hash, code);
         Account saved = accountRepository.save(account);
+        policyAcceptances.record(saved.getId(), command.policyAcceptance(), Channel.EMAIL);
 
         // 요구사항 1.1: 인증 코드 발송
         verificationCodeSender.send(email, code);
@@ -172,7 +184,8 @@ public class AccountService
 
         // 요구사항 1.6: 세션 토큰 발급 + Redis 세션 저장(실제 검증 가능 세션)
         String token = sessionToken.issue(account);
-        sessionStore.store(token, account.getId(), account.getRole(), SESSION_TTL);
+        Instant issuedAt = Instant.now(clock);
+        sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, initialStoreTtl());
         return new SignInResult(account.getId(), token, account.getRole());
     }
 
@@ -192,12 +205,86 @@ public class AccountService
      */
     @Override
     public Optional<CurrentSession> resolve(String token) {
-        return sessionStore
-                .resolve(token)
+        Optional<SessionStorePort.SessionPrincipal> principal = validPrincipal(token);
+        principal.ifPresent(p -> touchIfVersioned(token, p));
+        return principal
                 .flatMap(p -> accountRepository.findById(p.accountId()))
                 .filter(account -> !account.isSuspended())
                 .map(account ->
                         new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
+    }
+
+    @Override
+    public Optional<RefreshSessionResult> refresh(String currentToken) {
+        Optional<SessionStorePort.SessionPrincipal> resolved = validPrincipal(currentToken);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        SessionStorePort.SessionPrincipal principal = resolved.get();
+        Optional<Account> found = accountRepository.findById(principal.accountId());
+        if (found.isEmpty() || found.get().isSuspended()) {
+            sessionStore.revoke(currentToken);
+            return Optional.empty();
+        }
+
+        Account account = found.get();
+        Instant now = Instant.now(clock);
+        Instant issuedAt = principal.issuedAt() == null ? now : principal.issuedAt();
+        Instant rotatedAt = principal.rotatedAt();
+        Duration remaining = remainingLifetime(issuedAt, now);
+
+        if (rotatedAt != null && now.isBefore(rotatedAt.plus(sessionPolicy.getRotationAge()))) {
+            sessionStore.touch(currentToken, principal.accountId(), storeTtl(remaining));
+            return Optional.of(
+                    new RefreshSessionResult(account.getId(), currentToken, account.getRole(), false, remaining));
+        }
+
+        String replacement = sessionToken.issue(account);
+        if (replacement.equals(currentToken)) {
+            sessionStore.touch(currentToken, principal.accountId(), storeTtl(remaining));
+            return Optional.of(
+                    new RefreshSessionResult(account.getId(), currentToken, account.getRole(), false, remaining));
+        }
+        sessionStore.store(replacement, account.getId(), account.getRole(), issuedAt, now, storeTtl(remaining));
+        sessionStore.revoke(currentToken);
+        return Optional.of(new RefreshSessionResult(account.getId(), replacement, account.getRole(), true, remaining));
+    }
+
+    private Optional<SessionStorePort.SessionPrincipal> validPrincipal(String token) {
+        Optional<SessionStorePort.SessionPrincipal> resolved = sessionStore.resolve(token);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        SessionStorePort.SessionPrincipal principal = resolved.get();
+        if (principal.issuedAt() != null
+                && !Instant.now(clock).isBefore(principal.issuedAt().plus(sessionPolicy.getAbsoluteTtl()))) {
+            sessionStore.revoke(token);
+            return Optional.empty();
+        }
+        return resolved;
+    }
+
+    private void touchIfVersioned(String token, SessionStorePort.SessionPrincipal principal) {
+        if (principal.issuedAt() == null) {
+            return;
+        }
+        sessionStore.touch(
+                token, principal.accountId(), storeTtl(remainingLifetime(principal.issuedAt(), Instant.now(clock))));
+    }
+
+    private Duration initialStoreTtl() {
+        return storeTtl(sessionPolicy.getAbsoluteTtl());
+    }
+
+    private Duration remainingLifetime(Instant issuedAt, Instant now) {
+        Duration remaining = Duration.between(now, issuedAt.plus(sessionPolicy.getAbsoluteTtl()));
+        return remaining.isNegative() || remaining.isZero() ? Duration.ZERO : remaining;
+    }
+
+    private Duration storeTtl(Duration remainingAbsoluteLifetime) {
+        return remainingAbsoluteLifetime.compareTo(sessionPolicy.getIdleTtl()) < 0
+                ? remainingAbsoluteLifetime
+                : sessionPolicy.getIdleTtl();
     }
 
     private static int utf8Length(String value) {

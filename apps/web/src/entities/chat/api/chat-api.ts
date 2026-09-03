@@ -6,6 +6,7 @@ import type {
   ChatUnreadCounts,
   ResolvedChatRoom,
   SocialChatRoom,
+  SupportCategory,
 } from "../model/types";
 
 const BASE = "/api/v1/chat";
@@ -65,10 +66,14 @@ export function createGroupRoom(
   });
 }
 
-export function createSupportRoom(title: string, message: string): Promise<SocialChatRoom> {
+export function createSupportRoom(
+  title: string,
+  message: string,
+  category: SupportCategory = "GENERAL",
+): Promise<SocialChatRoom> {
   return apiRequest<SocialChatRoom>(`${BASE}/social/rooms/support`, {
     method: "POST",
-    body: { title, message },
+    body: { title, message, category },
   });
 }
 

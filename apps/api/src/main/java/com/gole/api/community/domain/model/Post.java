@@ -66,6 +66,15 @@ public final class Post {
         likedBy.add(userId);
     }
 
+    /** 좋아요 취소는 재시도에 안전하도록 이미 취소된 상태에서도 성공한다. */
+    public void unlike(String userId) {
+        likedBy.remove(userId);
+    }
+
+    public boolean isLikedBy(String userId) {
+        return userId != null && !userId.isBlank() && likedBy.contains(userId);
+    }
+
     /** 본문/이미지 수정(작성자). 권한 검증은 애플리케이션 서비스에서 수행한다. */
     public void edit(String newContent, List<String> newImageUrls) {
         edit(newContent, newImageUrls, status);

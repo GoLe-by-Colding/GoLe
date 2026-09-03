@@ -1,5 +1,5 @@
 import { env } from "@shared/config";
-import { readSessionAuthorization } from "./session-auth";
+import { clearStoredSession, readSessionAuthorization } from "./session-auth";
 
 export interface ApiErrorBody {
   readonly code: string;
@@ -73,6 +73,12 @@ export async function apiRequest<TResponse>(
       message: `Request failed with status ${response.status}`,
     };
     const parsed = (await response.json().catch(() => fallback)) as ApiErrorBody;
+    // 모든 401이 세션 만료를 뜻하지는 않는다. 로그인 실패(INVALID_CREDENTIALS)처럼
+    // 기존 세션과 무관한 응답까지 로그아웃으로 해석하지 않고, 서버가 세션 무효를
+    // 명시한 경우에만 화면용 메타데이터를 정리한다.
+    if (response.status === 401 && parsed.code === "INVALID_SESSION") {
+      clearStoredSession();
+    }
     throw new ApiError(
       response.status,
       parsed,

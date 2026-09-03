@@ -45,6 +45,19 @@ class NotificationServiceTest {
     }
 
     @Test
+    void notify_withSameDeduplicationKeyCreatesOnlyOneNotification() {
+        NotifyCommand command =
+                new NotifyCommand("u1", NotificationType.POST_LIKED, "누군가 내 글을 좋아해요", "/community/p1", "like:p1:u2");
+
+        String firstId = service.notify(command);
+        String repeatedId = service.notify(command);
+
+        assertThat(repeatedId).isEqualTo(firstId);
+        assertThat(service.list("u1")).hasSize(1);
+        assertThat(service.unreadCount("u1")).isEqualTo(1);
+    }
+
+    @Test
     void markRead_byOwner_marksRead() {
         String id = service.notify(new NotifyCommand("u1", NotificationType.GENERAL, "안녕", null));
         service.markRead(id, "u1");
@@ -78,6 +91,18 @@ class NotificationServiceTest {
             store.removeIf(n -> n.getId().equals(notification.getId()));
             store.add(notification);
             return notification;
+        }
+
+        @Override
+        public Notification saveOnce(Notification notification) {
+            if (notification.getDeduplicationKey() == null) {
+                return save(notification);
+            }
+            return store.stream()
+                    .filter(existing -> existing.getRecipientId().equals(notification.getRecipientId()))
+                    .filter(existing -> notification.getDeduplicationKey().equals(existing.getDeduplicationKey()))
+                    .findFirst()
+                    .orElseGet(() -> save(notification));
         }
 
         @Override
