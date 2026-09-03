@@ -27,6 +27,8 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Playwright는 이미 실행 중인 개발 서버를 건드리지 않고 별도 빌드 캐시를 쓸 수 있다.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   async headers() {
     return [
       {

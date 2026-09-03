@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 3000;
+// 로컬에서 이미 개발 서버가 떠 있어도 격리된 E2E 서버를 띄울 수 있게 포트를 바꿀 수 있다.
+// CI 기본값은 그대로 3000이다.
+const PORT = process.env.E2E_WEB_PORT ?? "3000";
 // E2E_BASE_URL 지정 시 외부(배포) 환경을 대상으로 테스트하고 dev 서버를 띄우지 않는다.
 // 미지정 시 로컬 dev 서버(pnpm dev)를 자동 기동한다.
 const EXTERNAL = process.env.E2E_BASE_URL;
@@ -35,7 +37,7 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: "pnpm dev",
+          command: `pnpm exec next dev --port ${PORT}`,
           url: BASE_URL,
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
@@ -44,7 +46,11 @@ export default defineConfig({
           //
           // 결제 요청 조립 계약 테스트(portone-request.spec.ts)는 브라우저가 아니라 이
           // Node 프로세스에서 돌기 때문에, 여기서 덮어써도 그 테스트의 환경은 그대로다.
-          env: { ...process.env, NEXT_PUBLIC_PAYMENT_MODE: "stub" },
+          env: {
+            ...process.env,
+            NEXT_DIST_DIR: process.env.NEXT_DIST_DIR ?? ".next/playwright-e2e",
+            NEXT_PUBLIC_PAYMENT_MODE: "stub",
+          },
         },
       }),
 });

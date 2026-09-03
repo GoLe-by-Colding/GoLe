@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const externalBaseUrl = process.env.E2E_BASE_URL;
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8090";
 const targetsRemoteHost =
   externalBaseUrl !== undefined &&
   !["localhost", "127.0.0.1"].includes(new URL(externalBaseUrl).hostname);
@@ -33,9 +34,7 @@ test.describe("Search & listing detail", () => {
   test("사용감 있는 매물의 구성과 누락 부품을 구매 전에 고지한다", async ({ page }) => {
     test.skip(targetsRemoteHost, "로컬 시드 매물과 API를 사용하는 상태 고지 회귀 테스트");
 
-    const response = await page.request.get(
-      "http://localhost:8090/api/v1/listings?condition=USED_FAIR",
-    );
+    const response = await page.request.get(`${apiBaseUrl}/api/v1/listings?condition=USED_FAIR`);
     expect(response.ok()).toBeTruthy();
     const listings = (await response.json()) as Array<{
       id: string;
