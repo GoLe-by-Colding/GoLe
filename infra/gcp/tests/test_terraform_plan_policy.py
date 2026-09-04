@@ -17,6 +17,10 @@ SPEC.loader.exec_module(MODULE)
 STATIC_NAME = "he-testbed-feedback-ip"
 STATIC_IP = "35.216.80.123"
 PROJECT_ID = "project-72a52bf1-06aa-4519-b2c"
+PROJECT_NUMBER = "336721527881"
+BILLING_ACCOUNT_ID = "01B490-1BC53A-33E611"
+BUDGET_ID = "b645c912-d766-43fc-8923-bff70ecfe8d8"
+BUDGET_AMOUNT_KRW = "370000"
 RUNTIME_EMAIL = f"gole-production-runtime@{PROJECT_ID}.iam.gserviceaccount.com"
 STARTUP_SCRIPT = "#!/usr/bin/env bash\nset -euo pipefail\n# independently reviewed fixture\n"
 STARTUP_SHA256 = hashlib.sha256(STARTUP_SCRIPT.encode()).hexdigest()
@@ -31,8 +35,10 @@ def resource(address: str, before: dict, after: dict, actions: list[str]) -> dic
 
 
 def instance_state(ip: str) -> dict:
+    labels = {"app": "gole", "environment": "production", "managed-by": "terraform"}
     return {
         "name": "gole-production",
+        "project": PROJECT_ID,
         "zone": "asia-northeast3-a",
         "network_interface": [
             {
@@ -43,9 +49,12 @@ def instance_state(ip: str) -> dict:
             }
         ],
         "deletion_protection": True,
+        "allow_stopping_for_update": True,
         "machine_type": "e2-standard-2",
         "tags": ["gole-web", "gole-ssh-iap"],
-        "labels": {"app": "gole", "environment": "production", "managed-by": "terraform"},
+        "labels": labels,
+        "effective_labels": copy.deepcopy(labels),
+        "terraform_labels": copy.deepcopy(labels),
         "metadata": {"enable-oslogin": "TRUE", "startup-script": STARTUP_SCRIPT},
         "boot_disk": [{"auto_delete": False, "initialize_params": [{
             "image": "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260826",
@@ -66,6 +75,13 @@ def instance_state(ip: str) -> dict:
 def snapshot_state() -> dict:
     return {
         "name": "gole-production-daily-snapshots",
+        "project": PROJECT_ID,
+        "region": "asia-northeast3",
+        "description": "Daily three-day recovery points for the GoLe production boot disk",
+        "disk_consistency_group_policy": [],
+        "group_placement_policy": [],
+        "instance_schedule_policy": [],
+        "workload_policy": [],
         "snapshot_schedule_policy": [
             {
                 "schedule": [
@@ -79,6 +95,7 @@ def snapshot_state() -> dict:
                 ],
                 "snapshot_properties": [
                     {
+                        "chain_name": None,
                         "guest_flush": False,
                         "storage_locations": ["asia-northeast3"],
                         "labels": {
@@ -94,10 +111,69 @@ def snapshot_state() -> dict:
     }
 
 
+def budget_state(*, project_recipients: bool = True) -> dict:
+    return {
+        "all_updates_rule": [{
+            "disable_default_iam_recipients": False,
+            "enable_project_level_recipients": project_recipients,
+            "monitoring_notification_channels": [],
+            "pubsub_topic": f"projects/{PROJECT_ID}/topics/gole-billing-budget",
+            "schema_version": "1.0",
+        }],
+        "amount": [{
+            "last_period_amount": False,
+            "specified_amount": [{
+                "currency_code": "KRW",
+                "nanos": 0,
+                "units": BUDGET_AMOUNT_KRW,
+            }],
+        }],
+        "billing_account": BILLING_ACCOUNT_ID,
+        "budget_filter": [{
+            "calendar_period": "",
+            "credit_types": [],
+            "credit_types_treatment": "EXCLUDE_ALL_CREDITS",
+            "custom_period": [{
+                "end_date": [{"day": 28, "month": 10, "year": 2026}],
+                "start_date": [{"day": 1, "month": 9, "year": 2026}],
+            }],
+            "labels": {},
+            "projects": [f"projects/{PROJECT_NUMBER}"],
+            "resource_ancestors": [],
+            "services": [],
+            "subaccounts": [],
+        }],
+        "display_name": "GoLe production credit guard",
+        "id": f"billingAccounts/{BILLING_ACCOUNT_ID}/budgets/{BUDGET_ID}",
+        "name": BUDGET_ID,
+        "ownership_scope": "",
+        "threshold_rules": [
+            {"spend_basis": "CURRENT_SPEND", "threshold_percent": value}
+            for value in (0.5, 0.75, 0.85, 0.9, 0.95, 1.0)
+        ],
+    }
+
+
 def safe_plan() -> dict:
-    address = {"name": STATIC_NAME, "address": STATIC_IP, "network_tier": "STANDARD"}
+    address = {
+        "name": STATIC_NAME,
+        "address": STATIC_IP,
+        "network_tier": "STANDARD",
+        "description": "HE Testbed external feedback endpoint",
+    }
     instance = instance_state(STATIC_IP)
     instance_before = copy.deepcopy(instance)
+    instance_before["allow_stopping_for_update"] = None
+    instance_before["deletion_protection"] = False
+    instance_before["machine_type"] = "e2-custom-4-8192"
+    instance_before["labels"] = {}
+    instance_before["effective_labels"] = {
+        "app": "gole",
+        "environment": "production",
+        "managed-by": "codex",
+    }
+    instance_before["terraform_labels"] = {}
+    instance_before["metadata"] = {"enable-oslogin": "FALSE"}
     instance_before["boot_disk"][0]["auto_delete"] = True
     changes = [
             resource("google_compute_address.gole", address, copy.deepcopy(address), ["no-op"]),
@@ -114,6 +190,7 @@ def safe_plan() -> dict:
                 {
                     "name": "gole-production-daily-snapshots",
                     "disk": "gole-production",
+                    "project": PROJECT_ID,
                     "zone": "asia-northeast3-a",
                 },
                 ["create"],
@@ -127,6 +204,7 @@ def safe_plan() -> dict:
         after: dict = {}
         project_services = {
             "google_project_service.compute": "compute.googleapis.com",
+            "google_project_service.resource_manager": "cloudresourcemanager.googleapis.com",
             "google_project_service.pubsub": "pubsub.googleapis.com",
             "google_project_service.billing_budgets": "billingbudgets.googleapis.com",
             "google_project_service.public_ca": "publicca.googleapis.com",
@@ -138,15 +216,55 @@ def safe_plan() -> dict:
         elif item == "google_service_account.production_runtime":
             after = {"account_id": "gole-production-runtime", "email": RUNTIME_EMAIL}
         elif item == "google_secret_manager_secret.production_env":
-            after = {"secret_id": "gole-production-env"}
+            secret_labels = {
+                "environment": "production",
+                "managed-by": "kscold-control",
+            }
+            after = {
+                "secret_id": "gole-production-env",
+                "project": PROJECT_ID,
+                "labels": secret_labels,
+                "effective_labels": copy.deepcopy(secret_labels),
+                "terraform_labels": copy.deepcopy(secret_labels),
+                "replication": [{
+                    "auto": [{"customer_managed_encryption": []}],
+                    "user_managed": [],
+                }],
+                "expire_time": "",
+                "ttl": None,
+                "rotation": [],
+                "topics": [],
+                "version_aliases": {},
+            }
         elif item == "google_project_iam_custom_role.budget_subscription_consumer":
             after = {"role_id": "goleBudgetSubscriptionConsumer", "permissions": ["pubsub.subscriptions.consume"], "stage": "GA"}
         elif item == "google_secret_manager_secret_iam_member.production_env_accessor":
-            after = {"role": "roles/secretmanager.secretAccessor", "member": f"serviceAccount:{RUNTIME_EMAIL}"}
+            after = {
+                "condition": [],
+                "project": PROJECT_ID,
+                "secret_id": f"projects/{PROJECT_ID}/secrets/gole-production-env",
+                "role": "roles/secretmanager.secretAccessor",
+                "member": f"serviceAccount:{RUNTIME_EMAIL}",
+            }
         elif item == "google_pubsub_topic_iam_member.billing_budget_publisher":
-            after = {"role": "roles/pubsub.publisher", "member": "serviceAccount:billing-budget-alert@system.gserviceaccount.com"}
+            after = {
+                "condition": [],
+                "project": PROJECT_ID,
+                "topic": f"projects/{PROJECT_ID}/topics/gole-billing-budget",
+                "role": "roles/pubsub.publisher",
+                "member": "serviceAccount:billing-budget-alert@system.gserviceaccount.com",
+            }
         elif item == "google_pubsub_subscription_iam_member.budget_relay_subscriber":
-            after = {"role": f"projects/{PROJECT_ID}/roles/goleBudgetSubscriptionConsumer", "member": f"serviceAccount:{RUNTIME_EMAIL}"}
+            after = {
+                "condition": [],
+                "project": None,
+                "subscription": (
+                    f"projects/{PROJECT_ID}/subscriptions/"
+                    "gole-billing-budget-discord"
+                ),
+                "role": f"projects/{PROJECT_ID}/roles/goleBudgetSubscriptionConsumer",
+                "member": f"serviceAccount:{RUNTIME_EMAIL}",
+            }
         elif item == "google_compute_firewall.web":
             after = firewall("gole-web", 1000, ["0.0.0.0/0"], ["gole-web"], allow=[{"ports": ["80", "443"], "protocol": "tcp"}])
         elif item == "google_compute_firewall.ssh_iap":
@@ -162,19 +280,38 @@ def safe_plan() -> dict:
                 "ack_deadline_seconds": 60,
                 "message_retention_duration": "604800s",
             }
+        elif item == MODULE.BUDGET_RESOURCE:
+            after = budget_state()
         changes.append(resource(item, copy.deepcopy(after), after, ["no-op"]))
     for item, role in (
         ("google_project_iam_member.operator_os_admin", "roles/compute.osAdminLogin"),
         ("google_project_iam_member.operator_iap_tunnel", "roles/iap.tunnelResourceAccessor"),
         ("google_service_account_iam_member.operator_service_account_user", "roles/iam.serviceAccountUser"),
     ):
-        changes.append(resource(item, None, {"role": role, "member": "user:coldingcontact@gmail.com"}, ["create"]))
+        iam_after = {
+            "condition": [],
+            "role": role,
+            "member": "user:coldingcontact@gmail.com",
+        }
+        if item.startswith("google_project_iam_member."):
+            iam_after["project"] = PROJECT_ID
+        else:
+            iam_after["service_account_id"] = (
+                f"projects/{PROJECT_ID}/serviceAccounts/{RUNTIME_EMAIL}"
+            )
+        changes.append(resource(item, None, iam_after, ["create"]))
     return {"resource_changes": changes}
 
 
 def firewall(name: str, priority: int, sources: list[str], tags: list[str], *, allow=None, deny=None) -> dict:
+    descriptions = {
+        "gole-web": "GoLe public HTTP and HTTPS",
+        "gole-ssh-iap": "SSH through Google IAP only",
+        "gole-deny-public-admin": "",
+    }
     return {
         "name": name,
+        "description": descriptions[name],
         "network": "default",
         "direction": "INGRESS",
         "priority": priority,
@@ -195,6 +332,10 @@ class ExistingPlanPolicyTest(unittest.TestCase):
             expected_static_ip_name=STATIC_NAME,
             expected_static_ip=STATIC_IP,
             expected_project_id=PROJECT_ID,
+            expected_project_number=PROJECT_NUMBER,
+            expected_billing_account_id=BILLING_ACCOUNT_ID,
+            expected_budget_id=BUDGET_ID,
+            expected_budget_amount_krw=BUDGET_AMOUNT_KRW,
             expected_startup_script_sha256=STARTUP_SHA256,
         )
 
@@ -209,6 +350,45 @@ class ExistingPlanPolicyTest(unittest.TestCase):
                 change["change"]["actions"] = ["no-op"]
         self.validate(plan)
 
+    def test_allows_only_the_reviewed_budget_recipient_migration(self) -> None:
+        plan = safe_plan()
+        budget = next(
+            item
+            for item in plan["resource_changes"]
+            if item["address"] == MODULE.BUDGET_RESOURCE
+        )
+        budget["change"]["before"] = budget_state(project_recipients=False)
+        budget["change"]["actions"] = ["update"]
+        self.validate(plan)
+
+    def test_rejects_budget_scope_amount_or_route_changes(self) -> None:
+        mutations = []
+        for mutation in ("amount", "project", "topic"):
+            plan = safe_plan()
+            budget = next(
+                item
+                for item in plan["resource_changes"]
+                if item["address"] == MODULE.BUDGET_RESOURCE
+            )
+            if mutation == "amount":
+                budget["change"]["after"]["amount"][0]["specified_amount"][0][
+                    "units"
+                ] = "999999"
+            elif mutation == "project":
+                budget["change"]["after"]["budget_filter"][0]["projects"] = [
+                    "projects/999999999999"
+                ]
+            else:
+                budget["change"]["after"]["all_updates_rule"][0][
+                    "pubsub_topic"
+                ] = "projects/foreign/topics/gole-billing-budget"
+            mutations.append(plan)
+
+        for plan in mutations:
+            with self.subTest():
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
+
     def test_rejects_unimported_address_create(self) -> None:
         plan = safe_plan()
         plan["resource_changes"][0]["change"] = {
@@ -216,6 +396,16 @@ class ExistingPlanPolicyTest(unittest.TestCase):
             "before": None,
             "after": {"name": STATIC_NAME, "address": None},
         }
+        with self.assertRaises(MODULE.PlanPolicyError):
+            self.validate(plan)
+
+    def test_rejects_missing_existing_billing_budget(self) -> None:
+        plan = safe_plan()
+        plan["resource_changes"] = [
+            item
+            for item in plan["resource_changes"]
+            if item["address"] != MODULE.BUDGET_RESOURCE
+        ]
         with self.assertRaises(MODULE.PlanPolicyError):
             self.validate(plan)
 
@@ -264,6 +454,153 @@ class ExistingPlanPolicyTest(unittest.TestCase):
                 with self.assertRaises(MODULE.PlanPolicyError):
                     self.validate(plan)
 
+    def test_rejects_unreviewed_vm_transition_fields(self) -> None:
+        mutations = {
+            "desired_status": lambda instance: instance.update(
+                desired_status="TERMINATED"
+            ),
+            "metadata_startup_script": lambda instance: instance.update(
+                metadata_startup_script="#!/bin/sh\nid\n"
+            ),
+            "advanced_machine_features": lambda instance: instance.update(
+                advanced_machine_features=[{"enable_nested_virtualization": True}]
+            ),
+            "confidential_instance_config": lambda instance: instance.update(
+                confidential_instance_config=[{"enable_confidential_compute": True}]
+            ),
+            "subnetwork": lambda instance: instance["network_interface"][0].update(
+                subnetwork="attacker-subnetwork"
+            ),
+            "network_ip": lambda instance: instance["network_interface"][0].update(
+                network_ip="10.178.0.99"
+            ),
+            "network": lambda instance: instance["network_interface"][0].update(
+                network="attacker-network"
+            ),
+            "access_config": lambda instance: instance["network_interface"][0][
+                "access_config"
+            ][0].update(public_ptr_domain_name="attacker.example"),
+            "preemptible": lambda instance: instance["scheduling"][0].update(
+                preemptible=True
+            ),
+            "provisioning_model": lambda instance: instance["scheduling"][0].update(
+                provisioning_model="SPOT"
+            ),
+            "max_run_duration": lambda instance: instance["scheduling"][0].update(
+                max_run_duration=[{"seconds": 60}]
+            ),
+            "termination_action": lambda instance: instance["scheduling"][0].update(
+                instance_termination_action="STOP"
+            ),
+            "can_ip_forward": lambda instance: instance.update(can_ip_forward=True),
+            "enable_display": lambda instance: instance.update(enable_display=True),
+            "tags": lambda instance: instance.update(tags=["gole-web", "attacker"]),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                plan = safe_plan()
+                instance = plan["resource_changes"][1]["change"]["after"]
+                mutate(instance)
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
+
+    def test_rejects_unknown_vm_after_value(self) -> None:
+        plan = safe_plan()
+        plan["resource_changes"][1]["change"]["after_unknown"] = {
+            "desired_status": True
+        }
+        with self.assertRaises(MODULE.PlanPolicyError):
+            self.validate(plan)
+
+    def test_allows_only_provider_computed_create_unknowns(self) -> None:
+        plan = safe_plan()
+        masks = {
+            MODULE.SNAPSHOT_POLICY_RESOURCE: {
+                "id": True,
+                "self_link": True,
+                "snapshot_schedule_policy": [
+                    {
+                        "retention_policy": [{}],
+                        "schedule": [{"daily_schedule": [{}]}],
+                        "snapshot_properties": [
+                            {"labels": {}, "storage_locations": [False]}
+                        ],
+                    }
+                ],
+            },
+            MODULE.SNAPSHOT_ATTACHMENT_RESOURCE: {"id": True},
+            "google_project_iam_member.operator_os_admin": {
+                "condition": [],
+                "etag": True,
+                "id": True,
+            },
+            "google_project_iam_member.operator_iap_tunnel": {
+                "condition": [],
+                "etag": True,
+                "id": True,
+            },
+            "google_service_account_iam_member.operator_service_account_user": {
+                "condition": [],
+                "etag": True,
+                "id": True,
+            },
+        }
+        for item in plan["resource_changes"]:
+            if item["address"] in masks:
+                item["change"]["after_unknown"] = masks[item["address"]]
+        self.validate(plan)
+
+    def test_rejects_unresolved_configurable_create_values(self) -> None:
+        mutations = (
+            (
+                "google_project_iam_member.operator_os_admin",
+                {"project": True},
+            ),
+            (
+                "google_service_account_iam_member.operator_service_account_user",
+                {"service_account_id": True},
+            ),
+            (
+                MODULE.SNAPSHOT_POLICY_RESOURCE,
+                {
+                    "snapshot_schedule_policy": [
+                        {"snapshot_properties": [{"storage_locations": [True]}]}
+                    ]
+                },
+            ),
+            (MODULE.SNAPSHOT_ATTACHMENT_RESOURCE, {"disk": True}),
+        )
+        for address, unknown_mask in mutations:
+            with self.subTest(address=address):
+                plan = safe_plan()
+                item = next(
+                    value
+                    for value in plan["resource_changes"]
+                    if value["address"] == address
+                )
+                item["change"]["after_unknown"] = unknown_mask
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
+
+    def test_allows_provider_computed_vm_bookkeeping_refresh(self) -> None:
+        plan = safe_plan()
+        instance_change = plan["resource_changes"][1]["change"]
+        instance_change["before"].update(
+            {
+                "current_status": "PROVISIONING",
+                "label_fingerprint": "old-computed-value",
+                "metadata_fingerprint": "old-computed-value",
+            }
+        )
+        instance_change["after"].update(
+            {
+                "current_status": "RUNNING",
+                "label_fingerprint": "new-computed-value",
+                "metadata_fingerprint": "new-computed-value",
+            }
+        )
+        self.validate(plan)
+
     def test_rejects_missing_or_relaxed_snapshot_policy(self) -> None:
         plan = safe_plan()
         plan["resource_changes"][2]["change"]["after"][
@@ -271,6 +608,89 @@ class ExistingPlanPolicyTest(unittest.TestCase):
         ][0]["retention_policy"][0]["max_retention_days"] = 30
         with self.assertRaises(MODULE.PlanPolicyError):
             self.validate(plan)
+
+    def test_rejects_snapshot_identity_and_policy_type_changes(self) -> None:
+        mutations = {
+            "project": lambda snapshot, attachment: snapshot.update(
+                project="foreign-project"
+            ),
+            "region": lambda snapshot, attachment: snapshot.update(
+                region="us-central1"
+            ),
+            "description": lambda snapshot, attachment: snapshot.update(
+                description="unreviewed"
+            ),
+            "group_policy": lambda snapshot, attachment: snapshot.update(
+                group_placement_policy=[{"vm_count": 2}]
+            ),
+            "chain": lambda snapshot, attachment: snapshot[
+                "snapshot_schedule_policy"
+            ][0]["snapshot_properties"][0].update(chain_name="unreviewed"),
+            "attachment_project": lambda snapshot, attachment: attachment.update(
+                project="foreign-project"
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                plan = safe_plan()
+                snapshot = next(
+                    item["change"]["after"]
+                    for item in plan["resource_changes"]
+                    if item["address"] == MODULE.SNAPSHOT_POLICY_RESOURCE
+                )
+                attachment = next(
+                    item["change"]["after"]
+                    for item in plan["resource_changes"]
+                    if item["address"] == MODULE.SNAPSHOT_ATTACHMENT_RESOURCE
+                )
+                mutate(snapshot, attachment)
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
+
+    def test_rejects_iam_target_project_or_condition_changes(self) -> None:
+        mutations = (
+            (
+                "google_project_iam_member.operator_os_admin",
+                "project",
+                "foreign-project",
+            ),
+            (
+                "google_project_iam_member.operator_iap_tunnel",
+                "condition",
+                [{"expression": "false", "title": "deny-recovery"}],
+            ),
+            (
+                "google_service_account_iam_member.operator_service_account_user",
+                "service_account_id",
+                "projects/foreign/serviceAccounts/admin@foreign.iam.gserviceaccount.com",
+            ),
+            (
+                "google_secret_manager_secret_iam_member.production_env_accessor",
+                "secret_id",
+                "projects/foreign/secrets/production",
+            ),
+            (
+                "google_pubsub_topic_iam_member.billing_budget_publisher",
+                "topic",
+                "projects/foreign/topics/billing",
+            ),
+            (
+                "google_pubsub_subscription_iam_member.budget_relay_subscriber",
+                "subscription",
+                "projects/foreign/subscriptions/billing",
+            ),
+        )
+        for address, field, value in mutations:
+            with self.subTest(address=address, field=field):
+                plan = safe_plan()
+                iam = next(
+                    item["change"]["after"]
+                    for item in plan["resource_changes"]
+                    if item["address"] == address
+                )
+                iam[field] = value
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
 
     def test_rejects_any_unrelated_destroy(self) -> None:
         plan = safe_plan()
@@ -324,7 +744,6 @@ class ExistingPlanPolicyTest(unittest.TestCase):
     def test_rejects_update_to_any_imported_non_vm_resource(self) -> None:
         for address in (
             "google_service_account.production_runtime",
-            "google_secret_manager_secret.production_env",
             "google_pubsub_subscription.billing_budget_discord",
             "google_compute_firewall.web",
         ):
@@ -340,6 +759,18 @@ class ExistingPlanPolicyTest(unittest.TestCase):
                     MODULE.PlanPolicyError, "separate reviewed migration"
                 ):
                     self.validate(plan)
+
+    def test_rejects_secret_container_changes_beyond_label_adoption(self) -> None:
+        plan = safe_plan()
+        secret = next(
+            item
+            for item in plan["resource_changes"]
+            if item["address"] == MODULE.SECRET_RESOURCE
+        )
+        secret["change"]["actions"] = ["update"]
+        secret["change"]["after"]["expire_time"] = "2026-09-06T00:00:00Z"
+        with self.assertRaises(MODULE.PlanPolicyError):
+            self.validate(plan)
 
     def test_rejects_unknown_provider_field_and_action_vector(self) -> None:
         plan = safe_plan()

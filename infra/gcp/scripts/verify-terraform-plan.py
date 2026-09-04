@@ -9,6 +9,7 @@ contain sensitive application metadata.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import sys
@@ -17,6 +18,8 @@ from typing import Any
 
 ADDRESS_RESOURCE = "google_compute_address.gole"
 INSTANCE_RESOURCE = "google_compute_instance.gole"
+SECRET_RESOURCE = "google_secret_manager_secret.production_env"
+BUDGET_RESOURCE = "google_billing_budget.gole_credit_guard[0]"
 SNAPSHOT_POLICY_RESOURCE = "google_compute_resource_policy.daily_boot_disk_snapshots"
 SNAPSHOT_ATTACHMENT_RESOURCE = (
     "google_compute_disk_resource_policy_attachment.daily_boot_disk_snapshots"
@@ -24,6 +27,7 @@ SNAPSHOT_ATTACHMENT_RESOURCE = (
 
 REQUIRED_EXISTING_RESOURCES = {
     "google_project_service.compute",
+    "google_project_service.resource_manager",
     "google_project_service.pubsub",
     "google_project_service.billing_budgets",
     "google_project_service.public_ca",
@@ -42,6 +46,7 @@ REQUIRED_EXISTING_RESOURCES = {
     "google_pubsub_topic_iam_member.billing_budget_publisher",
     "google_pubsub_subscription.billing_budget_discord",
     "google_pubsub_subscription_iam_member.budget_relay_subscriber",
+    BUDGET_RESOURCE,
 }
 REQUIRED_ADOPTION_RESOURCES = {
     SNAPSHOT_POLICY_RESOURCE,
@@ -53,10 +58,25 @@ REQUIRED_ADOPTION_RESOURCES = {
 GTS_RESOURCE = "google_project_iam_member.gts_eab_creator[0]"
 OPTIONAL_RESOURCES = {
     GTS_RESOURCE,
-    "google_billing_budget.gole_credit_guard[0]",
 }
 ALLOWED_CREATE_RESOURCES = REQUIRED_ADOPTION_RESOURCES | {GTS_RESOURCE}
 ALLOWED_RESOURCES = REQUIRED_EXISTING_RESOURCES | REQUIRED_ADOPTION_RESOURCES | OPTIONAL_RESOURCES
+
+# Terraform Provider 7.46 exposes these values only after the corresponding
+# create finishes. Every configurable value must already be known in the saved
+# plan so a reviewed identity, network, or recovery policy cannot be resolved
+# to something different during apply.
+ALLOWED_CREATE_UNKNOWN_PATHS: dict[str, set[tuple[str, ...]]] = {
+    SNAPSHOT_POLICY_RESOURCE: {("id",), ("self_link",)},
+    SNAPSHOT_ATTACHMENT_RESOURCE: {("id",)},
+    "google_project_iam_member.operator_os_admin": {("etag",), ("id",)},
+    "google_project_iam_member.operator_iap_tunnel": {("etag",), ("id",)},
+    "google_service_account_iam_member.operator_service_account_user": {
+        ("etag",),
+        ("id",),
+    },
+    GTS_RESOURCE: {("etag",), ("id",)},
+}
 
 # Provider schemas contain computed bookkeeping fields, but an imported
 # production plan must not smuggle a newly introduced privilege/network/disk
@@ -65,24 +85,25 @@ ALLOWED_RESOURCES = REQUIRED_EXISTING_RESOURCES | REQUIRED_ADOPTION_RESOURCES | 
 # a field require an explicit review of this list before production planning.
 ALLOWED_AFTER_KEYS_BY_TYPE: dict[str, set[str]] = {
     "google_project_service": {
-        "disable_dependent_services", "disable_on_destroy", "id", "project", "service",
+        "deletion_policy", "disable_dependent_services", "disable_on_destroy", "id", "project",
+        "service", "timeouts",
     },
     "google_service_account": {
-        "account_id", "description", "disabled", "display_name", "email", "id", "member",
-        "name", "project", "unique_id",
+        "account_id", "create_ignore_already_exists", "deletion_policy", "description", "disabled",
+        "display_name", "email", "id", "member", "name", "project", "timeouts", "unique_id",
     },
     "google_secret_manager_secret": {
-        "annotations", "create_time", "deletion_protection", "effective_annotations",
+        "annotations", "create_time", "deletion_policy", "deletion_protection", "effective_annotations",
         "effective_labels", "expire_time", "id", "labels", "name", "project", "replication",
-        "rotation", "secret_id", "terraform_labels", "topics", "ttl", "version_aliases",
+        "rotation", "secret_id", "tags", "terraform_labels", "timeouts", "topics", "ttl", "version_aliases",
         "version_destroy_ttl",
     },
     "google_secret_manager_secret_iam_member": {
         "condition", "etag", "id", "member", "project", "role", "secret_id",
     },
     "google_project_iam_custom_role": {
-        "deleted", "description", "id", "name", "permissions", "project", "role_id", "stage",
-        "title",
+        "deleted", "deletion_policy", "description", "id", "name", "permissions", "project",
+        "role_id", "stage", "title",
     },
     "google_project_iam_member": {
         "condition", "etag", "id", "member", "project", "role",
@@ -91,56 +112,58 @@ ALLOWED_AFTER_KEYS_BY_TYPE: dict[str, set[str]] = {
         "condition", "etag", "id", "member", "role", "service_account_id",
     },
     "google_compute_address": {
-        "address", "address_type", "creation_timestamp", "description", "effective_labels",
-        "id", "ip_version", "ipv6_endpoint_type", "labels", "name", "network", "network_tier",
-        "prefix_length", "project", "purpose", "region", "self_link", "subnetwork",
-        "terraform_labels", "users",
+        "address", "address_id", "address_type", "creation_timestamp", "deletion_policy", "description",
+        "effective_labels", "id", "ip_version", "ipv6_endpoint_type", "label_fingerprint", "labels", "name",
+        "network", "network_tier",
+        "prefix_length", "project", "purpose", "region", "self_link", "subnetwork", "terraform_labels",
+        "timeouts", "users", "ip_collection",
     },
     "google_compute_firewall": {
-        "allow", "creation_timestamp", "deny", "description", "destination_ranges", "direction",
-        "disabled", "enable_logging", "id", "log_config", "name", "network", "priority",
+        "allow", "creation_timestamp", "deletion_policy", "deny", "description", "destination_ranges",
+        "direction", "disabled", "enable_logging", "id", "log_config", "name", "network", "params", "priority",
         "project", "self_link", "source_ranges", "source_service_accounts", "source_tags",
-        "target_service_accounts", "target_tags",
+        "target_service_accounts", "target_tags", "timeouts",
     },
     "google_compute_instance": {
         "advanced_machine_features", "allow_stopping_for_update", "attached_disk", "boot_disk",
-        "can_ip_forward", "confidential_instance_config", "creation_timestamp", "current_status",
-        "deletion_protection", "desired_status", "effective_labels", "enable_display",
+        "can_ip_forward", "confidential_instance_config", "cpu_platform", "creation_timestamp", "current_status",
+        "deletion_policy", "deletion_protection", "description", "desired_status", "effective_labels", "enable_display",
         "guest_accelerator", "hostname", "id", "instance_encryption_key", "key_revocation_action_type",
-        "label_fingerprint", "labels", "machine_type", "metadata", "metadata_fingerprint",
+        "instance_id", "label_fingerprint", "labels", "machine_type", "metadata", "metadata_fingerprint",
         "metadata_startup_script", "min_cpu_platform", "name", "network_interface",
         "network_performance_config", "params", "project", "reservation_affinity", "resource_policies",
         "scheduling", "scratch_disk", "self_link", "service_account", "shielded_instance_config",
-        "tags", "tags_fingerprint", "terraform_labels", "zone",
+        "tags", "tags_fingerprint", "terraform_labels", "timeouts", "workload_identity_config", "zone",
     },
     "google_compute_resource_policy": {
-        "creation_timestamp", "description", "group_placement_policy", "id",
-        "instance_schedule_policy", "name", "project", "region", "self_link",
-        "snapshot_schedule_policy",
+        "creation_timestamp", "deletion_policy", "description", "disk_consistency_group_policy",
+        "group_placement_policy", "id", "instance_schedule_policy", "name", "project", "region",
+        "self_link", "snapshot_schedule_policy", "timeouts", "workload_policy",
     },
     "google_compute_disk_resource_policy_attachment": {
-        "disk", "id", "name", "project", "zone",
+        "deletion_policy", "disk", "id", "name", "project", "timeouts", "zone",
     },
     "google_pubsub_topic": {
-        "effective_labels", "id", "ingestion_data_source_settings", "kms_key_name", "labels",
-        "message_retention_duration", "message_storage_policy", "name", "project", "schema_settings",
-        "terraform_labels",
+        "deletion_policy", "effective_labels", "id", "ingestion_data_source_settings", "kms_key_name",
+        "labels", "message_retention_duration", "message_storage_policy", "message_transforms", "name",
+        "project", "schema_settings", "tags", "terraform_labels", "timeouts",
     },
     "google_pubsub_topic_iam_member": {
         "condition", "etag", "id", "member", "project", "role", "topic",
     },
     "google_pubsub_subscription": {
         "ack_deadline_seconds", "bigquery_config", "cloud_storage_config", "dead_letter_policy",
-        "detached", "effective_labels", "enable_exactly_once_delivery", "enable_message_ordering",
+        "deletion_policy", "detached", "effective_labels", "enable_exactly_once_delivery", "enable_message_ordering",
         "expiration_policy", "filter", "id", "labels", "message_retention_duration", "name",
-        "project", "push_config", "retain_acked_messages", "retry_policy", "terraform_labels", "topic",
+        "message_transforms", "project", "push_config", "retain_acked_messages", "retry_policy", "tags",
+        "terraform_labels", "timeouts", "topic",
     },
     "google_pubsub_subscription_iam_member": {
         "condition", "etag", "id", "member", "project", "role", "subscription",
     },
     "google_billing_budget": {
-        "all_updates_rule", "amount", "billing_account", "budget_filter", "display_name", "id", "name",
-        "ownership_scope", "threshold_rules",
+        "all_updates_rule", "amount", "billing_account", "budget_filter", "deletion_policy",
+        "display_name", "id", "name", "ownership_scope", "threshold_rules", "timeouts",
     },
 }
 
@@ -175,6 +198,46 @@ def _actions(resource: dict[str, Any]) -> list[str]:
     return actions
 
 
+def _unknown_leaf_paths(value: Any, path: tuple[str, ...] = ()) -> set[tuple[str, ...]]:
+    """Return the paths Terraform marks unknown, rejecting malformed masks."""
+
+    if value is True:
+        return {path}
+    if value is False:
+        return set()
+    if isinstance(value, dict):
+        paths: set[tuple[str, ...]] = set()
+        for key, nested in value.items():
+            if not isinstance(key, str):
+                raise PlanPolicyError("plan contains a malformed after_unknown mask")
+            paths.update(_unknown_leaf_paths(nested, (*path, key)))
+        return paths
+    if isinstance(value, list):
+        paths = set()
+        for index, nested in enumerate(value):
+            paths.update(_unknown_leaf_paths(nested, (*path, str(index))))
+        return paths
+    raise PlanPolicyError("plan contains a malformed after_unknown mask")
+
+
+def _assert_reviewed_after_unknown(resource: dict[str, Any], actions: list[str]) -> None:
+    mask = resource.get("change", {}).get("after_unknown")
+    if mask is None:
+        mask = {}
+    if not isinstance(mask, dict):
+        raise PlanPolicyError("resource after_unknown mask is invalid")
+
+    unknown_paths = _unknown_leaf_paths(mask)
+    if actions == ["create"]:
+        allowed = ALLOWED_CREATE_UNKNOWN_PATHS.get(resource["address"], set())
+        if not unknown_paths.issubset(allowed):
+            raise PlanPolicyError(
+                "create plan contains an unresolved configurable provider value"
+            )
+    elif unknown_paths:
+        raise PlanPolicyError("managed resource contains an unresolved after value")
+
+
 def _assert_top_level_field_allowlist(resource: dict[str, Any]) -> None:
     resource_type = resource.get("type")
     allowed = ALLOWED_AFTER_KEYS_BY_TYPE.get(resource_type)
@@ -185,6 +248,33 @@ def _assert_top_level_field_allowlist(resource: dict[str, Any]) -> None:
         raise PlanPolicyError("managed resource is absent after apply")
     if set(after) - allowed:
         raise PlanPolicyError("plan contains an unreviewed provider field")
+
+
+def _assert_reviewed_provider_defaults(resource: dict[str, Any]) -> None:
+    after = resource.get("change", {}).get("after")
+    if not isinstance(after, dict):
+        raise PlanPolicyError("managed resource is absent after apply")
+    if "deletion_policy" in after and after.get("deletion_policy") != "DELETE":
+        raise PlanPolicyError("provider deletion policy changed")
+    if after.get("timeouts") not in (None, {}):
+        raise PlanPolicyError("custom provider timeouts are not reviewed")
+
+    resource_type = resource.get("type")
+    empty_only_fields = {
+        "google_compute_address": ("ip_collection",),
+        "google_compute_firewall": ("params",),
+        "google_compute_instance": ("params", "workload_identity_config"),
+        "google_compute_resource_policy": (
+            "disk_consistency_group_policy",
+            "workload_policy",
+        ),
+        "google_pubsub_topic": ("message_transforms", "tags"),
+        "google_pubsub_subscription": ("message_transforms", "tags"),
+        "google_secret_manager_secret": ("tags",),
+    }
+    for field in empty_only_fields.get(str(resource_type), ()):
+        if after.get(field) not in (None, "", [], {}):
+            raise PlanPolicyError("provider field expected to remain empty")
 
 
 def _before_after(resource: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -228,12 +318,30 @@ def _assert_exact_iam(
     *,
     role: str,
     member: str,
+    expected_project_id: str | None = None,
+    allow_unset_project: bool = False,
+    target_field: str | None = None,
+    target_value: str | None = None,
 ) -> None:
     after = resources[address].get("change", {}).get("after")
     if not isinstance(after, dict):
         raise PlanPolicyError(f"IAM resource {address} is absent after apply")
-    if after.get("role") != role or after.get("member") != member:
+    if (
+        after.get("role") != role
+        or after.get("member") != member
+        or after.get("condition") != []
+    ):
         raise PlanPolicyError(f"IAM resource {address} grants an unexpected principal or role")
+    if expected_project_id is not None:
+        allowed_projects = (
+            {None, expected_project_id}
+            if allow_unset_project
+            else {expected_project_id}
+        )
+        if after.get("project") not in allowed_projects:
+            raise PlanPolicyError(f"IAM resource {address} targets an unexpected project")
+    if target_field is not None and after.get(target_field) != target_value:
+        raise PlanPolicyError(f"IAM resource {address} targets an unexpected resource")
 
 
 def _assert_firewall(
@@ -244,6 +352,7 @@ def _assert_firewall(
     priority: int,
     source_ranges: list[str],
     target_tags: list[str],
+    description: str,
     allow: list[dict[str, Any]] | None = None,
     deny: list[dict[str, Any]] | None = None,
 ) -> None:
@@ -252,6 +361,7 @@ def _assert_firewall(
         raise PlanPolicyError(f"firewall {address} is absent after apply")
     if (
         after.get("name") != name
+        or after.get("description", "") != description
         or _machine_name(after.get("network")) != "default"
         or after.get("direction", "INGRESS") != "INGRESS"
         or after.get("priority", 1000) != priority
@@ -260,10 +370,108 @@ def _assert_firewall(
         or _list(after.get("source_tags"))
         or _list(after.get("source_service_accounts"))
         or _list(after.get("target_service_accounts"))
-        or _list(after.get("allow")) != (allow or [])
-        or _list(after.get("deny")) != (deny or [])
+        or _normalized_firewall_rules(after.get("allow"))
+        != _normalized_firewall_rules(allow or [])
+        or _normalized_firewall_rules(after.get("deny"))
+        != _normalized_firewall_rules(deny or [])
     ):
         raise PlanPolicyError(f"firewall {address} differs from the reviewed least-privilege rule")
+
+
+def _normalized_firewall_rules(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, list):
+        raise PlanPolicyError("firewall protocol rules are invalid")
+    normalized: dict[str, set[str]] = {}
+    for rule in value:
+        if not isinstance(rule, dict) or set(rule) != {"ports", "protocol"}:
+            raise PlanPolicyError("firewall protocol rule has an unexpected field")
+        protocol = rule.get("protocol")
+        ports = rule.get("ports")
+        if not isinstance(protocol, str) or not isinstance(ports, list) or not all(
+            isinstance(port, str) for port in ports
+        ):
+            raise PlanPolicyError("firewall protocol rule is malformed")
+        normalized.setdefault(protocol, set()).update(ports)
+    return {protocol: sorted(ports) for protocol, ports in sorted(normalized.items())}
+
+
+def _drop_instance_computed_bookkeeping(state: dict[str, Any]) -> None:
+    """Remove only Provider 7.46 computed-only VM bookkeeping values."""
+
+    for key in (
+        "cpu_platform",
+        "creation_timestamp",
+        "current_status",
+        "instance_id",
+        "label_fingerprint",
+        "metadata_fingerprint",
+        "self_link",
+        "tags_fingerprint",
+    ):
+        state.pop(key, None)
+
+    for collection in ("attached_disk", "boot_disk", "scratch_disk"):
+        for disk in _list(state.get(collection)):
+            if isinstance(disk, dict):
+                disk.pop("disk_encryption_key_sha256", None)
+
+    for encryption_key in _list(state.get("instance_encryption_key")):
+        if isinstance(encryption_key, dict):
+            encryption_key.pop("sha256", None)
+
+    for boot in _list(state.get("boot_disk")):
+        if not isinstance(boot, dict):
+            continue
+        for initialize in _list(boot.get("initialize_params")):
+            if not isinstance(initialize, dict):
+                continue
+            for key_name in (
+                "source_image_encryption_key",
+                "source_snapshot_encryption_key",
+            ):
+                for encryption_key in _list(initialize.get(key_name)):
+                    if isinstance(encryption_key, dict):
+                        encryption_key.pop("sha256", None)
+
+    for interface in _list(state.get("network_interface")):
+        if not isinstance(interface, dict):
+            continue
+        for key in ("ipv6_access_type", "name", "parent_nic_name"):
+            interface.pop(key, None)
+
+
+def _validate_instance_transition(
+    instance_before: dict[str, Any], instance_after: dict[str, Any]
+) -> None:
+    """Allow only the reviewed one-time VM adoption changes."""
+
+    normalized_before = copy.deepcopy(instance_before)
+    normalized_after = copy.deepcopy(instance_after)
+    _drop_instance_computed_bookkeeping(normalized_before)
+    _drop_instance_computed_bookkeeping(normalized_after)
+
+    # These target values are independently checked by _validate_instance_after.
+    # Replacing them only in the comparison permits the reviewed migration while
+    # leaving every other user-controlled Provider field immutable.
+    for key in (
+        "allow_stopping_for_update",
+        "deletion_protection",
+        "effective_labels",
+        "labels",
+        "machine_type",
+        "metadata",
+        "terraform_labels",
+    ):
+        normalized_before[key] = copy.deepcopy(normalized_after.get(key))
+
+    before_boot = _single_block(normalized_before, "boot_disk")
+    after_boot = _single_block(normalized_after, "boot_disk")
+    before_boot["auto_delete"] = after_boot.get("auto_delete")
+
+    if normalized_before != normalized_after:
+        raise PlanPolicyError(
+            "production VM update changes a field outside the reviewed adoption set"
+        )
 
 
 def _validate_instance_after(
@@ -275,10 +483,14 @@ def _validate_instance_after(
 ) -> None:
     if instance_after.get("name") != "gole-production":
         raise PlanPolicyError("production instance name changed")
+    if instance_after.get("project") not in (None, expected_project_id):
+        raise PlanPolicyError("production instance project changed")
     if _machine_name(instance_after.get("zone")) != "asia-northeast3-a":
         raise PlanPolicyError("production instance zone changed")
     if instance_after.get("deletion_protection") is not True:
         raise PlanPolicyError("production deletion protection is not enabled in the plan")
+    if instance_after.get("allow_stopping_for_update") is not True:
+        raise PlanPolicyError("reviewed VM migration requires allow_stopping_for_update")
     if _machine_name(instance_after.get("machine_type")) != "e2-standard-2":
         raise PlanPolicyError("production plan does not use the reviewed e2-standard-2 shape")
     if set(_list(instance_after.get("tags"))) != {"gole-web", "gole-ssh-iap"}:
@@ -289,6 +501,27 @@ def _validate_instance_after(
         "managed-by": "terraform",
     }:
         raise PlanPolicyError("production labels changed")
+    if instance_after.get("effective_labels") != instance_after.get(
+        "labels"
+    ) or instance_after.get("terraform_labels") != instance_after.get("labels"):
+        raise PlanPolicyError("production effective or Terraform labels changed")
+
+    if instance_after.get("desired_status") not in (None, ""):
+        raise PlanPolicyError("production desired status must remain unmanaged")
+    if instance_after.get("metadata_startup_script") not in (None, ""):
+        raise PlanPolicyError("standalone metadata startup script is forbidden")
+    for field in (
+        "advanced_machine_features",
+        "confidential_instance_config",
+        "guest_accelerator",
+        "instance_encryption_key",
+        "network_performance_config",
+        "params",
+        "reservation_affinity",
+        "workload_identity_config",
+    ):
+        if instance_after.get(field) not in (None, "", [], {}):
+            raise PlanPolicyError("production VM gained an unreviewed optional capability")
 
     metadata = instance_after.get("metadata")
     if not isinstance(metadata, dict) or set(metadata) != {"enable-oslogin", "startup-script"}:
@@ -321,9 +554,21 @@ def _validate_instance_after(
         raise PlanPolicyError("production display device was enabled")
     if instance_after.get("hostname") not in (None, ""):
         raise PlanPolicyError("production hostname override is forbidden")
-    network = instance_after["network_interface"][0]
+    network = _single_block(instance_after, "network_interface")
     if _machine_name(network.get("network")) != "default":
         raise PlanPolicyError("production VPC changed")
+    if network.get("subnetwork") not in (None, "") and _machine_name(
+        network.get("subnetwork")
+    ) != "default":
+        raise PlanPolicyError("production subnetwork changed")
+    if network.get("subnetwork_project") not in (None, "", expected_project_id):
+        raise PlanPolicyError("production subnetwork project changed")
+    if network.get("network_attachment") not in (None, ""):
+        raise PlanPolicyError("production network attachment is forbidden")
+    if network.get("stack_type") not in (None, "", "IPV4_ONLY"):
+        raise PlanPolicyError("production network stack changed")
+    if network.get("nic_type") not in (None, ""):
+        raise PlanPolicyError("production NIC type changed")
     if _list(network.get("alias_ip_range")) or _list(network.get("ipv6_access_config")):
         raise PlanPolicyError("production network interface gained an unreviewed address")
 
@@ -345,15 +590,120 @@ def _validate_instance_after(
         "on_host_maintenance"
     ) != "MIGRATE":
         raise PlanPolicyError("production scheduling policy changed")
+    if scheduling.get("preemptible") not in (None, False) or scheduling.get(
+        "provisioning_model"
+    ) not in (None, "", "STANDARD"):
+        raise PlanPolicyError("production provisioning model changed")
+    if any(
+        scheduling.get(field) not in (None, 0)
+        for field in (
+            "availability_domain",
+            "host_error_timeout_seconds",
+            "min_node_cpus",
+        )
+    ):
+        raise PlanPolicyError("production scheduling scalar policy changed")
+    if scheduling.get("termination_time") not in (None, "") or scheduling.get(
+        "instance_termination_action"
+    ) not in (None, ""):
+        raise PlanPolicyError("production VM gained an automatic termination policy")
+    for field in (
+        "local_ssd_recovery_timeout",
+        "max_run_duration",
+        "node_affinities",
+        "on_instance_stop_action",
+    ):
+        if scheduling.get(field) not in (None, []):
+            raise PlanPolicyError("production scheduling gained an unreviewed nested policy")
     if instance_after.get("resource_policies") not in (None, []):
         raise PlanPolicyError("production VM has an instance schedule resource policy")
     if _nat_ip(instance_after) != expected_static_ip:
         raise PlanPolicyError("plan would change the production instance NAT IP")
 
 
+def _validate_budget_state(
+    state: dict[str, Any],
+    *,
+    expected_project_id: str,
+    expected_project_number: str,
+    expected_billing_account_id: str,
+    expected_budget_id: str,
+    expected_budget_amount_krw: str,
+    allow_project_recipients_disabled: bool,
+) -> None:
+    expected_resource_id = (
+        f"billingAccounts/{expected_billing_account_id}/budgets/{expected_budget_id}"
+    )
+    if (
+        state.get("id") != expected_resource_id
+        or state.get("name") != expected_budget_id
+        or state.get("billing_account") != expected_billing_account_id
+        or state.get("display_name") != "GoLe production credit guard"
+        or state.get("ownership_scope") != ""
+    ):
+        raise PlanPolicyError("billing budget identity changed")
+
+    amount = _single_block(state, "amount")
+    specified = _single_block(amount, "specified_amount")
+    if amount.get("last_period_amount") is not False or specified != {
+        "currency_code": "KRW",
+        "nanos": 0,
+        "units": expected_budget_amount_krw,
+    }:
+        raise PlanPolicyError("billing budget amount changed")
+
+    budget_filter = _single_block(state, "budget_filter")
+    custom_period = _single_block(budget_filter, "custom_period")
+    if (
+        budget_filter.get("calendar_period") != ""
+        or budget_filter.get("credit_types") != []
+        or budget_filter.get("credit_types_treatment") != "EXCLUDE_ALL_CREDITS"
+        or budget_filter.get("labels") != {}
+        or budget_filter.get("projects") != [f"projects/{expected_project_number}"]
+        or budget_filter.get("resource_ancestors") != []
+        or budget_filter.get("services") != []
+        or budget_filter.get("subaccounts") != []
+        or _single_block(custom_period, "start_date")
+        != {"day": 1, "month": 9, "year": 2026}
+        or _single_block(custom_period, "end_date")
+        != {"day": 28, "month": 10, "year": 2026}
+    ):
+        raise PlanPolicyError("billing budget scope or period changed")
+
+    threshold_rules = state.get("threshold_rules")
+    expected_thresholds = [0.5, 0.75, 0.85, 0.9, 0.95, 1.0]
+    if not isinstance(threshold_rules, list) or any(
+        not isinstance(rule, dict)
+        or not isinstance(rule.get("threshold_percent"), (int, float))
+        or not isinstance(rule.get("spend_basis"), str)
+        for rule in threshold_rules
+    ):
+        raise PlanPolicyError("billing budget thresholds are malformed")
+    if sorted(
+        (rule["threshold_percent"], rule["spend_basis"])
+        for rule in threshold_rules
+    ) != [(value, "CURRENT_SPEND") for value in expected_thresholds]:
+        raise PlanPolicyError("billing budget thresholds changed")
+
+    updates = _single_block(state, "all_updates_rule")
+    recipients = updates.get("enable_project_level_recipients")
+    allowed_recipients = {True, False} if allow_project_recipients_disabled else {True}
+    if (
+        recipients not in allowed_recipients
+        or updates.get("disable_default_iam_recipients") is not False
+        or updates.get("monitoring_notification_channels") != []
+        or updates.get("pubsub_topic")
+        != f"projects/{expected_project_id}/topics/gole-billing-budget"
+        or updates.get("schema_version") != "1.0"
+    ):
+        raise PlanPolicyError("billing budget notification route changed")
+
+
 def validate_existing_plan(
     plan: dict[str, Any], *, expected_static_ip_name: str, expected_static_ip: str,
-    expected_project_id: str, expected_startup_script_sha256: str
+    expected_project_id: str, expected_project_number: str,
+    expected_billing_account_id: str, expected_budget_id: str,
+    expected_budget_amount_krw: str, expected_startup_script_sha256: str
 ) -> None:
     resources = _resource_changes(plan)
 
@@ -375,6 +725,8 @@ def validate_existing_plan(
                 not isinstance(before, dict)
                 or before.get("role") != "roles/publicca.externalAccountKeyCreator"
                 or before.get("member") != f"serviceAccount:{runtime_email}"
+                or before.get("project") != expected_project_id
+                or before.get("condition") != []
                 or resource.get("change", {}).get("after") is not None
             ):
                 raise PlanPolicyError("GTS bootstrap privilege revocation is not exact")
@@ -383,6 +735,7 @@ def validate_existing_plan(
             raise PlanPolicyError("existing-production plan contains an unreviewed action vector")
         if "delete" in actions:
             raise PlanPolicyError("existing-production plan contains a destroy or replacement")
+        _assert_reviewed_after_unknown(resource, actions)
         if resource.get("type") == "google_secret_manager_secret_version" or resource[
             "address"
         ].startswith("google_secret_manager_secret_version."):
@@ -395,7 +748,7 @@ def validate_existing_plan(
             )
         if (
             address in REQUIRED_EXISTING_RESOURCES
-            and address != INSTANCE_RESOURCE
+            and address not in {INSTANCE_RESOURCE, SECRET_RESOURCE, BUDGET_RESOURCE}
             and actions != ["no-op"]
         ):
             raise PlanPolicyError(
@@ -403,7 +756,10 @@ def validate_existing_plan(
             )
         if address == INSTANCE_RESOURCE and actions not in (["no-op"], ["update"]):
             raise PlanPolicyError("production VM may only be unchanged or updated in place")
+        if address == SECRET_RESOURCE and actions not in (["no-op"], ["update"]):
+            raise PlanPolicyError("production Secret container may only adopt labels in place")
         _assert_top_level_field_allowlist(resource)
+        _assert_reviewed_provider_defaults(resource)
 
     try:
         address_resource = resources[ADDRESS_RESOURCE]
@@ -426,10 +782,14 @@ def validate_existing_plan(
             raise PlanPolicyError("reserved production IP would not be preserved")
         if state.get("network_tier") != "STANDARD":
             raise PlanPolicyError("reserved production address network tier would change")
+        if state.get("description") != "HE Testbed external feedback endpoint":
+            raise PlanPolicyError("reserved production address description would change")
         if state.get("region") is not None and _machine_name(state.get("region")) != "asia-northeast3":
             raise PlanPolicyError("reserved production address region would change")
 
     instance_before, instance_after = _before_after(instance_resource)
+    if instance_resource.get("change", {}).get("after_unknown") not in (None, {}):
+        raise PlanPolicyError("production VM plan contains an unresolved after value")
     if _nat_ip(instance_before) != expected_static_ip:
         raise PlanPolicyError("current instance NAT IP does not match the reserved production IP")
     if _nat_ip(instance_after) != expected_static_ip:
@@ -444,6 +804,7 @@ def validate_existing_plan(
         expected_project_id=expected_project_id,
         expected_startup_script_sha256=expected_startup_script_sha256,
     )
+    _validate_instance_transition(instance_before, instance_after)
 
     runtime_email = f"gole-production-runtime@{expected_project_id}.iam.gserviceaccount.com"
     _assert_exact_iam(
@@ -451,36 +812,55 @@ def validate_existing_plan(
         "google_secret_manager_secret_iam_member.production_env_accessor",
         role="roles/secretmanager.secretAccessor",
         member=f"serviceAccount:{runtime_email}",
+        expected_project_id=expected_project_id,
+        target_field="secret_id",
+        target_value=f"projects/{expected_project_id}/secrets/gole-production-env",
     )
     _assert_exact_iam(
         resources,
         "google_pubsub_topic_iam_member.billing_budget_publisher",
         role="roles/pubsub.publisher",
         member="serviceAccount:billing-budget-alert@system.gserviceaccount.com",
+        expected_project_id=expected_project_id,
+        target_field="topic",
+        target_value=f"projects/{expected_project_id}/topics/gole-billing-budget",
     )
     _assert_exact_iam(
         resources,
         "google_pubsub_subscription_iam_member.budget_relay_subscriber",
         role=f"projects/{expected_project_id}/roles/goleBudgetSubscriptionConsumer",
         member=f"serviceAccount:{runtime_email}",
+        expected_project_id=expected_project_id,
+        allow_unset_project=True,
+        target_field="subscription",
+        target_value=(
+            f"projects/{expected_project_id}/subscriptions/"
+            "gole-billing-budget-discord"
+        ),
     )
     _assert_exact_iam(
         resources,
         "google_project_iam_member.operator_os_admin",
         role="roles/compute.osAdminLogin",
         member="user:coldingcontact@gmail.com",
+        expected_project_id=expected_project_id,
     )
     _assert_exact_iam(
         resources,
         "google_project_iam_member.operator_iap_tunnel",
         role="roles/iap.tunnelResourceAccessor",
         member="user:coldingcontact@gmail.com",
+        expected_project_id=expected_project_id,
     )
     _assert_exact_iam(
         resources,
         "google_service_account_iam_member.operator_service_account_user",
         role="roles/iam.serviceAccountUser",
         member="user:coldingcontact@gmail.com",
+        target_field="service_account_id",
+        target_value=(
+            f"projects/{expected_project_id}/serviceAccounts/{runtime_email}"
+        ),
     )
 
     _assert_firewall(
@@ -490,6 +870,7 @@ def validate_existing_plan(
         priority=1000,
         source_ranges=["0.0.0.0/0"],
         target_tags=["gole-web"],
+        description="GoLe public HTTP and HTTPS",
         allow=[{"ports": ["80", "443"], "protocol": "tcp"}],
     )
     _assert_firewall(
@@ -499,6 +880,7 @@ def validate_existing_plan(
         priority=800,
         source_ranges=["35.235.240.0/20"],
         target_tags=["gole-ssh-iap"],
+        description="SSH through Google IAP only",
         allow=[{"ports": ["22"], "protocol": "tcp"}],
     )
     _assert_firewall(
@@ -508,11 +890,13 @@ def validate_existing_plan(
         priority=900,
         source_ranges=["0.0.0.0/0"],
         target_tags=["gole-ssh-iap"],
+        description="",
         deny=[{"ports": ["22", "3389"], "protocol": "tcp"}],
     )
 
     expected_services = {
         "google_project_service.compute": "compute.googleapis.com",
+        "google_project_service.resource_manager": "cloudresourcemanager.googleapis.com",
         "google_project_service.pubsub": "pubsub.googleapis.com",
         "google_project_service.billing_budgets": "billingbudgets.googleapis.com",
         "google_project_service.public_ca": "publicca.googleapis.com",
@@ -521,9 +905,11 @@ def validate_existing_plan(
     }
     for resource_address, service in expected_services.items():
         after = resources[resource_address].get("change", {}).get("after")
-        if not isinstance(after, dict) or after.get("service") != service or after.get(
-            "disable_on_destroy"
-        ) is not False:
+        if (
+            not isinstance(after, dict)
+            or after.get("service") != service
+            or after.get("disable_on_destroy") not in (None, False)
+        ):
             raise PlanPolicyError("Google API lifecycle policy changed")
 
     runtime_account = resources["google_service_account.production_runtime"].get(
@@ -534,11 +920,32 @@ def validate_existing_plan(
         or runtime_account.get("email") != runtime_email
     ):
         raise PlanPolicyError("production runtime service account identity changed")
-    secret = resources["google_secret_manager_secret.production_env"].get("change", {}).get(
-        "after"
-    )
-    if not isinstance(secret, dict) or secret.get("secret_id") != "gole-production-env":
+    secret_change = resources[SECRET_RESOURCE].get("change", {})
+    secret_before = secret_change.get("before")
+    secret = secret_change.get("after")
+    if (
+        not isinstance(secret_before, dict)
+        or not isinstance(secret, dict)
+        or secret.get("secret_id") != "gole-production-env"
+        or secret.get("project") != expected_project_id
+        or secret.get("labels")
+        != {"environment": "production", "managed-by": "kscold-control"}
+        or secret.get("effective_labels")
+        != {"environment": "production", "managed-by": "kscold-control"}
+        or secret.get("replication")
+        != [{"auto": [{"customer_managed_encryption": []}], "user_managed": []}]
+        or secret.get("expire_time") not in (None, "")
+        or secret.get("ttl") not in (None, "")
+        or secret.get("rotation") != []
+        or secret.get("topics") != []
+        or secret.get("version_aliases") != {}
+    ):
         raise PlanPolicyError("production Secret Manager container changed")
+    normalized_secret_before = dict(secret_before)
+    normalized_secret_before["labels"] = secret["labels"]
+    normalized_secret_before["terraform_labels"] = secret.get("terraform_labels")
+    if normalized_secret_before != secret:
+        raise PlanPolicyError("production Secret container update is not label adoption only")
 
     expected_custom_roles = {
         "google_project_iam_custom_role.budget_subscription_consumer": (
@@ -571,12 +978,42 @@ def validate_existing_plan(
     ):
         raise PlanPolicyError("billing Pub/Sub subscription changed")
 
+    if BUDGET_RESOURCE in resources:
+        budget_before, budget_after = _before_after(resources[BUDGET_RESOURCE])
+        _validate_budget_state(
+            budget_before,
+            expected_project_id=expected_project_id,
+            expected_project_number=expected_project_number,
+            expected_billing_account_id=expected_billing_account_id,
+            expected_budget_id=expected_budget_id,
+            expected_budget_amount_krw=expected_budget_amount_krw,
+            allow_project_recipients_disabled=True,
+        )
+        _validate_budget_state(
+            budget_after,
+            expected_project_id=expected_project_id,
+            expected_project_number=expected_project_number,
+            expected_billing_account_id=expected_billing_account_id,
+            expected_budget_id=expected_budget_id,
+            expected_budget_amount_krw=expected_budget_amount_krw,
+            allow_project_recipients_disabled=False,
+        )
+        normalized_budget_before = json.loads(json.dumps(budget_before))
+        _single_block(normalized_budget_before, "all_updates_rule")[
+            "enable_project_level_recipients"
+        ] = True
+        if normalized_budget_before != budget_after:
+            raise PlanPolicyError(
+                "billing budget update changes more than project-level recipients"
+            )
+
     if GTS_RESOURCE in resources and _actions(resources[GTS_RESOURCE]) != ["delete"]:
         _assert_exact_iam(
             resources,
             GTS_RESOURCE,
             role="roles/publicca.externalAccountKeyCreator",
             member=f"serviceAccount:{runtime_email}",
+            expected_project_id=expected_project_id,
         )
 
     snapshot_actions = _actions(snapshot_resource)
@@ -587,10 +1024,22 @@ def validate_existing_plan(
     attachment_after = snapshot_attachment.get("change", {}).get("after")
     if not isinstance(snapshot_after, dict) or not isinstance(attachment_after, dict):
         raise PlanPolicyError("snapshot policy/attachment is absent after apply")
-    if snapshot_after.get("name") != "gole-production-daily-snapshots":
-        raise PlanPolicyError("unexpected production snapshot policy name")
-    if snapshot_after.get("instance_schedule_policy") not in (None, []):
-        raise PlanPolicyError("snapshot resource must not contain an instance schedule")
+    if (
+        snapshot_after.get("name") != "gole-production-daily-snapshots"
+        or snapshot_after.get("project") != expected_project_id
+        or _machine_name(snapshot_after.get("region")) != "asia-northeast3"
+        or snapshot_after.get("description")
+        != "Daily three-day recovery points for the GoLe production boot disk"
+    ):
+        raise PlanPolicyError("unexpected production snapshot policy identity")
+    for policy_type in (
+        "disk_consistency_group_policy",
+        "group_placement_policy",
+        "instance_schedule_policy",
+        "workload_policy",
+    ):
+        if snapshot_after.get(policy_type) not in (None, []):
+            raise PlanPolicyError("snapshot resource contains an unreviewed policy type")
     policy = _single_block(snapshot_after, "snapshot_schedule_policy")
     schedule = _single_block(policy, "schedule")
     daily = _single_block(schedule, "daily_schedule")
@@ -607,6 +1056,8 @@ def validate_existing_plan(
         "storage_locations"
     ) != ["asia-northeast3"]:
         raise PlanPolicyError("snapshot consistency/location policy changed")
+    if properties.get("chain_name") not in (None, ""):
+        raise PlanPolicyError("snapshot chain policy changed")
     if properties.get("labels") != {
         "app": "gole",
         "environment": "production",
@@ -616,6 +1067,8 @@ def validate_existing_plan(
         raise PlanPolicyError("snapshot labels changed")
     if attachment_after.get("name") != "gole-production-daily-snapshots":
         raise PlanPolicyError("boot disk snapshot attachment uses an unexpected policy")
+    if attachment_after.get("project") != expected_project_id:
+        raise PlanPolicyError("snapshot attachment project changed")
     if attachment_after.get("disk") != "gole-production":
         raise PlanPolicyError("snapshot policy is not attached to the production boot disk")
     if _machine_name(attachment_after.get("zone")) != "asia-northeast3-a":
@@ -628,6 +1081,10 @@ def main() -> int:
     parser.add_argument("--expected-static-ip-name", required=True)
     parser.add_argument("--expected-static-ip", required=True)
     parser.add_argument("--expected-project-id", required=True)
+    parser.add_argument("--expected-project-number", required=True)
+    parser.add_argument("--expected-billing-account-id", required=True)
+    parser.add_argument("--expected-budget-id", required=True)
+    parser.add_argument("--expected-budget-amount-krw", required=True)
     parser.add_argument("--expected-startup-script-sha256", required=True)
     args = parser.parse_args()
 
@@ -640,6 +1097,10 @@ def main() -> int:
             expected_static_ip_name=args.expected_static_ip_name,
             expected_static_ip=args.expected_static_ip,
             expected_project_id=args.expected_project_id,
+            expected_project_number=args.expected_project_number,
+            expected_billing_account_id=args.expected_billing_account_id,
+            expected_budget_id=args.expected_budget_id,
+            expected_budget_amount_krw=args.expected_budget_amount_krw,
             expected_startup_script_sha256=args.expected_startup_script_sha256,
         )
     except (json.JSONDecodeError, PlanPolicyError) as exc:

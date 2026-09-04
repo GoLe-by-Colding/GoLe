@@ -43,7 +43,8 @@ Nginx/frontend/budget-relay는 `edge`, backend만 `edge`와 `data`를 연결한�
 Terraform state는 local 파일이나 git에 보관하지 않고 partial GCS backend를 사용한다. bucket은
 backend 자신의 state로 만들 수 없으므로 아래 별도 bootstrap을 먼저 실행한다. bucket 이름과
 prefix는 계정에 종속되지 않게 실행 시 주입하고, 자격증명은 `-backend-config`에 넣지 않고 gcloud
-ADC를 사용한다. GCS backend는 state locking을 지원한다.
+ADC 또는 아래처럼 이미 로그인된 운영 계정의 단기 access token을 사용한다. GCS backend는
+state locking을 지원한다.
 
 ```bash
 PROJECT_ID=project-72a52bf1-06aa-4519-b2c
@@ -58,6 +59,16 @@ bash infra/gcp/scripts/bootstrap-terraform-state.sh \
 bash infra/gcp/scripts/bootstrap-terraform-state.sh \
   --project "$PROJECT_ID" --bucket "$STATE_BUCKET" \
   --terraform-principal "$TERRAFORM_PRINCIPAL" --apply
+```
+
+로컬 ADC가 다른 Google 계정이면 기존 파일을 덮어쓰지 말고, Terraform 실행 셸에만 운영
+계정의 단기 token과 quota project를 주입한다. token은 출력·파일 저장하지 않고 만료되면
+같은 명령으로 다시 발급한다.
+
+```bash
+export GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token \
+  --account=coldingcontact@gmail.com)"
+export GOOGLE_CLOUD_QUOTA_PROJECT="$PROJECT_ID"
 ```
 
 bootstrap은 bucket이 다른 project/location이면 변경 전에 거부한다. Standard regional storage,
@@ -128,6 +139,7 @@ project/region/zone/name까지 확인한 뒤 대응 Terraform address에 먼저 
 
 ```bash
 PROJECT_ID=project-72a52bf1-06aa-4519-b2c
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 REGION=asia-northeast3
 ZONE=asia-northeast3-a
 INSTANCE=gole-production
@@ -135,6 +147,7 @@ STATIC_IP_NAME=he-testbed-feedback-ip
 STATIC_IP_ADDRESS=35.216.80.123
 BILLING_ACCOUNT_ID=01B490-1BC53A-33E611
 BUDGET_ID=b645c912-d766-43fc-8923-bff70ecfe8d8
+BUDGET_AMOUNT_KRW=370000
 RUNTIME_EMAIL="gole-production-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
 set -Eeuo pipefail
 
@@ -178,6 +191,10 @@ PY
     --expected-static-ip-name "$STATIC_IP_NAME" \
     --expected-static-ip "$STATIC_IP_ADDRESS" \
     --expected-project-id "$PROJECT_ID" \
+    --expected-project-number "$PROJECT_NUMBER" \
+    --expected-billing-account-id "$BILLING_ACCOUNT_ID" \
+    --expected-budget-id "$BUDGET_ID" \
+    --expected-budget-amount-krw "$BUDGET_AMOUNT_KRW" \
     --expected-startup-script-sha256 "$expected_startup_sha256" < "$plan_json"
   rm -f -- "$plan_json" "$startup_review"
   unset expected_startup_sha256 _reviewed
@@ -209,6 +226,7 @@ while read -r terraform_name service_name; do
     "${PROJECT_ID}/${service_name}.googleapis.com"
 done <<'SERVICES'
 compute compute
+resource_manager cloudresourcemanager
 pubsub pubsub
 billing_budgets billingbudgets
 public_ca publicca

@@ -58,7 +58,7 @@ cleanup() {
 trap cleanup EXIT
 
 bucket_uri="gs://${BUCKET_NAME}"
-if gcloud storage buckets describe "$bucket_uri" --format=json > "$work_dir/metadata.json" 2>/dev/null; then
+if gcloud storage buckets describe "$bucket_uri" --raw --format=json > "$work_dir/metadata.json" 2>/dev/null; then
   exists=true
   python3 "$ROOT/scripts/verify-terraform-state-bucket.py" \
     "$work_dir/metadata.json" \
@@ -109,7 +109,7 @@ gcloud storage buckets add-iam-policy-binding "$bucket_uri" \
   --member="$TERRAFORM_PRINCIPAL" \
   --role=roles/storage.objectAdmin >/dev/null
 
-gcloud storage buckets describe "$bucket_uri" --format=json > "$work_dir/metadata.json"
+gcloud storage buckets describe "$bucket_uri" --raw --format=json > "$work_dir/metadata.json"
 gcloud storage buckets get-iam-policy "$bucket_uri" --format=json > "$work_dir/iam.json"
 python3 "$ROOT/scripts/verify-terraform-state-bucket.py" \
   "$work_dir/metadata.json" "$work_dir/iam.json" \
