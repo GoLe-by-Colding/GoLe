@@ -245,6 +245,9 @@ jobs:
             exit 1
           fi
 
+      - name: Secret Sync log security contract
+        run: bash scripts/__tests__/secret-sync-security.test.sh
+
       - name: Docker Compose config
         env:
           GOLE_INFRA_ENV_FILE: ${{ github.workspace }}/infra/gcp/gole.env.example

@@ -34,7 +34,11 @@ on_deploy_exit() {
   local status=$?
   if [ "$status" -ne 0 ]; then
     "${COMPOSE[@]}" ps || true
-    "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
+    if [ -n "${SECRET_SYNC_REQUEST_ID:-}" ]; then
+      echo "Secret Sync 실패 로그는 민감정보 보호를 위해 Actions에 출력하지 않습니다." >&2
+    else
+      "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
+    fi
     notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
     if [ "$TARGET" = "all" ]; then
       notify_discord "🛑 전체 배포가 실패해 새 비용 가드 무장을 보장할 수 없으므로 GCP VM을 안전 정지합니다 · gole.co.kr"

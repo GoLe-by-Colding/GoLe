@@ -9,6 +9,7 @@
 #   2. readiness 실패(명시적 exit 1)      → "배포 실패" 알림 정확히 1건
 #   3. 정상 배포                            → "완료" 알림 1건 · "실패" 알림 0건
 #   4. DISCORD_SUPPRESS_NOTIFICATIONS=false → payload에 무음 플래그(4096) 없음
+#   5. Secret Sync 실패                     → 컨테이너 로그를 Actions 출력에서 차단
 #
 # 실제 저장소를 건드리지 않도록 매 케이스마다 임시 디렉터리에 가짜 repo를 만들고
 # git·pnpm·pm2·curl·sleep 를 PATH 스텁으로 대체한다.
@@ -38,6 +39,7 @@ run_deploy() {
 #!/usr/bin/env bash
 for arg in "\$@"; do
   if [ "\$arg" = "build" ]; then exit ${DOCKER_BUILD_EXIT:-0}; fi
+  if [ "\$arg" = "logs" ]; then printf '%s\n' '${DOCKER_LOG_SENTINEL:-}'; exit 0; fi
 done
 exit 0
 DOCKER
@@ -77,16 +79,22 @@ CURL
   PATH="$bin:$PATH" \
   DISCORD_DEPLOY_WEBHOOK_URL="$FAKE_WEBHOOK" \
   DISCORD_SUPPRESS_NOTIFICATIONS="${SUPPRESS:-true}" \
+  SECRET_SYNC_REQUEST_ID="${SECRET_SYNC_REQUEST_ID:-}" \
     bash "$sandbox/scripts/deploy.sh" "$target" >"$sandbox/stdout.txt" 2>&1
   DEPLOY_STATUS=$?
   set -e
   SENT="$(cat "$CAPTURE")"
+  OUTPUT="$(cat "$sandbox/stdout.txt")"
   SANDBOX="$sandbox"
 }
 
 count_matching() {
   # grep -c 는 0건일 때 1을 반환하므로 파이프로 세어 산술 비교를 안전하게 한다.
   printf '%s\n' "$SENT" | grep -F -- "$1" | grep -c . || true
+}
+
+count_output_matching() {
+  printf '%s\n' "$OUTPUT" | grep -F -- "$1" | grep -c . || true
 }
 
 expect_eq() {
@@ -123,6 +131,15 @@ DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=true run_deploy backend
 expect_eq "suppress=true 이면 flags:4096 포함" 2 "$(count_matching '"flags":4096')"
 DOCKER_BUILD_EXIT=0 FAIL_URL_SUBSTR="" SUPPRESS=false run_deploy backend
 expect_eq "suppress=false 이면 flags 없음" 0 "$(count_matching '"flags":4096')"
+
+printf '\n[5] Secret Sync 실패 → 컨테이너 로그를 출력하지 않음\n'
+DOCKER_BUILD_EXIT=1 \
+  FAIL_URL_SUBSTR="" \
+  DOCKER_LOG_SENTINEL="SECRET_VALUE_MUST_NOT_APPEAR" \
+  SECRET_SYNC_REQUEST_ID="00000000-0000-4000-8000-000000000000" \
+  run_deploy backend
+expect_eq "민감 로그 표식 미출력" 0 "$(count_output_matching 'SECRET_VALUE_MUST_NOT_APPEAR')"
+expect_eq "보안 생략 안내 출력" 1 "$(count_output_matching '민감정보 보호를 위해 Actions에 출력하지 않습니다')"
 
 printf '\n'
 if [ "$failures" -eq 0 ]; then
