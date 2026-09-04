@@ -35,10 +35,12 @@ METADATA_MACHINE_TYPE_URL = (
 PUBSUB_ROOT = "https://pubsub.googleapis.com/v1"
 CONFIG_PATH = pathlib.Path("/etc/gole/cloud-broker.conf")
 SOCKET_PATH = pathlib.Path("/run/gole-cloud-broker/broker.sock")
+POLICY_HEARTBEAT_PATH = pathlib.Path("/run/gole-cloud-broker/policy-heartbeat")
 STATE_PATH = pathlib.Path("/var/lib/gole-cloud-broker/state.json")
 TX_BYTES_PATH = pathlib.Path("/sys/class/net/ens4/statistics/tx_bytes")
-APP_ENV_PATH = pathlib.Path("/etc/gole/gole.env")
+DISCORD_ENV_PATH = pathlib.Path("/etc/gole/discord.env")
 MAX_REQUEST = 131072
+PROTOCOL_VERSION = 1
 GIB = Decimal(1024**3)
 DEADLINE_ALERT_DAYS = (14, 7, 3, 1)
 DEADLINE_ALERT_KEYS = frozenset({*(f"d-{day}" for day in DEADLINE_ALERT_DAYS), "expired"})
@@ -399,15 +401,15 @@ class Cloud:
 
     @staticmethod
     def _operations_webhook_url() -> str:
-        if APP_ENV_PATH.is_symlink() or not APP_ENV_PATH.is_file():
+        if DISCORD_ENV_PATH.is_symlink() or not DISCORD_ENV_PATH.is_file():
             raise BrokerError("operations notification configuration is missing")
-        metadata = APP_ENV_PATH.stat()
+        metadata = DISCORD_ENV_PATH.stat()
         if metadata.st_uid != 0 or metadata.st_gid != 0 or metadata.st_mode & 0o077:
             raise BrokerError("operations notification configuration is not root-only")
         matches: list[str] = []
         try:
-            for line in APP_ENV_PATH.read_text(encoding="utf-8").splitlines():
-                if line.startswith("GOLE_DISCORD_OPERATIONS_WEBHOOK_URL="):
+            for line in DISCORD_ENV_PATH.read_text(encoding="utf-8").splitlines():
+                if line.startswith("DISCORD_OPERATIONS_WEBHOOK_URL="):
                     matches.append(line.split("=", 1)[1])
         except OSError as exc:
             raise BrokerError("operations notification configuration is unreadable") from exc
@@ -551,6 +553,12 @@ class Cloud:
     def handle(self, request: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             operation = request.get("operation")
+            if operation == "readiness" and set(request) == {"operation"}:
+                # This fixed, side-effect-free exchange lets systemd prove that
+                # the process serving the Unix socket understands the newly
+                # installed protocol.  In particular, a bootstrap upgrade must
+                # not accept the stale process left alive by `enable --now`.
+                return {"ready": True, "protocol_version": PROTOCOL_VERSION}
             if operation == "pull" and set(request) == {"operation", "max_messages"}:
                 maximum = request["max_messages"]
                 if not isinstance(maximum, int) or not 1 <= maximum <= 20:
@@ -655,6 +663,22 @@ class Server(socketserver.ThreadingUnixStreamServer):
         os.chmod(SOCKET_PATH, 0o660)
 
 
+def enforce_policy_and_write_heartbeat(cloud: Cloud) -> None:
+    """Publish liveness only after one complete root policy evaluation."""
+    cloud.enforce_host_policy()
+    descriptor = os.open(
+        POLICY_HEARTBEAT_PATH,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+        os.write(descriptor, b"ok\n")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def main() -> int:
     policy = Policy(parse_config())
     server = Server(Cloud(policy))
@@ -663,13 +687,17 @@ def main() -> int:
     def policy_loop() -> None:
         # This loop is the trusted hard-stop boundary. The unprivileged relay
         # may be compromised or wedged and is not required to request a stop.
-        while not policy_stop.wait(10):
+        # A root-only heartbeat lets the independent watchdog prove this loop,
+        # rather than merely the container, is still enforcing the policy.
+        while not policy_stop.is_set():
             try:
-                server.cloud.enforce_host_policy()
+                enforce_policy_and_write_heartbeat(server.cloud)
             except (BrokerError, OSError, subprocess.SubprocessError):
                 # systemd restarts a failed broker; the separate host watchdog
                 # also powers off if this trusted service becomes unavailable.
                 os._exit(1)
+            if policy_stop.wait(10):
+                return
 
     policy_thread = threading.Thread(target=policy_loop, name="host-cost-policy", daemon=True)
     policy_thread.start()

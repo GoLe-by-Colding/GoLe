@@ -5,9 +5,19 @@ set -Eeuo pipefail
 # registration so security fixes are not blocked by the image bootstrap cadence.
 RUNNER_VERSION="2.337.0"
 RUNNER_SHA256_X64="70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613"
-RUNNER_ROOT="/opt/actions-runner"
+# Keep the dedicated account's runner separate from the one-time legacy
+# human-account installation at /opt/actions-runner. The legacy directory is
+# retained as a root-inaccessible forensic artifact after its unit is retired;
+# sharing the path would either trust its credentials or make registration
+# fail before GitHub's same-name --replace can run.
+RUNNER_ROOT="/opt/gole-actions-runner"
 RUNNER_SERVICE="gole-github-runner.service"
 RUNNER_SERVICE_FILE="/etc/systemd/system/$RUNNER_SERVICE"
+LEGACY_RUNNER_SERVICE="actions.runner.GoLe-by-Colding-GoLe.gole-gcp-production.service"
+LEGACY_RUNNER_SERVICE_FILE="/etc/systemd/system/$LEGACY_RUNNER_SERVICE"
+LEGACY_RUNNER_RETIRED_UNIT="/etc/gole/legacy-runner.service.retired"
+LEGACY_RUNNER_ROOT="/opt/actions-runner"
+LEGACY_RUNNER_UNIT_SHA256="06b078f9895218dbf279b2f5abbd18db6acd024e26572461a445130708fd4349"
 DEPLOY_IDENTITY_FILE="/etc/gole/deploy-user"
 RUNNER_BOOTSTRAP_FILE="/etc/gole/github-runner-bootstrap.conf"
 RUNNER_REGISTRATION_FILE="/etc/gole/github-runner-registration.conf"
@@ -44,7 +54,7 @@ IFS=: read -r DEPLOY_USER DEPLOY_GROUP < "$DEPLOY_IDENTITY_FILE"
 REPOSITORY_URL=""
 RUNNER_NAME=""
 RUNNER_LABELS=""
-while IFS='=' read -r key value; do
+while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
   case "$key" in
     repository_url) REPOSITORY_URL="$value" ;;
     runner_name) RUNNER_NAME="$value" ;;
@@ -80,15 +90,18 @@ ensure_runner_service() {
   cat > "$unit_candidate" <<EOF
 [Unit]
 Description=GoLe repository-scoped GitHub Actions runner
-After=network-online.target
+After=network-online.target gole-cloud-broker.service
 Wants=network-online.target
+Requires=gole-cloud-broker.service
+ConditionPathIsExecutable=/usr/local/libexec/gole/runner-start-allowed.sh
 
 [Service]
 User=$DEPLOY_USER
 Group=$DEPLOY_GROUP
 WorkingDirectory=$RUNNER_ROOT
+ExecCondition=/usr/local/libexec/gole/runner-start-allowed.sh
 ExecStart=$RUNNER_ROOT/runsvc.sh
-KillMode=process
+KillMode=control-group
 KillSignal=SIGINT
 TimeoutStopSec=5min
 Restart=always
@@ -107,45 +120,197 @@ EOF
   systemctl is-active --quiet "$RUNNER_SERVICE"
 }
 
+legacy_runner_root_state() {
+  if [ ! -e "$LEGACY_RUNNER_ROOT" ] && [ ! -L "$LEGACY_RUNNER_ROOT" ]; then
+    printf 'absent\n'
+    return
+  fi
+  [ -d "$LEGACY_RUNNER_ROOT" ] && [ ! -L "$LEGACY_RUNNER_ROOT" ] &&
+    ! mountpoint -q "$LEGACY_RUNNER_ROOT" || die "legacy runner root is invalid"
+  case "$(stat -c '%U:%G:%a' "$LEGACY_RUNNER_ROOT")" in
+    kscold:kscold:755)
+      [ -f "$LEGACY_RUNNER_ROOT/.runner" ] && [ ! -L "$LEGACY_RUNNER_ROOT/.runner" ] &&
+        [ "$(stat -c '%U:%G:%a:%h' "$LEGACY_RUNNER_ROOT/.runner")" = \
+          kscold:kscold:664:1 ] || die "legacy runner registration metadata is invalid"
+      [ -f "$LEGACY_RUNNER_ROOT/runsvc.sh" ] && [ ! -L "$LEGACY_RUNNER_ROOT/runsvc.sh" ] &&
+        [ -x "$LEGACY_RUNNER_ROOT/runsvc.sh" ] &&
+        [ "$(stat -c '%U:%G:%a:%h' "$LEGACY_RUNNER_ROOT/runsvc.sh")" = \
+          kscold:kscold:755:1 ] || die "legacy runner service command metadata is invalid"
+      printf 'unsealed\n'
+      ;;
+    root:root:700)
+      [ -f "$LEGACY_RUNNER_ROOT/.runner" ] && [ ! -L "$LEGACY_RUNNER_ROOT/.runner" ] ||
+        die "sealed legacy runner registration is invalid"
+      if find "$LEGACY_RUNNER_ROOT" -xdev \
+        \( ! -user root -o ! -group root -o -perm /0077 \) -print -quit | grep -q .; then
+        die "sealed legacy runner root is readable or not root-owned"
+      fi
+      printf 'sealed\n'
+      ;;
+    *) die "legacy runner root ownership or permissions are invalid" ;;
+  esac
+}
+
+verify_legacy_runner_cgroup_empty() {
+  local cgroup control_group
+  control_group="$(systemctl show --property=ControlGroup --value \
+    "$LEGACY_RUNNER_SERVICE")" || die "legacy runner control group cannot be read"
+  [ -n "$control_group" ] || return 0
+  [[ "$control_group" =~ ^/[A-Za-z0-9_.@:/-]+$ ]] &&
+    [[ "$control_group" != *..* ]] && [ "$control_group" != / ] ||
+    die "legacy runner control group is invalid"
+  cgroup="/sys/fs/cgroup${control_group}"
+  [ ! -e "$cgroup" ] && return 0
+  [ -d "$cgroup" ] && [ ! -L "$cgroup" ] && [ -r "$cgroup/cgroup.procs" ] ||
+    die "legacy runner control group cannot be verified"
+  [ -z "$(cat "$cgroup/cgroup.procs")" ] ||
+    die "legacy runner child processes remain"
+}
+
+validate_retired_legacy_runner_unit() {
+  local metadata
+  [ -f "$LEGACY_RUNNER_RETIRED_UNIT" ] && [ ! -L "$LEGACY_RUNNER_RETIRED_UNIT" ] &&
+    [ "$(sha256sum "$LEGACY_RUNNER_RETIRED_UNIT" | cut -d' ' -f1)" = \
+      "$LEGACY_RUNNER_UNIT_SHA256" ] || die "retired legacy runner unit is invalid"
+  metadata="$(stat -c '%U:%G:%a:%h' "$LEGACY_RUNNER_RETIRED_UNIT")"
+  case "$metadata" in
+    root:root:600:1) ;;
+    # An interruption immediately after the same-filesystem rename may retain
+    # the reviewed unit's old 0664 mode. Only its exact hash/identity reaches
+    # this normalization path; no foreign retirement artifact is adopted.
+    root:root:664:1)
+      chmod 0600 "$LEGACY_RUNNER_RETIRED_UNIT"
+      sync -f "$LEGACY_RUNNER_RETIRED_UNIT"
+      sync -f /etc/gole
+      ;;
+    *) die "retired legacy runner unit metadata is invalid" ;;
+  esac
+  [ "$(stat -c '%U:%G:%a:%h' "$LEGACY_RUNNER_RETIRED_UNIT")" = root:root:600:1 ] ||
+    die "retired legacy runner unit could not be sealed"
+}
+
 retire_nonstandard_runner_services() {
-  local existing_user exec_start legacy_root resolved_root runner_service runner_service_file
-  for runner_service_file in /etc/systemd/system/actions.runner.*.service; do
-    [ -e "$runner_service_file" ] || continue
-    runner_service="$(basename "$runner_service_file")"
-    if [ -L "$runner_service_file" ] || [ ! -f "$runner_service_file" ]; then
-      die "legacy runner service file is invalid"
+  local active_state group root_state unit_state
+  local -a legacy_units=()
+  shopt -s nullglob
+  legacy_units=(/etc/systemd/system/actions.runner.*.service)
+  shopt -u nullglob
+  [ "${#legacy_units[@]}" -le 1 ] || die "unexpected legacy runner services remain"
+
+  if [ -e "$LEGACY_RUNNER_RETIRED_UNIT" ] || [ -L "$LEGACY_RUNNER_RETIRED_UNIT" ]; then
+    validate_retired_legacy_runner_unit
+  fi
+
+  root_state="$(legacy_runner_root_state)"
+  if [ "${#legacy_units[@]}" -eq 0 ]; then
+    if [ "$root_state" = unsealed ] &&
+      [ ! -e "$LEGACY_RUNNER_RETIRED_UNIT" ] &&
+      [ ! -L "$LEGACY_RUNNER_RETIRED_UNIT" ]; then
+      die "unsealed legacy runner root has no reviewed retired unit"
     fi
-    existing_user="$(systemctl show -p User --value "$runner_service" 2>/dev/null || true)"
-    if [ -z "$existing_user" ] || [ "$existing_user" = root ]; then
-      die "legacy runner service identity is unsafe"
-    fi
-    exec_start="$(sed -n 's/^ExecStart=//p' "$runner_service_file")"
-    [[ "$exec_start" =~ ^(/home/[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+|/opt/[A-Za-z0-9._/-]+)/runsvc\.sh$ ]] ||
-      die "legacy runner service command is outside an allowed runner directory"
-    legacy_root="${exec_start%/runsvc.sh}"
-    resolved_root="$(readlink -f -- "$legacy_root")"
-    if [ "$resolved_root" != "$legacy_root" ] || [ -L "$legacy_root" ]; then
-      die "legacy runner service ownership cannot be verified"
-    fi
-    systemctl disable --now "$runner_service"
-    rm -f -- "$runner_service_file"
-    [ ! -e "$runner_service_file" ] || die "legacy runner service was not retired"
-  done
+    return
+  fi
+  [ "${legacy_units[0]}" = "$LEGACY_RUNNER_SERVICE_FILE" ] ||
+    die "unexpected legacy runner service remains"
+  [ "$root_state" = unsealed ] || die "legacy runner service does not match its root"
+  [ -f "$LEGACY_RUNNER_SERVICE_FILE" ] && [ ! -L "$LEGACY_RUNNER_SERVICE_FILE" ] &&
+    [ "$(stat -c '%U:%G:%a:%h' "$LEGACY_RUNNER_SERVICE_FILE")" = root:root:664:1 ] &&
+    [ "$(sha256sum "$LEGACY_RUNNER_SERVICE_FILE" | cut -d' ' -f1)" = \
+      "$LEGACY_RUNNER_UNIT_SHA256" ] || die "legacy runner service file is not the reviewed live unit"
+  grep -Fqx 'ExecStart=/opt/actions-runner/runsvc.sh' "$LEGACY_RUNNER_SERVICE_FILE" &&
+    grep -Fqx 'User=kscold' "$LEGACY_RUNNER_SERVICE_FILE" &&
+    grep -Fqx 'WorkingDirectory=/opt/actions-runner' "$LEGACY_RUNNER_SERVICE_FILE" ||
+    die "legacy runner service fields changed"
+  [ "$(systemctl show --property=User --value "$LEGACY_RUNNER_SERVICE")" = kscold ] ||
+    die "legacy runner service user changed"
+  group="$(systemctl show --property=Group --value "$LEGACY_RUNNER_SERVICE")"
+  [ -z "$group" ] || die "legacy runner service group changed"
+  [ "$(systemctl show --property=WorkingDirectory --value "$LEGACY_RUNNER_SERVICE")" = \
+    "$LEGACY_RUNNER_ROOT" ] || die "legacy runner working directory changed"
+  active_state="$(systemctl show --property=ActiveState --value "$LEGACY_RUNNER_SERVICE")"
+  unit_state="$(systemctl show --property=UnitFileState --value "$LEGACY_RUNNER_SERVICE")"
+  [ "$active_state" = inactive ] && [ "$unit_state" = disabled ] ||
+    die "legacy runner service is not quiescent"
+  verify_legacy_runner_cgroup_empty
+  systemctl disable --now "$LEGACY_RUNNER_SERVICE"
+  [ "$(systemctl show --property=ActiveState --value "$LEGACY_RUNNER_SERVICE")" = inactive ] &&
+    [ "$(systemctl show --property=UnitFileState --value "$LEGACY_RUNNER_SERVICE")" = disabled ] ||
+    die "legacy runner service did not remain quiescent"
+  verify_legacy_runner_cgroup_empty
+  [ ! -e "$LEGACY_RUNNER_RETIRED_UNIT" ] && [ ! -L "$LEGACY_RUNNER_RETIRED_UNIT" ] ||
+    die "retired legacy runner unit already exists"
+  mv -- "$LEGACY_RUNNER_SERVICE_FILE" "$LEGACY_RUNNER_RETIRED_UNIT"
+  chown root:root "$LEGACY_RUNNER_RETIRED_UNIT"
+  chmod 0600 "$LEGACY_RUNNER_RETIRED_UNIT"
+  sync -f "$LEGACY_RUNNER_RETIRED_UNIT"
+  sync -f /etc/gole
+  sync -f /etc/systemd/system
+  validate_retired_legacy_runner_unit
+  [ ! -e "$LEGACY_RUNNER_SERVICE_FILE" ] && [ ! -L "$LEGACY_RUNNER_SERVICE_FILE" ] ||
+    die "legacy runner service was not retired"
   systemctl daemon-reload
 }
 
+seal_legacy_runner_root() {
+  local root_state
+  root_state="$(legacy_runner_root_state)"
+  case "$root_state" in
+    absent|sealed) return ;;
+    unsealed) ;;
+    *) die "legacy runner root state is invalid" ;;
+  esac
+  chown -R root:root -- "$LEGACY_RUNNER_ROOT"
+  chmod -R go-rwx -- "$LEGACY_RUNNER_ROOT"
+  chmod 0700 "$LEGACY_RUNNER_ROOT"
+  sync -f "$LEGACY_RUNNER_ROOT"
+  [ "$(legacy_runner_root_state)" = sealed ] ||
+    die "legacy runner root could not be sealed"
+}
+
+runner_registration_marker_is_valid() {
+  local initial_version="" key marker_labels="" marker_name="" marker_repository="" value
+  local seen_initial=false seen_labels=false seen_name=false seen_repository=false
+  [ -f "$RUNNER_REGISTRATION_FILE" ] && [ ! -L "$RUNNER_REGISTRATION_FILE" ] &&
+    [ "$(stat -c '%U:%G:%a:%h' "$RUNNER_REGISTRATION_FILE")" = root:root:644:1 ] ||
+    return 1
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
+    case "$key" in
+      repository_url)
+        [ "$seen_repository" = false ] || return 1
+        seen_repository=true
+        marker_repository="$value"
+        ;;
+      runner_name)
+        [ "$seen_name" = false ] || return 1
+        seen_name=true
+        marker_name="$value"
+        ;;
+      runner_labels)
+        [ "$seen_labels" = false ] || return 1
+        seen_labels=true
+        marker_labels="$value"
+        ;;
+      initial_runner_version)
+        [ "$seen_initial" = false ] || return 1
+        seen_initial=true
+        initial_version="$value"
+        ;;
+      *) return 1 ;;
+    esac
+  done < "$RUNNER_REGISTRATION_FILE"
+  [ "$marker_repository" = "$REPOSITORY_URL" ] &&
+    [ "$marker_name" = "$RUNNER_NAME" ] &&
+    [ "$marker_labels" = "$RUNNER_LABELS" ] &&
+    [ "$initial_version" = "$RUNNER_VERSION" ]
+}
+
 if [ -f "$RUNNER_ROOT/.runner" ]; then
-  if [ ! -f "$RUNNER_REGISTRATION_FILE" ]; then
-    die "runner is configured but its non-secret registration marker is missing"
-  fi
-  if ! grep -Fqx "repository_url=$REPOSITORY_URL" "$RUNNER_REGISTRATION_FILE" ||
-    ! grep -Fqx "runner_name=$RUNNER_NAME" "$RUNNER_REGISTRATION_FILE" ||
-    ! grep -Fqx "runner_labels=$RUNNER_LABELS" "$RUNNER_REGISTRATION_FILE"; then
-    die "configured runner does not match the requested repository, name, or labels"
-  fi
+  runner_registration_marker_is_valid ||
+    die "configured runner registration marker is missing or invalid"
   retire_nonstandard_runner_services
   chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$RUNNER_ROOT"
   chmod 0750 "$RUNNER_ROOT"
+  seal_legacy_runner_root
   ensure_runner_service >/dev/null
   echo "GitHub Actions runner is already configured; ensured its service is running."
   exit 0
@@ -161,7 +326,40 @@ fi
 if IFS= read -r _extra_token_input; then
   die "stdin must contain exactly one registration token"
 fi
-trap 'RUNNER_TOKEN=""; if [ -n "${download_dir:-}" ]; then rm -rf -- "$download_dir"; fi' EXIT
+
+download_dir=""
+registration_candidate=""
+runner_root_created=false
+registration_succeeded=false
+cleanup_registration_attempt() {
+  local exit_status=$?
+  RUNNER_TOKEN=""
+  if [ -n "$download_dir" ]; then
+    rm -rf -- "$download_dir" || true
+  fi
+  if [ -n "$registration_candidate" ] && [ -f "$registration_candidate" ] &&
+    [ ! -L "$registration_candidate" ]; then
+    rm -f -- "$registration_candidate" || true
+  fi
+  if [ "$registration_succeeded" != true ] &&
+    runner_registration_marker_is_valid; then
+    registration_succeeded=true
+  fi
+  if [ "$runner_root_created" = true ] && [ "$registration_succeeded" != true ]; then
+    if [ "$RUNNER_ROOT" = /opt/gole-actions-runner ] &&
+      [ -d "$RUNNER_ROOT" ] && [ ! -L "$RUNNER_ROOT" ] &&
+      ! mountpoint -q "$RUNNER_ROOT"; then
+      # This exact path was created by this invocation from the pinned archive.
+      # A failed config must not block a retry with a fresh short-lived token.
+      rm -rf --one-file-system -- "$RUNNER_ROOT" ||
+        echo "failed to clean the unregistered dedicated runner root" >&2
+    else
+      echo "refusing to clean an unexpected dedicated runner root" >&2
+    fi
+  fi
+  return "$exit_status"
+}
+trap cleanup_registration_attempt EXIT
 
 download_dir="$(mktemp -d)"
 archive="$download_dir/actions-runner-linux-x64.tar.gz"
@@ -175,6 +373,7 @@ if [ -e "$RUNNER_ROOT" ] || [ -L "$RUNNER_ROOT" ]; then
   die "unconfigured runner root already exists; inspect it before retrying"
 fi
 install -d -m 0750 -o root -g root "$RUNNER_ROOT"
+runner_root_created=true
 tar --extract --gzip --file "$archive" --directory "$RUNNER_ROOT" --no-same-owner
 "$RUNNER_ROOT/bin/installdependencies.sh"
 chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$RUNNER_ROOT"
@@ -201,16 +400,29 @@ retire_nonstandard_runner_services
     --labels "$RUNNER_LABELS" \
     --work _work
 )
+[ -f "$RUNNER_ROOT/.runner" ] && [ ! -L "$RUNNER_ROOT/.runner" ] ||
+  die "runner registration did not create valid local metadata"
 RUNNER_TOKEN=""
 
-cat > "$RUNNER_REGISTRATION_FILE" <<EOF
+[ ! -e "$RUNNER_REGISTRATION_FILE" ] && [ ! -L "$RUNNER_REGISTRATION_FILE" ] ||
+  die "runner registration marker already exists unexpectedly"
+registration_candidate="$(mktemp /etc/gole/.github-runner-registration.XXXXXX)"
+cat > "$registration_candidate" <<EOF
 repository_url=$REPOSITORY_URL
 runner_name=$RUNNER_NAME
 runner_labels=$RUNNER_LABELS
 initial_runner_version=$RUNNER_VERSION
 EOF
-chown root:root "$RUNNER_REGISTRATION_FILE"
-chmod 0644 "$RUNNER_REGISTRATION_FILE"
+chown root:root "$registration_candidate"
+chmod 0644 "$registration_candidate"
+sync -f "$registration_candidate"
+mv -- "$registration_candidate" "$RUNNER_REGISTRATION_FILE"
+registration_candidate=""
+sync -f /etc/gole
+runner_registration_marker_is_valid ||
+  die "runner registration marker could not be committed"
+registration_succeeded=true
 
+seal_legacy_runner_root
 ensure_runner_service
 echo "GitHub Actions runner registered without persisting the short-lived registration token."

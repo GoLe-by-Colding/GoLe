@@ -51,6 +51,8 @@ gcloud pubsub subscriptions get-iam-policy gole-billing-budget-discord \
   --project "$PROJECT_ID" --format=json --quiet > "$policy_dir/subscription.json"
 gcloud iam roles describe goleBudgetSubscriptionConsumer --project "$PROJECT_ID" \
   --format=json --quiet > "$policy_dir/budget-role.json"
+gcloud compute os-login describe-profile --project "$PROJECT_ID" \
+  --format=json --quiet > "$policy_dir/os-login-profile.json"
 chmod 0600 "$policy_dir"/*.json
 python3 - \
   "$policy_dir/project.json" \
@@ -59,13 +61,14 @@ python3 - \
   "$policy_dir/secret.json" \
   "$policy_dir/subscription.json" \
   "$policy_dir/budget-role.json" \
+  "$policy_dir/os-login-profile.json" \
   "$PROJECT_ID" <<'PY'
 import json
 import pathlib
 import sys
 
 member = "user:coldingcontact@gmail.com"
-project_id = sys.argv[7]
+project_id = sys.argv[8]
 runtime_member = (
     f"serviceAccount:gole-production-runtime@{project_id}.iam.gserviceaccount.com"
 )
@@ -116,6 +119,27 @@ if roles_for(sys.argv[5], runtime_member) != {expected_consumer}:
 budget_role = json.loads(pathlib.Path(sys.argv[6]).read_text(encoding="utf-8"))
 if budget_role.get("includedPermissions") != ["pubsub.subscriptions.consume"]:
     raise SystemExit("runtime budget consumer role permissions are not exact")
+
+profile = json.loads(pathlib.Path(sys.argv[7]).read_text(encoding="utf-8"))
+expected_username = "coldingcontact_gmail_com"
+accounts = [
+    account
+    for account in profile.get("posixAccounts", [])
+    if isinstance(account, dict) and account.get("accountId") == project_id
+]
+if len(accounts) != 1:
+    raise SystemExit("operator has no unique project-scoped OS Login POSIX account")
+account = accounts[0]
+if (
+    account.get("name", "").split("/")[-2:] != ["projects", project_id]
+    or account.get("operatingSystemType") != "LINUX"
+    or account.get("primary") is not True
+    or account.get("username") != expected_username
+    or account.get("homeDirectory") != f"/home/{expected_username}"
+    or not str(account.get("uid", "")).isdigit()
+    or not str(account.get("gid", "")).isdigit()
+):
+    raise SystemExit("operator OS Login POSIX account is not the reviewed exact profile")
 PY
 
 instance_service_account="$(gcloud compute instances describe "$INSTANCE" \
@@ -130,6 +154,6 @@ instance_service_account="$(gcloud compute instances describe "$INSTANCE" \
 # immediately before the saved Terraform adoption plan is applied so enabling
 # OS Login cannot strand the only operator outside the instance.
 gcloud compute ssh "$INSTANCE" --project "$PROJECT_ID" --zone "$ZONE" \
-  --tunnel-through-iap --command=true --quiet >/dev/null
+  --tunnel-through-iap --command='sudo -n /usr/bin/true' --quiet >/dev/null
 
-echo 'Production operator IAP, OS Admin Login and service-account access preflight passed.'
+echo 'Production operator IAP, passwordless OS Admin Login and service-account access preflight passed.'

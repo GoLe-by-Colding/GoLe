@@ -83,7 +83,9 @@ test.describe("Community topics", () => {
 
   test("글쓰기 화면으로 이동하고 주제를 고를 수 있다", async ({ page }) => {
     await page.goto("/community");
-    await page.getByRole("link", { name: "글쓰기" }).click();
+    const composeLink = page.getByRole("link", { name: "글쓰기", exact: true });
+    await expect(composeLink).toHaveCount(1);
+    await composeLink.click();
     await expect(page).toHaveURL(/\/community\/new$/);
   });
 

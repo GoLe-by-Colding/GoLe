@@ -4,6 +4,9 @@ After=network-online.target gole-metadata-firewall.service
 Wants=network-online.target
 Requires=gole-metadata-firewall.service
 Before=gole-github-runner.service
+Before=docker.service
+OnFailure=poweroff.target
+OnFailureJobMode=replace-irreversibly
 
 [Service]
 Type=simple
@@ -12,9 +15,12 @@ Group=golecloud
 UMask=0007
 RuntimeDirectory=gole-cloud-broker
 RuntimeDirectoryMode=0710
+RuntimeDirectoryPreserve=yes
 StateDirectory=gole-cloud-broker
 StateDirectoryMode=0700
 ExecStart=/usr/local/libexec/gole/cloud-broker.py
+ExecStartPost=/usr/local/libexec/gole/verify-cloud-broker-ready.sh
+TimeoutStartSec=40s
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

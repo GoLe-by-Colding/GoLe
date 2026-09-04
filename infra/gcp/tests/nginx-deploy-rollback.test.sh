@@ -46,10 +46,12 @@ case "$command" in
   nginx-transaction-commit) : ;;
   nginx-transaction-finalize) rm -f "$TEST_ROOT/nginx.transaction" ;;
   deployment-rollback)
+    [ "${FAIL_ROLLBACK:-0}" != 1 ] || exit 55
     cp "$TEST_ROOT/nginx.backup" "$TEST_ROOT/nginx.conf"
     printf '%s\n' "$OLD_SHA" > "$TEST_ROOT/deployed.sha"
     rm -f "$TEST_ROOT/nginx.transaction" "$TEST_ROOT/deployment.transaction"
     ;;
+  deployment-fail-closed) : ;;
   deployment-images-snapshot | deployment-compose-build | deployment-compose-up | \
     deployment-compose-ps | deployment-budget-healthy | \
     deployment-verify-candidate-runtime | deployment-verify-commit | \
@@ -105,6 +107,7 @@ FAKE_DOCKER
 set -eu
 url="${*: -1}"
 printf 'curl %s\n' "$url" >> "$TEST_ROOT/events"
+printf 'curl-args %s\n' "$*" >> "$TEST_ROOT/events"
 if [ "${FAIL_SMOKE:-0}" = 1 ] && [[ "$url" == *'/api/v1/catalog/sets/featured'* ]] &&
   [ ! -e "$TEST_ROOT/smoke-failed" ]; then
   : > "$TEST_ROOT/smoke-failed"
@@ -145,10 +148,11 @@ FAKE_FLOCK
   export GOLE_TEST_PREPARE_NGINX="$TEST_ROOT/bin/prepare-nginx"
   export GOLE_TEST_HOST_DOCKER_CONTROL=1
   export DEPLOY_SHA="$NEW_SHA" GITHUB_RUN_ID=999
-  export FAIL_SMOKE=0 FAIL_MARKER=0
+  export FAIL_SMOKE=0 FAIL_MARKER=0 FAIL_ROLLBACK=0
   case "$mode" in
     smoke-failure) export FAIL_SMOKE=1 ;;
     marker-failure) export FAIL_MARKER=1 ;;
+    rollback-failure) export FAIL_SMOKE=1 FAIL_ROLLBACK=1 ;;
     success) ;;
   esac
 
@@ -157,6 +161,7 @@ FAKE_FLOCK
   flock -n 7
   set +e
   PATH="$TEST_ROOT/bin:$PATH" GOLE_ROLLOUT_LOCK_HELD=1 \
+    DISCORD_DEPLOY_WEBHOOK_URL=https://discord.invalid/deploy \
     bash "$TEST_ROOT/scripts/deploy.sh" all > "$TEST_ROOT/output" 2>&1
   CASE_STATUS=$?
   set -e
@@ -178,6 +183,21 @@ assert_rollback_case() {
 
 assert_rollback_case smoke-failure
 assert_rollback_case marker-failure
+
+# A data-mutation rollback deliberately fails closed until an explicit logical
+# restore. deploy.sh must never describe that outcome as automatic LKG
+# recovery; it emits the safe-stop notification and preserves the transaction.
+run_case rollback-failure
+[ "$CASE_STATUS" -ne 0 ]
+grep -q 'hostctl deployment-rollback' "$TEST_ROOT/events"
+grep -q 'hostctl deployment-fail-closed' "$TEST_ROOT/events"
+grep -q '복구를 증명하지 못해 GCP VM을 안전 정지함' "$TEST_ROOT/events"
+if grep -q '자동 복구함' "$TEST_ROOT/events"; then
+  echo 'failed data rollback emitted a false automatic-recovery notification' >&2
+  exit 1
+fi
+[ -e "$TEST_ROOT/deployment.transaction" ]
+rm -rf "$TEST_ROOT"
 
 run_case success
 [ "$CASE_STATUS" -eq 0 ]

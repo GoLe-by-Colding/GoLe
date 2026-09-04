@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.HandlerMapping;
 
 /**
  * 거래 모델에 맞지 않는 요청을 서버에서 막는다.
@@ -50,53 +51,79 @@ public class LaunchGateInterceptor implements HandlerInterceptor {
             return true;
         }
         LaunchConfig config = launchConfig.current();
+        WriteOperation operation = writeOperation(request);
 
-        if (!config.platformHandlesMoney() && createsPayment(request)) {
-            log.warn(
-                    "[launch gate] 직거래 단계에서 신규 주문/결제 요청 거부 method={} path={} stage={}",
+        if (operation == WriteOperation.UNCLASSIFIED) {
+            log.error(
+                    "[launch gate] 분류되지 않은 쓰기 요청을 안전 거부함 method={} pattern={}",
                     request.getMethod(),
-                    request.getRequestURI(),
+                    matchedPattern(request));
+            throw new ForbiddenException("LAUNCH_GATE_UNCLASSIFIED", "운영 단계가 확인되지 않은 요청입니다");
+        }
+
+        if (!config.platformHandlesMoney() && operation == WriteOperation.PAYMENT_CREATION) {
+            log.warn(
+                    "[launch gate] 직거래 단계에서 신규 주문/결제 요청 거부 method={} pattern={} stage={}",
+                    request.getMethod(),
+                    matchedPattern(request),
                     config.stage().level());
             throw new ForbiddenException("LAUNCH_DIRECT_TRADE_ONLY", "지금은 직거래 단계라 주문·결제·정산 기능을 제공하지 않습니다");
         }
 
-        if (createsPayment(request) && !config.isEnabled(LaunchFeature.PAYMENTS)) {
+        if (operation == WriteOperation.PAYMENT_CREATION && !config.isEnabled(LaunchFeature.PAYMENTS)) {
             log.warn(
-                    "[launch gate] 결제가 닫힌 상태에서 거래 요청 거부 method={} path={}",
+                    "[launch gate] 결제가 닫힌 상태에서 거래 요청 거부 method={} pattern={}",
                     request.getMethod(),
-                    request.getRequestURI());
+                    matchedPattern(request));
             throw new ForbiddenException("LAUNCH_PAYMENTS_CLOSED", "지금은 결제를 받지 않습니다");
         }
-        if (createsReview(request) && !config.isEnabled(LaunchFeature.REVIEWS)) {
+        if (operation == WriteOperation.REVIEW_CREATION && !config.isEnabled(LaunchFeature.REVIEWS)) {
             log.warn(
-                    "[launch gate] 후기가 닫힌 상태에서 작성 요청 거부 method={} path={}",
+                    "[launch gate] 후기가 닫힌 상태에서 작성 요청 거부 method={} pattern={}",
                     request.getMethod(),
-                    request.getRequestURI());
+                    matchedPattern(request));
             throw new ForbiddenException("LAUNCH_REVIEWS_CLOSED", "거래 후기는 아직 열리지 않았습니다");
         }
         return true;
     }
 
     /**
-     * 돈이 새로 들어오는 요청인가.
+     * Spring이 컨트롤러를 고른 뒤 기록한 canonical pattern으로만 쓰기 종류를 판정한다.
      *
-     * <p>경로를 명시 목록으로 좁힌다. 새 엔드포인트가 생겼을 때 조용히 열리는 쪽이 조용히
-     * 막히는 쪽보다 낫다 — 막히면 운영자가 원인을 찾기 어렵다.
+     * <p>{@link HttpServletRequest#getRequestURI()}는 matrix parameter({@code ;x=1})를 보존하지만
+     * Spring PathPattern은 이를 제거하고 같은 컨트롤러로 보낼 수 있다. 원문 URI를 보안 판정에
+     * 쓰면 게이트와 실제 handler가 서로 다른 경로를 본다. 새 POST mapping은 명시적으로
+     * 분류할 때까지 {@link WriteOperation#UNCLASSIFIED}로 닫힌다.
      */
-    private static boolean createsPayment(HttpServletRequest request) {
+    private static WriteOperation writeOperation(HttpServletRequest request) {
         if (!"POST".equalsIgnoreCase(request.getMethod())) {
-            return false;
+            return WriteOperation.NONE;
         }
-        String uri = request.getRequestURI();
-        return "/api/v1/orders".equals(uri) || (uri.startsWith("/api/v1/orders/") && uri.endsWith("/payment"));
+        return switch (matchedPattern(request)) {
+            case "/api/v1/orders", "/api/v1/orders/{orderId}/payment" -> WriteOperation.PAYMENT_CREATION;
+            case "/api/v1/reviews", "/api/v1/reviews/{reviewId}/reply" -> WriteOperation.REVIEW_CREATION;
+            case "/api/v1/orders/{orderId}/completion",
+                    "/api/v1/orders/{orderId}/refund",
+                    "/api/v1/orders/{orderId}/dispute",
+                    "/api/v1/orders/{orderId}/shipment/tracking" -> WriteOperation.EXISTING_TRANSACTION;
+            default -> WriteOperation.UNCLASSIFIED;
+        };
     }
 
-    /** 기존 후기 조회는 유지하고 새 후기와 판매자 답글 작성은 운영 설정으로 함께 닫는다. */
-    private static boolean createsReview(HttpServletRequest request) {
-        if (!"POST".equalsIgnoreCase(request.getMethod())) {
-            return false;
+    private static String matchedPattern(HttpServletRequest request) {
+        Object value = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (value == null) {
+            return "";
         }
-        String uri = request.getRequestURI();
-        return "/api/v1/reviews".equals(uri) || (uri.startsWith("/api/v1/reviews/") && uri.endsWith("/reply"));
+        String pattern = value.toString();
+        return pattern.length() <= 256 ? pattern : "";
+    }
+
+    private enum WriteOperation {
+        NONE,
+        PAYMENT_CREATION,
+        REVIEW_CREATION,
+        EXISTING_TRANSACTION,
+        UNCLASSIFIED
     }
 }

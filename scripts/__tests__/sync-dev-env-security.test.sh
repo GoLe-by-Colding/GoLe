@@ -23,6 +23,14 @@ printf '%s\n' \
   'COOLSMS_API_SECRET=fake-local-contract-secret' \
   > "$fixture_dir/production.env"
 
+# 최신 production Secret에서 빠진 외부 자격증명은 기존 로컬 파일에 남아 있어도
+# 되살리지 않는다. 로컬 전용 관리자/MinIO 값만 명시적으로 보존한다.
+printf '%s\n' \
+  'GOLE_ADMIN_EMAIL=local-admin@example.test' \
+  'MINIO_ROOT_USER=existing-local-minio' \
+  'GOOGLE_OAUTH_CLIENT_SECRET=stale-local-oauth-secret' \
+  > "$fixture_dir/.env"
+
 output="$(
   GOLE_DEV_ENV_ROOT="$fixture_dir" \
     GOLE_SECRET_SOURCE_FILE="$fixture_dir/production.env" \
@@ -55,8 +63,12 @@ assert_line 'GOLE_DISCORD_ALERTS_ENABLED=false'
 assert_line 'GOLE_SETTLEMENT_MODE=DISABLED'
 assert_line 'PORTONE_STORE_ID=store-local-contract'
 assert_line 'COOLSMS_API_SECRET=fake-local-contract-secret'
+assert_line 'GOLE_ADMIN_EMAIL=local-admin@example.test'
+assert_line 'MINIO_ROOT_USER=existing-local-minio'
 assert_absent 'production.invalid'
 assert_absent 'must-not-cross-the-boundary'
+assert_absent 'GOOGLE_OAUTH_CLIENT_SECRET='
+assert_absent 'stale-local-oauth-secret'
 
 if printf '%s' "$output" | grep -Fq 'fake-local-contract-secret'; then
   echo "동기화 로그에 비밀값이 노출됐습니다." >&2

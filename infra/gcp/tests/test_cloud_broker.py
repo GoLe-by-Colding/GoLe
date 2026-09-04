@@ -3,8 +3,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import socket
+import stat
+import subprocess
+import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 from datetime import datetime
 from decimal import Decimal
@@ -62,6 +67,9 @@ class CloudBrokerPolicyTest(unittest.TestCase):
         root = pathlib.Path(self.temporary.name)
         self.module.STATE_PATH = root / "state" / "state.json"
         self.module.TX_BYTES_PATH = root / "tx_bytes"
+        self.module.POLICY_HEARTBEAT_PATH = root / "runtime" / "policy-heartbeat"
+        self.module.POLICY_HEARTBEAT_PATH.parent.mkdir()
+        self.module.SOCKET_PATH = root / "runtime" / "broker.sock"
         self.module.TX_BYTES_PATH.write_text("1000\n", encoding="ascii")
         self.policy = self.module.Policy(policy_values())
 
@@ -195,6 +203,38 @@ class CloudBrokerPolicyTest(unittest.TestCase):
         self.assertNotIn("compute snapshots delete", source)
         self.assertNotIn("compute disks delete", source)
 
+    def test_deadline_alert_reads_exact_root_owned_discord_overlay_key(self) -> None:
+        webhook = (
+            "https://discord.com/api/webhooks/100000000000000002/"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef_1000000002"
+        )
+        overlay = mock.Mock()
+        overlay.is_symlink.return_value = False
+        overlay.is_file.return_value = True
+        overlay.stat.return_value = SimpleNamespace(
+            st_uid=0, st_gid=0, st_mode=stat.S_IFREG | 0o600
+        )
+        overlay.read_text.return_value = (
+            "GOLE_DISCORD_ALERTS_ENABLED=true\n"
+            f"DISCORD_OPERATIONS_WEBHOOK_URL={webhook}\n"
+        )
+
+        with mock.patch.object(self.module, "DISCORD_ENV_PATH", overlay):
+            self.assertEqual(
+                self.module.Cloud._operations_webhook_url(), webhook
+            )
+
+        self.assertEqual(
+            self.module.DISCORD_ENV_PATH,
+            pathlib.Path("/etc/gole/discord.env"),
+        )
+        overlay.read_text.return_value = (
+            f"GOLE_DISCORD_OPERATIONS_WEBHOOK_URL={webhook}\n"
+        )
+        with mock.patch.object(self.module, "DISCORD_ENV_PATH", overlay):
+            with self.assertRaises(self.module.BrokerError):
+                self.module.Cloud._operations_webhook_url()
+
     def test_policy_rejects_relaxed_machine_snapshot_and_baseline_values(self) -> None:
         for key, value in (
             ("EXPECTED_MACHINE_TYPE", "e2-standard-4"),
@@ -207,6 +247,151 @@ class CloudBrokerPolicyTest(unittest.TestCase):
                 values[key] = value
                 with self.assertRaises(self.module.BrokerError):
                     self.module.Policy(values)
+
+    def test_readiness_exchange_is_fixed_and_side_effect_free(self) -> None:
+        cloud = self.module.Cloud(self.policy)
+        self.assertEqual(
+            cloud.handle({"operation": "readiness"}),
+            {"ready": True, "protocol_version": 1},
+        )
+        with self.assertRaises(self.module.BrokerError):
+            cloud.handle({"operation": "readiness", "ignored": True})
+
+    def test_policy_heartbeat_is_fsynced_only_after_successful_enforcement(self) -> None:
+        cloud = mock.Mock()
+        with mock.patch.object(
+            self.module.os, "fsync", wraps=self.module.os.fsync
+        ) as fsync:
+            self.module.enforce_policy_and_write_heartbeat(cloud)
+        fsync.assert_called_once()
+        cloud.enforce_host_policy.assert_called_once_with()
+        self.assertEqual(
+            self.module.POLICY_HEARTBEAT_PATH.read_text(encoding="ascii"), "ok\n"
+        )
+        self.assertEqual(
+            self.module.POLICY_HEARTBEAT_PATH.stat().st_mode & 0o777, 0o600
+        )
+
+        self.module.POLICY_HEARTBEAT_PATH.unlink()
+        cloud.enforce_host_policy.side_effect = self.module.BrokerError("policy failed")
+        with self.assertRaises(self.module.BrokerError):
+            self.module.enforce_policy_and_write_heartbeat(cloud)
+        self.assertFalse(self.module.POLICY_HEARTBEAT_PATH.exists())
+
+    def test_broker_restart_closes_old_listener_and_serves_from_new_one(self) -> None:
+        child_code = r"""
+import importlib.util
+import pathlib
+import signal
+import sys
+import threading
+
+module_path, socket_path, generation = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("gole_cloud_broker_child", module_path)
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.SOCKET_PATH = pathlib.Path(socket_path)
+
+class Cloud:
+    def handle(self, request):
+        return {"generation": generation, "request": request}
+
+server = module.Server(Cloud())
+
+def stop(_signum, _frame):
+    threading.Thread(target=server.shutdown, daemon=True).start()
+
+signal.signal(signal.SIGTERM, stop)
+print("ready", flush=True)
+try:
+    server.serve_forever(poll_interval=0.05)
+finally:
+    server.server_close()
+    if module.SOCKET_PATH.exists():
+        module.SOCKET_PATH.unlink()
+"""
+
+        def stop(process: subprocess.Popen[str]) -> None:
+            if process.poll() is not None:
+                return
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+
+        def start(generation: str) -> subprocess.Popen[str]:
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    child_code,
+                    str(MODULE_PATH),
+                    str(self.module.SOCKET_PATH),
+                    generation,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            assert process.stdout is not None
+            ready = process.stdout.readline()
+            process.stdout.close()
+            if ready != "ready\n":
+                stop(process)
+                self.fail(f"broker child did not start (exit={process.returncode})")
+            return process
+
+        def exchange(expected_generation: str) -> bytes:
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(2)
+                client.connect(str(self.module.SOCKET_PATH))
+                client.sendall(b'{"op":"status"}\n')
+                response = client.recv(4096)
+                # The fixed protocol is one request per connection. A client
+                # attached to the old broker cannot remain usable across the
+                # service restart and accidentally talk to the new process.
+                self.assertEqual(client.recv(1), b"")
+            self.assertIn(f'"generation":"{expected_generation}"'.encode(), response)
+            return response
+
+        first = start("first")
+        held_client = socket.socket(socket.AF_UNIX)
+        held_client.settimeout(2)
+        try:
+            self.assertIn(b'"ok":true', exchange("first"))
+            # Leave an established request connection open while the broker
+            # process restarts. Process exit, not an inode-number heuristic,
+            # must make this old channel unusable.
+            held_client.connect(str(self.module.SOCKET_PATH))
+            stop(first)
+            try:
+                disconnected = held_client.recv(1)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            else:
+                self.assertEqual(disconnected, b"")
+        finally:
+            held_client.close()
+            stop(first)
+
+        self.assertEqual(first.returncode, 0)
+        # Unix filesystems may immediately reuse the same inode. Prove the old
+        # listener is gone in the restart gap instead of depending on a number.
+        with socket.socket(socket.AF_UNIX) as stale_client:
+            stale_client.settimeout(2)
+            with self.assertRaises(OSError):
+                stale_client.connect(str(self.module.SOCKET_PATH))
+
+        second = start("second")
+        try:
+            self.assertIn(b'"ok":true', exchange("second"))
+        finally:
+            stop(second)
+
+        self.assertEqual(second.returncode, 0)
 
 
 if __name__ == "__main__":

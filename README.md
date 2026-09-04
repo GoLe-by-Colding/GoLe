@@ -365,7 +365,8 @@ git push --force-with-lease origin feat/<작업명>
 gh pr create --base main --head feat/<작업명>
 
 # GCP VM: root-owned marker와 런타임 전체 계약을 값 노출 없이 확인
-gcloud compute ssh gole-production --zone asia-northeast3-a --tunnel-through-iap \
+gcloud compute ssh gole-production --project "$PROJECT_ID" \
+  --zone asia-northeast3-a --tunnel-through-iap \
   --command='sha="$(sudo -n /usr/local/sbin/gole-hostctl deployment-read-sha)"; sudo -n /usr/local/sbin/gole-hostctl deployment-verify-runtime "$sha"'
 ```
 

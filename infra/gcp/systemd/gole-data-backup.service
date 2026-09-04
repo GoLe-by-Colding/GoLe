@@ -9,6 +9,11 @@ Type=oneshot
 User=root
 Group=root
 ExecStart=/usr/local/sbin/gole-backup-data
+# The disk snapshot starts 30 minutes after this unit. Leave five minutes for
+# signal-safe MinIO unfreeze recovery and service failure notification rather
+# than allowing the logical dump to overlap the snapshot window.
+TimeoutStartSec=25min
+TimeoutStopSec=1min
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

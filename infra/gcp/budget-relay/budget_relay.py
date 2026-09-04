@@ -1007,15 +1007,58 @@ def calculate_cost_guard_snapshot(
     all_in_if_stopped = estimated_current_gross + (
         stopped_remaining * vat_multiplier
     )
-    projected_running = (
-        estimated_current_gross
+    # Project only through the enforced absolute cutoff.  Before the reviewed
+    # resize transition, future active hours retain the measured high rate;
+    # after the cutoff, only stopped disk/IP and retained snapshots accrue
+    # through the credit deadline.  This makes the Discord projection describe
+    # the policy that will actually be enforced instead of an impossible VM
+    # run through the whole deadline.
+    active_end = min(policy.stop_at, config.credit_deadline)
+    active_remaining_hours = Decimal(
+        str(max(0.0, (active_end - now_local).total_seconds()) / 3600)
+    )
+    future_high_rate_hours = Decimal(
+        str(
+            max(
+                0.0,
+                (
+                    min(policy.runtime_rate_transition_at, active_end)
+                    - now_local
+                ).total_seconds(),
+            )
+            / 3600
+        )
+    )
+    future_high_rate_hours = min(
+        active_remaining_hours, future_high_rate_hours
+    )
+    future_low_rate_hours = active_remaining_hours - future_high_rate_hours
+    stopped_tail_start = max(now_local, active_end)
+    stopped_tail_hours = Decimal(
+        str(
+            max(
+                0.0,
+                (config.credit_deadline - stopped_tail_start).total_seconds(),
+            )
+            / 3600
+        )
+    )
+    projected_future_pre_tax = (
+        policy.high_rate_hourly_cost_krw * future_high_rate_hours
+        + config.fixed_hourly_cost_krw * future_low_rate_hours
         + (
-            config.fixed_hourly_cost_krw
-            + config.snapshot_max_hourly_cost_krw
+            config.snapshot_max_hourly_cost_krw
             + config.manual_snapshot_hourly_cost_krw
         )
-        * remaining_hours
-        * vat_multiplier
+        * active_remaining_hours
+        + policy.stopped_resource_hourly_cost_krw * stopped_tail_hours
+        + config.snapshot_max_hourly_cost_krw
+        * min(stopped_tail_hours, config.snapshot_retention_hours)
+        + config.manual_snapshot_hourly_cost_krw * stopped_tail_hours
+    )
+    projected_running = (
+        estimated_current_gross
+        + projected_future_pre_tax * vat_multiplier
     )
 
     warnings: list[str] = []
@@ -1094,7 +1137,7 @@ def render_cost_guard_message(
         f"- 송신비 보수 추정: {_money(snapshot.modeled_network_pre_tax, 'KRW')}",
         f"- 최신 Billing 비용(세금 게시분 포함): {_money(snapshot.observed_billing_gross, 'KRW')}",
         f"- 지금 정지할 때 만료까지 총액(VAT 포함): **{_money(snapshot.all_in_if_stopped_gross, 'KRW')}**",
-        f"- 계속 운영 예상액(VAT 포함): {_money(snapshot.projected_running_gross, 'KRW')}",
+        f"- 절대 종료까지 운영 시 만료 총액(VAT 포함): {_money(snapshot.projected_running_gross, 'KRW')}",
         f"- 가동시간: {snapshot.runtime_hours:.1f} / {policy.max_runtime_hours:.0f}시간",
         f"- 자동 정지선: Billing {_money(policy.billing_cost_limit_krw, 'KRW')} · all-in {_money(policy.all_in_cost_limit_krw, 'KRW')}",
         f"- 절대 종료: {policy.stop_at.isoformat()}",
@@ -1126,21 +1169,28 @@ def render_discord_message(
         if guard_snapshot is not None:
             current_cost = guard_snapshot.estimated_current_gross
             projected_total = guard_snapshot.projected_running_gross
-            vat_multiplier = Decimal("1") + (
-                config.hard_stop.vat_rate if config.hard_stop else Decimal("0")
+            projected_additional_display = max(
+                Decimal("0"), projected_total - current_cost
             )
-            future_fixed_display = future_fixed * vat_multiplier
+            projected_additional_label = (
+                "강제 종료·정지 꼬리 포함 예상 추가비"
+            )
+            projected_total_label = (
+                "절대 종료까지 운영 시 만료 총액(VAT 포함)"
+            )
         else:
             current_cost = budget.cost_amount
             projected_total = budget.cost_amount + future_fixed
-            future_fixed_display = future_fixed
+            projected_additional_display = future_fixed
+            projected_additional_label = "만료일까지 예상 추가 고정비"
+            projected_total_label = "만료 시점 예상 총비용(VAT 포함)"
         current_credit_remaining = config.credit_amount_krw - current_cost
         projected_credit_remaining = config.credit_amount_krw - projected_total
         projection_lines = [
             f"- 설정 크레딧: {_money(config.credit_amount_krw, 'KRW')}",
             f"- 현재 비용 차감 잔액: {_money(current_credit_remaining, 'KRW')}",
-            f"- 만료일까지 예상 추가 고정비: {_money(future_fixed_display, 'KRW')}",
-            f"- 만료 시점 예상 총비용(VAT 포함): {_money(projected_total, 'KRW')}",
+            f"- {projected_additional_label}: {_money(projected_additional_display, 'KRW')}",
+            f"- {projected_total_label}: {_money(projected_total, 'KRW')}",
             f"- 예상 크레딧 잔액: {_money(projected_credit_remaining, 'KRW')}",
         ]
         if guard_snapshot is not None:

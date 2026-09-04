@@ -35,6 +35,91 @@ DEPLOYMENT_TRANSACTION_ACTIVE=0
 
 log() { printf '\n▶ %s\n' "$*"; }
 
+require_exact_production_env() {
+  local variable_name="$1" expected_value="$2"
+  if [ "${!variable_name:-}" != "$expected_value" ]; then
+    echo "운영 배포 실행 문맥이 올바르지 않습니다: ${variable_name}" >&2
+    exit 1
+  fi
+}
+
+validate_production_invocation() {
+  if [ "$TARGET" != "all" ]; then
+    echo "운영 배포는 전체 Docker Compose 대상(all)만 허용합니다." >&2
+    exit 1
+  fi
+  if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "운영 DEPLOY_SHA는 CI가 검증한 40자리 Git SHA여야 합니다." >&2
+    exit 1
+  fi
+  if [ "${GOLE_ROLLOUT_LOCK_HELD:-0}" != "1" ]; then
+    echo "운영 배포는 CD workflow가 획득한 rollout lock을 상속해야 합니다." >&2
+    exit 1
+  fi
+
+  # Accidental SSH/manual deploys must not be able to select a partial target or
+  # silently fall back to origin/main. These runner-provided values bind /app to
+  # the single protected-main CD job; hostctl separately proves current main and
+  # its successful push CI before any root-owned mutation.
+  require_exact_production_env GITHUB_ACTIONS true
+  require_exact_production_env GITHUB_SERVER_URL https://github.com
+  require_exact_production_env GITHUB_REPOSITORY GoLe-by-Colding/GoLe
+  require_exact_production_env GITHUB_WORKFLOW CD
+  require_exact_production_env GITHUB_WORKFLOW_REF \
+    GoLe-by-Colding/GoLe/.github/workflows/cd.yml@refs/heads/main
+  require_exact_production_env GITHUB_REF refs/heads/main
+  require_exact_production_env GITHUB_REF_NAME main
+  require_exact_production_env GITHUB_REF_TYPE branch
+  require_exact_production_env GITHUB_REF_PROTECTED true
+  require_exact_production_env GITHUB_JOB deploy
+  require_exact_production_env RUNNER_ENVIRONMENT self-hosted
+  require_exact_production_env RUNNER_NAME gole-gcp-production
+  require_exact_production_env RUNNER_OS Linux
+  require_exact_production_env RUNNER_ARCH X64
+  require_exact_production_env GITHUB_SHA "$DEPLOY_SHA"
+  require_exact_production_env GITHUB_WORKFLOW_SHA "$DEPLOY_SHA"
+
+  case "${GITHUB_EVENT_NAME:-}" in
+    workflow_run | workflow_dispatch) ;;
+    *)
+      echo "운영 배포는 main의 workflow_run 또는 workflow_dispatch에서만 허용합니다." >&2
+      exit 1
+      ;;
+  esac
+}
+
+case "$TARGET" in
+  all | backend | frontend) ;;
+  *)
+    echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2
+    exit 1
+    ;;
+esac
+
+PRODUCTION_DEPLOY_CONTEXT=0
+TEST_PRODUCTION_DEPLOY_CONTEXT=0
+if [ "$SCRIPT_ROOT" = "/app" ] || [ "$ROOT" = "/app" ]; then
+  if [ "$SCRIPT_ROOT" != "/app" ] || [ "$ROOT" != "/app" ]; then
+    echo "운영 deploy.sh는 /app checkout과 /app 작업 경로에서만 실행해야 합니다." >&2
+    exit 1
+  fi
+  PRODUCTION_DEPLOY_CONTEXT=1
+elif [ "${GOLE_TEST_PRODUCTION_DEPLOY_CONTEXT:-0}" = "1" ]; then
+  # Runtime contract tests may exercise the fail-closed gate from a disposable
+  # checkout. This switch can only add production restrictions, never bypass
+  # the real /app detection above.
+  PRODUCTION_DEPLOY_CONTEXT=1
+  TEST_PRODUCTION_DEPLOY_CONTEXT=1
+fi
+
+if [ "$PRODUCTION_DEPLOY_CONTEXT" = "1" ]; then
+  validate_production_invocation
+fi
+if [ "$TEST_PRODUCTION_DEPLOY_CONTEXT" = "1" ] &&
+  [ "${GOLE_TEST_VALIDATE_PRODUCTION_INVOCATION_ONLY:-0}" = "1" ]; then
+  exit 0
+fi
+
 install_discord_overlay() {
   local deploy operations support variable_name
   local -a required=(
@@ -301,14 +386,6 @@ on_deploy_exit() {
 }
 trap on_deploy_exit EXIT
 
-case "$TARGET" in
-  all | backend | frontend) ;;
-  *)
-    echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2
-    exit 1
-    ;;
-esac
-
 # This is the only runner→root secret bridge. The helper takes no argv values,
 # holds the rollout lock itself, and completes before recovery/build/container
 # mutation. Role destinations may intentionally share the GoLe room.
@@ -331,6 +408,29 @@ elif { [ "$ROOT" = "/app" ] && [ ! -e /proc/self/fd/7 ]; } || ! flock -n 7; then
   exit 1
 fi
 
+complete_pending_initial_tls() {
+  local certificate_status=0 completion_status=0
+  [ "$HOST_DOCKER_CONTROL" = 1 ] || return 1
+  # sudo closes the runner's inherited fd7. Release it first so the root-only
+  # certificate action can acquire the same host lock as fd8, then reacquire
+  # before touching the deployment journal again.
+  flock -u 7
+  sudo -n "$HOSTCTL" certificate-issue || certificate_status=$?
+  if ! flock -n 7; then
+    echo "인증서 작업 뒤 운영 rollout lock을 다시 획득하지 못했습니다." >&2
+    return 1
+  fi
+  if [ "$certificate_status" -ne 0 ]; then
+    sudo -n "$HOSTCTL" deployment-fail-closed-initial-tls || true
+    return "$certificate_status"
+  fi
+  sudo -n "$HOSTCTL" deployment-complete-initial-tls || completion_status=$?
+  if [ "$completion_status" -ne 0 ]; then
+    sudo -n "$HOSTCTL" deployment-fail-closed-initial-tls || true
+    return "$completion_status"
+  fi
+}
+
 if [ -r /proc/sys/kernel/random/uuid ]; then
   DEPLOYMENT_TRANSACTION_ID="$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid)"
 else
@@ -347,6 +447,10 @@ if [ -x "$HOSTCTL" ]; then
   deployment_recovery_state="$(sudo -n "$HOSTCTL" deployment-recover)"
   case "$deployment_recovery_state" in
     NONE | RECOVERED) ;;
+    INITIAL_TLS_REQUIRED)
+      log "중단된 최초 배포의 Google Trust Services TLS 완결"
+      complete_pending_initial_tls
+      ;;
     *)
       echo "중단된 배포 transaction을 안전하게 복구하지 못했습니다." >&2
       exit 1
@@ -527,10 +631,12 @@ log "runtime smoke checks"
 curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null
 curl -fsS --max-time 15 http://127.0.0.1:8080/api/v1/catalog/sets/featured >/dev/null
 curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null
-curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
-  https://gole.co.kr/actuator/health/readiness >/dev/null
-curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
-  https://gole.co.kr/icon.svg >/dev/null
+if [ -n "$PREVIOUS_SHA" ]; then
+  curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+    https://gole.co.kr/actuator/health/readiness >/dev/null
+  curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+    https://gole.co.kr/icon.svg >/dev/null
+fi
 
 if [ "$TARGET" = "all" ]; then
   log "비용 가드 독립 업데이트"
@@ -559,18 +665,28 @@ if [ "$TARGET" = "all" ]; then
   fi
   sudo -n "$HOSTCTL" deployment-record-sha "$deployed_sha" "$DEPLOYMENT_TRANSACTION_ID"
   DEPLOYMENT_MARKER_ADVANCED=1
-  # CI/runner가 Docker 소켓을 직접 읽지 않는다. root helper가 marker, clean
-  # checkout, 모든 컨테이너, readiness, Nginx와 watchdog을 한 번에 검증한다.
-  # 이 검증 실패도 Nginx transaction이 열린 상태라 EXIT rollback 대상이다.
-  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
-    sudo -n "$HOSTCTL" deployment-verify-commit "$deployed_sha" \
+  if [ "$HOST_DOCKER_CONTROL" = "1" ] && [ -z "$PREVIOUS_SHA" ]; then
+    # A fresh disk has no certificate yet. Prove the HTTP-only app first,
+    # retire the deployment Nginx journal, issue GTS under the same durable
+    # deployment transaction, then require the full TLS/HSTS proof.
+    sudo -n "$HOSTCTL" deployment-verify-initial-http-commit "$deployed_sha" \
       "$DEPLOYMENT_TRANSACTION_ID"
-  fi
-  if [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
     sudo -n "$HOSTCTL" nginx-transaction-finalize "$NGINX_TRANSACTION_ID"
     NGINX_TRANSACTION_ACTIVE=0
+    complete_pending_initial_tls
+  else
+    # CI/runner가 Docker 소켓을 직접 읽지 않는다. root helper가 marker, clean
+    # checkout, 모든 컨테이너, readiness, Nginx와 watchdog을 한 번에 검증한다.
+    if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+      sudo -n "$HOSTCTL" deployment-verify-commit "$deployed_sha" \
+        "$DEPLOYMENT_TRANSACTION_ID"
+    fi
+    if [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
+      sudo -n "$HOSTCTL" nginx-transaction-finalize "$NGINX_TRANSACTION_ID"
+      NGINX_TRANSACTION_ACTIVE=0
+    fi
+    sudo -n "$HOSTCTL" deployment-finalize "$DEPLOYMENT_TRANSACTION_ID"
   fi
-  sudo -n "$HOSTCTL" deployment-finalize "$DEPLOYMENT_TRANSACTION_ID"
   DEPLOYMENT_TRANSACTION_ACTIVE=0
   DEPLOYMENT_IMAGES_SNAPSHOTTED=0
 elif [ "$HOST_DOCKER_CONTROL" = "1" ]; then
