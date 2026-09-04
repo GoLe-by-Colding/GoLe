@@ -116,8 +116,11 @@ logging:
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
   onboarding:
-    # 전화번호 인증코드 알림톡 템플릿. 카카오 승인은 코드 밖 운영 과제라 기본값이 비어 있고,
-    # 비어 있는 동안 인증 요청은 PHONE_VERIFICATION_UNAVAILABLE로 명시적으로 거부된다. (onboarding D3)
+    # 전화번호 인증코드 알림톡 템플릿. 카카오 승인은 코드 밖 운영 과제라 기본값이 비어 있다.
+    # coolsms.enabled=false(로컬·승인 전)면 로깅 스텁이 이 값과 무관하게 코드를 로그로만
+    # 남기고 인증을 그대로 진행시킨다 — 발송 여부는 오직 coolsms.enabled로만 갈린다.
+    # coolsms.enabled=true인데 이 값이 비어 있으면 그때는 실제 어댑터(CoolsmsAlimtalkAdapter)가
+    # 요청을 거부해 PHONE_VERIFICATION_UNAVAILABLE로 이어진다. (onboarding D3)
     phone-verification-template-id: ${GOLE_ONBOARDING_PHONE_TEMPLATE_ID:}
     phone-verification-code-variable: '${GOLE_ONBOARDING_PHONE_CODE_VARIABLE:#{인증번호}}'
   # 가입 당시의 정책 버전을 별도 append-only 이력으로 남긴다. 약관/처리방침을 바꾸면

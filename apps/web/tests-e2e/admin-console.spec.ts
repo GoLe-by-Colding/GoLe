@@ -64,6 +64,25 @@ test.beforeEach(async ({ page }) => {
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );
+  // (main) 레이아웃의 OnboardingBanner가 마운트되자마자 이 상태를 조회한다(onboarding).
+  // 목킹하지 않으면 실제 백엔드로 새어나가 401을 받고, 그 401이 합성 세션을 지운다 —
+  // 위 알림 폴링과 같은 이유로 여기서도 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 });
 
 test.describe("운영자 콘솔 — 화면 게이트", () => {

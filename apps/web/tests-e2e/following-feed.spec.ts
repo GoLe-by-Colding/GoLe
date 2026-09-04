@@ -1,6 +1,28 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Following feed", () => {
+  test.beforeEach(async ({ page }) => {
+    // (main) 레이아웃의 OnboardingBanner가 마운트되자마자 상태를 조회한다. 이 스펙은
+    // HttpOnly 쿠키 없는 합성 세션을 쓰므로, 목킹하지 않으면 실제 백엔드 401이 그
+    // 세션을 지운다.
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
+  });
+
   test("비로그인 사용자는 원래 피드로 돌아오는 로그인 동선을 본다", async ({ page }) => {
     await page.goto("/feed");
 

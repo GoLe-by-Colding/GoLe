@@ -23,6 +23,24 @@ test.beforeEach(async ({ page }) => {
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다 — 목킹 안 하면 실제
+  // 백엔드로 새어나가 401을 받고, 그 401이 합성 세션을 지운다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 });
 
 async function mockChatApis(

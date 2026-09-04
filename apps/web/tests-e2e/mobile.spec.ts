@@ -136,6 +136,23 @@ test.describe("Mobile — 결제·운영 화면", () => {
     await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
+    // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
     // 콘솔 게이트는 로컬 세션의 role을 믿지 않고 서버에 다시 묻는다(fail closed). 이 응답을
     // 심어주지 않으면 게이트가 열리지 않아 표가 아예 렌더되지 않는다 — 스크롤을 재기도 전에
     // 실패한다. 여기서 확인하려는 건 권한이 아니라 좁은 화면의 표 스크롤이다.

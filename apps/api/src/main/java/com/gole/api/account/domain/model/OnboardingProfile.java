@@ -33,6 +33,15 @@ public record OnboardingProfile(
         return new OnboardingProfile(null, null, null, Set.of(), null, null, false);
     }
 
+    /**
+     * 운영 시드/부트스트랩 계정(관리자 등)의 프로필. 소비자 가입 절차를 밟지 않으므로
+     * 애초에 온보딩 대상이 아니다 — legacyExempt를 배포 시점 마이그레이션과 같은 의미로
+     * 처음부터 true로 둔다.
+     */
+    public static OnboardingProfile exempt() {
+        return new OnboardingProfile(null, null, null, Set.of(), null, null, true);
+    }
+
     public boolean hasNickname() {
         return nickname != null;
     }

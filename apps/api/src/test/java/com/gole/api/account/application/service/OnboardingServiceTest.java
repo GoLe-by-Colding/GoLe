@@ -188,15 +188,20 @@ class OnboardingServiceTest {
     }
 
     @Test
-    void missingTemplateConfigurationFailsLoudlyAndDoesNotBurnCooldown() {
-        // D3: 템플릿 승인 전 기간에 조용히 성공을 돌려주면 사용자는 오지 않는 코드를 기다린다.
+    void missingTemplateConfigurationStillSendsThroughWhicheverAdapterIsActive() {
+        // 발송 가능 여부는 coolsms.enabled(=발송 빈의 존재)로만 갈린다 — 템플릿 ID는 실제
+        // CoolsmsAlimtalkAdapter만 요구하는 값이라 여기서 따로 검증하지 않는다. 로깅 스텁처럼
+        // 템플릿을 안 보는 어댑터라면 비어 있어도 그대로 통과해 코드가 로그로 남고 인증이
+        // 정상 진행된다.
         OnboardingProperties unconfigured = new OnboardingProperties();
         OnboardingService noTemplate = new OnboardingService(
                 accounts, phoneVerifications, () -> "123456", Optional.of(alimtalk), unconfigured, clock);
 
-        assertThatThrownBy(() -> noTemplate.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678")))
-                .isInstanceOf(PhoneVerificationUnavailableException.class);
-        assertThat(phoneVerifications.isCooldownActive(ACCOUNT_ID)).isFalse();
+        var requested = noTemplate.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"));
+
+        assertThat(requested.maskedPhoneNumber()).isEqualTo("010-****-5678");
+        assertThat(alimtalk.sent).hasSize(1);
+        assertThat(alimtalk.sent.getFirst().templateId()).isEmpty();
     }
 
     @Test

@@ -143,9 +143,37 @@ public final class Account {
         return new Account(id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, code, 0, null, null);
     }
 
-    /** 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다. */
+    /**
+     * 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다.
+     *
+     * <p>구글 소셜 신규가입({@code SocialAccountProvisioner})도 이 팩토리를 함께 쓴다 — 그쪽은
+     * 온보딩 D7에 따라 legacyExempt=false(일반 온보딩 대상)여야 하므로, 여기서 면제를
+     * 기본값으로 바꾸면 안 된다. 운영 계정 전용 면제는 {@link #operationalBootstrap}을 쓴다.
+     */
     public static Account provisioned(String id, Email email, PasswordHash passwordHash, Role role) {
         return new Account(id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
+    }
+
+    /**
+     * 관리자 등 운영 부트스트랩 전용: {@link #provisioned}과 같지만 애초에 소비자 가입
+     * 절차(이메일 인증 → 로그인 → 온보딩 위저드)를 거치지 않는 계정이라 legacyExempt를
+     * 처음부터 켜 둔다. 그렇지 않으면 새로 만든 관리자 계정도 매물등록·구매·채팅에서
+     * 온보딩 위저드에 붙잡힌다.
+     */
+    public static Account operationalBootstrap(String id, Email email, PasswordHash passwordHash, Role role) {
+        return new Account(
+                id,
+                email,
+                passwordHash,
+                AccountStatus.VERIFIED,
+                role,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
+                OnboardingProfile.exempt());
     }
 
     /** 이메일 인증. 만료(1.5)/불일치 시 예외, 성공 시 VERIFIED 전이(1.4). */
