@@ -21,6 +21,23 @@ async function mockMe(page: Page, role: "USER" | "ADMIN"): Promise<void> {
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 }
 
 /** 로그인 API를 흉내 내 실제 폼 제출로 복귀 동작까지 확인한다. */

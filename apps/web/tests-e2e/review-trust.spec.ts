@@ -41,6 +41,23 @@ async function seedSession(page: Page, session: SeedSession): Promise<void> {
   await page.route(`**/api/v1/users/${session.accountId}/following`, (route) =>
     route.fulfill({ json: [] }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 }
 
 async function mockSellerShop(page: Page): Promise<void> {

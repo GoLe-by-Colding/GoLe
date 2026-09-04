@@ -38,6 +38,24 @@ async function mockProfileApis(page: Page): Promise<void> {
   await page.route("**/api/v1/accounts/me", (route) =>
     route.fulfill({ json: { accountId: "acc-1", email: "seller@gole.test", role: "USER" } }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다 — 목킹 안 하면 실제
+  // 백엔드 401이 위 알림 폴링과 똑같이 전역 stale-session 정리를 먼저 실행시킨다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
   await page.route("**/api/v1/config/launch", (route) =>
     route.fulfill({
       json: {

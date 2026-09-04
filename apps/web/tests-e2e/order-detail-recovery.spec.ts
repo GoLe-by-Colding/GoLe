@@ -75,6 +75,23 @@ test.describe("Order detail recovery UX", () => {
     await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
+    // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
     // 운송장 없음(404)은 발송 전 정상 상태다. 오류를 검증하는 테스트는 더 구체적인 라우트를
     // 나중에 등록해 이 기본 응답을 덮어쓴다.
     await page.route("**/api/v1/orders/*/shipment", (route) =>
