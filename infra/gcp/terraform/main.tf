@@ -1,10 +1,17 @@
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
 resource "google_project_service" "compute" {
   service            = "compute.googleapis.com"
   disable_on_destroy = false
+}
+
+resource "google_project_service" "resource_manager" {
+  service            = "cloudresourcemanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+data "google_project" "current" {
+  project_id = var.project_id
+
+  depends_on = [google_project_service.resource_manager]
 }
 
 resource "google_project_service" "pubsub" {
@@ -44,6 +51,13 @@ resource "google_service_account" "production_runtime" {
 # Secret versions and payloads are created out of band and never enter state.
 resource "google_secret_manager_secret" "production_env" {
   secret_id = var.production_env_secret_name
+
+  # Preserve the existing control-plane ownership labels during adoption.
+  # Terraform manages the container and IAM only; payload versions stay out of state.
+  labels = {
+    environment = "production"
+    managed-by  = "kscold-control"
+  }
 
   replication {
     auto {}
@@ -106,17 +120,24 @@ resource "google_compute_address" "gole" {
   name         = var.static_ip_name
   region       = var.region
   network_tier = "STANDARD"
+  description  = "HE Testbed external feedback endpoint"
 
   depends_on = [google_project_service.compute]
 }
 
 resource "google_compute_firewall" "web" {
-  name    = "gole-web"
-  network = "default"
+  name        = "gole-web"
+  description = "GoLe public HTTP and HTTPS"
+  network     = "default"
 
   allow {
     protocol = "tcp"
-    ports    = ["80", "443"]
+    ports    = ["80"]
+  }
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
   }
 
   source_ranges = ["0.0.0.0/0"]
@@ -126,9 +147,10 @@ resource "google_compute_firewall" "web" {
 }
 
 resource "google_compute_firewall" "ssh_iap" {
-  name     = "gole-ssh-iap"
-  network  = "default"
-  priority = 800
+  name        = "gole-ssh-iap"
+  description = "SSH through Google IAP only"
+  network     = "default"
+  priority    = 800
 
   allow {
     protocol = "tcp"
@@ -152,7 +174,12 @@ resource "google_compute_firewall" "deny_public_admin" {
 
   deny {
     protocol = "tcp"
-    ports    = ["22", "3389"]
+    ports    = ["22"]
+  }
+
+  deny {
+    protocol = "tcp"
+    ports    = ["3389"]
   }
 
   source_ranges = ["0.0.0.0/0"]

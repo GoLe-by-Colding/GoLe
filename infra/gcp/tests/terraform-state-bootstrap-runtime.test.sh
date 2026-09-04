@@ -49,6 +49,7 @@ args=(
 )
 
 bash "$ROOT/infra/gcp/scripts/bootstrap-terraform-state.sh" "${args[@]}" >/dev/null
+grep -q '^storage buckets describe .* --raw --format=json$' "$FAKE_GCLOUD_LOG"
 if grep -Eq 'buckets (create|update|add-iam-policy-binding)' "$FAKE_GCLOUD_LOG"; then
   echo "dry-run mutated the state bucket" >&2
   exit 1
