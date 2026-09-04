@@ -9,7 +9,11 @@ export function thumbnailUrl(url: string, width: number): string {
   if (!resolvedUrl.includes("/api/v1/media/")) {
     return resolvedUrl;
   }
+  const normalizedWidth = [240, 480, 960, 1600].find((candidate) => width <= candidate);
+  if (normalizedWidth === undefined) {
+    return resolvedUrl;
+  }
   const separator = resolvedUrl.includes("?") ? "&" : "?";
-  return `${resolvedUrl}${separator}w=${width}`;
+  return `${resolvedUrl}${separator}w=${normalizedWidth}`;
 }
 import { env } from "@shared/config";

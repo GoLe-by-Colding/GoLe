@@ -7,6 +7,7 @@ import {
   useRoomReadReceipt,
   type ChatReportReason,
 } from "@entities/chat";
+import { isThirdPartyProvisionConsentCancelledError } from "@entities/user";
 import { Button, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 
@@ -18,6 +19,8 @@ export interface ChatPanelProps {
   readonly showSenderIdentity?: boolean;
   readonly onManageSender?: (senderId: string) => void;
   readonly onRoomRead?: (roomId: string) => void;
+  /** 운영팀 문의를 제외한 메시지 전송을 제3자 제공 동의 흐름으로 감싼다. */
+  readonly runMessageAction?: (action: () => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -31,6 +34,7 @@ export function ChatPanel({
   showSenderIdentity = false,
   onManageSender,
   onRoomRead,
+  runMessageAction,
 }: ChatPanelProps) {
   const { messages, send, loadOlder, retry, hasOlder, loadingOlder, olderError, loading, error } =
     useConversation(roomId);
@@ -70,9 +74,13 @@ export function ChatPanel({
     setSending(true);
     setSendError(undefined);
     try {
-      await send(input.trim());
+      const content = input.trim();
+      const action = () => send(content);
+      if (runMessageAction === undefined) await action();
+      else await runMessageAction(action);
       setInput("");
-    } catch {
+    } catch (cause) {
+      if (isThirdPartyProvisionConsentCancelledError(cause)) return;
       setSendError("메시지를 보내지 못했습니다. 대화 권한과 네트워크를 확인해 주세요.");
     } finally {
       setSending(false);

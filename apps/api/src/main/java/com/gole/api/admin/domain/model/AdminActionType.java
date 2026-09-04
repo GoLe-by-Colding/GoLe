@@ -12,6 +12,10 @@ public enum AdminActionType {
     ACCOUNT_SUSPEND,
     ACCOUNT_REINSTATE,
     ACCOUNT_ROLE_CHANGE,
+    ACCOUNT_DELETION_REVIEW,
+    ACCOUNT_DELETION_HOLD,
+    ACCOUNT_DELETION_HOLD_RELEASE,
+    ACCOUNT_DELETION_COMPLETE,
     REPORT_RESOLVE,
     REPORT_DISMISS,
     REVIEW_HIDE,
@@ -33,6 +37,14 @@ public enum AdminActionType {
     SUPPORT_RESOLVE,
     SUPPORT_REOPEN,
     SUPPORT_INTERNAL_NOTE,
+    /** 법정·분쟁 보존 필요가 있어 문의 대화 파기를 중지함. */
+    SUPPORT_RETENTION_HOLD,
+    /** 보존 근거가 종료되어 명시적으로 파기 중지를 해제함. */
+    SUPPORT_RETENTION_RELEASE,
+    /** 완료된 문의의 원문·AI 분석·방 메타데이터를 연계 파기함. */
+    SUPPORT_CONVERSATION_PURGE,
+    /** 전달 한도를 소진한 비식별 문의 Discord 알림을 명시적으로 재큐잉함. */
+    SUPPORT_NOTIFICATION_REQUEUE,
     /** 신고에 고정된 채팅 문맥 열람. 실시간 방 접근과 구분해 별도 감사한다. */
     CHAT_REPORT_SNAPSHOT_VIEW,
     /** 신고된 공개 댓글 원문 열람. 블라인드 후에도 원문 접근을 추적한다. */

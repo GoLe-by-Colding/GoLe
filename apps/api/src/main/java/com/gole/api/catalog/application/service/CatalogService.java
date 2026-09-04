@@ -10,6 +10,7 @@ import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
+import com.gole.api.catalog.domain.model.CatalogImagePath;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.common.exception.BadRequestException;
 import java.util.List;
@@ -49,7 +50,7 @@ public class CatalogService
                 command.pieceCount(),
                 command.releaseYear(),
                 command.retirementStatus(),
-                command.imageUrl());
+                CatalogImagePath.requireSafeInput(command.imageUrl()));
         return catalogAdminPort.save(set, command.featured()).getSetNumber();
     }
 
@@ -93,7 +94,7 @@ public class CatalogService
                 command.pieceCount(),
                 command.releaseYear(),
                 command.retirementStatus(),
-                command.imageUrl());
+                CatalogImagePath.requireSafeInput(command.imageUrl()));
         catalogAdminPort.save(updated, command.featured());
     }
 

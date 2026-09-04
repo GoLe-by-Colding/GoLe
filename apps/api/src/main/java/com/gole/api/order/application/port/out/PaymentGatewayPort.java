@@ -23,6 +23,9 @@ public interface PaymentGatewayPort {
         REQUESTED
     }
 
+    /** 주문 상태를 바꾸기 전에 현재 PG가 실제 작업을 수행할 수 있는지 확인한다. */
+    default void requireAvailable(String orderId) {}
+
     /** 브라우저 결제창을 열기 전에 주문 금액을 PG에 고정한다. 스텁은 아무 작업도 하지 않는다. */
     default void preparePayment(String orderId, long amount) {}
 

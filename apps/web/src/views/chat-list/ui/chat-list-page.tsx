@@ -25,7 +25,13 @@ import {
 } from "@entities/chat";
 import { ApiError } from "@shared/api";
 import { fetchLaunchConfig } from "@entities/launch";
-import { useSession } from "@entities/user";
+import {
+  isThirdPartyProvisionConsentCancelledError,
+  ThirdPartyProvisionConsentDialog,
+  type ThirdPartyProvisionPath,
+  useSession,
+  useThirdPartyProvisionConsent,
+} from "@entities/user";
 import { DirectTradeConfirmation } from "@features/chat-listing";
 import { ChatPanel } from "@widgets/chat-panel";
 import {
@@ -46,6 +52,7 @@ type Conversation =
   | { readonly kind: "SOCIAL"; readonly room: SocialChatRoom };
 
 type ComposerMode = "DIRECT" | "GROUP" | "SUPPORT";
+type ConsentRunner = <T>(action: () => Promise<T>, path: ThirdPartyProvisionPath) => Promise<T>;
 
 const SUPPORT_CATEGORY_LABEL: Record<SupportCategory, string> = {
   GENERAL: "일반 이용 문의",
@@ -68,6 +75,7 @@ const MAX_ROOM_RESOLVE_RETRIES = 3;
 
 export function ChatListPage() {
   const { session } = useSession();
+  const { runWithConsent, dialog: thirdPartyConsentDialog } = useThirdPartyProvisionConsent();
   const sessionAccountId = session?.accountId ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -216,7 +224,9 @@ export function ChatListPage() {
             : undefined,
         );
         setDirectTradeOpen(
-          launchResult.status === "fulfilled" && launchResult.value.tradeMode === "DIRECT_CHAT",
+          launchResult.status === "fulfilled" &&
+            launchResult.value.sellerIdentityVerificationReady &&
+            launchResult.value.tradeMode === "DIRECT_CHAT",
         );
 
         const availableIds = new Set([
@@ -514,7 +524,10 @@ export function ChatListPage() {
     }
     setRoomActionError(undefined);
     try {
-      const updated = await inviteGroupMember(selected.room.id, inviteAccountId.trim());
+      const updated = await runWithConsent(
+        () => inviteGroupMember(selected.room.id, inviteAccountId.trim()),
+        "SOCIAL_GROUP_INVITE",
+      );
       setSocialRooms((current) => {
         const next = (current ?? []).map((room) => (room.id === updated.id ? updated : room));
         socialRoomsRef.current = next;
@@ -527,7 +540,8 @@ export function ChatListPage() {
       }
       setInviteAccountId("");
       setInviteOpen(false);
-    } catch {
+    } catch (cause) {
+      if (isThirdPartyProvisionConsentCancelledError(cause)) return;
       setRoomActionError("초대할 수 없는 계정입니다. 계정 ID와 차단 상태를 확인해 주세요.");
     }
   }
@@ -649,6 +663,7 @@ export function ChatListPage() {
             initialSupportCategory={requestedSupportCategory}
             onClose={() => setComposer(null)}
             onCreated={addSocialRoom}
+            runWithConsent={runWithConsent}
           />
         ) : null}
 
@@ -981,6 +996,12 @@ export function ChatListPage() {
                               "차단을 해제하면 이 대화에서 다시 메시지를 보낼 수 있습니다.",
                           }
                         : {})}
+                      {...(selected.kind === "SOCIAL" && selected.room.type === "SUPPORT"
+                        ? {}
+                        : {
+                            runMessageAction: (action: () => Promise<void>) =>
+                              runWithConsent(action, "CHAT_MESSAGE"),
+                          })}
                     />
                   )}
                 </div>
@@ -1000,6 +1021,7 @@ export function ChatListPage() {
           </div>
         )}
       </div>
+      <ThirdPartyProvisionConsentDialog {...thirdPartyConsentDialog} />
     </Container>
   );
 }
@@ -1010,12 +1032,14 @@ function ConversationComposer({
   initialSupportCategory,
   onClose,
   onCreated,
+  runWithConsent,
 }: {
   readonly mode: ComposerMode;
   readonly initialPeerId: string;
   readonly initialSupportCategory: SupportCategory;
   readonly onClose: () => void;
   readonly onCreated: (room: SocialChatRoom) => void;
+  readonly runWithConsent: ConsentRunner;
 }) {
   const [peerId, setPeerId] = useState(initialPeerId);
   const [category, setCategory] = useState(initialSupportCategory);
@@ -1034,17 +1058,22 @@ function ConversationComposer({
     setError(undefined);
     try {
       if (mode === "DIRECT") {
-        onCreated(await createDirectRoom(peerId.trim()));
+        onCreated(
+          await runWithConsent(() => createDirectRoom(peerId.trim()), "SOCIAL_DIRECT_CHAT"),
+        );
       } else if (mode === "GROUP") {
         const memberIds = members
           .split(/[\s,]+/)
           .map((value) => value.trim())
           .filter(Boolean);
-        onCreated(await createGroupRoom(title.trim(), memberIds));
+        onCreated(
+          await runWithConsent(() => createGroupRoom(title.trim(), memberIds), "SOCIAL_GROUP_CHAT"),
+        );
       } else {
         onCreated(await createSupportRoom(title.trim(), message.trim(), category));
       }
-    } catch {
+    } catch (cause) {
+      if (isThirdPartyProvisionConsentCancelledError(cause)) return;
       setError(
         mode === "GROUP"
           ? "그룹은 본인 포함 3명 이상이어야 하며, 대화 가능한 계정만 초대할 수 있습니다."
@@ -1138,11 +1167,18 @@ function ConversationComposer({
               className="resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </label>
+          <p className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
+            접수 후 원인을 조사해 3영업일 이내에 진행 경과를, 10영업일 이내에 조사 결과 또는
+            처리방안을 이 문의방으로 안내합니다. 자세한 기준은{" "}
+            <Link href="/terms#complaint-resolution-policy" className="font-semibold underline">
+              불만·분쟁 처리기준
+            </Link>
+            에서 확인할 수 있습니다.
+          </p>
           {category.startsWith("PRIVACY_") ? (
             <p className="rounded-lg border border-brand-100 bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
-              로그인된 본인 계정으로 접수되며 운영팀은 10일 안의 첫 처리 안내를 목표로 합니다.
-              법령상 보존이 필요한 거래·분쟁 기록은 바로 삭제되지 않을 수 있고, 그 사유를 이
-              대화에서 안내합니다.
+              로그인된 본인 계정으로 접수됩니다. 법령상 보존이 필요한 거래·분쟁 기록은 바로 삭제되지
+              않을 수 있고, 그 사유를 이 대화에서 안내합니다.
             </p>
           ) : null}
         </div>

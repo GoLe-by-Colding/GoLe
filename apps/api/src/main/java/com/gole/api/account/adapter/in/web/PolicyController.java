@@ -19,8 +19,13 @@ public class PolicyController {
     @GetMapping("/current")
     public CurrentPolicyResponse current() {
         var policy = policies.currentSignupPolicy();
-        return new CurrentPolicyResponse(policy.termsVersion(), policy.privacyVersion(), policy.minimumAge());
+        return new CurrentPolicyResponse(
+                policy.termsVersion(),
+                policy.privacyVersion(),
+                policy.thirdPartyProvisionVersion(),
+                policy.minimumAge());
     }
 
-    public record CurrentPolicyResponse(String termsVersion, String privacyVersion, int minimumAge) {}
+    public record CurrentPolicyResponse(
+            String termsVersion, String privacyVersion, String thirdPartyProvisionVersion, int minimumAge) {}
 }

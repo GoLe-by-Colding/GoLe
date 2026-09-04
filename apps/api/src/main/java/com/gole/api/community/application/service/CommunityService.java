@@ -23,11 +23,14 @@ import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
 import com.gole.api.community.domain.model.PostStatus;
 import com.gole.api.community.domain.model.PostType;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.media.domain.model.MediaTargetType;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 커뮤니티 유스케이스 구현. inbound port를 구현하고 outbound port에만 의존한다.
@@ -53,6 +56,7 @@ public class CommunityService
     private final CommentRepositoryPort commentRepository;
     private final CommunityIdGeneratorPort idGenerator;
     private final PostAuthorNotifierPort postAuthorNotifier;
+    private final ManageMediaAssetsUseCase mediaAssets;
     private final Clock clock;
 
     public CommunityService(
@@ -60,23 +64,29 @@ public class CommunityService
             CommentRepositoryPort commentRepository,
             CommunityIdGeneratorPort idGenerator,
             PostAuthorNotifierPort postAuthorNotifier,
+            ManageMediaAssetsUseCase mediaAssets,
             Clock clock) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.idGenerator = idGenerator;
         this.postAuthorNotifier = postAuthorNotifier;
+        this.mediaAssets = mediaAssets;
         this.clock = clock;
     }
 
     @Override
+    @Transactional
     public String publish(PublishPostCommand command) {
+        String postId = idGenerator.newId();
         Post post = Post.publish(
-                idGenerator.newId(),
+                postId,
                 command.authorId(),
                 command.content(),
-                command.imageUrls(),
+                command.imageKeys(),
                 com.gole.api.community.domain.model.PostType.fromKey(command.topic()),
                 Instant.now(clock));
+        mediaAssets.replaceReferences(
+                command.authorId(), MediaTargetType.COMMUNITY_POST, postId, command.imageKeys(), true);
         return postRepository.save(post).getId();
     }
 
@@ -168,6 +178,7 @@ public class CommunityService
     }
 
     @Override
+    @Transactional
     public void delete(String postId, String requesterId) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         if (!post.getAuthorId().equals(requesterId)) {
@@ -175,6 +186,7 @@ public class CommunityService
         }
         post.delete();
         postRepository.save(post);
+        mediaAssets.revokeTarget(MediaTargetType.COMMUNITY_POST, postId);
     }
 
     /**
@@ -182,23 +194,29 @@ public class CommunityService
      * 사유는 관리자 컨텍스트의 감사 로그가 보관한다. (admin-console 요구사항 5.2)
      */
     @Override
+    @Transactional
     public void removeByModerator(String postId, String reason) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         post.delete();
         postRepository.save(post);
+        mediaAssets.revokeTarget(MediaTargetType.COMMUNITY_POST, postId);
     }
 
     @Override
+    @Transactional
     public void edit(EditPostCommand command) {
         Post post = requirePublished(command.postId());
         if (!post.getAuthorId().equals(command.requesterId())) {
             throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
         }
-        post.edit(command.content(), command.imageUrls());
+        mediaAssets.replaceReferences(
+                command.requesterId(), MediaTargetType.COMMUNITY_POST, command.postId(), command.imageKeys(), true);
+        post.edit(command.content(), command.imageKeys());
         postRepository.save(post);
     }
 
     @Override
+    @Transactional
     public Post patch(PatchPostCommand command) {
         Post post = postRepository
                 .findById(command.postId())
@@ -211,6 +229,17 @@ public class CommunityService
         String nextBody = command.body().provided() ? command.body().value() : post.getContent();
         List<String> nextPhotos = command.photos().provided() ? command.photos().value() : post.getImageUrls();
         PostStatus nextStatus = command.status().provided() ? command.status().value() : post.getStatus();
+        if (command.photos().provided()) {
+            mediaAssets.replaceReferences(
+                    command.requesterId(),
+                    MediaTargetType.COMMUNITY_POST,
+                    command.postId(),
+                    nextPhotos,
+                    nextStatus == PostStatus.PUBLISHED);
+        } else {
+            mediaAssets.setTargetVisibility(
+                    MediaTargetType.COMMUNITY_POST, command.postId(), nextStatus == PostStatus.PUBLISHED);
+        }
         post.edit(nextBody, nextPhotos, nextStatus);
         return postRepository.save(post);
     }

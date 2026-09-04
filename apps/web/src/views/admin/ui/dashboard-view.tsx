@@ -29,6 +29,7 @@ export function AdminDashboardView() {
 
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [pendingReports, setPendingReports] = useState(0);
+  const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
   const [failedPayments, setFailedPayments] = useState(0);
   const [pendingPayments, setPendingPayments] = useState(0);
   const [reviewPayments, setReviewPayments] = useState(0);
@@ -51,6 +52,7 @@ export function AdminDashboardView() {
           setOverview(data);
           // 롤링 배포 중 구버전 API가 이 필드를 아직 주지 않아도 숫자가 비어 보이지 않게 한다.
           setPendingReports(data.pendingReports ?? 0);
+          setUnassignedSupportTickets(data.unassignedSupportTickets ?? 0);
           setFailedPayments(data.ordersByStatus.PAYMENT_FAILED ?? 0);
           setPendingPayments(data.ordersByStatus.PAYMENT_PENDING ?? 0);
           setReviewPayments(data.ordersByStatus.PAYMENT_REVIEW ?? 0);
@@ -84,6 +86,26 @@ export function AdminDashboardView() {
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <Link href="/admin/support">
+            <Card
+              padded
+              className={
+                unassignedSupportTickets > 0
+                  ? "h-full border-warning/40 bg-warning-soft"
+                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
+              }
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Text weight="medium">미배정 문의</Text>
+                <Badge tone={unassignedSupportTickets > 0 ? "warning" : "success"}>
+                  {unassignedSupportTickets}건
+                </Badge>
+              </div>
+              <Text tone="muted" size="sm" className="mt-2">
+                문의 확인 및 담당자 배정 →
+              </Text>
+            </Card>
+          </Link>
           <Link href="/admin/reports">
             <Card
               padded

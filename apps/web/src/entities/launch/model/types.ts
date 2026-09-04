@@ -11,6 +11,8 @@ export interface LaunchConfig {
   readonly stage: LaunchStage;
   readonly tradeMode: TradeMode;
   readonly features: LaunchFeatures;
+  /** 배포 래치와 판매자 확인 절차가 모두 준비됐을 때만 true. 누락은 false로 해석한다. */
+  readonly sellerIdentityVerificationReady: boolean;
   readonly updatedAt: string | null;
 }
 
@@ -33,6 +35,7 @@ export const SAFE_LAUNCH_CONFIG: LaunchConfig = Object.freeze({
     reviews: false,
     partnerPayout: false,
   }),
+  sellerIdentityVerificationReady: false,
   updatedAt: null,
 });
 
@@ -95,6 +98,8 @@ export function parseLaunchConfig(value: unknown): LaunchConfig {
     stage: value.stage,
     tradeMode: value.tradeMode,
     features,
+    // 롤링 배포 중 구버전 API 응답의 필드 누락도 판매 개방으로 추측하지 않는다.
+    sellerIdentityVerificationReady: value.sellerIdentityVerificationReady === true,
     updatedAt: value.updatedAt,
   });
 }

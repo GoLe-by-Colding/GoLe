@@ -1,6 +1,7 @@
 package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.account.application.service.SellerIdentityVerificationService;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
@@ -27,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 매물 문의 댓글(Q&A). 댓글 저장 후 매물 판매자에게 알림을 전송한다(본인 제외, best-effort).
  */
-@Tag(name = "Listing Q@RestControllerA", description = "매물 문의 댓글 조회·작성")
+@Tag(name = "Listing Q&A", description = "매물 문의 댓글 조회·작성")
 @RestController
 @RequestMapping("/api/v1/listings/{listingId}/comments")
 public class ListingCommentController {
@@ -35,14 +36,17 @@ public class ListingCommentController {
     private final ListingCommentMongoRepository commentRepository;
     private final GetListingUseCase getListingUseCase;
     private final NotifyUseCase notifyUseCase;
+    private final SellerIdentityVerificationService sellerIdentityVerification;
 
     public ListingCommentController(
             ListingCommentMongoRepository commentRepository,
             GetListingUseCase getListingUseCase,
-            NotifyUseCase notifyUseCase) {
+            NotifyUseCase notifyUseCase,
+            SellerIdentityVerificationService sellerIdentityVerification) {
         this.commentRepository = commentRepository;
         this.getListingUseCase = getListingUseCase;
         this.notifyUseCase = notifyUseCase;
+        this.sellerIdentityVerification = sellerIdentityVerification;
     }
 
     @GetMapping
@@ -59,6 +63,7 @@ public class ListingCommentController {
             @PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req, HttpServletRequest http) {
         String authorId = AuthenticatedUser.id(http);
         Listing listing = getListingUseCase.getPublicById(listingId);
+        sellerIdentityVerification.requireVerifiedSeller(listing.getSellerId());
         ListingCommentDocument doc = new ListingCommentDocument(
                 UUID.randomUUID().toString(), listingId, authorId, req.content(), false, Instant.now());
         CommentResponse saved = CommentResponse.from(commentRepository.save(doc));

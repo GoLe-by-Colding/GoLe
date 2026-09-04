@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CreatePostForm } from "@features/create-post";
 import { useSession } from "@entities/user";
+import { loginHrefWithReturnTo } from "@shared/lib";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
 export function CommunityComposePage() {
@@ -21,7 +22,7 @@ export function CommunityComposePage() {
         ) : (
           <div className="flex flex-col items-start gap-4 rounded-lg border border-neutral-200 bg-white p-6">
             <Text tone="secondary">글을 쓰려면 로그인이 필요합니다.</Text>
-            <LinkButton href="/login">로그인하러 가기</LinkButton>
+            <LinkButton href={loginHrefWithReturnTo("/community/new")}>로그인하러 가기</LinkButton>
           </div>
         )}
       </div>

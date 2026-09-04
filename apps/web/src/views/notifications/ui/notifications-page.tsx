@@ -10,10 +10,10 @@ import {
 } from "@entities/notification";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { loginHrefWithReturnTo } from "@shared/lib";
 import {
   BellIcon,
   Button,
-  Card,
   Container,
   EmptyState,
   Heading,
@@ -26,6 +26,29 @@ function notificationErrorMessage(cause: unknown): string {
   return cause instanceof ApiError
     ? cause.message
     : "알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+const NOTIFICATION_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/(?:chat|collection|community|feed|notifications|prices|profile|search)(?:\/)?$/,
+  /^\/(?:community|listings|orders|sets|shops)\/[^/]+\/?$/,
+];
+
+/** 서버 데이터가 깨져도 알림을 외부 주소나 존재하지 않는 앱 경로의 링크로 만들지 않는다. */
+function safeNotificationHref(link: string | null): string | null {
+  if (link === null || !link.startsWith("/") || link.startsWith("//")) return null;
+  try {
+    const base = "https://gole.invalid";
+    const url = new URL(link, base);
+    if (
+      url.origin !== base ||
+      !NOTIFICATION_ROUTE_PATTERNS.some((pattern) => pattern.test(url.pathname))
+    ) {
+      return null;
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -108,7 +131,7 @@ export function NotificationsPage() {
         <div className="flex flex-col items-start gap-4 pt-10 pb-16">
           <Heading level={1}>알림</Heading>
           <Text tone="secondary">로그인이 필요합니다.</Text>
-          <LinkButton href="/login">로그인하러 가기</LinkButton>
+          <LinkButton href={loginHrefWithReturnTo("/notifications")}>로그인하러 가기</LinkButton>
         </div>
       </Container>
     );
@@ -154,15 +177,21 @@ export function NotificationsPage() {
             }
           />
         ) : visibleItems.length === 0 ? (
-          <Card>
-            <div className="flex flex-col items-center gap-2 p-10 text-center">
-              <BellIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
-              <Text tone="secondary">아직 알림이 없어요.</Text>
-            </div>
-          </Card>
+          <EmptyState
+            variant="inline"
+            icon={<BellIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+            title="아직 알림이 없어요"
+            description="새 댓글과 팔로우 소식이 생기면 이곳에서 바로 이어볼 수 있어요."
+            action={
+              <LinkButton href="/community" size="sm" variant="secondary">
+                커뮤니티 둘러보기
+              </LinkButton>
+            }
+          />
         ) : (
           <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200 bg-white">
             {visibleItems.map((n) => {
+              const href = safeNotificationHref(n.link);
               const body = (
                 <div className="flex items-start gap-3 px-5 py-4">
                   {!n.read ? (
@@ -183,15 +212,15 @@ export function NotificationsPage() {
               );
               return (
                 <li key={n.id}>
-                  {n.link !== null ? (
+                  {href !== null ? (
                     <Link
-                      href={n.link}
+                      href={href}
                       onClick={() => handleClickItem(n)}
                       className="block hover:bg-neutral-50"
                     >
                       {body}
                     </Link>
-                  ) : (
+                  ) : !n.read ? (
                     <button
                       type="button"
                       onClick={() => handleClickItem(n)}
@@ -199,6 +228,8 @@ export function NotificationsPage() {
                     >
                       {body}
                     </button>
+                  ) : (
+                    <div>{body}</div>
                   )}
                 </li>
               );

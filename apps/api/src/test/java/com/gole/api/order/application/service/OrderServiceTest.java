@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.order.adapter.out.payment.StubPaymentGatewayAdapter;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
@@ -237,6 +238,21 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.complete(id)).isInstanceOf(OrderStateException.class);
         assertThat(settlement.calls).hasValue(0);
         assertThat(reservation.released).isFalse();
+    }
+
+    @Test
+    void disabledProductionGatewayRejectsRefundBeforeAnyOrderStateMutation() {
+        reservation.available = true;
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
+        service.pay(id);
+        service = serviceWith(new StubPaymentGatewayAdapter("production"));
+
+        assertThatThrownBy(() -> service.refund(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.FUNDS_HELD);
+        assertThat(reservation.released).isFalse();
+
+        assertThatThrownBy(() -> service.confirmRefund(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.FUNDS_HELD);
     }
 
     @Test

@@ -2,7 +2,7 @@
 
 import { type FormEvent, type ChangeEvent, useState } from "react";
 import { POST_TOPICS, publishPost, type PostType } from "@entities/community";
-import { ApiError, uploadImages } from "@shared/api";
+import { ApiError, uploadImages, type UploadedImage } from "@shared/api";
 import { Button, Field, Select, Textarea } from "@shared/ui";
 
 export interface CreatePostFormProps {
@@ -14,7 +14,7 @@ const MAX_IMAGES = 5;
 
 export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   const [content, setContent] = useState("");
-  const [imageUrls, setImageUrls] = useState<readonly string[]>([]);
+  const [images, setImages] = useState<readonly UploadedImage[]>([]);
   const [topic, setTopic] = useState<PostType>("general");
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
@@ -26,7 +26,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       return;
     }
     setError(undefined);
-    const remaining = MAX_IMAGES - imageUrls.length;
+    const remaining = MAX_IMAGES - images.length;
     if (remaining <= 0) {
       setError(`이미지는 최대 ${MAX_IMAGES}장까지 올릴 수 있어요.`);
       return;
@@ -34,7 +34,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
     setUploading(true);
     try {
       const uploaded = await uploadImages(selected.slice(0, remaining));
-      setImageUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
+      setImages((prev) => [...prev, ...uploaded]);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
@@ -43,8 +43,8 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
     }
   }
 
-  function removeImage(url: string) {
-    setImageUrls((prev) => prev.filter((u) => u !== url));
+  function removeImage(key: string) {
+    setImages((prev) => prev.filter((image) => image.key !== key));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -55,7 +55,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       const post = await publishPost({
         authorId,
         content,
-        imageUrls: [...imageUrls],
+        imageKeys: images.map((image) => image.key),
         topic,
       });
       onCreated(post.id);
@@ -97,34 +97,34 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       </Field>
       <Field
         label="이미지 (선택)"
-        hint={`최대 ${MAX_IMAGES}장 · 직접 촬영하거나 제작한 이미지만 올려주세요. LEGO 공식 제품·카탈로그 이미지 도용은 금지됩니다.`}
+        hint={`최대 ${MAX_IMAGES}장 · JPEG/PNG 정지 이미지만 가능하며 위치정보 등 메타데이터는 제거됩니다. 직접 촬영하거나 제작한 이미지만 올려주세요.`}
       >
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input
               id={inputId}
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
+              accept="image/jpeg,image/png"
               multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
-              disabled={uploading || submitting || imageUrls.length >= MAX_IMAGES}
+              disabled={uploading || submitting || images.length >= MAX_IMAGES}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
             {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
-            {imageUrls.length > 0 ? (
+            {images.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
-                {imageUrls.map((url, index) => (
-                  <li key={url} className="relative">
+                {images.map((image, index) => (
+                  <li key={image.key} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={url}
+                      src={image.url}
                       alt={`이미지 ${index + 1}`}
                       className="h-24 w-24 rounded-lg border border-neutral-200/70 object-cover"
                     />
                     <button
                       type="button"
-                      onClick={() => removeImage(url)}
+                      onClick={() => removeImage(image.key)}
                       aria-label={`이미지 ${index + 1} 삭제`}
                       className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900/80 text-sm text-white"
                     >

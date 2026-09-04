@@ -1,18 +1,26 @@
 package com.gole.api.common.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -28,10 +36,10 @@ class DiscordOperationalEventPublisherTest {
 
     @Test
     void publish_routesEveryOperationalCategoryToItsRoleSpecificWebhook() throws Exception {
-        CountDownLatch received = new CountDownLatch(4);
+        CountDownLatch received = new CountDownLatch(5);
         ConcurrentLinkedQueue<String> paths = new ConcurrentLinkedQueue<>();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        for (String path : List.of("/account", "/payment", "/operations")) {
+        for (String path : List.of("/account", "/payment", "/support", "/operations")) {
             server.createContext(path, exchange -> {
                 paths.add(exchange.getRequestURI().getPath());
                 exchange.getRequestBody().readAllBytes();
@@ -48,6 +56,7 @@ class DiscordOperationalEventPublisherTest {
             properties.setEnabled(true);
             properties.setAccountWebhookUrl(base + "/account");
             properties.setPaymentWebhookUrl(base + "/payment");
+            properties.setSupportWebhookUrl(base + "/support");
             properties.setOperationsWebhookUrl(base + "/operations");
             DiscordOperationalEventPublisher publisher =
                     new DiscordOperationalEventPublisher(properties, new ObjectMapper());
@@ -63,7 +72,8 @@ class DiscordOperationalEventPublisherTest {
             }
 
             assertThat(received.await(2, TimeUnit.SECONDS)).isTrue();
-            assertThat(paths).containsExactlyInAnyOrder("/account", "/payment", "/operations", "/operations");
+            assertThat(paths)
+                    .containsExactlyInAnyOrder("/account", "/payment", "/support", "/operations", "/operations");
         } finally {
             server.stop(0);
         }
@@ -146,48 +156,60 @@ class DiscordOperationalEventPublisherTest {
     }
 
     @Test
-    void publish_deduplicatesRepeatedApplicationDependencyFailures() throws Exception {
-        AtomicInteger requests = new AtomicInteger();
-        CountDownLatch received = new CountDownLatch(1);
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/webhook", exchange -> {
-            requests.incrementAndGet();
-            exchange.getRequestBody().readAllBytes();
-            exchange.sendResponseHeaders(204, -1);
-            exchange.close();
-            received.countDown();
-        });
-        server.start();
+    void publish_deduplicatesApplicationEventWhileInFlightAndAfterSuccessfulDelivery() {
+        HttpClient httpClient = mock(HttpClient.class);
+        CompletableFuture<HttpResponse<Void>> delivery = new CompletableFuture<>();
+        when(httpClient.sendAsync(
+                        any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<Void>>any()))
+                .thenReturn(delivery);
+        DiscordOperationalEventPublisher publisher = testPublisher(
+                applicationProperties(),
+                httpClient,
+                Duration.ofSeconds(1),
+                Duration.ofMillis(1),
+                Duration.ofMillis(10),
+                1);
+        OperationalEvent first = applicationEvent("/api/v1/media/catalog/10294.svg");
+        OperationalEvent sameFailureFromAnotherRequest = applicationEvent("/api/v1/media/catalog/10307.svg");
 
-        try {
-            DiscordOperationsProperties properties = properties(server);
-            properties.setDeduplicationWindow(Duration.ofMinutes(5));
-            DiscordOperationalEventPublisher publisher =
-                    new DiscordOperationalEventPublisher(properties, new ObjectMapper());
-            OperationalEvent first = new OperationalEvent(
-                    Category.APPLICATION,
-                    Level.ERROR,
-                    "미디어 저장소 연결 장애",
-                    "스토리지 연결 실패",
-                    Map.of("요청 경로", "/api/v1/media/catalog/10294.svg", "예외 종류", "SdkClientException"),
-                    Instant.now());
-            OperationalEvent second = new OperationalEvent(
-                    Category.APPLICATION,
-                    Level.ERROR,
-                    "미디어 저장소 연결 장애",
-                    "스토리지 연결 실패",
-                    Map.of("요청 경로", "/api/v1/media/catalog/10307.svg", "예외 종류", "SdkClientException"),
-                    Instant.now());
+        publisher.publish(first);
+        publisher.publish(sameFailureFromAnotherRequest);
 
-            publisher.publish(first);
-            publisher.publish(second);
+        verify(httpClient, times(1))
+                .sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<Void>>any());
 
-            assertThat(received.await(2, TimeUnit.SECONDS)).isTrue();
-            Thread.sleep(100);
-            assertThat(requests).hasValue(1);
-        } finally {
-            server.stop(0);
-        }
+        delivery.complete(response(204));
+        publisher.publish(sameFailureFromAnotherRequest);
+
+        verify(httpClient, times(1))
+                .sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<Void>>any());
+    }
+
+    @Test
+    void publish_releasesApplicationDeduplicationAfterFinalFailure() {
+        HttpClient httpClient = mock(HttpClient.class);
+        CompletableFuture<HttpResponse<Void>> failedDelivery = new CompletableFuture<>();
+        CompletableFuture<HttpResponse<Void>> nextDelivery = new CompletableFuture<>();
+        when(httpClient.sendAsync(
+                        any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<Void>>any()))
+                .thenReturn(failedDelivery)
+                .thenReturn(nextDelivery);
+        DiscordOperationalEventPublisher publisher = testPublisher(
+                applicationProperties(),
+                httpClient,
+                Duration.ofSeconds(1),
+                Duration.ofMillis(1),
+                Duration.ofMillis(10),
+                1);
+        OperationalEvent event = applicationEvent("/api/v1/media/catalog/10294.svg");
+
+        publisher.publish(event);
+        failedDelivery.complete(response(503));
+        publisher.publish(event);
+
+        verify(httpClient, times(2))
+                .sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<Void>>any());
+        nextDelivery.complete(response(204));
     }
 
     @Test
@@ -353,6 +375,69 @@ class DiscordOperationalEventPublisherTest {
         }
     }
 
+    @Test
+    void publishAndConfirmReturnsOnlyAfterDiscordAcceptanceAndKeepsMentionsDisabled() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/webhook", exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        server.start();
+
+        try {
+            DiscordOperationalEventPublisher publisher =
+                    new DiscordOperationalEventPublisher(properties(server), new ObjectMapper());
+            OperationalEvent support = new OperationalEvent(
+                    Category.SUPPORT,
+                    Level.INFO,
+                    "새 운영 문의 접수",
+                    "관리자 문의함에서 확인해 주세요.",
+                    Map.of("이벤트 ID", "event-1"),
+                    Instant.parse("2026-09-04T01:02:03Z"));
+
+            var result = publisher.publishAndConfirm(support);
+
+            assertThat(result.status()).isEqualTo(ConfirmedOperationalEventPublisher.DeliveryStatus.DELIVERED);
+            assertThat(body.get())
+                    .contains("event-1", "\"allowed_mentions\":{\"parse\":[]}")
+                    .doesNotContain("@everyone", "@here");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void publishAndConfirmClassifiesServerAndClientFailuresForDurableWorker() throws Exception {
+        AtomicInteger status = new AtomicInteger(503);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/webhook", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(status.get(), -1);
+            exchange.close();
+        });
+        server.start();
+
+        try {
+            DiscordOperationalEventPublisher publisher =
+                    new DiscordOperationalEventPublisher(properties(server), new ObjectMapper());
+
+            var retryable = publisher.publishAndConfirm(event(Map.of("이벤트 ID", "event-1")));
+            status.set(400);
+            var permanent = publisher.publishAndConfirm(event(Map.of("이벤트 ID", "event-2")));
+
+            assertThat(retryable.status())
+                    .isEqualTo(ConfirmedOperationalEventPublisher.DeliveryStatus.RETRYABLE_FAILURE);
+            assertThat(retryable.errorCode()).isEqualTo("HTTP_503");
+            assertThat(permanent.status())
+                    .isEqualTo(ConfirmedOperationalEventPublisher.DeliveryStatus.PERMANENT_FAILURE);
+            assertThat(permanent.errorCode()).isEqualTo("HTTP_400");
+        } finally {
+            server.stop(0);
+        }
+    }
+
     private static DiscordOperationsProperties properties(HttpServer server) {
         DiscordOperationsProperties properties = new DiscordOperationsProperties();
         properties.setEnabled(true);
@@ -375,6 +460,43 @@ class DiscordOperationalEventPublisherTest {
                 retryDelay,
                 maxRetryDelay,
                 maxAttempts);
+    }
+
+    private static DiscordOperationalEventPublisher testPublisher(
+            DiscordOperationsProperties properties,
+            HttpClient httpClient,
+            Duration requestTimeout,
+            Duration retryDelay,
+            Duration maxRetryDelay,
+            int maxAttempts) {
+        return new DiscordOperationalEventPublisher(
+                properties, new ObjectMapper(), httpClient, requestTimeout, retryDelay, maxRetryDelay, maxAttempts);
+    }
+
+    private static DiscordOperationsProperties applicationProperties() {
+        DiscordOperationsProperties properties = new DiscordOperationsProperties();
+        properties.setEnabled(true);
+        properties.setEnvironment("test");
+        properties.setOperationsWebhookUrl("https://discord.com/api/webhooks/1/test-token");
+        properties.setDeduplicationWindow(Duration.ofMinutes(5));
+        return properties;
+    }
+
+    private static OperationalEvent applicationEvent(String requestPath) {
+        return new OperationalEvent(
+                Category.APPLICATION,
+                Level.ERROR,
+                "미디어 저장소 연결 장애",
+                "스토리지 연결 실패",
+                Map.of("요청 경로", requestPath, "예외 종류", "SdkClientException"),
+                Instant.parse("2026-01-01T00:00:00Z"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static HttpResponse<Void> response(int status) {
+        HttpResponse<Void> response = (HttpResponse<Void>) mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(status);
+        return response;
     }
 
     private static OperationalEvent event(Map<String, String> fields) {

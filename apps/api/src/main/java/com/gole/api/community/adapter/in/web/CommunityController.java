@@ -106,7 +106,7 @@ public class CommunityController {
     @ResponseStatus(HttpStatus.CREATED)
     public PostResponse publish(@Valid @RequestBody PublishPostRequest request, HttpServletRequest http) {
         String id = publishPostUseCase.publish(new PublishPostCommand(
-                AuthenticatedUser.id(http), request.content(), request.imageUrls(), request.topic()));
+                AuthenticatedUser.id(http), request.content(), request.imageKeys(), request.topic()));
         return PostResponse.from(getFeedUseCase.getPost(id), AuthenticatedUser.id(http));
     }
 
@@ -166,7 +166,7 @@ public class CommunityController {
     public PostResponse edit(
             @PathVariable String postId, @Valid @RequestBody EditPostRequest request, HttpServletRequest http) {
         editPostUseCase.edit(
-                new EditPostCommand(postId, AuthenticatedUser.id(http), request.content(), request.imageUrls()));
+                new EditPostCommand(postId, AuthenticatedUser.id(http), request.content(), request.imageKeys()));
         return PostResponse.from(getFeedUseCase.getPost(postId), AuthenticatedUser.id(http));
     }
 

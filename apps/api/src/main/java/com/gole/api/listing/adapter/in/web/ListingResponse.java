@@ -2,6 +2,7 @@ package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.media.domain.model.MediaKey;
 import java.time.Instant;
 import java.util.List;
 
@@ -42,7 +43,9 @@ public record ListingResponse(
                 d.hasMissingParts(),
                 d.missingPartsNote(),
                 d.defectsNote(),
-                listing.getPhotoUrls(),
+                listing.getPhotoUrls().stream()
+                        .flatMap(value -> MediaKey.safePublicPath(value).stream())
+                        .toList(),
                 listing.getCatalogSetNumber(),
                 listing.getCategory().key(),
                 listing.getStatus().name().toLowerCase(),

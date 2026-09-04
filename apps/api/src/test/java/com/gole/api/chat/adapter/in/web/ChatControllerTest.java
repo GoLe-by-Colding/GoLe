@@ -3,15 +3,22 @@ package com.gole.api.chat.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
+import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
@@ -24,6 +31,7 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
@@ -40,6 +48,7 @@ import java.util.Optional;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
@@ -58,17 +67,24 @@ class ChatControllerTest {
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final ChatMessagingService messaging = mock(ChatMessagingService.class);
     private final ChatReadService reads = mock(ChatReadService.class);
+    private final DirectTradeService directTrades = mock(DirectTradeService.class);
     private final SupportTicketRepositoryPort supportTickets = mock(SupportTicketRepositoryPort.class);
+    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents =
+            mock(ThirdPartyProvisionConsentService.class);
+    private final SellerIdentityVerificationService sellerIdentityVerification =
+            mock(SellerIdentityVerificationService.class);
     private final ChatController controller = new ChatController(
             rooms,
             listeners,
             listings,
             new ObjectMapper(),
-            mock(DirectTradeService.class),
+            directTrades,
             socialChats,
             messaging,
             reads,
-            supportTickets);
+            supportTickets,
+            thirdPartyProvisionConsents,
+            sellerIdentityVerification);
 
     @Test
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
@@ -85,6 +101,64 @@ class ChatControllerTest {
         assertThat(response.buyerId()).isEqualTo("real-buyer");
         assertThat(response.sellerId()).isEqualTo("real-seller");
         verify(rooms).findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1");
+        verify(sellerIdentityVerification).requireVerifiedSeller("real-seller");
+    }
+
+    @Test
+    void createRoom_requiresCurrentProvisionConsentBeforeCreatingRoom() {
+        when(listings.getById("listing-1")).thenReturn(listing("seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("legacy-buyer", "seller", "listing-1"))
+                .thenReturn(Optional.empty());
+        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+                .when(thirdPartyProvisionConsents)
+                .requireCurrent("legacy-buyer");
+
+        assertThatThrownBy(() -> controller.createOrGetRoom(
+                        new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("legacy-buyer")))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("code")
+                .isEqualTo(ThirdPartyProvisionConsentService.REQUIRED_CODE);
+
+        verify(listings, never()).getPublicById("listing-1");
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void createRoom_requiresVerifiedListingSellerBeforeCreatingANewRoom() {
+        when(listings.getById("listing-1")).thenReturn(listing("unverified-seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("buyer", "unverified-seller", "listing-1"))
+                .thenReturn(Optional.empty());
+        doThrow(new ServiceUnavailableException(
+                        "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "seller verification unavailable"))
+                .when(sellerIdentityVerification)
+                .requireVerifiedSeller("unverified-seller");
+
+        assertThatThrownBy(() -> controller.createOrGetRoom(
+                        new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("buyer")))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE");
+
+        verifyNoInteractions(thirdPartyProvisionConsents);
+        verify(rooms, never()).save(any());
+    }
+
+    @Test
+    void createRoom_requiresSellersConsentBeforeProvidingTheirIdentityToANewRoom() {
+        when(listings.getById("listing-1")).thenReturn(listing("seller"));
+        when(rooms.findByBuyerIdAndSellerIdAndListingId("buyer", "seller", "listing-1"))
+                .thenReturn(Optional.empty());
+        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+                .when(thirdPartyProvisionConsents)
+                .requireCurrentSubject("seller");
+
+        assertThatThrownBy(() -> controller.createOrGetRoom(
+                        new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("buyer")))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("code")
+                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
+
+        verify(listings, never()).getPublicById("listing-1");
+        verify(rooms, never()).save(any());
     }
 
     @Test
@@ -141,6 +215,8 @@ class ChatControllerTest {
                 new ChatController.CreateRoomRequest("deleted-listing", null, null), authenticated("real-buyer"));
 
         assertThat(response.id()).isEqualTo("room-1");
+        verifyNoInteractions(thirdPartyProvisionConsents);
+        verifyNoInteractions(sellerIdentityVerification);
         verify(listings, never()).getPublicById("deleted-listing");
         verify(rooms, never()).save(any());
     }
@@ -159,6 +235,24 @@ class ChatControllerTest {
                 new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("real-buyer"));
 
         assertThat(response.id()).isEqualTo("winner");
+    }
+
+    @Test
+    void directTradeConfirmationRequiresTheListingSellersVerifiedIdentity() {
+        Instant now = Instant.parse("2026-09-04T00:00:00Z");
+        ChatRoomDocument listingRoom = new ChatRoomDocument("room-1", "listing-1", "buyer-1", "seller-1", now);
+        when(socialChats.requireReadable("room-1", "buyer-1"))
+                .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer-1", "seller-1", now));
+        when(rooms.findById("room-1")).thenReturn(Optional.of(listingRoom));
+        doThrow(new ServiceUnavailableException(
+                        "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "seller verification unavailable"))
+                .when(sellerIdentityVerification)
+                .requireVerifiedSeller("seller-1");
+
+        assertThatThrownBy(() -> controller.confirmDirectTrade("room-1", authenticated("buyer-1")))
+                .isInstanceOf(ServiceUnavailableException.class);
+
+        verify(directTrades, never()).confirm(any(), any());
     }
 
     @Test
@@ -226,6 +320,37 @@ class ChatControllerTest {
 
         assertThat(response).extracting(ChatController.MessageResponse::id).containsExactly("message-1", "message-2");
         verify(messaging).history("room-1", "buyer", null, null, 60);
+        verify(thirdPartyProvisionConsents, never()).requireCurrent("buyer");
+    }
+
+    @Test
+    void sendingNewNonSupportMessageRequiresConsentButSupportMessageDoesNot() {
+        SocialChatRoom listingRoom =
+                SocialChatRoom.listing("listing-room", "listing-1", "buyer", "seller", Instant.now());
+        when(socialChats.requireReadable("listing-room", "buyer")).thenReturn(listingRoom);
+        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+                .when(thirdPartyProvisionConsents)
+                .requireCurrent("buyer");
+
+        assertThatThrownBy(() -> controller.sendMessage(
+                        "listing-room",
+                        new ChatController.SendMessageRequest(null, "new message"),
+                        authenticated("buyer")))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messaging, never()).send("listing-room", "buyer", "new message");
+
+        SocialChatRoom supportRoom = SocialChatRoom.support("support-room", "buyer", "privacy request", Instant.now());
+        ChatMessage sent = new ChatMessage("message-1", "support-room", "buyer", "help", Instant.now());
+        when(socialChats.requireReadable("support-room", "buyer")).thenReturn(supportRoom);
+        when(messaging.send("support-room", "buyer", "help")).thenReturn(sent);
+
+        assertThat(controller
+                        .sendMessage(
+                                "support-room",
+                                new ChatController.SendMessageRequest(null, "help"),
+                                authenticated("buyer"))
+                        .id())
+                .isEqualTo("message-1");
     }
 
     @Test
@@ -241,9 +366,21 @@ class ChatControllerTest {
         Message invalid = mock(Message.class);
         when(invalid.getBody()).thenReturn("not-json".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-        listener.getValue().onMessage(invalid, null);
+        Logger logger = (Logger) LoggerFactory.getLogger(ChatController.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            listener.getValue().onMessage(invalid, null);
+        } finally {
+            logger.detachAppender(appender);
+        }
 
         verify(listeners).removeMessageListener(listener.getValue(), topic.getValue());
+        assertThat(appender.list).singleElement().satisfies(event -> {
+            assertThat(event.getFormattedMessage()).contains("errorType=");
+            assertThat(event.getFormattedMessage()).doesNotContain("not-json");
+        });
     }
 
     @Test

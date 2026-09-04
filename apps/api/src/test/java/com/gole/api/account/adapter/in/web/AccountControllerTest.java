@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.LogoutUseCase;
+import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
 import com.gole.api.account.application.port.in.RefreshSessionUseCase;
 import com.gole.api.account.application.port.in.RefreshSessionUseCase.RefreshSessionResult;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
@@ -18,7 +19,9 @@ import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterA
 import com.gole.api.account.application.port.in.ResendVerificationUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
+import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Role;
+import com.gole.api.common.web.ClientAddressResolver;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
 import java.util.Optional;
@@ -34,21 +37,27 @@ class AccountControllerTest {
 
     private RefreshSessionUseCase refreshSessions;
     private RegisterAccountUseCase registerAccounts;
+    private ResendVerificationUseCase resendVerifications;
+    private PublicAuthRequestLimitUseCase publicRequestLimit;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         refreshSessions = mock(RefreshSessionUseCase.class);
         registerAccounts = mock(RegisterAccountUseCase.class);
+        resendVerifications = mock(ResendVerificationUseCase.class);
+        publicRequestLimit = mock(PublicAuthRequestLimitUseCase.class);
         var controller = new AccountController(
                 registerAccounts,
-                mock(ResendVerificationUseCase.class),
+                resendVerifications,
                 mock(VerifyEmailUseCase.class),
                 mock(SignInUseCase.class),
                 mock(GetCurrentSessionUseCase.class),
                 mock(LogoutUseCase.class),
                 refreshSessions,
-                new SessionCookie("false", Duration.ofDays(7)));
+                new SessionCookie("false", Duration.ofDays(7)),
+                publicRequestLimit,
+                new ClientAddressResolver());
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -64,21 +73,52 @@ class AccountControllerTest {
                                 {
                                   "email": "member@gole.test",
                                   "password": "password1",
-                                  "termsVersion": "2026-09-03",
-                                  "privacyVersion": "2026-09-03",
+                                  "termsVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-04",
+                                  "termsAccepted": true,
+                                  "privacyAcknowledged": true,
+                                  "minimumAgeConfirmed": true,
+                                  "thirdPartyProvisionVersion": "2026-09-04",
+                                  "thirdPartyProvisionAccepted": true
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accountId").value("registration-pending"));
+
+        ArgumentCaptor<RegisterAccountCommand> command = ArgumentCaptor.forClass(RegisterAccountCommand.class);
+        verify(registerAccounts).register(command.capture());
+        verify(publicRequestLimit).acquireRegistration("member@gole.test", "127.0.0.1");
+        assertThat(command.getValue().policyAcceptance().termsVersion()).isEqualTo("2026-09-04");
+        assertThat(command.getValue().policyAcceptance().privacyAcknowledged()).isTrue();
+        assertThat(command.getValue().policyAcceptance().minimumAgeConfirmed()).isTrue();
+        assertThat(command.getValue().policyAcceptance().thirdPartyProvisionVersion())
+                .isEqualTo("2026-09-04");
+        assertThat(command.getValue().policyAcceptance().thirdPartyProvisionAccepted())
+                .isTrue();
+    }
+
+    @Test
+    void registerDoesNotDiscloseWhetherEmailAlreadyExists() throws Exception {
+        when(registerAccounts.register(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new EmailAlreadyRegisteredException("member@gole.test"));
+
+        mvc.perform(
+                        post("/api/v1/accounts")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                {
+                                  "email": "member@gole.test",
+                                  "password": "password1",
+                                  "termsVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-04",
                                   "termsAccepted": true,
                                   "privacyAcknowledged": true,
                                   "minimumAgeConfirmed": true
                                 }
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accountId").value("account-1"));
-
-        ArgumentCaptor<RegisterAccountCommand> command = ArgumentCaptor.forClass(RegisterAccountCommand.class);
-        verify(registerAccounts).register(command.capture());
-        assertThat(command.getValue().policyAcceptance().termsVersion()).isEqualTo("2026-09-03");
-        assertThat(command.getValue().policyAcceptance().privacyAcknowledged()).isTrue();
-        assertThat(command.getValue().policyAcceptance().minimumAgeConfirmed()).isTrue();
+                .andExpect(jsonPath("$.accountId").value("registration-pending"));
     }
 
     @Test
@@ -91,8 +131,8 @@ class AccountControllerTest {
                                 {
                                   "email": "member@gole.test",
                                   "password": "password1",
-                                  "termsVersion": "2026-09-03",
-                                  "privacyVersion": "2026-09-03",
+                                  "termsVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-04",
                                   "termsAccepted": false,
                                   "privacyAcknowledged": true,
                                   "minimumAgeConfirmed": true
@@ -101,6 +141,23 @@ class AccountControllerTest {
                 .andExpect(status().isBadRequest());
 
         org.mockito.Mockito.verifyNoInteractions(registerAccounts);
+    }
+
+    @Test
+    void resendCooldownReturnsNoContentWithoutLookingUpAccount() throws Exception {
+        when(publicRequestLimit.acquireVerificationResend("member@gole.test", "127.0.0.1"))
+                .thenReturn(false);
+
+        mvc.perform(
+                        post("/api/v1/accounts/verification/resend")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                {"email":"member@gole.test"}
+                                """))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verifyNoInteractions(resendVerifications);
     }
 
     @Test

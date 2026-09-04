@@ -13,7 +13,7 @@
 - `app/layout.tsx`: `metadata`(metadataBase, title template `%s · GoLe`, OG/Twitter/robots/keywords/canonical) + JSON-LD(`Organization`+`WebSite`/SearchAction).
 - `app/robots.ts`, `app/sitemap.ts`: 공개 경로 색인, 비공개 disallow.
 - 각 page.tsx: 공개 페이지 per-page `metadata`, 비공개 `robots: { index:false }`.
-- `shared/config/env.ts`: `siteUrl`(NEXT_PUBLIC_SITE_URL, 기본 https://gole.kscold.com).
+- `shared/config/env.ts`: `siteUrl`(NEXT_PUBLIC_SITE_URL, 운영 기본 https://gole.co.kr).
 
 ## 브랜드 토큰 (`app/globals.css @theme`)
 
@@ -33,6 +33,6 @@
 
 ## 테스트 (Playwright)
 
-- `playwright.config.ts`: `chromium`(데스크톱, mobile.spec 제외) + `mobile-chrome`(Pixel 5, mobile.spec 전용). pm2 서버 재사용.
+- `playwright.config.ts`: `chromium`(데스크톱, mobile.spec 제외) + `mobile-chrome`(Pixel 5, mobile.spec 전용). 로컬 개발 서버 재사용.
 - 스펙: home/auth/create-listing/purchase(데스크톱) + mobile(오버플로우 없음, 햄버거 내비).
 - 브라우저: 컨테이너에 Chromium + OS 라이브러리 1회 설치(`npx playwright install --with-deps chromium`).

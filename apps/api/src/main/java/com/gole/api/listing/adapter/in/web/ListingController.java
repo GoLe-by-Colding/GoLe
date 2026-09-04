@@ -2,6 +2,7 @@ package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.adapter.in.web.RequiresOnboarding;
+import com.gole.api.account.adapter.in.web.RequiresVerifiedSellerIdentity;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.adapter.in.web.ListingRequests.CreateListingRequest;
 import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
@@ -32,9 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Inbound 어댑터(REST). use case 인터페이스에만 의존한다.
- */
+/** Inbound 어댑터(REST). use case 인터페이스에만 의존한다. */
 @Tag(name = "Listing", description = "매물 등록·검색·조회·완료·삭제")
 @RestController
 @RequestMapping("/api/v1/listings")
@@ -62,9 +61,10 @@ public class ListingController {
         this.browseListingsUseCase = browseListingsUseCase;
     }
 
-    @Operation(summary = "매물 등록", description = "판매할 레고 상품을 등록합니다. sellerId는 로그인 계정 ID.")
+    @Operation(summary = "매물 등록", description = "판매할 브릭 상품을 등록합니다. sellerId는 로그인 계정 ID.")
     @PostMapping
     @RequiresOnboarding // onboarding D5, R9
+    @RequiresVerifiedSellerIdentity
     @ResponseStatus(HttpStatus.CREATED)
     public ListingResponse create(@Valid @RequestBody CreateListingRequest request, HttpServletRequest http) {
         String id = createListingUseCase.create(new CreateListingCommand(
@@ -80,7 +80,7 @@ public class ListingController {
                         request.hasMissingParts(),
                         request.missingPartsNote(),
                         request.defectsNote()),
-                request.photoUrls(),
+                request.photoKeys(),
                 request.catalogSetNumber(),
                 com.gole.api.listing.domain.model.ListingCategory.fromKey(request.category())));
         return ListingResponse.from(getListingUseCase.getById(id));

@@ -13,6 +13,8 @@ storage:
   public-base-url: "${STORAGE_PUBLIC_BASE_URL:http://localhost:${SERVER_PORT:8080}}"
 
 gole:
+  seller-identity:
+    verification-ready: ${GOLE_SELLER_IDENTITY_VERIFICATION_READY:true}
   onboarding:
     # 운영은 카카오 템플릿 승인 전까지 빈 값으로 두어 발송을 명시적으로 거부해야 한다(503).
     # 로컬은 LoggingAlimtalkSenderAdapter가 실제 발송 대신 로그만 남기므로 값이 있어도 안전하다.

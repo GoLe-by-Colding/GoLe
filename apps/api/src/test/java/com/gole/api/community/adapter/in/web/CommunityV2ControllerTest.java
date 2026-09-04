@@ -51,7 +51,7 @@ class CommunityV2ControllerTest {
                 "post-1",
                 "author-1",
                 "",
-                List.of("community/example.jpg"),
+                List.of("community/example.svg"),
                 PostType.GENERAL,
                 PostStatus.DRAFT,
                 Set.of(),
@@ -62,7 +62,7 @@ class CommunityV2ControllerTest {
                 """
                 {
                   "body": "",
-                  "photos": ["community/example.jpg"],
+                  "mediaKeys": ["images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg"],
                   "visibility": "public",
                   "status": "draft"
                 }
@@ -77,10 +77,12 @@ class CommunityV2ControllerTest {
         verify(useCase).patch(command.capture());
         assertThat(command.getValue().body().provided()).isTrue();
         assertThat(command.getValue().body().value()).isEmpty();
-        assertThat(command.getValue().photos().value()).containsExactly("community/example.jpg");
+        assertThat(command.getValue().photos().value())
+                .containsExactly("images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg");
         assertThat(command.getValue().status().value()).isEqualTo(PostStatus.DRAFT);
         assertThat(response.body()).isEmpty();
-        assertThat(response.photos()).containsExactly("community/example.jpg");
+        assertThat(response.mediaKeys()).isEmpty();
+        assertThat(response.imageUrls()).containsExactly("/api/v1/media/community/example.svg");
         assertThat(response.status()).isEqualTo("draft");
     }
 

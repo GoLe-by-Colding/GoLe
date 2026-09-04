@@ -22,7 +22,10 @@ import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.SocialChatService;
+import com.gole.api.chat.application.SupportAssistantAnalysisService;
 import com.gole.api.chat.application.SupportChatService;
+import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
+import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
@@ -47,10 +50,11 @@ class AdminSupportControllerTest {
     private final SupportChatService support = mock(SupportChatService.class);
     private final SocialChatService rooms = mock(SocialChatService.class);
     private final ChatMessagingService messaging = mock(ChatMessagingService.class);
+    private final SupportAssistantAnalysisService supportAssistant = mock(SupportAssistantAnalysisService.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                    new AdminSupportController(support, rooms, messaging, audit))
+                    new AdminSupportController(support, rooms, messaging, supportAssistant, audit))
             .addInterceptors(new AdminAuthInterceptor(sessions, new SessionCookie("false")))
             .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
             .build();
@@ -109,7 +113,54 @@ class AdminSupportControllerTest {
                         .param("category", "PRIVACY_CORRECTION_DELETION"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].category").value("PRIVACY_CORRECTION_DELETION"))
+                .andExpect(jsonPath("$[0].progressDueAt").value("2026-09-02T09:00:00Z"))
                 .andExpect(jsonPath("$[0].responseDueAt").value("2026-09-09T09:00:00Z"));
+    }
+
+    @Test
+    void assignedAdminSeesReviewOnlyAssistantAnalysis() throws Exception {
+        SupportTicket ticket = SupportTicket.opened("room-ai", "user-1", NOW).assignTo("admin-2", NOW);
+        SocialChatRoom room =
+                SocialChatRoom.support("room-ai", "user-1", "일반 문의", NOW).withSupportAgent(null, "admin-2");
+        Analysis analysis = new Analysis(
+                SupportCategory.TRADE,
+                Priority.HIGH,
+                "거래 조건을 확인해야 합니다.",
+                "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
+                List.of("ESCROW_REVIEW"),
+                true,
+                false,
+                "rules-v1");
+        when(support.inbox("admin-2", null, null, 50)).thenReturn(List.of(ticket));
+        when(rooms.requireRoom("room-ai")).thenReturn(room);
+        when(supportAssistant.findCompleted(List.of("room-ai"))).thenReturn(java.util.Map.of("room-ai", analysis));
+
+        mvc.perform(get("/api/admin/support").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].category").value("GENERAL"))
+                .andExpect(jsonPath("$[0].assistantAnalysis.category").value("TRADE"))
+                .andExpect(jsonPath("$[0].assistantAnalysis.priority").value("HIGH"))
+                .andExpect(jsonPath("$[0].assistantAnalysis.summary").value("거래 조건을 확인해야 합니다."))
+                .andExpect(jsonPath("$[0].assistantAnalysis.draft").value("안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다."))
+                .andExpect(jsonPath("$[0].assistantAnalysis.risk[0]").value("ESCROW_REVIEW"))
+                .andExpect(jsonPath("$[0].assistantAnalysis.humanReview").value(true))
+                .andExpect(jsonPath("$[0].assistantAnalysis.externalModel").value(false))
+                .andExpect(jsonPath("$[0].assistantAnalysis.engine").value("rules-v1"));
+    }
+
+    @Test
+    void unassignedInboxDoesNotExposeAssistantDerivedContent() throws Exception {
+        SupportTicket ticket = SupportTicket.opened("room-unassigned", "user-1", NOW);
+        SocialChatRoom room = SocialChatRoom.support("room-unassigned", "user-1", "비공개 문의", NOW);
+        when(support.inbox("admin-2", null, null, 50)).thenReturn(List.of(ticket));
+        when(rooms.requireRoom("room-unassigned")).thenReturn(room);
+
+        mvc.perform(get("/api/admin/support").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].assistantAnalysis").doesNotExist());
+
+        verify(supportAssistant).findCompleted(List.of());
+        verify(supportAssistant, never()).findCompleted("room-unassigned");
     }
 
     @Test

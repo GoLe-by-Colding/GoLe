@@ -29,6 +29,18 @@ test.describe("Home", () => {
     await expect(page.getByText("#10307").first()).toBeVisible();
   });
 
+  test("추천 세트 카드가 세트 상세로 이어진다", async ({ page }) => {
+    await page.goto("/");
+
+    const card = page.getByTestId("lego-set-card").first();
+    const detailLink = card.getByRole("link", { name: /세트 상세 보기/ });
+    const href = await detailLink.getAttribute("href");
+
+    expect(href).toMatch(/^\/sets\/[^/]+$/);
+    await detailLink.click();
+    await expect(page).toHaveURL(new RegExp(`${href!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+  });
+
   test("히어로 CTA로 탐색/시세로 이동한다", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("link", { name: "상품 둘러보기" }).click();

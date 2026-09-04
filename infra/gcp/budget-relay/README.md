@@ -11,8 +11,8 @@ Cloud Billing Budget은 비용 상한이 아니고 실제비용 알림도 지연
 - 유효한 현재 Budget 실제비용이 `320,000원`에 도달함
 - 고정비·송신비·정지 후 디스크/IP·VAT를 합친 추정액이 `350,000원`에 도달함
 - 호스트 송신량이 `30 GiB`에 도달함
-- 가드 경과시간이 `1,320시간`에 도달함
-- `2026-10-26T19:50:00+09:00`에 도달함
+- 가드 경과시간이 `1,350시간`에 도달함
+- `2026-10-28T01:50:00+09:00`에 도달함
 - 호스트 비용 계측 파일을 읽지 못해 비용을 안전하게 계산할 수 없음
 
 정지 조건은 Discord보다 먼저 실행된다. Webhook이 느리거나 실패해도 정지를
@@ -28,7 +28,9 @@ Budget `costAmount`는 게시된 세금이 포함될 수 있는 값으로 그대
 
 ## 운영 환경변수
 
-배포 워크플로가 다음 값을 Compose에 전달한다.
+다음 값은 GitHub repository variables가 아니라 host bootstrap/이전 절차가 검증해 설치한
+root-owned `/etc/gole/infra.env`에서만 Compose에 전달된다. runner 환경은 root Compose로
+전달되지 않는다.
 
 | 변수 | 현재 값 | 용도 |
 |---|---:|---|
@@ -36,17 +38,25 @@ Budget `costAmount`는 게시된 세금이 포함될 수 있는 값으로 그대
 | `GCP_PROJECT_ID` | `project-72a52bf1-06aa-4519-b2c` | 정지할 VM의 프로젝트 |
 | `GCP_CREDIT_AMOUNT_KRW` | `395600.60` | 전체 크레딧 |
 | `GCP_CREDIT_DEADLINE` | `2026-10-28` | 크레딧 만료일 |
-| `GCP_FIXED_HOURLY_COST_KRW` | `231.249894200` | CPU·RAM·100 GiB pd-balanced 세전 시간당 고정비 |
+| `GCP_FIXED_HOURLY_COST_KRW` | `153.390555330` | e2-standard-2 CPU·RAM·100 GiB pd-balanced·attached external IPv4 세전 시간당 고정비 |
 | `GCP_HARD_STOP_BILLING_COST_KRW` | `320000` | 지연된 Billing 실제비용 보조 정지선 |
 | `GCP_HARD_STOP_ALL_IN_COST_KRW` | `350000` | VAT 포함 보수 추정 정지선 |
 | `GCP_HARD_STOP_MIN_RESERVE_KRW` | `75000` | Billing 정지선의 최소 크레딧 여유 |
 | `GCP_HARD_STOP_NETWORK_GIB` | `30` | 누적 호스트 송신량 정지선 |
-| `GCP_HARD_STOP_MAX_RUNTIME_HOURS` | `1320` | 경과시간 정지선 |
-| `GCP_HARD_STOP_AT` | `2026-10-26T19:50:00+09:00` | 절대 정지 시각 |
-| `GCP_HARD_STOP_ARM_ID` | `2026-09-credit-v1` | 현재 크레딧 기간의 영속 잠금 ID |
+| `GCP_HARD_STOP_MAX_RUNTIME_HOURS` | `1350` | external IPv4·snapshot tail을 포함한 경과시간 정지선 |
+| `GCP_COST_GUARD_RUNTIME_WARNING_HOURS` | `1250` | 경과시간 사전 경고선 |
+| `GCP_COST_GUARD_RUNTIME_DANGER_HOURS` | `1320` | 경과시간 위험 경고선 |
+| `GCP_HARD_STOP_AT` | `2026-10-28T01:50:00+09:00` | 절대 정지 시각 |
+| `GCP_HARD_STOP_ARM_ID` | `2026-09-e2-standard-2-ipv4-v3` | 현재 크레딧 기간의 영속 잠금 ID |
 | `GCP_HARD_STOP_BUDGET_ID` | 현재 Budget UUID | 허용할 Budget 식별자 |
 | `GCP_HARD_STOP_BILLING_ACCOUNT_ID` | 현재 결제 계정 ID | 허용할 결제 계정 식별자 |
 | `DISCORD_OPERATIONS_WEBHOOK_URL` | secret | 운영 채널 Webhook |
+
+Discord 메시지는 Google의 forecast threshold를 `실제 초과 아님`으로 표시하고, Cloud Billing에
+게시된 실제 누적비용과 로컬 VAT·snapshot-tail 보수 projection을 별도 줄로 구분한다. forecast
+신호만으로는 VM을 정지하지 않는다. `GCP_HARD_STOP_ARM_ID`를 새 사양용 값으로 바꾸면 이전
+arm의 경고/trip/stop event는 재사용하지 않으며, `GCP_HARD_STOP_PERIOD_START`와 같은 현재
+기간의 게시 실제비용만 계속 사용한다.
 
 코드는 Budget 메시지의 `budgetId`, `billingAccountId`, `schemaVersion`, 표시명,
 통화, 금액, 기간 시작일을 모두 확인한다. 이전 크레딧 기간이나 다른 Budget의
@@ -54,8 +64,9 @@ Budget `costAmount`는 게시된 세금이 포함될 수 있는 값으로 그대
 
 비용 모델 기본값은 VAT `10%`, 외부 송신 최고 단가
 `318.154399937원/GiB`, 정지 후 디스크·미사용 고정 IP
-`45.725088879원/시간`이다. 송신량은 호스트 `ens4`의 부팅 후 전체 TX 바이트를
-포함해 실제 목적지와 관계없이 최고 단가로 계산한다.
+`45.725095000원/시간`이다. 송신량은 호스트 `ens4`의 TX counter를 root-owned
+내구 상태에 단조 누적해 재부팅·NIC reset 전 사용량까지 포함하고, 실제 목적지와 관계없이
+최고 단가로 계산한다.
 
 ## 최소 권한
 
@@ -63,16 +74,21 @@ VM에는 키 없는 전용 서비스 계정을 연결하고 OAuth scope는 `clou
 둔다. IAM 권한은 리소스별로 다음 두 개만 부여한다.
 
 - 해당 subscription의 `pubsub.subscriptions.consume`
-- 해당 `gole-production` 인스턴스의 `compute.instances.stop`
+- 해당 production Secret의 exact-version `secretmanager.versions.access`
+
+VM 정지는 runtime 서비스 계정 IAM이 아니라, metadata token을 읽지 않는 root broker가
+10초마다 독립적으로 비용 정책을 평가한 뒤 로컬 `systemctl poweroff`로 수행한다. runner와
+container는 metadata, Docker socket, 임의 systemctl에 접근할 수 없다.
 
 최초 GTS 인증서 EAB 생성 권한은 발급할 때만 임시 부여하고 발급 직후 제거한다.
 
 ## 계정·프로젝트 이전
 
-새 크레딧으로 이전할 때는 가격과 Budget을 다시 조회한 뒤 GitHub repository
-variables의 프로젝트, 결제 계정, Budget ID, 기간, VM 시작 시각, 종료 시각을
-교체한다. 마지막으로 이전과 다른 `GCP_HARD_STOP_ARM_ID`를 지정한다. 기존 ID를
-재사용하면 의도적으로 이전 정지 잠금이 유지된다.
+계정·프로젝트를 이전할 때는 가격과 Budget을 다시 조회한 뒤 코드 기본값/validator/bootstrap의
+infra.env 계약을 먼저 갱신하고, host bootstrap/adoption으로 `/etc/gole/infra.env`를 exact 값에
+맞춘다. 이후 GitHub variables는 runner 사전 확인과 Actions 알림용 mirror로만 갱신한다. mirror만
+바꿔서는 root Compose 비용 정책이 바뀌지 않는다. 마지막으로 이전과 다른
+`GCP_HARD_STOP_ARM_ID`를 지정한다. 기존 ID를 재사용하면 의도적으로 이전 정지 잠금이 유지된다.
 
 정지한 뒤에도 디스크와 미사용 고정 IP는 과금될 수 있으므로 데이터 이전을
 확인한 뒤 이전 프로젝트의 디스크 삭제와 IP 해제를 별도로 완료해야 한다.

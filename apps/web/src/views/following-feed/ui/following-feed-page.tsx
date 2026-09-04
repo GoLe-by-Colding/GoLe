@@ -301,6 +301,11 @@ export function FollowingFeedPage() {
                 variant="inline"
                 title="새 매물이 아직 없어요"
                 description="팔로우한 판매자가 상품을 등록하면 가장 먼저 이곳에 보여드려요."
+                action={
+                  <LinkButton href="/prices" size="sm" variant="secondary">
+                    세트 시세 둘러보기
+                  </LinkButton>
+                }
               />
             ) : null}
 
@@ -324,6 +329,11 @@ export function FollowingFeedPage() {
                 variant="inline"
                 title="새 이야기가 아직 없어요"
                 description="팔로우한 빌더가 글을 남기면 이곳에서 바로 이어볼 수 있어요."
+                action={
+                  <LinkButton href="/community" size="sm" variant="secondary">
+                    커뮤니티 둘러보기
+                  </LinkButton>
+                }
               />
             ) : null}
           </>

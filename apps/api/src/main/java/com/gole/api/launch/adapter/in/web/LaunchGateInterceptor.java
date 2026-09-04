@@ -91,8 +91,12 @@ public class LaunchGateInterceptor implements HandlerInterceptor {
         return "/api/v1/orders".equals(uri) || (uri.startsWith("/api/v1/orders/") && uri.endsWith("/payment"));
     }
 
-    /** 기존 후기 조회는 유지하고 새 후기 작성만 운영 설정으로 닫는다. */
+    /** 기존 후기 조회는 유지하고 새 후기와 판매자 답글 작성은 운영 설정으로 함께 닫는다. */
     private static boolean createsReview(HttpServletRequest request) {
-        return "POST".equalsIgnoreCase(request.getMethod()) && "/api/v1/reviews".equals(request.getRequestURI());
+        if (!"POST".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        return "/api/v1/reviews".equals(uri) || (uri.startsWith("/api/v1/reviews/") && uri.endsWith("/reply"));
     }
 }

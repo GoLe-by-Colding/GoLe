@@ -15,11 +15,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "gole.onboarding")
 public class OnboardingProperties {
 
+    /** 전화번호 인증을 온보딩 완료 조건으로 요구하는가. 로컬 기본값은 기존 4단계 흐름을 유지한다. */
+    private boolean phoneVerificationRequired = true;
+
     /** 인증코드 알림톡 템플릿 연동 ID. 비어 있으면 전화번호 인증 요청이 503으로 거부된다. */
     private String phoneVerificationTemplateId = "";
 
     /** 템플릿에 넘길 인증코드 변수명. 승인된 템플릿의 표기를 그대로 쓴다. */
     private String phoneVerificationCodeVariable = "#{인증번호}";
+
+    public boolean phoneVerificationRequired() {
+        return phoneVerificationRequired;
+    }
 
     public String phoneVerificationTemplateId() {
         return phoneVerificationTemplateId;
@@ -27,6 +34,10 @@ public class OnboardingProperties {
 
     public String phoneVerificationCodeVariable() {
         return phoneVerificationCodeVariable;
+    }
+
+    public void setPhoneVerificationRequired(boolean phoneVerificationRequired) {
+        this.phoneVerificationRequired = phoneVerificationRequired;
     }
 
     public void setPhoneVerificationTemplateId(String phoneVerificationTemplateId) {

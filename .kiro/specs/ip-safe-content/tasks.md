@@ -19,7 +19,7 @@
 
 ## 검증/배포
 - [x] 5. 프론트 build/lint + e2e(home/mobile) 통과
-- [x] 6. 배포 + 푸터/링크 확인 — 프로덕션 `https://gole.kscold.com/` 200
+- [x] 6. 배포 + 푸터/링크 확인 — 프로덕션 `https://gole.co.kr/` 200
 
 ## 후속
 - [x] 실제 사진 업로드(스토리지) 도입 — `image-upload` 스펙에서 완료(MinIO/S3 media 컨텍스트)

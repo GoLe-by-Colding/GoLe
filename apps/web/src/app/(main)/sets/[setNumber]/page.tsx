@@ -15,7 +15,7 @@ interface PageParams {
 /**
  * 세트 상세 — 롱테일 검색 착지 페이지. (SEO 스펙 R1)
  *
- * title은 실제 검색 쿼리 형태(`레고 10307 에펠탑 중고 시세`)를 그대로 담는다.
+ * title은 브랜드 오인 없이 세트번호·이름·거래 의도를 담는다.
  * 브랜드명은 layout의 template(`%s · GoLe`)이 뒤에 붙인다.
  */
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
@@ -28,9 +28,9 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
     return { title: "세트를 찾을 수 없습니다", robots: { index: false, follow: false } };
   }
 
-  const title = `레고 ${set.setNumber} ${set.name} 중고 시세·매물`;
+  const title = `브릭 세트 ${set.setNumber} ${set.name} 중고 시세·매물`;
   const description =
-    `레고 ${set.name}(${set.setNumber}) 중고 매물과 실제 체결가 시세를 확인하세요. ` +
+    `브릭 세트 ${set.name}(${set.setNumber}) 중고 매물과 검증된 거래 근거의 시세를 확인하세요. ` +
     `${set.theme} 테마 · ${set.pieceCount.toLocaleString()}피스 · ${set.releaseYear}년 출시.`;
   const canonical = `/sets/${set.setNumber}`;
 
@@ -60,7 +60,7 @@ function setJsonLd(
     "@context": "https://schema.org",
     "@type": "Product",
     "@id": `${env.siteUrl}/sets/${set.setNumber}#product`,
-    name: `레고 ${set.name}`,
+    name: `브릭 세트 ${set.name}`,
     sku: set.setNumber,
     productID: set.setNumber,
     category: set.theme,
@@ -128,7 +128,7 @@ export default async function Page({ params }: PageParams) {
         data={breadcrumbJsonLd(
           [
             { name: "홈", path: "/" },
-            { name: `레고 ${set.setNumber} ${set.name}`, path: `/sets/${set.setNumber}` },
+            { name: `브릭 세트 ${set.setNumber} ${set.name}`, path: `/sets/${set.setNumber}` },
           ],
           env.siteUrl,
         )}

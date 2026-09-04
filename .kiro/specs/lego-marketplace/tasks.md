@@ -1,4 +1,4 @@
-# GoLe LEGO Marketplace — Implementation Tasks
+# GoLe Brick Marketplace — Implementation Tasks
 
 > `requirements.md` / `design.md`를 구현 단위로 분해한다. 체크된 항목(`[x]`)은 현재 코드베이스에 구현·커밋·배포 완료된 것이다.
 > 구현 순서는 헥사고날(domain → port-in → port-out → service → persistence → web) 및 FSD(shared → entities → features → widgets → views → app) 규약을 따른다.
@@ -110,8 +110,8 @@
 ## 12. 인프라 / 배포
 
 - [x] 12.1 docker-compose(mongo rs0, redis)
-- [x] 12.2 `ubuntu-gole` 컨테이너 PM2(`gole-backend`, `gole-frontend`) + `scripts/deploy.sh`
-- [x] 12.3 nginx 리버스 프록시 + `gole.kscold.com` HTTPS(Let's Encrypt)
+- [x] 12.2 GCP `gole-production` Docker Compose + SHA 고정 `scripts/deploy.sh`
+- [x] 12.3 GCP nginx 리버스 프록시 + `gole.co.kr` HTTPS(Google Trust Services)
 - [x] 12.4 SDD 스펙 문서 정식화(`.kiro/specs/lego-marketplace/{requirements,design,tasks}.md`)
 
 ## 13. 후속 백로그 (Not started)

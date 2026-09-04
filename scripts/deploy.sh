@@ -1,13 +1,82 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
+SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${GOLE_DEPLOY_ROOT:-$SCRIPT_ROOT}"
+cd "$ROOT"
 TARGET="${1:-all}"
 DEPLOY_SHA="${DEPLOY_SHA:-}"
+ROLLBACK_SHA="${ROLLBACK_SHA:-}"
 COMPOSE=(docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f "$ROOT/infra/gcp/docker-compose.yml")
+HOSTCTL="/usr/local/sbin/gole-hostctl"
+PREPARE_NGINX_SCRIPT="$ROOT/infra/gcp/scripts/prepare-nginx-config.sh"
+# Isolated contract tests run outside /app and may inject rootless fakes. These
+# overrides are deliberately ignored on the production checkout.
+if [ "$ROOT" != "/app" ]; then
+  HOSTCTL="${GOLE_TEST_HOSTCTL:-$HOSTCTL}"
+  PREPARE_NGINX_SCRIPT="${GOLE_TEST_PREPARE_NGINX:-$PREPARE_NGINX_SCRIPT}"
+fi
+HOST_DOCKER_CONTROL=0
+if [ "$ROOT" = "/app" ] ||
+  { [ "$ROOT" != "/app" ] && [ "${GOLE_TEST_HOST_DOCKER_CONTROL:-0}" = "1" ]; }; then
+  HOST_DOCKER_CONTROL=1
+fi
+ROLLOUT_LOCK="/run/lock/gole-production-rollout.lock"
+PREVIOUS_SHA=""
+DEPLOY_MUTATED=0
+ROLLBACK_SUCCEEDED=0
+DEPLOYMENT_TRANSACTION_ID=""
+ROLLBACK_IMAGES=()
+DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+NGINX_TRANSACTION_ACTIVE=0
+NGINX_TRANSACTION_ID=""
+DEPLOYMENT_MARKER_ADVANCED=0
+DEPLOYMENT_TRANSACTION_ACTIVE=0
 
 log() { printf '\n▶ %s\n' "$*"; }
+
+install_discord_overlay() {
+  local deploy operations support variable_name
+  local -a required=(
+    DISCORD_OPERATIONS_WEBHOOK_URL
+    DISCORD_ACCOUNT_WEBHOOK_URL
+    DISCORD_PAYMENT_WEBHOOK_URL
+  )
+  [ "$HOST_DOCKER_CONTROL" = 1 ] || return 0
+  if [ "${GOLE_ROLLOUT_LOCK_HELD:-0}" = 1 ]; then
+    # CD/Secret Sync installed the overlay in the immediately preceding step,
+    # before taking fd7. Revalidate only: attempting the install here would
+    # conflict with the already-held rollout lock.
+    sudo -n "$HOSTCTL" discord-overlay-verify
+    return
+  fi
+  for variable_name in "${required[@]}"; do
+    if [ -z "${!variable_name:-}" ]; then
+      echo "필수 Discord GitHub secret 누락: ${variable_name}" >&2
+      return 1
+    fi
+  done
+  operations="$DISCORD_OPERATIONS_WEBHOOK_URL"
+  deploy="${DISCORD_DEPLOY_WEBHOOK_URL:-$operations}"
+  support="${DISCORD_SUPPORT_WEBHOOK_URL:-$operations}"
+  DISCORD_SUPPRESS_NOTIFICATIONS="${DISCORD_SUPPRESS_NOTIFICATIONS:-false}"
+  [[ "$DISCORD_SUPPRESS_NOTIFICATIONS" =~ ^(true|false)$ ]] || {
+    echo "Discord suppress 설정은 true 또는 false여야 합니다." >&2
+    return 1
+  }
+  # Never put webhook values in argv or logs. The root helper validates and
+  # normalizes this fixed-key request before atomically installing 0600 state.
+  set +x
+  printf '%s\n' \
+    'GOLE_DISCORD_ALERTS_ENABLED=true' \
+    "DISCORD_DEPLOY_WEBHOOK_URL=$deploy" \
+    "DISCORD_OPERATIONS_WEBHOOK_URL=$operations" \
+    "DISCORD_ACCOUNT_WEBHOOK_URL=$DISCORD_ACCOUNT_WEBHOOK_URL" \
+    "DISCORD_PAYMENT_WEBHOOK_URL=$DISCORD_PAYMENT_WEBHOOK_URL" \
+    "DISCORD_SUPPORT_WEBHOOK_URL=$support" \
+    "DISCORD_SUPPRESS_NOTIFICATIONS=$DISCORD_SUPPRESS_NOTIFICATIONS" |
+    sudo -n "$HOSTCTL" discord-overlay-install
+}
 
 notify_discord() {
   local webhook_url="${DISCORD_DEPLOY_WEBHOOK_URL:-${DISCORD_OPERATIONS_WEBHOOK_URL:-}}"
@@ -30,23 +99,260 @@ notify_deploy_result_once() {
   notify_discord "$1"
 }
 
+snapshot_container_image() {
+  local container_name="$1"
+  local target_image="$2"
+  local image_id rollback_tag
+  image_id="$(docker inspect --format '{{.Image}}' "$container_name" 2>/dev/null || true)"
+  if [ -z "$image_id" ]; then
+    return 0
+  fi
+  rollback_tag="${target_image}-gole-rollback-${GITHUB_RUN_ID:-$$}"
+  docker image tag "$image_id" "$rollback_tag"
+  ROLLBACK_IMAGES+=("${target_image}|${rollback_tag}")
+}
+
+snapshot_deployment_images() {
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-images-snapshot "$TARGET" "$DEPLOYMENT_TRANSACTION_ID"
+  else
+    case "$TARGET" in
+      backend)
+        snapshot_container_image gole-support-agent gole/support-agent:local
+        snapshot_container_image gole-backend gole/backend:local
+        ;;
+      frontend) snapshot_container_image gole-frontend gole/frontend:local ;;
+      all)
+        snapshot_container_image gole-support-agent gole/support-agent:local
+        snapshot_container_image gole-backend gole/backend:local
+        snapshot_container_image gole-frontend gole/frontend:local
+        snapshot_container_image gole-budget-relay gole/budget-relay:local
+        ;;
+    esac
+  fi
+  DEPLOYMENT_IMAGES_SNAPSHOTTED=1
+}
+
+cleanup_rollback_images() {
+  local entry rollback_tag
+  if [ "$DEPLOYMENT_IMAGES_SNAPSHOTTED" = "0" ]; then return 0; fi
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-images-cleanup "$TARGET" "$DEPLOYMENT_TRANSACTION_ID" || true
+    DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+    return 0
+  fi
+  for entry in "${ROLLBACK_IMAGES[@]-}"; do
+    if [ -z "$entry" ]; then continue; fi
+    rollback_tag="${entry#*|}"
+    docker image rm "$rollback_tag" >/dev/null 2>&1 || true
+  done
+  DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+}
+
+compose_build_target() {
+  local requested_sha="$1"
+  shift
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-compose-build "$TARGET" "$requested_sha" \
+      "$DEPLOYMENT_TRANSACTION_ID"
+  else
+    "${COMPOSE[@]}" build "$@"
+  fi
+}
+
+compose_up_phase() {
+  local phase="$1" requested_sha="$2"
+  shift 2
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-compose-up "$phase" "$requested_sha" \
+      "$DEPLOYMENT_TRANSACTION_ID"
+  else
+    "${COMPOSE[@]}" "$@"
+  fi
+}
+
+compose_show_status() {
+  local requested_sha
+  requested_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [ "$HOST_DOCKER_CONTROL" = "1" ] && [[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    sudo -n "$HOSTCTL" deployment-compose-ps "$requested_sha" "$DEPLOYMENT_TRANSACTION_ID"
+  elif [ "$HOST_DOCKER_CONTROL" = "0" ]; then
+    "${COMPOSE[@]}" ps
+  fi
+}
+
+budget_relay_healthy() {
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-budget-healthy
+  else
+    [ "$(docker inspect --format '{{.State.Health.Status}}' gole-budget-relay 2>/dev/null)" = "healthy" ]
+  fi
+}
+
+rollback_deployment() {
+  local entry target_image rollback_tag available_services service
+  local rollback_services=()
+
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    [ "$DEPLOYMENT_TRANSACTION_ACTIVE" = "1" ] || return 1
+    sudo -n "$HOSTCTL" deployment-rollback "$DEPLOYMENT_TRANSACTION_ID" || return 1
+    DEPLOYMENT_TRANSACTION_ACTIVE=0
+    DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+    NGINX_TRANSACTION_ACTIVE=0
+    ROLLBACK_SUCCEEDED=1
+    return 0
+  fi
+  if [ -z "$PREVIOUS_SHA" ] || [ "$DEPLOYMENT_IMAGES_SNAPSHOTTED" = "0" ]; then
+    return 1
+  fi
+  if [ "$HOST_DOCKER_CONTROL" = "0" ] && [ -z "${ROLLBACK_IMAGES[0]-}" ]; then return 1; fi
+
+  log "직전 정상 커밋과 이미지로 자동 복구"
+  git reset --hard "$PREVIOUS_SHA" || return 1
+  if [ "$HOST_DOCKER_CONTROL" = "0" ]; then
+    for entry in "${ROLLBACK_IMAGES[@]-}"; do
+      if [ -z "$entry" ]; then continue; fi
+      target_image="${entry%%|*}"
+      rollback_tag="${entry#*|}"
+      docker image tag "$rollback_tag" "$target_image" || return 1
+    done
+
+    available_services="$("${COMPOSE[@]}" config --services)" || return 1
+    case "$TARGET" in
+      backend)
+        for service in support-agent backend nginx; do
+          if grep -qx "$service" <<<"$available_services"; then rollback_services+=("$service"); fi
+        done
+        ;;
+      frontend)
+        for service in frontend nginx; do
+          if grep -qx "$service" <<<"$available_services"; then rollback_services+=("$service"); fi
+        done
+        ;;
+      all)
+        for service in support-agent backend frontend budget-relay nginx; do
+          if grep -qx "$service" <<<"$available_services"; then rollback_services+=("$service"); fi
+        done
+        ;;
+    esac
+    if [ "${#rollback_services[@]}" -eq 0 ]; then return 1; fi
+    "${COMPOSE[@]}" up -d --no-build --remove-orphans --wait "${rollback_services[@]}" || return 1
+  fi
+  curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null || return 1
+  curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null || return 1
+  if [ "$TARGET" = "all" ]; then
+    budget_relay_healthy || return 1
+    sudo -n "$HOSTCTL" deployment-record-sha "$PREVIOUS_SHA" || return 1
+  fi
+  ROLLBACK_SUCCEEDED=1
+  cleanup_rollback_images
+  return 0
+}
+
 on_deploy_exit() {
   local status=$?
+  if [ -n "${NGINX_CANDIDATE:-}" ]; then
+    rm -f -- "$NGINX_CANDIDATE"
+  fi
   if [ "$status" -ne 0 ]; then
-    "${COMPOSE[@]}" ps || true
+    set +e
+    compose_show_status || true
     if [ -n "${SECRET_SYNC_REQUEST_ID:-}" ]; then
       echo "Secret Sync 실패 로그는 민감정보 보호를 위해 Actions에 출력하지 않습니다." >&2
-    else
-      "${COMPOSE[@]}" logs --tail=100 backend frontend budget-relay nginx || true
+    elif [ "$HOST_DOCKER_CONTROL" = "0" ]; then
+      "${COMPOSE[@]}" logs --tail=100 support-agent backend frontend budget-relay nginx || true
     fi
     notify_deploy_result_once "❌ GoLe ${TARGET} 배포 실패 (exit ${status}) · gole.co.kr"
-    if [ "$TARGET" = "all" ]; then
-      notify_discord "🛑 전체 배포가 실패해 새 비용 가드 무장을 보장할 수 없으므로 GCP VM을 안전 정지합니다 · gole.co.kr"
-      sudo systemctl poweroff --no-block || true
+    nginx_config_restored=1
+    preserve_initial_nginx_commit=0
+    if [ "$HOST_DOCKER_CONTROL" = "0" ] && [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
+      # 최초 배포는 되돌릴 앱/SHA가 없다. 모든 smoke 뒤 marker까지 이미 기록됐다면
+      # 유효한 committed journal을 다음 실행이 완결하게 두고 설정을 역행시키지 않는다.
+      if [ -z "$PREVIOUS_SHA" ] && [ "$DEPLOYMENT_MARKER_ADVANCED" = "1" ]; then
+        preserve_initial_nginx_commit=1
+      elif ! sudo -n "$HOSTCTL" nginx-transaction-abort "$NGINX_TRANSACTION_ID"; then
+        nginx_config_restored=0
+      fi
     fi
+    if [ "$HOST_DOCKER_CONTROL" = "1" ] && [ "$DEPLOYMENT_TRANSACTION_ACTIVE" = "1" ] &&
+      rollback_deployment; then
+      notify_discord "↩️ GoLe ${TARGET} 배포 실패 후 root LKG release로 자동 복구함 · gole.co.kr"
+    elif [ "$HOST_DOCKER_CONTROL" = "0" ] && [ "$DEPLOY_MUTATED" = "1" ] &&
+      [ "$nginx_config_restored" = "1" ] && rollback_deployment; then
+      if [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
+        sudo -n "$HOSTCTL" nginx-transaction-finish-recovery "$NGINX_TRANSACTION_ID" || true
+      fi
+      notify_discord "↩️ GoLe ${TARGET} 배포 실패 후 직전 정상 버전으로 자동 복구함 · gole.co.kr"
+    elif [ "$DEPLOY_MUTATED" = "0" ] && [ "$NGINX_TRANSACTION_ACTIVE" = "1" ] &&
+      [ "$nginx_config_restored" = "1" ] && [ "$preserve_initial_nginx_commit" = "0" ]; then
+      sudo -n "$HOSTCTL" nginx-transaction-finish-recovery "$NGINX_TRANSACTION_ID" || true
+    elif [ "$HOST_DOCKER_CONTROL" = "1" ] && [ "$DEPLOYMENT_TRANSACTION_ACTIVE" = "1" ]; then
+      notify_discord "🛑 배포 복구를 증명하지 못해 GCP VM을 안전 정지함 · gole.co.kr"
+      sudo -n "$HOSTCTL" deployment-fail-closed "$DEPLOYMENT_TRANSACTION_ID" || true
+    elif [ "$DEPLOY_MUTATED" = "0" ] && [ -n "$PREVIOUS_SHA" ]; then
+      # CD 부트스트랩이 먼저 새 커밋을 checkout한 뒤 빌드가 실패한 경우에도 다음
+      # 배포의 rollback 기준이 흐려지지 않도록 코드만 직전 SHA로 되돌린다.
+      git reset --hard "$PREVIOUS_SHA" || true
+    fi
+  fi
+  if [ "$ROLLBACK_SUCCEEDED" != "1" ] && [ "$HOST_DOCKER_CONTROL" = "0" ]; then
+    cleanup_rollback_images
   fi
 }
 trap on_deploy_exit EXIT
+
+case "$TARGET" in
+  all | backend | frontend) ;;
+  *)
+    echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2
+    exit 1
+    ;;
+esac
+
+# This is the only runner→root secret bridge. The helper takes no argv values,
+# holds the rollout lock itself, and completes before recovery/build/container
+# mutation. Role destinations may intentionally share the GoLe room.
+install_discord_overlay
+
+# CD와 Secret Sync가 서로 다른 workflow여도 호스트 전체 변이 구간은 하나만 실행한다.
+# apply-secret-env.sh가 이미 같은 lock을 보유한 채 backend 재기동을 호출할 때만 재진입한다.
+if [ "${GOLE_ROLLOUT_LOCK_HELD:-0}" != "1" ]; then
+  if [ ! -f "$ROLLOUT_LOCK" ] || [ -L "$ROLLOUT_LOCK" ]; then
+    echo "운영 rollout lock이 설치되지 않았습니다." >&2
+    exit 1
+  fi
+  exec 7>>"$ROLLOUT_LOCK"
+  if ! flock -n 7; then
+    echo "다른 운영 배포 또는 환경 동기화가 진행 중입니다." >&2
+    exit 1
+  fi
+elif { [ "$ROOT" = "/app" ] && [ ! -e /proc/self/fd/7 ]; } || ! flock -n 7; then
+  echo "부모 rollout lock을 확인할 수 없습니다." >&2
+  exit 1
+fi
+
+if [ -r /proc/sys/kernel/random/uuid ]; then
+  DEPLOYMENT_TRANSACTION_ID="$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid)"
+else
+  DEPLOYMENT_TRANSACTION_ID="$(uuidgen | tr 'A-F' 'a-f')"
+fi
+[[ "$DEPLOYMENT_TRANSACTION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || {
+  echo "배포 transaction ID를 만들지 못했습니다." >&2
+  exit 1
+}
+
+# SIGKILL이나 호스트 재시작으로 이전 rollout이 중단됐으면 새 checkout/build
+# 전에 root journal과 immutable LKG release로 전체 서비스를 복구한다.
+if [ -x "$HOSTCTL" ]; then
+  deployment_recovery_state="$(sudo -n "$HOSTCTL" deployment-recover)"
+  case "$deployment_recovery_state" in
+    NONE | RECOVERED) ;;
+    *)
+      echo "중단된 배포 transaction을 안전하게 복구하지 못했습니다." >&2
+      exit 1
+      ;;
+  esac
+fi
 
 notify_discord "🚀 GoLe ${TARGET} 배포 시작 · gole.co.kr"
 
@@ -100,6 +406,29 @@ if [ "$TARGET" = "all" ]; then
 fi
 
 log "CI가 검증한 origin/main 동기화"
+# root 소유 marker가 마지막으로 smoke를 통과한 유일한 rollback 기준이다. 테스트/최초
+# bootstrap 호환 경로에서만 호출자가 넘긴 SHA 또는 현재 HEAD를 사용한다.
+if [ -x "$HOSTCTL" ]; then
+  if PREVIOUS_SHA="$(sudo -n "$HOSTCTL" deployment-read-sha 2>/dev/null)"; then
+    if [ "${GOLE_INITIAL_DEPLOY:-0}" = "1" ]; then
+      echo "이미 정상 배포 marker가 있어 최초 배포 모드를 거부합니다." >&2
+      exit 1
+    fi
+  elif [ "${GOLE_INITIAL_DEPLOY:-0}" = "1" ] &&
+    sudo -n "$HOSTCTL" deployment-is-uninitialized; then
+    # 신규 계정/VM의 최초 배포는 되돌릴 운영 버전이 없다. marker는 아래의 모든
+    # smoke와 비용 가드를 통과한 뒤에만 생성한다.
+    PREVIOUS_SHA=""
+  else
+    echo "마지막 정상 배포 SHA를 읽지 못해 배포를 중단합니다." >&2
+    exit 1
+  fi
+elif [ "$ROOT" = "/app" ]; then
+  echo "서버의 제한 권한 도우미가 설치되지 않았습니다." >&2
+  exit 1
+else
+  PREVIOUS_SHA="${ROLLBACK_SHA:-$(git rev-parse HEAD)}"
+fi
 git fetch --prune origin main
 
 # 운영 checkout에 수동 변경이 있으면 덮어쓰지 않는다. 깨끗한 경우에만 원격 main을
@@ -131,31 +460,68 @@ fi
 
 case "$TARGET" in
   backend)
-    SERVICES=(backend nginx)
+    SERVICES=(support-agent backend nginx)
     ;;
   frontend)
     SERVICES=(frontend nginx)
     ;;
   all)
-    SERVICES=(backend frontend budget-relay nginx)
-    ;;
-  *)
-    echo "알 수 없는 대상: $TARGET (all|backend|frontend)" >&2
-    exit 1
+    SERVICES=(support-agent backend frontend budget-relay nginx)
     ;;
 esac
 
+current_deploy_sha="$(git rev-parse HEAD)"
+if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+  transaction_previous_sha="${PREVIOUS_SHA:-0}"
+  sudo -n "$HOSTCTL" deployment-begin "$TARGET" "$current_deploy_sha" \
+    "$transaction_previous_sha" "$DEPLOYMENT_TRANSACTION_ID"
+  DEPLOYMENT_TRANSACTION_ACTIVE=1
+fi
+snapshot_deployment_images
+
 log "Docker Compose build"
-"${COMPOSE[@]}" build "${SERVICES[@]}"
+compose_build_target "$current_deploy_sha" "${SERVICES[@]}"
+
+# 빌드가 오래 걸리는 동안 main이 전진했다면 아직 live container를 건드리기 전
+# 중단한다. 뒤처진 성공 CI가 최신 배포를 잠시라도 되돌리는 일을 막는다.
+if [ -n "$DEPLOY_SHA" ]; then
+  git fetch --prune origin main
+  if [ "$(git rev-parse refs/remotes/origin/main)" != "$DEPLOY_SHA" ]; then
+    echo "빌드 중 main이 갱신되어 뒤처진 배포 후보를 폐기합니다." >&2
+    exit 1
+  fi
+fi
+
+if [ "$TARGET" = "all" ] && [ -x "$HOSTCTL" ]; then
+  log "source-controlled Nginx 설정 사전 검증 및 stage"
+  NGINX_TRANSACTION_ID="$DEPLOYMENT_TRANSACTION_ID"
+  if [ "$HOST_DOCKER_CONTROL" = "0" ]; then
+    NGINX_CANDIDATE="/tmp/gole-nginx.${NGINX_TRANSACTION_ID//-/}"
+    bash "$PREPARE_NGINX_SCRIPT" "$NGINX_TRANSACTION_ID"
+  fi
+  current_deploy_sha="$(git rev-parse HEAD)"
+  NGINX_TRANSACTION_ACTIVE=1
+  sudo -n "$HOSTCTL" nginx-transaction-begin "$NGINX_TRANSACTION_ID" "$current_deploy_sha"
+fi
 
 log "Docker Compose rolling update"
-"${COMPOSE[@]}" up -d --remove-orphans --wait "${SERVICES[@]}"
+DEPLOY_MUTATED=1
+if [ "$TARGET" = "all" ]; then
+  # 비용 가드는 기존 정상 컨테이너를 유지한 채 애플리케이션부터 검증한다. 새 앱이
+  # 실패해도 예산 보호가 끊기지 않으며, 비용 가드는 마지막에 독립 교체한다.
+  compose_up_phase rollout-all-apps "$current_deploy_sha" \
+    up -d --remove-orphans --wait support-agent backend frontend nginx
+else
+  compose_up_phase "rollout-$TARGET" "$current_deploy_sha" \
+    up -d --remove-orphans --wait "${SERVICES[@]}"
+fi
 
 # backend/frontend 컨테이너가 재생성되면 내부 IP가 바뀔 수 있다. Nginx도 매번
 # 재생성해 Docker DNS를 다시 조회하게 하고, 오래된 upstream으로 인한 502를 막는다.
 log "Nginx upstream refresh"
-"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait nginx
-"${COMPOSE[@]}" exec -T nginx nginx -t
+compose_up_phase refresh-nginx "$current_deploy_sha" \
+  up -d --no-deps --force-recreate --wait nginx
+if [ "$HOST_DOCKER_CONTROL" = "0" ]; then "${COMPOSE[@]}" exec -T nginx nginx -t; fi
 
 log "runtime smoke checks"
 curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null
@@ -167,16 +533,56 @@ curl -fsS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
   https://gole.co.kr/icon.svg >/dev/null
 
 if [ "$TARGET" = "all" ]; then
+  log "비용 가드 독립 업데이트"
+  compose_up_phase rollout-budget "$current_deploy_sha" up -d --no-deps --wait budget-relay
+  budget_relay_healthy
+
   log "비용 가드 호스트 watchdog 활성화"
-  sudo install -m 0755 infra/gcp/scripts/cost-guard-watchdog.sh \
-    /usr/local/sbin/gole-cost-guard-watchdog
-  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.service \
-    /etc/systemd/system/gole-cost-guard-watchdog.service
-  sudo install -m 0644 infra/gcp/systemd/gole-cost-guard-watchdog.timer \
-    /etc/systemd/system/gole-cost-guard-watchdog.timer
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now gole-cost-guard-watchdog.timer
+  sudo -n "$HOSTCTL" watchdog-install
+  sudo -n "$HOSTCTL" watchdog-active
 fi
 
-"${COMPOSE[@]}" ps
+compose_show_status
+if [ "$TARGET" = "all" ]; then
+  # Marker를 전진시키기 전에 root 경계 안에서 모든 컨테이너, canonical redirect,
+  # HSTS와 watchdog까지 검증한다. 최초 배포도 실패한 SHA marker를 남기지 않는다.
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-verify-candidate-runtime "$current_deploy_sha" \
+      "$DEPLOYMENT_TRANSACTION_ID"
+  fi
+  # 모든 container/readiness/비용 가드 검증 뒤에만 LKG marker를 전진시킨다. 이 기록이
+  # 실패하면 DEPLOY_MUTATED=1 상태라 EXIT trap이 직전 SHA와 이미지로 되돌린다.
+  deployed_sha="$(git rev-parse HEAD)"
+  [ "$deployed_sha" = "${DEPLOY_SHA:-$deployed_sha}" ]
+  if [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
+    sudo -n "$HOSTCTL" nginx-transaction-commit "$NGINX_TRANSACTION_ID"
+  fi
+  sudo -n "$HOSTCTL" deployment-record-sha "$deployed_sha" "$DEPLOYMENT_TRANSACTION_ID"
+  DEPLOYMENT_MARKER_ADVANCED=1
+  # CI/runner가 Docker 소켓을 직접 읽지 않는다. root helper가 marker, clean
+  # checkout, 모든 컨테이너, readiness, Nginx와 watchdog을 한 번에 검증한다.
+  # 이 검증 실패도 Nginx transaction이 열린 상태라 EXIT rollback 대상이다.
+  if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+    sudo -n "$HOSTCTL" deployment-verify-commit "$deployed_sha" \
+      "$DEPLOYMENT_TRANSACTION_ID"
+  fi
+  if [ "$NGINX_TRANSACTION_ACTIVE" = "1" ]; then
+    sudo -n "$HOSTCTL" nginx-transaction-finalize "$NGINX_TRANSACTION_ID"
+    NGINX_TRANSACTION_ACTIVE=0
+  fi
+  sudo -n "$HOSTCTL" deployment-finalize "$DEPLOYMENT_TRANSACTION_ID"
+  DEPLOYMENT_TRANSACTION_ACTIVE=0
+  DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+elif [ "$HOST_DOCKER_CONTROL" = "1" ]; then
+  sudo -n "$HOSTCTL" deployment-verify-candidate-runtime "$current_deploy_sha" \
+    "$DEPLOYMENT_TRANSACTION_ID"
+  sudo -n "$HOSTCTL" deployment-finalize-partial "$DEPLOYMENT_TRANSACTION_ID"
+  DEPLOYMENT_TRANSACTION_ACTIVE=0
+  DEPLOYMENT_IMAGES_SNAPSHOTTED=0
+fi
+DEPLOY_MUTATED=0
+if [ -n "${NGINX_CANDIDATE:-}" ]; then
+  rm -f -- "$NGINX_CANDIDATE"
+fi
+cleanup_rollback_images
 notify_deploy_result_once "✅ GoLe ${TARGET} 배포 및 헬스체크 완료 · gole.co.kr"

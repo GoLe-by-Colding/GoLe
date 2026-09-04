@@ -1,4 +1,4 @@
-# GoLe LEGO Marketplace — Design
+# GoLe Brick Marketplace — Design
 
 > 본 문서는 `requirements.md`를 만족하는 시스템의 기술 설계다. 백엔드(헥사고날) · 프론트엔드(FSD) · 데이터 모델 · API 계약 · 횡단 관심사를 다룬다.
 
@@ -6,7 +6,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Browser ── HTTPS ──> nginx (gole.kscold.com)                  │
+│  Browser ── HTTPS ──> nginx (gole.co.kr)                       │
 │                         ├── /  ──────────> Next.js (web :3000)  │
 │                         └── /api, /actuator ─> Spring Boot (:8080)│
 └──────────────────────────────────────────────────────────────┘
@@ -17,7 +17,7 @@
 - **Frontend**: Next.js 16 (App Router, React 19), TypeScript strict, FSD. 정적/SSR 페이지에서 `apiRequest`로 백엔드 호출.
 - **Backend**: Spring Boot 4 (Java 21), 헥사고날 아키텍처 + AOP. 10개 바운디드 컨텍스트.
 - **Data**: MongoDB(primary, replica set rs0로 트랜잭션 지원), Redis(캐시/랭킹 등 확장 슬롯).
-- **배포**: `ubuntu-gole` 컨테이너에서 PM2(`gole-backend`, `gole-frontend`)로 구동. 자세한 절차는 `.kiro/steering/deploy.md`.
+- **배포**: GCP `gole-production` 단일 VM에서 Docker Compose로 구동. 자세한 절차는 `.kiro/steering/deploy.md`와 `infra/gcp/README.md`를 따른다.
 
 ## 2. 백엔드 — 헥사고날 아키텍처
 

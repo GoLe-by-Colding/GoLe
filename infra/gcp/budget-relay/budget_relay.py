@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Google Cloud Billing Budget Pub/Sub to Discord relay.
 
-The service deliberately uses only Python's standard library. It obtains an
-OAuth token from the Compute Engine metadata server, pulls budget messages,
-and acknowledges a message only after any required Discord notification has
-been delivered and durable deduplication state has been written.
+The service deliberately uses only Python's standard library. A root-owned
+Unix broker performs the fixed cloud operations without returning an OAuth
+token to this container. Messages are acknowledged only after any required
+Discord notification and durable deduplication state have completed.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import logging
 import os
 import random
 import signal
+import socket
 import tempfile
 import threading
 import time
@@ -37,6 +38,7 @@ PUBSUB_ROOT = "https://pubsub.googleapis.com/v1"
 COMPUTE_ROOT = "https://compute.googleapis.com/compute/v1"
 STATE_VERSION = 1
 GIB = Decimal(1024**3)
+SNAPSHOT_RECOVERY_POINT_COUNT = Decimal("3")
 
 
 class ConfigurationError(ValueError):
@@ -206,6 +208,8 @@ class HardStopPolicy:
     budget_display_name: str
     period_start: date
     vm_cost_start: datetime
+    runtime_rate_transition_at: datetime
+    high_rate_hourly_cost_krw: Decimal
     stop_at: datetime
     arm_id: str
     project_id: str
@@ -255,6 +259,9 @@ class Config:
     credit_amount_krw: Decimal
     credit_deadline: datetime
     fixed_hourly_cost_krw: Decimal
+    snapshot_max_hourly_cost_krw: Decimal
+    snapshot_retention_hours: Decimal
+    manual_snapshot_hourly_cost_krw: Decimal
     warning_thresholds: tuple[Decimal, ...]
     state_dir: Path
     timezone_offset_hours: int
@@ -296,7 +303,25 @@ class Config:
         hourly = _decimal(
             required("GCP_FIXED_HOURLY_COST_KRW"), "GCP_FIXED_HOURLY_COST_KRW"
         )
-        if credit <= 0 or hourly < 0:
+        snapshot_hourly = _decimal(
+            values.get("GCP_SNAPSHOT_MAX_HOURLY_COST_KRW", "0"),
+            "GCP_SNAPSHOT_MAX_HOURLY_COST_KRW",
+        )
+        snapshot_retention_hours = _decimal(
+            values.get("GCP_SNAPSHOT_RETENTION_HOURS", "0"),
+            "GCP_SNAPSHOT_RETENTION_HOURS",
+        )
+        manual_snapshot_hourly = _decimal(
+            values.get("GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW", "0"),
+            "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW",
+        )
+        if (
+            credit <= 0
+            or hourly < 0
+            or snapshot_hourly < 0
+            or snapshot_retention_hours < 0
+            or manual_snapshot_hourly < 0
+        ):
             raise ConfigurationError("credit must be positive and hourly cost non-negative")
 
         offset = int(values.get("BUDGET_TIMEZONE_OFFSET_HOURS", "9"))
@@ -368,15 +393,15 @@ class Config:
         network_limit_gib = hard_decimal("GCP_HARD_STOP_NETWORK_GIB", "30")
         network_warning_gib = hard_decimal("GCP_COST_GUARD_NETWORK_WARNING_GIB", "15")
         network_danger_gib = hard_decimal("GCP_COST_GUARD_NETWORK_DANGER_GIB", "25")
-        runtime_limit = hard_decimal("GCP_HARD_STOP_MAX_RUNTIME_HOURS", "1320")
-        runtime_warning = hard_decimal("GCP_COST_GUARD_RUNTIME_WARNING_HOURS", "1200")
-        runtime_danger = hard_decimal("GCP_COST_GUARD_RUNTIME_DANGER_HOURS", "1296")
+        runtime_limit = hard_decimal("GCP_HARD_STOP_MAX_RUNTIME_HOURS", "1350")
+        runtime_warning = hard_decimal("GCP_COST_GUARD_RUNTIME_WARNING_HOURS", "1250")
+        runtime_danger = hard_decimal("GCP_COST_GUARD_RUNTIME_DANGER_HOURS", "1320")
         vat_rate = hard_decimal("GCP_VAT_RATE", "0.10")
         egress_rate = hard_decimal(
             "GCP_NETWORK_EGRESS_KRW_PER_GIB", "318.154399937"
         )
         stopped_hourly = hard_decimal(
-            "GCP_STOPPED_RESOURCE_HOURLY_COST_KRW", "45.725088879"
+            "GCP_STOPPED_RESOURCE_HOURLY_COST_KRW", "45.725095000"
         )
         expected_budget = hard_decimal(
             "GCP_HARD_STOP_EXPECTED_BUDGET_KRW", "370000"
@@ -384,6 +409,10 @@ class Config:
         guard_interval = float(values.get("GCP_COST_GUARD_INTERVAL_SECONDS", "10"))
         guard_retry = float(values.get("GCP_HARD_STOP_RETRY_SECONDS", "300"))
         vm_cost_start = hard_datetime("GCP_VM_COST_START")
+        rate_transition_at = hard_datetime("GCP_RUNTIME_RATE_TRANSITION_AT")
+        high_rate_hourly = hard_decimal(
+            "GCP_HIGH_RATE_HOURLY_COST_KRW", str(hourly)
+        )
         stop_at = hard_datetime("GCP_HARD_STOP_AT")
         expected_budget_id = hard_required("GCP_HARD_STOP_BUDGET_ID")
         billing_account_id = hard_required("GCP_HARD_STOP_BILLING_ACCOUNT_ID")
@@ -429,9 +458,21 @@ class Config:
                 raise ConfigurationError(
                     "billing hard-stop cost does not leave the minimum reserve"
                 )
+            full_horizon_hours = Decimal(
+                str(max(0.0, (deadline - vm_cost_start).total_seconds() / 3600))
+            )
+            snapshot_tail_pre_tax = (
+                snapshot_hourly * snapshot_retention_hours
+                + manual_snapshot_hourly * full_horizon_hours
+            )
+            snapshot_tail_gross = snapshot_tail_pre_tax * (Decimal("1") + vat_rate)
+            if credit - all_in_limit < snapshot_tail_gross:
+                raise ConfigurationError(
+                    "all-in hard-stop cost does not reserve the maximum snapshot retention tail"
+                )
             if expected_budget <= 0 or vat_rate < 0 or vat_rate > 1:
                 raise ConfigurationError("budget and VAT settings are invalid")
-            if egress_rate < 0 or stopped_hourly < 0:
+            if egress_rate < 0 or stopped_hourly < 0 or high_rate_hourly < hourly:
                 raise ConfigurationError("guard hourly costs cannot be negative")
             if guard_interval <= 0 or guard_retry <= 0:
                 raise ConfigurationError("guard intervals must be positive")
@@ -439,7 +480,11 @@ class Config:
                 raise ConfigurationError(
                     "GCP_HARD_STOP_BUDGET_DISPLAY_NAME cannot be empty"
                 )
-            if vm_cost_start >= stop_at or stop_at > deadline:
+            if (
+                vm_cost_start >= rate_transition_at
+                or rate_transition_at >= stop_at
+                or stop_at > deadline
+            ):
                 raise ConfigurationError(
                     "VM cost start, hard stop, and credit deadline must be ordered"
                 )
@@ -468,6 +513,8 @@ class Config:
             budget_display_name=budget_display_name,
             period_start=period_start,
             vm_cost_start=vm_cost_start,
+            runtime_rate_transition_at=rate_transition_at,
+            high_rate_hourly_cost_krw=high_rate_hourly,
             stop_at=stop_at,
             arm_id=arm_id,
             project_id=project_id or "",
@@ -514,6 +561,9 @@ class Config:
             credit_amount_krw=credit,
             credit_deadline=deadline,
             fixed_hourly_cost_krw=hourly,
+            snapshot_max_hourly_cost_krw=snapshot_hourly,
+            snapshot_retention_hours=snapshot_retention_hours,
+            manual_snapshot_hourly_cost_krw=manual_snapshot_hourly,
             warning_thresholds=thresholds,
             state_dir=Path(values.get("BUDGET_STATE_DIR", "/state")),
             timezone_offset_hours=offset,
@@ -905,7 +955,31 @@ def calculate_cost_guard_snapshot(
         0.0, (config.credit_deadline - now_local).total_seconds()
     )
     remaining_hours = Decimal(str(remaining_seconds / 3600))
-    modeled_fixed = config.fixed_hourly_cost_krw * runtime_hours
+    # Model the measured 4-vCPU rate only through the reviewed resize deadline.
+    # After that instant the root broker independently attests e2-standard-2 or
+    # powers off. Snapshot rates assume three full scheduled points plus the
+    # retained manual pre-IaC point from the first runtime hour.
+    high_rate_hours = min(
+        runtime_hours,
+        Decimal(
+            str(
+                (
+                    policy.runtime_rate_transition_at - policy.vm_cost_start
+                ).total_seconds()
+                / 3600
+            )
+        ),
+    )
+    modeled_fixed = (
+        policy.high_rate_hourly_cost_krw * high_rate_hours
+        + config.fixed_hourly_cost_krw
+        * max(Decimal("0"), runtime_hours - high_rate_hours)
+        + (
+            config.snapshot_max_hourly_cost_krw
+            + config.manual_snapshot_hourly_cost_krw
+        )
+        * runtime_hours
+    )
     modeled_network = (
         Decimal(network_bytes) / GIB * policy.network_egress_krw_per_gib
     )
@@ -916,15 +990,32 @@ def calculate_cost_guard_snapshot(
     estimated_current_gross = max(
         observed_billing_gross, modeled_current_gross
     )
+    # Cover the three-point scheduled chain through 72h retention and the manual
+    # pre-IaC snapshot independently through the credit deadline.
+    retained_chain_tail = (
+        config.snapshot_max_hourly_cost_krw
+        * min(remaining_hours, config.snapshot_retention_hours)
+    )
+    final_snapshot_tail = (
+        config.manual_snapshot_hourly_cost_krw * remaining_hours
+    )
+    snapshot_tail = retained_chain_tail + final_snapshot_tail
     stopped_remaining = (
         policy.stopped_resource_hourly_cost_krw * remaining_hours
+        + snapshot_tail
     )
     all_in_if_stopped = estimated_current_gross + (
         stopped_remaining * vat_multiplier
     )
     projected_running = (
         estimated_current_gross
-        + config.fixed_hourly_cost_krw * remaining_hours * vat_multiplier
+        + (
+            config.fixed_hourly_cost_krw
+            + config.snapshot_max_hourly_cost_krw
+            + config.manual_snapshot_hourly_cost_krw
+        )
+        * remaining_hours
+        * vat_multiplier
     )
 
     warnings: list[str] = []
@@ -1069,14 +1160,18 @@ def render_discord_message(
         ]
         overrun = False
 
-    level = plan.observed_level
-    if overrun or level >= Decimal("1"):
+    actual_level = max(
+        budget.actual_ratio,
+        budget.alert_threshold or Decimal("0"),
+    )
+    forecast_level = budget.forecast_threshold or Decimal("0")
+    if overrun or actual_level >= Decimal("1"):
         icon = "🚨"
-    elif level >= Decimal("0.9"):
+    elif actual_level >= Decimal("0.9"):
         icon = "🔴"
-    elif level >= Decimal("0.75"):
+    elif actual_level >= Decimal("0.75"):
         icon = "🟠"
-    elif level >= Decimal("0.5"):
+    elif actual_level >= Decimal("0.5") or forecast_level >= Decimal("0.5"):
         icon = "🟡"
     else:
         icon = "🟢"
@@ -1087,7 +1182,9 @@ def render_discord_message(
         reasons.append(f"실제비용 {_percentage(max(actual_levels))} 임계치")
     if any(item.startswith("forecast:") for item in plan.threshold_events):
         forecast_levels = [Decimal(item.split(":", 1)[1]) for item in plan.threshold_events if item.startswith("forecast:")]
-        reasons.append(f"예측비용 {_percentage(max(forecast_levels))} 임계치")
+        reasons.append(
+            f"Google forecast {_percentage(max(forecast_levels))} 임계치(실제 초과 아님)"
+        )
     if not reasons:
         reasons.append("일일 현황")
 
@@ -1095,16 +1192,19 @@ def render_discord_message(
     budget_remaining = budget.budget_amount - budget.cost_amount
     lines = [
         f"{icon} **GoLe GCP 예산 알림 · {' / '.join(reasons)}**",
-        f"- 예산: **{_money(budget.cost_amount, budget.currency_code)} / {_money(budget.budget_amount, budget.currency_code)}** ({_percentage(budget.actual_ratio)})",
-        f"- 예산 잔액: **{_money(budget_remaining, budget.currency_code)}**",
+        f"- Google Billing 게시 실제 누적비용: **{_money(budget.cost_amount, budget.currency_code)} / {_money(budget.budget_amount, budget.currency_code)}** ({_percentage(budget.actual_ratio)})",
+        f"- Google Budget 한도까지 실제 잔액: **{_money(budget_remaining, budget.currency_code)}**",
         *projection_lines,
         f"- 고정비 가정: {_money(config.fixed_hourly_cost_krw, 'KRW')}/시간",
         f"- 크레딧 만료: {deadline.date().isoformat()} (D-{max(d_day, 0)})",
         f"- 비용 구간 시작: {budget.interval_start.date().isoformat()}",
-        "_공식 예산의 실제비용과 설정한 시간당 고정비가 유지된다는 단순 추정입니다._",
+        "_Google forecast 알림, 게시된 실제비용, 로컬 보수 projection은 서로 다른 신호이며 forecast만으로 초과나 자동 정지를 뜻하지 않습니다._",
     ]
     if overrun:
-        lines.insert(1, "**현재 사양을 유지하면 설정 크레딧을 초과할 것으로 예상됩니다.**")
+        lines.insert(
+            1,
+            "**로컬 보수 projection상 현재 사양을 유지하면 설정 크레딧을 초과할 것으로 예상됩니다(게시 실제비용 초과와 다름).**",
+        )
     return "\n".join(lines)[:1990]
 
 
@@ -1311,6 +1411,74 @@ class ComputeClient:
                     f"Compute stop failed ({type(exc).__name__})"
                 ) from exc
         raise RemoteServiceError("Compute stop authorization failed")
+
+
+class CloudBrokerClient:
+    """Narrow Unix client; it cannot select cloud resources or receive tokens."""
+
+    def __init__(self, socket_path: str, timeout: float) -> None:
+        path = Path(socket_path)
+        if not path.is_absolute() or str(path) != "/run/gole-cloud-broker/broker.sock":
+            raise ConfigurationError("GOLE_CLOUD_BROKER_SOCKET is invalid")
+        self.socket_path = str(path)
+        self.timeout = timeout
+
+    def request(self, payload: dict[str, Any]) -> dict[str, Any]:
+        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
+        if len(encoded) > 131072:
+            raise RemoteServiceError("cloud broker request is too large")
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(self.timeout)
+                connection.connect(self.socket_path)
+                connection.sendall(encoded)
+                response = b""
+                while not response.endswith(b"\n"):
+                    chunk = connection.recv(65536)
+                    if not chunk:
+                        break
+                    response += chunk
+                    if len(response) > 4 * 1024 * 1024:
+                        raise RemoteServiceError("cloud broker response is too large")
+            decoded = json.loads(response)
+            if not isinstance(decoded, dict) or decoded.get("ok") is not True:
+                raise RemoteServiceError("cloud broker rejected the fixed operation")
+            result = decoded.get("result")
+            if not isinstance(result, dict):
+                raise RemoteServiceError("cloud broker returned an invalid response")
+            return result
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            if isinstance(exc, RemoteServiceError):
+                raise
+            raise RemoteServiceError(
+                f"cloud broker request failed ({type(exc).__name__})"
+            ) from exc
+
+
+class BrokerPubSubClient:
+    def __init__(self, broker: CloudBrokerClient) -> None:
+        self.broker = broker
+
+    def pull(self, max_messages: int) -> list[dict[str, Any]]:
+        result = self.broker.request(
+            {"operation": "pull", "max_messages": max_messages}
+        )
+        messages = result.get("messages", [])
+        if not isinstance(messages, list):
+            raise RemoteServiceError("cloud broker returned invalid messages")
+        return messages
+
+    def acknowledge(self, ack_ids: list[str]) -> None:
+        if ack_ids:
+            self.broker.request({"operation": "acknowledge", "ack_ids": ack_ids})
+
+
+class BrokerComputeClient:
+    def __init__(self, broker: CloudBrokerClient) -> None:
+        self.broker = broker
+
+    def stop(self, request_id: str) -> None:
+        self.broker.request({"operation": "stop", "request_id": request_id})
 
 
 class CostGuard:
@@ -1680,24 +1848,16 @@ def run() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     config = Config.from_env()
-    credentials = MetadataCredentials(config.http_timeout_seconds)
-    pubsub = PubSubClient(
-        config.subscription,
-        config.project_id,
-        credentials,
-        config.http_timeout_seconds,
-    )
+    broker_path = os.environ.get("GOLE_CLOUD_BROKER_SOCKET", "").strip()
+    if not broker_path:
+        raise ConfigurationError("GOLE_CLOUD_BROKER_SOCKET is required")
+    broker = CloudBrokerClient(broker_path, config.http_timeout_seconds)
+    pubsub = BrokerPubSubClient(broker)
     state = StateStore(config.state_dir)
     discord = DiscordClient(config.webhook_url, config.http_timeout_seconds)
     cost_guard: CostGuard | None = None
     if config.hard_stop is not None and config.hard_stop.enabled:
-        compute = ComputeClient(
-            config.hard_stop.project_id,
-            config.hard_stop.zone,
-            config.hard_stop.instance_name,
-            credentials,
-            config.http_timeout_seconds,
-        )
+        compute = BrokerComputeClient(broker)
         cost_guard = CostGuard(config, state, discord, compute)
     relay = Relay(
         config,

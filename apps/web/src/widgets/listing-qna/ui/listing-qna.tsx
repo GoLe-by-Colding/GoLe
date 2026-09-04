@@ -8,16 +8,17 @@ import {
 } from "@entities/listing";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button, Heading, Skeleton } from "@shared/ui";
+import { Button, Heading, LinkButton, Skeleton } from "@shared/ui";
 
 export interface ListingQnaProps {
   readonly listingId: string;
+  readonly sellerTradingOpen: boolean;
 }
 
 /**
  * 매물 Q&A 댓글. 비로그인은 읽기만 가능, 로그인 시 작성 가능.
  */
-export function ListingQna({ listingId }: ListingQnaProps) {
+export function ListingQna({ listingId, sellerTradingOpen }: ListingQnaProps) {
   const { session } = useSession();
   const [comments, setComments] = useState<readonly ListingCommentItem[] | null>(null);
   const [content, setContent] = useState("");
@@ -80,7 +81,11 @@ export function ListingQna({ listingId }: ListingQnaProps) {
           <Skeleton className="h-10 w-4/5 rounded-lg" />
         </div>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-neutral-400">아직 문의가 없어요. 첫 질문을 남겨보세요!</p>
+        <p className="text-sm text-neutral-400">
+          {sellerTradingOpen
+            ? "아직 문의가 없어요. 첫 질문을 남겨보세요!"
+            : "아직 공개된 문의가 없어요."}
+        </p>
       ) : (
         <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
           {comments.map((c) => (
@@ -101,7 +106,16 @@ export function ListingQna({ listingId }: ListingQnaProps) {
       )}
 
       {/* 작성 폼 */}
-      {session ? (
+      {!sellerTradingOpen ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+          <p className="text-sm leading-relaxed text-neutral-600">
+            판매자 신원확인 절차를 준비 중이라 과거 문의만 볼 수 있고 새 상품 문의는 받지 않습니다.
+          </p>
+          <LinkButton href="/chat?compose=support&category=TRADE" size="sm" variant="ghost">
+            운영팀에 문의하기
+          </LinkButton>
+        </div>
+      ) : session ? (
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           {error ? (
             <p className="text-sm text-danger" role="alert">

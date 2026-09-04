@@ -20,7 +20,9 @@ public final class AccountRequests {
             @NotBlank @Size(max = 64) String privacyVersion,
             @AssertTrue(message = "이용약관에 동의해야 합니다") boolean termsAccepted,
             @AssertTrue(message = "개인정보처리방침을 확인해야 합니다") boolean privacyAcknowledged,
-            @AssertTrue(message = "만 14세 이상임을 확인해야 합니다") boolean minimumAgeConfirmed) {}
+            @AssertTrue(message = "만 14세 이상임을 확인해야 합니다") boolean minimumAgeConfirmed,
+            @Size(max = 64) String thirdPartyProvisionVersion,
+            Boolean thirdPartyProvisionAccepted) {}
 
     public record VerifyEmailRequest(
             @Email @NotBlank @Size(max = 254) String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}

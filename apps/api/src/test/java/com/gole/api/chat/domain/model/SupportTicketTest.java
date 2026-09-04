@@ -63,16 +63,19 @@ class SupportTicketTest {
     }
 
     @Test
-    void privacyRightsRequestKeepsCategoryAndTenDayResponseTargetAcrossTransitions() {
+    void everySupportRequestKeepsConservativeThreeAndTenDayInternalTargetsAcrossTransitions() {
         SupportTicket opened = SupportTicket.opened("room-privacy", "user-1", SupportCategory.PRIVACY_ACCESS, NOW);
 
         SupportTicket assigned = opened.assignTo("admin-1", NOW.plusSeconds(10));
         SupportTicket resolved = assigned.resolve(NOW.plusSeconds(20));
 
+        assertThat(opened.progressDueAt()).isEqualTo(NOW.plusSeconds(3L * 24 * 60 * 60));
         assertThat(opened.responseDueAt()).isEqualTo(NOW.plusSeconds(10L * 24 * 60 * 60));
         assertThat(assigned.category()).isEqualTo(SupportCategory.PRIVACY_ACCESS);
         assertThat(resolved.category()).isEqualTo(SupportCategory.PRIVACY_ACCESS);
+        assertThat(SupportTicket.opened("room-general", "user-1", NOW).progressDueAt())
+                .isEqualTo(NOW.plusSeconds(3L * 24 * 60 * 60));
         assertThat(SupportTicket.opened("room-general", "user-1", NOW).responseDueAt())
-                .isNull();
+                .isEqualTo(NOW.plusSeconds(10L * 24 * 60 * 60));
     }
 }

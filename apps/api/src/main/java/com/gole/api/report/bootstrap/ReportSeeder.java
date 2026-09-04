@@ -1,5 +1,10 @@
 package com.gole.api.report.bootstrap;
 
+import static com.gole.api.common.bootstrap.DemoContentActors.USER_BUILDER;
+import static com.gole.api.common.bootstrap.DemoContentActors.USER_COLLECTOR;
+import static com.gole.api.common.bootstrap.DemoContentActors.USER_MOC;
+import static com.gole.api.common.bootstrap.DemoContentActors.USER_NEWBIE;
+
 import com.gole.api.community.adapter.out.persistence.PostDocument;
 import com.gole.api.community.adapter.out.persistence.PostMongoRepository;
 import com.gole.api.listing.adapter.out.persistence.ListingDocument;
@@ -66,7 +71,7 @@ public class ReportSeeder implements CommandLineRunner {
 
         if (!listings.isEmpty()) {
             commands.add(new SubmitReportCommand(
-                    "user-collector",
+                    USER_COLLECTOR,
                     ReportTargetType.LISTING,
                     listings.getFirst().getId(),
                     ReportReason.COUNTERFEIT,
@@ -74,7 +79,7 @@ public class ReportSeeder implements CommandLineRunner {
         }
         if (listings.size() > 1) {
             commands.add(new SubmitReportCommand(
-                    "user-builder",
+                    USER_BUILDER,
                     ReportTargetType.LISTING,
                     listings.get(1).getId(),
                     ReportReason.IP_INFRINGEMENT,
@@ -82,7 +87,7 @@ public class ReportSeeder implements CommandLineRunner {
         }
         if (listings.size() > 2) {
             commands.add(new SubmitReportCommand(
-                    "user-newbie",
+                    USER_NEWBIE,
                     ReportTargetType.LISTING,
                     listings.get(2).getId(),
                     ReportReason.FRAUD,
@@ -90,7 +95,7 @@ public class ReportSeeder implements CommandLineRunner {
         }
         if (!posts.isEmpty()) {
             commands.add(new SubmitReportCommand(
-                    "user-moc",
+                    USER_MOC,
                     ReportTargetType.POST,
                     posts.getFirst().getId(),
                     ReportReason.INAPPROPRIATE,

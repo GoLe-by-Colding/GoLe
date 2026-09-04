@@ -15,7 +15,18 @@ import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
 import { PostAuthorActions } from "@features/manage-post";
 import { useSession } from "@entities/user";
-import { Badge, Card, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
+import { ApiError } from "@shared/api";
+import {
+  Badge,
+  Button,
+  Card,
+  Container,
+  EmptyState,
+  Heading,
+  LinkButton,
+  Skeleton,
+  Text,
+} from "@shared/ui";
 
 export interface CommunityPostPageProps {
   readonly postId: string;
@@ -25,49 +36,93 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const { session } = useSession();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<readonly Comment[]>([]);
-  const [missing, setMissing] = useState(false);
+  const [postStatus, setPostStatus] = useState<"loading" | "ready" | "missing" | "error">(
+    "loading",
+  );
+  const [postAttempt, setPostAttempt] = useState(0);
+  const [commentsError, setCommentsError] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [commentActionError, setCommentActionError] = useState<string | null>(null);
 
   const loadComments = useCallback(async () => {
+    setCommentsError(false);
     try {
       setComments(await fetchComments(postId));
     } catch {
-      setComments([]);
+      setCommentsError(true);
     }
   }, [postId]);
 
   useEffect(() => {
     let active = true;
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      setPost(null);
+      setPostStatus("loading");
+      setComments([]);
+      setCommentsError(false);
+      setCommentActionError(null);
+    }, 0);
     void (async () => {
       try {
         const data = await fetchPost(postId);
         if (active) {
           setPost(data);
+          setPostStatus("ready");
         }
         await loadComments();
-      } catch {
+      } catch (cause) {
         if (active) {
-          setMissing(true);
+          setPostStatus(cause instanceof ApiError && cause.status === 404 ? "missing" : "error");
         }
       }
     })();
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, [postId, loadComments]);
+  }, [postId, postAttempt, loadComments]);
 
-  if (missing) {
+  if (postStatus === "missing") {
     return (
       <Container width="sm">
-        <div className="pt-10">
-          <Text tone="muted">게시글을 찾을 수 없습니다.</Text>
+        <div className="pt-10 pb-16">
+          <EmptyState
+            variant="inline"
+            title="게시글을 찾을 수 없어요"
+            description="삭제되었거나 공개되지 않은 글일 수 있어요. 커뮤니티의 다른 이야기를 둘러보세요."
+            action={<LinkButton href="/community">커뮤니티로 돌아가기</LinkButton>}
+          />
         </div>
       </Container>
     );
   }
 
-  if (post === null) {
+  if (postStatus === "error") {
+    return (
+      <Container width="sm">
+        <div className="pt-10 pb-16">
+          <EmptyState
+            variant="inline"
+            title="게시글을 불러오지 못했어요"
+            description="연결이 잠시 지연되고 있어요. 다시 시도하거나 커뮤니티 목록으로 이동하세요."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" onClick={() => setPostAttempt((attempt) => attempt + 1)}>
+                  다시 시도
+                </Button>
+                <LinkButton href="/community" size="sm" variant="secondary">
+                  커뮤니티 목록
+                </LinkButton>
+              </div>
+            }
+          />
+        </div>
+      </Container>
+    );
+  }
+
+  if (post === null || postStatus === "loading") {
     return (
       <Container width="sm">
         <div className="flex flex-col gap-5 pt-8 pb-16">
@@ -174,6 +229,20 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
               </li>
             ))}
           </ul>
+          {commentsError ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2">
+              <Text size="sm" tone="secondary" role="alert">
+                댓글을 불러오지 못했어요. 작성 기능은 그대로 이용할 수 있어요.
+              </Text>
+              <Button size="sm" variant="secondary" onClick={() => void loadComments()}>
+                댓글 다시 확인
+              </Button>
+            </div>
+          ) : comments.length === 0 ? (
+            <Text size="sm" tone="muted">
+              아직 댓글이 없어요. 첫 의견을 남겨보세요.
+            </Text>
+          ) : null}
           {commentActionError === null ? null : (
             <Text role="alert" size="sm" tone="secondary">
               {commentActionError}

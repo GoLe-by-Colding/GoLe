@@ -6,7 +6,7 @@ import {
   fetchOnboardingStatus,
   isOnboardingComplete,
   nextIncompleteStep,
-  ONBOARDING_STEPS,
+  onboardingSteps,
   type OnboardingStatus,
   type OnboardingStep,
   withStepCompleted,
@@ -24,9 +24,9 @@ import { stepTitle } from "../model/steps";
 /**
  * 최초 로그인 온보딩 위저드(R11).
  *
- * 닉네임 → 전화인증 → 관심태그 → 동의 순으로 진행하되, 진입할 때 서버 상태를 받아
- * **이미 끝난 단계는 건너뛴다**. 각 단계는 성공 즉시 서버에 저장되므로(D1) 중간에
- * 이탈해도 다음에 같은 지점에서 이어진다.
+ * 닉네임 → (정책상 필수일 때만 전화인증) → 관심태그 → 동의 순으로 진행하되, 진입할 때
+ * 서버 상태를 받아 **필요 없거나 이미 끝난 단계는 건너뛴다**. 각 단계는 성공 즉시 서버에
+ * 저장되므로(D1) 중간에 이탈해도 다음에 같은 지점에서 이어진다.
  */
 export function OnboardingPage() {
   return (
@@ -124,12 +124,13 @@ function OnboardingContent() {
     setStatus((prev) => (prev === null ? prev : withStepCompleted(prev, step)));
   }
 
-  const stepIndex = ONBOARDING_STEPS.indexOf(current);
+  const steps = onboardingSteps(status);
+  const stepIndex = steps.indexOf(current);
 
   return (
-    <OnboardingShell title={stepTitle(current)} subtitle={`${stepIndex + 1}/4 단계`}>
+    <OnboardingShell title={stepTitle(current)} subtitle={`${stepIndex + 1}/${steps.length} 단계`}>
       <div className="flex flex-col gap-5">
-        <StepIndicator current={stepIndex} />
+        <StepIndicator current={stepIndex} steps={steps} />
         {current === "nickname" ? (
           <SetNicknameForm onCompleted={() => completeStep("nickname")} />
         ) : null}
@@ -147,13 +148,16 @@ function OnboardingContent() {
 }
 
 /** 남은 단계를 눈으로 가늠하게 해준다. 진행 상태는 서버 응답에서만 파생된다. */
-function StepIndicator({ current }: { readonly current: number }) {
+function StepIndicator({
+  current,
+  steps,
+}: {
+  readonly current: number;
+  readonly steps: readonly OnboardingStep[];
+}) {
   return (
-    <ol
-      className="flex gap-1.5"
-      aria-label={`전체 ${ONBOARDING_STEPS.length}단계 중 ${current + 1}단계`}
-    >
-      {ONBOARDING_STEPS.map((step, index) => (
+    <ol className="flex gap-1.5" aria-label={`전체 ${steps.length}단계 중 ${current + 1}단계`}>
+      {steps.map((step, index) => (
         <li
           key={step}
           aria-hidden="true"

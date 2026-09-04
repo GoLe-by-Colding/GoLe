@@ -19,7 +19,7 @@ public interface CreateListingUseCase {
             long price,
             ItemCondition condition,
             ConditionDisclosure disclosure,
-            List<String> photoUrls,
+            List<String> photoKeys,
             String catalogSetNumber,
             ListingCategory category) {
 
@@ -31,7 +31,7 @@ public interface CreateListingUseCase {
                 long price,
                 ItemCondition condition,
                 ConditionDisclosure disclosure,
-                List<String> photoUrls,
+                List<String> photoKeys,
                 String catalogSetNumber) {
             this(
                     sellerId,
@@ -40,7 +40,7 @@ public interface CreateListingUseCase {
                     price,
                     condition,
                     disclosure,
-                    photoUrls,
+                    photoKeys,
                     catalogSetNumber,
                     ListingCategory.SET);
         }

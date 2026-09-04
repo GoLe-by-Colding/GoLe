@@ -40,6 +40,11 @@ public interface PhoneVerificationStorePort {
     /** 인증 성공 또는 시도 횟수 초과 시 무효화. */
     void delete(String accountId);
 
+    /** 계정 파기 시 OTP뿐 아니라 쿨다운·일일 한도 키까지 함께 제거한다. */
+    default void deleteAllForAccount(String accountId) {
+        delete(accountId);
+    }
+
     /**
      * 발급된 인증 시도.
      *

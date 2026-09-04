@@ -86,7 +86,7 @@ public class OnboardingController {
         return OnboardingStatusResponse.from(getOnboardingStatusUseCase.status(currentAccountId(http)));
     }
 
-    @Operation(summary = "선택 가능한 관심 태그", description = "온보딩에서 고를 수 있는 curated 레고 테마 목록입니다. 로그인 없이 조회할 수 있습니다.")
+    @Operation(summary = "선택 가능한 관심 태그", description = "온보딩에서 고를 수 있는 curated 브릭 테마 목록입니다. 로그인 없이 조회할 수 있습니다.")
     @GetMapping("/api/v1/account/interest-tags")
     public InterestTagsResponse interestTags() {
         return InterestTagsResponse.from(listInterestTagsUseCase.availableTags());

@@ -11,17 +11,30 @@ interface AppEnv {
   readonly portOneChannelKey: string;
   /** 카드(KG이니시스) 채널. 빈 문자열이면 카드 결제를 노출하지 않는다. */
   readonly portOneCardChannelKey: string;
-  readonly paymentMode: "stub" | "portone-test" | "portone-live";
+  readonly paymentMode: "disabled" | "stub" | "portone-test" | "portone-live";
   readonly nodeEnv: "development" | "production" | "test";
+  readonly gaMeasurementId: string;
+  readonly gtmId: string;
 }
+
+import {
+  resolveAnalyticsRuntimeConfig,
+  validateOptionalAnalyticsId,
+  type AnalyticsRuntimeConfig,
+} from "./analytics";
+
+export type PaymentRuntimeConfig = Pick<
+  AppEnv,
+  "paymentMode" | "nodeEnv" | "portOneStoreId" | "portOneChannelKey"
+>;
 
 function readPaymentMode(nodeEnv: AppEnv["nodeEnv"]): AppEnv["paymentMode"] {
   const raw = process.env.NEXT_PUBLIC_PAYMENT_MODE;
-  if (raw === "stub" || raw === "portone-test" || raw === "portone-live") {
+  if (raw === "disabled" || raw === "stub" || raw === "portone-test" || raw === "portone-live") {
     return raw;
   }
-  // 운영에서 설정 누락을 개발용 스텁으로 조용히 우회하면 실제 결제 없이 주문이 승인될 수 있다.
-  return nodeEnv === "production" ? "portone-live" : "stub";
+  // 공개 빌드는 결제 설정을 명시하지 않으면 닫힌다. 개발만 결정론적 스텁을 기본으로 쓴다.
+  return nodeEnv === "production" ? "disabled" : "stub";
 }
 
 function readPublicApiBaseUrl(): string {
@@ -70,6 +83,12 @@ function readNodeEnv(): AppEnv["nodeEnv"] {
 
 const nodeEnv = readNodeEnv();
 
+const gaMeasurementId = validateOptionalAnalyticsId(
+  "NEXT_PUBLIC_GA_MEASUREMENT_ID",
+  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
+);
+const gtmId = validateOptionalAnalyticsId("NEXT_PUBLIC_GTM_ID", process.env.NEXT_PUBLIC_GTM_ID);
+
 export const env: AppEnv = Object.freeze({
   apiBaseUrl: readApiBaseUrl(),
   publicApiBaseUrl: readPublicApiBaseUrl(),
@@ -79,4 +98,28 @@ export const env: AppEnv = Object.freeze({
   portOneCardChannelKey: process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY ?? "",
   paymentMode: readPaymentMode(nodeEnv),
   nodeEnv,
+  gaMeasurementId,
+  gtmId,
 });
+
+export const analyticsRuntimeConfig: AnalyticsRuntimeConfig = resolveAnalyticsRuntimeConfig({
+  gaMeasurementId,
+  gtmId,
+});
+
+/**
+ * 공개 launch 플래그와 별개로, 이 웹 빌드가 신규 결제를 실제로 시작할 수 있는지 판정한다.
+ *
+ * 운영에서 `stub`을 명시해도 허용하지 않고, PortOne 모드는 결제창에 반드시 필요한 공개 키가
+ * 모두 있을 때만 연다. 서버 플래그가 잘못 열려도 브라우저가 스텁 API로 조용히 우회하지 않는
+ * 두 번째 fail-closed 경계다.
+ */
+export function isPaymentRuntimeAvailable(configuration: PaymentRuntimeConfig = env): boolean {
+  if (configuration.paymentMode === "disabled") {
+    return false;
+  }
+  if (configuration.paymentMode === "stub") {
+    return configuration.nodeEnv !== "production";
+  }
+  return configuration.portOneStoreId.length > 0 && configuration.portOneChannelKey.length > 0;
+}

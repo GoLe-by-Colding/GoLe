@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 비밀번호 변경·재설정 전용 서비스. 회원가입 인증 상태와 challenge 저장소를 공유하지 않는다. */
 @Service
@@ -60,6 +61,7 @@ public class AccountPasswordService
     }
 
     @Override
+    @Transactional
     public void change(ChangePasswordCommand command) {
         validatePassword(command.newPassword());
         Account account = accountRepository
@@ -104,6 +106,7 @@ public class AccountPasswordService
     }
 
     @Override
+    @Transactional
     public void confirm(ConfirmPasswordResetCommand command) {
         validatePassword(command.newPassword());
         Email email = new Email(command.email());

@@ -195,6 +195,9 @@ public class OrderService
 
     @Override
     public void refund(String orderId) {
+        // 결제 OFF 운영의 Stub은 상태를 바꾸기 전에 거부한다. 이 확인이 beginRefund 뒤로
+        // 내려가면 실제 환불 호출 없이 주문만 REFUND_PENDING에 영구 고정될 수 있다.
+        paymentGateway.requireAvailable(orderId);
         Instant now = Instant.now(clock);
         RefundPreparation preparation = paymentTransitions.beginRefund(orderId, now);
         Order order = preparation.order();
@@ -234,6 +237,7 @@ public class OrderService
 
     @Override
     public void confirmRefund(String orderId) {
+        paymentGateway.requireAvailable(orderId);
         Instant now = Instant.now(clock);
         RefundPreparation preparation = paymentTransitions.beginRefund(orderId, now);
         Order order = preparation.order();

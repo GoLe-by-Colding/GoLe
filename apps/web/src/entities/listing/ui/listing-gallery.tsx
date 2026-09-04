@@ -8,7 +8,7 @@ export interface ListingGalleryProps {
   readonly alt: string;
 }
 
-const PLACEHOLDER = "https://placehold.co/800x600?text=BRICK";
+const PLACEHOLDER = "/gole-whale.svg";
 
 /**
  * 매물 사진 갤러리. 대표 이미지 + 썸네일 스트립(클릭 시 전환). 사진이 1장이면 썸네일은 숨긴다.

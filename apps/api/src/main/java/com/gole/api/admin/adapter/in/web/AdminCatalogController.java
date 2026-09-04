@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 카탈로그 관리 — 세트 목록/등록/수정/추천 토글. (admin-console 요구사항 7.2~7.5)
  */
-@Tag(name = "Admin · 카탈로그", description = "레고 세트 기준 정보 관리")
+@Tag(name = "Admin · 카탈로그", description = "브릭 세트 기준 정보 관리")
 @RestController
 @RequestMapping("/api/admin/catalog/sets")
 public class AdminCatalogController {

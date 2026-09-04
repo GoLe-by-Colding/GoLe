@@ -3,6 +3,7 @@ package com.gole.api.chat.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +45,16 @@ class SupportChatServiceTest {
     void admins() {
         when(accounts.findById("admin-1")).thenReturn(Optional.of(admin("admin-1")));
         when(accounts.findById("admin-2")).thenReturn(Optional.of(admin("admin-2")));
+    }
+
+    @Test
+    void countUnassignedUsesRepositoryCountWithoutReadingPrivateContent() {
+        when(tickets.countByStatus(SupportStatus.UNASSIGNED)).thenReturn(3L);
+
+        assertThat(service.countUnassigned()).isEqualTo(3);
+
+        verify(tickets).countByStatus(SupportStatus.UNASSIGNED);
+        verify(tickets, never()).findByStatus(any(), anyInt());
     }
 
     @Test

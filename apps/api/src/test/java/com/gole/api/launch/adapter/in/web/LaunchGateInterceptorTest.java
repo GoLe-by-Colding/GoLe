@@ -146,12 +146,16 @@ class LaunchGateInterceptorTest {
     }
 
     @Test
-    @DisplayName("후기 기능이 닫히면 작성만 막고 기존 후기 조회는 허용한다")
+    @DisplayName("후기 기능이 닫히면 후기·답글 작성만 막고 기존 후기 조회는 허용한다")
     void closedReviewsBlockOnlyWrites() {
         when(launchConfig.current())
                 .thenReturn(new LaunchConfig(LaunchStage.TRADING, Map.of(LaunchFeature.REVIEWS, false), null, null));
 
         assertThatThrownBy(() -> interceptor.preHandle(request("POST", "/api/v1/reviews"), response, new Object()))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("후기");
+        assertThatThrownBy(() -> interceptor.preHandle(
+                        request("POST", "/api/v1/reviews/review-1/reply"), response, new Object()))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("후기");
         assertThat(interceptor.preHandle(request("GET", "/api/v1/sellers/seller-1/reviews"), response, new Object()))
@@ -164,6 +168,8 @@ class LaunchGateInterceptorTest {
         stage(LaunchStage.TRADING);
 
         assertThat(interceptor.preHandle(request("POST", "/api/v1/reviews"), response, new Object()))
+                .isTrue();
+        assertThat(interceptor.preHandle(request("POST", "/api/v1/reviews/review-1/reply"), response, new Object()))
                 .isTrue();
     }
 

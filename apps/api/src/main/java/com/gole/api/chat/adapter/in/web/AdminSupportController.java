@@ -7,7 +7,9 @@ import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.SocialChatService;
+import com.gole.api.chat.application.SupportAssistantAnalysisService;
 import com.gole.api.chat.application.SupportChatService;
+import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SupportCategory;
@@ -21,6 +23,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,16 +43,19 @@ public class AdminSupportController {
     private final SupportChatService support;
     private final SocialChatService rooms;
     private final ChatMessagingService messaging;
+    private final SupportAssistantAnalysisService supportAssistant;
     private final RecordAdminActionUseCase audit;
 
     public AdminSupportController(
             SupportChatService support,
             SocialChatService rooms,
             ChatMessagingService messaging,
+            SupportAssistantAnalysisService supportAssistant,
             RecordAdminActionUseCase audit) {
         this.support = support;
         this.rooms = rooms;
         this.messaging = messaging;
+        this.supportAssistant = supportAssistant;
         this.audit = audit;
     }
 
@@ -61,8 +67,14 @@ public class AdminSupportController {
             @RequestParam(defaultValue = "50") int limit,
             HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        return support.inbox(actor.id(), status, category, limit).stream()
-                .map(this::response)
+        List<SupportTicket> tickets = support.inbox(actor.id(), status, category, limit);
+        List<String> ownedRoomIds = tickets.stream()
+                .filter(ticket -> actor.id().equals(ticket.assigneeId()))
+                .map(SupportTicket::roomId)
+                .toList();
+        Map<String, Analysis> analysisByRoom = supportAssistant.findCompleted(ownedRoomIds);
+        return tickets.stream()
+                .map(ticket -> response(ticket, analysisByRoom.get(ticket.roomId())))
                 .toList();
     }
 
@@ -74,7 +86,7 @@ public class AdminSupportController {
         if (conversation.changed()) {
             record(actor, AdminActionType.SUPPORT_ASSIGN, roomId, null);
         }
-        return TicketResponse.from(conversation.ticket(), conversation.room().title());
+        return response(conversation.ticket(), actor.id(), conversation.room().title());
     }
 
     @PostMapping("/{roomId}/transfer")
@@ -84,7 +96,7 @@ public class AdminSupportController {
         AdminActor actor = AdminActor.of(http);
         var conversation = support.transfer(roomId, actor.id(), request.assigneeId());
         record(actor, AdminActionType.SUPPORT_TRANSFER, roomId, "assignee=" + request.assigneeId());
-        return TicketResponse.from(conversation.ticket(), conversation.room().title());
+        return response(conversation.ticket(), actor.id(), conversation.room().title());
     }
 
     @Operation(summary = "문의 강제 인수", description = "응답 불가 또는 오배정된 타인 담당 미해결 문의를 사유와 감사 기록을 남기고 인수합니다.")
@@ -99,7 +111,7 @@ public class AdminSupportController {
                 AdminActionType.SUPPORT_TAKEOVER,
                 roomId,
                 "previousAssignee=%s; reason=%s".formatted(takeover.previousAssigneeId(), takeover.reason()));
-        return TicketResponse.from(takeover.ticket(), takeover.room().title());
+        return response(takeover.ticket(), actor.id(), takeover.room().title());
     }
 
     @PostMapping("/{roomId}/resolve")
@@ -110,7 +122,7 @@ public class AdminSupportController {
         if (transition.changed()) {
             record(actor, AdminActionType.SUPPORT_RESOLVE, roomId, null);
         }
-        return response(transition.ticket());
+        return response(transition.ticket(), actor.id());
     }
 
     @PostMapping("/{roomId}/reopen")
@@ -121,7 +133,7 @@ public class AdminSupportController {
         if (transition.changed()) {
             record(actor, AdminActionType.SUPPORT_REOPEN, roomId, null);
         }
-        return response(transition.ticket());
+        return response(transition.ticket(), actor.id());
     }
 
     @GetMapping("/{roomId}/messages")
@@ -167,8 +179,19 @@ public class AdminSupportController {
         return ResponseEntity.noContent().build();
     }
 
-    private TicketResponse response(SupportTicket ticket) {
-        return TicketResponse.from(ticket, rooms.requireRoom(ticket.roomId()).title());
+    private TicketResponse response(SupportTicket ticket, Analysis analysis) {
+        return TicketResponse.from(ticket, rooms.requireRoom(ticket.roomId()).title(), analysis);
+    }
+
+    private TicketResponse response(SupportTicket ticket, String actorId) {
+        return response(ticket, actorId, rooms.requireRoom(ticket.roomId()).title());
+    }
+
+    private TicketResponse response(SupportTicket ticket, String actorId, String title) {
+        Analysis analysis = actorId.equals(ticket.assigneeId())
+                ? supportAssistant.findCompleted(ticket.roomId()).orElse(null)
+                : null;
+        return TicketResponse.from(ticket, title, analysis);
     }
 
     private void record(AdminActor actor, AdminActionType type, String roomId, String reason) {
@@ -194,9 +217,11 @@ public class AdminSupportController {
             String createdAt,
             String updatedAt,
             String resolvedAt,
-            String responseDueAt) {
+            String progressDueAt,
+            String responseDueAt,
+            AssistantAnalysisResponse assistantAnalysis) {
 
-        static TicketResponse from(SupportTicket ticket, String title) {
+        static TicketResponse from(SupportTicket ticket, String title, Analysis analysis) {
             return new TicketResponse(
                     ticket.roomId(),
                     ticket.requesterId(),
@@ -207,9 +232,38 @@ public class AdminSupportController {
                     ticket.createdAt().toString(),
                     ticket.updatedAt().toString(),
                     ticket.resolvedAt() == null ? null : ticket.resolvedAt().toString(),
+                    ticket.progressDueAt().toString(),
                     ticket.responseDueAt() == null
                             ? null
-                            : ticket.responseDueAt().toString());
+                            : ticket.responseDueAt().toString(),
+                    AssistantAnalysisResponse.from(analysis));
+        }
+    }
+
+    /** AI 출력은 결론이 아니라 담당자가 검토할 분류·초안이다. */
+    public record AssistantAnalysisResponse(
+            String category,
+            String priority,
+            String summary,
+            String draft,
+            List<String> risk,
+            boolean humanReview,
+            boolean externalModel,
+            String engine) {
+
+        static AssistantAnalysisResponse from(Analysis analysis) {
+            if (analysis == null) {
+                return null;
+            }
+            return new AssistantAnalysisResponse(
+                    analysis.recommendedCategory().name(),
+                    analysis.priority().name(),
+                    analysis.summary(),
+                    analysis.draftReply(),
+                    analysis.riskFlags(),
+                    analysis.humanReviewRequired(),
+                    analysis.externalModelUsed(),
+                    analysis.engineVersion());
         }
     }
 

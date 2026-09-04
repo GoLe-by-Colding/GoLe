@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
 import { PaymentReturnPage } from "@views/payment-return";
+
+export const metadata: Metadata = {
+  title: "결제 결과 확인",
+  robots: { index: false, follow: false },
+};
 
 interface PageProps {
   readonly searchParams: Promise<{

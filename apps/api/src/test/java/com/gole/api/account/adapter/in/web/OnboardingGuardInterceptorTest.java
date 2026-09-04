@@ -106,6 +106,7 @@ class OnboardingGuardInterceptorTest {
                 true,
                 "고레",
                 true,
+                true,
                 "010-****-5678",
                 true,
                 List.of("technic"),

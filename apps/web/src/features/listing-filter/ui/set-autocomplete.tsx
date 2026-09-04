@@ -12,7 +12,7 @@ export interface SetAutocompleteProps {
   readonly placeholder?: string;
 }
 
-/** 레고 세트 검색 자동완성 (debounce 300ms). listing-filter 전용. */
+/** 브릭 세트 검색 자동완성 (debounce 300ms). listing-filter 전용. */
 export function SetAutocomplete({
   value,
   onChange,

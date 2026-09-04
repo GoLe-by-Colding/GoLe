@@ -44,7 +44,7 @@ public class CommunityV2Controller {
                 postId,
                 AuthenticatedUser.id(http),
                 field(request.bodyProvided(), request.body()),
-                field(request.photosProvided(), request.photos()),
+                field(request.mediaKeysProvided(), request.mediaKeys()),
                 statusField(request)));
         return PatchPostResponse.from(updated);
     }

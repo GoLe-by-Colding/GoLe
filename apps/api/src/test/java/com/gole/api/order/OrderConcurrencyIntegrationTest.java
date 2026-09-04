@@ -12,6 +12,7 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListi
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
@@ -30,6 +31,7 @@ import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase;
 import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase.RegisterWaybillCommand;
 import com.gole.api.shipping.application.port.out.ShipmentNotifierPort;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -107,6 +109,9 @@ class OrderConcurrencyIntegrationTest {
     @Autowired
     PriceTransactionRepositoryPort prices;
 
+    @Autowired
+    ManageMediaAssetsUseCase mediaAssets;
+
     @MockitoBean
     ShipmentNotifierPort shipmentNotifier;
 
@@ -118,8 +123,14 @@ class OrderConcurrencyIntegrationTest {
                 100_000,
                 ItemCondition.NEW_SEALED,
                 com.gole.api.listing.domain.model.ConditionDisclosure.basic(),
-                List.of("p.jpg"),
+                List.of(stagedPhoto("seller-x")),
                 "10307"));
+    }
+
+    private String stagedPhoto(String ownerId) {
+        String key = "images/" + UUID.randomUUID() + ".jpg";
+        mediaAssets.registerStaged(ownerId, key, "image/jpeg", 1);
+        return key;
     }
 
     @Test

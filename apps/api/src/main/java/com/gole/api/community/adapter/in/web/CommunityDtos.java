@@ -16,12 +16,12 @@ public final class CommunityDtos {
     public record PublishPostRequest(
             String authorId,
             @NotBlank @Size(max = 5000) String content,
-            @Size(max = 10) List<@NotBlank @Size(max = 2048) String> imageUrls,
+            @Size(max = 10) List<@NotBlank @Size(max = 80) String> imageKeys,
             @Size(max = 50) String topic) {
 
         /** 이미지 미지정 시 빈 목록(텍스트 전용 글 허용). */
-        public List<String> imageUrls() {
-            return imageUrls == null ? List.of() : imageUrls;
+        public List<String> imageKeys() {
+            return imageKeys == null ? List.of() : imageKeys;
         }
     }
 
@@ -33,10 +33,10 @@ public final class CommunityDtos {
     public record EditPostRequest(
             String requesterId,
             @NotBlank @Size(max = 5000) String content,
-            @Size(max = 10) List<@NotBlank @Size(max = 2048) String> imageUrls) {
+            @Size(max = 10) List<@NotBlank @Size(max = 80) String> imageKeys) {
 
-        public List<String> imageUrls() {
-            return imageUrls == null ? List.of() : imageUrls;
+        public List<String> imageKeys() {
+            return imageKeys == null ? List.of() : imageKeys;
         }
     }
 
@@ -44,6 +44,7 @@ public final class CommunityDtos {
             String id,
             String authorId,
             String content,
+            List<String> imageKeys,
             List<String> imageUrls,
             String type,
             int likeCount,
@@ -59,7 +60,12 @@ public final class CommunityDtos {
                     post.getId(),
                     post.getAuthorId(),
                     post.getContent(),
-                    post.getImageUrls(),
+                    post.getImageUrls().stream()
+                            .flatMap(value -> com.gole.api.media.domain.model.MediaKey.safeStoredKey(value).stream())
+                            .toList(),
+                    post.getImageUrls().stream()
+                            .flatMap(value -> com.gole.api.media.domain.model.MediaKey.safePublicPath(value).stream())
+                            .toList(),
                     post.getType().name().toLowerCase(),
                     post.likeCount(),
                     post.isLikedBy(viewerId),

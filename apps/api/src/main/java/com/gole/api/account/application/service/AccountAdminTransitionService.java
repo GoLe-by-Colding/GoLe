@@ -2,6 +2,7 @@ package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.domain.model.Account;
+import com.gole.api.account.domain.model.AccountDeletionRequest;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.NotFoundException;
@@ -21,6 +22,7 @@ public class AccountAdminTransitionService {
     @Transactional
     public Account suspend(String accountId, String actorAccountId, String reason) {
         Account account = load(accountId);
+        ensureNotDeletionPending(account);
         ensureNotSelf(accountId, actorAccountId);
         if (account.getRole() == Role.ADMIN) {
             accounts.fenceAdminMutation();
@@ -33,6 +35,7 @@ public class AccountAdminTransitionService {
     @Transactional
     public Account reinstate(String accountId) {
         Account account = load(accountId);
+        ensureNotDeletionPending(account);
         account.reinstate();
         return accounts.save(account);
     }
@@ -40,6 +43,7 @@ public class AccountAdminTransitionService {
     @Transactional
     public Account changeRole(String accountId, String actorAccountId, Role newRole) {
         Account account = load(accountId);
+        ensureNotDeletionPending(account);
         if (account.getRole() == newRole) {
             return account;
         }
@@ -66,6 +70,13 @@ public class AccountAdminTransitionService {
     private static void ensureNotSelf(String accountId, String actorAccountId) {
         if (accountId.equals(actorAccountId)) {
             throw new BadRequestException("ADMIN_SELF_TARGET", "자기 자신에게는 이 조치를 할 수 없습니다");
+        }
+    }
+
+    private static void ensureNotDeletionPending(Account account) {
+        if (AccountDeletionRequest.isDeletionSuspension(account.getSuspendedReason())) {
+            throw new BadRequestException(
+                    "ACCOUNT_DELETION_ADMIN_MUTATION_FORBIDDEN", "탈퇴 처리 중인 계정은 일반 회원 관리 기능으로 변경할 수 없습니다");
         }
     }
 }

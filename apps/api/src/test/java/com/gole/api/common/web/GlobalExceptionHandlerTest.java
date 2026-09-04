@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.exception.TooManyRequestsException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -110,6 +111,16 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
         assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("2");
         assertThat(response.getBody().code()).isEqualTo("MEDIA_UPLOAD_RATE_LIMITED");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void plannedSellerReadinessGateReturns503WithoutOperationalAlert() {
+        var response = handler.handleServiceUnavailable(
+                new ServiceUnavailableException("SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "판매자 신원확인 준비 중입니다"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody().code()).isEqualTo("SELLER_IDENTITY_VERIFICATION_UNAVAILABLE");
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 

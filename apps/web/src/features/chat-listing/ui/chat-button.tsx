@@ -1,8 +1,14 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useChatRoom, useRoomReadReceipt } from "@entities/chat";
-import { useSession } from "@entities/user";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type ChatRoom, useChatRoom, useRoomReadReceipt } from "@entities/chat";
+import {
+  isThirdPartyProvisionConsentCancelledError,
+  ThirdPartyProvisionConsentDialog,
+  type ThirdPartyProvisionPath,
+  useSession,
+  useThirdPartyProvisionConsent,
+} from "@entities/user";
 import { Button, LinkButton, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 import { DirectTradeConfirmation } from "./direct-trade-confirmation";
@@ -29,6 +35,7 @@ export function ChatButton({
   initialOpen = false,
 }: ChatButtonProps) {
   const { session } = useSession();
+  const { runWithConsent, dialog } = useThirdPartyProvisionConsent();
   const [open, setOpen] = useState(initialOpen);
 
   if (!available) return null;
@@ -47,42 +54,60 @@ export function ChatButton({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <Button size="lg" variant="secondary" onClick={() => setOpen((v) => !v)}>
-        {open ? "채팅 닫기" : label}
-      </Button>
-      {open ? (
-        <div
-          className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
-          style={{ height: 420 }}
-        >
-          <InlineChatPanel
-            key={`${session.accountId}:${listingId}:${sellerId}`}
-            listingId={listingId}
-            myId={session.accountId}
-            sellerId={sellerId}
-            directTradeEnabled={directTradeEnabled}
-          />
-        </div>
-      ) : null}
-    </div>
+    <>
+      <div className="flex flex-col gap-3">
+        <Button size="lg" variant="secondary" onClick={() => setOpen((v) => !v)}>
+          {open ? "채팅 닫기" : label}
+        </Button>
+        {open ? (
+          <div
+            className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
+            style={{ height: 420 }}
+          >
+            <InlineChatPanel
+              key={`${session.accountId}:${listingId}:${sellerId}`}
+              listingId={listingId}
+              myId={session.accountId}
+              sellerId={sellerId}
+              directTradeEnabled={directTradeEnabled}
+              runWithConsent={runWithConsent}
+            />
+          </div>
+        ) : null}
+      </div>
+      <ThirdPartyProvisionConsentDialog {...dialog} />
+    </>
   );
 }
+
+type ConsentRunner = <T>(action: () => Promise<T>, path: ThirdPartyProvisionPath) => Promise<T>;
 
 interface InlineChatPanelProps {
   readonly listingId: string;
   readonly myId: string;
   readonly sellerId: string;
   readonly directTradeEnabled: boolean;
+  readonly runWithConsent: ConsentRunner;
 }
 
-function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: InlineChatPanelProps) {
+function InlineChatPanel({
+  listingId,
+  myId,
+  sellerId,
+  directTradeEnabled,
+  runWithConsent,
+}: InlineChatPanelProps) {
+  const runCreate = useCallback(
+    (action: () => Promise<ChatRoom>) => runWithConsent(action, "LISTING_CHAT"),
+    [runWithConsent],
+  );
   const { room, messages, send, confirmTrade, cancelTradeConfirmation, retry, loading, error } =
     useChatRoom({
       listingId,
       myId,
       otherId: sellerId,
       isBuyer: true,
+      runCreate,
     });
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -101,9 +126,11 @@ function InlineChatPanel({ listingId, myId, sellerId, directTradeEnabled }: Inli
     setSending(true);
     setActionError(undefined);
     try {
-      await send(input.trim());
+      const content = input.trim();
+      await runWithConsent(() => send(content), "CHAT_MESSAGE");
       setInput("");
-    } catch {
+    } catch (cause) {
+      if (isThirdPartyProvisionConsentCancelledError(cause)) return;
       setActionError("메시지를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSending(false);

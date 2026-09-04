@@ -1,12 +1,15 @@
 import { apiRequest } from "@shared/api";
 import type {
   CurrentSignupPolicy,
+  AccountDeletionRequestResult,
   InterestTag,
   Me,
   OnboardingStatus,
   RegisterResult,
   Session,
   SignupPolicyAcceptance,
+  ThirdPartyProvisionConsentStatus,
+  ThirdPartyProvisionPath,
 } from "../model/types";
 
 export function fetchCurrentSignupPolicy(signal?: AbortSignal): Promise<CurrentSignupPolicy> {
@@ -86,6 +89,27 @@ export function confirmPasswordReset(
   });
 }
 
+/** 현재 로그인 계정 이메일로 탈퇴 전용 일회용 코드를 보낸다. */
+export function requestAccountDeletionVerification(): Promise<void> {
+  return apiRequest<void>("/api/v1/accounts/me/deletion-verifications", {
+    method: "POST",
+  });
+}
+
+/** 강한 본인확인 후 계정을 즉시 비활성화하고 탈퇴 검토 원장을 만든다. */
+export function requestAccountDeletion(
+  email: string,
+  confirmation: string,
+  verificationCode: string,
+  idempotencyKey: string,
+): Promise<AccountDeletionRequestResult> {
+  return apiRequest<AccountDeletionRequestResult>("/api/v1/accounts/me/deletion-requests", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: { email, confirmation, verificationCode },
+  });
+}
+
 const OAUTH_BASE = "/api/v1/auth/oauth";
 
 /** 설정(활성)된 소셜 provider 키 목록(google/kakao/naver). */
@@ -96,22 +120,20 @@ export function fetchSocialProviders(signal?: AbortSignal): Promise<readonly str
   });
 }
 
-/** provider 동의 화면 URL을 받아온다. state는 서버가 발급한다. */
+/** provider 동의 화면 URL을 받아온다. 복귀 경로는 서버가 검증해 1회용 state에 결박한다. */
 export function fetchSocialAuthorizeUrl(
   provider: string,
   redirectUri: string,
   signupPolicyAcceptance?: SignupPolicyAcceptance,
+  returnTo?: string | null,
 ): Promise<{ readonly url: string }> {
-  const query = new URLSearchParams({ redirectUri });
-  if (signupPolicyAcceptance !== undefined) {
-    query.set("termsVersion", signupPolicyAcceptance.termsVersion);
-    query.set("privacyVersion", signupPolicyAcceptance.privacyVersion);
-    query.set("termsAccepted", String(signupPolicyAcceptance.termsAccepted));
-    query.set("privacyAcknowledged", String(signupPolicyAcceptance.privacyAcknowledged));
-    query.set("minimumAgeConfirmed", String(signupPolicyAcceptance.minimumAgeConfirmed));
-  }
-  return apiRequest<{ readonly url: string }>(`${OAUTH_BASE}/${provider}/authorize-url?${query}`, {
-    cache: "no-store",
+  return apiRequest<{ readonly url: string }>(`${OAUTH_BASE}/${provider}/authorize-url`, {
+    method: "POST",
+    body: {
+      redirectUri,
+      ...(returnTo === undefined || returnTo === null ? {} : { returnTo }),
+      ...(signupPolicyAcceptance ?? {}),
+    },
   });
 }
 
@@ -135,6 +157,7 @@ export async function socialCallback(
       onboardingRequired: res.onboardingRequired,
     },
     newAccount: res.newAccount,
+    returnTo: res.returnTo,
   };
 }
 
@@ -144,11 +167,13 @@ interface SocialCallbackResponse {
   readonly role: "USER" | "ADMIN";
   readonly newAccount: boolean;
   readonly onboardingRequired: boolean;
+  readonly returnTo: string | null;
 }
 
 export interface SocialCallbackResult {
   readonly session: Session;
   readonly newAccount: boolean;
+  readonly returnTo: string | null;
 }
 
 /** 로그아웃: HttpOnly 쿠키 또는 외부 API용 Bearer 세션을 서버에서 폐기한다. */
@@ -165,6 +190,44 @@ export function fetchMe(sessionToken: string): Promise<Me> {
     cache: "no-store",
     headers: sessionToken.length > 0 ? { Authorization: `Bearer ${sessionToken}` } : {},
   });
+}
+
+const THIRD_PARTY_PROVISION_BASE = "/api/v1/accounts/me/third-party-provision-consents";
+
+/** 현재 공지 버전에 대한 제3자 제공 동의 여부를 조회한다. */
+export function fetchThirdPartyProvisionConsentStatus(
+  signal?: AbortSignal,
+): Promise<ThirdPartyProvisionConsentStatus> {
+  return apiRequest<ThirdPartyProvisionConsentStatus>(`${THIRD_PARTY_PROVISION_BASE}/current`, {
+    cache: "no-store",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+/** 선택 기능 진입 직전 받은 동의를 append-only 감사 기록으로 남긴다. */
+export function acceptThirdPartyProvisionConsent(
+  noticeVersion: string,
+  path: ThirdPartyProvisionPath,
+  requestId: string,
+): Promise<ThirdPartyProvisionConsentStatus> {
+  return apiRequest<ThirdPartyProvisionConsentStatus>(THIRD_PARTY_PROVISION_BASE, {
+    method: "POST",
+    body: { noticeVersion, accepted: true, path, requestId },
+  });
+}
+
+/** 과거 동의 기록은 보존하고 현재 버전에 대한 철회 결정을 새 기록으로 남긴다. */
+export function withdrawThirdPartyProvisionConsent(
+  noticeVersion: string,
+  requestId: string,
+): Promise<ThirdPartyProvisionConsentStatus> {
+  return apiRequest<ThirdPartyProvisionConsentStatus>(
+    "/api/v1/accounts/me/third-party-provision-consent-withdrawals",
+    {
+      method: "POST",
+      body: { noticeVersion, requestId },
+    },
+  );
 }
 
 // --- 최초 로그인 온보딩 (onboarding R2~R7) ---------------------------------

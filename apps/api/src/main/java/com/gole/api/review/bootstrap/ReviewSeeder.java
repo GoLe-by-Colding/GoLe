@@ -1,5 +1,16 @@
 package com.gole.api.review.bootstrap;
 
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_HYUN;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_JI;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_JUN;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_MINA;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_SOO;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_TAE;
+import static com.gole.api.common.bootstrap.DemoContentActors.BUYER_WON;
+import static com.gole.api.common.bootstrap.DemoContentActors.SELLER_AURORA;
+import static com.gole.api.common.bootstrap.DemoContentActors.SELLER_BRICKBANK;
+import static com.gole.api.common.bootstrap.DemoContentActors.SELLER_MINIFIG;
+
 import com.gole.api.review.adapter.out.persistence.ReviewMongoRepository;
 import com.gole.api.review.application.port.out.ReviewIdGeneratorPort;
 import com.gole.api.review.application.port.out.ReviewRepositoryPort;
@@ -52,13 +63,13 @@ public class ReviewSeeder implements CommandLineRunner {
             return;
         }
         List<Seed> seeds = List.of(
-                new Seed("seller-aurora", "buyer-jun", 5, "포장 꼼꼼하고 상태도 설명 그대로였어요. 또 거래하고 싶네요!"),
-                new Seed("seller-aurora", "buyer-mina", 5, "미개봉 새상품 정품 확인했습니다. 빠른 배송 감사합니다."),
-                new Seed("seller-aurora", "buyer-tae", 4, "전체적으로 만족! 박스 모서리 약간 눌림은 있었지만 가격 대비 좋아요."),
-                new Seed("seller-brickbank", "buyer-soo", 5, "부품 누락 없이 완벽했어요. 설명서까지 깨끗합니다."),
-                new Seed("seller-brickbank", "buyer-hyun", 4, "응답 빠르고 친절하셨어요. 직거래로 안전하게 받았습니다."),
-                new Seed("seller-minifig", "buyer-ji", 5, "미니피그 상태 최고예요. 희귀 피그 구해서 너무 만족합니다."),
-                new Seed("seller-minifig", "buyer-won", 4, "사진과 동일한 상태라 안심하고 거래했어요."));
+                new Seed(SELLER_AURORA, BUYER_JUN, 5, "포장 꼼꼼하고 상태도 설명 그대로였어요. 또 거래하고 싶네요!"),
+                new Seed(SELLER_AURORA, BUYER_MINA, 5, "미개봉 새상품 정품 확인했습니다. 빠른 배송 감사합니다."),
+                new Seed(SELLER_AURORA, BUYER_TAE, 4, "전체적으로 만족! 박스 모서리 약간 눌림은 있었지만 가격 대비 좋아요."),
+                new Seed(SELLER_BRICKBANK, BUYER_SOO, 5, "부품 누락 없이 완벽했어요. 설명서까지 깨끗합니다."),
+                new Seed(SELLER_BRICKBANK, BUYER_HYUN, 4, "응답 빠르고 친절하셨어요. 직거래로 안전하게 받았습니다."),
+                new Seed(SELLER_MINIFIG, BUYER_JI, 5, "미니피그 상태 최고예요. 희귀 피그 구해서 너무 만족합니다."),
+                new Seed(SELLER_MINIFIG, BUYER_WON, 4, "사진과 동일한 상태라 안심하고 거래했어요."));
 
         Instant now = Instant.now(clock);
         int i = 0;

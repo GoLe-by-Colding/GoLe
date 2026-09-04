@@ -28,11 +28,11 @@ public class OpenApiConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("GoLe LEGO Marketplace API")
+                        .title("GoLe 브릭 중고거래 API")
                         .version("1.0.0")
                         .description(
                                 """
-                                GoLe — 레고 중고거래 마켓플레이스 백엔드 API.
+                                GoLe — 브릭 중고거래 플랫폼 백엔드 API.
 
                                 ## 인증
                                 브라우저는 **HttpOnly 세션 쿠키**, 외부 API 클라이언트는 **Bearer 토큰**으로 인증합니다.

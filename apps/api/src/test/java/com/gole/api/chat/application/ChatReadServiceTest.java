@@ -10,6 +10,8 @@ import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
+import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
@@ -29,8 +31,10 @@ class ChatReadServiceTest {
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
     private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
-    private final ChatReadService service =
-            new ChatReadService(messages, readStates, blocks, socialChats, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final SupportConversationPrivacyRepositoryPort supportPrivacy =
+            mock(SupportConversationPrivacyRepositoryPort.class);
+    private final ChatReadService service = new ChatReadService(
+            messages, readStates, blocks, socialChats, supportPrivacy, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void unreadCounts_rechecksEveryRoomAndExcludesStaleSupportAssignee() {
@@ -92,6 +96,21 @@ class ChatReadServiceTest {
 
         verify(socialChats).requireReadable("direct", "me");
         verify(readStates).advance("direct", "me", "message-1", sentAt, NOW);
+    }
+
+    @Test
+    void markReadFencesSupportConversationBeforeCursorCanBeRecreated() {
+        SocialChatRoom support = new SocialChatRoom(
+                "support", ChatRoomType.SUPPORT, List.of("me", "admin"), "me", "문의", null, NOW, NOW, null, 0);
+        Instant sentAt = NOW.minusSeconds(10);
+        when(socialChats.requireReadable("support", "me")).thenReturn(support);
+        when(messages.findById("message-1"))
+                .thenReturn(Optional.of(new ChatMessageDocument("message-1", "support", "me", "문의", sentAt)));
+
+        service.markRead("support", "me", "message-1");
+
+        verify(supportPrivacy).fenceSupportConversation("support", NOW);
+        verify(readStates).advance("support", "me", "message-1", sentAt, NOW);
     }
 
     @Test

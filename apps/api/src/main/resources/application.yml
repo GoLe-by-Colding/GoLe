@@ -27,6 +27,10 @@ spring:
     properties:
       "[mail.smtp.auth]": ${SMTP_AUTH:true}
       "[mail.smtp.starttls.enable]": ${SMTP_STARTTLS:true}
+      # 앱 비밀번호가 평문 SMTP나 위조 인증서로 전송되지 않게 STARTTLS 협상과
+      # 인증서 호스트명 검증을 선택 사항이 아닌 연결 계약으로 둔다.
+      "[mail.smtp.starttls.required]": ${SMTP_STARTTLS_REQUIRED:true}
+      "[mail.smtp.ssl.checkserveridentity]": ${SMTP_SSL_CHECKSERVERIDENTITY:true}
       "[mail.smtp.connectiontimeout]": 5000
       "[mail.smtp.timeout]": 5000
       "[mail.smtp.writetimeout]": 5000
@@ -42,6 +46,10 @@ storage:
     bucket: ${STORAGE_S3_BUCKET:gole}
   public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.co.kr}
   max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
+  # 디코드 전에 헤더 치수와 총 픽셀을 검사해 압축폭탄/OOM 위험을 제한한다.
+  max-image-width: ${STORAGE_MAX_IMAGE_WIDTH:8192}
+  max-image-height: ${STORAGE_MAX_IMAGE_HEIGHT:8192}
+  max-image-pixels: ${STORAGE_MAX_IMAGE_PIXELS:16000000}
 
 # 소셜 로그인(OAuth2). client-id/secret만 env로 주입하면 활성화된다(미설정 provider는 비활성).
 oauth:
@@ -106,7 +114,7 @@ management:
       # 그러면 메일 인증(gole.verification.email.enabled)이 꺼져 있는 기본 구성에서도
       # /actuator/health 전체가 DOWN(503)이 되고, deploy.sh의 헬스 게이트가 정상 배포를
       # 실패로 처리한다. 실제로 쓰는 SMTP를 붙일 때만 이 지표를 켠다.
-      enabled: ${GOLE_MAIL_HEALTH_ENABLED:false}
+      enabled: ${GOLE_MAIL_HEALTH_ENABLED:${GOLE_VERIFICATION_EMAIL_ENABLED:false}}
 
 logging:
   level:
@@ -115,10 +123,58 @@ logging:
 # 시드 데이터: 기본은 전부 꺼져 있다. 로컬 데모에서만 명시적으로 켠다.
 gole:
   environment: ${GOLE_ENVIRONMENT:local}
+  seller-identity:
+    # 계정의 전화번호 인증과 별개인 운영 준비 래치다. 환경변수가 누락되면 신규 매물 등록을
+    # 닫아 두며, 로컬/e2e 프로필만 별도 fixture로 명시적으로 연다.
+    verification-ready: ${GOLE_SELLER_IDENTITY_VERIFICATION_READY:false}
+  auth:
+    # 공개 인증 API는 Nginx 제한에 기대지 않고 Redis Lua로 여러 시간창을 원자적으로
+    # 획득한다. 이메일/IP는 SHA-256 식별자로만 키에 들어가며 Redis 장애 시 fail-closed 한다.
+    public-rate-limit:
+      email-recipient-cooldown:
+        maximum: ${GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_MAXIMUM:1}
+        window: ${GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_WINDOW:PT1M}
+      email-recipient-daily:
+        maximum: ${GOLE_AUTH_EMAIL_RECIPIENT_DAILY_MAXIMUM:8}
+        window: ${GOLE_AUTH_EMAIL_RECIPIENT_DAILY_WINDOW:P1D}
+      email-client-burst:
+        maximum: ${GOLE_AUTH_EMAIL_CLIENT_BURST_MAXIMUM:5}
+        window: ${GOLE_AUTH_EMAIL_CLIENT_BURST_WINDOW:PT1M}
+      email-client-hourly:
+        maximum: ${GOLE_AUTH_EMAIL_CLIENT_HOURLY_MAXIMUM:30}
+        window: ${GOLE_AUTH_EMAIL_CLIENT_HOURLY_WINDOW:PT1H}
+      email-global-burst:
+        maximum: ${GOLE_AUTH_EMAIL_GLOBAL_BURST_MAXIMUM:60}
+        window: ${GOLE_AUTH_EMAIL_GLOBAL_BURST_WINDOW:PT1M}
+      email-global-daily:
+        maximum: ${GOLE_AUTH_EMAIL_GLOBAL_DAILY_MAXIMUM:300}
+        window: ${GOLE_AUTH_EMAIL_GLOBAL_DAILY_WINDOW:P1D}
+      oauth-client-burst:
+        maximum: ${GOLE_AUTH_OAUTH_CLIENT_BURST_MAXIMUM:20}
+        window: ${GOLE_AUTH_OAUTH_CLIENT_BURST_WINDOW:PT1M}
+      oauth-client-hourly:
+        maximum: ${GOLE_AUTH_OAUTH_CLIENT_HOURLY_MAXIMUM:120}
+        window: ${GOLE_AUTH_OAUTH_CLIENT_HOURLY_WINDOW:PT1H}
+      oauth-global-burst:
+        maximum: ${GOLE_AUTH_OAUTH_GLOBAL_BURST_MAXIMUM:120}
+        window: ${GOLE_AUTH_OAUTH_GLOBAL_BURST_WINDOW:PT1M}
+      oauth-global-daily:
+        maximum: ${GOLE_AUTH_OAUTH_GLOBAL_DAILY_MAXIMUM:2000}
+        window: ${GOLE_AUTH_OAUTH_GLOBAL_DAILY_WINDOW:P1D}
+  oauth:
+    # OAuth provider에 넘길 redirect_uri는 브라우저 입력을 신뢰하지 않고 서버의 정확한
+    # 콜백 목록과 대조한다. 운영 Compose는 apex HTTPS 3개만 별도로 고정한다.
+    allowed-redirect-uris: ${GOLE_OAUTH_ALLOWED_REDIRECT_URIS:http://localhost:3000/auth/callback/google,http://localhost:3000/auth/callback/kakao,http://localhost:3000/auth/callback/naver,http://localhost:3010/auth/callback/google,http://localhost:3010/auth/callback/kakao,http://localhost:3010/auth/callback/naver}
   onboarding:
+    # 로컬은 기존 전화 인증 흐름을 계속 검증한다. 알림톡이 준비되지 않은 초기 공개 운영은
+    # false로 내려 신규 사용자가 발송 불가능한 OTP 단계에서 막히지 않게 한다.
+    phone-verification-required: ${GOLE_ONBOARDING_PHONE_REQUIRED:true}
+    # OTP 원문 로그는 로컬 계열 환경에서도 기본 차단한다. 수동 흐름 확인에 꼭 필요할 때만
+    # 명시적으로 켜며 staging/production에서는 true여도 로깅 어댑터가 요청을 거부한다.
+    log-verification-codes: ${GOLE_ONBOARDING_LOG_VERIFICATION_CODES:false}
     # 전화번호 인증코드 알림톡 템플릿. 카카오 승인은 코드 밖 운영 과제라 기본값이 비어 있다.
-    # coolsms.enabled=false(로컬·승인 전)면 로깅 스텁이 이 값과 무관하게 코드를 로그로만
-    # 남기고 인증을 그대로 진행시킨다 — 발송 여부는 오직 coolsms.enabled로만 갈린다.
+    # coolsms.enabled=false(로컬·승인 전)면 로깅 스텁이 이 값과 무관하게 인증 흐름을
+    # 진행시킨다. 기본 로그는 코드를 가리고, 위 로컬 전용 옵트인을 켰을 때만 원문을 남긴다.
     # coolsms.enabled=true인데 이 값이 비어 있으면 그때는 실제 어댑터(CoolsmsAlimtalkAdapter)가
     # 요청을 거부해 PHONE_VERIFICATION_UNAVAILABLE로 이어진다. (onboarding D3)
     phone-verification-template-id: ${GOLE_ONBOARDING_PHONE_TEMPLATE_ID:}
@@ -126,8 +182,9 @@ gole:
   # 가입 당시의 정책 버전을 별도 append-only 이력으로 남긴다. 약관/처리방침을 바꾸면
   # 문서의 시행일과 이 값을 함께 올려 오래된 가입 화면의 제출을 fail-closed 한다.
   policy:
-    terms-version: ${GOLE_TERMS_VERSION:2026-09-03}
-    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-03}
+    terms-version: ${GOLE_TERMS_VERSION:2026-09-04}
+    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-04}
+    third-party-provision-version: ${GOLE_THIRD_PARTY_PROVISION_VERSION:2026-09-04}
     minimum-age: ${GOLE_MINIMUM_SIGNUP_AGE:14}
   catalog:
     seed-on-empty: ${GOLE_CATALOG_SEED:false}
@@ -151,6 +208,16 @@ gole:
     upload-rate-limit:
       maximum-images: ${GOLE_MEDIA_UPLOAD_RATE_MAX_IMAGES:30}
       window: ${GOLE_MEDIA_UPLOAD_RATE_WINDOW:PT10M}
+    lifecycle:
+      # 업로드만 하고 콘텐츠에 연결하지 않은 파일은 24시간 뒤 폐기한다.
+      staged-ttl: ${GOLE_MEDIA_STAGED_TTL:PT24H}
+      maintenance-interval: ${GOLE_MEDIA_MAINTENANCE_INTERVAL:PT1M}
+      batch-size: ${GOLE_MEDIA_MAINTENANCE_BATCH_SIZE:100}
+      deletion-maximum-attempts: ${GOLE_MEDIA_DELETION_MAX_ATTEMPTS:8}
+      deletion-initial-backoff: ${GOLE_MEDIA_DELETION_INITIAL_BACKOFF:PT30S}
+      # 스냅샷 복구 직후에만 복구 시각(ISO-8601)을 넣는다. 그 이후 완료된 영구 삭제
+      # journal을 MinIO에 한 번 더 적용해 삭제된 개인정보가 복원되지 않게 한다.
+      replay-completed-since: ${GOLE_MEDIA_REPLAY_COMPLETED_SINCE:}
   # 파이프라인 상태별 타임아웃(shipping-and-fees R9.1). 코드 상수 금지 — 전부 여기서.
   # 정상 거래는 운영자 개입 0으로 끝까지 흘러가고, 예외만 큐에 올라온다(R7).
   pipeline:
@@ -208,6 +275,7 @@ gole:
     webhook-url: ${DISCORD_WEBHOOK_URL:}
     account-webhook-url: ${DISCORD_ACCOUNT_WEBHOOK_URL:}
     payment-webhook-url: ${DISCORD_PAYMENT_WEBHOOK_URL:}
+    support-webhook-url: ${DISCORD_SUPPORT_WEBHOOK_URL:}
     operations-webhook-url: ${DISCORD_OPERATIONS_WEBHOOK_URL:}
     # 모든 역할별 웹훅 메시지 프로필을 GoLe 파비콘으로 통일한다. 필요하면 환경변수로 교체한다.
     avatar-url: ${DISCORD_AVATAR_URL:https://gole.co.kr/icon.svg}
@@ -215,6 +283,24 @@ gole:
     suppress-notifications: ${DISCORD_SUPPRESS_NOTIFICATIONS:true}
     # 같은 APPLICATION 장애는 요청 경로가 달라도 예외 종류별 한 건으로 묶어 알림 폭주를 막는다.
     deduplication-window: ${DISCORD_DEDUPLICATION_WINDOW:PT5M}
+  # 문의 답변 보조 LangGraph 서비스. 분석 실패가 문의 접수·Discord 알림을 막지 않으며,
+  # 결과는 언제나 관리자 검토용 초안이다. 외부 모델 연결 전에는 내부 rules-v1만 사용한다.
+  support-agent:
+    enabled: ${GOLE_SUPPORT_AGENT_ENABLED:false}
+    target: ${GOLE_SUPPORT_AGENT_GRPC_TARGET:}
+    timeout: ${GOLE_SUPPORT_AGENT_TIMEOUT:PT2S}
+  # 문의 알림은 문의 저장 트랜잭션에 비식별 Mongo outbox로 먼저 적재한다. Discord가
+  # 수락한 뒤에만 완료하며, 프로세스 재시작·429·5xx는 lease 만료와 백오프로 복구한다.
+  support-notification-outbox:
+    processing-enabled: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_ENABLED:${GOLE_DISCORD_ALERTS_ENABLED:false}}
+    poll-interval: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_POLL_INTERVAL:PT10S}
+    batch-size: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_BATCH_SIZE:20}
+    maximum-attempts: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_MAXIMUM_ATTEMPTS:12}
+    lease-duration: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_LEASE_DURATION:PT30S}
+    initial-backoff: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_INITIAL_BACKOFF:PT10S}
+    maximum-backoff: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_MAXIMUM_BACKOFF:PT1H}
+    # 문의와 연결할 수 없는 완료·dead-letter 운영 영수증만 이 기간 뒤 TTL 정리한다.
+    terminal-retention: ${GOLE_SUPPORT_NOTIFICATION_OUTBOX_TERMINAL_RETENTION:P30D}
 
 # 포트원(PortOne) V2 결제. 로컬은 스텁을 허용하지만 GOLE_ENVIRONMENT=production에서는
 # enabled=true와 비밀키·상점·채널 설정이 모두 없으면 안전하게 부팅을 중단한다.

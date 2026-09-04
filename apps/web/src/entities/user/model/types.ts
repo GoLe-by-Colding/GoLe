@@ -18,6 +18,7 @@ export interface RegisterResult {
 export interface CurrentSignupPolicy {
   readonly termsVersion: string;
   readonly privacyVersion: string;
+  readonly thirdPartyProvisionVersion: string;
   readonly minimumAge: number;
 }
 
@@ -25,9 +26,28 @@ export interface CurrentSignupPolicy {
 export interface SignupPolicyAcceptance {
   readonly termsVersion: string;
   readonly privacyVersion: string;
+  readonly thirdPartyProvisionVersion: string;
   readonly termsAccepted: boolean;
   readonly privacyAcknowledged: boolean;
+  readonly thirdPartyProvisionAccepted: boolean;
   readonly minimumAgeConfirmed: boolean;
+}
+
+/** 제3자 제공 동의가 실제로 필요한 기능 진입 경로. 서버 감사 기록과 같은 enum을 쓴다. */
+export type ThirdPartyProvisionPath =
+  | "LISTING_CHAT"
+  | "SOCIAL_DIRECT_CHAT"
+  | "SOCIAL_GROUP_CHAT"
+  | "SOCIAL_GROUP_INVITE"
+  | "CHAT_MESSAGE"
+  | "ORDER_CONTACTS"
+  | "ACCOUNT_SETTINGS";
+
+/** 현재 공지 버전에 대한 로그인 사용자의 동의 상태. */
+export interface ThirdPartyProvisionConsentStatus {
+  readonly noticeVersion: string;
+  readonly consented: boolean;
+  readonly lastDecisionAt: string | null;
 }
 
 /** GET /me 응답: 현재 로그인 사용자 정보. */
@@ -39,17 +59,39 @@ export interface Me {
   readonly onboardingRequired: boolean;
 }
 
+export type AccountDeletionStatus = "BLOCKED" | "READY" | "COMPLETED";
+
+export type AccountDeletionBlocker =
+  | "ACTIVE_ORDER"
+  | "UNSETTLED_PAYOUT"
+  | "PENDING_REPORT"
+  | "SUPPORT_RECORDS_REQUIRE_PURGE"
+  | "PUBLIC_CONTENT_REQUIRES_LIFECYCLE_REVIEW"
+  | "MEDIA_REQUIRES_LIFECYCLE_REVIEW"
+  | "OWNED_GROUP_REQUIRES_TRANSFER"
+  | "EXPLICIT_RETENTION_HOLD";
+
+/** 탈퇴 요청 결과에는 이메일이나 내부 accountId를 되돌려 주지 않는다. */
+export interface AccountDeletionRequestResult {
+  readonly requestId: string;
+  readonly status: AccountDeletionStatus;
+  readonly blockers: readonly AccountDeletionBlocker[];
+  readonly requestedAt: string;
+}
+
 /**
  * 온보딩 진행 상태(onboarding R2). 완료 여부는 서버가 계정 필드 유무로 파생시키며
  * 별도 플래그로 저장하지 않는다(D1) — 화면은 이 응답만 보고 남은 단계부터 재개한다.
  */
 export interface OnboardingStatus {
-  /** 네 단계가 모두 끝나지 않았으면 true. */
+  /** 현재 배포 정책에서 요구하는 단계가 모두 끝나지 않았으면 true. */
   readonly required: boolean;
   /** 스펙 배포 이전 계정(D6). true면 강제 리다이렉트 대신 배너만 노출한다. */
   readonly legacyExempt: boolean;
   readonly nicknameCompleted: boolean;
   readonly nickname: string | null;
+  /** false면 전화 인증은 선택 사항이며 위저드·완료 판정에서 제외한다. */
+  readonly phoneVerificationRequired: boolean;
   readonly phoneCompleted: boolean;
   readonly maskedPhoneNumber: string | null;
   readonly interestTagsCompleted: boolean;

@@ -84,6 +84,12 @@ public class RedisPhoneVerificationStoreAdapter implements PhoneVerificationStor
         redisTemplate.delete(OTP_PREFIX + accountId);
     }
 
+    @Override
+    public void deleteAllForAccount(String accountId) {
+        redisTemplate.delete(
+                java.util.List.of(OTP_PREFIX + accountId, COOLDOWN_PREFIX + accountId, DAILY_PREFIX + accountId));
+    }
+
     private static String serialize(PhoneVerificationChallenge challenge) {
         return challenge.phoneNumber() + "\n" + challenge.code() + "\n" + challenge.attempts();
     }

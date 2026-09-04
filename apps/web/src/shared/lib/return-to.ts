@@ -74,3 +74,22 @@ export function resolveReturnTo(raw: string | null | undefined): string | null {
   }
   return target;
 }
+
+/** 검증을 통과한 복귀 경로를 담은 로그인 링크를 만든다. */
+export function loginHrefWithReturnTo(target: string): string {
+  const safe = resolveReturnTo(target);
+  return safe === null ? "/login" : `/login?returnTo=${encodeURIComponent(safe)}`;
+}
+
+/**
+ * 클라이언트 액션이 현재 화면으로 돌아올 수 있는 로그인 링크를 만든다.
+ * 이벤트 시점의 주소를 읽으므로 검색 조건과 해시도 함께 보존된다.
+ */
+export function loginHrefForCurrentPage(): string {
+  if (typeof window === "undefined") {
+    return "/login";
+  }
+  return loginHrefWithReturnTo(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  );
+}

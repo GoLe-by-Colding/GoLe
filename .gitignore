@@ -11,6 +11,7 @@ next-env.d.ts
 # 개인 환경변수. 예시 파일만 버전 관리한다.
 .env
 .env.*
+apps/support-agent/generated/
 !.env.example
 !**/.env.example
 playwright-report/
@@ -28,6 +29,8 @@ build/
 # Python (GCP budget relay tests/runtime)
 __pycache__/
 *.py[cod]
+.venv/
+.pytest_cache/
 
 # IDE / OS
 .idea/
@@ -46,7 +49,11 @@ pnpm-debug.log*
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+*.tfplan
+crash.log
+crash.*.log
 .terraform.lock.hcl
+!infra/gcp/terraform/.terraform.lock.hcl
 
 # Kiro 로컬 스펙 메타데이터(머신별 specId) — 추적하지 않는다
 .kiro/specs/**/.config.kiro

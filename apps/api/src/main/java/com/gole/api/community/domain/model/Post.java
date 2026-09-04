@@ -104,6 +104,9 @@ public final class Post {
     /** 삭제(요구사항 12.7). */
     public void delete() {
         this.status = PostStatus.DELETED;
+        this.content = "";
+        this.imageUrls = List.of();
+        this.likedBy.clear();
     }
 
     public boolean isPublished() {

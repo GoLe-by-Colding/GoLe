@@ -87,7 +87,7 @@ export function HeaderSearch({ fullWidth = false, onSubmitted }: HeaderSearchPro
             type="search"
             value={value}
             placeholder="세트번호·이름으로 검색"
-            aria-label="레고 세트 검색"
+            aria-label="브릭 세트 검색"
             autoComplete="off"
             onChange={(e) => setValue(e.target.value)}
             onFocus={() => results.length > 0 && setSearch((s) => ({ ...s, open: true }))}

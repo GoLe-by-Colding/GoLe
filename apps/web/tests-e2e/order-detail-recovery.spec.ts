@@ -44,6 +44,7 @@ async function mockPaymentsOpen(page: Page) {
         stage: 2,
         tradeMode: "MANUAL_SETTLEMENT",
         features: { payments: true, reviews: true, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
         updatedAt: "2026-08-09T00:00:00Z",
       },
     }),

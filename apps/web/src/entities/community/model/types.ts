@@ -35,6 +35,8 @@ export interface Post {
   readonly id: string;
   readonly authorId: string;
   readonly content: string;
+  /** 작성자 수정 요청에만 다시 제출하는 canonical 저장 키. */
+  readonly imageKeys?: readonly string[];
   readonly imageUrls: readonly string[];
   readonly type: PostType;
   readonly likeCount: number;

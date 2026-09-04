@@ -13,7 +13,6 @@ BUDGET_END_DATE="${BUDGET_END_DATE:-2026-10-28}"
 TOPIC_NAME="${TOPIC_NAME:-gole-billing-budget}"
 SUBSCRIPTION_NAME="${SUBSCRIPTION_NAME:-gole-billing-budget-discord}"
 PUBSUB_CONSUMER_ROLE_ID="${PUBSUB_CONSUMER_ROLE_ID:-goleBudgetSubscriptionConsumer}"
-INSTANCE_STOPPER_ROLE_ID="${INSTANCE_STOPPER_ROLE_ID:-goleProductionInstanceStopper}"
 
 for required_command in gcloud jq curl; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
@@ -86,25 +85,25 @@ ensure_custom_role() {
   fi
 }
 
-echo "▶ 자동 비용 정지용 최소 권한 custom role 준비"
+echo "▶ 비용 이벤트 소비용 최소 권한 custom role 준비"
 ensure_custom_role \
   "$PUBSUB_CONSUMER_ROLE_ID" \
   'GoLe budget subscription consumer' \
   'Consumes only the GoLe billing budget Pub/Sub subscription' \
   'pubsub.subscriptions.consume'
-ensure_custom_role \
-  "$INSTANCE_STOPPER_ROLE_ID" \
-  'GoLe production instance stopper' \
-  'Stops only the GoLe production Compute Engine instance' \
-  'compute.instances.stop'
 
 PUBSUB_CONSUMER_ROLE="projects/${PROJECT_ID}/roles/${PUBSUB_CONSUMER_ROLE_ID}"
-INSTANCE_STOPPER_ROLE="projects/${PROJECT_ID}/roles/${INSTANCE_STOPPER_ROLE_ID}"
 
 echo "▶ 비용 알림 Pub/Sub topic/subscription 준비"
 if ! gcloud pubsub topics describe "$TOPIC_NAME" --project "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud pubsub topics create "$TOPIC_NAME" --project "$PROJECT_ID"
 fi
+# Cloud Billing publishes as this Google-managed identity. The Budget API can
+# otherwise accept a topic while later deliveries fail silently.
+gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
+  --project "$PROJECT_ID" \
+  --member='serviceAccount:billing-budget-alert@system.gserviceaccount.com' \
+  --role='roles/pubsub.publisher' >/dev/null
 if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION_NAME" --project "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud pubsub subscriptions create "$SUBSCRIPTION_NAME" \
     --project "$PROJECT_ID" \
@@ -138,12 +137,9 @@ if jq -e \
     --role='roles/pubsub.subscriber' >/dev/null
 fi
 
-# 자동 정지는 이 VM 한 대에만 허용한다. 프로젝트의 다른 인스턴스는 정지할 수 없다.
-gcloud compute instances add-iam-policy-binding "$INSTANCE_NAME" \
-  --project "$PROJECT_ID" \
-  --zone "$ZONE" \
-  --member="serviceAccount:${COMPUTE_SERVICE_ACCOUNT}" \
-  --role="$INSTANCE_STOPPER_ROLE" >/dev/null
+# VM 정지는 metadata credential을 가진 앱/relay가 아니라 root cloud broker가
+# local systemd poweroff로 집행한다. runtime 서비스 계정에는 VM 정지 IAM
+# 권한을 만들거나 부여하지 않는다.
 
 TOPIC_RESOURCE="projects/${PROJECT_ID}/topics/${TOPIC_NAME}"
 PROJECT_RESOURCE="projects/${PROJECT_NUMBER}"

@@ -34,23 +34,23 @@ media/
 
 ## 3. S3 어댑터(MinIO) 설정
 AWS SDK v2 `software.amazon.awssdk:s3`. `S3Client`:
-- endpoint override: `storage.s3.endpoint`(로컬: `http://localhost:9000`, 운영 컨테이너:
-  `http://host.docker.internal:9000`)
-- region: `us-east-1`, credentials: static(`minioadmin`/`minioadmin`)
+- endpoint override: `storage.s3.endpoint`(로컬: `http://localhost:9000`, 운영 Compose:
+  `http://minio:9000`)
+- region: `us-east-1`, credentials: 로컬 기본값 또는 운영 Secret Manager 주입값
 - `forcePathStyle(true)` (MinIO 필수)
 - 시작 시 `ensureBucket("gole")`(없으면 createBucket).
 
 `application.yml`:
 ```yaml
-# application.yml — 운영 컨테이너 기본값
+# application.yml — 환경변수 계약
 storage:
   s3:
-    endpoint: ${STORAGE_S3_ENDPOINT:http://host.docker.internal:9000}
+    endpoint: ${STORAGE_S3_ENDPOINT:http://localhost:9000}
     access-key: ${STORAGE_S3_ACCESS_KEY:minioadmin}
     secret-key: ${STORAGE_S3_SECRET_KEY:minioadmin}
     region: ${STORAGE_S3_REGION:us-east-1}
     bucket: ${STORAGE_S3_BUCKET:gole}
-  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.kscold.com}
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://gole.co.kr}
   max-image-bytes: ${STORAGE_MAX_IMAGE_BYTES:5242880}
 ```
 로컬 실행은 `application-local.yml`에서 endpoint를 `http://localhost:${MINIO_API_PORT:9000}`로,
@@ -75,6 +75,6 @@ storage:
 - 업로드 중 `submitting`/`uploading` 상태로 제출 차단(M3.3). 실패 시 메시지.
 
 ## 6. 보안 / 트레이드오프
-- 현재 업로드는 비인증 공개 엔드포인트(MVP). 후속: 세션 토큰 검증 + 사용자별 레이트리밋 + 바이러스/이미지 검증. design에 명시하고 tasks 백로그로 둔다.
+- 업로드는 세션 인증과 계정별 원자적 할당량을 요구한다. 파일 시그니처·디코딩 검증과 크기 제한을 함께 적용한다.
 - 백엔드 스트리밍 방식은 단순/안전(인프라 무변경)하나 대용량 트래픽 시 비효율 → 후속에 presigned URL/CDN 전환 여지(포트 유지로 어댑터 교체 가능).
 - 이미지 메타데이터는 별도 DB에 저장하지 않는다(객체 스토리지가 진실원천). 필요 시 후속 도입.
