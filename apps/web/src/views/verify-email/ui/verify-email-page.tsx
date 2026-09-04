@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VerifyEmailForm } from "@features/verify-email";
 import { AuthCard } from "@widgets/auth-layout";
-import { resolveReturnTo } from "@views/auth/model/return-to";
+import { resolveReturnTo } from "@shared/lib";
 
 function VerifyEmailContent() {
   const router = useRouter();

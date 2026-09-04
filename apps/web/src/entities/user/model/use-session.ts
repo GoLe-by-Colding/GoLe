@@ -23,10 +23,14 @@ function refreshBrowserSession(): Promise<void> {
   if (refreshInFlight !== null) return refreshInFlight;
   refreshInFlight = refreshSession()
     .then((refreshed) => {
+      // 리프레시 엔드포인트는 세션 TTL만 갱신할 뿐 온보딩 상태를 다시 계산해 내려주지
+      // 않는다 — 그 값은 로컬에 이미 저장돼 있던 세션에서 그대로 들고 간다.
+      const current = loadSession();
       saveSession({
         accountId: refreshed.accountId,
         sessionToken: "",
         role: refreshed.role,
+        onboardingRequired: current?.onboardingRequired ?? false,
         refreshAfter: Date.now() + SESSION_REFRESH_INTERVAL_MS,
       });
     })
