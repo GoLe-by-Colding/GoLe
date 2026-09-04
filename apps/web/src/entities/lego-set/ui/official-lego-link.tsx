@@ -4,10 +4,10 @@ export interface OfficialLegoLinkProps {
   readonly className?: string;
 }
 
-/** 공식 이미지를 복제하지 않고 LEGO 검색 페이지로만 연결하는 IP-safe 외부 링크. */
+/** 공식 이미지를 복제하지 않고 제조사 검색 페이지로만 연결하는 IP-safe 외부 링크. */
 export function OfficialLegoLink({
   setNumber,
-  label = "레고 공식 페이지에서 보기",
+  label = "제조사 공식 페이지에서 보기",
   className = "",
 }: OfficialLegoLinkProps) {
   return (

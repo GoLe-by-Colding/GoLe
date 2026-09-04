@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveSession, socialCallback } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { isAdminPath, resolveReturnTo } from "@shared/lib";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
 export interface OAuthCallbackPageProps {
@@ -11,8 +12,8 @@ export interface OAuthCallbackPageProps {
 }
 
 /**
- * OAuth 콜백 처리. provider에서 돌아온 code/state를 검증하고 세션을 발급받아 저장한 뒤 홈으로 이동한다.
- * (소셜 로그인 스펙 S9)
+ * OAuth 콜백 처리. provider에서 돌아온 code/state를 검증하고 세션을 저장한 뒤 state에 결박된
+ * 복귀 화면으로 이동한다. (소셜 로그인 스펙 S9)
  */
 export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
   const router = useRouter();
@@ -43,21 +44,30 @@ export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
       const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
       try {
         // state는 서버가 발급·검증한다(CSRF). 콜백에서 그대로 전달만 한다.
-        const { session, newAccount } = await socialCallback(
+        const { session, newAccount, returnTo } = await socialCallback(
           provider,
           code,
           redirectUri,
           returnedState,
         );
         saveSession(session);
-        // 구글 신규가입만 온보딩 위저드로 보낸다(onboarding D7, R12).
-        // 카카오·네이버는 이번 스코프 밖이라 기존 동작(환영 화면/홈)을 그대로 둔다.
-        if (newAccount && provider === "google") {
-          router.replace("/onboarding");
+
+        const requestedTarget = resolveReturnTo(returnTo);
+        const target =
+          requestedTarget !== null && (!isAdminPath(requestedTarget) || session.role === "ADMIN")
+            ? requestedTarget
+            : "/";
+
+        if (session.onboardingRequired) {
+          router.replace(`/onboarding?${new URLSearchParams({ returnTo: target }).toString()}`);
           return;
         }
-        // 신규(소셜 첫 가입)는 회원가입 온보딩 화면으로, 기존 회원은 홈으로.
-        router.replace(newAccount ? "/signup?welcome=1" : "/");
+        if (newAccount) {
+          const next = new URLSearchParams({ welcome: "1", returnTo: target });
+          router.replace(`/signup?${next.toString()}`);
+          return;
+        }
+        router.replace(target);
       } catch (cause) {
         setError(
           cause instanceof ApiError ? cause.message : "소셜 로그인 처리 중 오류가 발생했습니다.",

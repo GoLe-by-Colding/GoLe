@@ -99,6 +99,7 @@ test.describe("Mobile — 결제·운영 화면", () => {
           stage: 2,
           tradeMode: "MANUAL_SETTLEMENT",
           features: { payments: true, reviews: true, partnerPayout: false },
+          sellerIdentityVerificationReady: true,
           updatedAt: "2026-08-14T00:00:00Z",
         },
       }),

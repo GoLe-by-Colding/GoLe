@@ -12,6 +12,7 @@ import {
 } from "@entities/pricing";
 import { formatKrw, formatKrwCompact } from "@shared/lib";
 import { Badge, Button, Card, EmptyState, LineChart, MediaImage } from "@shared/ui";
+import { SetPriceActions } from "./set-price-actions";
 
 export interface PriceBoardItem {
   readonly setNumber: string;
@@ -254,6 +255,8 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
           {snapshot === null ? null : <EvidenceBadge warning={evidenceWarning} />}
         </div>
 
+        <SetPriceActions setNumber={current.setNumber} setName={current.name} />
+
         {snapshot === null ? (
           <EmptyState
             variant="inline"
@@ -269,7 +272,7 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
           <EmptyState
             variant="inline"
             title="아직 체결 시세가 없어요"
-            description="GoLe에서 결제하고 구매를 확정한 거래가 생기면 실제 체결가가 여기에 쌓여요."
+            description="플랫폼 결제가 열리고 구매확정된 거래가 생기면 검증된 체결가가 여기에 쌓여요."
           />
         ) : snapshot.state === "OBSERVATIONS_ONLY" ? (
           <div className="flex flex-col gap-5">

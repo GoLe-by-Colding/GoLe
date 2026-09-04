@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "@entities/user";
 import { NotificationBell } from "@features/notification-bell";
+import { loginHrefForCurrentPage } from "@shared/lib";
 import { Button, Container, LinkButton, Logo } from "@shared/ui";
 import { HeaderSearch } from "./header-search";
 
@@ -170,7 +171,7 @@ export function SiteHeader() {
                 </Button>
               </div>
             ) : (
-              <Button size="sm" onClick={() => router.push("/login")}>
+              <Button size="sm" onClick={() => router.push(loginHrefForCurrentPage())}>
                 로그인
               </Button>
             )}
@@ -282,7 +283,7 @@ export function SiteHeader() {
                     fullWidth
                     onClick={() => {
                       setMenuOpen(false);
-                      router.push("/login");
+                      router.push(loginHrefForCurrentPage());
                     }}
                   >
                     로그인

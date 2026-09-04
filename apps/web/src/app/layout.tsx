@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import { env } from "@shared/config";
+import { Suspense, type ReactNode } from "react";
+import { AnalyticsConsentManager } from "@widgets/analytics-consent";
+import { analyticsRuntimeConfig, BUSINESS_INFO, env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import "./globals.css";
 
@@ -30,7 +31,6 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   keywords: KEYWORDS,
   applicationName: SITE_NAME,
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
@@ -61,8 +61,21 @@ function StructuredData() {
         "@type": "Organization",
         "@id": `${env.siteUrl}/#organization`,
         name: SITE_NAME,
+        legalName: BUSINESS_INFO.name,
         url: env.siteUrl,
         description: SITE_DESCRIPTION,
+        email: BUSINESS_INFO.contactEmail,
+        telephone: BUSINESS_INFO.phone,
+        identifier: {
+          "@type": "PropertyValue",
+          propertyID: "사업자등록번호",
+          value: BUSINESS_INFO.registrationNumber,
+        },
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: BUSINESS_INFO.address,
+          addressCountry: "KR",
+        },
       },
       {
         "@type": "WebSite",
@@ -91,6 +104,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body>
         {children}
         <StructuredData />
+        <Suspense fallback={null}>
+          <AnalyticsConsentManager configuration={analyticsRuntimeConfig} />
+        </Suspense>
       </body>
     </html>
   );

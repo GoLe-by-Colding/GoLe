@@ -13,7 +13,7 @@ export interface CreateListingInput {
   readonly hasMissingParts: boolean;
   readonly missingPartsNote: string;
   readonly defectsNote: string;
-  readonly photoUrls: readonly string[];
+  readonly photoKeys: readonly string[];
   readonly catalogSetNumber: string | null;
   readonly category: ListingCategory;
 }
@@ -34,7 +34,7 @@ export function createListing(input: CreateListingInput): Promise<Listing> {
       hasMissingParts: input.hasMissingParts,
       missingPartsNote: input.missingPartsNote,
       defectsNote: input.defectsNote,
-      photoUrls: input.photoUrls,
+      photoKeys: input.photoKeys,
       catalogSetNumber: input.catalogSetNumber,
       category: input.category,
     },

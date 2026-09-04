@@ -26,6 +26,7 @@ const NAV: readonly NavItem[] = [
   { href: "/admin/settlements", label: "정산" },
   { href: "/admin/community", label: "커뮤니티" },
   { href: "/admin/accounts", label: "회원" },
+  { href: "/admin/account-deletions", label: "탈퇴 검토" },
   { href: "/admin/catalog", label: "카탈로그" },
   { href: "/admin/audit", label: "감사 로그" },
 ];
@@ -70,6 +71,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     readonly access: Exclude<Access, "checking">;
   } | null>(null);
   const [pendingReports, setPendingReports] = useState(0);
+  const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
   const search = useSyncExternalStore(
     subscribeLocation,
     getLocationSearch,
@@ -124,6 +126,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       .then((overview) => {
         if (active) {
           setPendingReports(overview.pendingReports ?? 0);
+          setUnassignedSupportTickets(overview.unassignedSupportTickets ?? 0);
         }
       })
       .catch(() => undefined);
@@ -208,6 +211,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
               return (
                 <li key={item.href}>
                   <AdminNavigationItem href={item.href} label={item.label} active={active}>
+                    {item.href === "/admin/support" && unassignedSupportTickets > 0 ? (
+                      <Badge tone="warning">{unassignedSupportTickets}</Badge>
+                    ) : null}
                     {item.href === "/admin/reports" && pendingReports > 0 ? (
                       <Badge tone="warning">{pendingReports}</Badge>
                     ) : null}

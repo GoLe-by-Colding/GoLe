@@ -63,8 +63,10 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
   const [signupPolicyAcceptance, setSignupPolicyAcceptance] = useState<SignupPolicyAcceptance>({
     termsVersion: "",
     privacyVersion: "",
+    thirdPartyProvisionVersion: "",
     termsAccepted: false,
     privacyAcknowledged: false,
+    thirdPartyProvisionAccepted: false,
     minimumAgeConfirmed: false,
   });
 
@@ -80,6 +82,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
           ...current,
           termsVersion: policy.termsVersion,
           privacyVersion: policy.privacyVersion,
+          thirdPartyProvisionVersion: policy.thirdPartyProvisionVersion,
         }));
       })
       .catch((cause: unknown) => {
@@ -114,7 +117,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
       <AuthCard title="환영합니다" subtitle="소셜 계정으로 가입이 완료됐어요.">
         <div className="flex flex-col gap-5">
           <p className="text-sm leading-relaxed text-neutral-600">
-            이제 GoLe에서 레고 시세를 확인하고, 안전하게 거래하고, 컬렉션을 자랑할 수 있어요.
+            이제 GoLe에서 브릭 시세를 확인하고, 판매자와 대화하고, 컬렉션을 자랑할 수 있어요.
           </p>
           <Button
             size="lg"
@@ -146,7 +149,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     <AuthCard
       title={mode === "signup" ? "회원가입" : "로그인"}
       subtitle={
-        mode === "signup" ? "레고를 사고팔고 컬렉션을 자랑해보세요." : "다시 오신 것을 환영합니다."
+        mode === "signup" ? "브릭을 사고팔고 컬렉션을 자랑해보세요." : "다시 오신 것을 환영합니다."
       }
     >
       <div className="flex flex-col gap-5">
@@ -208,6 +211,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
         <SocialLoginButtons
           mode={mode}
           signupPolicyAcceptance={mode === "signup" ? signupPolicyAcceptance : undefined}
+          returnTo={returnTo}
         />
       </div>
     </AuthCard>

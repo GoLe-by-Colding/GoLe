@@ -16,13 +16,20 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   "consent",
 ];
 
+/** 서버가 내려준 현재 정책에 맞는 실제 위저드 단계. 누락된 구버전 응답은 안전하게 4단계로 본다. */
+export function onboardingSteps(status: OnboardingStatus): readonly OnboardingStep[] {
+  return status.phoneVerificationRequired === false
+    ? ONBOARDING_STEPS.filter((step) => step !== "phone")
+    : ONBOARDING_STEPS;
+}
+
 /** 상태 응답에서 해당 단계의 완료 여부를 읽는다. */
 export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep): boolean {
   switch (step) {
     case "nickname":
       return status.nicknameCompleted;
     case "phone":
-      return status.phoneCompleted;
+      return status.phoneVerificationRequired === false || status.phoneCompleted;
     case "interestTags":
       return status.interestTagsCompleted;
     case "consent":
@@ -38,10 +45,10 @@ export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep):
  * 각 단계가 성공 즉시 서버에 저장되므로(D1) 이탈 후 다시 들어와도 같은 지점에서 재개된다.
  */
 export function nextIncompleteStep(status: OnboardingStatus): OnboardingStep | null {
-  return ONBOARDING_STEPS.find((step) => !isStepCompleted(status, step)) ?? null;
+  return onboardingSteps(status).find((step) => !isStepCompleted(status, step)) ?? null;
 }
 
-/** 네 단계가 모두 끝났는지. 면제(legacyExempt) 여부와는 무관한 순수 판정이다. */
+/** 현재 정책의 모든 단계가 끝났는지. 면제(legacyExempt) 여부와는 무관한 순수 판정이다. */
 export function isOnboardingComplete(status: OnboardingStatus): boolean {
   return nextIncompleteStep(status) === null;
 }

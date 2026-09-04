@@ -11,6 +11,7 @@ import {
 } from "@entities/report";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { loginHrefForCurrentPage } from "@shared/lib";
 import { Button, FlagIcon, Textarea } from "@shared/ui";
 
 export interface ReportButtonProps {
@@ -64,7 +65,7 @@ export function ReportButton({
 
   function handleOpen() {
     if (!session) {
-      router.push("/login");
+      router.push(loginHrefForCurrentPage());
       return;
     }
     setOpen(true);

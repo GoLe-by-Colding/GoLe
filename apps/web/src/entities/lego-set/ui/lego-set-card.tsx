@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "../model/types";
@@ -9,8 +10,10 @@ export interface LegoSetCardProps {
 }
 
 export function LegoSetCard({ set }: LegoSetCardProps) {
+  const detailHref = `/sets/${encodeURIComponent(set.setNumber)}`;
+
   return (
-    <Card interactive padded={false} className="flex flex-col" data-testid="lego-set-card">
+    <Card interactive padded={false} className="relative flex flex-col" data-testid="lego-set-card">
       <div className="aspect-[4/3] overflow-hidden bg-neutral-50">
         <MediaImage
           src={set.imageUrl === null ? null : thumbnailUrl(set.imageUrl, 480)}
@@ -28,7 +31,13 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
       </div>
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-base font-semibold leading-tight text-neutral-900">{set.name}</span>
+          <Link
+            href={detailHref}
+            aria-label={`${set.name} 세트 상세 보기`}
+            className="text-base font-semibold leading-tight text-neutral-900 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand-500 focus-visible:after:ring-offset-2"
+          >
+            {set.name}
+          </Link>
           {isRetired(set) ? (
             <Badge tone="danger" data-testid="retired-badge">
               단종
@@ -50,8 +59,8 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
         </dl>
         <OfficialLegoLink
           setNumber={set.setNumber}
-          label="레고 공식 페이지"
-          className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
+          label="제조사 공식 페이지"
+          className="relative z-10 mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"
         />
       </div>
     </Card>

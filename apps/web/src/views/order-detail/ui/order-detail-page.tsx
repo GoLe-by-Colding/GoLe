@@ -4,18 +4,27 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   completeOrder,
   DISPUTE_REASON_LABEL,
-  fetchOrder,
   fetchOrderContacts,
+  fetchOrder,
+  fetchMyOrderContact,
   orderStatusLabel,
   payOrder,
   refundOrder,
   type Order,
+  type OrderContacts,
   type OrderStatus,
 } from "@entities/order";
 import { fetchLaunchConfig } from "@entities/launch";
 import { fetchShipment, refreshShipment, type Shipment } from "@entities/shipment";
-import { fetchMe, useSession } from "@entities/user";
+import {
+  fetchMe,
+  isThirdPartyProvisionConsentCancelledError,
+  ThirdPartyProvisionConsentDialog,
+  useSession,
+  useThirdPartyProvisionConsent,
+} from "@entities/user";
 import { ApiError } from "@shared/api";
+import { env, isPaymentRuntimeAvailable } from "@shared/config";
 import {
   formatKrw,
   getPortOneConfigurationError,
@@ -163,6 +172,7 @@ export interface OrderDetailPageProps {
 
 export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const { session } = useSession();
+  const { runWithConsent, dialog: thirdPartyConsentDialog } = useThirdPartyProvisionConsent();
   const [order, setOrder] = useState<Order | null>(null);
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [shipmentLoadState, setShipmentLoadState] = useState<ShipmentLoadState>("loading");
@@ -184,6 +194,9 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [cardName, setCardName] = useState("");
   const [cardEmail, setCardEmail] = useState("");
   const [cardPhone, setCardPhone] = useState("");
+  const [counterpartContact, setCounterpartContact] = useState<OrderContacts | null>(null);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactError, setContactError] = useState<string | undefined>();
   // sessionStorage는 React 밖의 상태다. 서버 렌더에는 없으므로 서버 스냅샷은 항상 false다.
   const paymentAttempted = useSyncExternalStore(
     subscribePaymentAttempt,
@@ -200,7 +213,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         if (active) {
           setOrder(data);
           setInitialLoadFailure(null);
-          setPaymentsOpen(launch.features.payments);
+          setPaymentsOpen(launch.features.payments && isPaymentRuntimeAvailable());
           setReviewsOpen(launch.features.reviews);
         }
       } catch (cause) {
@@ -350,11 +363,11 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     }
   }, [confirmation, run]);
 
-  // 결제: 포트원이 설정돼 있으면 브라우저 결제창을 먼저 띄우고(paymentId=주문 id),
-  // 성공 후 서버가 결제를 검증한다(payOrder). 미설정 시 서버 스텁 결제로 진행한다.
+  // 결제: 로컬·테스트의 명시적 스텁만 결제창 없이 진행한다. 그 외 모드는 PortOne 결제창
+  // 성공 후 서버가 원장을 검증한다(payOrder). 설정 누락·운영 스텁은 API로 우회하지 않는다.
   const pay = useCallback(
     async (method: PortOneMethod, customer?: PortOneCustomer) => {
-      if (!paymentsOpen) {
+      if (!paymentsOpen || !isPaymentRuntimeAvailable()) {
         setError("현재 신규 결제가 일시 중지되어 있습니다. 주문 상태는 보존됩니다.");
         return;
       }
@@ -362,7 +375,12 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
       setBusy(true);
       try {
         const current = await fetchOrder(orderId);
-        if (isPortOneEnabled()) {
+        if (env.paymentMode !== "stub") {
+          if (!isPortOneEnabled()) {
+            throw new Error(
+              getPortOneConfigurationError() ?? "현재 플랫폼 결제 기능을 제공하지 않습니다.",
+            );
+          }
           // 결제창을 여는 순간 기록한다. 모바일은 여기서 페이지를 떠나므로 이후에 기록할 기회가 없다.
           // 커스텀 이벤트가 같은 탭의 구독자에게 전파하므로 별도 setState가 필요 없다.
           rememberPaymentAttempt(orderId);
@@ -418,13 +436,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     // 한쪽이 실패해도 나머지는 채운다. 못 채운 칸은 구매자가 직접 입력하면 된다.
     const [me, contacts] = await Promise.allSettled([
       fetchMe(session?.sessionToken ?? ""),
-      fetchOrderContacts(orderId),
+      fetchMyOrderContact(orderId),
     ]);
     if (me.status === "fulfilled") {
       setCardEmail((current) => (current.length > 0 ? current : me.value.email));
     }
-    if (contacts.status === "fulfilled" && contacts.value.buyerPhone !== null) {
-      const phone = contacts.value.buyerPhone;
+    if (contacts.status === "fulfilled" && contacts.value.phone !== null) {
+      const phone = contacts.value.phone;
       setCardPhone((current) => (current.length > 0 ? current : phone));
     }
     setCardPrefilling(false);
@@ -451,6 +469,25 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     },
     [cardEmail, cardName, cardPhone, pay],
   );
+
+  const revealCounterpartContact = useCallback(async () => {
+    if (contactBusy) return;
+    setContactBusy(true);
+    setContactError(undefined);
+    try {
+      setCounterpartContact(
+        await runWithConsent(() => fetchOrderContacts(orderId), "ORDER_CONTACTS"),
+      );
+    } catch (cause) {
+      if (!isThirdPartyProvisionConsentCancelledError(cause)) {
+        setContactError(
+          cause instanceof ApiError ? cause.message : "거래 상대방 연락처를 확인하지 못했습니다.",
+        );
+      }
+    } finally {
+      setContactBusy(false);
+    }
+  }, [contactBusy, orderId, runWithConsent]);
 
   if (initialLoadFailure !== null && order === null) {
     return (
@@ -723,6 +760,48 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </Card>
         ) : null}
 
+        <Card padded className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <Text weight="semibold">거래 상대방 연락처</Text>
+            <Text size="sm" tone="secondary">
+              배송·거래 협의나 분쟁 처리에 필요한 경우에만 명시적으로 확인할 수 있습니다.
+            </Text>
+          </div>
+          {contactError ? (
+            <p role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger">
+              {contactError}
+            </p>
+          ) : null}
+          {counterpartContact === null ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="self-start"
+              disabled={contactBusy}
+              onClick={() => void revealCounterpartContact()}
+            >
+              {contactBusy ? "확인 중…" : "상대방 연락처 확인"}
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 rounded-lg bg-neutral-50 p-3">
+              <p className="font-mono text-base font-semibold text-neutral-900">
+                {counterpartContact.counterpartPhone ?? "상대방이 연락처를 등록하지 않았습니다."}
+              </p>
+              <p className="text-xs leading-relaxed text-neutral-500">
+                {counterpartContact.notice}
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="self-start"
+                onClick={() => setCounterpartContact(null)}
+              >
+                연락처 숨기기
+              </Button>
+            </div>
+          )}
+        </Card>
+
         {paymentsOpen && order.status === "payment_pending" && !isSeller ? (
           <div className="flex flex-col gap-4">
             {cardAvailable ? (
@@ -905,6 +984,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           onConfirm={() => void confirmOrderAction()}
         />
       ) : null}
+      <ThirdPartyProvisionConsentDialog {...thirdPartyConsentDialog} />
     </Container>
   );
 }

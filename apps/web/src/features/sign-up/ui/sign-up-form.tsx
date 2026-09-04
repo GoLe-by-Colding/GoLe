@@ -6,6 +6,7 @@ import {
   registerAccount,
   type CurrentSignupPolicy,
   type SignupPolicyAcceptance,
+  ThirdPartyProvisionNotice,
 } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Field, Input } from "@shared/ui";
@@ -134,6 +135,25 @@ export function SignUpForm({
             >
               만 {policy.minimumAge}세 이상입니다. (필수)
             </PolicyCheckbox>
+          </>
+        )}
+      </fieldset>
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+        <legend className="px-1 text-sm font-bold text-neutral-800">제3자 제공 선택 동의</legend>
+        {policy === undefined ? (
+          <p className="text-sm text-neutral-500">최신 안내를 확인하는 중…</p>
+        ) : (
+          <>
+            <ThirdPartyProvisionNotice compact />
+            <PolicyCheckbox
+              checked={policyAcceptance.thirdPartyProvisionAccepted}
+              onChange={(checked) => updatePolicy({ thirdPartyProvisionAccepted: checked })}
+            >
+              위 개인정보 제3자 제공에 동의합니다. (선택)
+            </PolicyCheckbox>
+            <p className="text-xs text-neutral-400">
+              제3자 제공 안내 버전 {policy.thirdPartyProvisionVersion}
+            </p>
           </>
         )}
       </fieldset>

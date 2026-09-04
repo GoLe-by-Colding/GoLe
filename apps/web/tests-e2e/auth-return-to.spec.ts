@@ -105,6 +105,68 @@ test.describe("returnTo 허용목록", () => {
   });
 });
 
+test.describe("소셜 로그인 복귀 경로", () => {
+  test("인가 URL 요청에 검증된 returnTo를 함께 보낸다", async ({ page }) => {
+    let requestedReturnTo: string | null = null;
+    await page.route("**/api/v1/auth/oauth/providers", (route) =>
+      route.fulfill({ json: ["google"] }),
+    );
+    await page.route("**/api/v1/auth/oauth/google/authorize-url", async (route) => {
+      requestedReturnTo =
+        (route.request().postDataJSON() as { returnTo?: string }).returnTo ?? null;
+      await route.fulfill({ json: { url: "/oauth-started" } });
+    });
+
+    await page.goto(`/login?returnTo=${encodeURIComponent("/collection?tab=sets")}`);
+    await page.getByRole("button", { name: "Google로 로그인" }).click();
+
+    await expect.poll(() => requestedReturnTo).toBe("/collection?tab=sets");
+  });
+
+  test("콜백 성공 뒤 state에 결박된 원래 화면으로 이동한다", async ({ page }) => {
+    await mockMe(page, "USER");
+    await page.route("**/api/v1/auth/oauth/google/callback", (route) =>
+      route.fulfill({
+        json: {
+          accountId: "acc-1",
+          sessionToken: "session-token",
+          role: "USER",
+          newAccount: false,
+          onboardingRequired: false,
+          returnTo: "/privacy?source=social",
+        },
+      }),
+    );
+
+    await page.goto("/auth/callback/google?code=oauth-code&state=oauth-state");
+
+    await expect(page).toHaveURL(/\/privacy\?source=social$/);
+  });
+
+  test("provider 조회 실패를 준비 중으로 숨기지 않고 다시 확인한다", async ({ page }) => {
+    let recovered = false;
+    let attempts = 0;
+    await page.route("**/api/v1/auth/oauth/providers", (route) => {
+      attempts += 1;
+      return recovered
+        ? route.fulfill({ json: ["google"] })
+        : route.fulfill({ status: 503, json: { code: "TEMPORARY", message: "temporary" } });
+    });
+
+    await page.goto("/login");
+    await expect(page.getByText("소셜 로그인 설정을 확인하지 못했습니다.")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Google로 계속하기 (확인 실패)" }),
+    ).toBeDisabled();
+
+    recovered = true;
+    await page.getByRole("button", { name: "다시 시도" }).click();
+
+    await expect(page.getByRole("button", { name: "Google로 로그인" })).toBeEnabled();
+    expect(attempts).toBeGreaterThanOrEqual(2);
+  });
+});
+
 test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
   test("환영 화면은 세션이 확인되기 전 관리자 복귀 CTA를 활성화하지 않는다", async ({ page }) => {
     await page.goto(`/signup?welcome=1&returnTo=${encodeURIComponent("/admin")}`);
@@ -241,8 +303,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await page.route("**/api/v1/policies/current", (route) =>
       route.fulfill({
         json: {
-          termsVersion: "2026-09-03",
-          privacyVersion: "2026-09-03",
+          termsVersion: "2026-09-04",
+          privacyVersion: "2026-09-04",
+          thirdPartyProvisionVersion: "2026-09-04",
           minimumAge: 14,
         },
       }),

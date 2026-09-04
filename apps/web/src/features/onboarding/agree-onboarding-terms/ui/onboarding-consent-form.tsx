@@ -50,6 +50,23 @@ export function OnboardingConsentForm({ onCompleted }: OnboardingConsentFormProp
       ) : null}
 
       <div className="flex flex-col gap-3">
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs leading-relaxed text-neutral-600">
+          <dl className="grid gap-1">
+            <ConsentNoticeItem label="수집·이용 목적">
+              계정 프로필 구성, 관심 콘텐츠 제공, 거래·문의 기능 운영
+            </ConsentNoticeItem>
+            <ConsentNoticeItem label="항목">
+              닉네임, 관심 태그, 정책상 전화 인증을 이용한 경우 전화번호·인증일시
+            </ConsentNoticeItem>
+            <ConsentNoticeItem label="보유기간">
+              회원 탈퇴 또는 삭제 요청 처리 시까지. 법령상 보존 대상은 해당 기간 동안 분리 보관
+            </ConsentNoticeItem>
+            <ConsentNoticeItem label="거부권·불이익">
+              필수 수집·이용 동의를 거부할 수 있으나, 거부하면 온보딩을 완료할 수 없어 로그인 기반
+              거래·커뮤니티 기능 이용이 제한됩니다.
+            </ConsentNoticeItem>
+          </dl>
+        </div>
         <ConsentCheckbox
           checked={privacyConsented}
           onChange={setPrivacyConsented}
@@ -70,7 +87,12 @@ export function OnboardingConsentForm({ onCompleted }: OnboardingConsentFormProp
         <ConsentCheckbox
           checked={marketingConsented}
           onChange={setMarketingConsented}
-          label={<>(선택) 혜택·소식 마케팅 정보 수신에 동의합니다.</>}
+          label={
+            <>
+              (선택) 이메일을 이용한 혜택·소식 안내에 동의합니다. 동의 철회 시까지 이용하며,
+              거부해도 서비스 이용에 불이익이 없습니다.
+            </>
+          }
         />
       </div>
 
@@ -90,6 +112,21 @@ export function OnboardingConsentForm({ onCompleted }: OnboardingConsentFormProp
         {submitting ? "처리 중..." : "가입 완료"}
       </Button>
     </form>
+  );
+}
+
+function ConsentNoticeItem({
+  label,
+  children,
+}: {
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div>
+      <dt className="inline font-semibold text-neutral-800">{label}: </dt>
+      <dd className="inline">{children}</dd>
+    </div>
   );
 }
 

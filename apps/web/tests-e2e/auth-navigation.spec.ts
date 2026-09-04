@@ -30,8 +30,9 @@ test.describe("Auth navigation", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          termsVersion: "2026-09-03",
-          privacyVersion: "2026-09-03",
+          termsVersion: "2026-09-04",
+          privacyVersion: "2026-09-04",
+          thirdPartyProvisionVersion: "2026-09-04",
           minimumAge: 14,
         }),
       });
@@ -49,10 +50,19 @@ test.describe("Auth navigation", () => {
     const submit = page.getByRole("button", { name: "가입하기" });
     await expect(submit).toBeDisabled();
     await expect(page.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms");
-    await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "개인정보처리방침", exact: true })).toHaveAttribute(
       "href",
       "/privacy",
     );
+    const thirdPartyConsent = page.getByRole("checkbox", {
+      name: /개인정보 제3자 제공에 동의합니다/,
+    });
+    await expect(thirdPartyConsent).not.toBeChecked();
+    const notice = page.getByTestId("third-party-provision-notice");
+    await expect(notice).toContainText("제공받는 자: 대화방 참여자");
+    await expect(notice).toContainText("제공받는 자: 거래 상대방");
+    await expect(notice).toContainText("정보주체의 전체 전화번호");
+    await expect(notice).toContainText("동의하지 않아도 가입할 수 있으나");
 
     await page.getByRole("checkbox", { name: /이용약관/ }).check();
     await page.getByRole("checkbox", { name: /개인정보처리방침/ }).check();
@@ -65,13 +75,49 @@ test.describe("Auth navigation", () => {
     expect(registerBody).toEqual({
       email: "policy@gole.test",
       password: "password1",
-      termsVersion: "2026-09-03",
-      privacyVersion: "2026-09-03",
+      termsVersion: "2026-09-04",
+      privacyVersion: "2026-09-04",
+      thirdPartyProvisionVersion: "2026-09-04",
       termsAccepted: true,
       privacyAcknowledged: true,
+      thirdPartyProvisionAccepted: false,
       minimumAgeConfirmed: true,
     });
     await expect(page).toHaveURL(/\/verify\?email=policy%40gole\.test&returnTo=%2Fcollection/);
+  });
+
+  test("소셜 가입도 선택한 제3자 제공 동의와 공지 버전을 OAuth 요청에 보낸다", async ({ page }) => {
+    let authorizeBody: Record<string, unknown> | undefined;
+    await page.route("**/api/v1/policies/current", (route) =>
+      route.fulfill({
+        json: {
+          termsVersion: "2026-09-04",
+          privacyVersion: "2026-09-04",
+          thirdPartyProvisionVersion: "third-party-2026-09-04",
+          minimumAge: 14,
+        },
+      }),
+    );
+    await page.route("**/api/v1/auth/oauth/providers", (route) =>
+      route.fulfill({ json: ["google"] }),
+    );
+    await page.route("**/api/v1/auth/oauth/google/authorize-url", (route) => {
+      authorizeBody = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: { url: "/auth/callback/google?code=test&state=test" } });
+    });
+
+    await page.goto("/signup");
+    await page.getByRole("checkbox", { name: /이용약관/ }).check();
+    await page.getByRole("checkbox", { name: /개인정보처리방침/ }).check();
+    await page.getByRole("checkbox", { name: /만 14세 이상/ }).check();
+    await page.getByRole("checkbox", { name: /개인정보 제3자 제공에 동의합니다/ }).check();
+    await page.getByRole("button", { name: "Google로 가입" }).click();
+
+    await expect
+      .poll(() => authorizeBody?.thirdPartyProvisionVersion)
+      .toBe("third-party-2026-09-04");
+    expect(authorizeBody?.thirdPartyProvisionAccepted).toBe(true);
+    expect(authorizeBody?.minimumAgeConfirmed).toBe(true);
   });
 
   test("인증 화면에서 뒤로가기 버튼이 보인다", async ({ page }) => {

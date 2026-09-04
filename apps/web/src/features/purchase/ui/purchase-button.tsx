@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { placeOrder } from "@entities/order";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { loginHrefForCurrentPage } from "@shared/lib";
 import { Button, Field, Input, Text } from "@shared/ui";
 
 export interface PurchaseButtonProps {
@@ -38,7 +39,7 @@ export function PurchaseButton({ listingId, sellerId, available }: PurchaseButto
 
   function handleClick() {
     if (!session) {
-      router.push("/login");
+      router.push(loginHrefForCurrentPage());
       return;
     }
     setBuyerPhone(readStoredPhone());

@@ -6,6 +6,7 @@ export { AdminExceptionsView } from "./ui/exceptions-view";
 export { AdminSettlementsView } from "./ui/settlements-view";
 export { AdminCommunityView } from "./ui/community-view";
 export { AdminAccountsView } from "./ui/accounts-view";
+export { AdminAccountDeletionsView } from "./ui/account-deletions-view";
 export { AdminCatalogView } from "./ui/catalog-view";
 export { AdminAuditView } from "./ui/audit-view";
 export { AdminSupportView } from "./ui/support-view";

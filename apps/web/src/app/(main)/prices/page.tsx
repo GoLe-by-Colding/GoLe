@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 import { PricesPage } from "@views/prices";
 
 export const metadata: Metadata = {
-  title: "레고 실시간 시세",
+  title: "브릭 실시간 시세",
   description:
-    "체결가 기반 레고 세트별 실시간 시세와 추이를 확인하세요. 시세 데이터로 합리적으로 사고팔 수 있습니다.",
+    "검증된 거래 근거가 있는 브릭 세트별 시세와 추이를 확인하세요. 데이터 범위를 함께 표시합니다.",
   alternates: { canonical: "/prices" },
+  openGraph: {
+    title: "브릭 실시간 시세 · GoLe",
+    description:
+      "검증된 거래 근거가 있는 브릭 세트별 시세와 추이를 확인하세요. 데이터 범위를 함께 표시합니다.",
+    url: "/prices",
+    type: "website",
+  },
 };
 
 export const dynamic = "force-dynamic";

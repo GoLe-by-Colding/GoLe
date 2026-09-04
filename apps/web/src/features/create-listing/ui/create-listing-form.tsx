@@ -12,7 +12,7 @@ import {
   LISTING_CATEGORIES,
 } from "@entities/listing";
 import { calculateSellerPayout, fetchSellerFeePolicy, type SellerFeePolicy } from "@entities/order";
-import { ApiError, uploadImages } from "@shared/api";
+import { ApiError, uploadImages, type UploadedImage } from "@shared/api";
 import { formatKrw } from "@shared/lib";
 import { Button, Field, Input, Select, Textarea } from "@shared/ui";
 
@@ -32,10 +32,11 @@ type FeePolicyState =
 
 export interface CreateListingFormProps {
   readonly sellerId: string;
+  readonly paymentsOpen: boolean;
   readonly onCreated: (listingId: string) => void;
 }
 
-export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProps) {
+export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateListingFormProps) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ListingCategory>("set");
   const [description, setDescription] = useState("");
@@ -47,7 +48,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
   const [hasMissingParts, setHasMissingParts] = useState(false);
   const [missingPartsNote, setMissingPartsNote] = useState("");
   const [defectsNote, setDefectsNote] = useState("");
-  const [photoUrls, setPhotoUrls] = useState<readonly string[]>([]);
+  const [photos, setPhotos] = useState<readonly UploadedImage[]>([]);
   const [catalogSetNumber, setCatalogSetNumber] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +67,9 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       : null;
 
   useEffect(() => {
+    if (!paymentsOpen) {
+      return;
+    }
     const controller = new AbortController();
 
     fetchSellerFeePolicy(controller.signal)
@@ -77,7 +81,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       });
 
     return () => controller.abort();
-  }, [feePolicyRequestKey]);
+  }, [feePolicyRequestKey, paymentsOpen]);
 
   function retryFeePolicy() {
     setFeePolicyState({ status: "loading" });
@@ -90,7 +94,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       return;
     }
     setError(undefined);
-    const remaining = MAX_PHOTOS - photoUrls.length;
+    const remaining = MAX_PHOTOS - photos.length;
     if (remaining <= 0) {
       setError(`이미지는 최대 ${MAX_PHOTOS}장까지 올릴 수 있어요.`);
       return;
@@ -99,7 +103,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
     setUploading(true);
     try {
       const uploaded = await uploadImages(toUpload);
-      setPhotoUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
+      setPhotos((prev) => [...prev, ...uploaded]);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
@@ -108,14 +112,14 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
     }
   }
 
-  function removePhoto(url: string) {
-    setPhotoUrls((prev) => prev.filter((u) => u !== url));
+  function removePhoto(key: string) {
+    setPhotos((prev) => prev.filter((photo) => photo.key !== key));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
-    if (photoUrls.length === 0) {
+    if (photos.length === 0) {
       setError("상품 이미지를 한 장 이상 업로드해 주세요.");
       return;
     }
@@ -137,7 +141,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         hasMissingParts,
         missingPartsNote: missingPartsNote.trim(),
         defectsNote: defectsNote.trim(),
-        photoUrls: [...photoUrls],
+        photoKeys: photos.map((photo) => photo.key),
         catalogSetNumber: catalogSetNumber.trim().length > 0 ? catalogSetNumber.trim() : null,
         category,
       });
@@ -216,9 +220,14 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         className="rounded-xl border border-brand-100 bg-brand-50/60 p-4"
       >
         <h2 id="seller-fee-heading" className="text-sm font-bold text-brand-900">
-          판매 수수료와 예상 정산액
+          {paymentsOpen ? "판매 수수료와 예상 정산액" : "현재 거래 방식"}
         </h2>
-        {feePolicyState.status === "loading" ? (
+        {!paymentsOpen ? (
+          <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+            지금은 플랫폼 결제와 정산 수수료 없이 판매자와 구매자가 채팅으로 조건을 합의하는 직접
+            거래만 지원합니다.
+          </p>
+        ) : feePolicyState.status === "loading" ? (
           <p className="mt-2 text-sm text-neutral-600">현재 수수료 정책을 확인하고 있어요.</p>
         ) : feePolicyState.status === "unavailable" ? (
           <div className="mt-2 flex flex-col items-start gap-2">
@@ -349,34 +358,34 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
       </Field>
       <Field
         label="상품 이미지"
-        hint={`직접 촬영한 실물 사진을 올려주세요(최대 ${MAX_PHOTOS}장). 레고 공식 제품 이미지 도용은 금지됩니다.`}
+        hint={`직접 촬영한 JPEG/PNG 정지 사진을 올려주세요(최대 ${MAX_PHOTOS}장). 위치정보 등 메타데이터는 제거되며 제조사 공식 제품 이미지 도용은 금지됩니다.`}
       >
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input
               id={inputId}
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
+              accept="image/jpeg,image/png"
               multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
-              disabled={uploading || submitting || photoUrls.length >= MAX_PHOTOS}
+              disabled={uploading || submitting || photos.length >= MAX_PHOTOS}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
             {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
-            {photoUrls.length > 0 ? (
+            {photos.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
-                {photoUrls.map((url, index) => (
-                  <li key={url} className="relative">
+                {photos.map((photo, index) => (
+                  <li key={photo.key} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={url}
+                      src={photo.url}
                       alt={`상품 이미지 ${index + 1}`}
                       className="h-24 w-24 rounded-lg border border-neutral-200/70 object-cover"
                     />
                     <button
                       type="button"
-                      onClick={() => removePhoto(url)}
+                      onClick={() => removePhoto(photo.key)}
                       aria-label={`이미지 ${index + 1} 삭제`}
                       className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900/80 text-sm text-white"
                     >
@@ -390,7 +399,7 @@ export function CreateListingForm({ sellerId, onCreated }: CreateListingFormProp
         )}
       </Field>
       <Field
-        label="레고 세트 번호 (선택)"
+        label="브릭 세트 번호 (선택)"
         hint="해당하는 공식 세트 번호가 있으면 입력하세요. 세트명·번호는 식별용 텍스트로만 표시됩니다."
       >
         {({ inputId, describedBy }) => (

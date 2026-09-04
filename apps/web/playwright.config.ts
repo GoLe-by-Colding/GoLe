@@ -7,6 +7,12 @@ const PORT = process.env.E2E_WEB_PORT ?? "3000";
 // 미지정 시 로컬 dev 서버(pnpm dev)를 자동 기동한다.
 const EXTERNAL = process.env.E2E_BASE_URL;
 const BASE_URL = EXTERNAL ?? `http://localhost:${PORT}`;
+const ANALYTICS_CONSENT_STORAGE_KEY = "gole.analytics-consent.v1";
+const DENIED_ANALYTICS_STATE = JSON.stringify({
+  version: 1,
+  decision: "denied",
+  updatedAt: "2026-09-04T00:00:00.000Z",
+});
 
 export default defineConfig({
   testDir: "./tests-e2e",
@@ -18,6 +24,16 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
+    // 분석 테스트 한 건을 제외한 E2E는 선택 배너의 영향과 외부 요청 없이 제품 기능만 검증한다.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(BASE_URL).origin,
+          localStorage: [{ name: ANALYTICS_CONSENT_STORAGE_KEY, value: DENIED_ANALYTICS_STATE }],
+        },
+      ],
+    },
   },
   projects: [
     {
@@ -50,6 +66,9 @@ export default defineConfig({
             ...process.env,
             NEXT_DIST_DIR: process.env.NEXT_DIST_DIR ?? ".next/playwright-e2e",
             NEXT_PUBLIC_PAYMENT_MODE: "stub",
+            // 유효한 테스트용 공개 ID다. 둘 다 설정해 GTM 우선·GA 미중복 계약을 검증한다.
+            NEXT_PUBLIC_GA_MEASUREMENT_ID: "G-PLAYWRIGHT01",
+            NEXT_PUBLIC_GTM_ID: "GTM-PLAYWRIGHT01",
           },
         },
       }),

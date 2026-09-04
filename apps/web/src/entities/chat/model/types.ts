@@ -46,6 +46,9 @@ export interface SocialChatRoom {
   readonly supportStatus: SupportStatus | null;
   readonly assigneeId: string | null;
   readonly supportCategory: SupportCategory | null;
+  /** 접수 후 3일로 잡은 보수적 내부 진행 경과 안내 목표(법정 기준은 3영업일). */
+  readonly progressDueAt: string | null;
+  /** 접수 후 10일로 잡은 보수적 내부 결과·처리방안 안내 목표(법정 기준은 10영업일). */
   readonly responseDueAt: string | null;
 }
 

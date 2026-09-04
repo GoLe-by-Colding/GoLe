@@ -26,8 +26,8 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
   const title = `${sellerId} 판매자 샵`;
   const description =
     rating !== null && rating.count > 0
-      ? `평점 ${rating.average.toFixed(1)}점 · 후기 ${rating.count}건. ${sellerId} 판매자의 레고 중고 매물을 확인하세요.`
-      : `${sellerId} 판매자의 레고 중고 매물을 확인하세요.`;
+      ? `평점 ${rating.average.toFixed(1)}점 · 후기 ${rating.count}건. ${sellerId} 판매자의 브릭 중고 매물을 확인하세요.`
+      : `${sellerId} 판매자의 브릭 중고 매물을 확인하세요.`;
 
   return {
     title,

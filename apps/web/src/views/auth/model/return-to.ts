@@ -1,5 +1,5 @@
 import type { Session } from "@entities/user";
-import { isAdminPath, resolveReturnTo } from "@shared/lib";
+import { isAdminPath, loginHrefWithReturnTo, resolveReturnTo } from "@shared/lib";
 
 /**
  * 로그인 게이트의 복귀 경로 처리.
@@ -8,7 +8,7 @@ import { isAdminPath, resolveReturnTo } from "@shared/lib";
  * 여기에는 역할·문구 등 인증 화면 고유의 판단만 남긴다.
  */
 
-export { resolveReturnTo, isAdminPath };
+export { resolveReturnTo, isAdminPath, loginHrefWithReturnTo };
 
 /**
  * 인증이 끝나 실제 권한을 알게 된 시점에 적용하는 2차 게이트.
@@ -25,12 +25,6 @@ export function applyRoleGuard(
     return null;
   }
   return target;
-}
-
-/** 검증을 통과한 복귀 경로를 담은 로그인 링크를 만든다. */
-export function loginHrefWithReturnTo(target: string): string {
-  const safe = resolveReturnTo(target);
-  return safe === null ? "/login" : `/login?returnTo=${encodeURIComponent(safe)}`;
 }
 
 /** 복귀 경로를 사람이 읽을 수 있는 짧은 이름으로 바꾼다(안내 문구용). */

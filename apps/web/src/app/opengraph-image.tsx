@@ -45,7 +45,7 @@ export default function OpengraphImage() {
           Brick Marketplace
         </div>
         <div style={{ fontSize: "36px", opacity: 0.85 }}>
-          Prices · Escrow · Collection · Community
+          Prices · Direct Chat · Collection · Community
         </div>
       </div>
 

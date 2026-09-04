@@ -86,6 +86,7 @@ async function mockChatApis(
         stage: 0,
         tradeMode: "DIRECT_CHAT",
         features: { payments: false, reviews: false, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
         updatedAt: null,
       },
     }),
@@ -177,6 +178,7 @@ async function mockChatDeepLinkApis(
         stage: 0,
         tradeMode: "DIRECT_CHAT",
         features: { payments: false, reviews: false, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
         updatedAt: null,
       },
     }),
@@ -306,6 +308,7 @@ test.describe("채팅 UX", () => {
           supportStatus: "UNASSIGNED",
           assigneeId: null,
           supportCategory: "PRIVACY_ACCESS",
+          progressDueAt: "2026-09-06T09:00:00Z",
           responseDueAt: "2026-09-13T09:00:00Z",
         },
       });
@@ -320,7 +323,12 @@ test.describe("채팅 UX", () => {
     await page.goto("/chat?compose=support&category=PRIVACY_ACCESS");
 
     await expect(page.getByRole("combobox", { name: "문의 유형" })).toHaveValue("PRIVACY_ACCESS");
-    await expect(page.getByText(/10일 안의 첫 처리 안내/)).toBeVisible();
+    await expect(page.getByText(/3영업일 이내에 진행 경과/)).toBeVisible();
+    await expect(page.getByText(/10영업일 이내에 조사 결과 또는 처리방안/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "불만·분쟁 처리기준" })).toHaveAttribute(
+      "href",
+      "/terms#complaint-resolution-policy",
+    );
     await page
       .getByRole("textbox", { name: "문의 내용" })
       .fill("보유 중인 개인정보를 확인하고 싶습니다.");

@@ -26,7 +26,12 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
   try {
     post = await fetchPost(id);
   } catch {
-    return { title: "커뮤니티", description: "GoLe 레고 커뮤니티" };
+    return {
+      title: "커뮤니티",
+      description: "GoLe 브릭 커뮤니티",
+      alternates: { canonical: `/community/${id}` },
+      robots: { index: false, follow: false },
+    };
   }
 
   const title = `${postHeadline(post)} · ${POST_TOPIC_LABEL[post.type]}`;

@@ -6,7 +6,7 @@ import { Button, Heading, Text, Textarea } from "@shared/ui";
 export interface ReasonPromptProps {
   /** 모달 제목. 예: "매물 내리기" */
   readonly title: string;
-  /** 조치 대상 설명. 예: "레고 75192 밀레니엄 팔콘" */
+  /** 조치 대상 설명. 예: "브릭 세트 75192 밀레니엄 팔콘" */
   readonly target: string;
   /** 확인 버튼 라벨. 기본 "조치하기" */
   readonly confirmLabel?: string | undefined;

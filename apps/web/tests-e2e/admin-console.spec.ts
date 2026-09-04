@@ -51,6 +51,7 @@ async function mockMe(
         ordersByStatus: {},
         activeListings: 0,
         pendingReports: 0,
+        unassignedSupportTickets: 0,
         pendingSettlements: 0,
       },
     }),
@@ -279,7 +280,21 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
             createdAt: "2026-09-03T09:00:00Z",
             updatedAt: "2026-09-03T09:00:00Z",
             resolvedAt: null,
+            progressDueAt: "2099-09-06T09:00:00Z",
             responseDueAt: "2099-09-13T09:00:00Z",
+          },
+          {
+            roomId: "resolved-room",
+            requesterId: "user-resolved",
+            title: "처리 완료 문의",
+            category: "GENERAL",
+            status: "RESOLVED",
+            assigneeId: "admin-1",
+            createdAt: "2026-09-01T09:00:00Z",
+            updatedAt: "2026-09-02T09:00:00Z",
+            resolvedAt: "2026-09-02T09:00:00Z",
+            progressDueAt: "2026-09-04T09:00:00Z",
+            responseDueAt: "2026-09-11T09:00:00Z",
           },
         ],
       });
@@ -290,12 +305,78 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(page.getByRole("heading", { name: "운영 문의" })).toBeVisible();
     const inbox = page.getByRole("complementary");
     await expect(inbox.getByText("개인정보 열람", { exact: true })).toBeVisible();
-    await expect(inbox.getByText(/일 남음/)).toBeVisible();
+    await expect(inbox.getByText(/진행 안내 .*일 남음/)).toBeVisible();
+    await expect(inbox.getByText(/결과·방안 .*일 남음/)).toBeVisible();
+    await expect(inbox.getByText("진행 안내 기한 내 처리")).toBeVisible();
+    await expect(inbox.getByText("결과·방안 기한 내 처리")).toBeVisible();
 
     await page.getByRole("combobox", { name: "유형" }).selectOption("PRIVACY_ACCESS");
     await expect
       .poll(() => requestedUrls.some((url) => url.includes("category=PRIVACY_ACCESS")))
       .toBe(true);
+  });
+
+  test("AI 문의 분석은 담당자에게만 검토용 초안으로 표시되고 자동 전송하지 않는다", async ({
+    page,
+  }) => {
+    await seedLocalSession(page, {
+      accountId: "admin-1",
+      sessionToken: "admin-test-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
+    });
+    let replyPosts = 0;
+    await page.route(/\/api\/admin\/support(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            roomId: "room-ai",
+            requesterId: "user-1",
+            title: "거래 문의",
+            category: "GENERAL",
+            status: "IN_PROGRESS",
+            assigneeId: "admin-1",
+            createdAt: "2026-09-04T01:00:00Z",
+            updatedAt: "2026-09-04T01:00:00Z",
+            resolvedAt: null,
+            responseDueAt: null,
+            assistantAnalysis: {
+              category: "TRADE",
+              priority: "HIGH",
+              summary: "거래 조건을 확인해야 합니다.",
+              draft: "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
+              risk: ["ESCROW_REVIEW"],
+              humanReview: true,
+              externalModel: false,
+              engine: "rules-v1",
+            },
+          },
+        ],
+      }),
+    );
+    await page.route(/\/api\/admin\/support\/room-ai\/messages(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "POST") replyPosts += 1;
+      await route.fulfill({ json: [] });
+    });
+    await page.route(/\/api\/admin\/support\/room-ai\/notes(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [] }),
+    );
+
+    await page.goto("/admin/support");
+
+    const assistant = page.getByRole("region", { name: "AI 답변 보조" });
+    await expect(assistant.getByText("거래 조건을 확인해야 합니다.")).toBeVisible();
+    await expect(assistant.getByText("사람의 검토가 필요합니다.")).toBeVisible();
+    expect(replyPosts).toBe(0);
+
+    await assistant.getByRole("button", { name: "초안을 답변에 넣기" }).click();
+    await expect(page.getByPlaceholder("사용자에게 보낼 답변")).toHaveValue(
+      "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
+    );
+    expect(replyPosts).toBe(0);
   });
 
   test("콘솔 로그인 안내는 원래 경로를 returnTo로 전달한다", async ({ page }) => {
@@ -347,6 +428,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             COMPLETED: 12,
           },
           pendingReports: 3,
+          unassignedSupportTickets: 4,
           pendingSettlements: 2,
         }),
       });
@@ -366,6 +448,10 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       "page",
     );
     await expect(page.getByText("미처리 신고").locator("..").getByText("3건")).toBeVisible();
+    await expect(page.getByText("미배정 문의").locator("..").getByText("4건")).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "운영자 메뉴" }).locator('a[href="/admin/support"]'),
+    ).toContainText("4");
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
@@ -508,7 +594,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     });
 
     await page.goto("/admin/catalog");
-    await expect(page.getByRole("table", { name: /레고 세트 카탈로그 목록/ })).toBeVisible();
+    await expect(page.getByRole("table", { name: /브릭 세트 카탈로그 목록/ })).toBeVisible();
 
     const pieceCount = page.getByRole("spinbutton", { name: "피스 수" });
     const releaseYear = page.getByRole("spinbutton", { name: "출시 연도" });
@@ -521,7 +607,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(yearBox!.y).toBeGreaterThan(pieceBox!.y + pieceBox!.height);
 
     const tableScroller = page
-      .getByRole("table", { name: /레고 세트 카탈로그 목록/ })
+      .getByRole("table", { name: /브릭 세트 카탈로그 목록/ })
       .locator("..");
     const dimensions = await tableScroller.evaluate((element) => ({
       clientWidth: element.clientWidth,
