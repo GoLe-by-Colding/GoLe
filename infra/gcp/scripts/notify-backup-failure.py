@@ -5,25 +5,50 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
-ENV_PATH = pathlib.Path("/etc/gole/gole.env")
+DISCORD_ENV_PATH = pathlib.Path("/etc/gole/discord.env")
+
+
+def operations_webhook_url() -> str:
+    if DISCORD_ENV_PATH.is_symlink() or not DISCORD_ENV_PATH.is_file():
+        raise ValueError("operations notification configuration is missing")
+    metadata = DISCORD_ENV_PATH.stat()
+    if metadata.st_uid != 0 or metadata.st_gid != 0 or metadata.st_mode & 0o077:
+        raise ValueError("operations notification configuration is not root-only")
+    matches = [
+        line.split("=", 1)[1]
+        for line in DISCORD_ENV_PATH.read_text(encoding="utf-8").splitlines()
+        if line.startswith("DISCORD_OPERATIONS_WEBHOOK_URL=")
+    ]
+    if len(matches) != 1:
+        raise ValueError("operations webhook configuration is invalid")
+    webhook = matches[0]
+    parsed = urllib.parse.urlsplit(webhook)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in {"discord.com", "discordapp.com"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port not in (None, 443)
+        or not re.fullmatch(
+            r"/api/webhooks/[0-9]{15,24}/[A-Za-z0-9._-]{40,200}", parsed.path
+        )
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("operations webhook configuration is invalid")
+    return webhook
 
 
 def main() -> int:
-    webhook = ""
     try:
-        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-            if line.startswith("DISCORD_OPERATIONS_WEBHOOK_URL="):
-                webhook = line.partition("=")[2].strip()
-                break
-    except OSError:
-        return 1
-    if not webhook.startswith(
-        ("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/")
-    ):
+        webhook = operations_webhook_url()
+    except (OSError, ValueError):
         return 1
     request = urllib.request.Request(
         webhook,

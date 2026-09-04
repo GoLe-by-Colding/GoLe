@@ -466,6 +466,13 @@ def _validate_instance_transition(
 
     before_boot = _single_block(normalized_before, "boot_disk")
     after_boot = _single_block(normalized_after, "boot_disk")
+    if (
+        before_boot.get("auto_delete") is not True
+        and before_boot.get("auto_delete") is not False
+    ) or after_boot.get("auto_delete") is not False:
+        raise PlanPolicyError(
+            "production boot disk auto-delete transition must be true-to-false or remain false"
+        )
     before_boot["auto_delete"] = after_boot.get("auto_delete")
 
     if normalized_before != normalized_after:
@@ -479,6 +486,7 @@ def _validate_instance_after(
     *,
     expected_static_ip: str,
     expected_project_id: str,
+    expected_budget_id: str,
     expected_startup_script_sha256: str,
 ) -> None:
     if instance_after.get("name") != "gole-production":
@@ -524,10 +532,16 @@ def _validate_instance_after(
             raise PlanPolicyError("production VM gained an unreviewed optional capability")
 
     metadata = instance_after.get("metadata")
-    if not isinstance(metadata, dict) or set(metadata) != {"enable-oslogin", "startup-script"}:
+    if not isinstance(metadata, dict) or set(metadata) != {
+        "enable-oslogin",
+        "gole-budget-id",
+        "startup-script",
+    }:
         raise PlanPolicyError("production metadata contains an unexpected key")
     if metadata.get("enable-oslogin") != "TRUE":
         raise PlanPolicyError("production OS Login is not enabled in the plan")
+    if metadata.get("gole-budget-id") != expected_budget_id:
+        raise PlanPolicyError("production instance Budget identity metadata changed")
     startup_script = metadata.get("startup-script")
     if not isinstance(startup_script, str) or hashlib.sha256(
         startup_script.encode("utf-8")
@@ -630,6 +644,7 @@ def _validate_budget_state(
     expected_budget_id: str,
     expected_budget_amount_krw: str,
     allow_project_recipients_disabled: bool,
+    allow_missing_notification_route: bool = False,
 ) -> None:
     expected_resource_id = (
         f"billingAccounts/{expected_billing_account_id}/budgets/{expected_budget_id}"
@@ -685,6 +700,13 @@ def _validate_budget_state(
     ) != [(value, "CURRENT_SPEND") for value in expected_thresholds]:
         raise PlanPolicyError("billing budget thresholds changed")
 
+    update_blocks = state.get("all_updates_rule")
+    if (
+        allow_missing_notification_route
+        and "all_updates_rule" in state
+        and update_blocks in (None, [])
+    ):
+        return
     updates = _single_block(state, "all_updates_rule")
     recipients = updates.get("enable_project_level_recipients")
     allowed_recipients = {True, False} if allow_project_recipients_disabled else {True}
@@ -802,6 +824,7 @@ def validate_existing_plan(
         instance_after,
         expected_static_ip=expected_static_ip,
         expected_project_id=expected_project_id,
+        expected_budget_id=expected_budget_id,
         expected_startup_script_sha256=expected_startup_script_sha256,
     )
     _validate_instance_transition(instance_before, instance_after)
@@ -988,6 +1011,7 @@ def validate_existing_plan(
             expected_budget_id=expected_budget_id,
             expected_budget_amount_krw=expected_budget_amount_krw,
             allow_project_recipients_disabled=True,
+            allow_missing_notification_route=True,
         )
         _validate_budget_state(
             budget_after,
@@ -999,12 +1023,24 @@ def validate_existing_plan(
             allow_project_recipients_disabled=False,
         )
         normalized_budget_before = json.loads(json.dumps(budget_before))
-        _single_block(normalized_budget_before, "all_updates_rule")[
-            "enable_project_level_recipients"
-        ] = True
+        if (
+            "all_updates_rule" in normalized_budget_before
+            and normalized_budget_before.get("all_updates_rule") in (None, [])
+        ):
+            # The 2026-09-05 live Budget lost its Pub/Sub allUpdatesRule while
+            # the imported remote state still contained the historical route.
+            # Permit only restoring the already validated exact after block;
+            # every other Budget field must remain byte-for-byte equivalent.
+            normalized_budget_before["all_updates_rule"] = json.loads(
+                json.dumps(budget_after["all_updates_rule"])
+            )
+        else:
+            _single_block(normalized_budget_before, "all_updates_rule")[
+                "enable_project_level_recipients"
+            ] = True
         if normalized_budget_before != budget_after:
             raise PlanPolicyError(
-                "billing budget update changes more than project-level recipients"
+                "billing budget update changes more than the reviewed notification repair"
             )
 
     if GTS_RESOURCE in resources and _actions(resources[GTS_RESOURCE]) != ["delete"]:

@@ -3,17 +3,21 @@ set -Eeuo pipefail
 
 REQUIRE_RUNNER="false"
 REQUIRE_DEPLOYMENT="false"
+ALLOW_METADATA_MIGRATION_PENDING="false"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --require-runner) REQUIRE_RUNNER="true" ;;
     --require-deployment) REQUIRE_DEPLOYMENT="true" ;;
+    --allow-metadata-migration-pending) ALLOW_METADATA_MIGRATION_PENDING="true" ;;
     *)
-      echo "Usage: verify-host-bootstrap.sh [--require-runner] [--require-deployment]" >&2
+      echo "Usage: verify-host-bootstrap.sh [--require-runner] [--require-deployment] [--allow-metadata-migration-pending]" >&2
       exit 2
       ;;
   esac
   shift
 done
+
+METADATA_MIGRATION_MARKER="/etc/gole/metadata-migration.pending"
 
 failures=0
 pass() { echo "PASS: $*"; }
@@ -38,14 +42,62 @@ if [ -x /usr/local/sbin/gole-metadata-firewall ] &&
 else
   fail "metadata firewall installation or service state is invalid"
 fi
-if iptables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
-  iptables -w -t raw -C GOLE_METADATA_INPUT -d 169.254.169.254/32 -j DROP >/dev/null 2>&1 &&
-  iptables -w -C OUTPUT -d 169.254.169.254/32 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 &&
+metadata_migration_state="full"
+if [ -e "$METADATA_MIGRATION_MARKER" ] || [ -L "$METADATA_MIGRATION_MARKER" ]; then
+  marker_state="$(sed -n 's/^state=//p' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)"
+  marker_sha="$(sed -n 's/^legacy_sha=//p' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)"
+  if [ -f "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] &&
+    [ "$(stat -c '%U:%G:%a' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)" = "root:root:644" ] &&
+    [ "$(grep -Ec '^(state|legacy_sha)=' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)" -eq 2 ] &&
+    [ "$(wc -l < "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)" -eq 2 ] &&
+    [ "$(tail -c 1 "$METADATA_MIGRATION_MARKER" 2>/dev/null | wc -l)" -eq 1 ] &&
+    [ "$(grep -Ec '^state=' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)" -eq 1 ] &&
+    [ "$(grep -Ec '^legacy_sha=' "$METADATA_MIGRATION_MARKER" 2>/dev/null || true)" -eq 1 ] &&
+    [[ "$marker_sha" =~ ^[0-9a-f]{40}$ ]] && [ "$marker_state" = pending ]; then
+    metadata_migration_state="pending"
+  else
+    metadata_migration_state="invalid"
+    fail "metadata migration marker is invalid or ratcheting is incomplete"
+  fi
+fi
+
+if [ "$metadata_migration_state" = pending ] &&
+  [ "$ALLOW_METADATA_MIGRATION_PENDING" != true ]; then
+  fail "temporary metadata migration mode remains active"
+elif [ "$metadata_migration_state" = pending ]; then
+  pass "temporary metadata migration mode is explicitly allowed"
+fi
+
+metadata_output_valid=false
+if iptables -w -C OUTPUT -d 169.254.169.254/32 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 &&
   iptables -w -C GOLE_METADATA_OUTPUT -m owner --uid-owner 0 -j RETURN >/dev/null 2>&1 &&
   iptables -w -C GOLE_METADATA_OUTPUT -j REJECT >/dev/null 2>&1; then
+  metadata_output_valid=true
+fi
+if [ "$metadata_migration_state" = pending ] && [ "$metadata_output_valid" = true ] &&
+  ! iptables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1; then
+  pass "metadata IPv4 policy blocks non-root host processes while preserving legacy containers"
+elif [ "$metadata_migration_state" = full ] && [ "$metadata_output_valid" = true ] &&
+  iptables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
+  iptables -w -t raw -C GOLE_METADATA_INPUT -d 169.254.169.254/32 -j DROP >/dev/null 2>&1; then
   pass "metadata IPv4 policy blocks containers and non-root host processes"
 else
   fail "metadata IPv4 firewall policy is missing"
+fi
+
+if command -v ip6tables >/dev/null 2>&1; then
+  if [ "$metadata_migration_state" = pending ] &&
+    ! ip6tables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
+    ip6tables -w -C OUTPUT -d fd20:ce::254/128 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1; then
+    pass "metadata IPv6 pending policy preserves only legacy container access"
+  elif [ "$metadata_migration_state" = full ] &&
+    ip6tables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
+    ip6tables -w -t raw -C GOLE_METADATA_INPUT -d fd20:ce::254/128 -j DROP >/dev/null 2>&1 &&
+    ip6tables -w -C OUTPUT -d fd20:ce::254/128 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1; then
+    pass "metadata IPv6 policy blocks containers and non-root host processes"
+  else
+    fail "metadata IPv6 firewall policy is missing"
+  fi
 fi
 
 if [ ! -r /etc/gole/deploy-user ]; then
@@ -72,6 +124,21 @@ if systemctl is-enabled --quiet docker && systemctl is-active --quiet docker; th
   pass "Docker service enabled and active"
 else
   fail "Docker service is not enabled and active"
+fi
+docker_security_dropin=/etc/systemd/system/docker.service.d/gole-security.conf
+docker_requires="$(systemctl show --property=Requires --value docker.service 2>/dev/null || true)"
+docker_after="$(systemctl show --property=After --value docker.service 2>/dev/null || true)"
+if [ -f "$docker_security_dropin" ] && [ ! -L "$docker_security_dropin" ] &&
+  [ "$(stat -c '%U:%G:%a' "$docker_security_dropin")" = "root:root:644" ] &&
+  grep -Fqx 'Requires=gole-metadata-firewall.service gole-cloud-broker.service' "$docker_security_dropin" &&
+  grep -Fqx 'After=gole-metadata-firewall.service gole-cloud-broker.service' "$docker_security_dropin" &&
+  [[ " $docker_requires " == *' gole-metadata-firewall.service '* ]] &&
+  [[ " $docker_requires " == *' gole-cloud-broker.service '* ]] &&
+  [[ " $docker_after " == *' gole-metadata-firewall.service '* ]] &&
+  [[ " $docker_after " == *' gole-cloud-broker.service '* ]]; then
+  pass "Docker is fail-closed behind metadata firewall and root broker"
+else
+  fail "Docker security dependency graph is invalid"
 fi
 
 if [ -x /usr/local/sbin/gole-hostctl ] && [ "$(stat -c '%U:%G:%a' /usr/local/sbin/gole-hostctl)" = "root:root:755" ]; then
@@ -109,6 +176,12 @@ for installed_helper in \
     fail "$(basename "$installed_helper") installation invalid"
   fi
 done
+if [ -x /usr/local/libexec/gole/runner-start-allowed.sh ] &&
+  [ "$(stat -c '%U:%G:%a' /usr/local/libexec/gole/runner-start-allowed.sh)" = "root:root:755" ]; then
+  pass "runner metadata-ratchet start gate is installed"
+else
+  fail "runner metadata-ratchet start gate installation invalid"
+fi
 
 if [ -x /usr/local/libexec/gole/validate-production-compose.py ] &&
   [ "$(stat -c '%U:%G:%a' /usr/local/libexec/gole/validate-production-compose.py)" = "root:root:755" ]; then
@@ -130,7 +203,10 @@ fi
 for protected_env in /etc/gole/infra.env /etc/gole/gole.env; do
   if [ -e "$protected_env" ]; then
     if [ -f "$protected_env" ] && [ ! -L "$protected_env" ] &&
-      [ "$(stat -c '%U:%G:%a' "$protected_env")" = "root:root:600" ]; then
+      [ "$(stat -c '%U:%G:%a' "$protected_env")" = "root:root:600" ] &&
+      [ "$(stat -c '%h' "$protected_env")" = 1 ] &&
+      [ "$(stat -c '%s' "$protected_env")" -gt 0 ] &&
+      [ "$(stat -c '%s' "$protected_env")" -le 131072 ]; then
       pass "$(basename "$protected_env") is root-only"
     else
       fail "$(basename "$protected_env") permissions are not root-only"
@@ -210,10 +286,12 @@ if [ "$REQUIRE_DEPLOYMENT" = "true" ]; then
 fi
 
 if [ "$REQUIRE_RUNNER" = "true" ]; then
-  if [ -d /opt/actions-runner ] && [ "$(stat -c '%a' /opt/actions-runner)" = "750" ]; then
+  if [ -d /opt/gole-actions-runner ] &&
+    [ ! -L /opt/gole-actions-runner ] &&
+    [ "$(stat -c '%U:%G:%a' /opt/gole-actions-runner)" = "$DEPLOY_USER:$DEPLOY_GROUP:750" ]; then
     pass "runner workspace is hidden from unrelated host users"
   else
-    fail "runner root permissions are not 0750"
+    fail "runner root identity or permissions are invalid"
   fi
 
   runner_service_file=/etc/systemd/system/gole-github-runner.service
@@ -227,7 +305,10 @@ if [ "$REQUIRE_RUNNER" = "true" ]; then
   else
     runner_service_user="$(systemctl show -p User --value "$runner_service" 2>/dev/null || true)"
     if [ "$runner_service_user" = "$DEPLOY_USER" ] &&
-      grep -Fqx "ExecStart=/opt/actions-runner/runsvc.sh" "$runner_service_file" &&
+      grep -Fqx 'Requires=gole-cloud-broker.service' "$runner_service_file" &&
+      grep -Fqx 'ExecCondition=/usr/local/libexec/gole/runner-start-allowed.sh' "$runner_service_file" &&
+      grep -Fqx "ExecStart=/opt/gole-actions-runner/runsvc.sh" "$runner_service_file" &&
+      grep -Fqx 'KillMode=control-group' "$runner_service_file" &&
       systemctl is-enabled --quiet "$runner_service" && systemctl is-active --quiet "$runner_service"; then
       pass "GitHub Actions runner service enabled and active"
     else
@@ -242,7 +323,9 @@ if [ "$REQUIRE_RUNNER" = "true" ]; then
     fail "production runner label marker missing"
   fi
 
-  for credential_file in /opt/actions-runner/.credentials /opt/actions-runner/.credentials_rsaparams; do
+  for credential_file in \
+    /opt/gole-actions-runner/.credentials \
+    /opt/gole-actions-runner/.credentials_rsaparams; do
     if [ -e "$credential_file" ]; then
       mode="$(stat -c '%a' "$credential_file")"
       if (( (8#$mode & 0077) == 0 )); then

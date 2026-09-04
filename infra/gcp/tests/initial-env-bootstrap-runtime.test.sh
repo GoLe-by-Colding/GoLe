@@ -137,7 +137,12 @@ fi
 initial_request='50000000-0000-0000-0000-000000000005'
 SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-begin \
   all "$sha" 0 "$initial_request"
-SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$initial_request"
+sed -i 's/^state=prepared$/state=mutation-armed/' /etc/gole/deployment.transaction
+if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$initial_request" \
+  >/tmp/initial-rollback.out 2>&1; then
+  echo 'initial deployment rollback falsely reported a recovered LKG' >&2
+  exit 1
+fi
 [ "$(wc -l < /tmp/poweroff-calls | tr -d ' ')" = 1 ]
 [ -e /etc/gole/deployment.transaction ]
 [ -e /etc/gole/initial-deploy.pending ]

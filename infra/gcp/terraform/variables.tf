@@ -5,8 +5,12 @@ variable "project_id" {
 
 variable "billing_account_id" {
   type        = string
-  description = "Billing account ID. Leave empty to provision everything except the Billing Budget."
-  default     = ""
+  description = "Required billing account ID for the production gross-spend budget and root cost guard"
+
+  validation {
+    condition     = can(regex("^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$", var.billing_account_id))
+    error_message = "billing_account_id is required and must use the 000000-000000-000000 format."
+  }
 }
 
 variable "budget_amount_krw" {
@@ -168,17 +172,6 @@ variable "runtime_rate_transition_at" {
   }
 }
 
-variable "expected_budget_id" {
-  type        = string
-  description = "Exact Billing Budget UUID accepted by the root broker"
-  default     = "b645c912-d766-43fc-8923-bff70ecfe8d8"
-
-  validation {
-    condition     = can(regex("^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", var.expected_budget_id))
-    error_message = "expected_budget_id must be a lowercase UUID."
-  }
-}
-
 variable "credit_deadline" {
   type        = string
   description = "Credit expiry endpoint used for retained disk and snapshot tail projection"
@@ -256,12 +249,12 @@ variable "deploy_user" {
 
 variable "github_runner_name" {
   type        = string
-  description = "Non-secret name shown for the repository-scoped production runner"
-  default     = "gole-production"
+  description = "Fixed non-secret name used to replace the repository-scoped production runner"
+  default     = "gole-gcp-production"
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9._-]{1,64}$", var.github_runner_name))
-    error_message = "github_runner_name contains unsupported characters."
+    condition     = var.github_runner_name == "gole-gcp-production"
+    error_message = "github_runner_name must remain gole-gcp-production so migration replaces the existing runner."
   }
 }
 

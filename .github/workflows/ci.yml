@@ -246,6 +246,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The adoption policy renders the exact historical production SHA as
+          # a regression fixture; a depth-1 checkout cannot prove that contract.
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -260,7 +264,6 @@ jobs:
           bash -n \
             infra/gcp/scripts/cost-guard-watchdog.sh \
             infra/gcp/scripts/bootstrap-host.sh \
-            infra/gcp/scripts/setup-budget-alerts.sh \
             infra/gcp/scripts/apply-secret-env.sh \
             scripts/deploy.sh
           failure_file="$RUNNER_TEMP/gole-cost-guard-watchdog.failures"

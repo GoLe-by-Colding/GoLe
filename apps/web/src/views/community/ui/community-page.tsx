@@ -50,7 +50,7 @@ export async function CommunityPage() {
                   다시 확인
                 </LinkButton>
                 <LinkButton href="/community/new" size="sm" variant="ghost">
-                  글쓰기
+                  새 글 작성
                 </LinkButton>
               </div>
             }

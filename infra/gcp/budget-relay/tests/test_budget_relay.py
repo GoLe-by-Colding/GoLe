@@ -297,6 +297,10 @@ class BudgetRelayTests(unittest.TestCase):
             message = render_discord_message(budget, plan, cfg, NOW)
             self.assertIn("초과할 것으로 예상", message)
             self.assertIn("예상 크레딧 잔액", message)
+            self.assertIn("만료일까지 예상 추가 고정비", message)
+            self.assertIn("만료 시점 예상 총비용", message)
+            self.assertNotIn("강제 종료·정지 꼬리 포함", message)
+            self.assertNotIn("절대 종료까지 운영 시", message)
             self.assertNotIn(cfg.webhook_url, message)
 
     def test_hard_stop_accepts_only_exact_budget_identity_and_period(self):
@@ -613,6 +617,99 @@ class BudgetRelayTests(unittest.TestCase):
                 stopped.all_in_if_stopped_gross,
                 cfg.hard_stop.all_in_cost_limit_krw,
             )
+
+    def test_running_projection_is_piecewise_across_rate_transition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cfg = guard_config(root, root / "tx_bytes", root / "boot_id")
+            transition = cfg.hard_stop.runtime_rate_transition_at
+
+            projections = [
+                calculate_cost_guard_snapshot(
+                    cfg,
+                    transition + timedelta(hours=offset),
+                    observed_billing_gross=Decimal("0"),
+                    network_bytes=0,
+                ).projected_running_gross.quantize(Decimal("0.000001"))
+                for offset in (-1, 0, 1)
+            ]
+
+            # One future high-rate hour moves into the historical high-rate
+            # bucket at the transition, then low-rate hours move one-for-one.
+            # The full policy-horizon projection must therefore stay exact.
+            self.assertEqual(projections[0], projections[1])
+            self.assertEqual(projections[1], projections[2])
+
+    def test_running_projection_uses_stopped_tail_after_absolute_cutoff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cfg = guard_config(root, root / "tx_bytes", root / "boot_id")
+            cutoff = cfg.hard_stop.stop_at
+            deadline = cfg.credit_deadline
+
+            for sampled_at in (cutoff, cutoff + timedelta(hours=1), deadline):
+                with self.subTest(sampled_at=sampled_at.isoformat()):
+                    snapshot = calculate_cost_guard_snapshot(
+                        cfg,
+                        sampled_at,
+                        observed_billing_gross=Decimal("0"),
+                        network_bytes=30 * 1024**3,
+                    )
+                    self.assertEqual(
+                        snapshot.projected_running_gross,
+                        snapshot.all_in_if_stopped_gross,
+                    )
+
+            cutoff_snapshot = calculate_cost_guard_snapshot(
+                cfg,
+                cutoff,
+                observed_billing_gross=Decimal("0"),
+                network_bytes=30 * 1024**3,
+            )
+            self.assertEqual(
+                cutoff_snapshot.projected_running_gross.quantize(
+                    Decimal("0.000001")
+                ),
+                Decimal("327556.956498"),
+            )
+
+    def test_guard_discord_projection_names_cutoff_and_stopped_tail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cfg = guard_config(root, root / "tx_bytes", root / "boot_id")
+            budget = BudgetNotification.from_pubsub_data(
+                encoded_budget(
+                    "17438.25",
+                    display_name="GoLe production credit guard",
+                    budget_amount="370000",
+                )
+            )
+            plan = StateStore(root).plan(
+                "m-guard-projection",
+                NOW,
+                budget,
+                cfg.warning_thresholds,
+                NOW,
+            )
+            snapshot = calculate_cost_guard_snapshot(
+                cfg,
+                NOW,
+                observed_billing_gross=budget.cost_amount,
+                network_bytes=0,
+            )
+
+            message = render_discord_message(
+                budget,
+                plan,
+                cfg,
+                NOW,
+                guard_snapshot=snapshot,
+            )
+
+            self.assertIn("강제 종료·정지 꼬리 포함 예상 추가비", message)
+            self.assertIn("절대 종료까지 운영 시 만료 총액", message)
+            self.assertNotIn("만료일까지 예상 추가 고정비", message)
+            self.assertNotIn("계속 운영 예상액", message)
 
     def test_snapshot_tail_must_fit_below_credit(self):
         with tempfile.TemporaryDirectory() as directory:

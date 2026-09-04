@@ -27,7 +27,18 @@ cat > /test-bin/docker <<'FAKE_DOCKER'
 #!/bin/sh
 [ "$1" = run ] && [ "${FAKE_NGINX_INVALID:-0}" = 0 ]
 FAKE_DOCKER
-chmod 0755 /test-bin/docker
+cat > /test-bin/sync <<'FAKE_SYNC'
+#!/bin/sh
+state="$(sed -n 's/^state=//p' /etc/gole/nginx.conf.transaction 2>/dev/null || true)"
+printf '%s|state=%s\n' "$*" "$state" >> /tmp/nginx-sync.calls
+if [ -e /tmp/kill-after-nginx-config-sync ] &&
+  [ "$*" = '-f /etc/gole/nginx.conf' ]; then
+  rm -f /tmp/kill-after-nginx-config-sync
+  kill -KILL "$PPID"
+fi
+exit 0
+FAKE_SYNC
+chmod 0755 /test-bin/docker /test-bin/sync
 export PATH="/test-bin:$PATH"
 
 seed_deployment() {
@@ -52,6 +63,17 @@ SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-begin "$request_on
 ! grep -q 'runner-controlled-config' /etc/gole/nginx.conf
 grep -q 'server_name gole.co.kr' /etc/gole/nginx.conf
 [ "$(stat -c '%U:%G:%a' /etc/gole/nginx.conf.transaction)" = 'root:root:600' ]
+backup_sync_line="$(grep -nF -- "-f /var/backups/gole-nginx/nginx.conf.$request_one|state=" \
+  /tmp/nginx-sync.calls | head -n 1 | cut -d: -f1)"
+prepared_sync_line="$(grep -nF -- '-f /etc/gole/nginx.conf.transaction|state=prepared' \
+  /tmp/nginx-sync.calls | head -n 1 | cut -d: -f1)"
+config_sync_line="$(grep -nF -- '-f /etc/gole/nginx.conf|state=prepared' \
+  /tmp/nginx-sync.calls | head -n 1 | cut -d: -f1)"
+installed_sync_line="$(grep -nF -- '-f /etc/gole/nginx.conf.transaction|state=installed' \
+  /tmp/nginx-sync.calls | head -n 1 | cut -d: -f1)"
+[ "$backup_sync_line" -lt "$prepared_sync_line" ]
+[ "$prepared_sync_line" -lt "$config_sync_line" ]
+[ "$config_sync_line" -lt "$installed_sync_line" ]
 SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-abort "$request_one"
 grep -qx 'old-config' /etc/gole/nginx.conf
 SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-finish-recovery "$request_one"
@@ -59,6 +81,14 @@ SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-finish-recovery "$
 request_two='20000000-0000-4000-8000-000000000002'
 seed_deployment built "$request_two"
 SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-begin "$request_two" "$sha"
+touch /tmp/kill-after-nginx-config-sync
+if SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-recover \
+  >/tmp/nginx-restore-kill.out 2>&1; then
+  echo 'Nginx rollback survived the injected restored-config SIGKILL' >&2
+  exit 1
+fi
+grep -qx 'state=installed' /etc/gole/nginx.conf.transaction
+grep -qx old-config /etc/gole/nginx.conf
 recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-recover)"
 [ "$recovery" = "RECOVERY_REQUIRED:$request_two" ]
 grep -qx 'old-config' /etc/gole/nginx.conf
@@ -85,6 +115,23 @@ seed_deployment runtime-verified "$request_four"
 SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-finalize "$request_four"
 [ ! -e /etc/gole/nginx.conf.transaction ]
 grep -q 'server_name gole.co.kr' /etc/gole/nginx.conf
+
+# SIGKILL after the activated config fsync but before the installed journal
+# write leaves prepared, so recovery must restore the durable backup.
+request_five='50000000-0000-4000-8000-000000000005'
+printf 'old-config\n' > /etc/gole/nginx.conf
+seed_deployment built "$request_five"
+touch /tmp/kill-after-nginx-config-sync
+if SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-begin \
+  "$request_five" "$sha" >/tmp/nginx-config-kill.out 2>&1; then
+  echo 'Nginx transaction survived the injected config-sync SIGKILL' >&2
+  exit 1
+fi
+grep -qx 'state=prepared' /etc/gole/nginx.conf.transaction
+recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-recover)"
+[ "$recovery" = "RECOVERY_REQUIRED:$request_five" ]
+grep -qx old-config /etc/gole/nginx.conf
+SUDO_USER=root /usr/local/sbin/gole-hostctl nginx-transaction-finish-recovery "$request_five"
 
 echo 'Nginx root-owned release transaction runtime tests passed.'
 CONTAINER_TEST

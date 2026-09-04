@@ -1,3 +1,15 @@
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+upstream gole_backend {
+    zone gole_backend 64k;
+    server backend:8080 resolve;
+}
+
+upstream gole_frontend {
+    zone gole_frontend 64k;
+    server frontend:3000 resolve;
+}
+
 server {
     listen 80;
     listen [::]:80;
@@ -36,7 +48,7 @@ server {
     large_client_header_buffers 4 64k;
 
     location /api/ {
-        proxy_pass http://backend:8080;
+        proxy_pass http://gole_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -50,7 +62,7 @@ server {
     }
 
     location ~ ^/(actuator|v3/api-docs|swagger-ui) {
-        proxy_pass http://backend:8080;
+        proxy_pass http://gole_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -58,7 +70,7 @@ server {
     }
 
     location / {
-        proxy_pass http://frontend:3000;
+        proxy_pass http://gole_frontend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

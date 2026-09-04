@@ -28,7 +28,8 @@ output "automatic_cost_guard_role" {
 }
 
 output "billing_budget_id" {
-  value = try(google_billing_budget.gole_credit_guard[0].id, null)
+  description = "Terraform-created exact Budget identity injected into the root cost guard"
+  value       = try(google_billing_budget.gole_credit_guard[0].id, null)
 }
 
 output "boot_disk_snapshot_policy" {

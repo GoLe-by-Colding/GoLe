@@ -226,9 +226,33 @@ resource "google_compute_instance" "gole" {
 
   metadata = {
     enable-oslogin = "TRUE"
+    gole-budget-id = basename(google_billing_budget.gole_credit_guard[0].id)
     startup-script = <<-EOT
       #!/usr/bin/env bash
       set -euo pipefail
+
+      startup_complete=0
+      bootstrap_repository=""
+      bootstrap_tree=""
+      startup_cleanup() {
+        startup_status=$?
+        trap - EXIT
+        set +e
+        if [ -n "$bootstrap_repository" ]; then
+          rm -rf -- "$bootstrap_repository"
+        fi
+        if [ -n "$bootstrap_tree" ]; then
+          rm -rf -- "$bootstrap_tree"
+        fi
+        if [ "$startup_status" -ne 0 ] && [ "$startup_complete" -ne 1 ]; then
+          systemctl poweroff --no-block || true
+          echo "production startup bootstrap failed; VM poweroff requested" >&2
+        fi
+        exit "$startup_status"
+      }
+      trap startup_cleanup EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
 
       # Install the root policy once from an immutable reviewed commit. Later
       # boots must never execute the runner-writable /app checkout as root.
@@ -238,6 +262,7 @@ resource "google_compute_instance" "gole" {
           [ "$(stat -c '%U:%G:%a' /etc/gole/host-bootstrap.complete)" = "root:root:644" ] && \
           grep -Eq '^bootstrap_source_sha=[0-9a-f]{40}$' /etc/gole/host-bootstrap.complete && \
           [ -x /usr/local/sbin/gole-hostctl ]; then
+          startup_complete=1
           exit 0
         fi
         echo "host bootstrap completion marker is invalid" >&2
@@ -245,10 +270,16 @@ resource "google_compute_instance" "gole" {
       fi
 
       apt-get update
-      apt-get install -y ca-certificates git python3
+      apt-get install -y ca-certificates curl git python3
+      expected_budget_id="$(curl -fsS --max-time 5 \
+        -H 'Metadata-Flavor: Google' \
+        http://169.254.169.254/computeMetadata/v1/instance/attributes/gole-budget-id)"
+      [[ "$expected_budget_id" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || {
+        echo "instance Budget identity metadata is invalid" >&2
+        exit 1
+      }
       bootstrap_repository="$(mktemp -d /run/gole-startup-repository.XXXXXX)"
       bootstrap_tree="$(mktemp -d /run/gole-startup-tree.XXXXXX)"
-      trap 'rm -rf -- "$bootstrap_repository" "$bootstrap_tree"' EXIT
       chmod 0700 "$bootstrap_repository" "$bootstrap_tree"
       env -i HOME=/root PATH=/usr/bin:/bin GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
         git init --bare "$bootstrap_repository" >/dev/null
@@ -306,13 +337,23 @@ resource "google_compute_instance" "gole" {
       GCP_HARD_STOP_AT=${jsonencode(var.hard_stop_at)} \
       GCP_CREDIT_DEADLINE=${jsonencode(var.credit_deadline)} \
       GCP_RUNTIME_RATE_TRANSITION_AT=${jsonencode(var.runtime_rate_transition_at)} \
-      GCP_EXPECTED_BUDGET_ID=${jsonencode(var.expected_budget_id)} \
+      GCP_EXPECTED_BUDGET_ID="$expected_budget_id" \
       GCP_EXPECTED_BILLING_ACCOUNT_ID=${jsonencode(var.billing_account_id)} \
       REPOSITORY_URL=${jsonencode(var.repository_url)} \
       BOOTSTRAP_SOURCE_SHA=${jsonencode(var.bootstrap_source_sha)} \
       GITHUB_RUNNER_NAME=${jsonencode(var.github_runner_name)} \
       GITHUB_RUNNER_LABELS=${jsonencode(var.github_runner_labels)} \
         bash "$bootstrap_tree/infra/gcp/scripts/bootstrap-host.sh"
+      [ -f /etc/gole/host-bootstrap.complete ] && \
+        [ ! -L /etc/gole/host-bootstrap.complete ] && \
+        [ "$(stat -c '%U:%G:%a' /etc/gole/host-bootstrap.complete)" = "root:root:644" ] && \
+        grep -Fqx 'bootstrap_source_sha=${var.bootstrap_source_sha}' \
+          /etc/gole/host-bootstrap.complete && \
+        [ -x /usr/local/sbin/gole-hostctl ] || {
+          echo "host bootstrap did not commit its reviewed completion marker" >&2
+          exit 1
+        }
+      startup_complete=1
     EOT
   }
 
@@ -423,7 +464,7 @@ resource "google_pubsub_subscription_iam_member" "budget_relay_subscriber" {
 }
 
 resource "google_billing_budget" "gole_credit_guard" {
-  count           = var.billing_account_id == "" ? 0 : 1
+  count           = 1
   billing_account = var.billing_account_id
   display_name    = "GoLe production credit guard"
 

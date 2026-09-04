@@ -74,8 +74,19 @@ EXPECTED_IMAGES = {
     "support-agent": "gole/support-agent:local",
 }
 
+LKG_PINNED_IMAGE_PATTERNS = {
+    "certbot": r"certbot/certbot:latest@sha256:[0-9a-f]{64}",
+    "minio": r"minio/minio@sha256:[0-9a-f]{64}",
+    "minio-init": r"minio/mc:latest@sha256:[0-9a-f]{64}",
+    "mongo": r"mongo:7@sha256:[0-9a-f]{64}",
+    "mongo-init": r"mongo:7@sha256:[0-9a-f]{64}",
+    "nginx": r"nginx:1\.29-alpine@sha256:[0-9a-f]{64}",
+    "redis": r"redis:7-alpine@sha256:[0-9a-f]{64}",
+}
+
 LEGACY_ADOPTION_IMAGES = {
     **EXPECTED_IMAGES,
+    "certbot": "certbot/certbot:latest",
     "minio-init": "minio/mc:latest",
     "mongo": "mongo:7",
     "mongo-init": "mongo:7",
@@ -107,7 +118,7 @@ LEGACY_ADOPTION_PORTS = {
 }
 
 EXPECTED_SERVICE_NETWORKS = {
-    "backend": {"data", "edge"},
+    "backend": {"agent", "data", "edge"},
     "budget-relay": {"edge"},
     "certbot": {"edge"},
     "frontend": {"edge"},
@@ -117,7 +128,22 @@ EXPECTED_SERVICE_NETWORKS = {
     "mongo-init": {"data"},
     "nginx": {"edge"},
     "redis": {"data"},
-    "support-agent": {"data"},
+    "support-agent": {"agent"},
+}
+
+EXPECTED_NETWORK_NAMES = {
+    "agent": "gole_agent",
+    "data": "gole_data",
+    "edge": "gole_edge",
+}
+
+EXPECTED_VOLUME_NAMES = {
+    "budget-relay-state": "gole_budget-relay-state",
+    "certbot-webroot": "gole_certbot-webroot",
+    "letsencrypt": "gole_letsencrypt",
+    "minio-data": "gole_minio-data",
+    "mongo-data": "gole_mongo-data",
+    "redis-data": "gole_redis-data",
 }
 
 EXPECTED_LOGGING = {
@@ -125,8 +151,137 @@ EXPECTED_LOGGING = {
     "options": {"max-file": "3", "max-size": "10m"},
 }
 
+EXPECTED_RESTART_POLICIES = {
+    "backend": "unless-stopped",
+    "budget-relay": "unless-stopped",
+    "certbot": "no",
+    "frontend": "unless-stopped",
+    "minio": "unless-stopped",
+    "minio-init": "no",
+    "mongo": "unless-stopped",
+    "mongo-init": "no",
+    "nginx": "unless-stopped",
+    "redis": "unless-stopped",
+    "support-agent": "unless-stopped",
+}
+
+EXPECTED_HEALTHCHECKS = {
+    "backend": {
+        "test": [
+            "CMD",
+            "curl",
+            "-fsS",
+            "http://localhost:8080/actuator/health/readiness",
+        ],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 30,
+        "start_period": "30s",
+    },
+    "budget-relay": {
+        "test": [
+            "CMD",
+            "python",
+            "-c",
+            "import os,time; p='/tmp/gole-cost-guard-heartbeat'; "
+            "raise SystemExit(0 if os.path.exists(p) and "
+            "time.time()-os.path.getmtime(p)<35 else 1)",
+        ],
+        "timeout": "3s",
+        "interval": "10s",
+        "retries": 3,
+        "start_period": "20s",
+    },
+    "frontend": {
+        "test": [
+            "CMD",
+            "node",
+            "-e",
+            "fetch('http://localhost:3000/icon.svg').then(r=>{if(!r.ok)"
+            "process.exit(1)}).catch(()=>process.exit(1))",
+        ],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 20,
+        "start_period": "20s",
+    },
+    "minio": {
+        "test": ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 20,
+    },
+    "mongo": {
+        "test": [
+            "CMD",
+            "mongosh",
+            "--quiet",
+            "--eval",
+            "db.adminCommand('ping').ok",
+        ],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 20,
+    },
+    "nginx": {
+        "test": ["CMD", "nginx", "-t"],
+        "timeout": "5s",
+        "interval": "15s",
+        "retries": 3,
+    },
+    "redis": {
+        "test": ["CMD", "redis-cli", "ping"],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 20,
+    },
+    "support-agent": {
+        "test": [
+            "CMD",
+            "python",
+            "-m",
+            "gole_support_agent.healthcheck",
+        ],
+        "timeout": "3s",
+        "interval": "10s",
+        "retries": 12,
+        "start_period": "10s",
+    },
+}
+
+EXPECTED_CPUS = {
+    "mongo": 1.0,
+    "mongo-init": 0.25,
+    "redis": 0.5,
+    "minio": 0.75,
+    "minio-init": 0.25,
+    "support-agent": 0.25,
+    "backend": 1.5,
+    "budget-relay": 0.25,
+    "frontend": 0.75,
+    "nginx": 0.5,
+    "certbot": 0.5,
+}
+EXPECTED_MEMORY_LIMITS = {
+    "mongo": "1879048192",
+    "mongo-init": "268435456",
+    "redis": "402653184",
+    "minio": "805306368",
+    "minio-init": "134217728",
+    "support-agent": "201326592",
+    "backend": "2147483648",
+    "budget-relay": "134217728",
+    "frontend": "671088640",
+    "nginx": "201326592",
+    "certbot": "268435456",
+}
+
 EXPECTED_ENVIRONMENT_VALUES = {
     "backend": {
+        "GOLE_ENVIRONMENT": "production",
+        "PORTONE_ENABLED": "false",
+        "GOLE_SETTLEMENT_MODE": "DISABLED",
+        "GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED": "false",
         "GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_MAXIMUM": "1",
         "GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_WINDOW": "PT1M",
         "GOLE_AUTH_EMAIL_RECIPIENT_DAILY_MAXIMUM": "8",
@@ -191,28 +346,38 @@ EXPECTED_ENVIRONMENT_VALUES = {
 
 EXPECTED_MOUNTS = {
     "budget-relay": {
-        ("volume", "budget-relay-state", "/state", False),
+        ("volume", "budget-relay-state", "/state", False, None),
         (
             "bind",
-            "/run/gole-cloud-broker/broker.sock",
-            "/run/gole-cloud-broker/broker.sock",
+            "/run/gole-cloud-broker",
+            "/run/gole-cloud-broker",
+            True,
             False,
         ),
-        ("bind", "/sys/class/net/ens4/statistics/tx_bytes", "/host-metrics/tx_bytes", True),
-        ("bind", "/proc/sys/kernel/random/boot_id", "/host-metrics/boot_id", True),
+        ("bind", "/sys/class/net/ens4/statistics/tx_bytes", "/host-metrics/tx_bytes", True, None),
+        ("bind", "/proc/sys/kernel/random/boot_id", "/host-metrics/boot_id", True, None),
     },
     "certbot": {
-        ("volume", "certbot-webroot", "/var/www/certbot", False),
-        ("volume", "letsencrypt", "/etc/letsencrypt", False),
+        ("volume", "certbot-webroot", "/var/www/certbot", False, None),
+        ("volume", "letsencrypt", "/etc/letsencrypt", False, None),
     },
-    "minio": {("volume", "minio-data", "/data", False)},
-    "mongo": {("volume", "mongo-data", "/data/db", False)},
+    "minio": {("volume", "minio-data", "/data", False, None)},
+    "mongo": {("volume", "mongo-data", "/data/db", False, None)},
     "nginx": {
-        ("bind", "/etc/gole/nginx.conf", "/etc/nginx/conf.d/default.conf", True),
-        ("volume", "certbot-webroot", "/var/www/certbot", True),
-        ("volume", "letsencrypt", "/etc/letsencrypt", True),
+        ("bind", "/etc/gole/nginx.conf", "/etc/nginx/conf.d/default.conf", True, None),
+        ("volume", "certbot-webroot", "/var/www/certbot", True, None),
+        ("volume", "letsencrypt", "/etc/letsencrypt", True, None),
     },
-    "redis": {("volume", "redis-data", "/data", False)},
+    "redis": {("volume", "redis-data", "/data", False, None)},
+}
+
+LEGACY_ADOPTION_MOUNTS = {
+    **EXPECTED_MOUNTS,
+    "budget-relay": {
+        ("volume", "budget-relay-state", "/state", False, None),
+        ("bind", "/sys/class/net/ens4/statistics/tx_bytes", "/host-metrics/tx_bytes", True, None),
+        ("bind", "/proc/sys/kernel/random/boot_id", "/host-metrics/boot_id", True, None),
+    },
 }
 
 DANGEROUS_SERVICE_KEYS = {
@@ -234,9 +399,34 @@ DANGEROUS_SERVICE_KEYS = {
     "sysctls",
     "tmpfs",
     "ulimits",
+    "use_api_socket",
     "userns_mode",
     "uts",
     "volumes_from",
+}
+
+# Reject future Compose service capabilities by default. A denylist alone is
+# unsafe because newer Compose releases can add engine-access features such as
+# use_api_socket before this validator knows their names.
+ALLOWED_SERVICE_KEYS = {
+    "build",
+    "command",
+    "container_name",
+    "cpus",
+    "depends_on",
+    "entrypoint",
+    "environment",
+    "expose",
+    "healthcheck",
+    "image",
+    "logging",
+    "mem_limit",
+    "networks",
+    "ports",
+    "profiles",
+    "restart",
+    "security_opt",
+    "volumes",
 }
 
 
@@ -260,16 +450,62 @@ def normalized_ports(service: dict[str, Any]) -> set[tuple[str | None, str, int,
     return result
 
 
-def normalized_mounts(service: dict[str, Any]) -> set[tuple[str, str, str, bool]]:
+def normalized_mounts(
+    service: dict[str, Any],
+) -> set[tuple[str, str, str, bool, bool | None]]:
     result = set()
     for mount in service.get("volumes", []):
         reject(not isinstance(mount, dict), "a service mount has invalid structure")
+        mount_type = mount.get("type")
+        source = mount.get("source")
+        target = mount.get("target")
+        read_only = mount.get("read_only", False)
+        reject(not isinstance(mount_type, str), "a service mount has invalid type")
+        reject(not isinstance(source, str), "a service mount has invalid source")
+        reject(not isinstance(target, str), "a service mount has invalid target")
+        reject(not isinstance(read_only, bool), "a service mount has invalid read-only flag")
+        bind_options_present = "bind" in mount
+        bind_options = mount.get("bind", {})
+        reject(not isinstance(bind_options, dict), "a bind mount has invalid options")
+        create_host_path = bind_options.get("create_host_path")
+        reject(
+            create_host_path is not None and not isinstance(create_host_path, bool),
+            "a bind mount has invalid create-host-path flag",
+        )
+
+        if mount_type == "bind":
+            reject(
+                set(bind_options).difference({"create_host_path"}),
+                "a bind mount uses unreviewed options",
+            )
+            if (source, target) == (
+                "/run/gole-cloud-broker",
+                "/run/gole-cloud-broker",
+            ):
+                # Compose 2.38 drops an explicitly configured
+                # `create_host_path: false` from its JSON model, whereas
+                # Compose 5 retains it. It still preserves an empty `bind`
+                # object, while a source mount with no bind options has no
+                # `bind` key. Use that distinction so removing the reviewed
+                # false setting or changing it to true still fails closed.
+                if create_host_path is None and bind_options_present:
+                    create_host_path = False
+            elif create_host_path is True:
+                # Compose 2.x materializes the effective `true` default for
+                # short bind syntax. Compose 5 emits an empty bind object for
+                # the same source, so normalize only that renderer variance.
+                create_host_path = None
+        else:
+            reject(bool(bind_options), "a non-bind mount uses bind options")
+            create_host_path = None
+
         result.add(
             (
-                str(mount.get("type")),
-                str(mount.get("source")),
-                str(mount.get("target")),
-                bool(mount.get("read_only", False)),
+                mount_type,
+                source,
+                target,
+                read_only,
+                create_host_path,
             )
         )
     return result
@@ -278,9 +514,14 @@ def normalized_mounts(service: dict[str, Any]) -> set[tuple[str, str, str, bool]
 def validate(
     model: dict[str, Any],
     allow_legacy_adoption: bool = False,
+    allow_lkg_image_pins: bool = False,
     allow_missing_discord_overlay: bool = False,
     release_root: str = "/app",
 ) -> None:
+    reject(
+        allow_legacy_adoption and allow_lkg_image_pins,
+        "legacy and strict LKG image modes cannot be combined",
+    )
     if release_root != "/app":
         reject(
             not release_root.startswith("/var/lib/gole/releases/")
@@ -291,11 +532,13 @@ def validate(
     reject(model.get("name") != "gole", "production Compose project name must remain gole")
     services = model.get("services")
     reject(not isinstance(services, dict), "production Compose services are missing")
+
     accepted_service_sets = [EXPECTED_SERVICES]
     if allow_legacy_adoption:
         accepted_service_sets.extend(
             [
                 EXPECTED_SERVICES - {"certbot"},
+                EXPECTED_SERVICES - {"support-agent"},
                 EXPECTED_SERVICES - {"certbot", "support-agent"},
             ]
         )
@@ -308,13 +551,63 @@ def validate(
         reject(not isinstance(service, dict), f"service {name} has invalid structure")
         dangerous = sorted(DANGEROUS_SERVICE_KEYS.intersection(service))
         reject(bool(dangerous), f"service {name} uses a forbidden host-escape setting")
+        unexpected = sorted(set(service).difference(ALLOWED_SERVICE_KEYS))
+        reject(bool(unexpected), f"service {name} uses an unreviewed Compose setting")
+        expected_profiles = ["certificate"] if name == "certbot" else []
+        reject(
+            service.get("profiles", []) != expected_profiles,
+            f"service {name} profiles changed",
+        )
+        # An omitted restart value and the rendered literal `no` have the same
+        # Docker runtime meaning. No other policy is accepted for one-shot
+        # services, and every daemon must survive host or Docker restarts.
+        actual_restart = service.get("restart", "no")
+        reject(
+            actual_restart != EXPECTED_RESTART_POLICIES[name],
+            f"service {name} restart policy changed",
+        )
+        expected_healthcheck = EXPECTED_HEALTHCHECKS.get(name)
+        if allow_legacy_adoption and name == "nginx":
+            expected_healthcheck = None
+        reject(
+            service.get("healthcheck") != expected_healthcheck,
+            f"service {name} healthcheck changed",
+        )
+        if allow_legacy_adoption:
+            reject("cpus" in service, f"legacy service {name} unexpectedly has a CPU limit")
+            reject(
+                "mem_limit" in service,
+                f"legacy service {name} unexpectedly has a memory limit",
+            )
+        else:
+            reject(
+                service.get("cpus") != EXPECTED_CPUS.get(name),
+                f"service {name} CPU limit changed",
+            )
+            reject(
+                service.get("mem_limit") != EXPECTED_MEMORY_LIMITS.get(name),
+                f"service {name} memory limit changed",
+            )
+        if name == "support-agent":
+            reject(
+                service.get("entrypoint") is not None
+                or service.get("command") is not None,
+                "support-agent process command must use the reviewed image default",
+            )
         if not allow_legacy_adoption:
             reject(
                 service.get("security_opt") != ["no-new-privileges:true"],
                 f"service {name} must retain no-new-privileges",
             )
         expected_images = LEGACY_ADOPTION_IMAGES if allow_legacy_adoption else EXPECTED_IMAGES
-        reject(service.get("image") != expected_images[name], f"service {name} image changed")
+        if allow_lkg_image_pins and name in LKG_PINNED_IMAGE_PATTERNS:
+            reject(
+                re.fullmatch(LKG_PINNED_IMAGE_PATTERNS[name], str(service.get("image", "")))
+                is None,
+                f"service {name} LKG image repository or immutable pin changed",
+            )
+        else:
+            reject(service.get("image") != expected_images[name], f"service {name} image changed")
         expected_name = EXPECTED_CONTAINER_NAMES.get(name)
         reject(service.get("container_name") != expected_name, f"service {name} name changed")
         expected_ports = LEGACY_ADOPTION_PORTS if allow_legacy_adoption else EXPECTED_PORTS
@@ -322,7 +615,12 @@ def validate(
             normalized_ports(service) != expected_ports.get(name, set()),
             f"service {name} published ports changed",
         )
-        service_networks = set(service.get("networks", {}))
+        service_network_attachments = service.get("networks")
+        reject(
+            not isinstance(service_network_attachments, dict),
+            f"service {name} networks are invalid",
+        )
+        service_networks = set(service_network_attachments)
         if allow_legacy_adoption:
             reject(service_networks != {"default"}, f"legacy service {name} network changed")
         else:
@@ -330,13 +628,20 @@ def validate(
                 service_networks != EXPECTED_SERVICE_NETWORKS[name],
                 f"service {name} network boundary changed",
             )
+        for network_name, attachment in service_network_attachments.items():
+            reject(
+                attachment is not None
+                and (not isinstance(attachment, dict) or bool(attachment)),
+                f"service {name} network {network_name} uses unreviewed attachment options",
+            )
         if not allow_legacy_adoption:
             reject(
                 service.get("logging") != EXPECTED_LOGGING,
                 f"service {name} logging rotation changed",
             )
+        expected_mounts = LEGACY_ADOPTION_MOUNTS if allow_legacy_adoption else EXPECTED_MOUNTS
         reject(
-            normalized_mounts(service) != EXPECTED_MOUNTS.get(name, set()),
+            normalized_mounts(service) != expected_mounts.get(name, set()),
             f"service {name} mounts changed",
         )
         environment = service.get("environment", {})
@@ -378,9 +683,11 @@ def validate(
                     "NEXT_PUBLIC_PORTONE_STORE_ID",
                     "NEXT_PUBLIC_PORTONE_CHANNEL_KEY",
                     "NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY",
-                    "NEXT_PUBLIC_GA_MEASUREMENT_ID",
-                    "NEXT_PUBLIC_GTM_ID",
                 }
+                if not allow_legacy_adoption:
+                    expected_argument_keys.update(
+                        {"NEXT_PUBLIC_GA_MEASUREMENT_ID", "NEXT_PUBLIC_GTM_ID"}
+                    )
                 reject(
                     set(build_arguments) != expected_argument_keys,
                     "frontend build argument set changed",
@@ -388,20 +695,37 @@ def validate(
                 for key, expected in {
                     "NEXT_PUBLIC_API_BASE_URL": "https://gole.co.kr",
                     "NEXT_PUBLIC_SITE_URL": "https://gole.co.kr",
-                    "NEXT_PUBLIC_PAYMENT_MODE": "disabled",
                 }.items():
                     reject(
                         str(build_arguments.get(key)) != expected,
                         f"frontend protected build argument changed: {key}",
                     )
-                for key, pattern in {
-                    "NEXT_PUBLIC_GA_MEASUREMENT_ID": r"(?:|G-[A-Z0-9]+)",
-                    "NEXT_PUBLIC_GTM_ID": r"(?:|GTM-[A-Z0-9]+)",
-                }.items():
+                # The single reviewed legacy runtime was built with PortOne's
+                # test channel. Its first read-only validation therefore sees
+                # `portone-test`, while the staged v6 environment rendered from
+                # the same historical Compose source already sees `disabled`.
+                # No other value is accepted, and every ordinary/strict build
+                # remains pinned to disabled below.
+                payment_mode = str(build_arguments.get("NEXT_PUBLIC_PAYMENT_MODE"))
+                if allow_legacy_adoption:
                     reject(
-                        re.fullmatch(pattern, str(build_arguments.get(key, ""))) is None,
-                        f"frontend analytics identifier is invalid: {key}",
+                        payment_mode not in {"portone-test", "disabled"},
+                        "frontend protected build argument changed: NEXT_PUBLIC_PAYMENT_MODE",
                     )
+                else:
+                    reject(
+                        payment_mode != "disabled",
+                        "frontend protected build argument changed: NEXT_PUBLIC_PAYMENT_MODE",
+                    )
+                if not allow_legacy_adoption:
+                    for key, pattern in {
+                        "NEXT_PUBLIC_GA_MEASUREMENT_ID": r"(?:|G-[A-Z0-9]+)",
+                        "NEXT_PUBLIC_GTM_ID": r"(?:|GTM-[A-Z0-9]+)",
+                    }.items():
+                        reject(
+                            re.fullmatch(pattern, str(build_arguments.get(key, ""))) is None,
+                            f"frontend analytics identifier is invalid: {key}",
+                        )
         else:
             reject(build is not None, f"service {name} unexpectedly builds a local image")
 
@@ -451,37 +775,72 @@ def validate(
 
     volumes = model.get("volumes")
     reject(not isinstance(volumes, dict), "production Compose volumes are missing")
-    reject(
-        set(volumes)
-        != {"budget-relay-state", "certbot-webroot", "letsencrypt", "minio-data", "mongo-data", "redis-data"},
-        "production Compose volume set changed",
-    )
-    for volume in volumes.values():
+    reject(set(volumes) != set(EXPECTED_VOLUME_NAMES), "production Compose volume set changed")
+    for volume_name, volume in volumes.items():
         reject(not isinstance(volume, dict), "production volume has invalid structure")
         reject(bool(volume.get("external", False)), "external Docker volumes are forbidden")
         reject("driver_opts" in volume, "Docker volume driver options are forbidden")
+        if not allow_legacy_adoption:
+            reject(
+                set(volume).difference({"name", "driver"}),
+                f"production volume {volume_name} has an unreviewed setting",
+            )
+            reject(
+                volume.get("name") != EXPECTED_VOLUME_NAMES[volume_name],
+                f"production volume {volume_name} runtime name changed",
+            )
+            reject(
+                volume.get("driver", "local") != "local",
+                f"production volume {volume_name} driver changed",
+            )
 
     networks = model.get("networks", {})
-    expected_networks = {"default"} if allow_legacy_adoption else {"data", "edge"}
+    expected_networks = (
+        {"default"} if allow_legacy_adoption else set(EXPECTED_NETWORK_NAMES)
+    )
     reject(set(networks) != expected_networks, "production Compose network set changed")
     for name, network in networks.items():
         reject(not isinstance(network, dict), f"Docker network {name} is invalid")
         reject(bool(network.get("external", False)), "external Docker networks are forbidden")
         reject("driver_opts" in network, "Docker network driver options are forbidden")
     if not allow_legacy_adoption:
+        for name, expected_name in EXPECTED_NETWORK_NAMES.items():
+            reject(
+                # Compose 2.x materializes an empty ipam object even when the
+                # source declares none. Accept only that semantic no-op; any
+                # subnet, gateway or driver configuration remains forbidden.
+                set(networks[name]).difference({"name", "driver", "internal", "ipam"}),
+                f"Docker network {name} has an unreviewed setting",
+            )
+            reject(
+                networks[name].get("ipam", {}) != {},
+                f"Docker network {name} IPAM changed",
+            )
+            reject(
+                networks[name].get("name") != expected_name,
+                f"Docker network {name} runtime name changed",
+            )
+            reject(
+                networks[name].get("driver", "bridge") != "bridge",
+                f"Docker network {name} driver changed",
+            )
         reject(networks["data"].get("internal") is not True, "data network must remain internal")
+        reject(networks["agent"].get("internal") is not True, "agent network must remain internal")
         reject(bool(networks["edge"].get("internal", False)), "edge network must retain egress")
 
 
 def main(argv: list[str]) -> int:
     arguments = argv[1:]
     allow_legacy = False
+    allow_lkg_pins = False
     allow_missing_discord = False
     release_root = "/app"
     while arguments:
         argument = arguments.pop(0)
         if argument == "--allow-legacy-adoption":
             allow_legacy = True
+        elif argument == "--allow-lkg-image-pins":
+            allow_lkg_pins = True
         elif argument == "--allow-missing-discord-overlay":
             allow_missing_discord = True
         elif argument == "--release-root" and arguments:
@@ -499,6 +858,7 @@ def main(argv: list[str]) -> int:
         validate(
             model,
             allow_legacy_adoption=allow_legacy,
+            allow_lkg_image_pins=allow_lkg_pins,
             allow_missing_discord_overlay=allow_missing_discord,
             release_root=release_root,
         )

@@ -14,20 +14,26 @@ RELEASE_ROOT="/var/lib/gole/releases"
 ROOT_GIT_REPOSITORY="/var/lib/gole/repository.git"
 GITHUB_RELEASE_VERIFIER="/usr/local/libexec/gole/verify-github-release.py"
 FIXED_REPOSITORY_URL="https://github.com/GoLe-by-Colding/GoLe.git"
+HOST_BOOTSTRAP_MARKER="/etc/gole/host-bootstrap.complete"
 INITIAL_DEPLOY_FILE="/etc/gole/initial-deploy.pending"
 ENV_VERSION_FILE="/etc/gole/gole.env.version"
 ENV_TRANSACTION_FILE="/etc/gole/gole.env.transaction"
 INFRA_ENV_FILE="/etc/gole/infra.env"
 IMAGE_BACKUP_DIR="/var/backups/gole-images"
+LOGICAL_BACKUP_HELPER="/usr/local/sbin/gole-backup-data"
+MINIO_RECOVERY_MARKER="/var/backups/gole-data/MINIO_UNFREEZE_REQUIRED"
 NGINX_BACKUP_DIR="/var/backups/gole-nginx"
 NGINX_CONFIG_FILE="/etc/gole/nginx.conf"
 NGINX_TRANSACTION_FILE="/etc/gole/nginx.conf.transaction"
 NGINX_VALIDATION_IMAGE="nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de"
 BROKER_CONFIG_FILE="/etc/gole/cloud-broker.conf"
+METADATA_FIREWALL="/usr/local/sbin/gole-metadata-firewall"
+METADATA_MIGRATION_MARKER="/etc/gole/metadata-migration.pending"
 PRODUCTION_SECRET_NAME="gole-production-env"
 PRODUCTION_COMPOSE_FILE="$APP_ROOT/infra/gcp/docker-compose.yml"
 PRODUCTION_COMPOSE_VALIDATOR="/usr/local/libexec/gole/validate-production-compose.py"
 PRODUCTION_ENV_VALIDATOR="/usr/local/libexec/gole/validate-production-env.py"
+CERTIFICATE_ISSUER="/usr/local/libexec/gole/issue-certificate.sh"
 
 die() {
   echo "$*" >&2
@@ -39,6 +45,12 @@ die() {
 # helper functions overwriting the transaction rollback EXIT handler.
 GOLE_TEMP_FILES=()
 GOLE_TEMP_DIRS=()
+METADATA_RATCHET_STARTED=0
+INITIAL_RESET_STARTED=0
+declare -A SNAPSHOT_IMAGE_IDS=()
+declare -A DATA_UPGRADE_CHANGES=()
+declare -A DATA_UPGRADE_IMAGE_IDS=()
+STRICT_DATA_UPGRADE_CHANGED=0
 
 register_temp_file() { GOLE_TEMP_FILES+=("$1"); }
 register_temp_dir() { GOLE_TEMP_DIRS+=("$1"); }
@@ -70,6 +82,13 @@ default_exit_cleanup() {
   trap - EXIT
   set +e
   cleanup_registered_temporaries
+  if [ "$status" -ne 0 ] && [ "$METADATA_RATCHET_STARTED" -eq 1 ]; then
+    systemctl poweroff --no-block || true
+    echo "metadata isolation ratchet failed after closing began; VM powered off" >&2
+  elif [ "$status" -ne 0 ] && [ "$INITIAL_RESET_STARTED" -eq 1 ]; then
+    systemctl poweroff --no-block || true
+    echo "initial deployment reset failed after cleanup began; VM powered off" >&2
+  fi
   exit "$status"
 }
 trap default_exit_cleanup EXIT
@@ -117,6 +136,18 @@ atomic_install() {
     rm -f -- "$staged"
     die "could not atomically activate host state"
   fi
+}
+
+sync_host_state() {
+  local path="$1"
+  sync -f "$path"
+  sync -f "$(dirname "$path")"
+}
+
+remove_host_state() {
+  local path="$1"
+  rm -f -- "$path"
+  sync -f "$(dirname "$path")"
 }
 
 validate_discord_environment() {
@@ -365,12 +396,14 @@ bootstrap_environment() {
   if ! ln "$environment_stage" "$APP_ENV_FILE"; then
     die "could not atomically bootstrap the environment file"
   fi
+  sync_host_state "$APP_ENV_FILE"
   if ! ln "$version_stage" "$ENV_VERSION_FILE"; then
     if [ "$(stat -c '%d:%i' "$environment_stage")" = "$(stat -c '%d:%i' "$APP_ENV_FILE")" ]; then
       rm -f -- "$APP_ENV_FILE"
     fi
     die "could not atomically bootstrap the environment version marker"
   fi
+  sync_host_state "$ENV_VERSION_FILE"
   if ! ln "$initial_deploy_stage" "$INITIAL_DEPLOY_FILE"; then
     if [ "$(stat -c '%d:%i' "$version_stage")" = "$(stat -c '%d:%i' "$ENV_VERSION_FILE")" ]; then
       rm -f -- "$ENV_VERSION_FILE"
@@ -380,6 +413,7 @@ bootstrap_environment() {
     fi
     die "could not atomically create the initial deployment marker"
   fi
+  sync_host_state "$INITIAL_DEPLOY_FILE"
   rm -f -- "$environment_stage" "$version_stage" "$initial_deploy_stage"
   forget_temp_file "$environment_stage"
   forget_temp_file "$version_stage"
@@ -423,6 +457,18 @@ read_deployed_sha() {
   printf '%s\n' "$sha"
 }
 
+write_deployed_sha_exact() {
+  local candidate requested_sha="$1"
+  [[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid deployment SHA marker"
+  candidate="$(mktemp)"
+  register_temp_file "$candidate"
+  printf '%s\n' "$requested_sha" > "$candidate"
+  atomic_install "$candidate" "$DEPLOYED_SHA_FILE" 0644 root
+  sync_host_state "$DEPLOYED_SHA_FILE"
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+}
+
 validate_initial_deployment() {
   local key value marker_version="" marker_sha256=""
   local seen_version=0 seen_hash=0
@@ -441,7 +487,7 @@ validate_initial_deployment() {
     die "initial deployment authorization marker is missing or invalid"
   fi
 
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       version)
         [ "$seen_version" -eq 0 ] || die "initial deployment marker has duplicate version"
@@ -623,6 +669,8 @@ validate_production_compose() {
   fi
   if [ "$mode" = "legacy-adoption" ]; then
     validator_arguments+=(--allow-legacy-adoption)
+  elif [ "$mode" = "strict-lkg" ]; then
+    validator_arguments+=(--allow-lkg-image-pins)
   elif [ "$mode" != "strict" ]; then
     die "invalid production Compose validation mode"
   fi
@@ -640,7 +688,7 @@ validate_production_compose() {
     validator_arguments+=(--allow-missing-discord-overlay)
   fi
   local compose_validation_arguments=(config --format json)
-  if [ "$mode" = strict ]; then
+  if [ "$mode" = strict ] || [ "$mode" = strict-lkg ]; then
     # Validate the normally dormant certificate profile too; otherwise a
     # reviewed main commit could hide a Docker-socket or host-path mount in the
     # root-owned renewal path while the base model still passed.
@@ -793,6 +841,7 @@ write_deployment_transaction() {
     "previous_sha=$previous_sha" > "$candidate"
   atomic_install "$candidate" "$DEPLOYMENT_TRANSACTION_FILE" 0600 root
   rm -f -- "$candidate"
+  sync_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
 
 read_deployment_transaction() {
@@ -801,7 +850,7 @@ read_deployment_transaction() {
     [ "$(stat -c '%U:%G:%a' "$DEPLOYMENT_TRANSACTION_FILE")" = "root:root:600" ] ||
     die "deployment transaction is missing or invalid"
   DEPLOY_TX_STATE="" DEPLOY_TX_TARGET="" DEPLOY_TX_REQUEST_ID="" DEPLOY_TX_NEW_SHA="" DEPLOY_TX_PREVIOUS_SHA=""
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       state) [ "$seen_state" -eq 0 ] || die "duplicate deployment state"; DEPLOY_TX_STATE="$value"; seen_state=1 ;;
       target) [ "$seen_target" -eq 0 ] || die "duplicate deployment target"; DEPLOY_TX_TARGET="$value"; seen_target=1 ;;
@@ -813,7 +862,7 @@ read_deployment_transaction() {
   done < "$DEPLOYMENT_TRANSACTION_FILE"
   [ "$seen_state$seen_target$seen_request$seen_new$seen_previous" = "11111" ] ||
     die "deployment transaction is incomplete"
-  [[ "$DEPLOY_TX_STATE" =~ ^(prepared|snapshotted|built|nginx-installed|mutated|refreshed|budget-updated|verified|marker-recorded|runtime-verified|rollback-restored)$ ]] ||
+  [[ "$DEPLOY_TX_STATE" =~ ^(prepared|snapshotted|built|nginx-installed|mutation-armed|mutated|refreshed|budget-updated|verified|marker-recorded|initial-http-verified|runtime-verified|metadata-ratchet-armed|metadata-ratchet-verified|initial-reset-armed|cleanup-pending|rollback-restored)$ ]] ||
     die "deployment transaction state is invalid"
   validate_deployment_target "$DEPLOY_TX_TARGET"
   validate_request_id "$DEPLOY_TX_REQUEST_ID"
@@ -837,6 +886,10 @@ begin_deployment_transaction() {
   [[ "$previous_sha" =~ ^(0|[0-9a-f]{40})$ ]] || die "invalid previous deployment SHA"
   [ ! -e "$DEPLOYMENT_TRANSACTION_FILE" ] && [ ! -L "$DEPLOYMENT_TRANSACTION_FILE" ] ||
     die "a deployment transaction is already active"
+  if [ "$target" != all ] && { [ -e "$METADATA_MIGRATION_MARKER" ] ||
+    [ -L "$METADATA_MIGRATION_MARKER" ]; }; then
+    die "metadata migration pending requires a full deployment"
+  fi
   if [ "$previous_sha" = "0" ]; then
     validate_initial_deployment
   else
@@ -911,6 +964,24 @@ validate_adoption_backup_path() {
   fi
 }
 
+adoption_backup_path() {
+  local request_id="$1"
+  validate_request_id "$request_id"
+  printf '%s/gole.env.%s\n' "$ADOPTION_BACKUP_DIR" "$request_id"
+}
+
+cleanup_adoption_backup_artifact() {
+  local backup_file request_id="$1"
+  validate_request_id "$request_id"
+  backup_file="$(adoption_backup_path "$request_id")"
+  if [ -e "$backup_file" ] || [ -L "$backup_file" ]; then
+    validate_adoption_backup_path "$backup_file"
+    remove_host_state "$backup_file"
+  else
+    sync -f "$ADOPTION_BACKUP_DIR"
+  fi
+}
+
 write_adoption_transaction() {
   local backup_file="$5" candidate_sha256="$6" previous_version="$2"
   local request_id="$4" requested_version="$3" state="$1" adoption_sha="$7"
@@ -926,6 +997,7 @@ write_adoption_transaction() {
     "adoption_sha=$adoption_sha" > "$transaction_candidate"
   atomic_install "$transaction_candidate" "$ADOPTION_TRANSACTION_FILE" 0600 root
   rm -f -- "$transaction_candidate"
+  sync_host_state "$ADOPTION_TRANSACTION_FILE"
 }
 
 read_adoption_transaction() {
@@ -945,7 +1017,7 @@ read_adoption_transaction() {
   ADOPT_BACKUP_FILE=""
   ADOPT_CANDIDATE_SHA256=""
   ADOPT_DEPLOYMENT_SHA=""
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       state)
         [ "$seen_state" -eq 0 ] || die "adoption transaction has duplicate state"
@@ -987,7 +1059,7 @@ read_adoption_transaction() {
   done < "$ADOPTION_TRANSACTION_FILE"
   [ "$seen_state$seen_previous$seen_requested$seen_request$seen_backup$seen_hash$seen_sha" = \
     "1111111" ] || die "adoption transaction is incomplete"
-  [[ "$ADOPT_STATE" =~ ^(prepared|installed|ready|committed|adopted|rollback-restored)$ ]] ||
+  [[ "$ADOPT_STATE" =~ ^(prepared|snapshotted|installed|ready|committed|adopted|rollback-restored)$ ]] ||
     die "adoption transaction state is invalid"
   [[ "$ADOPT_PREVIOUS_VERSION" =~ ^[1-9][0-9]{0,11}$ ]] ||
     die "adoption transaction previous version is invalid"
@@ -1007,6 +1079,14 @@ require_matching_adoption_transaction() {
   local request_id="$1"
   read_adoption_transaction || die "adoption transaction is missing"
   [ "$ADOPT_REQUEST_ID" = "$request_id" ] || die "adoption transaction request does not match"
+}
+
+require_exact_adoption_invocation() {
+  local adoption_sha="$1" requested_version="$2" request_id="$3"
+  [ "$ADOPT_DEPLOYMENT_SHA" = "$adoption_sha" ] &&
+    [ "$ADOPT_REQUESTED_VERSION" = "$requested_version" ] &&
+    [ "$ADOPT_REQUEST_ID" = "$request_id" ] ||
+    die "adoption recovery invocation does not exactly match the active transaction"
 }
 
 begin_adoption_transaction() {
@@ -1047,15 +1127,22 @@ begin_adoption_transaction() {
   validate_existing_deployment_runtime "$adoption_sha" false
 
   install -d -m 0700 -o root -g root "$ADOPTION_BACKUP_DIR"
-  backup_file="$ADOPTION_BACKUP_DIR/gole.env.$request_id"
-  if [ -e "$backup_file" ] || [ -L "$backup_file" ]; then
-    die "adoption backup already exists"
-  fi
+  # A terminal adoption deliberately removes its journal before best-effort
+  # artifact cleanup. Reclaim only the exact, validated request-scoped orphan
+  # so the documented identical retry remains idempotent after a power loss.
+  cleanup_adoption_backend_image_artifacts "$request_id"
+  cleanup_adoption_backup_artifact "$request_id"
+  backup_file="$(adoption_backup_path "$request_id")"
   install -m 0600 -o root -g root "$APP_ENV_FILE" "$backup_file"
+  sync_host_state "$backup_file"
   candidate_sha256="$(sha256sum "$staged_candidate" | cut -d' ' -f1)"
   write_adoption_transaction prepared "$previous_version" "$requested_version" \
     "$request_id" "$backup_file" "$candidate_sha256" "$adoption_sha"
+  snapshot_adoption_backend_image "$request_id"
+  write_adoption_transaction snapshotted "$previous_version" "$requested_version" \
+    "$request_id" "$backup_file" "$candidate_sha256" "$adoption_sha"
   atomic_install "$staged_candidate" "$APP_ENV_FILE" 0600 root
+  sync_host_state "$APP_ENV_FILE"
   write_adoption_transaction installed "$previous_version" "$requested_version" \
     "$request_id" "$backup_file" "$candidate_sha256" "$adoption_sha"
   rm -f -- "$staged_candidate"
@@ -1075,7 +1162,7 @@ mark_adoption_transaction_ready() {
 }
 
 commit_adoption_transaction() {
-  local current_version request_id="$1" sha_candidate
+  local current_version request_id="$1"
   require_matching_adoption_transaction "$request_id"
   [ "$ADOPT_STATE" = "ready" ] || die "adoption transaction is not ready"
   validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" true
@@ -1088,12 +1175,7 @@ commit_adoption_transaction() {
   write_adoption_transaction committed "$ADOPT_PREVIOUS_VERSION" "$ADOPT_REQUESTED_VERSION" \
     "$ADOPT_REQUEST_ID" "$ADOPT_BACKUP_FILE" "$ADOPT_CANDIDATE_SHA256" "$ADOPT_DEPLOYMENT_SHA"
 
-  sha_candidate="$(mktemp)"
-  register_temp_file "$sha_candidate"
-  printf '%s\n' "$ADOPT_DEPLOYMENT_SHA" > "$sha_candidate"
-  atomic_install "$sha_candidate" "$DEPLOYED_SHA_FILE" 0644 root
-  rm -f -- "$sha_candidate"
-  forget_temp_file "$sha_candidate"
+  write_deployed_sha_exact "$ADOPT_DEPLOYMENT_SHA"
   write_adoption_transaction adopted "$ADOPT_PREVIOUS_VERSION" "$ADOPT_REQUESTED_VERSION" \
     "$ADOPT_REQUEST_ID" "$ADOPT_BACKUP_FILE" "$ADOPT_CANDIDATE_SHA256" "$ADOPT_DEPLOYMENT_SHA"
 }
@@ -1109,7 +1191,10 @@ finalize_adoption_transaction() {
     die "adopted environment version is invalid"
   [ "$(read_deployed_sha)" = "$ADOPT_DEPLOYMENT_SHA" ] ||
     die "adopted deployment SHA is invalid"
-  rm -f -- "$ADOPTION_TRANSACTION_FILE"
+  verify_adoption_backend_image_runtime "$request_id"
+  remove_host_state "$ADOPTION_TRANSACTION_FILE"
+  cleanup_adoption_backend_image_artifacts "$request_id"
+  cleanup_adoption_backup_artifact "$request_id"
 }
 
 restore_adoption_transaction() {
@@ -1119,9 +1204,10 @@ restore_adoption_transaction() {
     current_deployed_sha="$(read_deployed_sha)"
     [ "$current_deployed_sha" = "$ADOPT_DEPLOYMENT_SHA" ] ||
       die "deployment marker changed outside the adoption transaction"
-    rm -f -- "$DEPLOYED_SHA_FILE"
+    remove_host_state "$DEPLOYED_SHA_FILE"
   fi
   atomic_install "$ADOPT_BACKUP_FILE" "$APP_ENV_FILE" 0600 root
+  sync_host_state "$APP_ENV_FILE"
   write_env_version_exact "$ADOPT_PREVIOUS_VERSION"
   write_adoption_transaction rollback-restored "$ADOPT_PREVIOUS_VERSION" \
     "$ADOPT_REQUESTED_VERSION" "$ADOPT_REQUEST_ID" "$ADOPT_BACKUP_FILE" \
@@ -1131,6 +1217,9 @@ restore_adoption_transaction() {
 abort_adoption_transaction() {
   local request_id="$1"
   require_matching_adoption_transaction "$request_id"
+  if [ "$ADOPT_STATE" = prepared ]; then
+    ensure_adoption_backend_image_snapshot "$request_id"
+  fi
   if [ "$ADOPT_STATE" != "rollback-restored" ]; then
     restore_adoption_transaction
   fi
@@ -1150,10 +1239,16 @@ recover_adoption_transaction() {
       [ -f "$APP_ENV_FILE" ] && [ ! -L "$APP_ENV_FILE" ] &&
       [ "$(sha256sum "$APP_ENV_FILE" 2>/dev/null | cut -d' ' -f1)" = \
         "$ADOPT_CANDIDATE_SHA256" ]; then
-      rm -f -- "$ADOPTION_TRANSACTION_FILE"
+      verify_adoption_backend_image_runtime "$ADOPT_REQUEST_ID"
+      remove_host_state "$ADOPTION_TRANSACTION_FILE"
+      cleanup_adoption_backend_image_artifacts "$ADOPT_REQUEST_ID"
+      cleanup_adoption_backup_artifact "$ADOPT_REQUEST_ID"
       echo "COMMITTED"
       return
     fi
+  fi
+  if [ "$ADOPT_STATE" = prepared ]; then
+    ensure_adoption_backend_image_snapshot "$ADOPT_REQUEST_ID"
   fi
   restore_adoption_transaction
   echo "RECOVERY_REQUIRED:$ADOPT_REQUEST_ID"
@@ -1172,7 +1267,10 @@ finish_adoption_recovery() {
   if [ -e "$DEPLOYED_SHA_FILE" ] || [ -L "$DEPLOYED_SHA_FILE" ]; then
     die "deployment marker remains after adoption rollback"
   fi
-  rm -f -- "$ADOPTION_TRANSACTION_FILE"
+  verify_adoption_backend_image_runtime "$request_id"
+  remove_host_state "$ADOPTION_TRANSACTION_FILE"
+  cleanup_adoption_backend_image_artifacts "$request_id"
+  cleanup_adoption_backup_artifact "$request_id"
 }
 
 validate_deployment_target() {
@@ -1182,23 +1280,59 @@ validate_deployment_target() {
   esac
 }
 
-deployment_image_entries() {
-  case "$1" in
-    all)
+deployment_image_services() {
+  local mode="${2:-strict}" target="$1"
+  case "$target:$mode" in
+    all:initial | all:legacy-adoption)
       printf '%s\n' \
-        'gole-support-agent|gole/support-agent:local' \
-        'gole-backend|gole/backend:local' \
-        'gole-frontend|gole/frontend:local' \
-        'gole-budget-relay|gole/budget-relay:local'
+        mongo mongo-init redis minio minio-init support-agent backend frontend nginx budget-relay
       ;;
-    backend)
+    all:strict)
+      # Data containers are immutable rollback provenance even when an ordinary
+      # application deploy leaves them running. Capturing IDs/tags is harmless;
+      # recreation is gated separately by an exact pinned-reference change.
       printf '%s\n' \
-        'gole-support-agent|gole/support-agent:local' \
-        'gole-backend|gole/backend:local'
+        mongo mongo-init redis minio minio-init support-agent backend frontend nginx budget-relay
       ;;
-    frontend) printf '%s\n' 'gole-frontend|gole/frontend:local' ;;
+    backend:strict)
+      printf '%s\n' support-agent backend nginx
+      ;;
+    frontend:strict) printf '%s\n' frontend nginx ;;
     *) die "invalid deployment target" ;;
   esac
+}
+
+deployment_long_running_service() {
+  case "$1" in
+    mongo | redis | minio | support-agent | backend | frontend | nginx | budget-relay) return 0 ;;
+    mongo-init | minio-init) return 1 ;;
+    *) die "invalid deployment image service" ;;
+  esac
+}
+
+deployment_container_name() {
+  case "$1" in
+    mongo) printf 'gole-mongo\n' ;;
+    redis) printf 'gole-redis\n' ;;
+    minio) printf 'gole-minio\n' ;;
+    support-agent) printf 'gole-support-agent\n' ;;
+    backend) printf 'gole-backend\n' ;;
+    frontend) printf 'gole-frontend\n' ;;
+    nginx) printf 'gole-nginx\n' ;;
+    budget-relay) printf 'gole-budget-relay\n' ;;
+    mongo-init | minio-init) return 1 ;;
+    *) die "invalid deployment image service" ;;
+  esac
+}
+
+deployment_rollback_image() {
+  local request_id="$2" service="$1"
+  validate_request_id "$request_id"
+  case "$service" in
+    mongo | mongo-init | redis | minio | minio-init | support-agent | backend | frontend | nginx | budget-relay) ;;
+    *) die "invalid rollback image service" ;;
+  esac
+  printf 'gole/rollback-%s:%s\n' "$service" "${request_id//-/}"
 }
 
 deployment_image_marker() {
@@ -1208,8 +1342,125 @@ deployment_image_marker() {
   printf '%s/images.%s\n' "$IMAGE_BACKUP_DIR" "$compact_request_id"
 }
 
+deployment_image_snapshot_mode() {
+  local previous_sha="$1"
+  if [ "$previous_sha" = 0 ]; then
+    printf 'initial\n'
+  elif read_metadata_migration_marker; then
+    [ "$METADATA_MIGRATION_STATE" = pending ] ||
+      die "cannot snapshot images while metadata isolation is ratcheting"
+    printf 'legacy-adoption\n'
+  else
+    printf 'strict\n'
+  fi
+}
+
+deployment_snapshot_image_required() {
+  local mode="$1" service="$2"
+  case "$mode:$service" in
+    initial:*) return 1 ;;
+    legacy-adoption:support-agent) return 1 ;;
+    legacy-adoption:* | strict:*) return 0 ;;
+    *) die "invalid deployment image snapshot requirement" ;;
+  esac
+}
+
+render_deployment_compose_model() {
+  local destination="$1"
+  production_compose "$APP_ENV_FILE" config --format json > "$destination"
+  [ -s "$destination" ] && [ "$(stat -c '%s' "$destination")" -le 4194304 ] ||
+    die "rendered deployment Compose model is invalid"
+}
+
+compose_model_has_service() {
+  local model="$1" service="$2"
+  python3 - "$model" "$service" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "rb") as source:
+    model = json.load(source)
+services = model.get("services")
+raise SystemExit(0 if isinstance(services, dict) and sys.argv[2] in services else 1)
+PY
+}
+
+compose_model_service_image() {
+  local model="$1" service="$2"
+  python3 - "$model" "$service" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "rb") as source:
+    model = json.load(source)
+image = model.get("services", {}).get(sys.argv[2], {}).get("image")
+if not isinstance(image, str) or not image or len(image) > 512 or any(c.isspace() for c in image):
+    raise SystemExit(1)
+print(image)
+PY
+}
+
+verify_compose_container_identity() {
+  local container_id="$1" service="$2" labels
+  [[ "$container_id" =~ ^[0-9a-f]{12,64}$ || "$container_id" =~ ^gole-[a-z-]+$ ]] ||
+    die "invalid Compose container identity"
+  labels="$(docker inspect --format \
+    '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+    "$container_id")" || die "could not inspect Compose container ownership"
+  [ "$labels" = "gole|$service" ] || die "Compose container ownership is invalid: $service"
+}
+
+resolve_snapshot_service_image() {
+  local container_id container_ids image_id image_ref model="$1" mode="$2" service="$3" state
+  if ! compose_model_has_service "$model" "$service"; then
+    [ "$mode:$service" = legacy-adoption:support-agent ] ||
+      die "required deployment service is absent: $service"
+    printf 'absent\n'
+    return
+  fi
+  image_ref="$(compose_model_service_image "$model" "$service")" ||
+    die "deployment service image is missing: $service"
+  container_ids="$(production_compose "$APP_ENV_FILE" ps -a -q "$service")" ||
+    die "could not resolve deployment service container: $service"
+  if [ -n "$container_ids" ]; then
+    [ "$(wc -l <<<"$container_ids")" -eq 1 ] ||
+      die "deployment service has multiple containers: $service"
+    container_id="$container_ids"
+    verify_compose_container_identity "$container_id" "$service"
+    if deployment_long_running_service "$service"; then
+      state="$(docker inspect --format \
+        '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+        "$container_id")" || die "could not inspect deployment service health: $service"
+      case "$service:$mode:$state" in
+        nginx:legacy-adoption:running:missing | *:*:running:healthy) ;;
+        *) die "deployment service is not a healthy LKG: $service" ;;
+      esac
+    else
+      state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container_id")" ||
+        die "could not inspect initializer state: $service"
+      [ "$state" = exited:0 ] || die "historical initializer did not complete successfully: $service"
+    fi
+    image_id="$(docker inspect --format '{{.Image}}' "$container_id")" ||
+      die "could not inspect deployment service image: $service"
+  else
+    if deployment_long_running_service "$service"; then
+      die "required running deployment service is missing: $service"
+    fi
+    # A mutable legacy initializer tag is not evidence of which image last
+    # prepared the live data. The exited Compose container is the provenance;
+    # if it was manually removed, require operator recovery instead of guessing.
+    die "historical initializer container is missing: $service"
+  fi
+  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+    die "deployment service image identity is invalid: $service"
+  printf '%s\n' "$image_id"
+}
+
 snapshot_deployment_images() {
-  local container count=0 image image_id marker marker_candidate request_id="$2" target="$1"
+  local count=0 image_id image_ref marker marker_candidate mode model request_id="$2" rollback_image
+  local service target="$1"
+  local -A compose_ref_ids=()
+  local -a image_manifest=()
   validate_deployment_target "$target"
   require_deployment_transaction "$request_id" prepared
   [ "$DEPLOY_TX_TARGET" = "$target" ] || die "deployment image target does not match transaction"
@@ -1218,33 +1469,77 @@ snapshot_deployment_images() {
   if [ -e "$marker" ] || [ -L "$marker" ]; then
     die "deployment image snapshot already exists"
   fi
-  while IFS='|' read -r container image; do
-    image_id="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
-    if [ -n "$image_id" ]; then
-      docker image tag "$image_id" "${image}:rollback-${request_id//-/}"
-      count=$((count + 1))
+  mode="$(deployment_image_snapshot_mode "$DEPLOY_TX_PREVIOUS_SHA")"
+  if [ "$mode" = initial ]; then
+    model=""
+  else
+    select_release "$DEPLOY_TX_PREVIOUS_SHA"
+    validate_current_environment
+    if [ "$mode" = strict ]; then
+      validate_production_compose "$APP_ENV_FILE" strict-lkg
+    else
+      validate_production_compose "$APP_ENV_FILE" "$mode"
     fi
-  done < <(deployment_image_entries "$target")
+    model="$(mktemp)"
+    register_temp_file "$model"
+    chmod 0600 "$model"
+    render_deployment_compose_model "$model"
+  fi
+  while IFS= read -r service; do
+    if [ "$mode" = initial ]; then
+      image_id=absent
+    else
+      image_id="$(resolve_snapshot_service_image "$model" "$mode" "$service")"
+    fi
+    if [ "$image_id" != absent ]; then
+      image_ref="$(compose_model_service_image "$model" "$service")" ||
+        die "deployment service image is missing: $service"
+      if [ -n "${compose_ref_ids[$image_ref]+present}" ] &&
+        [ "${compose_ref_ids[$image_ref]}" != "$image_id" ]; then
+        die "one Compose image reference resolves to conflicting LKG images: $image_ref"
+      fi
+      compose_ref_ids["$image_ref"]="$image_id"
+      rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+      docker image tag "$image_id" "$rollback_image"
+      [ "$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)" = "$image_id" ] ||
+        die "rollback image tag could not be verified: $service"
+      count=$((count + 1))
+      image_manifest+=("image.$service=$image_id")
+    else
+      deployment_snapshot_image_required "$mode" "$service" &&
+        die "required deployment image is missing: $service"
+      image_manifest+=("image.$service=absent")
+    fi
+  done < <(deployment_image_services "$target" "$mode")
   marker_candidate="$(mktemp)"
   register_temp_file "$marker_candidate"
-  printf 'target=%s\nrequest_id=%s\nimage_count=%s\n' "$target" "$request_id" "$count" > "$marker_candidate"
+  printf 'target=%s\nrequest_id=%s\nmode=%s\nimage_count=%s\n' \
+    "$target" "$request_id" "$mode" "$count" > "$marker_candidate"
+  printf '%s\n' "${image_manifest[@]}" >> "$marker_candidate"
   atomic_install "$marker_candidate" "$marker" 0600 root
+  sync_host_state "$marker"
   rm -f -- "$marker_candidate"
   forget_temp_file "$marker_candidate"
+  if [ -n "$model" ]; then
+    rm -f -- "$model"
+    forget_temp_file "$model"
+  fi
   advance_deployment_transaction "$request_id" prepared snapshotted
 }
 
 read_deployment_image_marker() {
-  local key marker="$1" value
-  local seen_count=0 seen_request=0 seen_target=0
+  local expected_fields=0 key marker="$1" present_count=0 service value
+  local seen_count=0 seen_images=0 seen_mode=0 seen_request=0 seen_target=0
   if [ ! -f "$marker" ] || [ -L "$marker" ] ||
     [ "$(stat -c '%U:%G:%a' "$marker")" != "root:root:600" ]; then
     die "deployment image snapshot marker is missing or invalid"
   fi
   SNAPSHOT_TARGET=""
   SNAPSHOT_REQUEST_ID=""
+  SNAPSHOT_MODE=""
   SNAPSHOT_IMAGE_COUNT=""
-  while IFS='=' read -r key value; do
+  SNAPSHOT_IMAGE_IDS=()
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       target)
         [ "$seen_target" -eq 0 ] || die "duplicate image snapshot target"
@@ -1256,52 +1551,711 @@ read_deployment_image_marker() {
         SNAPSHOT_REQUEST_ID="$value"
         seen_request=1
         ;;
+      mode)
+        [ "$seen_mode" -eq 0 ] || die "duplicate image snapshot mode"
+        SNAPSHOT_MODE="$value"
+        seen_mode=1
+        ;;
       image_count)
         [ "$seen_count" -eq 0 ] || die "duplicate image snapshot count"
         SNAPSHOT_IMAGE_COUNT="$value"
         seen_count=1
         ;;
+      image.mongo|image.mongo-init|image.redis|image.minio|image.minio-init|image.support-agent|image.backend|image.frontend|image.nginx|image.budget-relay)
+        service="${key#image.}"
+        [ -z "${SNAPSHOT_IMAGE_IDS[$service]+present}" ] ||
+          die "duplicate image snapshot identity"
+        [[ "$value" = absent || "$value" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+          die "invalid image snapshot identity"
+        SNAPSHOT_IMAGE_IDS["$service"]="$value"
+        seen_images=$((seen_images + 1))
+        ;;
       *) die "unknown deployment image snapshot field" ;;
     esac
   done < "$marker"
-  [ "$seen_target$seen_request$seen_count" = "111" ] || die "incomplete image snapshot marker"
+  [ "$seen_target$seen_request$seen_mode$seen_count" = "1111" ] ||
+    die "incomplete image snapshot marker"
   validate_deployment_target "$SNAPSHOT_TARGET"
   validate_request_id "$SNAPSHOT_REQUEST_ID"
-  [[ "$SNAPSHOT_IMAGE_COUNT" =~ ^[0-4]$ ]] || die "invalid image snapshot count"
+  [[ "$SNAPSHOT_MODE" =~ ^(initial|legacy-adoption|strict)$ ]] ||
+    die "invalid image snapshot mode"
+  [[ "$SNAPSHOT_IMAGE_COUNT" =~ ^([0-9]|10)$ ]] || die "invalid image snapshot count"
+  while IFS= read -r service; do
+    expected_fields=$((expected_fields + 1))
+    [ -n "${SNAPSHOT_IMAGE_IDS[$service]+present}" ] ||
+      die "image snapshot manifest is incomplete"
+    value="${SNAPSHOT_IMAGE_IDS[$service]}"
+    if [ "$value" != absent ]; then
+      [ "$SNAPSHOT_MODE" != initial ] ||
+        die "initial deployment snapshot unexpectedly contains an image"
+      present_count=$((present_count + 1))
+    elif deployment_snapshot_image_required "$SNAPSHOT_MODE" "$service"; then
+      die "required image snapshot identity is absent: $service"
+    fi
+  done < <(deployment_image_services "$SNAPSHOT_TARGET" "$SNAPSHOT_MODE")
+  [ "$seen_images" -eq "$expected_fields" ] || die "image snapshot manifest has extra identities"
+  [ "$present_count" -eq "$SNAPSHOT_IMAGE_COUNT" ] ||
+    die "image snapshot count does not match its manifest"
 }
 
 require_deployment_image_snapshot() {
   local marker request_id="$2" target="$1"
+  if [ -z "${DEPLOY_TX_PREVIOUS_SHA+x}" ]; then
+    require_deployment_transaction "$request_id" \
+      snapshotted,built,nginx-installed,mutation-armed,mutated,refreshed,budget-updated,verified,marker-recorded,initial-http-verified,runtime-verified,metadata-ratchet-armed,metadata-ratchet-verified,initial-reset-armed,rollback-restored,cleanup-pending
+  fi
   marker="$(deployment_image_marker "$request_id")"
   read_deployment_image_marker "$marker"
   if [ "$SNAPSHOT_TARGET" != "$target" ] || [ "$SNAPSHOT_REQUEST_ID" != "$request_id" ]; then
     die "deployment image snapshot does not match"
   fi
+  if [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ]; then
+    [ "$SNAPSHOT_MODE" = initial ] || die "initial deployment snapshot mode does not match"
+  else
+    [ "$SNAPSHOT_MODE" != initial ] || die "rollback snapshot mode does not match"
+  fi
   SNAPSHOT_MARKER="$marker"
 }
 
 restore_deployment_images() {
-  local container image restored=0 request_id="$2" rollback_image target="$1"
+  local expected_id request_id="$2" restored=0 rollback_id rollback_image service target="$1"
   require_deployment_image_snapshot "$target" "$request_id"
   [ "$SNAPSHOT_IMAGE_COUNT" -gt 0 ] || die "deployment image snapshot is empty"
-  while IFS='|' read -r container image; do
-    rollback_image="${image}:rollback-${request_id//-/}"
-    if docker image inspect "$rollback_image" >/dev/null 2>&1; then
-      docker image tag "$rollback_image" "$image"
-      restored=$((restored + 1))
-    fi
-  done < <(deployment_image_entries "$target")
+  while IFS= read -r service; do
+    expected_id="${SNAPSHOT_IMAGE_IDS[$service]}"
+    [ "$expected_id" != absent ] || continue
+    rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+    rollback_id="$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)"
+    [ "$rollback_id" = "$expected_id" ] ||
+      die "rollback image identity changed or is missing: $service"
+    restored=$((restored + 1))
+  done < <(deployment_image_services "$target" "$SNAPSHOT_MODE")
   [ "$restored" -eq "$SNAPSHOT_IMAGE_COUNT" ] || die "deployment image snapshot is incomplete"
 }
 
-cleanup_deployment_images() {
-  local container image request_id="$2" rollback_image target="$1"
+restore_canonical_compose_image_refs() {
+  local expected_id image_ref model="$1" request_id="$3" rollback_image service target="$2"
+  local -A restored_refs=()
+  while IFS= read -r service; do
+    expected_id="${SNAPSHOT_IMAGE_IDS[$service]}"
+    [ "$expected_id" != absent ] || continue
+    compose_model_has_service "$model" "$service" ||
+      die "rollback Compose service disappeared: $service"
+    image_ref="$(compose_model_service_image "$model" "$service")" ||
+      die "rollback Compose image disappeared: $service"
+    if [ -n "${restored_refs[$image_ref]+present}" ] &&
+      [ "${restored_refs[$image_ref]}" != "$expected_id" ]; then
+      die "rollback image reference has conflicting identities: $image_ref"
+    fi
+    restored_refs["$image_ref"]="$expected_id"
+    if [[ "$image_ref" == *@sha256:* ]]; then
+      [ "$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null || true)" = "$expected_id" ] ||
+        die "immutable rollback image reference changed: $service"
+    else
+      rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+      docker image tag "$rollback_image" "$image_ref"
+      [ "$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null || true)" = "$expected_id" ] ||
+        die "canonical rollback image activation failed: $service"
+    fi
+  done < <(deployment_image_services "$target" "$SNAPSHOT_MODE")
+  for image_ref in "${!restored_refs[@]}"; do
+    [ "$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null || true)" = \
+      "${restored_refs[$image_ref]}" ] || die "canonical rollback image reference drifted"
+  done
+}
+
+write_deployment_image_override() {
+  local destination="$3" expected_id request_id="$2" rollback_id rollback_image
+  local service target="$1"
   require_deployment_image_snapshot "$target" "$request_id"
-  while IFS='|' read -r container image; do
-    rollback_image="${image}:rollback-${request_id//-/}"
+  : > "$destination"
+  chmod 0600 "$destination"
+  printf 'services:\n' >> "$destination"
+  while IFS= read -r service; do
+    expected_id="${SNAPSHOT_IMAGE_IDS[$service]}"
+    [ "$expected_id" != absent ] || continue
+    rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+    rollback_id="$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)"
+    [ "$rollback_id" = "$expected_id" ] ||
+      die "rollback image identity changed before Compose restore: $service"
+    printf '  %s:\n    image: %s\n' "$service" "$rollback_image" >> "$destination"
+  done < <(deployment_image_services "$target" "$SNAPSHOT_MODE")
+  sync -f "$destination"
+}
+
+production_compose_with_override() {
+  local environment_file="$1" override_file="$2"
+  shift 2
+  [ -f "$override_file" ] && [ ! -L "$override_file" ] &&
+    [ "$(stat -c '%U:%G:%a' "$override_file")" = root:root:600 ] ||
+    die "rollback Compose image override is invalid"
+  local -a environment_arguments=(
+    --env-file "$INFRA_ENV_FILE"
+    --env-file "$environment_file"
+  )
+  if [ -e "$DISCORD_ENV_FILE" ] || [ -L "$DISCORD_ENV_FILE" ]; then
+    validate_discord_environment
+    environment_arguments+=(--env-file "$DISCORD_ENV_FILE")
+  else
+    die "Discord environment overlay is required"
+  fi
+  env -i \
+    HOME=/root \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    GOLE_APP_ENV_FILE="$environment_file" \
+    GOLE_INFRA_ENV_FILE="$INFRA_ENV_FILE" \
+    docker compose \
+    "${environment_arguments[@]}" \
+    -f "$PRODUCTION_COMPOSE_FILE" -f "$override_file" "$@"
+}
+
+run_compose_services_exactly() {
+  local compose_mode="$1" override_file="${2:-}" service
+  shift 2
+  local -a command=(production_compose "$APP_ENV_FILE")
+  if [ "$compose_mode" = rollback ]; then
+    command=(production_compose_with_override "$APP_ENV_FILE" "$override_file")
+  elif [ "$compose_mode" != candidate ]; then
+    die "invalid exact Compose rollout mode"
+  fi
+  for service in "$@"; do
+    "${command[@]}" up -d --no-build --no-deps --force-recreate --wait "$service"
+  done
+}
+
+run_compose_initializers_exactly() {
+  local compose_mode="$1" container_id container_ids override_file="${2:-}" service state
+  shift 2
+  local -a command=(production_compose "$APP_ENV_FILE")
+  if [ "$compose_mode" = rollback ]; then
+    command=(production_compose_with_override "$APP_ENV_FILE" "$override_file")
+  elif [ "$compose_mode" != candidate ]; then
+    die "invalid exact Compose initializer mode"
+  fi
+  for service in "$@"; do
+    # Keep the successful Compose service container as an immutable provenance
+    # record. `compose run --rm` erased that evidence, so the next strict deploy
+    # could not prove which initializer prepared the live volume.
+    "${command[@]}" up --no-build --no-deps --force-recreate \
+      --abort-on-container-exit --exit-code-from "$service" "$service" >/dev/null
+    container_ids="$("${command[@]}" ps -a -q "$service")" ||
+      die "could not resolve completed initializer: $service"
+    [ -n "$container_ids" ] && [ "$(wc -l <<<"$container_ids")" -eq 1 ] ||
+      die "initializer provenance container is missing: $service"
+    container_id="$container_ids"
+    verify_compose_container_identity "$container_id" "$service"
+    state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container_id")" ||
+      die "could not inspect completed initializer: $service"
+    [ "$state" = exited:0 ] || die "initializer did not complete successfully: $service"
+  done
+}
+
+data_upgrade_services() {
+  printf '%s\n' mongo mongo-init redis minio minio-init
+}
+
+data_upgrade_marker() {
+  local request_id="$1"
+  validate_request_id "$request_id"
+  printf '%s/data-upgrade.%s\n' "$IMAGE_BACKUP_DIR" "${request_id//-/}"
+}
+
+validate_logical_backup_path() {
+  local backup_path="$1" complete
+  [[ "$backup_path" =~ ^/var/backups/gole-data/20[0-9]{6}T[0-9]{6}Z$ ]] ||
+    die "deployment logical backup path is invalid"
+  [ -d "$backup_path" ] && [ ! -L "$backup_path" ] &&
+    [ "$(stat -c '%U:%G:%a' "$backup_path")" = root:root:700 ] ||
+    die "deployment logical backup directory is invalid"
+  complete="$backup_path/COMPLETE"
+  [ -f "$complete" ] && [ ! -L "$complete" ] &&
+    [ "$(stat -c '%U:%G:%a' "$complete")" = root:root:600 ] ||
+    die "deployment logical backup completion marker is invalid"
+  for artifact in SHA256SUMS mongo.archive.gz minio.tar.gz redis.tar.gz; do
+    [ -f "$backup_path/$artifact" ] && [ ! -L "$backup_path/$artifact" ] &&
+      [ "$(stat -c '%U:%G:%a' "$backup_path/$artifact")" = root:root:600 ] ||
+      die "deployment logical backup artifact is invalid"
+  done
+  (
+    cd "$backup_path"
+    sha256sum --check --strict --status SHA256SUMS &&
+      [ -s mongo.archive.gz ] &&
+      [ -s minio.tar.gz ] &&
+    [ -s redis.tar.gz ]
+  ) || die "deployment logical backup checksum validation failed"
+}
+
+write_data_upgrade_marker() {
+  local backup_path="$1" request_id="$2" marker candidate service
+  marker="$(data_upgrade_marker "$request_id")"
+  [ ! -e "$marker" ] && [ ! -L "$marker" ] || die "data upgrade marker already exists"
+  candidate="$(mktemp)"
+  register_temp_file "$candidate"
+  printf 'state=backup-ready\nrequest_id=%s\nbackup_path=%s\n' \
+    "$request_id" "$backup_path" > "$candidate"
+  while IFS= read -r service; do
+    printf 'change.%s=%s\ncandidate.%s=%s\n' \
+      "$service" "${DATA_UPGRADE_CHANGES[$service]}" \
+      "$service" "${DATA_UPGRADE_IMAGE_IDS[$service]}" >> "$candidate"
+  done < <(data_upgrade_services)
+  atomic_install "$candidate" "$marker" 0600 root
+  sync_host_state "$marker"
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+}
+
+arm_data_upgrade_mutation() {
+  local candidate marker request_id="$1" service
+  require_data_upgrade_marker "$request_id"
+  [ "$DATA_UPGRADE_STATE" = backup-ready ] ||
+    die "data upgrade mutation is not ready to arm"
+  marker="$(data_upgrade_marker "$request_id")"
+  candidate="$(mktemp)"
+  register_temp_file "$candidate"
+  printf 'state=mutation-armed\nrequest_id=%s\nbackup_path=%s\n' \
+    "$request_id" "$DATA_UPGRADE_BACKUP_PATH" > "$candidate"
+  while IFS= read -r service; do
+    printf 'change.%s=%s\ncandidate.%s=%s\n' \
+      "$service" "${DATA_UPGRADE_CHANGES[$service]}" \
+      "$service" "${DATA_UPGRADE_IMAGE_IDS[$service]}" >> "$candidate"
+  done < <(data_upgrade_services)
+  atomic_install "$candidate" "$marker" 0600 root
+  sync_host_state "$marker"
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+  require_data_upgrade_marker "$request_id"
+  [ "$DATA_UPGRADE_STATE" = mutation-armed ] ||
+    die "data upgrade mutation marker was not armed"
+}
+
+read_data_upgrade_marker() {
+  local marker="$1" key value service seen_backup=0 seen_request=0 seen_state=0
+  local seen_changes=0 seen_candidates=0
+  [ -f "$marker" ] && [ ! -L "$marker" ] &&
+    [ "$(stat -c '%U:%G:%a' "$marker")" = root:root:600 ] ||
+    die "data upgrade marker is missing or invalid"
+  DATA_UPGRADE_REQUEST_ID=""
+  DATA_UPGRADE_BACKUP_PATH=""
+  DATA_UPGRADE_STATE=""
+  DATA_UPGRADE_CHANGES=()
+  DATA_UPGRADE_IMAGE_IDS=()
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
+    case "$key" in
+      state)
+        [ "$seen_state" -eq 0 ] || die "duplicate data upgrade state"
+        [[ "$value" =~ ^(backup-ready|mutation-armed)$ ]] ||
+          die "invalid data upgrade state"
+        DATA_UPGRADE_STATE="$value"
+        seen_state=1
+        ;;
+      request_id)
+        [ "$seen_request" -eq 0 ] || die "duplicate data upgrade request"
+        DATA_UPGRADE_REQUEST_ID="$value"
+        seen_request=1
+        ;;
+      backup_path)
+        [ "$seen_backup" -eq 0 ] || die "duplicate data upgrade backup"
+        DATA_UPGRADE_BACKUP_PATH="$value"
+        seen_backup=1
+        ;;
+      change.mongo|change.mongo-init|change.redis|change.minio|change.minio-init)
+        service="${key#change.}"
+        [ -z "${DATA_UPGRADE_CHANGES[$service]+present}" ] ||
+          die "duplicate data upgrade change flag"
+        [[ "$value" =~ ^(true|false)$ ]] || die "invalid data upgrade change flag"
+        DATA_UPGRADE_CHANGES["$service"]="$value"
+        seen_changes=$((seen_changes + 1))
+        ;;
+      candidate.mongo|candidate.mongo-init|candidate.redis|candidate.minio|candidate.minio-init)
+        service="${key#candidate.}"
+        [ -z "${DATA_UPGRADE_IMAGE_IDS[$service]+present}" ] ||
+          die "duplicate data upgrade candidate image"
+        [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+          die "invalid data upgrade candidate image"
+        DATA_UPGRADE_IMAGE_IDS["$service"]="$value"
+        seen_candidates=$((seen_candidates + 1))
+        ;;
+      *) die "unknown data upgrade marker field" ;;
+    esac
+  done < "$marker"
+  [ "$seen_state$seen_request$seen_backup" = 111 ] && [ "$seen_changes" -eq 5 ] &&
+    [ "$seen_candidates" -eq 5 ] || die "data upgrade marker is incomplete"
+  validate_request_id "$DATA_UPGRADE_REQUEST_ID"
+  validate_logical_backup_path "$DATA_UPGRADE_BACKUP_PATH"
+}
+
+require_data_upgrade_marker() {
+  local marker request_id="$1"
+  marker="$(data_upgrade_marker "$request_id")"
+  read_data_upgrade_marker "$marker"
+  [ "$DATA_UPGRADE_REQUEST_ID" = "$request_id" ] || die "data upgrade request does not match"
+}
+
+cleanup_data_upgrade_marker() {
+  local marker request_id="$1"
+  marker="$(data_upgrade_marker "$request_id")"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    require_data_upgrade_marker "$request_id"
+    remove_host_state "$marker"
+  fi
+}
+
+prepare_strict_data_upgrade() {
+  local changed=0 image_id marker new_model new_ref old_model old_ref
+  local request_id="$1" service
+  local -a changed_services=()
+  require_deployment_transaction "$request_id" nginx-installed
+  require_deployment_image_snapshot all "$request_id"
+  [ "$SNAPSHOT_MODE" = strict ] || die "strict data upgrade requested outside strict mode"
+  marker="$(data_upgrade_marker "$request_id")"
+  [ ! -e "$marker" ] && [ ! -L "$marker" ] || die "data upgrade marker already exists"
+  old_model="$(mktemp)"
+  new_model="$(mktemp)"
+  register_temp_file "$old_model"
+  register_temp_file "$new_model"
+  chmod 0600 "$old_model" "$new_model"
+  select_release "$DEPLOY_TX_PREVIOUS_SHA"
+  render_deployment_compose_model "$old_model"
+  select_release "$DEPLOY_TX_NEW_SHA"
+  render_deployment_compose_model "$new_model"
+  DATA_UPGRADE_CHANGES=()
+  DATA_UPGRADE_IMAGE_IDS=()
+  STRICT_DATA_UPGRADE_CHANGED=0
+  while IFS= read -r service; do
+    old_ref="$(compose_model_service_image "$old_model" "$service")" ||
+      die "previous data image is missing: $service"
+    new_ref="$(compose_model_service_image "$new_model" "$service")" ||
+      die "candidate data image is missing: $service"
+    [[ "$new_ref" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
+      die "candidate data image is not digest pinned: $service"
+    if [ "$old_ref" != "$new_ref" ]; then
+      DATA_UPGRADE_CHANGES["$service"]=true
+      changed_services+=("$service")
+      changed=1
+    else
+      DATA_UPGRADE_CHANGES["$service"]=false
+    fi
+  done < <(data_upgrade_services)
+  if [ "$changed" -eq 0 ]; then
+    rm -f -- "$old_model" "$new_model"
+    forget_temp_file "$old_model"
+    forget_temp_file "$new_model"
+    return 0
+  fi
+  # Resolve every candidate before closing the write path. A slow or failed
+  # registry pull must not lengthen the data recovery-point window.
+  production_compose "$APP_ENV_FILE" pull --quiet "${changed_services[@]}"
+  while IFS= read -r service; do
+    new_ref="$(compose_model_service_image "$new_model" "$service")" ||
+      die "candidate data image is missing after pull: $service"
+    image_id="$(docker image inspect --format '{{.Id}}' "$new_ref" 2>/dev/null || true)"
+    [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+      die "candidate data image identity is unavailable: $service"
+    DATA_UPGRADE_IMAGE_IDS["$service"]="$image_id"
+  done < <(data_upgrade_services)
+  STRICT_DATA_UPGRADE_CHANGED=1
+  rm -f -- "$old_model" "$new_model"
+  forget_temp_file "$old_model"
+  forget_temp_file "$new_model"
+}
+
+capture_strict_data_upgrade_backup() {
+  local backup_output backup_path backup_status=0 request_id="$1"
+  [ "$STRICT_DATA_UPGRADE_CHANGED" -eq 1 ] ||
+    die "strict data upgrade backup was requested without a changed image"
+  require_deployment_transaction "$request_id" mutation-armed
+  [ -x "$LOGICAL_BACKUP_HELPER" ] && [ ! -L "$LOGICAL_BACKUP_HELPER" ] ||
+    die "logical backup helper is missing or invalid"
+
+  # The transaction is durable before this stop. Therefore a crash anywhere
+  # from quiesce through backup can only recover by restarting the exact LKG.
+  quiesce_public_runtime
+  if backup_output="$("$LOGICAL_BACKUP_HELPER")"; then
+    :
+  else
+    backup_status=$?
+    if [ "$backup_status" -eq 78 ] ||
+      [ -e "$MINIO_RECOVERY_MARKER" ] || [ -L "$MINIO_RECOVERY_MARKER" ]; then
+      systemctl poweroff --no-block || true
+      die "MinIO unfreeze is uncertain; deployment retained and VM powered off"
+    fi
+    die "pre-upgrade logical backup failed"
+  fi
+  [ "$(wc -l <<<"$backup_output")" -eq 1 ] || die "logical backup returned an invalid path"
+  backup_path="$backup_output"
+  validate_logical_backup_path "$backup_path"
+  write_data_upgrade_marker "$backup_path" "$request_id"
+}
+
+data_upgrade_required() {
+  local marker
+  marker="$(data_upgrade_marker "$1")"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    require_data_upgrade_marker "$1"
+    return 0
+  fi
+  return 1
+}
+
+run_strict_data_upgrade() {
+  local request_id="$1"
+  require_data_upgrade_marker "$request_id"
+  [ "$DATA_UPGRADE_STATE" = backup-ready ] ||
+    die "strict data upgrade backup is not ready"
+  require_public_runtime_quiesced
+  # From this durable boundary onward, merely restoring old images is unsafe:
+  # an initializer or storage engine can have changed on-disk semantics. Any
+  # failure retains the exact logical backup and requires explicit root restore.
+  arm_data_upgrade_mutation "$request_id"
+  [ "${DATA_UPGRADE_CHANGES[mongo]}" = true ] &&
+    run_compose_services_exactly candidate "" mongo
+  [ "${DATA_UPGRADE_CHANGES[redis]}" = true ] &&
+    run_compose_services_exactly candidate "" redis
+  [ "${DATA_UPGRADE_CHANGES[minio]}" = true ] &&
+    run_compose_services_exactly candidate "" minio
+  if [ "${DATA_UPGRADE_CHANGES[mongo]}" = true ] ||
+    [ "${DATA_UPGRADE_CHANGES[mongo-init]}" = true ]; then
+    run_compose_initializers_exactly candidate "" mongo-init
+  fi
+  if [ "${DATA_UPGRADE_CHANGES[minio]}" = true ] ||
+    [ "${DATA_UPGRADE_CHANGES[minio-init]}" = true ]; then
+    run_compose_initializers_exactly candidate "" minio-init
+  fi
+  verify_data_upgrade_candidate_runtime "$request_id"
+  # Do not reopen background or public writes until every changed data image
+  # and initializer has passed the immutable candidate checks above.
+  require_public_runtime_quiesced
+}
+
+verify_data_upgrade_candidate_runtime() {
+  local actual_id container container_ids expected_id request_id="$1" service state
+  require_data_upgrade_marker "$request_id"
+  while IFS= read -r service; do
+    expected_id="${DATA_UPGRADE_IMAGE_IDS[$service]}"
+    if deployment_long_running_service "$service"; then
+      container="$(deployment_container_name "$service")"
+      verify_compose_container_identity "$container" "$service"
+      actual_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+        die "could not inspect upgraded data service: $service"
+      [ "$actual_id" = "$expected_id" ] || die "upgraded data image does not match: $service"
+      state="$(docker inspect --format \
+        '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+        "$container")" || die "could not inspect upgraded data health: $service"
+      [ "$state" = running:healthy ] || die "upgraded data service is not healthy: $service"
+    else
+      container_ids="$(production_compose "$APP_ENV_FILE" ps -a -q "$service")" ||
+        die "could not resolve upgraded initializer: $service"
+      [ -n "$container_ids" ] && [ "$(wc -l <<<"$container_ids")" -eq 1 ] ||
+        die "upgraded initializer provenance is missing: $service"
+      container="$container_ids"
+      verify_compose_container_identity "$container" "$service"
+      actual_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+        die "could not inspect upgraded initializer: $service"
+      [ "$actual_id" = "$expected_id" ] || die "upgraded initializer image does not match: $service"
+      state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container")" ||
+        die "could not inspect upgraded initializer state: $service"
+      [ "$state" = exited:0 ] || die "upgraded initializer did not succeed: $service"
+    fi
+  done < <(data_upgrade_services)
+}
+
+quiesce_public_runtime() {
+  local container labels service state
+  # Nginx closes the public write path first. Backend is stopped before any
+  # data-plane replacement so no request or background worker can span the
+  # legacy and strict Mongo/Redis/MinIO instances.
+  for service in nginx frontend backend support-agent; do
+    container="$(deployment_container_name "$service")"
+    if ! docker inspect "$container" >/dev/null 2>&1; then
+      [ "$service" = support-agent ] || continue
+      continue
+    fi
+    labels="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+      "$container")" || die "could not verify service before quiescing: $service"
+    [ "$labels" = "gole|$service" ] || die "unexpected container blocks quiescing: $service"
+    docker stop --time 30 "$container" >/dev/null
+    state="$(docker inspect --format '{{.State.Running}}' "$container")" ||
+      die "could not verify quiesced service: $service"
+    [ "$state" = false ] || die "service remained active during data-plane migration: $service"
+  done
+}
+
+require_public_runtime_quiesced() {
+  local container labels service state
+  for service in nginx frontend backend support-agent; do
+    container="$(deployment_container_name "$service")"
+    if ! docker inspect "$container" >/dev/null 2>&1; then
+      continue
+    fi
+    labels="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+      "$container")" || die "could not verify quiesced service ownership: $service"
+    [ "$labels" = "gole|$service" ] || die "unexpected container blocks quiesce proof: $service"
+    state="$(docker inspect --format '{{.State.Running}}' "$container")" ||
+      die "could not inspect quiesced service: $service"
+    [ "$state" = false ] || die "write-capable service resumed during data-plane migration: $service"
+  done
+}
+
+verify_restored_deployment_images() {
+  local container container_ids expected_id image_id labels request_id="$2" rollback_id rollback_image
+  local service state target="$1"
+  require_deployment_image_snapshot "$target" "$request_id"
+  while IFS= read -r service; do
+    expected_id="${SNAPSHOT_IMAGE_IDS[$service]}"
+    if [ "$expected_id" = absent ]; then
+      if container="$(deployment_container_name "$service" 2>/dev/null)" &&
+        docker inspect "$container" >/dev/null 2>&1; then
+        die "rollback retained a service that was absent from the LKG: $service"
+      fi
+      continue
+    fi
+    rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+    rollback_id="$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)"
+    [ "$rollback_id" = "$expected_id" ] || die "rollback image tag drifted: $service"
+    if deployment_long_running_service "$service"; then
+      container="$(deployment_container_name "$service")"
+      verify_compose_container_identity "$container" "$service"
+      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+        die "could not inspect restored service: $service"
+      [ "$image_id" = "$expected_id" ] || die "restored service image does not match: $service"
+      state="$(docker inspect --format \
+        '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+        "$container")" || die "could not inspect restored service health: $service"
+      case "$service:$SNAPSHOT_MODE:$state" in
+        nginx:legacy-adoption:running:missing | *:*:running:healthy) ;;
+        *) die "restored service is not healthy: $service" ;;
+      esac
+    else
+      container_ids="$(production_compose "$APP_ENV_FILE" ps -a -q "$service")" ||
+        die "could not resolve restored initializer: $service"
+      [ -n "$container_ids" ] && [ "$(wc -l <<<"$container_ids")" -eq 1 ] ||
+        die "restored initializer provenance is missing: $service"
+      container="$container_ids"
+      verify_compose_container_identity "$container" "$service"
+      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+        die "could not inspect restored initializer: $service"
+      [ "$image_id" = "$expected_id" ] ||
+        die "restored initializer image does not match: $service"
+      state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container")" ||
+        die "could not inspect restored initializer state: $service"
+      [ "$state" = exited:0 ] || die "restored initializer did not succeed: $service"
+    fi
+  done < <(deployment_image_services "$target" "$SNAPSHOT_MODE")
+}
+
+cleanup_deployment_images() {
+  local image_mode marker marker_present=0 request_id="$2" rollback_image service target="$1"
+  validate_deployment_target "$target"
+  validate_request_id "$request_id"
+  marker="$(deployment_image_marker "$request_id")"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    require_deployment_image_snapshot "$target" "$request_id"
+    marker_present=1
+    image_mode="$SNAPSHOT_MODE"
+  else
+    [ "${DEPLOY_TX_TARGET:-}" = "$target" ] &&
+      [ "${DEPLOY_TX_REQUEST_ID:-}" = "$request_id" ] ||
+      die "deployment image cleanup does not match transaction"
+    case "${DEPLOY_TX_STATE:-}" in
+      cleanup-pending | rollback-restored) ;;
+      *) die "deployment image snapshot marker is missing before terminal cleanup" ;;
+    esac
+    if [ "$target" = all ]; then
+      image_mode=legacy-adoption
+    else
+      image_mode=strict
+    fi
+  fi
+  while IFS= read -r service; do
+    rollback_image="$(deployment_rollback_image "$service" "$request_id")"
     docker image rm "$rollback_image" >/dev/null 2>&1 || true
-  done < <(deployment_image_entries "$target")
-  rm -f -- "$SNAPSHOT_MARKER"
+  done < <(deployment_image_services "$target" "$image_mode")
+  cleanup_data_upgrade_marker "$request_id"
+  if [ "$marker_present" -eq 1 ]; then
+    remove_host_state "$SNAPSHOT_MARKER"
+  else
+    sync -f "$IMAGE_BACKUP_DIR"
+  fi
+}
+
+cleanup_deployment_images_command() {
+  local request_id="$2" target="$1"
+  require_deployment_transaction "$request_id" cleanup-pending,rollback-restored
+  [ "$DEPLOY_TX_TARGET" = "$target" ] || die "deployment image cleanup target does not match"
+  cleanup_deployment_images "$target" "$request_id"
+}
+
+cleanup_uncommitted_deployment_image_tags() {
+  local mode request_id="$2" rollback_image service target="$1"
+  validate_deployment_target "$target"
+  validate_request_id "$request_id"
+  mode="$(deployment_image_snapshot_mode "$DEPLOY_TX_PREVIOUS_SHA")"
+  while IFS= read -r service; do
+    rollback_image="$(deployment_rollback_image "$service" "$request_id")"
+    docker image rm "$rollback_image" >/dev/null 2>&1 || true
+  done < <(deployment_image_services "$target" "$mode")
+}
+
+verify_pre_snapshot_lkg_runtime() {
+  local available container expected_sha="$1" mode service state
+  if [ "$expected_sha" = 0 ]; then
+    validate_initial_deployment
+    return
+  fi
+  [ "$(read_deployed_sha)" = "$expected_sha" ] ||
+    die "pre-snapshot recovery LKG marker changed"
+  select_release "$expected_sha"
+  validate_current_environment
+  mode="$(deployment_image_snapshot_mode "$expected_sha")"
+  if [ "$mode" = strict ]; then
+    validate_production_compose "$APP_ENV_FILE" strict-lkg
+  else
+    validate_production_compose "$APP_ENV_FILE" "$mode"
+  fi
+  available="$(production_compose "$APP_ENV_FILE" config --services)"
+  for service in backend frontend budget-relay nginx; do
+    grep -qx "$service" <<<"$available" ||
+      die "pre-snapshot recovery release misses a required service"
+  done
+  if [ "$mode" = strict ]; then
+    grep -qx support-agent <<<"$available" ||
+      die "strict pre-snapshot recovery release misses support-agent"
+    verify_metadata_full_policy
+    verify_broker_native_budget_relay
+  else
+    verify_metadata_pending_policy
+  fi
+  for container in gole-backend gole-frontend gole-budget-relay gole-nginx; do
+    state="$(docker inspect --format \
+      '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+      "$container" 2>/dev/null || true)"
+    [ "$state" = running:healthy ] || die "pre-snapshot LKG container is not healthy"
+  done
+  if [ "$mode" = strict ]; then
+    state="$(docker inspect --format \
+      '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+      gole-support-agent 2>/dev/null || true)"
+    [ "$state" = running:healthy ] || die "pre-snapshot support agent is not healthy"
+  fi
+  verify_public_transport_runtime
+  systemctl is-active --quiet gole-cost-guard-watchdog.timer ||
+    die "cost guard watchdog timer is not active"
+}
+
+recover_pre_snapshot_deployment() {
+  local marker
+  [ "$DEPLOY_TX_STATE" = prepared ] || die "pre-snapshot recovery state changed"
+  verify_pre_snapshot_lkg_runtime "$DEPLOY_TX_PREVIOUS_SHA"
+  marker="$(deployment_image_marker "$DEPLOY_TX_REQUEST_ID")"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+  else
+    cleanup_uncommitted_deployment_image_tags "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+  fi
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
 
 validate_current_production_model() {
@@ -1332,7 +2286,7 @@ build_deployment_images() {
 run_deployment_compose_phase() {
   local phase="$1" requested_sha="$2" request_id="$3"
   require_deployment_transaction "$request_id" \
-    built,nginx-installed,mutated,refreshed,budget-updated
+    built,nginx-installed,mutation-armed,mutated,refreshed,budget-updated
   [ "$DEPLOY_TX_NEW_SHA" = "$requested_sha" ] || die "deployment phase SHA does not match"
   select_release "$requested_sha"
   validate_current_production_model
@@ -1340,27 +2294,59 @@ run_deployment_compose_phase() {
     rollout-all-apps)
       [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_STATE" = nginx-installed ] ||
         die "all-services rollout is out of order"
-      production_compose "$APP_ENV_FILE" up -d --remove-orphans --wait \
-        support-agent backend frontend nginx
-      advance_deployment_transaction "$request_id" nginx-installed mutated
+      require_matching_nginx_transaction "$request_id"
+      [ "$NGINX_TXN_STATE" = installed ] && [ "$NGINX_TXN_DEPLOY_SHA" = "$requested_sha" ] ||
+        die "all-services rollout Nginx transaction is not installed"
+      # Do not let Compose recursively choose dependencies. The first legacy
+      # cutover changes both network topology and pinned data-plane images, so
+      # every affected service is replaced in a fixed order after its exact
+      # previous image was journaled.
+      require_deployment_image_snapshot all "$request_id"
+      if [ "$SNAPSHOT_MODE" = strict ]; then
+        # Compare the previous and candidate digest-pinned data images before
+        # crossing the durable mutation boundary. Candidate pulls and identity
+        # resolution finish while the LKG still accepts writes. An ordinary
+        # deploy performs no data pull, backup, stop or recreate when every
+        # reference is equal.
+        prepare_strict_data_upgrade "$request_id"
+      fi
+      advance_deployment_transaction "$request_id" nginx-installed mutation-armed
+      if [ "$SNAPSHOT_MODE" = strict ] && [ "$STRICT_DATA_UPGRADE_CHANGED" -eq 1 ]; then
+        # The RPO begins only after all write-capable services are stopped, and
+        # that stop is recoverable because mutation-armed is already durable.
+        capture_strict_data_upgrade_backup "$request_id"
+      fi
+      if [ "$SNAPSHOT_MODE" = legacy-adoption ]; then
+        quiesce_public_runtime
+        run_compose_services_exactly candidate "" mongo redis minio
+        run_compose_initializers_exactly candidate "" mongo-init minio-init
+      elif [ "$SNAPSHOT_MODE" = initial ]; then
+        run_compose_services_exactly candidate "" mongo redis minio
+        run_compose_initializers_exactly candidate "" mongo-init minio-init
+      elif data_upgrade_required "$request_id"; then
+        run_strict_data_upgrade "$request_id"
+      fi
+      run_compose_services_exactly candidate "" support-agent backend frontend
+      advance_deployment_transaction "$request_id" mutation-armed mutated
       ;;
     rollout-backend)
       [ "$DEPLOY_TX_TARGET" = backend ] && [ "$DEPLOY_TX_STATE" = built ] ||
         die "backend rollout is out of order"
-      production_compose "$APP_ENV_FILE" up -d --remove-orphans --wait \
-        support-agent backend nginx
-      advance_deployment_transaction "$request_id" built mutated
+      advance_deployment_transaction "$request_id" built mutation-armed
+      run_compose_services_exactly candidate "" support-agent backend
+      advance_deployment_transaction "$request_id" mutation-armed mutated
       ;;
     rollout-frontend)
       [ "$DEPLOY_TX_TARGET" = frontend ] && [ "$DEPLOY_TX_STATE" = built ] ||
         die "frontend rollout is out of order"
-      production_compose "$APP_ENV_FILE" up -d --remove-orphans --wait frontend nginx
-      advance_deployment_transaction "$request_id" built mutated
+      advance_deployment_transaction "$request_id" built mutation-armed
+      run_compose_services_exactly candidate "" frontend
+      advance_deployment_transaction "$request_id" mutation-armed mutated
       ;;
     rollout-budget)
       [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_STATE" = refreshed ] ||
         die "budget rollout is out of order"
-      production_compose "$APP_ENV_FILE" up -d --no-deps --wait budget-relay
+      production_compose "$APP_ENV_FILE" up -d --no-build --no-deps --force-recreate --wait budget-relay
       advance_deployment_transaction "$request_id" refreshed budget-updated
       ;;
     refresh-nginx)
@@ -1375,7 +2361,7 @@ run_deployment_compose_phase() {
 
 show_deployment_status() {
   local requested_sha="$1" request_id="$2"
-  require_deployment_transaction "$request_id" prepared,snapshotted,built,nginx-installed,mutated,refreshed,budget-updated,verified,marker-recorded,runtime-verified
+  require_deployment_transaction "$request_id" prepared,snapshotted,built,nginx-installed,mutation-armed,mutated,refreshed,budget-updated,verified,marker-recorded,initial-http-verified,runtime-verified
   [ "$DEPLOY_TX_NEW_SHA" = "$requested_sha" ] || die "status SHA does not match"
   select_release "$requested_sha"
   validate_current_production_model
@@ -1388,7 +2374,92 @@ verify_budget_relay_health() {
     die "budget relay is not healthy"
 }
 
+read_host_bootstrap_sha() {
+  local line
+  if [ ! -f "$HOST_BOOTSTRAP_MARKER" ] || [ -L "$HOST_BOOTSTRAP_MARKER" ] ||
+    [ "$(stat -c '%U:%G:%a' "$HOST_BOOTSTRAP_MARKER")" != "root:root:644" ]; then
+    die "host bootstrap completion marker is missing or invalid"
+  fi
+  [ "$(wc -l < "$HOST_BOOTSTRAP_MARKER")" -eq 1 ] &&
+    [ "$(tail -c 1 "$HOST_BOOTSTRAP_MARKER" | wc -l)" -eq 1 ] ||
+    die "host bootstrap completion marker is malformed"
+  line="$(cat "$HOST_BOOTSTRAP_MARKER")"
+  [[ "$line" =~ ^bootstrap_source_sha=([0-9a-f]{40})$ ]] ||
+    die "host bootstrap completion SHA is invalid"
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+read_cloud_broker_project_id() {
+  local project_id
+  if [ ! -f "$BROKER_CONFIG_FILE" ] || [ -L "$BROKER_CONFIG_FILE" ] ||
+    [ "$(stat -c '%U:%G:%a' "$BROKER_CONFIG_FILE")" != "root:root:600" ]; then
+    die "cloud broker configuration is missing or invalid"
+  fi
+  [ "$(grep -Ec '^PROJECT_ID=' "$BROKER_CONFIG_FILE")" -eq 1 ] ||
+    die "cloud broker project configuration is invalid"
+  project_id="$(awk -F= '$1 == "PROJECT_ID" { print substr($0, index($0, "=") + 1) }' \
+    "$BROKER_CONFIG_FILE")"
+  [[ "$project_id" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] ||
+    die "cloud broker project configuration is invalid"
+  printf '%s\n' "$project_id"
+}
+
+issue_certificate() {
+  local caller="${SUDO_USER:-root}" project_id release release_sha transaction
+  if [ ! -f /run/lock/gole-production-rollout.lock ] ||
+    [ -L /run/lock/gole-production-rollout.lock ] ||
+    [ "$(stat -c '%U:%G:%a' /run/lock/gole-production-rollout.lock)" != "root:${DEPLOY_GROUP}:660" ]; then
+    die "production rollout lock is missing or invalid"
+  fi
+  exec 8>>/run/lock/gole-production-rollout.lock
+  flock -n 8 || die "another production rollout is active"
+
+  if [ -e "$DEPLOYMENT_TRANSACTION_FILE" ] || [ -L "$DEPLOYMENT_TRANSACTION_FILE" ]; then
+    read_deployment_transaction
+    [ "$DEPLOY_TX_STATE" = initial-http-verified ] &&
+      [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] &&
+      [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+      die "an active production transaction blocks certificate issuance"
+    release_sha="$DEPLOY_TX_NEW_SHA"
+  else
+    [ "$caller" = root ] ||
+      die "certificate issuance by the deploy user requires an initial TLS transaction"
+    if [ -e "$DEPLOYED_SHA_FILE" ] || [ -L "$DEPLOYED_SHA_FILE" ]; then
+      release_sha="$(read_deployed_sha)"
+    else
+      release_sha="$(read_host_bootstrap_sha)"
+    fi
+  fi
+  for transaction in \
+    "$ENV_TRANSACTION_FILE" "$ADOPTION_TRANSACTION_FILE" "$NGINX_TRANSACTION_FILE" \
+    "$METADATA_MIGRATION_MARKER"; do
+    [ ! -e "$transaction" ] && [ ! -L "$transaction" ] ||
+      die "an active production transaction blocks certificate issuance"
+  done
+  [ ! -e "$INITIAL_DEPLOY_FILE" ] && [ ! -L "$INITIAL_DEPLOY_FILE" ] ||
+    die "initial deployment is not complete"
+  project_id="$(read_cloud_broker_project_id)"
+  create_release "$release_sha" historical-main
+  select_release "$release_sha"
+  validate_current_production_model
+  release="$(release_path "$release_sha")"
+  if [ ! -x "$CERTIFICATE_ISSUER" ] || [ -L "$CERTIFICATE_ISSUER" ] ||
+    [ "$(stat -c '%U:%G:%a' "$CERTIFICATE_ISSUER")" != "root:root:755" ]; then
+    die "certificate issuer is missing or invalid"
+  fi
+  env -i \
+    HOME=/root \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    GOLE_ROLLOUT_LOCK_HELD=1 \
+    GOLE_TRUSTED_RELEASE_ROOT="$release" \
+    DOMAIN=gole.co.kr \
+    EMAIL=coldingcontact@gmail.com \
+    GCP_PROJECT_ID="$project_id" \
+    "$CERTIFICATE_ISSUER"
+}
+
 renew_certificate() {
+  local deployed_sha
   if [ "${SUDO_USER:-root}" != "root" ]; then
     die "certificate renewal is reserved for the root-owned systemd timer"
   fi
@@ -1399,22 +2470,21 @@ renew_certificate() {
   fi
   exec 8>>/run/lock/gole-production-rollout.lock
   flock -n 8 || die "another production rollout is active"
+  deployed_sha="$(read_deployed_sha)"
+  select_release "$deployed_sha"
   validate_current_production_model
   production_compose "$APP_ENV_FILE" --profile certificate run --rm --no-deps -T certbot renew --quiet
   production_compose "$APP_ENV_FILE" exec -T nginx nginx -t >/dev/null
   production_compose "$APP_ENV_FILE" exec -T nginx nginx -s reload >/dev/null
 }
 
-verify_deployment_runtime_components() {
-  local apex_headers canonical_path container expected_sha="$1" http_redirect https_redirect state
-  select_release "$expected_sha"
-  validate_current_production_model
-  for container in gole-backend gole-frontend gole-budget-relay gole-support-agent gole-nginx; do
-    state="$(docker inspect --format \
-      '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-      "$container" 2>/dev/null || true)"
-    [ "$state" = "running:healthy" ] || die "required production container is not healthy"
-  done
+verify_public_transport_runtime() {
+  local apex_headers canonical_path http_redirect https_redirect state
+  state="$(docker inspect --format \
+    '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+    gole-nginx 2>/dev/null || true)"
+  [ "$state" = "running:healthy" ] || [ "$state" = "running:missing" ] ||
+    die "Nginx is not running"
   docker exec gole-nginx nginx -t >/dev/null 2>&1 || die "Nginx runtime validation failed"
   curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null ||
     die "backend readiness check failed"
@@ -1435,8 +2505,255 @@ verify_deployment_runtime_components() {
     https://gole.co.kr/)" || die "HTTPS apex response check failed"
   grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000([;[:space:]]|$)' \
     <<<"$apex_headers" || die "HTTPS apex response is missing HSTS"
+}
+
+verify_legacy_adopted_transport_runtime() {
+  local apex_headers expected_config http_apex http_www https_apex https_www www_headers
+  local legacy_path state template
+
+  # Adoption deliberately leaves the already-serving Nginx LKG untouched.
+  # Bind that temporary exception to the exact reviewed historical template;
+  # accepting transport behavior alone could bless an unrelated root config.
+  validate_nginx_config
+  [ "$(stat -c '%h' "$NGINX_CONFIG_FILE")" -eq 1 ] ||
+    die "legacy Nginx configuration has multiple hard links"
+  template="$(dirname "$PRODUCTION_COMPOSE_FILE")/nginx-https.conf.template"
+  [ -f "$template" ] && [ ! -L "$template" ] ||
+    die "reviewed legacy Nginx template is missing"
+  expected_config="$(mktemp)"
+  register_temp_file "$expected_config"
+  sed 's/__DOMAIN__/gole.co.kr/g' "$template" > "$expected_config"
+  cmp -s "$expected_config" "$NGINX_CONFIG_FILE" ||
+    die "legacy Nginx configuration does not match the reviewed release"
+  rm -f -- "$expected_config"
+  forget_temp_file "$expected_config"
+
+  state="$(docker inspect --format \
+    '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+    gole-nginx 2>/dev/null || true)"
+  [ "$state" = "running:healthy" ] || [ "$state" = "running:missing" ] ||
+    die "Nginx is not running"
+  docker exec gole-nginx nginx -t >/dev/null 2>&1 || die "Nginx runtime validation failed"
+
+  legacy_path="/__gole-legacy-transport-check?source=adoption"
+  http_apex="$(curl -sS --max-time 15 --resolve gole.co.kr:80:127.0.0.1 \
+    --output /dev/null --write-out '%{http_code}|%{redirect_url}' \
+    "http://gole.co.kr${legacy_path}")" || die "legacy HTTP apex redirect check failed"
+  [ "$http_apex" = "301|https://gole.co.kr${legacy_path}" ] ||
+    die "legacy HTTP apex redirect changed"
+  http_www="$(curl -sS --max-time 15 --resolve www.gole.co.kr:80:127.0.0.1 \
+    --output /dev/null --write-out '%{http_code}|%{redirect_url}' \
+    "http://www.gole.co.kr${legacy_path}")" || die "legacy HTTP www redirect check failed"
+  [ "$http_www" = "301|https://www.gole.co.kr${legacy_path}" ] ||
+    die "legacy HTTP www redirect changed"
+  https_apex="$(curl -sS --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+    --output /dev/null --write-out '%{http_code}|%{redirect_url}' \
+    https://gole.co.kr/)" || die "legacy HTTPS apex check failed"
+  [ "$https_apex" = "200|" ] || die "legacy HTTPS apex response changed"
+  https_www="$(curl -sS --max-time 15 --resolve www.gole.co.kr:443:127.0.0.1 \
+    --output /dev/null --write-out '%{http_code}|%{redirect_url}' \
+    https://www.gole.co.kr/)" || die "legacy HTTPS www check failed"
+  [ "$https_www" = "200|" ] || die "legacy HTTPS www response changed"
+  apex_headers="$(curl -fsSI --max-time 15 --resolve gole.co.kr:443:127.0.0.1 \
+    https://gole.co.kr/)" || die "legacy HTTPS apex header check failed"
+  grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000([;[:space:]]|$)' \
+    <<<"$apex_headers" || die "legacy HTTPS apex response is missing HSTS"
+  www_headers="$(curl -fsSI --max-time 15 --resolve www.gole.co.kr:443:127.0.0.1 \
+    https://www.gole.co.kr/)" || die "legacy HTTPS www header check failed"
+  grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000([;[:space:]]|$)' \
+    <<<"$www_headers" || die "legacy HTTPS www response is missing HSTS"
+}
+
+expected_runtime_resource_limits() {
+  case "$1" in
+    mongo) printf '1000000000|1879048192\n' ;;
+    mongo-init) printf '250000000|268435456\n' ;;
+    redis) printf '500000000|402653184\n' ;;
+    minio) printf '750000000|805306368\n' ;;
+    minio-init) printf '250000000|134217728\n' ;;
+    support-agent) printf '250000000|201326592\n' ;;
+    backend) printf '1500000000|2147483648\n' ;;
+    budget-relay) printf '250000000|134217728\n' ;;
+    frontend) printf '750000000|671088640\n' ;;
+    nginx) printf '500000000|201326592\n' ;;
+    *) die "strict runtime resource contract is missing: $1" ;;
+  esac
+}
+
+verify_strict_live_compose_runtime() {
+  local actual_image actual_mounts actual_networks actual_ports container container_ids
+  local actual_resources expected_image expected_mounts expected_networks expected_ports
+  local expected_resources image_ref logging model restart_policy security service state
+  model="$(mktemp)"
+  register_temp_file "$model"
+  chmod 0600 "$model"
+  render_deployment_compose_model "$model"
+  for service in mongo redis minio support-agent backend frontend nginx budget-relay; do
+    container="$(deployment_container_name "$service")"
+    verify_compose_container_identity "$container" "$service"
+    image_ref="$(compose_model_service_image "$model" "$service")" ||
+      die "strict runtime image is missing: $service"
+    expected_image="$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null || true)"
+    actual_image="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
+    [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ ]] && [ "$actual_image" = "$expected_image" ] ||
+      die "strict runtime image identity changed: $service"
+    actual_networks="$(docker inspect --format \
+      '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+      "$container" | LC_ALL=C sort | paste -sd, -)" ||
+      die "strict runtime networks could not be inspected: $service"
+    case "$service" in
+      backend) expected_networks=gole_agent,gole_data,gole_edge ;;
+      mongo | redis | minio) expected_networks=gole_data ;;
+      support-agent) expected_networks=gole_agent ;;
+      frontend | nginx | budget-relay) expected_networks=gole_edge ;;
+    esac
+    [ "$actual_networks" = "$expected_networks" ] ||
+      die "strict runtime network boundary changed: $service"
+    actual_ports="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$container" |
+      python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin) or {}, separators=(",", ":"), sort_keys=True))')" ||
+      die "strict runtime ports could not be inspected: $service"
+    case "$service" in
+      backend) expected_ports='{"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"8080"}]}' ;;
+      frontend) expected_ports='{"3000/tcp":[{"HostIp":"127.0.0.1","HostPort":"3000"}]}' ;;
+      nginx) expected_ports='{"443/tcp":[{"HostIp":"","HostPort":"443"}],"80/tcp":[{"HostIp":"","HostPort":"80"}]}' ;;
+      *) expected_ports='{}' ;;
+    esac
+    [ "$actual_ports" = "$expected_ports" ] || die "strict runtime published ports changed: $service"
+    if [ "$service" = mongo ] || [ "$service" = redis ] || [ "$service" = minio ]; then
+      actual_mounts="$(docker inspect --format '{{json .Mounts}}' "$container" |
+        python3 -c 'import json,sys
+m=json.load(sys.stdin) or []
+rows=[]
+for x in m:
+    if not isinstance(x,dict): raise SystemExit(1)
+    rows.append("%s|%s|%s|%s" % (x.get("Type",""),x.get("Name",""),x.get("Destination",""),str(bool(x.get("RW"))).lower()))
+print(",".join(sorted(rows)))')" || die "strict runtime mounts could not be inspected: $service"
+      case "$service" in
+        mongo) expected_mounts='volume|gole_mongo-data|/data/db|true' ;;
+        redis) expected_mounts='volume|gole_redis-data|/data|true' ;;
+        minio) expected_mounts='volume|gole_minio-data|/data|true' ;;
+      esac
+      [ "$actual_mounts" = "$expected_mounts" ] ||
+        die "strict runtime persistent volume changed: $service"
+    fi
+    logging="$(docker inspect --format \
+      '{{.HostConfig.LogConfig.Type}}|{{index .HostConfig.LogConfig.Config "max-size"}}|{{index .HostConfig.LogConfig.Config "max-file"}}' \
+      "$container")" || die "strict runtime logging could not be inspected: $service"
+    [ "$logging" = 'local|10m|3' ] || die "strict runtime log rotation changed: $service"
+    security="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container" |
+      python3 -c 'import json,sys; print("true" if "no-new-privileges:true" in (json.load(sys.stdin) or []) else "false")')" ||
+      die "strict runtime security option changed: $service"
+    [ "$security" = true ] || die "strict runtime security option changed: $service"
+    restart_policy="$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$container")" ||
+      die "strict runtime restart policy could not be inspected: $service"
+    [ "$restart_policy" = unless-stopped ] || die "strict runtime restart policy changed: $service"
+    actual_resources="$(docker inspect --format \
+      '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}' "$container")" ||
+      die "strict runtime resource limits could not be inspected: $service"
+    expected_resources="$(expected_runtime_resource_limits "$service")"
+    [ "$actual_resources" = "$expected_resources" ] ||
+      die "strict runtime resource limits changed: $service"
+  done
+  for service in mongo-init minio-init; do
+    container_ids="$(production_compose "$APP_ENV_FILE" ps -a -q "$service")" ||
+      die "strict initializer could not be resolved: $service"
+    [ -n "$container_ids" ] && [ "$(wc -l <<<"$container_ids")" -eq 1 ] ||
+      die "strict initializer provenance is missing: $service"
+    container="$container_ids"
+    verify_compose_container_identity "$container" "$service"
+    image_ref="$(compose_model_service_image "$model" "$service")" ||
+      die "strict initializer image is missing: $service"
+    expected_image="$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null || true)"
+    actual_image="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
+    [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ ]] && [ "$actual_image" = "$expected_image" ] ||
+      die "strict initializer image identity changed: $service"
+    state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container")" ||
+      die "strict initializer state could not be inspected: $service"
+    [ "$state" = exited:0 ] || die "strict initializer did not complete successfully: $service"
+    actual_resources="$(docker inspect --format \
+      '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}' "$container")" ||
+      die "strict initializer resource limits could not be inspected: $service"
+    expected_resources="$(expected_runtime_resource_limits "$service")"
+    [ "$actual_resources" = "$expected_resources" ] ||
+      die "strict initializer resource limits changed: $service"
+  done
+  rm -f -- "$model"
+  forget_temp_file "$model"
+}
+
+verify_deployment_runtime_components_base() {
+  local container expected_sha="$1" state
+  select_release "$expected_sha"
+  validate_current_production_model
+  for container in gole-backend gole-frontend gole-budget-relay gole-support-agent gole-nginx; do
+    state="$(docker inspect --format \
+      '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+      "$container" 2>/dev/null || true)"
+    [ "$state" = "running:healthy" ] || die "required production container is not healthy"
+  done
+  verify_strict_live_compose_runtime
   systemctl is-active --quiet gole-cost-guard-watchdog.timer ||
     die "cost guard watchdog timer is not active"
+}
+
+verify_initial_http_transport_runtime() {
+  local canonical_path http_redirect state
+  state="$(docker inspect --format \
+    '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+    gole-nginx 2>/dev/null || true)"
+  [ "$state" = running:healthy ] || die "initial HTTP Nginx is not healthy"
+  docker exec gole-nginx nginx -t >/dev/null 2>&1 ||
+    die "initial HTTP Nginx validation failed"
+  curl -fsS --max-time 15 --resolve gole.co.kr:80:127.0.0.1 \
+    http://gole.co.kr/actuator/health/readiness >/dev/null ||
+    die "initial HTTP apex readiness failed"
+  curl -fsS --max-time 15 --resolve gole.co.kr:80:127.0.0.1 \
+    http://gole.co.kr/icon.svg >/dev/null || die "initial HTTP apex frontend failed"
+  canonical_path="/__gole-canonical-check?source=initial"
+  http_redirect="$(curl -sS --max-time 15 --resolve www.gole.co.kr:80:127.0.0.1 \
+    --output /dev/null --write-out '%{http_code}|%{redirect_url}' \
+    "http://www.gole.co.kr${canonical_path}")" ||
+    die "initial HTTP canonical redirect check failed"
+  [ "$http_redirect" = "301|https://gole.co.kr${canonical_path}" ] ||
+    die "initial HTTP www does not redirect directly to the canonical apex"
+}
+
+verify_deployment_runtime_components() {
+  local expected_sha="$1"
+  verify_deployment_runtime_components_base "$expected_sha"
+  verify_public_transport_runtime
+}
+
+verify_initial_deployment_runtime_components() {
+  local expected_sha="$1"
+  verify_deployment_runtime_components_base "$expected_sha"
+  verify_initial_http_transport_runtime
+}
+
+verify_adopted_deployment_runtime() {
+  local age expected_sha="$1" now
+  [ "${SUDO_USER:-root}" = root ] ||
+    die "legacy deployment runtime verification is root-only"
+  read_metadata_migration_marker || die "legacy metadata migration is not pending"
+  [ "$METADATA_MIGRATION_STATE" = pending ] &&
+    [ "$METADATA_MIGRATION_LEGACY_SHA" = "$expected_sha" ] ||
+    die "legacy metadata migration SHA does not match"
+  [ "$(read_deployed_sha)" = "$expected_sha" ] ||
+    die "adopted deployment marker does not match"
+  verify_metadata_pending_policy
+  select_release "$expected_sha"
+  validate_existing_deployment_runtime "$expected_sha" true
+  verify_legacy_adopted_transport_runtime
+  systemctl is-active --quiet gole-cloud-broker.service ||
+    die "root cloud broker is not active"
+  [ -f /run/gole-cloud-broker/policy-heartbeat ] &&
+    [ ! -L /run/gole-cloud-broker/policy-heartbeat ] &&
+    [ "$(stat -c '%U:%G:%a' /run/gole-cloud-broker/policy-heartbeat)" = "root:golecloud:600" ] ||
+    die "root cloud broker policy heartbeat is invalid"
+  now="$(date +%s)"
+  age=$((now - $(stat -c %Y /run/gole-cloud-broker/policy-heartbeat)))
+  [ "$age" -ge 0 ] && [ "$age" -le 30 ] ||
+    die "root cloud broker policy heartbeat is stale"
 }
 
 verify_seller_identity_launch_preflight() {
@@ -1475,39 +2792,203 @@ verify_full_deployment_runtime() {
   advance_deployment_transaction "$request_id" marker-recorded runtime-verified
 }
 
+verify_initial_http_commit() {
+  local expected_sha="$1" request_id="$2"
+  require_deployment_transaction "$request_id" marker-recorded
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] &&
+    [ "$DEPLOY_TX_NEW_SHA" = "$expected_sha" ] ||
+    die "initial HTTP commit transaction does not match"
+  [ "$(read_deployed_sha)" = "$expected_sha" ] ||
+    die "initial HTTP commit marker does not match"
+  [ ! -e "$INITIAL_DEPLOY_FILE" ] && [ ! -L "$INITIAL_DEPLOY_FILE" ] ||
+    die "initial HTTP commit authorization marker remains"
+  require_matching_nginx_transaction "$request_id"
+  [ "$NGINX_TXN_STATE" = committed ] && [ "$NGINX_TXN_DEPLOY_SHA" = "$expected_sha" ] ||
+    die "initial HTTP committed Nginx journal does not match"
+  verify_initial_deployment_runtime_components "$expected_sha"
+  verify_seller_identity_launch_preflight
+  advance_deployment_transaction "$request_id" marker-recorded initial-http-verified
+}
+
+complete_initial_tls_commit() {
+  local request_id="$1"
+  require_deployment_transaction "$request_id" initial-http-verified
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] ||
+    die "initial TLS completion transaction does not match"
+  [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+    die "initial TLS completion marker does not match"
+  [ ! -e "$INITIAL_DEPLOY_FILE" ] && [ ! -L "$INITIAL_DEPLOY_FILE" ] ||
+    die "initial TLS completion authorization marker remains"
+  [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] ||
+    die "deployment Nginx transaction remains before certificate activation"
+  verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+  verify_seller_identity_launch_preflight
+  advance_deployment_transaction "$request_id" initial-http-verified runtime-verified
+  finalize_deployment_transaction "$request_id"
+}
+
+adoption_image_marker() {
+  local request_id="$1"
+  validate_request_id "$request_id"
+  printf '%s/backend-image.%s\n' "$ADOPTION_BACKUP_DIR" "${request_id//-/}"
+}
+
+adoption_rollback_image() {
+  local request_id="$1"
+  validate_request_id "$request_id"
+  printf 'gole/adoption-backend:%s\n' "${request_id//-/}"
+}
+
+snapshot_adoption_backend_image() {
+  local candidate image_id labels marker request_id="$1" rollback_image
+  validate_request_id "$request_id"
+  marker="$(adoption_image_marker "$request_id")"
+  [ ! -e "$marker" ] && [ ! -L "$marker" ] || die "adoption image snapshot already exists"
+  labels="$(docker inspect --format \
+    '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+    gole-backend)" || die "could not verify adopted backend ownership"
+  [ "$labels" = gole\|backend ] || die "adopted backend ownership is invalid"
+  image_id="$(docker inspect --format '{{.Image}}' gole-backend)" ||
+    die "could not inspect adopted backend image"
+  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || die "adopted backend image ID is invalid"
+  rollback_image="$(adoption_rollback_image "$request_id")"
+  docker image tag "$image_id" "$rollback_image"
+  [ "$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)" = "$image_id" ] ||
+    die "adopted backend rollback image could not be verified"
+  candidate="$(mktemp)"
+  register_temp_file "$candidate"
+  printf 'request_id=%s\nimage.backend=%s\n' "$request_id" "$image_id" > "$candidate"
+  atomic_install "$candidate" "$marker" 0600 root
+  sync_host_state "$marker"
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+}
+
+read_adoption_backend_image() {
+  local key marker request_id="$1" seen_image=0 seen_request=0 value
+  marker="$(adoption_image_marker "$request_id")"
+  [ -f "$marker" ] && [ ! -L "$marker" ] &&
+    [ "$(stat -c '%U:%G:%a' "$marker")" = root:root:600 ] ||
+    die "adoption image snapshot is missing or invalid"
+  ADOPTION_BACKEND_IMAGE_ID=""
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
+    case "$key" in
+      request_id)
+        [ "$seen_request" -eq 0 ] || die "duplicate adoption image request"
+        [ "$value" = "$request_id" ] || die "adoption image request does not match"
+        seen_request=1
+        ;;
+      image.backend)
+        [ "$seen_image" -eq 0 ] || die "duplicate adoption backend image"
+        [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] || die "adoption backend image ID is invalid"
+        ADOPTION_BACKEND_IMAGE_ID="$value"
+        seen_image=1
+        ;;
+      *) die "unknown adoption image snapshot field" ;;
+    esac
+  done < "$marker"
+  [ "$seen_request$seen_image" = 11 ] || die "adoption image snapshot is incomplete"
+}
+
+ensure_adoption_backend_image_snapshot() {
+  local marker request_id="$1"
+  marker="$(adoption_image_marker "$request_id")"
+  if [ ! -e "$marker" ] && [ ! -L "$marker" ]; then
+    # A prepared transaction cannot have changed the backend yet. Rebuilding
+    # its snapshot makes the abort path deterministic after an interrupted tag.
+    [ "$ADOPT_STATE" = prepared ] || die "installed adoption is missing its image snapshot"
+    docker image rm "$(adoption_rollback_image "$request_id")" >/dev/null 2>&1 || true
+    snapshot_adoption_backend_image "$request_id"
+  fi
+  read_adoption_backend_image "$request_id"
+}
+
+verify_adoption_backend_image_runtime() {
+  local current_id labels request_id="$1" state
+  validate_request_id "$request_id"
+  [ "${ADOPT_REQUEST_ID:-}" = "$request_id" ] ||
+    die "adoption backend verification does not match transaction"
+  read_adoption_backend_image "$request_id"
+  labels="$(docker inspect --format \
+    '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+    gole-backend)" || die "could not verify adopted backend ownership"
+  [ "$labels" = gole\|backend ] || die "adopted backend ownership is invalid"
+  current_id="$(docker inspect --format '{{.Image}}' gole-backend)" ||
+    die "could not verify adopted backend image"
+  [ "$current_id" = "$ADOPTION_BACKEND_IMAGE_ID" ] ||
+    die "adopted backend does not run its snapshotted image"
+  state="$(docker inspect --format \
+    '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+    gole-backend)" || die "could not verify adopted backend health"
+  [ "$state" = running:healthy ] || die "adopted backend is not healthy"
+}
+
+cleanup_adoption_backend_image_artifacts() {
+  local marker request_id="$1"
+  validate_request_id "$request_id"
+  marker="$(adoption_image_marker "$request_id")"
+  docker image rm "$(adoption_rollback_image "$request_id")" >/dev/null 2>&1 || true
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    remove_host_state "$marker"
+  else
+    sync -f "$ADOPTION_BACKUP_DIR"
+  fi
+}
+
 restart_adoption_services() {
-  local available request_id="$1" service
-  local services=()
+  local available current_id override request_id="$1" rollback_id rollback_image service
   require_matching_adoption_transaction "$request_id"
   case "$ADOPT_STATE" in
-    installed | rollback-restored) ;;
+    installed | rollback-restored | prepared) ;;
     *) die "adoption services cannot restart in the current transaction state" ;;
   esac
   validate_clean_checkout_sha "$ADOPT_DEPLOYMENT_SHA"
   validate_current_environment
   validate_production_compose "$APP_ENV_FILE" legacy-adoption
+  ensure_adoption_backend_image_snapshot "$request_id"
+  rollback_image="$(adoption_rollback_image "$request_id")"
+  rollback_id="$(docker image inspect --format '{{.Id}}' "$rollback_image" 2>/dev/null || true)"
+  [ "$rollback_id" = "$ADOPTION_BACKEND_IMAGE_ID" ] ||
+    die "adoption backend rollback image changed"
+  # Keep the canonical local tag on the adopted LKG as well. Later Secret Sync
+  # must not resurrect a drifted candidate after this one-time migration.
+  docker image tag "$rollback_image" gole/backend:local
+  [ "$(docker image inspect --format '{{.Id}}' gole/backend:local 2>/dev/null || true)" = \
+    "$ADOPTION_BACKEND_IMAGE_ID" ] || die "adoption backend image activation failed"
   available="$(production_compose "$APP_ENV_FILE" config --services)"
-  for service in support-agent backend frontend budget-relay nginx; do
-    if grep -qx "$service" <<<"$available"; then
-      services+=("$service")
-    fi
-  done
   for service in backend frontend budget-relay nginx; do
     grep -qx "$service" <<<"$available" || die "legacy Compose is missing a required service"
   done
-  production_compose "$APP_ENV_FILE" up -d --no-build --force-recreate \
-    --remove-orphans --wait "${services[@]}"
+  override="$(mktemp)"
+  register_temp_file "$override"
+  chmod 0600 "$override"
+  printf 'services:\n  backend:\n    image: %s\n' "$rollback_image" > "$override"
+  sync -f "$override"
+  production_compose_with_override "$APP_ENV_FILE" "$override" \
+    up -d --no-build --no-deps --force-recreate --wait backend
+  current_id="$(docker inspect --format '{{.Image}}' gole-backend)" ||
+    die "could not verify restarted adoption backend"
+  [ "$current_id" = "$ADOPTION_BACKEND_IMAGE_ID" ] ||
+    die "restarted adoption backend image does not match"
+  rm -f -- "$override"
+  forget_temp_file "$override"
   production_compose "$APP_ENV_FILE" exec -T nginx nginx -t >/dev/null
+  production_compose "$APP_ENV_FILE" exec -T nginx nginx -s reload >/dev/null
 }
 
 verify_adoption_services() {
-  local available request_id="$1" state
+  local available backend_image request_id="$1" state
   require_matching_adoption_transaction "$request_id"
   case "$ADOPT_STATE" in
     installed | rollback-restored) ;;
     *) die "adoption services cannot be verified in the current transaction state" ;;
   esac
   validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" false
+  ensure_adoption_backend_image_snapshot "$request_id"
+  backend_image="$(docker inspect --format '{{.Image}}' gole-backend)" ||
+    die "could not verify adopted backend image"
+  [ "$backend_image" = "$ADOPTION_BACKEND_IMAGE_ID" ] ||
+    die "adopted backend image changed during environment migration"
   available="$(production_compose "$APP_ENV_FILE" config --services)"
   if grep -qx support-agent <<<"$available"; then
     state="$(docker inspect --format '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
@@ -1580,6 +3061,7 @@ write_nginx_transaction() {
     "deploy_sha=$deploy_sha" > "$transaction_candidate"
   atomic_install "$transaction_candidate" "$NGINX_TRANSACTION_FILE" 0600 root
   rm -f -- "$transaction_candidate"
+  sync_host_state "$NGINX_TRANSACTION_FILE"
 }
 
 read_nginx_transaction() {
@@ -1596,7 +3078,7 @@ read_nginx_transaction() {
   NGINX_TXN_BACKUP_FILE=""
   NGINX_TXN_CANDIDATE_SHA256=""
   NGINX_TXN_DEPLOY_SHA=""
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       state)
         [ "$seen_state" -eq 0 ] || die "Nginx transaction has duplicate state"
@@ -1672,9 +3154,11 @@ begin_nginx_transaction() {
     die "Nginx transaction backup already exists"
   fi
   install -m 0600 -o root -g root "$NGINX_CONFIG_FILE" "$backup_file"
+  sync_host_state "$backup_file"
   candidate_sha256="$(sha256sum "$staged_candidate" | cut -d' ' -f1)"
   write_nginx_transaction prepared "$request_id" "$backup_file" "$candidate_sha256" "$deploy_sha"
   atomic_install "$staged_candidate" "$NGINX_CONFIG_FILE" 0644 root
+  sync_host_state "$NGINX_CONFIG_FILE"
   write_nginx_transaction installed "$request_id" "$backup_file" "$candidate_sha256" "$deploy_sha"
   advance_deployment_transaction "$request_id" built nginx-installed
   rm -f -- "$staged_candidate"
@@ -1690,6 +3174,7 @@ require_matching_nginx_transaction() {
 restore_nginx_transaction() {
   validate_nginx_backup_path "$NGINX_TXN_BACKUP_FILE"
   atomic_install "$NGINX_TXN_BACKUP_FILE" "$NGINX_CONFIG_FILE" 0644 root
+  sync_host_state "$NGINX_CONFIG_FILE"
   write_nginx_transaction rollback-restored "$NGINX_TXN_REQUEST_ID" \
     "$NGINX_TXN_BACKUP_FILE" "$NGINX_TXN_CANDIDATE_SHA256" "$NGINX_TXN_DEPLOY_SHA"
 }
@@ -1715,7 +3200,7 @@ recover_nginx_transaction() {
       [ "$current_deployed_sha" = "$NGINX_TXN_DEPLOY_SHA" ] &&
       [ "$(sha256sum "$NGINX_CONFIG_FILE" | cut -d' ' -f1)" = \
         "$NGINX_TXN_CANDIDATE_SHA256" ]; then
-      rm -f -- "$NGINX_TRANSACTION_FILE"
+      remove_host_state "$NGINX_TRANSACTION_FILE"
       echo "COMMITTED"
       return
     fi
@@ -1734,7 +3219,7 @@ finish_nginx_recovery() {
   [ "$(sha256sum "$NGINX_CONFIG_FILE" | cut -d' ' -f1)" = \
     "$(sha256sum "$NGINX_TXN_BACKUP_FILE" | cut -d' ' -f1)" ] ||
     die "recovered Nginx configuration hash is invalid"
-  rm -f -- "$NGINX_TRANSACTION_FILE"
+  remove_host_state "$NGINX_TRANSACTION_FILE"
 }
 
 commit_nginx_transaction() {
@@ -1752,7 +3237,11 @@ commit_nginx_transaction() {
 finalize_nginx_transaction() {
   local current_deployed_sha request_id="$1"
   require_matching_nginx_transaction "$request_id"
-  require_deployment_transaction "$request_id" runtime-verified
+  require_deployment_transaction "$request_id" runtime-verified,initial-http-verified
+  if [ "$DEPLOY_TX_STATE" = initial-http-verified ] &&
+    { [ "$DEPLOY_TX_TARGET" != all ] || [ "$DEPLOY_TX_PREVIOUS_SHA" != 0 ]; }; then
+    die "only the initial HTTP commit may finalize Nginx before TLS"
+  fi
   [ "$NGINX_TXN_STATE" = "committed" ] || die "Nginx transaction is not committed"
   validate_nginx_config
   [ "$(sha256sum "$NGINX_CONFIG_FILE" | cut -d' ' -f1)" = "$NGINX_TXN_CANDIDATE_SHA256" ] ||
@@ -1760,7 +3249,7 @@ finalize_nginx_transaction() {
   current_deployed_sha="$(read_deployed_sha)"
   [ "$current_deployed_sha" = "$NGINX_TXN_DEPLOY_SHA" ] ||
     die "deployment marker does not match the Nginx transaction"
-  rm -f -- "$NGINX_TRANSACTION_FILE"
+  remove_host_state "$NGINX_TRANSACTION_FILE"
 }
 
 verify_candidate_deployment_runtime() {
@@ -1773,7 +3262,11 @@ verify_candidate_deployment_runtime() {
     expected_state=refreshed
   fi
   [ "$DEPLOY_TX_STATE" = "$expected_state" ] || die "candidate verification is out of order"
-  verify_deployment_runtime_components "$expected_sha"
+  if [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ]; then
+    verify_initial_deployment_runtime_components "$expected_sha"
+  else
+    verify_deployment_runtime_components "$expected_sha"
+  fi
   if [ "$DEPLOY_TX_TARGET" = all ]; then
     verify_seller_identity_launch_preflight
   fi
@@ -1781,7 +3274,7 @@ verify_candidate_deployment_runtime() {
 }
 
 record_deployment_sha() {
-  local requested_sha="$1" request_id="$2" initial_deployment=false sha_candidate
+  local requested_sha="$1" request_id="$2" initial_deployment=false
   require_deployment_transaction "$request_id" verified
   [ "$DEPLOY_TX_NEW_SHA" = "$requested_sha" ] || die "deployment marker SHA does not match"
   if [ "$DEPLOY_TX_TARGET" = all ]; then
@@ -1794,17 +3287,226 @@ record_deployment_sha() {
   elif [ "$(read_deployed_sha)" != "$DEPLOY_TX_PREVIOUS_SHA" ]; then
     die "last-known-good marker changed during deployment"
   fi
-  sha_candidate="$(mktemp)"
-  register_temp_file "$sha_candidate"
-  printf '%s\n' "$requested_sha" > "$sha_candidate"
-  atomic_install "$sha_candidate" "$DEPLOYED_SHA_FILE" 0644 root
+  write_deployed_sha_exact "$requested_sha"
   if [ "$initial_deployment" = true ] && ! rm -f -- "$INITIAL_DEPLOY_FILE"; then
     rm -f -- "$DEPLOYED_SHA_FILE"
     die "could not retire the initial deployment marker"
   fi
-  rm -f -- "$sha_candidate"
-  forget_temp_file "$sha_candidate"
+  sync -f /etc/gole
   advance_deployment_transaction "$request_id" verified marker-recorded
+}
+
+read_metadata_migration_marker() {
+  local key value seen_legacy=0 seen_state=0
+  if [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ]; then
+    return 1
+  fi
+  if [ ! -f "$METADATA_MIGRATION_MARKER" ] || [ -L "$METADATA_MIGRATION_MARKER" ] ||
+    [ "$(stat -c '%U:%G:%a' "$METADATA_MIGRATION_MARKER")" != "root:root:644" ]; then
+    die "metadata migration marker is invalid"
+  fi
+  METADATA_MIGRATION_STATE=""
+  METADATA_MIGRATION_LEGACY_SHA=""
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
+    case "$key" in
+      state)
+        [ "$seen_state" -eq 0 ] || die "metadata migration marker has duplicate state"
+        METADATA_MIGRATION_STATE="$value"
+        seen_state=1
+        ;;
+      legacy_sha)
+        [ "$seen_legacy" -eq 0 ] || die "metadata migration marker has duplicate legacy SHA"
+        METADATA_MIGRATION_LEGACY_SHA="$value"
+        seen_legacy=1
+        ;;
+      *) die "metadata migration marker contains an unknown field" ;;
+    esac
+  done < "$METADATA_MIGRATION_MARKER"
+  [ "$seen_state$seen_legacy" = "11" ] || die "metadata migration marker is incomplete"
+  [[ "$METADATA_MIGRATION_STATE" =~ ^(pending|ratcheting)$ ]] ||
+    die "metadata migration marker state is invalid"
+  [[ "$METADATA_MIGRATION_LEGACY_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+    die "metadata migration legacy SHA is invalid"
+}
+
+write_metadata_migration_marker() {
+  local candidate legacy_sha="$1" state="$2"
+  [[ "$legacy_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid metadata migration legacy SHA"
+  [[ "$state" =~ ^(pending|ratcheting)$ ]] || die "invalid metadata migration state"
+  candidate="$(mktemp)"
+  register_temp_file "$candidate"
+  printf 'state=%s\nlegacy_sha=%s\n' "$state" "$legacy_sha" > "$candidate"
+  atomic_install "$candidate" "$METADATA_MIGRATION_MARKER" 0644 root
+  sync_host_state "$METADATA_MIGRATION_MARKER"
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+}
+
+verify_metadata_pending_policy() {
+  ! iptables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 ||
+    die "metadata container isolation was applied before the ratchet"
+  iptables -w -C OUTPUT -d 169.254.169.254/32 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 &&
+    iptables -w -C GOLE_METADATA_OUTPUT -m owner --uid-owner 0 -j RETURN >/dev/null 2>&1 &&
+    iptables -w -C GOLE_METADATA_OUTPUT -j REJECT >/dev/null 2>&1 ||
+    die "metadata host isolation is incomplete"
+  if command -v ip6tables >/dev/null 2>&1; then
+    ! ip6tables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 ||
+      die "metadata IPv6 container isolation was applied before the ratchet"
+    ip6tables -w -C OUTPUT -d fd20:ce::254/128 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 ||
+      die "metadata IPv6 host isolation is incomplete"
+  fi
+}
+
+verify_metadata_full_policy() {
+  iptables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
+    iptables -w -t raw -C GOLE_METADATA_INPUT -d 169.254.169.254/32 -j DROP >/dev/null 2>&1 &&
+    iptables -w -C OUTPUT -d 169.254.169.254/32 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 &&
+    iptables -w -C GOLE_METADATA_OUTPUT -m owner --uid-owner 0 -j RETURN >/dev/null 2>&1 &&
+    iptables -w -C GOLE_METADATA_OUTPUT -j REJECT >/dev/null 2>&1 ||
+    die "metadata IPv4 isolation ratchet is incomplete"
+  if command -v ip6tables >/dev/null 2>&1; then
+    ip6tables -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT >/dev/null 2>&1 &&
+      ip6tables -w -t raw -C GOLE_METADATA_INPUT -d fd20:ce::254/128 -j DROP >/dev/null 2>&1 &&
+      ip6tables -w -C OUTPUT -d fd20:ce::254/128 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 ||
+      die "metadata IPv6 isolation ratchet is incomplete"
+  fi
+}
+
+verify_broker_native_budget_relay() {
+  local age broker_socket heartbeat mount now socket_value state
+  systemctl is-active --quiet gole-metadata-firewall.service ||
+    die "metadata firewall service is not active"
+  systemctl is-active --quiet gole-cloud-broker.service ||
+    die "root cloud broker is not active"
+  broker_socket="/run/gole-cloud-broker/broker.sock"
+  [ -S "$broker_socket" ] && [ ! -L "$broker_socket" ] &&
+    [ "$(stat -c '%U:%G:%a' "$broker_socket")" = "root:golecloud:660" ] ||
+    die "root cloud broker socket is invalid"
+  heartbeat="/run/gole-cloud-broker/policy-heartbeat"
+  [ -f "$heartbeat" ] && [ ! -L "$heartbeat" ] &&
+    [ "$(stat -c '%U:%G:%a' "$heartbeat")" = "root:golecloud:600" ] ||
+    die "root cloud broker policy heartbeat is invalid"
+  now="$(date +%s)"
+  age=$((now - $(stat -c %Y "$heartbeat")))
+  [ "$age" -ge 0 ] && [ "$age" -le 30 ] ||
+    die "root cloud broker policy heartbeat is stale"
+  state="$(docker inspect --format '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+    gole-budget-relay 2>/dev/null || true)"
+  [ "$state" = "running:healthy" ] || die "broker-native budget relay is not healthy"
+  [ "$(docker inspect --format '{{.Config.Image}}' gole-budget-relay 2>/dev/null || true)" = \
+    "gole/budget-relay:local" ] || die "budget relay image identity is invalid"
+  socket_value="$(container_environment_value gole-budget-relay GOLE_CLOUD_BROKER_SOCKET)"
+  [ "$socket_value" = "$broker_socket" ] || die "budget relay does not use the root cloud broker"
+  mount="$(docker inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/run/gole-cloud-broker"}}{{.Type}}|{{.Source}}|{{.Destination}}|{{.RW}}{{println}}{{end}}{{end}}' \
+    gole-budget-relay 2>/dev/null || true)"
+  [ "$mount" = "bind|/run/gole-cloud-broker|/run/gole-cloud-broker|false" ] ||
+    die "budget relay broker directory mount is invalid"
+}
+
+verify_metadata_denial_runtime() {
+  if runuser -u "$DEPLOY_USER" -- curl -fsS --max-time 2 \
+    -H 'Metadata-Flavor: Google' \
+    http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
+    >/dev/null 2>&1; then
+    die "deploy runner can reach the metadata token endpoint"
+  fi
+  if docker exec gole-budget-relay python -c \
+    'import urllib.request; urllib.request.urlopen(urllib.request.Request("http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token", headers={"Metadata-Flavor":"Google"}), timeout=2).read()' \
+    >/dev/null 2>&1; then
+    die "budget relay container can reach the metadata token endpoint"
+  fi
+}
+
+verify_broker_policy_heartbeat_advanced() {
+  local after before broker_after broker_before attempt
+  broker_before="$(stat -c %y /run/gole-cloud-broker/policy-heartbeat 2>/dev/null || true)"
+  [ -n "$broker_before" ] || die "root broker policy heartbeat is missing"
+  before="$(docker exec gole-budget-relay python -c \
+    'import os; print(os.stat("/tmp/gole-cost-guard-heartbeat").st_mtime_ns)' \
+    2>/dev/null || true)"
+  [[ "$before" =~ ^[0-9]+$ ]] || die "budget relay heartbeat is missing"
+  for attempt in $(seq 1 35); do
+    sleep 1
+    after="$(docker exec gole-budget-relay python -c \
+      'import os; print(os.stat("/tmp/gole-cost-guard-heartbeat").st_mtime_ns)' \
+      2>/dev/null || true)"
+    broker_after="$(stat -c %y /run/gole-cloud-broker/policy-heartbeat 2>/dev/null || true)"
+    if [[ "$after" =~ ^[0-9]+$ ]] && [ "$after" -gt "$before" ] &&
+      [ -n "$broker_after" ] && [ "$broker_after" != "$broker_before" ]; then
+      return 0
+    fi
+  done
+  die "budget relay heartbeat did not advance after metadata isolation"
+}
+
+prepare_metadata_migration_ratchet() {
+  local expected_sha="$1"
+  read_metadata_migration_marker || return 1
+  [ "$METADATA_MIGRATION_STATE" = pending ] ||
+    die "metadata migration ratchet is already in progress"
+  [ "$METADATA_MIGRATION_LEGACY_SHA" != "$expected_sha" ] ||
+    die "legacy deployment cannot finalize metadata isolation"
+  [ "$(read_deployed_sha)" = "$expected_sha" ] ||
+    die "metadata ratchet SHA is not the current LKG"
+  verify_metadata_pending_policy
+  verify_broker_native_budget_relay
+  verify_deployment_runtime_components "$expected_sha"
+}
+
+arm_metadata_migration_ratchet() {
+  local expected_sha="$1" request_id="$2"
+  require_deployment_transaction "$request_id" runtime-verified
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_NEW_SHA" = "$expected_sha" ] ||
+    die "metadata ratchet deployment identity changed before arming"
+  read_metadata_migration_marker || die "metadata migration marker disappeared before arming"
+  [ "$METADATA_MIGRATION_STATE" = pending ] ||
+    die "metadata migration is not pending before arming"
+  METADATA_RATCHET_STARTED=1
+  # The marker is the reboot-time fail-closed journal and must reach disk before
+  # the deployment transaction advances. A crash from this point makes the
+  # firewall full and prevents the runner from starting.
+  write_metadata_migration_marker "$METADATA_MIGRATION_LEGACY_SHA" ratcheting
+  advance_deployment_transaction "$request_id" runtime-verified metadata-ratchet-armed
+}
+
+complete_metadata_migration_ratchet() {
+  local expected_sha="$1" request_id="$2"
+  require_deployment_transaction "$request_id" metadata-ratchet-armed
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_NEW_SHA" = "$expected_sha" ] ||
+    die "metadata ratchet deployment identity changed"
+  if read_metadata_migration_marker; then
+    [ "$METADATA_MIGRATION_LEGACY_SHA" != "$expected_sha" ] ||
+      die "legacy deployment cannot complete metadata isolation"
+    if [ "$METADATA_MIGRATION_STATE" = pending ]; then
+      verify_metadata_pending_policy
+      verify_broker_native_budget_relay
+      verify_deployment_runtime_components "$expected_sha"
+      METADATA_RATCHET_STARTED=1
+      write_metadata_migration_marker "$METADATA_MIGRATION_LEGACY_SHA" ratcheting
+    else
+      METADATA_RATCHET_STARTED=1
+    fi
+  else
+    # Absence is reachable only after the one-way rule and marker removal. The
+    # durable deployment state still requires full verification before cleanup.
+    METADATA_RATCHET_STARTED=1
+  fi
+  "$METADATA_FIREWALL" --full
+  verify_metadata_full_policy
+  verify_metadata_denial_runtime
+  verify_broker_native_budget_relay
+  verify_broker_policy_heartbeat_advanced
+  verify_deployment_runtime_components "$expected_sha"
+  # Keep the fail-closed marker until the durable deployment journal records
+  # that every post-ratchet check passed. A crash before that write leaves the
+  # runner gated and recovery can only continue forward.
+  advance_deployment_transaction "$request_id" metadata-ratchet-armed metadata-ratchet-verified
+  if [ -e "$METADATA_MIGRATION_MARKER" ] || [ -L "$METADATA_MIGRATION_MARKER" ]; then
+    rm -f -- "$METADATA_MIGRATION_MARKER"
+    sync -f /etc/gole
+  fi
+  METADATA_RATCHET_STARTED=0
 }
 
 finalize_deployment_transaction() {
@@ -1813,9 +3515,25 @@ finalize_deployment_transaction() {
   if [ "$DEPLOY_TX_TARGET" = all ] && { [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; }; then
     die "Nginx transaction must be finalized first"
   fi
+  if [ "$DEPLOY_TX_TARGET" = all ] && prepare_metadata_migration_ratchet "$DEPLOY_TX_NEW_SHA"; then
+    arm_metadata_migration_ratchet "$DEPLOY_TX_NEW_SHA" "$request_id"
+    complete_metadata_migration_ratchet "$DEPLOY_TX_NEW_SHA" "$request_id"
+  fi
+  require_deployment_transaction "$request_id" runtime-verified,metadata-ratchet-verified
+  [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+    die "completed deployment marker changed before cleanup"
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "metadata migration marker remains before cleanup"
+  verify_metadata_full_policy
+  verify_metadata_denial_runtime
+  verify_broker_native_budget_relay
+  verify_broker_policy_heartbeat_advanced
+  verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
   require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+  advance_deployment_transaction "$request_id" \
+    runtime-verified,metadata-ratchet-verified cleanup-pending
   cleanup_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
-  rm -f -- "$DEPLOYMENT_TRANSACTION_FILE"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
 
 finalize_partial_deployment_transaction() {
@@ -1824,9 +3542,348 @@ finalize_partial_deployment_transaction() {
   [ "$DEPLOY_TX_TARGET" != all ] || die "full deployment requires marker verification"
   [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
     die "partial deployment may only rebuild the current LKG SHA"
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "partial deployment cannot finalize during metadata migration"
+  verify_metadata_full_policy
+  verify_metadata_denial_runtime
+  verify_broker_native_budget_relay
+  verify_broker_policy_heartbeat_advanced
+  verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
   require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+  advance_deployment_transaction "$request_id" verified cleanup-pending
   cleanup_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
-  rm -f -- "$DEPLOYMENT_TRANSACTION_FILE"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+}
+
+recover_completed_deployment_cleanup() {
+  [ "$DEPLOY_TX_STATE" = cleanup-pending ] || die "deployment cleanup recovery state changed"
+  [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+    die "cleanup-pending deployment is not the current LKG"
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "cleanup-pending deployment still has a metadata migration marker"
+  verify_metadata_full_policy
+  verify_metadata_denial_runtime
+  verify_broker_native_budget_relay
+  verify_broker_policy_heartbeat_advanced
+  verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+  cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+}
+
+verify_runtime_verified_commit_window() {
+  [ "$DEPLOY_TX_STATE" = runtime-verified ] && [ "$DEPLOY_TX_TARGET" = all ] ||
+    die "deployment commit-window state is invalid"
+  [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] ||
+    die "deployment commit-window still has an Nginx transaction"
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "deployment commit-window still has a metadata migration marker"
+  [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+    die "deployment commit-window LKG marker does not match"
+  verify_metadata_full_policy
+  verify_metadata_denial_runtime
+  verify_broker_native_budget_relay
+  verify_broker_policy_heartbeat_advanced
+  verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+}
+
+recover_restored_deployment_cleanup() {
+  [ "$DEPLOY_TX_STATE" = rollback-restored ] || die "rollback cleanup recovery state changed"
+  verify_pre_snapshot_lkg_runtime "$DEPLOY_TX_PREVIOUS_SHA"
+  cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+}
+
+recover_initial_deployment_commit_window() {
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] ||
+    die "initial deployment commit-window identity changed"
+  [[ "$DEPLOY_TX_STATE" =~ ^(marker-recorded|initial-http-verified|runtime-verified)$ ]] ||
+    die "initial deployment commit-window state is invalid"
+  [ ! -e "$INITIAL_DEPLOY_FILE" ] && [ ! -L "$INITIAL_DEPLOY_FILE" ] ||
+    die "initial deployment authorization was not retired"
+  [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
+    die "initial deployment marker does not match its transaction"
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "initial deployment commit window has unexpected metadata migration state"
+  case "$DEPLOY_TX_STATE" in
+    marker-recorded)
+      require_matching_nginx_transaction "$DEPLOY_TX_REQUEST_ID"
+      [ "$NGINX_TXN_STATE" = committed ] &&
+        [ "$NGINX_TXN_DEPLOY_SHA" = "$DEPLOY_TX_NEW_SHA" ] ||
+        die "initial deployment committed Nginx journal does not match"
+      verify_initial_http_commit "$DEPLOY_TX_NEW_SHA" "$DEPLOY_TX_REQUEST_ID"
+      finalize_nginx_transaction "$DEPLOY_TX_REQUEST_ID"
+      echo INITIAL_TLS_REQUIRED
+      ;;
+    initial-http-verified)
+      [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] ||
+        die "initial HTTP commit still has a deployment Nginx journal"
+      verify_initial_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+      echo INITIAL_TLS_REQUIRED
+      ;;
+    runtime-verified)
+      verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+      if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
+        require_matching_nginx_transaction "$DEPLOY_TX_REQUEST_ID"
+        [ "$NGINX_TXN_STATE" = committed ] &&
+          [ "$NGINX_TXN_DEPLOY_SHA" = "$DEPLOY_TX_NEW_SHA" ] ||
+          die "initial deployment committed Nginx journal does not match"
+        finalize_nginx_transaction "$DEPLOY_TX_REQUEST_ID"
+      fi
+      finalize_deployment_transaction "$DEPLOY_TX_REQUEST_ID"
+      echo RECOVERED
+      ;;
+  esac
+}
+
+initial_reset_container_name() {
+  case "$1" in
+    mongo) printf 'gole-mongo\n' ;;
+    mongo-init) printf 'gole-mongo-init-1\n' ;;
+    redis) printf 'gole-redis\n' ;;
+    minio) printf 'gole-minio\n' ;;
+    minio-init) printf 'gole-minio-init-1\n' ;;
+    support-agent) printf 'gole-support-agent\n' ;;
+    backend) printf 'gole-backend\n' ;;
+    frontend) printf 'gole-frontend\n' ;;
+    nginx) printf 'gole-nginx\n' ;;
+    budget-relay) printf 'gole-budget-relay\n' ;;
+    *) die "unexpected Compose service blocks initial reset" ;;
+  esac
+}
+
+validate_initial_reset_project_resources() {
+  local container_id labels name network_id network_identity service
+  local -A seen_containers=() seen_networks=()
+
+  # Compose down acts on a project label, so prove that every object within
+  # that project is one of the reviewed production objects before mutation.
+  while IFS= read -r container_id; do
+    [ -n "$container_id" ] || continue
+    labels="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{.Name}}' \
+      "$container_id")" || die "could not inspect initial deployment container"
+    IFS='|' read -r project service name <<<"$labels"
+    [ "$project" = gole ] || die "initial reset container project changed"
+    name="${name#/}"
+    [ "$name" = "$(initial_reset_container_name "$service")" ] ||
+      die "unexpected Compose container blocks initial reset: $service"
+    [ -z "${seen_containers[$service]+present}" ] ||
+      die "duplicate Compose service blocks initial reset: $service"
+    seen_containers["$service"]=1
+  done < <(docker ps -a --filter label=com.docker.compose.project=gole --format '{{.ID}}')
+
+  for service in \
+    mongo mongo-init redis minio minio-init support-agent backend frontend nginx budget-relay; do
+    name="$(initial_reset_container_name "$service")"
+    if docker inspect "$name" >/dev/null 2>&1; then
+      labels="$(docker inspect --format \
+        '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+        "$name")" || die "could not inspect named production container"
+      [ "$labels" = "gole|$service" ] ||
+        die "named production container ownership is invalid: $name"
+    fi
+  done
+
+  while IFS= read -r network_id; do
+    [ -n "$network_id" ] || continue
+    network_identity="$(docker network inspect --format \
+      '{{.Name}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.network"}}' \
+      "$network_id")" || die "could not inspect initial deployment network"
+    IFS='|' read -r name project service <<<"$network_identity"
+    [ "$project" = gole ] || die "initial reset network project changed"
+    case "$name|$service" in
+      gole_edge\|edge | gole_data\|data | gole_agent\|agent) ;;
+      *) die "unexpected Compose network blocks initial reset: $name" ;;
+    esac
+    [ -z "${seen_networks[$name]+present}" ] ||
+      die "duplicate Compose network blocks initial reset: $name"
+    seen_networks["$name"]=1
+  done < <(docker network ls --filter label=com.docker.compose.project=gole --format '{{.ID}}')
+
+  for name in gole_edge gole_data gole_agent; do
+    if docker network inspect "$name" >/dev/null 2>&1; then
+      network_identity="$(docker network inspect --format \
+        '{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.network"}}' \
+        "$name")" || die "could not verify named production network"
+      case "$name|$network_identity" in
+        gole_edge\|gole\|edge | gole_data\|gole\|data | gole_agent\|gole\|agent) ;;
+        *) die "named production network ownership is invalid: $name" ;;
+      esac
+    fi
+  done
+}
+
+initial_reset_volume_state() {
+  local identity volume
+  for volume in \
+    gole_mongo-data gole_redis-data gole_minio-data gole_certbot-webroot \
+    gole_letsencrypt gole_budget-relay-state; do
+    if identity="$(docker volume inspect --format '{{.Name}}|{{.Driver}}' "$volume" 2>/dev/null)"; then
+      [ "$identity" = "$volume|local" ] ||
+        die "production volume identity is invalid: $volume"
+      printf '%s=present\n' "$volume"
+    else
+      printf '%s=absent\n' "$volume"
+    fi
+  done
+}
+
+verify_initial_reset_project_absent() {
+  local name service
+  [ -z "$(docker ps -a --filter label=com.docker.compose.project=gole --format '{{.ID}}')" ] ||
+    die "Compose project containers remain after initial reset"
+  [ -z "$(docker network ls --filter label=com.docker.compose.project=gole --format '{{.ID}}')" ] ||
+    die "Compose project networks remain after initial reset"
+  for service in \
+    mongo mongo-init redis minio minio-init support-agent backend frontend nginx budget-relay; do
+    name="$(initial_reset_container_name "$service")"
+    ! docker inspect "$name" >/dev/null 2>&1 ||
+      die "named production container remains after initial reset: $name"
+  done
+  for name in gole_edge gole_data gole_agent; do
+    ! docker network inspect "$name" >/dev/null 2>&1 ||
+      die "named production network remains after initial reset: $name"
+  done
+}
+
+remove_initial_reset_local_images() {
+  local image
+  for image in \
+    gole/support-agent:local gole/backend:local gole/frontend:local gole/budget-relay:local; do
+    docker image rm "$image" >/dev/null 2>&1 || true
+    ! docker image inspect "$image" >/dev/null 2>&1 ||
+      die "candidate local image remains after initial reset: $image"
+  done
+}
+
+reset_initial_deployment_failure() {
+  local request_id state_before volume_state
+  [ "${SUDO_USER:-root}" = root ] || die "initial deployment reset is root-only"
+  [ -f /run/lock/gole-production-rollout.lock ] &&
+    [ ! -L /run/lock/gole-production-rollout.lock ] &&
+    [ "$(stat -c '%U:%G:%a' /run/lock/gole-production-rollout.lock)" = "root:${DEPLOY_GROUP}:660" ] ||
+    die "production rollout lock metadata is invalid"
+  exec 8>>/run/lock/gole-production-rollout.lock
+  flock -n 8 || die "another production rollout is active"
+
+  read_deployment_transaction
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] ||
+    die "only a failed initial full deployment can be reset"
+  case "$DEPLOY_TX_STATE" in
+    mutation-armed | mutated | refreshed | budget-updated | verified | initial-reset-armed | rollback-restored) ;;
+    *) die "initial deployment is not in an explicitly resettable state" ;;
+  esac
+  validate_initial_deployment
+  [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+    die "metadata migration state blocks initial reset"
+  require_deployment_image_snapshot all "$DEPLOY_TX_REQUEST_ID"
+  [ "$SNAPSHOT_MODE" = initial ] && [ "$SNAPSHOT_IMAGE_COUNT" -eq 0 ] ||
+    die "initial deployment image journal is invalid"
+  create_release "$DEPLOY_TX_NEW_SHA" historical-main
+  select_release "$DEPLOY_TX_NEW_SHA"
+  validate_current_production_model
+  request_id="$DEPLOY_TX_REQUEST_ID"
+  state_before="$DEPLOY_TX_STATE"
+
+  if [ "$state_before" != initial-reset-armed ] && [ "$state_before" != rollback-restored ]; then
+    require_matching_nginx_transaction "$request_id"
+    [ "$NGINX_TXN_DEPLOY_SHA" = "$DEPLOY_TX_NEW_SHA" ] ||
+      die "initial reset Nginx deployment SHA changed"
+    write_deployment_transaction initial-reset-armed "$DEPLOY_TX_TARGET" \
+      "$request_id" "$DEPLOY_TX_NEW_SHA" "$DEPLOY_TX_PREVIOUS_SHA"
+    state_before=initial-reset-armed
+  fi
+
+  INITIAL_RESET_STARTED=1
+  if [ "$state_before" = initial-reset-armed ]; then
+    if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
+      require_matching_nginx_transaction "$request_id"
+      [ "$NGINX_TXN_DEPLOY_SHA" = "$DEPLOY_TX_NEW_SHA" ] ||
+        die "initial reset Nginx deployment SHA changed"
+      if [ "$NGINX_TXN_STATE" != rollback-restored ]; then
+        restore_nginx_transaction
+      fi
+      finish_nginx_recovery "$request_id"
+    fi
+
+    validate_initial_reset_project_resources
+    volume_state="$(initial_reset_volume_state)"
+    # Deliberately omit both -v and --remove-orphans. Unknown project objects
+    # were rejected above, and named persistent volumes must survive exactly.
+    production_compose "$APP_ENV_FILE" down --timeout 30
+    verify_initial_reset_project_absent
+    [ "$(initial_reset_volume_state)" = "$volume_state" ] ||
+      die "production volume presence changed during initial reset"
+    remove_initial_reset_local_images
+    write_deployment_transaction rollback-restored "$DEPLOY_TX_TARGET" \
+      "$request_id" "$DEPLOY_TX_NEW_SHA" "$DEPLOY_TX_PREVIOUS_SHA"
+  else
+    [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] ||
+      die "Nginx transaction remains after initial reset"
+    verify_initial_reset_project_absent
+    remove_initial_reset_local_images
+  fi
+
+  read_deployment_transaction
+  [ "$DEPLOY_TX_STATE" = rollback-restored ] ||
+    die "initial deployment reset did not reach terminal cleanup"
+  cleanup_deployment_images all "$request_id"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+  INITIAL_RESET_STARTED=0
+}
+
+rollback_unmutated_deployment_transaction() {
+  local model="" request_id="$1" validation_mode=strict
+  require_deployment_transaction "$request_id" snapshotted,built,nginx-installed
+  require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+
+  if [ "$DEPLOY_TX_PREVIOUS_SHA" != 0 ]; then
+    select_release "$DEPLOY_TX_PREVIOUS_SHA"
+    validate_current_environment
+    if [ "$SNAPSHOT_MODE" = strict ]; then
+      validation_mode=strict-lkg
+    else
+      validation_mode="$SNAPSHOT_MODE"
+    fi
+    validate_production_compose "$APP_ENV_FILE" "$validation_mode"
+    model="$(mktemp)"
+    register_temp_file "$model"
+    chmod 0600 "$model"
+    render_deployment_compose_model "$model"
+    # A build may have moved mutable local tags, but no running service may be
+    # recreated until mutation-armed is durable. Restore only those tags here.
+    restore_canonical_compose_image_refs "$model" "$DEPLOY_TX_TARGET" "$request_id"
+  fi
+
+  if [ "$DEPLOY_TX_STATE" = nginx-installed ] &&
+    [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ]; then
+    die "unmutated deployment lost its installed Nginx transaction"
+  fi
+  if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
+    require_matching_nginx_transaction "$request_id"
+    case "$NGINX_TXN_STATE" in
+      prepared | installed) restore_nginx_transaction ;;
+      rollback-restored) ;;
+      *) die "unmutated deployment has an invalid Nginx transaction state" ;;
+    esac
+  fi
+
+  verify_restored_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
+  verify_pre_snapshot_lkg_runtime "$DEPLOY_TX_PREVIOUS_SHA"
+  if [ "$DEPLOY_TX_PREVIOUS_SHA" != 0 ]; then
+    write_deployed_sha_exact "$DEPLOY_TX_PREVIOUS_SHA"
+  fi
+  if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
+    finish_nginx_recovery "$request_id"
+  fi
+  if [ -n "$model" ]; then
+    rm -f -- "$model"
+    forget_temp_file "$model"
+  fi
+  advance_deployment_transaction "$request_id" \
+    snapshotted,built,nginx-installed rollback-restored
+  cleanup_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
 
 recover_deployment_transaction() {
@@ -1834,24 +3891,128 @@ recover_deployment_transaction() {
     if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
       die "orphaned Nginx transaction requires manual root recovery"
     fi
+    if read_metadata_migration_marker && [ "$METADATA_MIGRATION_STATE" = ratcheting ]; then
+      systemctl poweroff --no-block || true
+      die "orphaned metadata ratchet requires manual recovery; VM powered off"
+    fi
     echo NONE
     return
   fi
   read_deployment_transaction
-  rollback_deployment_transaction "$DEPLOY_TX_REQUEST_ID"
+  if [ "$DEPLOY_TX_STATE" = cleanup-pending ]; then
+    recover_completed_deployment_cleanup
+    echo RECOVERED
+    return
+  fi
+  if [ "$DEPLOY_TX_STATE" = rollback-restored ]; then
+    recover_restored_deployment_cleanup
+    echo RECOVERED
+    return
+  fi
+  if [ "$DEPLOY_TX_STATE" = prepared ]; then
+    recover_pre_snapshot_deployment
+    echo RECOVERED
+    return
+  fi
+  if [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] && [ "$DEPLOY_TX_TARGET" = all ] &&
+    [[ "$DEPLOY_TX_STATE" =~ ^(marker-recorded|initial-http-verified|runtime-verified)$ ]]; then
+    recover_initial_deployment_commit_window
+    return
+  fi
+  if [ "$DEPLOY_TX_STATE" = runtime-verified ] &&
+    read_metadata_migration_marker && [ "$METADATA_MIGRATION_STATE" = ratcheting ]; then
+    METADATA_RATCHET_STARTED=1
+    advance_deployment_transaction "$DEPLOY_TX_REQUEST_ID" runtime-verified metadata-ratchet-armed
+    read_deployment_transaction
+  fi
+  if [ "$DEPLOY_TX_STATE" = metadata-ratchet-armed ]; then
+    complete_metadata_migration_ratchet "$DEPLOY_TX_NEW_SHA" "$DEPLOY_TX_REQUEST_ID"
+    read_deployment_transaction
+  fi
+  if [ "$DEPLOY_TX_STATE" = runtime-verified ] &&
+    [ "$DEPLOY_TX_TARGET" = all ] &&
+    [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] &&
+    [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] &&
+    [ "$(read_deployed_sha 2>/dev/null || true)" = "$DEPLOY_TX_NEW_SHA" ] &&
+    (verify_runtime_verified_commit_window); then
+    require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    advance_deployment_transaction "$DEPLOY_TX_REQUEST_ID" runtime-verified cleanup-pending
+    cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+    echo RECOVERED
+    return
+  fi
+  if [ "$DEPLOY_TX_STATE" = metadata-ratchet-verified ]; then
+    METADATA_RATCHET_STARTED=1
+    verify_metadata_full_policy
+    verify_metadata_denial_runtime
+    verify_broker_native_budget_relay
+    verify_broker_policy_heartbeat_advanced
+    verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
+    if [ -e "$METADATA_MIGRATION_MARKER" ] || [ -L "$METADATA_MIGRATION_MARKER" ]; then
+      if ! (read_metadata_migration_marker); then
+        systemctl poweroff --no-block || true
+        die "invalid metadata ratchet marker during recovery; VM powered off"
+      fi
+      read_metadata_migration_marker
+      [ "$METADATA_MIGRATION_STATE" = ratcheting ] &&
+        [ "$METADATA_MIGRATION_LEGACY_SHA" != "$DEPLOY_TX_NEW_SHA" ] || {
+          systemctl poweroff --no-block || true
+          die "metadata ratchet marker does not match recovery; VM powered off"
+        }
+      rm -f -- "$METADATA_MIGRATION_MARKER"
+      sync -f /etc/gole
+    fi
+    require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    advance_deployment_transaction "$DEPLOY_TX_REQUEST_ID" \
+      metadata-ratchet-verified cleanup-pending
+    cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
+    METADATA_RATCHET_STARTED=0
+  else
+    rollback_deployment_transaction "$DEPLOY_TX_REQUEST_ID"
+  fi
   echo RECOVERED
 }
 
 rollback_deployment_transaction() {
-  local available current_marker request_id="$1" service state
-  local services=()
-  require_deployment_transaction "$request_id" prepared,snapshotted,built,nginx-installed,mutated,refreshed,budget-updated,verified,marker-recorded,runtime-verified
+  local available marker model override request_id="$1" service validation_mode=strict-lkg
+  local -a app_services=()
+  require_deployment_transaction "$request_id" prepared,snapshotted,built,nginx-installed,mutation-armed,mutated,refreshed,budget-updated,verified,marker-recorded,runtime-verified
+  # Once the durable marker says ratcheting, rollback is forbidden even if a
+  # crash happened before the deployment transaction advanced. Reopening the
+  # legacy metadata-dependent relay would break the one-way security boundary.
+  if [ -e "$METADATA_MIGRATION_MARKER" ] || [ -L "$METADATA_MIGRATION_MARKER" ]; then
+    if ! (read_metadata_migration_marker); then
+      "$METADATA_FIREWALL" --full >/dev/null 2>&1 || true
+      systemctl poweroff --no-block || true
+      die "invalid metadata migration marker blocks rollback; VM powered off"
+    fi
+    read_metadata_migration_marker
+    if [ "$METADATA_MIGRATION_STATE" = ratcheting ]; then
+      METADATA_RATCHET_STARTED=1
+      "$METADATA_FIREWALL" --full >/dev/null 2>&1 || true
+      systemctl poweroff --no-block || true
+      die "metadata isolation ratchet blocks rollback; VM powered off"
+    fi
+    validation_mode=legacy-adoption
+  fi
+  if [ "$DEPLOY_TX_STATE" = prepared ]; then
+    recover_pre_snapshot_deployment
+    return
+  fi
+  case "$DEPLOY_TX_STATE" in
+    snapshotted | built | nginx-installed)
+      rollback_unmutated_deployment_transaction "$request_id"
+      return
+      ;;
+  esac
   if [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ]; then
     # A first deployment has no known-good application or image. Leaving an
-    # unknown partial service online is less safe than stopping the VM.
-    systemctl poweroff --no-block
-    echo "initial deployment failed closed; transaction retained for audit" >&2
-    return 0
+    # unknown partial service online is less safe than stopping the VM. Return
+    # failure so deploy.sh cannot announce a nonexistent LKG rollback; the
+    # command wrapper performs the single fail-closed poweroff request.
+    die "initial deployment has no LKG; transaction retained for explicit root reset"
   fi
   if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
     require_matching_nginx_transaction "$request_id"
@@ -1860,52 +4021,133 @@ rollback_deployment_transaction() {
     fi
   fi
   require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+  if [ "$SNAPSHOT_MODE" = strict ] &&
+    { [ -e "$MINIO_RECOVERY_MARKER" ] || [ -L "$MINIO_RECOVERY_MARKER" ]; }; then
+    (quiesce_public_runtime && require_public_runtime_quiesced) || true
+    systemctl poweroff --no-block || true
+    die "MinIO unfreeze recovery is unresolved; rollback cannot reopen writes"
+  fi
+  if [ "$SNAPSHOT_MODE" = strict ]; then
+    marker="$(data_upgrade_marker "$request_id")"
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      if ! (quiesce_public_runtime && require_public_runtime_quiesced); then
+        systemctl poweroff --no-block || true
+        die "data-plane rollback could not close writes; VM powered off"
+      fi
+      require_data_upgrade_marker "$request_id"
+      if [ "$DATA_UPGRADE_STATE" = mutation-armed ]; then
+        systemctl poweroff --no-block || true
+        die "mutated data plane requires explicit logical restore; backup retained and VM powered off"
+      fi
+    fi
+  fi
   restore_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
   select_release "$DEPLOY_TX_PREVIOUS_SHA"
   validate_current_environment
-  validate_production_compose "$APP_ENV_FILE" legacy-adoption
+  validate_production_compose "$APP_ENV_FILE" "$validation_mode"
+  model="$(mktemp)"
+  override="$(mktemp)"
+  register_temp_file "$model"
+  register_temp_file "$override"
+  chmod 0600 "$model" "$override"
+  render_deployment_compose_model "$model"
+  restore_canonical_compose_image_refs "$model" "$DEPLOY_TX_TARGET" "$request_id"
+  write_deployment_image_override "$DEPLOY_TX_TARGET" "$request_id" "$override"
   available="$(production_compose "$APP_ENV_FILE" config --services)"
-  for service in support-agent backend frontend budget-relay nginx; do
-    if grep -qx "$service" <<<"$available"; then services+=("$service"); fi
-  done
   for service in backend frontend budget-relay nginx; do
     grep -qx "$service" <<<"$available" || die "rollback release misses a required service"
   done
-  if ! production_compose "$APP_ENV_FILE" up -d --no-build --remove-orphans --wait "${services[@]}"; then
+  if [ "$DEPLOY_TX_TARGET" = all ] &&
+    { [ "$SNAPSHOT_MODE" = legacy-adoption ] ||
+      { [ "$SNAPSHOT_MODE" = strict ] && data_upgrade_required "$request_id"; }; }; then
+    quiesce_public_runtime
+    for service in mongo mongo-init redis minio minio-init; do
+      grep -qx "$service" <<<"$available" || die "rollback release misses a data service"
+    done
+    if [ "$SNAPSHOT_MODE" = strict ]; then
+      require_data_upgrade_marker "$request_id"
+      if { [ "${DATA_UPGRADE_CHANGES[mongo]}" = true ] &&
+        ! run_compose_services_exactly rollback "$override" mongo; } ||
+        { [ "${DATA_UPGRADE_CHANGES[redis]}" = true ] &&
+          ! run_compose_services_exactly rollback "$override" redis; } ||
+        { [ "${DATA_UPGRADE_CHANGES[minio]}" = true ] &&
+          ! run_compose_services_exactly rollback "$override" minio; } ||
+        { { [ "${DATA_UPGRADE_CHANGES[mongo]}" = true ] ||
+            [ "${DATA_UPGRADE_CHANGES[mongo-init]}" = true ]; } &&
+          ! run_compose_initializers_exactly rollback "$override" mongo-init; } ||
+        { { [ "${DATA_UPGRADE_CHANGES[minio]}" = true ] ||
+            [ "${DATA_UPGRADE_CHANGES[minio-init]}" = true ]; } &&
+          ! run_compose_initializers_exactly rollback "$override" minio-init; }; then
+        systemctl poweroff --no-block
+        die "strict data-plane rollback failed; logical backup retained; VM powered off"
+      fi
+    elif ! run_compose_services_exactly rollback "$override" mongo redis minio ||
+      ! run_compose_initializers_exactly rollback "$override" mongo-init minio-init; then
+      systemctl poweroff --no-block
+      die "rollback data-plane Compose failed; VM powered off"
+    fi
+  fi
+  case "$DEPLOY_TX_TARGET" in
+    all)
+      grep -qx support-agent <<<"$available" && app_services+=(support-agent)
+      app_services+=(backend frontend budget-relay nginx)
+      ;;
+    backend)
+      grep -qx support-agent <<<"$available" && app_services+=(support-agent)
+      app_services+=(backend nginx)
+      ;;
+    frontend) app_services+=(frontend nginx) ;;
+  esac
+  if [ "${SNAPSHOT_IMAGE_IDS[support-agent]:-missing}" = absent ] &&
+    docker inspect gole-support-agent >/dev/null 2>&1; then
+    labels="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+      gole-support-agent)"
+    [ "$labels" = gole\|support-agent ] || die "unexpected support-agent blocks rollback"
+    docker rm -f gole-support-agent >/dev/null
+  fi
+  if ! run_compose_services_exactly rollback "$override" "${app_services[@]}"; then
     systemctl poweroff --no-block
     die "rollback Compose failed; VM powered off"
   fi
-  for service in gole-backend gole-frontend gole-budget-relay gole-nginx; do
-    state="$(docker inspect --format '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$service" 2>/dev/null || true)"
-    [ "$state" = running:healthy ] || {
-      systemctl poweroff --no-block
-      die "rollback health failed; VM powered off"
-    }
-  done
+  verify_restored_deployment_images "$DEPLOY_TX_TARGET" "$request_id" || {
+    systemctl poweroff --no-block
+    die "rollback image or health verification failed; VM powered off"
+  }
+  docker exec gole-nginx nginx -t >/dev/null 2>&1 || {
+    systemctl poweroff --no-block
+    die "rollback Nginx validation failed; VM powered off"
+  }
   curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null || {
     systemctl poweroff --no-block
     die "rollback readiness failed; VM powered off"
   }
-  current_marker="$(read_deployed_sha 2>/dev/null || true)"
-  if [ "$current_marker" != "$DEPLOY_TX_PREVIOUS_SHA" ]; then
-    sha_candidate="$(mktemp)"
-    printf '%s\n' "$DEPLOY_TX_PREVIOUS_SHA" > "$sha_candidate"
-    atomic_install "$sha_candidate" "$DEPLOYED_SHA_FILE" 0644 root
-    rm -f -- "$sha_candidate"
-  fi
+  write_deployed_sha_exact "$DEPLOY_TX_PREVIOUS_SHA"
   if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
     finish_nginx_recovery "$request_id"
   fi
+  rm -f -- "$model" "$override"
+  forget_temp_file "$model"
+  forget_temp_file "$override"
+  advance_deployment_transaction "$request_id" \
+    mutation-armed,mutated,refreshed,budget-updated,verified,marker-recorded,runtime-verified \
+    rollback-restored
   cleanup_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
-  rm -f -- "$DEPLOYMENT_TRANSACTION_FILE"
+  remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
 
 cost_guard_fail_closed() {
-  if systemctl is-active --quiet gole-cost-guard-watchdog.timer ||
-    verify_budget_relay_health >/dev/null 2>&1; then
+  if systemctl is-active --quiet gole-cost-guard-watchdog.timer; then
     return 0
   fi
-  systemctl poweroff --no-block
+  # A legacy relay can stay healthy briefly after the root policy loop dies.
+  # Without the watchdog timer, only the complete broker-native path proves
+  # that budget enforcement is still running.
+  if (verify_broker_native_budget_relay) >/dev/null 2>&1; then
+    return 0
+  fi
+  systemctl poweroff --no-block || true
+  die "cost guard protections are unavailable; VM powered off"
 }
 
 validate_request_id() {
@@ -1921,6 +4163,7 @@ create_environment_backup() {
   install -d -m 0700 -o root -g root "$BACKUP_DIR"
   backup_file="${BACKUP_DIR}/gole.env.$(date -u +%Y%m%dT%H%M%SZ).v${version}.${request_id}"
   install -m 0600 -o root -g root "$APP_ENV_FILE" "$backup_file"
+  sync_host_state "$backup_file"
   printf '%s\n' "$backup_file"
 }
 
@@ -1946,7 +4189,7 @@ write_env_version_exact() {
   local version_candidate
   if [ "$version" = "0" ]; then
     if [ -e "$ENV_VERSION_FILE" ] || [ -L "$ENV_VERSION_FILE" ]; then
-      rm -f -- "$ENV_VERSION_FILE"
+      remove_host_state "$ENV_VERSION_FILE"
     fi
     return
   fi
@@ -1954,6 +4197,7 @@ write_env_version_exact() {
   version_candidate="$(mktemp)"
   printf '%s\n' "$version" > "$version_candidate"
   atomic_install "$version_candidate" "$ENV_VERSION_FILE" 0644 root
+  sync_host_state "$ENV_VERSION_FILE"
   rm -f -- "$version_candidate"
 }
 
@@ -1976,6 +4220,7 @@ write_transaction() {
     "candidate_sha256=$candidate_sha256" > "$transaction_candidate"
   atomic_install "$transaction_candidate" "$ENV_TRANSACTION_FILE" 0600 root
   rm -f -- "$transaction_candidate"
+  sync_host_state "$ENV_TRANSACTION_FILE"
 }
 
 read_transaction() {
@@ -1995,7 +4240,7 @@ read_transaction() {
   TXN_REQUEST_ID=""
   TXN_BACKUP_FILE=""
   TXN_CANDIDATE_SHA256=""
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "${key}${value}" ]; do
     case "$key" in
       state)
         [ "$seen_state" -eq 0 ] || die "environment transaction has duplicate state"
@@ -2059,6 +4304,7 @@ require_matching_transaction() {
 restore_transaction_environment() {
   local current_version
   atomic_install "$TXN_BACKUP_FILE" "$APP_ENV_FILE" 0600 root
+  sync_host_state "$APP_ENV_FILE"
   current_version="$(read_env_version)"
   if [ "$current_version" != "$TXN_PREVIOUS_VERSION" ]; then
     if [ "$current_version" != "$TXN_REQUESTED_VERSION" ]; then
@@ -2111,6 +4357,7 @@ begin_environment_transaction() {
   write_transaction prepared "$previous_version" "$version" "$request_id" \
     "$backup_file" "$candidate_sha256"
   atomic_install "$staged_candidate" "$APP_ENV_FILE" 0600 root
+  sync_host_state "$APP_ENV_FILE"
   write_transaction installed "$previous_version" "$version" "$request_id" \
     "$backup_file" "$candidate_sha256"
   rm -f -- "$staged_candidate"
@@ -2158,7 +4405,7 @@ finalize_environment_transaction() {
     die "committed environment hash is invalid"
   [ "$(read_env_version)" = "$TXN_REQUESTED_VERSION" ] ||
     die "committed environment version is invalid"
-  rm -f -- "$ENV_TRANSACTION_FILE"
+  remove_host_state "$ENV_TRANSACTION_FILE"
 }
 
 recover_environment_transaction() {
@@ -2176,7 +4423,7 @@ recover_environment_transaction() {
       { [ "$current_version" = "$TXN_PREVIOUS_VERSION" ] ||
         [ "$current_version" = "$TXN_REQUESTED_VERSION" ]; }; then
       write_env_version_exact "$TXN_REQUESTED_VERSION"
-      rm -f -- "$ENV_TRANSACTION_FILE"
+      remove_host_state "$ENV_TRANSACTION_FILE"
       echo "COMMITTED"
       return
     fi
@@ -2202,16 +4449,40 @@ finish_environment_recovery() {
     die "recovered environment hash is invalid"
   [ "$(read_env_version)" = "$TXN_PREVIOUS_VERSION" ] ||
     die "recovered environment version is invalid"
-  rm -f -- "$ENV_TRANSACTION_FILE"
+  remove_host_state "$ENV_TRANSACTION_FILE"
 }
 
 restart_strict_lkg_services() {
-  local expected_sha="$1"
+  local attempt backend_ready=0 expected_sha="$1" https_ready=0
   create_release "$expected_sha" false
   select_release "$expected_sha"
   validate_current_production_model
   production_compose "$APP_ENV_FILE" up -d --no-build --no-deps \
-    --force-recreate --wait support-agent backend nginx
+    --force-recreate --wait support-agent
+  production_compose "$APP_ENV_FILE" up -d --no-build --no-deps \
+    --force-recreate --wait backend
+  for ((attempt = 1; attempt <= 30; attempt++)); do
+    if curl -fsS --max-time 5 \
+      http://127.0.0.1:8080/actuator/health/readiness >/dev/null; then
+      backend_ready=1
+      break
+    fi
+    sleep 1
+  done
+  [ "$backend_ready" -eq 1 ] || die "restarted backend did not become ready"
+  production_compose "$APP_ENV_FILE" up -d --no-build --no-deps \
+    --force-recreate --wait nginx
+  production_compose "$APP_ENV_FILE" exec -T nginx nginx -t >/dev/null
+  production_compose "$APP_ENV_FILE" exec -T nginx nginx -s reload >/dev/null
+  for ((attempt = 1; attempt <= 30; attempt++)); do
+    if curl -fsS --max-time 5 --resolve gole.co.kr:443:127.0.0.1 \
+      https://gole.co.kr/actuator/health/readiness >/dev/null; then
+      https_ready=1
+      break
+    fi
+    sleep 1
+  done
+  [ "$https_ready" -eq 1 ] || die "restarted HTTPS backend route did not become ready"
   verify_deployment_runtime_components "$expected_sha"
 }
 
@@ -2365,8 +4636,12 @@ migrate_and_adopt_secret() {
     die "an Nginx transaction is active"
 
   if [ -e "$ADOPTION_TRANSACTION_FILE" ] || [ -L "$ADOPTION_TRANSACTION_FILE" ]; then
-    validate_discord_environment
     read_adoption_transaction || die "adoption recovery transaction is missing"
+    # Recovery is part of the original root operation, not a generic adoption
+    # shortcut. Reject stale or mistyped workflow arguments before any release,
+    # environment, image, service, or marker mutation occurs.
+    require_exact_adoption_invocation "$adoption_sha" "$requested_version" "$request_id"
+    validate_discord_environment
     create_release "$ADOPT_DEPLOYMENT_SHA" false
     select_release "$ADOPT_DEPLOYMENT_SHA"
     recovery_state="$(recover_adoption_transaction)"
@@ -2420,9 +4695,9 @@ migrate_and_adopt_secret() {
   trap - EXIT INT TERM
 }
 
-command="${1:-}"
+hostctl_command="${1:-}"
 shift || true
-case "$command" in
+case "$hostctl_command" in
   privilege-probe)
     require_argument_count 0 "$@"
     ;;
@@ -2494,7 +4769,14 @@ case "$command" in
     ;;
   deployment-recover)
     require_argument_count 0 "$@"
-    recover_deployment_transaction
+    if ! (recover_deployment_transaction); then
+      systemctl poweroff --no-block || true
+      die "deployment recovery failed; VM powered off"
+    fi
+    ;;
+  deployment-reset-initial-failure)
+    require_argument_count 0 "$@"
+    reset_initial_deployment_failure
     ;;
   deployment-is-uninitialized)
     require_argument_count 0 "$@"
@@ -2522,7 +4804,7 @@ case "$command" in
     ;;
   deployment-images-cleanup)
     require_argument_count 2 "$@"
-    cleanup_deployment_images "$1" "$2"
+    cleanup_deployment_images_command "$1" "$2"
     ;;
   deployment-budget-healthy)
     require_argument_count 0 "$@"
@@ -2552,9 +4834,22 @@ case "$command" in
     require_argument_count 2 "$@"
     verify_candidate_deployment_runtime "$1" "$2"
     ;;
+  deployment-verify-initial-http-commit)
+    require_argument_count 2 "$@"
+    verify_initial_http_commit "$1" "$2"
+    ;;
+  deployment-complete-initial-tls)
+    require_argument_count 0 "$@"
+    read_deployment_transaction
+    complete_initial_tls_commit "$DEPLOY_TX_REQUEST_ID"
+    ;;
   certificate-renew)
     require_argument_count 0 "$@"
     renew_certificate
+    ;;
+  certificate-issue)
+    require_argument_count 0 "$@"
+    issue_certificate
     ;;
   deployment-verify-commit)
     require_argument_count 2 "$@"
@@ -2563,7 +4858,15 @@ case "$command" in
   deployment-verify-runtime)
     require_argument_count 1 "$@"
     [ "$(read_deployed_sha)" = "$1" ] || die "deployed SHA marker does not match"
+    [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
+      die "metadata migration is not finalized"
+    verify_metadata_full_policy
+    verify_broker_native_budget_relay
     verify_deployment_runtime_components "$1"
+    ;;
+  deployment-verify-adopted-runtime)
+    require_argument_count 1 "$@"
+    verify_adopted_deployment_runtime "$1"
     ;;
   adoption-transaction-begin)
     require_argument_count 4 "$@"
@@ -2639,14 +4942,22 @@ case "$command" in
     ;;
   deployment-rollback)
     require_argument_count 1 "$@"
-    (
-      trap 'systemctl poweroff --no-block || true' ERR
-      rollback_deployment_transaction "$1"
-    )
+    if ! (rollback_deployment_transaction "$1"); then
+      systemctl poweroff --no-block || true
+      die "deployment rollback failed; VM powered off"
+    fi
     ;;
   deployment-fail-closed)
     require_argument_count 1 "$@"
-    require_deployment_transaction "$1" prepared,snapshotted,built,nginx-installed,mutated,refreshed,budget-updated,verified,marker-recorded,runtime-verified
+    require_deployment_transaction "$1" prepared,snapshotted,built,nginx-installed,mutation-armed,mutated,refreshed,budget-updated,verified,marker-recorded,initial-http-verified,runtime-verified,metadata-ratchet-armed,metadata-ratchet-verified,initial-reset-armed,cleanup-pending,rollback-restored
+    systemctl poweroff --no-block
+    ;;
+  deployment-fail-closed-initial-tls)
+    require_argument_count 0 "$@"
+    read_deployment_transaction
+    [ "$DEPLOY_TX_STATE" = initial-http-verified ] &&
+      [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_PREVIOUS_SHA" = 0 ] ||
+      die "no initial TLS completion is pending"
     systemctl poweroff --no-block
     ;;
   watchdog-install)

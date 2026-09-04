@@ -1,8 +1,8 @@
 project_id = "replace-with-project-id"
 # 반드시 plan/apply 전에 검토가 끝난 main의 full SHA로 교체한다.
 bootstrap_source_sha = "REPLACE_WITH_REVIEWED_FULL_MAIN_SHA"
-# 결제 계정 권한이 없거나 budget을 별도 스크립트로 만들 때는 빈 문자열로 둔다.
-billing_account_id = ""
+# 운영 Budget과 root 비용 가드가 사용할 결제 계정 ID를 반드시 입력한다.
+billing_account_id = "REPLACE-WITH-BILLING-ACCOUNT-ID"
 region       = "asia-northeast3"
 zone         = "asia-northeast3-a"
 domain       = "gole.co.kr"
@@ -15,7 +15,6 @@ vm_cost_start  = "2026-09-01T19:57:05+09:00"
 hard_stop_at   = "2026-10-28T01:50:00+09:00"
 credit_deadline = "2026-10-28T23:59:59+09:00"
 runtime_rate_transition_at = "2026-09-06T00:00:00+09:00"
-expected_budget_id = "b645c912-d766-43fc-8923-bff70ecfe8d8"
 snapshot_policy_name    = "gole-production-daily-snapshots"
 snapshot_retention_days = 3
 snapshot_start_time_utc = "20:00"
@@ -28,5 +27,5 @@ grant_gts_eab_creator      = false
 # GitHub 등록 토큰은 tfvars/Terraform state/startup-script에 절대 넣지 않는다.
 # terraform apply가 끝난 뒤 README의 2단계 명령으로 1시간짜리 토큰을 stdin 전달한다.
 deploy_user          = "goledeploy"
-github_runner_name   = "gole-production"
+github_runner_name   = "gole-gcp-production"
 github_runner_labels = "gole-gcp-production"

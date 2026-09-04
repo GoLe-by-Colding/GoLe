@@ -214,13 +214,9 @@ for key in ("GOLE_ADMIN_EMAIL", "GOLE_ADMIN_PASSWORD"):
 
 imported = 0
 for key in external_credentials:
-    value = production.get(key)
-    if value is None:
-        value = existing.get(key)
-    if value is not None:
-        local_values[key] = value
-        if key in production:
-            imported += 1
+    if key in production:
+        local_values[key] = production[key]
+        imported += 1
 
 lines = [
     "# scripts/sync-dev-env.sh가 생성한 맥 개발 전용 환경입니다.",
