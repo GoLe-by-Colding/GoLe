@@ -112,7 +112,12 @@ def guard_config(state_dir, tx_path, boot_path, **overrides):
         "GCP_PROJECT_ID": "project-72a52bf1-06aa-4519-b2c",
         "GCP_CREDIT_AMOUNT_KRW": "395600.60",
         "GCP_CREDIT_DEADLINE": "2026-10-28T23:59:59+09:00",
-        "GCP_FIXED_HOURLY_COST_KRW": "231.249894200",
+        "GCP_FIXED_HOURLY_COST_KRW": "153.390555330",
+        "GCP_HIGH_RATE_HOURLY_COST_KRW": "240.749900000",
+        "GCP_RUNTIME_RATE_TRANSITION_AT": "2026-09-06T00:00:00+09:00",
+        "GCP_SNAPSHOT_MAX_HOURLY_COST_KRW": "39.041010000",
+        "GCP_SNAPSHOT_RETENTION_HOURS": "72",
+        "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW": "13.013670000",
         "BUDGET_STATE_DIR": str(state_dir),
         "GCP_HARD_STOP_ENABLED": "true",
         "GCP_HARD_STOP_DRY_RUN": "false",
@@ -125,7 +130,7 @@ def guard_config(state_dir, tx_path, boot_path, **overrides):
         "GCP_HARD_STOP_BUDGET_DISPLAY_NAME": "GoLe production credit guard",
         "GCP_HARD_STOP_PERIOD_START": "2026-09-01",
         "GCP_VM_COST_START": "2026-09-01T19:57:05+09:00",
-        "GCP_HARD_STOP_AT": "2026-10-26T19:50:00+09:00",
+        "GCP_HARD_STOP_AT": "2026-10-28T01:50:00+09:00",
         "GCP_HARD_STOP_ARM_ID": "2026-09-credit-v1",
         "GCP_INSTANCE_ZONE": "asia-northeast3-a",
         "GCP_INSTANCE_NAME": "gole-production",
@@ -432,7 +437,53 @@ class BudgetRelayTests(unittest.TestCase):
             self.assertEqual(compute.request_ids, [])
             self.assertIsNone(state.guard_trip_reason(cfg.hard_stop.arm_id))
             self.assertTrue(
-                any("예측비용 100.0% 임계치" in item for item in discord.messages)
+                any(
+                    "Google forecast 100.0% 임계치(실제 초과 아님)" in item
+                    for item in discord.messages
+                )
+            )
+            self.assertTrue(
+                any("Google Billing 게시 실제 누적비용" in item for item in discord.messages)
+            )
+
+    def test_new_arm_ignores_old_period_and_old_arm_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_cfg = guard_config(root, root / "tx_bytes", root / "boot_id")
+            new_cfg = guard_config(
+                root,
+                root / "tx_bytes",
+                root / "boot_id",
+                GCP_HARD_STOP_ARM_ID="2026-09-e2-standard-2-v2",
+            )
+            state = StateStore(root)
+            state.data["periods"] = {
+                "old": {
+                    "interval_start": "2026-08-05T07:00:00Z",
+                    "latest_publish_time": "2026-09-04T11:58:00Z",
+                    "latest_cost_amount": "53919.08",
+                    "currency_code": "KRW",
+                },
+                "current": {
+                    "interval_start": "2026-09-01T07:00:00Z",
+                    "latest_publish_time": "2026-09-04T11:59:51Z",
+                    "latest_cost_amount": "15835.15",
+                    "currency_code": "KRW",
+                },
+            }
+            state.trip_guard(old_cfg.hard_stop.arm_id, "billing-limit", NOW)
+            state.mark_guard_events(old_cfg.hard_stop.arm_id, ["all-in-warning"])
+
+            self.assertEqual(
+                state.latest_cost(new_cfg.hard_stop.period_start),
+                Decimal("15835.15"),
+            )
+            self.assertIsNone(state.guard_trip_reason(new_cfg.hard_stop.arm_id))
+            self.assertEqual(
+                state.unseen_guard_events(
+                    new_cfg.hard_stop.arm_id, ["all-in-warning"]
+                ),
+                ("all-in-warning",),
             )
 
     def test_billing_320000_stops_vm(self):
@@ -527,6 +578,57 @@ class BudgetRelayTests(unittest.TestCase):
                 * Decimal("1.10"),
             )
 
+    def test_snapshot_tail_and_resized_vm_fit_before_credit_exhaustion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cfg = guard_config(root, root / "tx_bytes", root / "boot_id")
+            runtime_hourly = (
+                cfg.fixed_hourly_cost_krw
+                + cfg.snapshot_max_hourly_cost_krw
+                + cfg.manual_snapshot_hourly_cost_krw
+            )
+            self.assertEqual(runtime_hourly, Decimal("205.445235330"))
+
+            start = cfg.hard_stop.vm_cost_start
+            stopped = None
+            for elapsed_hours in range(0, 1351):
+                candidate = calculate_cost_guard_snapshot(
+                    cfg,
+                    start + timedelta(hours=elapsed_hours),
+                    observed_billing_gross=Decimal("0"),
+                    network_bytes=0,
+                )
+                if candidate.stop_reason is not None:
+                    stopped = candidate
+                    break
+
+            self.assertIsNotNone(stopped)
+            assert stopped is not None
+            self.assertEqual(stopped.stop_reason, "absolute-cutoff")
+            self.assertEqual(stopped.runtime_hours, Decimal("1350"))
+            # all_in_if_stopped already includes VAT, stopped disk/IP cost, the
+            # 72-hour three-point schedule tail and the manual snapshot tail.
+            self.assertLess(stopped.all_in_if_stopped_gross, cfg.credit_amount_krw)
+            self.assertLess(
+                stopped.all_in_if_stopped_gross,
+                cfg.hard_stop.all_in_cost_limit_krw,
+            )
+
+    def test_snapshot_tail_must_fit_below_credit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(
+                ConfigurationError, "maximum snapshot retention tail"
+            ):
+                guard_config(
+                    root,
+                    root / "tx_bytes",
+                    root / "boot_id",
+                    GCP_HARD_STOP_ALL_IN_COST_KRW="390000",
+                    GCP_COST_GUARD_WARNING_KRW="370000",
+                    GCP_COST_GUARD_DANGER_KRW="380000",
+                )
+
     def test_state_save_error_does_not_prevent_compute_stop(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -581,7 +683,7 @@ class BudgetRelayTests(unittest.TestCase):
             boot_path = root / "boot_id"
             tx_path.write_text("0", encoding="utf-8")
             boot_path.write_text("boot-a", encoding="utf-8")
-            cutoff = datetime.fromisoformat("2026-10-26T19:50:00+09:00")
+            cutoff = datetime.fromisoformat("2026-10-28T01:50:00+09:00")
             now = [cutoff]
             cfg = guard_config(root, tx_path, boot_path)
             state = StateStore(root)
@@ -699,7 +801,7 @@ class BudgetRelayTests(unittest.TestCase):
             boot_path = root / "boot_id"
             tx_path.write_text("0", encoding="utf-8")
             boot_path.write_text("boot-a", encoding="utf-8")
-            cutoff = datetime.fromisoformat("2026-10-26T19:50:00+09:00")
+            cutoff = datetime.fromisoformat("2026-10-28T01:50:00+09:00")
             cfg = guard_config(root, tx_path, boot_path)
             state = StateStore(root)
             compute = FakeCompute()

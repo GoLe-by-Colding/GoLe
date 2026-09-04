@@ -1,10 +1,10 @@
-FROM python:3.13-alpine
+FROM python:3.13-alpine@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     BUDGET_STATE_DIR=/state
 
-RUN addgroup -S gole && adduser -S -G gole -u 10001 gole \
+RUN addgroup -S -g 10001 gole && adduser -S -G gole -u 10001 gole \
     && mkdir -p /app /state \
     && chown -R gole:gole /app /state
 

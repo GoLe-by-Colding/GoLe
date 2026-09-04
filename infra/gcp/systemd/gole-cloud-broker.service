@@ -1,0 +1,28 @@
+[Unit]
+Description=GoLe root-only GCP credential broker
+After=network-online.target gole-metadata-firewall.service
+Wants=network-online.target
+Requires=gole-metadata-firewall.service
+Before=gole-github-runner.service
+
+[Service]
+Type=simple
+User=root
+Group=golecloud
+UMask=0007
+RuntimeDirectory=gole-cloud-broker
+RuntimeDirectoryMode=0710
+StateDirectory=gole-cloud-broker
+StateDirectoryMode=0700
+ExecStart=/usr/local/libexec/gole/cloud-broker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/gole-cloud-broker /var/lib/gole-cloud-broker
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 # 거래 후기/평점 (Review) — 구현 태스크
 
 > 상태: **전부 구현·배포 완료.** (2026-08-03 실측 감사로 소급 체크)
-> 근거: 프로덕션 `GET https://gole.kscold.com/api/v1/sellers/seller-aurora/rating`
+> 현재 운영 확인 주소: `GET https://gole.co.kr/api/v1/sellers/{sellerId}/rating`
 > → `{"average":4.7,"count":3}` 정상 응답. 로컬 `ReviewSeeder` 7건 적재 확인.
 
 ## 백엔드 (헥사고날 구현 순서)

@@ -5,6 +5,4 @@ After=docker.service network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/app
-ExecStart=/app/infra/gcp/scripts/renew-certificate.sh
-
+ExecStart=/usr/local/sbin/gole-hostctl certificate-renew

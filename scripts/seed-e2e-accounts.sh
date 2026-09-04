@@ -18,6 +18,7 @@
 set -euo pipefail
 
 MONGO_SERVICE="${MONGO_SERVICE:-mongo}"
+MONGODB_PORT="${MONGODB_PORT:-27017}"
 REDIS_SERVICE="${REDIS_SERVICE:-redis}"
 # 개발 데이터와 절대 섞이지 않는 전용 DB가 기본이다. 운영/개발 DB를 명시해도 아래 가드가
 # 즉시 중단하므로, 이 스크립트는 어떤 기존 계정도 삭제하지 않는다.
@@ -45,11 +46,13 @@ SELLER_TOKEN="e2e-seller-session-token"
 BUYER_TOKEN="e2e-buyer-session-token"
 
 # 실제로 검증되지 않는 자리채움 해시. 이 계정들은 비밀번호 로그인을 하지 않는다.
+# 테스트 픽스처의 bcrypt 해시는 셸 변수 치환 대상이 아닌 리터럴이다.
+# shellcheck disable=SC2016
 PLACEHOLDER_HASH='$2a$10$e2eE2eE2eE2eE2eE2eE2eOa1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p'
 
 echo "▶ E2E 계정 시드 (mongo=$MONGO_SERVICE db=$MONGO_DB redis-db=$REDIS_DATABASE)"
 
-docker compose exec -T "$MONGO_SERVICE" mongosh --quiet "$MONGO_DB" <<MONGO
+docker compose exec -T "$MONGO_SERVICE" mongosh --port "$MONGODB_PORT" --quiet "$MONGO_DB" <<MONGO
 const accounts = [
   { _id: "$SELLER_ID", email: "e2e-seller@gole.test" },
   { _id: "$BUYER_ID",  email: "e2e-buyer@gole.test"  },
@@ -73,6 +76,10 @@ for (const a of accounts) {
         role: "USER",
         verificationFailedAttempts: 0,
         failedAttempts: 0,
+        // 판매자 신원확인 게이트는 legacyExempt와 무관하게 실제 인증 시각을 요구한다.
+        // 테스트 전용 번호를 계정마다 다르게 두어 unique 인덱스와 운영 데이터를 침범하지 않는다.
+        phoneNumber: a._id === "$SELLER_ID" ? "01000000001" : "01000000002",
+        phoneVerifiedAt: new Date(),
         // onboarding 게이트(@RequiresOnboarding)가 이 계정을 막지 않게 한다.
         // 이메일 인증만 우회한 것과 같은 이유 — E2E는 온보딩 자체가 아니라 그 이후
         // 흐름(매물등록·구매·채팅)을 검증한다. legacyExempt=true는 배포 이전 계정에게

@@ -1,0 +1,11 @@
+[Unit]
+Description=Create GoLe logical backup before the daily disk snapshot
+
+[Timer]
+OnCalendar=*-*-* 19:30:00 UTC
+Persistent=true
+RandomizedDelaySec=0
+Unit=gole-data-backup.service
+
+[Install]
+WantedBy=timers.target

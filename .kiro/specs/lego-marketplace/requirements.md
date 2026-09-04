@@ -1,11 +1,11 @@
-# GoLe LEGO Marketplace — Requirements
+# GoLe Brick Marketplace — Requirements
 
 > 형식: EARS (Easy Approach to Requirements Syntax). `~할 때(WHEN) / ~하면(IF) / 항상(SHALL)` 패턴으로 검증 가능한 단일 행위를 기술한다.
 > 본 문서는 현재 구현(`apps/api`, `apps/web`)을 정식 스펙으로 역정규화하여, 향후 변경의 단일 기준이 된다.
 
 ## 0. 개요
 
-GoLe는 레고 중고거래 플랫폼이다. 체결가 기반 시세·안전거래, 동네 직거래, 보유/희망 컬렉션, 셀러 샵·팔로우를 한곳에서 제공한다.
+GoLe는 브릭 중고거래 플랫폼이다. 체결가 기반 시세·안전거래, 동네 직거래, 보유/희망 컬렉션, 셀러 샵·팔로우를 한곳에서 제공한다.
 
 | 영역 | 바운디드 컨텍스트 | 책임 |
 |---|---|---|

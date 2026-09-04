@@ -1,25 +1,40 @@
 name: gole
 
+x-logging: &gole-logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-security: &gole-security
+  security_opt: ["no-new-privileges:true"]
+
 services:
   mongo:
-    image: mongo:7
+    <<: *gole-security
+    image: mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
     container_name: gole-mongo
+    logging: *gole-logging
     restart: unless-stopped
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    ports: ["127.0.0.1:27017:27017"]
+    networks: [data]
     volumes: ["mongo-data:/data/db"]
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 20
 
   mongo-init:
-    image: mongo:7
+    <<: *gole-security
+    image: mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
+    logging: *gole-logging
     depends_on:
       mongo:
         condition: service_healthy
     restart: "no"
+    networks: [data]
     entrypoint:
       - bash
       - -c
@@ -38,11 +53,13 @@ services:
         '
 
   redis:
-    image: redis:7-alpine
+    <<: *gole-security
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     container_name: gole-redis
+    logging: *gole-logging
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
-    ports: ["127.0.0.1:6379:6379"]
+    networks: [data]
     volumes: ["redis-data:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -51,12 +68,14 @@ services:
       retries: 20
 
   minio:
+    <<: *gole-security
     image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: gole-minio
+    logging: *gole-logging
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     env_file: ["${GOLE_INFRA_ENV_FILE:-/etc/gole/infra.env}"]
-    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+    networks: [data]
     volumes: ["minio-data:/data"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -65,11 +84,14 @@ services:
       retries: 20
 
   minio-init:
-    image: minio/mc:latest
+    <<: *gole-security
+    image: minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    logging: *gole-logging
     depends_on:
       minio:
         condition: service_healthy
     restart: "no"
+    networks: [data]
     env_file: ["${GOLE_INFRA_ENV_FILE:-/etc/gole/infra.env}"]
     entrypoint:
       - /bin/sh
@@ -77,35 +99,112 @@ services:
       - |
         mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
         mc mb --ignore-existing local/gole
+        mc anonymous set none local/gole
+
+  support-agent:
+    <<: *gole-security
+    build:
+      context: ../..
+      dockerfile: apps/support-agent/Dockerfile
+    image: gole/support-agent:local
+    container_name: gole-support-agent
+    logging: *gole-logging
+    restart: unless-stopped
+    environment:
+      SUPPORT_AGENT_GRPC_PORT: "50051"
+      SUPPORT_AGENT_WORKERS: ${SUPPORT_AGENT_WORKERS:-2}
+      LOG_LEVEL: ${SUPPORT_AGENT_LOG_LEVEL:-INFO}
+    expose: ["50051"]
+    cpus: ${SUPPORT_AGENT_CPUS:-0.25}
+    mem_limit: ${SUPPORT_AGENT_MEMORY_LIMIT:-192m}
+    networks: [data]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; socket.create_connection(('127.0.0.1', 50051), 2).close()
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
   backend:
+    <<: *gole-security
     build:
       context: ../..
       dockerfile: infra/gcp/docker/api.Dockerfile
     image: gole/backend:local
     container_name: gole-backend
+    logging: *gole-logging
     restart: unless-stopped
     env_file: ["${GOLE_APP_ENV_FILE:-/etc/gole/gole.env}"]
     environment:
       MONGODB_URI: mongodb://mongo:27017/gole?replicaSet=rs0
       REDIS_HOST: redis
       STORAGE_S3_ENDPOINT: http://minio:9000
-      GOLE_ENVIRONMENT: ${GOLE_ENVIRONMENT:-staging}
-      GOLE_CATALOG_SEED: ${GOLE_CATALOG_SEED:-false}
-      GOLE_LISTING_SEED: ${GOLE_LISTING_SEED:-false}
-      GOLE_PRICING_SEED: ${GOLE_PRICING_SEED:-false}
-      GOLE_PRICING_INCLUDE_DEMO: ${GOLE_PRICING_INCLUDE_DEMO:-false}
-      GOLE_PRICING_INCLUDE_LEGACY: ${GOLE_PRICING_INCLUDE_LEGACY:-false}
-      GOLE_COMMUNITY_SEED: ${GOLE_COMMUNITY_SEED:-false}
-      GOLE_REPORT_SEED: ${GOLE_REPORT_SEED:-false}
-      GOLE_REVIEW_SEED: ${GOLE_REVIEW_SEED:-false}
-      GOLE_MEDIA_SEED: ${GOLE_MEDIA_SEED:-false}
+      # 단일 GCP Compose는 운영 전용이다. 로컬 개발은 저장소 루트 Compose를 사용한다.
+      GOLE_ENVIRONMENT: production
+      # 초기 공개는 CoolSMS 템플릿 승인 전이므로 전화 단계를 온보딩 완료 조건에서 뺀다.
+      GOLE_ONBOARDING_PHONE_REQUIRED: "false"
+      GOLE_ONBOARDING_LOG_VERIFICATION_CODES: "false"
+      GOLE_VERIFICATION_EMAIL_ENABLED: "true"
+      GOLE_MAIL_HEALTH_ENABLED: "true"
+      GOLE_SESSION_COOKIE_SECURE: "true"
+      GOLE_WEB_ALLOWED_ORIGINS: https://gole.co.kr,https://www.gole.co.kr
+      GOLE_OAUTH_ALLOWED_REDIRECT_URIS: https://gole.co.kr/auth/callback/google,https://gole.co.kr/auth/callback/kakao,https://gole.co.kr/auth/callback/naver
+      GOLE_TERMS_VERSION: "2026-09-04"
+      GOLE_PRIVACY_VERSION: "2026-09-04"
+      GOLE_THIRD_PARTY_PROVISION_VERSION: "2026-09-04"
+      GOLE_SELLER_IDENTITY_VERIFICATION_READY: "false"
+      # 공개 인증 레이트리밋은 Secret 값으로 완화할 수 없도록 운영 Compose에 고정한다.
+      GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_MAXIMUM: "1"
+      GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_WINDOW: PT1M
+      GOLE_AUTH_EMAIL_RECIPIENT_DAILY_MAXIMUM: "8"
+      GOLE_AUTH_EMAIL_RECIPIENT_DAILY_WINDOW: P1D
+      GOLE_AUTH_EMAIL_CLIENT_BURST_MAXIMUM: "5"
+      GOLE_AUTH_EMAIL_CLIENT_BURST_WINDOW: PT1M
+      GOLE_AUTH_EMAIL_CLIENT_HOURLY_MAXIMUM: "30"
+      GOLE_AUTH_EMAIL_CLIENT_HOURLY_WINDOW: PT1H
+      GOLE_AUTH_EMAIL_GLOBAL_BURST_MAXIMUM: "60"
+      GOLE_AUTH_EMAIL_GLOBAL_BURST_WINDOW: PT1M
+      GOLE_AUTH_EMAIL_GLOBAL_DAILY_MAXIMUM: "300"
+      GOLE_AUTH_EMAIL_GLOBAL_DAILY_WINDOW: P1D
+      GOLE_AUTH_OAUTH_CLIENT_BURST_MAXIMUM: "20"
+      GOLE_AUTH_OAUTH_CLIENT_BURST_WINDOW: PT1M
+      GOLE_AUTH_OAUTH_CLIENT_HOURLY_MAXIMUM: "120"
+      GOLE_AUTH_OAUTH_CLIENT_HOURLY_WINDOW: PT1H
+      GOLE_AUTH_OAUTH_GLOBAL_BURST_MAXIMUM: "120"
+      GOLE_AUTH_OAUTH_GLOBAL_BURST_WINDOW: PT1M
+      GOLE_AUTH_OAUTH_GLOBAL_DAILY_MAXIMUM: "2000"
+      GOLE_AUTH_OAUTH_GLOBAL_DAILY_WINDOW: P1D
+      SMTP_AUTH: "true"
+      SMTP_STARTTLS: "true"
+      SMTP_STARTTLS_REQUIRED: "true"
+      SMTP_SSL_CHECKSERVERIDENTITY: "true"
+      GOLE_CATALOG_SEED: "false"
+      GOLE_LISTING_SEED: "false"
+      GOLE_PRICING_SEED: "false"
+      GOLE_PRICING_INCLUDE_DEMO: "false"
+      GOLE_PRICING_INCLUDE_LEGACY: "false"
+      GOLE_COMMUNITY_SEED: "false"
+      GOLE_REPORT_SEED: "false"
+      GOLE_REVIEW_SEED: "false"
+      GOLE_MEDIA_SEED: "false"
+      PORTONE_ENABLED: "false"
+      GOLE_SETTLEMENT_MODE: DISABLED
       GOLE_DISCORD_ALERTS_ENABLED: ${GOLE_DISCORD_ALERTS_ENABLED:-false}
       DISCORD_DEPLOY_WEBHOOK_URL: ${DISCORD_DEPLOY_WEBHOOK_URL:-}
       DISCORD_OPERATIONS_WEBHOOK_URL: ${DISCORD_OPERATIONS_WEBHOOK_URL:-}
       DISCORD_ACCOUNT_WEBHOOK_URL: ${DISCORD_ACCOUNT_WEBHOOK_URL:-}
       DISCORD_PAYMENT_WEBHOOK_URL: ${DISCORD_PAYMENT_WEBHOOK_URL:-}
+      DISCORD_SUPPORT_WEBHOOK_URL: ${DISCORD_SUPPORT_WEBHOOK_URL:-}
       DISCORD_SUPPRESS_NOTIFICATIONS: ${DISCORD_SUPPRESS_NOTIFICATIONS:-true}
+      # 문의 원문은 이 Compose 내부 서비스로만 전달한다. 운영 Secret으로 외부 target을
+      # 덮어쓸 수 없게 해 개인정보처리방침의 외부 미전송 계약을 지킨다.
+      GOLE_SUPPORT_AGENT_ENABLED: "true"
+      GOLE_SUPPORT_AGENT_GRPC_TARGET: support-agent:50051
+      GOLE_SUPPORT_AGENT_TIMEOUT: PT2S
     depends_on:
       mongo-init:
         condition: service_completed_successfully
@@ -113,27 +212,51 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      support-agent:
+        condition: service_healthy
     ports: ["127.0.0.1:8080:8080"]
+    networks: [data, edge]
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://localhost:8080/actuator/health/readiness",
+        ]
       interval: 10s
       timeout: 5s
       retries: 30
       start_period: 30s
 
   budget-relay:
+    <<: *gole-security
     build:
       context: ./budget-relay
       dockerfile: Dockerfile
     image: gole/budget-relay:local
     container_name: gole-budget-relay
+    logging: *gole-logging
     restart: unless-stopped
+    networks: [edge]
     environment:
+      # OAuth tokens never enter the container. A root-owned Unix broker exposes
+      # only the fixed budget subscription and independently authorized stop.
+      GOLE_CLOUD_BROKER_SOCKET: /run/gole-cloud-broker/broker.sock
       GCP_BUDGET_PUBSUB_SUBSCRIPTION: ${GCP_BUDGET_PUBSUB_SUBSCRIPTION:-gole-billing-budget-discord}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID:-project-72a52bf1-06aa-4519-b2c}
       GCP_CREDIT_AMOUNT_KRW: ${GCP_CREDIT_AMOUNT_KRW:-395600.60}
       GCP_CREDIT_DEADLINE: ${GCP_CREDIT_DEADLINE:-2026-10-28}
-      GCP_FIXED_HOURLY_COST_KRW: ${GCP_FIXED_HOURLY_COST_KRW:-231.249894200}
+      # Post-resize e2-standard-2 + disk + in-use IPv4. The relay separately
+      # models the pre-resize high-rate segment and every snapshot.
+      GCP_FIXED_HOURLY_COST_KRW: ${GCP_FIXED_HOURLY_COST_KRW:-153.390555330}
+      GCP_HIGH_RATE_HOURLY_COST_KRW: "240.749900000"
+      GCP_RUNTIME_RATE_TRANSITION_AT: "2026-09-06T00:00:00+09:00"
+      # Seoul regional snapshot $0.000068493/GiB-hour, 100GiB x 3 recovery
+      # points, and a conservative 1,900 KRW/USD ceiling.
+      GCP_SNAPSHOT_MAX_HOURLY_COST_KRW: "39.041010000"
+      GCP_SNAPSHOT_RETENTION_HOURS: "72"
+      GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW: "13.013670000"
       GCP_BUDGET_WARNING_THRESHOLDS: ${GCP_BUDGET_WARNING_THRESHOLDS:-0.50,0.75,0.85,0.90,0.95,1.00}
       GCP_HARD_STOP_ENABLED: ${GCP_HARD_STOP_ENABLED:-false}
       GCP_HARD_STOP_DRY_RUN: ${GCP_HARD_STOP_DRY_RUN:-false}
@@ -145,9 +268,9 @@ services:
       GCP_HARD_STOP_NETWORK_GIB: ${GCP_HARD_STOP_NETWORK_GIB:-30}
       GCP_COST_GUARD_NETWORK_WARNING_GIB: ${GCP_COST_GUARD_NETWORK_WARNING_GIB:-15}
       GCP_COST_GUARD_NETWORK_DANGER_GIB: ${GCP_COST_GUARD_NETWORK_DANGER_GIB:-25}
-      GCP_HARD_STOP_MAX_RUNTIME_HOURS: ${GCP_HARD_STOP_MAX_RUNTIME_HOURS:-1320}
-      GCP_COST_GUARD_RUNTIME_WARNING_HOURS: ${GCP_COST_GUARD_RUNTIME_WARNING_HOURS:-1200}
-      GCP_COST_GUARD_RUNTIME_DANGER_HOURS: ${GCP_COST_GUARD_RUNTIME_DANGER_HOURS:-1296}
+      GCP_HARD_STOP_MAX_RUNTIME_HOURS: ${GCP_HARD_STOP_MAX_RUNTIME_HOURS:-1350}
+      GCP_COST_GUARD_RUNTIME_WARNING_HOURS: ${GCP_COST_GUARD_RUNTIME_WARNING_HOURS:-1250}
+      GCP_COST_GUARD_RUNTIME_DANGER_HOURS: ${GCP_COST_GUARD_RUNTIME_DANGER_HOURS:-1320}
       GCP_HARD_STOP_EXPECTED_BUDGET_KRW: ${GCP_HARD_STOP_EXPECTED_BUDGET_KRW:-370000}
       GCP_HARD_STOP_BUDGET_ID: ${GCP_HARD_STOP_BUDGET_ID:-}
       GCP_HARD_STOP_BILLING_ACCOUNT_ID: ${GCP_HARD_STOP_BILLING_ACCOUNT_ID:-}
@@ -160,13 +283,14 @@ services:
       GCP_INSTANCE_NAME: ${GCP_INSTANCE_NAME:-gole-production}
       GCP_VAT_RATE: ${GCP_VAT_RATE:-0.10}
       GCP_NETWORK_EGRESS_KRW_PER_GIB: ${GCP_NETWORK_EGRESS_KRW_PER_GIB:-318.154399937}
-      GCP_STOPPED_RESOURCE_HOURLY_COST_KRW: ${GCP_STOPPED_RESOURCE_HOURLY_COST_KRW:-45.725088879}
+      GCP_STOPPED_RESOURCE_HOURLY_COST_KRW: ${GCP_STOPPED_RESOURCE_HOURLY_COST_KRW:-45.725095000}
       GCP_COST_GUARD_INTERVAL_SECONDS: ${GCP_COST_GUARD_INTERVAL_SECONDS:-10}
       GCP_HARD_STOP_RETRY_SECONDS: ${GCP_HARD_STOP_RETRY_SECONDS:-300}
       BUDGET_HTTP_TIMEOUT_SECONDS: ${BUDGET_HTTP_TIMEOUT_SECONDS:-5}
       DISCORD_OPERATIONS_WEBHOOK_URL: ${DISCORD_OPERATIONS_WEBHOOK_URL:-}
     volumes:
       - budget-relay-state:/state
+      - /run/gole-cloud-broker/broker.sock:/run/gole-cloud-broker/broker.sock
       - /sys/class/net/ens4/statistics/tx_bytes:/host-metrics/tx_bytes:ro
       - /proc/sys/kernel/random/boot_id:/host-metrics/boot_id:ro
     healthcheck:
@@ -181,33 +305,46 @@ services:
       start_period: 20s
 
   frontend:
+    <<: *gole-security
     build:
       context: ../..
       dockerfile: infra/gcp/docker/web.Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://gole.co.kr}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://gole.co.kr}
-        NEXT_PUBLIC_PAYMENT_MODE: ${NEXT_PUBLIC_PAYMENT_MODE:-portone-test}
+        NEXT_PUBLIC_API_BASE_URL: https://gole.co.kr
+        NEXT_PUBLIC_SITE_URL: https://gole.co.kr
+        NEXT_PUBLIC_PAYMENT_MODE: disabled
         NEXT_PUBLIC_PORTONE_STORE_ID: ${NEXT_PUBLIC_PORTONE_STORE_ID:-}
         NEXT_PUBLIC_PORTONE_CHANNEL_KEY: ${NEXT_PUBLIC_PORTONE_CHANNEL_KEY:-}
         NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: ${NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY:-}
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+        NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID:-}
     image: gole/frontend:local
     container_name: gole-frontend
+    logging: *gole-logging
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     ports: ["127.0.0.1:3000:3000"]
+    networks: [edge]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/icon.svg').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/icon.svg').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
       start_period: 20s
 
   nginx:
-    image: nginx:1.29-alpine
+    <<: *gole-security
+    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
     container_name: gole-nginx
+    logging: *gole-logging
     restart: unless-stopped
     depends_on:
       frontend:
@@ -215,14 +352,23 @@ services:
       backend:
         condition: service_healthy
     ports: ["80:80", "443:443"]
+    networks: [edge]
     volumes:
       - /etc/gole/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - certbot-webroot:/var/www/certbot:ro
       - letsencrypt:/etc/letsencrypt:ro
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   certbot:
-    image: certbot/certbot:latest
+    <<: *gole-security
+    image: certbot/certbot:latest@sha256:f70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20
+    logging: *gole-logging
     profiles: ["certificate"]
+    networks: [edge]
     volumes:
       - certbot-webroot:/var/www/certbot
       - letsencrypt:/etc/letsencrypt
@@ -240,3 +386,10 @@ volumes:
     name: gole_letsencrypt
   budget-relay-state:
     name: gole_budget-relay-state
+
+networks:
+  edge:
+    name: gole_edge
+  data:
+    name: gole_data
+    internal: true
