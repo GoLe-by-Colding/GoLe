@@ -230,6 +230,7 @@ jobs:
             infra/gcp/scripts/cost-guard-watchdog.sh \
             infra/gcp/scripts/bootstrap-host.sh \
             infra/gcp/scripts/setup-budget-alerts.sh \
+            infra/gcp/scripts/apply-secret-env.sh \
             scripts/deploy.sh
           failure_file="$RUNNER_TEMP/gole-cost-guard-watchdog.failures"
           GOLE_COST_GUARD_CONTAINER_NAME=gole-nonexistent-ci \

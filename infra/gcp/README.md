@@ -140,6 +140,18 @@ curl -H 'Host: gole.co.kr' http://NEW_IP/
 
 ## 운영 원칙
 
+### Secret Manager 환경 변수 배포
+
+`gole-production-env`는 `/etc/gole/gole.env` 전체를 버전 단위로 보관한다.
+`Secret Sync` workflow에는 평문이 아니라 숫자 버전과 control 요청 ID만 전달한다.
+러너는 VM 연결 서비스 계정으로 정확한 버전을 받아 Compose 구성을 검증하고,
+기존 파일을 호스트에 백업한 후 backend를 교체한다. readiness 실패 시 기존 파일로
+자동 롤백한다. 시크릿 값은 workflow 입력, 명령 인자, stdout에 넣지 않는다.
+
+control API에서 새 버전을 만들기 전에는 control PostgreSQL의 `secret_backups`
+테이블에 기존 평문을 AES-256-GCM 암호문으로 먼저 저장한다. 이 DB 백업이 실패하면
+Secret Manager와 GCP 서버는 수정하지 않는다.
+
 - MongoDB, Redis, MinIO 포트는 루프백에만 바인딩한다.
 - Nginx는 TLS와 라우팅만 담당한다. CORS, 헤더/본문 크기 제한, 보안 정책은 앱에서 관리한다.
 - 운영 로그는 `docker compose -f infra/gcp/docker-compose.yml logs -f backend`로 본다.
