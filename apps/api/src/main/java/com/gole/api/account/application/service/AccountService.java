@@ -186,7 +186,7 @@ public class AccountService
         String token = sessionToken.issue(account);
         Instant issuedAt = Instant.now(clock);
         sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, initialStoreTtl());
-        return new SignInResult(account.getId(), token, account.getRole());
+        return new SignInResult(account.getId(), token, account.getRole(), account.isOnboardingRequired());
     }
 
     @Override
@@ -210,8 +210,11 @@ public class AccountService
         return principal
                 .flatMap(p -> accountRepository.findById(p.accountId()))
                 .filter(account -> !account.isSuspended())
-                .map(account ->
-                        new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
+                .map(account -> new CurrentSession(
+                        account.getId(),
+                        account.getEmail().value(),
+                        account.getRole(),
+                        account.isOnboardingRequired()));
     }
 
     @Override

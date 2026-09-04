@@ -1,6 +1,7 @@
 package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.adapter.in.web.ListingRequests.CreateListingRequest;
 import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
@@ -63,6 +64,7 @@ public class ListingController {
 
     @Operation(summary = "매물 등록", description = "판매할 레고 상품을 등록합니다. sellerId는 로그인 계정 ID.")
     @PostMapping
+    @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.CREATED)
     public ListingResponse create(@Valid @RequestBody CreateListingRequest request, HttpServletRequest http) {
         String id = createListingUseCase.create(new CreateListingCommand(

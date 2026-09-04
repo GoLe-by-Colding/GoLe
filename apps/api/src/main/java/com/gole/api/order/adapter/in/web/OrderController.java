@@ -1,6 +1,7 @@
 package com.gole.api.order.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.order.adapter.in.web.OrderRequests.OpenDisputeRequest;
@@ -69,6 +70,7 @@ public class OrderController {
     }
 
     @PostMapping
+    @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request, HttpServletRequest http) {
         String id = placeOrderUseCase.place(

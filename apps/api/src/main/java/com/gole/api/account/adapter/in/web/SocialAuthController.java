@@ -70,7 +70,11 @@ public class SocialAuthController {
                 new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
         sessionCookie.issue(http, response, result.sessionToken());
         return new SocialLoginResponse(
-                result.accountId(), result.sessionToken(), result.role().name(), result.newAccount());
+                result.accountId(),
+                result.sessionToken(),
+                result.role().name(),
+                result.newAccount(),
+                result.onboardingRequired());
     }
 
     private static AuthProvider parse(String provider) {
@@ -105,5 +109,6 @@ public class SocialAuthController {
 
     public record CallbackRequest(@NotBlank String code, @NotBlank String redirectUri, @NotBlank String state) {}
 
-    public record SocialLoginResponse(String accountId, String sessionToken, String role, boolean newAccount) {}
+    public record SocialLoginResponse(
+            String accountId, String sessionToken, String role, boolean newAccount, boolean onboardingRequired) {}
 }

@@ -73,6 +73,11 @@ for (const a of accounts) {
         role: "USER",
         verificationFailedAttempts: 0,
         failedAttempts: 0,
+        // onboarding 게이트(@RequiresOnboarding)가 이 계정을 막지 않게 한다.
+        // 이메일 인증만 우회한 것과 같은 이유 — E2E는 온보딩 자체가 아니라 그 이후
+        // 흐름(매물등록·구매·채팅)을 검증한다. legacyExempt=true는 배포 이전 계정에게
+        // 주는 실제 값과 같은 의미로, "이 계정은 온보딩 단계 없이도 늘 통과한다"이다.
+        legacyExempt: true,
       },
       \$unset: { verificationCode: "", verificationCodeIssuedAt: "", lockedUntil: "", suspendedReason: "" },
     },

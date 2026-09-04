@@ -151,7 +151,10 @@ public class SocialAuthService implements SocialLoginUseCase {
                 ? sessionPolicy.getIdleTtl()
                 : sessionPolicy.getAbsoluteTtl();
         sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, ttl);
-        return new SocialLoginResult(account.getId(), token, account.getRole(), newAccount);
+        // D7: 이번 스코프는 구글만 온보딩 대상이다. 카카오·네이버 신규가입은 기존 동작
+        // (즉시 로그인 + newAccount 환영 화면)을 그대로 유지한다.
+        boolean onboardingRequired = command.provider() == AuthProvider.GOOGLE && account.isOnboardingRequired();
+        return new SocialLoginResult(account.getId(), token, account.getRole(), newAccount, onboardingRequired);
     }
 
     private void requireConfigured(AuthProvider provider) {

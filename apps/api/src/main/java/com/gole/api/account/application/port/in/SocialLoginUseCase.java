@@ -21,5 +21,10 @@ public interface SocialLoginUseCase {
 
     record SocialLoginCommand(AuthProvider provider, String code, String redirectUri, String state) {}
 
-    record SocialLoginResult(String accountId, String sessionToken, Role role, boolean newAccount) {}
+    /**
+     * @param onboardingRequired 온보딩으로 보내야 하는가. (onboarding R8, D7)
+     *     이번 스코프는 구글 신규가입만 대상이라 카카오·네이버는 항상 {@code false}다.
+     */
+    record SocialLoginResult(
+            String accountId, String sessionToken, Role role, boolean newAccount, boolean onboardingRequired) {}
 }

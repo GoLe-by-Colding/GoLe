@@ -1,6 +1,7 @@
 package com.gole.api.chat.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
@@ -97,6 +98,7 @@ public class ChatController {
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
     @PostMapping("/rooms")
+    @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req, HttpServletRequest http) {
         String buyerId = AuthenticatedUser.id(http);
