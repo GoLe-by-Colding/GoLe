@@ -6,6 +6,7 @@ import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -24,12 +25,17 @@ public class PaymentPendingExpiryRule implements PipelineRule {
     private final OrderRepositoryPort orders;
     private final OrderPaymentTransitionService transitions;
     private final PipelineProperties properties;
+    private final boolean developerStubEnvironment;
 
     public PaymentPendingExpiryRule(
-            OrderRepositoryPort orders, OrderPaymentTransitionService transitions, PipelineProperties properties) {
+            OrderRepositoryPort orders,
+            OrderPaymentTransitionService transitions,
+            PipelineProperties properties,
+            @Value("${gole.environment:local}") String environment) {
         this.orders = orders;
         this.transitions = transitions;
         this.properties = properties;
+        this.developerStubEnvironment = isDeveloperStubEnvironment(environment);
     }
 
     @Override
@@ -39,6 +45,11 @@ public class PaymentPendingExpiryRule implements PipelineRule {
 
     @Override
     public List<String> candidates(Instant now) {
+        // portone.enabled=false는 "로컬 스텁"뿐 아니라 의도적인 운영 결제 중단도 뜻한다.
+        // 운영에서 과거 실결제 대기 주문을 PG 원장 확인 없이 만료시키지 않는다.
+        if (!developerStubEnvironment) {
+            return List.of();
+        }
         return orders
                 .findByStatusChangedBefore(OrderStatus.PAYMENT_PENDING, now.minus(properties.paymentPendingExpiry()))
                 .stream()
@@ -48,7 +59,20 @@ public class PaymentPendingExpiryRule implements PipelineRule {
 
     @Override
     public boolean apply(String orderId, Instant now) {
+        if (!developerStubEnvironment) {
+            return false;
+        }
         // 트랜잭션 안에서 상태를 다시 읽으므로 결제 웹훅과의 경쟁도 안전하다.
         return transitions.expireMissingPayment(orderId, now) == OrderStatus.PAYMENT_FAILED;
+    }
+
+    private static boolean isDeveloperStubEnvironment(String environment) {
+        if (environment == null) {
+            return false;
+        }
+        return switch (environment.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "local", "development", "dev", "test", "e2e" -> true;
+            default -> false;
+        };
     }
 }

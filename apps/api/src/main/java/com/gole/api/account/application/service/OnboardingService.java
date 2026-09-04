@@ -40,8 +40,8 @@ import org.springframework.stereotype.Service;
  * 사용자가 다음 로그인 때 처음부터 다시 해야 하는데, 온보딩은 이탈률이 가장 높은 구간이다.
  *
  * <p>OTP 발송은 신규 포트를 만들지 않고 notification 컨텍스트의 {@link AlimtalkSenderPort}를
- * 그대로 호출한다(D3). 그 빈은 {@code coolsms.enabled=false}면 존재하지 않으므로 Optional로
- * 주입받아 부팅을 깨뜨리지 않는다 — 로컬·CI는 알림톡 없이도 떠야 한다.
+ * 그대로 호출한다(D3). 실제 CoolSMS 빈이나 로컬 전용 로깅 빈이 없는 구성도 부팅할 수 있도록
+ * Optional로 주입한다. 공개 환경의 로깅 빈은 요청을 성공처럼 처리하지 않고 실패로 닫힌다.
  */
 @Service
 public class OnboardingService
@@ -88,13 +88,14 @@ public class OnboardingService
                 accountId,
                 profile.hasNickname(),
                 profile.hasNickname() ? profile.nickname().value() : null,
+                properties.phoneVerificationRequired(),
                 profile.isPhoneVerified(),
                 profile.isPhoneVerified() ? profile.phoneNumber().masked() : null,
                 profile.hasInterestTags(),
                 List.copyOf(profile.interestTags()),
                 profile.hasPrivacyConsent(),
                 profile.marketingConsentedAt() != null,
-                profile.isRequired(),
+                profile.isRequired(properties.phoneVerificationRequired()),
                 profile.legacyExempt());
     }
 
@@ -189,9 +190,9 @@ public class OnboardingService
     }
 
     private void sendCode(PhoneNumber phoneNumber, String code) {
-        // 발송 가능 여부는 coolsms.enabled 하나로만 결정한다 — 꺼져 있으면 로깅 스텁 빈이 대신
-        // 등록되어 있으므로(coolsms 미승인·로컬 개발에서도) 여기서 템플릿 ID를 따로 검증하지
-        // 않는다. 승인된 템플릿이 필요한 건 실제 CoolSMS 어댑터뿐이고, 그 요구는
+        // 템플릿 요구는 실제 CoolSMS 어댑터가 소유한다. 로컬 로깅 어댑터는 빈 템플릿으로도
+        // 개발 흐름을 재현하지만, staging/production에서는 요청을 실패로 닫는다. 승인된
+        // 템플릿이 필요한 실제 어댑터의 요구는
         // CoolsmsAlimtalkAdapter.validate()가 이미 강제한다(빈 값이면 AlimtalkSendException).
         if (alimtalkSender.isEmpty()) {
             throw new PhoneVerificationUnavailableException();

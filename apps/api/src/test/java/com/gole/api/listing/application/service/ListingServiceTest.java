@@ -2,6 +2,7 @@ package com.gole.api.listing.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
@@ -16,6 +17,7 @@ import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingStatus;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -36,7 +38,8 @@ class ListingServiceTest {
         repository = new InMemoryListingRepository();
         notifier = new RecordingNewListingNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new ListingService(repository, new SequentialIdGenerator(), notifier, clock);
+        service = new ListingService(
+                repository, new SequentialIdGenerator(), notifier, mock(ManageMediaAssetsUseCase.class), clock);
     }
 
     private CreateListingCommand validCommand() {

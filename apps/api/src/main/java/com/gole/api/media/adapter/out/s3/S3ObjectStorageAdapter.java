@@ -7,6 +7,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
@@ -72,6 +73,36 @@ public class S3ObjectStorageAdapter implements ObjectStoragePort {
                     object.asByteArray(), contentType == null ? "application/octet-stream" : contentType));
         } catch (NoSuchKeyException | NoSuchBucketException e) {
             return Optional.empty();
+        } catch (SdkException e) {
+            throw new ObjectStorageUnavailableException(e);
+        }
+    }
+
+    @Override
+    public void delete(String key) {
+        try {
+            s3Client.deleteObject(
+                    DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+        } catch (NoSuchBucketException ignored) {
+            // 삭제는 멱등하다. 버킷 자체가 없으면 대상 객체도 없다.
+        } catch (SdkException e) {
+            throw new ObjectStorageUnavailableException(e);
+        }
+    }
+
+    @Override
+    public void deletePrefix(String prefix) {
+        try {
+            var keys = s3Client
+                    .listObjectsV2Paginator(builder -> builder.bucket(bucket).prefix(prefix))
+                    .stream()
+                    .flatMap(response -> response.contents().stream())
+                    .map(object -> object.key())
+                    .toList();
+            keys.forEach(key -> s3Client.deleteObject(
+                    DeleteObjectRequest.builder().bucket(bucket).key(key).build()));
+        } catch (NoSuchBucketException ignored) {
+            // 삭제는 멱등하다.
         } catch (SdkException e) {
             throw new ObjectStorageUnavailableException(e);
         }

@@ -34,7 +34,8 @@ public final class LegoSet {
         this.pieceCount = pieceCount;
         this.releaseYear = releaseYear;
         this.retirementStatus = Objects.requireNonNull(retirementStatus, "retirementStatus");
-        this.imageUrl = imageUrl; // nullable 허용
+        // 레거시 외부 URL은 도메인에 진입하는 즉시 격리해 응답/브라우저까지 전달하지 않는다.
+        this.imageUrl = CatalogImagePath.quarantineUnsafeStoredValue(imageUrl);
     }
 
     private static String requireText(String value, String field) {

@@ -5,12 +5,12 @@ import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.EmailVerificationChallenge;
 import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.OnboardingProfile;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
-import com.gole.api.account.domain.model.VerificationCode;
 import com.gole.api.common.exception.ConflictException;
 import java.util.List;
 import java.util.Optional;
@@ -108,7 +108,7 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     }
 
     private AccountDocument toDocument(Account account) {
-        VerificationCode code = account.getVerificationCode();
+        EmailVerificationChallenge challenge = account.getVerificationChallenge();
         OnboardingProfile onboarding = account.getOnboarding();
         Nickname nickname = onboarding.nickname();
         PhoneNumber phoneNumber = onboarding.phoneNumber();
@@ -118,8 +118,8 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 account.getPasswordHash().value(),
                 account.getStatus().name(),
                 account.getRole().name(),
-                code == null ? null : code.code(),
-                code == null ? null : code.issuedAt(),
+                challenge == null ? null : challenge.codeHash(),
+                challenge == null ? null : challenge.issuedAt(),
                 account.getVerificationFailedAttempts(),
                 account.getFailedAttempts(),
                 account.getFailureWindowStartedAt(),
@@ -137,16 +137,17 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     }
 
     private Account toDomain(AccountDocument document) {
-        VerificationCode code = document.getVerificationCode() == null
+        EmailVerificationChallenge challenge = document.getVerificationCodeHash() == null
                 ? null
-                : new VerificationCode(document.getVerificationCode(), document.getVerificationCodeIssuedAt());
+                : new EmailVerificationChallenge(
+                        document.getVerificationCodeHash(), document.getVerificationCodeIssuedAt());
         return new Account(
                 document.getId(),
                 new Email(document.getEmail()),
                 new PasswordHash(document.getPasswordHash()),
                 AccountStatus.valueOf(document.getStatus()),
                 document.getRole() == null ? Role.USER : Role.valueOf(document.getRole()),
-                code,
+                challenge,
                 document.getVerificationFailedAttempts(),
                 document.getFailedAttempts(),
                 document.getFailureWindowStartedAt(),

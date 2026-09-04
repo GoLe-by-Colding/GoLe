@@ -18,18 +18,25 @@ public final class LaunchDtos {
     private LaunchDtos() {}
 
     /**
-     * 공개 응답. <b>프론트와 고정된 계약</b>이므로 필드를 빼거나 이름을 바꾸지 않는다.
-     * 추가는 가능하다(프론트는 모르는 필드를 무시한다).
+     * 공개 응답. <b>프론트와 고정된 계약</b>이므로 필드를 빼거나 이름을 바꾸지 않는다. 추가는 가능하다(프론트는 모르는 필드를 무시한다).
      *
      * <p>{@code updatedAt} 은 설정이 한 번도 저장되지 않았으면 {@code null} 이다.
      *
-     * <p>{@code tradeMode} 는 단계에서 파생된다 — {@code DIRECT_CHAT}(0~1단계, 플랫폼이 돈을
-     * 만지지 않는 직거래), {@code MANUAL_SETTLEMENT}(2단계), {@code PARTNER_PAYOUT}(3단계).
-     * 프론트는 이 값으로 "주문/결제 화면을 아예 그리지 않는다"를 판단한다.
+     * <p>{@code tradeMode} 는 단계에서 파생된다 — {@code DIRECT_CHAT}(0~1단계, 플랫폼이 돈을 만지지 않는 직거래), {@code
+     * MANUAL_SETTLEMENT}(2단계), {@code PARTNER_PAYOUT}(3단계). 프론트는 이 값으로 "주문/결제 화면을 아예 그리지 않는다"를 판단한다.
      */
-    public record LaunchConfigResponse(int stage, String tradeMode, Features features, Instant updatedAt) {
+    public record LaunchConfigResponse(
+            int stage,
+            String tradeMode,
+            Features features,
+            boolean sellerIdentityVerificationReady,
+            Instant updatedAt) {
 
         public static LaunchConfigResponse from(LaunchConfig config) {
+            return from(config, false);
+        }
+
+        public static LaunchConfigResponse from(LaunchConfig config, boolean sellerIdentityVerificationReady) {
             return new LaunchConfigResponse(
                     config.stage().level(),
                     config.tradeMode().name(),
@@ -37,6 +44,7 @@ public final class LaunchDtos {
                             config.isEnabled(LaunchFeature.PAYMENTS),
                             config.isEnabled(LaunchFeature.REVIEWS),
                             config.isEnabled(LaunchFeature.PARTNER_PAYOUT)),
+                    sellerIdentityVerificationReady,
                     config.updatedAt());
         }
     }
@@ -47,8 +55,8 @@ public final class LaunchDtos {
     /**
      * 관리자 조회 응답. 공개 응답에 운영 메타(override 원본, 조치자)를 더한다.
      *
-     * <p>공개 응답을 그대로 품어서, 관리자가 보는 값과 사용자가 보는 값이 어긋날 수 없게 한다.
-     * {@code requestedStage}도 안전 래치를 통과한 영속 값이라 실행 조건 복구만으로 자동 상향되지 않는다.
+     * <p>공개 응답을 그대로 품어서, 관리자가 보는 값과 사용자가 보는 값이 어긋날 수 없게 한다. {@code requestedStage}도 안전 래치를 통과한 영속 값이라
+     * 실행 조건 복구만으로 자동 상향되지 않는다.
      */
     public record AdminLaunchConfigResponse(
             LaunchConfigResponse config,
@@ -60,7 +68,11 @@ public final class LaunchDtos {
             boolean payoutContractVerified) {
 
         public static AdminLaunchConfigResponse from(
-                LaunchConfig effective, LaunchConfig requested, Mode settlementMode, boolean payoutContractVerified) {
+                LaunchConfig effective,
+                LaunchConfig requested,
+                Mode settlementMode,
+                boolean payoutContractVerified,
+                boolean sellerIdentityVerificationReady) {
             java.util.Map<String, Boolean> overrides = new java.util.LinkedHashMap<>();
             requested.overrides().forEach((feature, enabled) -> overrides.put(feature.apiName(), enabled));
             java.util.Map<String, Boolean> readiness = new java.util.LinkedHashMap<>();
@@ -68,7 +80,7 @@ public final class LaunchDtos {
                 readiness.put(check.apiName(), requested.isConfirmed(check));
             }
             return new AdminLaunchConfigResponse(
-                    LaunchConfigResponse.from(effective),
+                    LaunchConfigResponse.from(effective, sellerIdentityVerificationReady),
                     requested.stage().level(),
                     overrides,
                     readiness,

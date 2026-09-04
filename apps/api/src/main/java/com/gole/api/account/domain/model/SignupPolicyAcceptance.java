@@ -12,4 +12,17 @@ public record SignupPolicyAcceptance(
         String privacyVersion,
         boolean termsAccepted,
         boolean privacyAcknowledged,
-        boolean minimumAgeConfirmed) {}
+        boolean minimumAgeConfirmed,
+        String thirdPartyProvisionVersion,
+        boolean thirdPartyProvisionAccepted) {
+
+    /** 기존 내부 호출과 직렬화 자료가 선택 동의를 강제로 참으로 만들지 않게 하는 호환 생성자. */
+    public SignupPolicyAcceptance(
+            String termsVersion,
+            String privacyVersion,
+            boolean termsAccepted,
+            boolean privacyAcknowledged,
+            boolean minimumAgeConfirmed) {
+        this(termsVersion, privacyVersion, termsAccepted, privacyAcknowledged, minimumAgeConfirmed, null, false);
+    }
+}

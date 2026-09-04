@@ -2,8 +2,11 @@ package com.gole.api.order.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.adapter.in.web.RequiresOnboarding;
+import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.order.adapter.in.web.OrderRequests.OpenDisputeRequest;
 import com.gole.api.order.adapter.in.web.OrderRequests.PlaceOrderRequest;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
@@ -33,9 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Inbound 어댑터(REST): 주문 라이프사이클. (요구사항 7, 13)
- */
+/** Inbound 어댑터(REST): 주문 라이프사이클. (요구사항 7, 13) */
 @Tag(name = "Order", description = "주문 생성·결제·구매확정·환불·조회")
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -49,6 +50,9 @@ public class OrderController {
     private final OpenDisputeUseCase openDisputeUseCase;
     private final GetShipmentUseCase getShipmentUseCase;
     private final GetSellerSettlementsUseCase sellerSettlements;
+    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
+    private final GetListingUseCase getListingUseCase;
+    private final SellerIdentityVerificationService sellerIdentityVerification;
 
     public OrderController(
             PlaceOrderUseCase placeOrderUseCase,
@@ -58,7 +62,10 @@ public class OrderController {
             GetOrderUseCase getOrderUseCase,
             OpenDisputeUseCase openDisputeUseCase,
             GetShipmentUseCase getShipmentUseCase,
-            GetSellerSettlementsUseCase sellerSettlements) {
+            GetSellerSettlementsUseCase sellerSettlements,
+            ThirdPartyProvisionConsentService thirdPartyProvisionConsents,
+            GetListingUseCase getListingUseCase,
+            SellerIdentityVerificationService sellerIdentityVerification) {
         this.placeOrderUseCase = placeOrderUseCase;
         this.payOrderUseCase = payOrderUseCase;
         this.completeOrderUseCase = completeOrderUseCase;
@@ -67,12 +74,17 @@ public class OrderController {
         this.openDisputeUseCase = openDisputeUseCase;
         this.getShipmentUseCase = getShipmentUseCase;
         this.sellerSettlements = sellerSettlements;
+        this.thirdPartyProvisionConsents = thirdPartyProvisionConsents;
+        this.getListingUseCase = getListingUseCase;
+        this.sellerIdentityVerification = sellerIdentityVerification;
     }
 
     @PostMapping
     @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request, HttpServletRequest http) {
+        String sellerId = getListingUseCase.getById(request.listingId()).getSellerId();
+        sellerIdentityVerification.requireVerifiedSeller(sellerId);
         String id = placeOrderUseCase.place(
                 new PlaceOrderCommand(request.listingId(), AuthenticatedUser.id(http), request.buyerPhone()));
         return OrderResponse.from(getOrderUseCase.getById(id));
@@ -95,8 +107,7 @@ public class OrderController {
     /**
      * 구매자 일방 환불. (R4.5)
      *
-     * <p>판매자가 운송장을 등록하기 전에만 허용한다 — 상품이 이미 이동 중인데 구매자가
-     * 일방적으로 자금을 회수하면 판매자가 물건과 돈을 모두 잃는다. 발송 이후의 문제는
+     * <p>판매자가 운송장을 등록하기 전에만 허용한다 — 상품이 이미 이동 중인데 구매자가 일방적으로 자금을 회수하면 판매자가 물건과 돈을 모두 잃는다. 발송 이후의 문제는
      * 분쟁({@code /dispute})으로 접수해 운영자가 배송 사실을 근거로 판정한다(R4.3).
      */
     @PostMapping("/{orderId}/refund")
@@ -122,11 +133,27 @@ public class OrderController {
     @GetMapping("/{orderId}/contacts")
     public OrderContactsResponse contacts(@PathVariable String orderId, HttpServletRequest http) {
         Order order = requireParty(orderId, http);
+        String accountId = AuthenticatedUser.id(http);
+        thirdPartyProvisionConsents.requireCurrent(accountId);
+        String counterpartId = order.getBuyerId().equals(accountId) ? order.getSellerId() : order.getBuyerId();
+        thirdPartyProvisionConsents.requireCurrentSubject(counterpartId);
         Shipment shipment = getShipmentUseCase.getByOrderId(orderId).orElse(null);
-        return new OrderContactsResponse(
-                order.getBuyerPhone() == null ? null : order.getBuyerPhone().value(),
-                shipment == null ? null : shipment.getSellerPhone(),
-                "거래 분쟁 대응 목적으로만 사용할 수 있으며, 목적 외 사용(마케팅·재판매 등)은 금지됩니다.");
+        String counterpartPhone = order.getBuyerId().equals(accountId)
+                ? shipment == null ? null : shipment.getSellerPhone()
+                : order.getBuyerPhone() == null ? null : order.getBuyerPhone().value();
+        return new OrderContactsResponse(counterpartPhone, "거래 분쟁 대응 목적으로만 사용할 수 있으며, 목적 외 사용(마케팅·재판매 등)은 금지됩니다.");
+    }
+
+    @Operation(summary = "내 주문 연락처 조회", description = "결제 입력 보조를 위해 현재 당사자 자신의 번호만 반환합니다.")
+    @GetMapping("/{orderId}/contacts/me")
+    public OwnOrderContactResponse ownContact(@PathVariable String orderId, HttpServletRequest http) {
+        Order order = requireParty(orderId, http);
+        String accountId = AuthenticatedUser.id(http);
+        Shipment shipment = getShipmentUseCase.getByOrderId(orderId).orElse(null);
+        String ownPhone = order.getBuyerId().equals(accountId)
+                ? order.getBuyerPhone() == null ? null : order.getBuyerPhone().value()
+                : shipment == null ? null : shipment.getSellerPhone();
+        return new OwnOrderContactResponse(ownPhone);
     }
 
     @Operation(summary = "주문 단건 조회", description = "거래 당사자(구매자·판매자)만. 판매자는 발송 처리를 위해 조회가 필요하다.")
@@ -174,6 +201,9 @@ public class OrderController {
         return order;
     }
 
-    /** 전체 번호 응답(R8.4 전용 엔드포인트). {@code notice}는 목적 외 사용 금지 고지다(R8.6). */
-    public record OrderContactsResponse(String buyerPhone, String sellerPhone, String notice) {}
+    /** 상대방 전체 번호 응답(R8.4 전용). {@code notice}는 목적 외 사용 금지 고지다(R8.6). */
+    public record OrderContactsResponse(String counterpartPhone, String notice) {}
+
+    /** 결제 입력 보조용 본인 번호. 상대방 번호를 포함하지 않는다. */
+    public record OwnOrderContactResponse(String phone) {}
 }

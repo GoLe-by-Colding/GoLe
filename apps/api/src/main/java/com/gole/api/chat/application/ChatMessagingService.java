@@ -4,13 +4,16 @@ import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -26,16 +29,22 @@ public class ChatMessagingService {
     private final ChatMessageMongoRepository messages;
     private final ChatRedisPublisher publisher;
     private final SocialChatService socialChats;
+    private final SupportOperationalEventNotifier supportEvents;
+    private final SupportAssistantAnalysisService supportAnalysis;
     private final Clock clock;
 
     public ChatMessagingService(
             ChatMessageMongoRepository messages,
             ChatRedisPublisher publisher,
             SocialChatService socialChats,
+            SupportOperationalEventNotifier supportEvents,
+            SupportAssistantAnalysisService supportAnalysis,
             Clock clock) {
         this.messages = messages;
         this.publisher = publisher;
         this.socialChats = socialChats;
+        this.supportEvents = supportEvents;
+        this.supportAnalysis = supportAnalysis;
         this.clock = clock;
     }
 
@@ -80,15 +89,36 @@ public class ChatMessagingService {
 
     @Transactional
     public ChatMessage send(String roomId, String actorId, String rawContent) {
+        return sendUserMessage(roomId, actorId, rawContent, false);
+    }
+
+    /** 문의방 생성 트랜잭션에서만 쓰는 첫 메시지 경로. 일반 사용자 답변과 알림을 구분한다. */
+    @Transactional
+    public ChatMessage sendSupportOpening(String roomId, String actorId, String rawContent) {
+        return sendUserMessage(roomId, actorId, rawContent, true);
+    }
+
+    private ChatMessage sendUserMessage(String roomId, String actorId, String rawContent, boolean supportOpening) {
         String content = normalizeContent(rawContent);
         SocialChatRoom room = socialChats.requireSendable(roomId, actorId);
+        if (supportOpening && room.type() != ChatRoomType.SUPPORT) {
+            throw new BadRequestException("CHAT_NOT_SUPPORT_ROOM", "운영팀 문의방이 아닙니다");
+        }
         Instant now = Instant.now(clock);
         ChatMessageDocument saved =
                 messages.save(new ChatMessageDocument(UUID.randomUUID().toString(), roomId, actorId, content, now));
         ChatMessage message = toDomain(saved);
-        socialChats.onMessageSent(room, actorId);
+        Optional<SupportTicket> supportTicket = socialChats.onMessageSent(room, actorId);
         socialChats.touchActivity(roomId, now);
         publishAfterCommit(message);
+        supportTicket.ifPresent(ticket -> {
+            if (supportOpening) {
+                supportEvents.opened(ticket);
+                supportAnalysis.analyzeOpeningAfterCommit(ticket, room.title(), content, "ko-KR");
+            } else {
+                supportEvents.requesterReplied(ticket);
+            }
+        });
         return message;
     }
 

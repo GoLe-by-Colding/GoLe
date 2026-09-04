@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
+import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ChangeStageRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ReadinessCheckRequest;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
@@ -30,8 +31,10 @@ class AdminLaunchControllerTest {
     private final ManageLaunchConfigUseCase manageLaunchConfig = mock(ManageLaunchConfigUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final LaunchSettlementModePort settlementMode = mock(LaunchSettlementModePort.class);
-    private final AdminLaunchController controller =
-            new AdminLaunchController(getLaunchConfig, manageLaunchConfig, audit, settlementMode);
+    private final SellerIdentityVerificationProperties sellerIdentityVerification =
+            new SellerIdentityVerificationProperties();
+    private final AdminLaunchController controller = new AdminLaunchController(
+            getLaunchConfig, manageLaunchConfig, audit, settlementMode, sellerIdentityVerification);
     private final LaunchConfig browseOnly = new LaunchConfig(LaunchStage.BROWSE_ONLY, Map.of(), null, "admin-1");
 
     @BeforeEach

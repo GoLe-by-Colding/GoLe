@@ -31,17 +31,22 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     private final boolean stubAllowed;
 
     public StubPaymentGatewayAdapter(@Value("${gole.environment:local}") String environment) {
-        this.stubAllowed = !isProduction(environment);
+        this.stubAllowed = isDeveloperEnvironment(environment);
+    }
+
+    @Override
+    public void requireAvailable(String orderId) {
+        requireStubAllowed(orderId);
     }
 
     @Override
     public void preparePayment(String orderId, long amount) {
-        requireStubAllowed();
+        requireStubAllowed(orderId);
     }
 
     @Override
     public PaymentVerification verifyPayment(String orderId, long amount) {
-        requireStubAllowed();
+        requireStubAllowed(orderId);
         String transactionId = newTransactionId(orderId);
         // TODO: integrate real PG (Toss/PortOne)
         log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
@@ -50,7 +55,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
 
     @Override
     public RefundResult refund(String orderId, long amount) {
-        requireStubAllowed();
+        requireStubAllowed(orderId);
         String transactionId = newTransactionId(orderId);
         log.info("[STUB-PG] refund success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
         return RefundResult.SUCCEEDED;
@@ -58,19 +63,23 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
 
     @Override
     public boolean isFullyRefunded(String orderId, long amount) {
-        requireStubAllowed();
+        requireStubAllowed(orderId);
         return true;
     }
 
-    private void requireStubAllowed() {
+    private void requireStubAllowed(String orderId) {
         if (!stubAllowed) {
-            throw new IllegalStateException(
-                    "Production payment gateway is disabled; refusing to simulate a payment or refund");
+            throw new com.gole.api.order.application.port.out.PaymentGatewayUnavailableException(
+                    orderId, new IllegalStateException("Production payment gateway is disabled"));
         }
     }
 
-    private static boolean isProduction(String environment) {
-        return "production".equalsIgnoreCase(environment) || "prod".equalsIgnoreCase(environment);
+    private static boolean isDeveloperEnvironment(String environment) {
+        return "local".equalsIgnoreCase(environment)
+                || "development".equalsIgnoreCase(environment)
+                || "dev".equalsIgnoreCase(environment)
+                || "test".equalsIgnoreCase(environment)
+                || "e2e".equalsIgnoreCase(environment);
     }
 
     /** 주문 식별자 기반의 결정론적 거래 식별자. */

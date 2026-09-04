@@ -1,6 +1,7 @@
 package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.in.SocialLoginUseCase;
+import com.gole.api.account.application.port.in.SocialLoginUseCase.AuthorizeUrlResult;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.OAuthStateStorePort;
 import com.gole.api.account.application.port.out.OAuthStateStorePort.OAuthStateContext;
@@ -12,6 +13,7 @@ import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.PolicyAcceptance;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.operations.OperationalEvent;
@@ -46,6 +48,9 @@ public class SocialAuthService implements SocialLoginUseCase {
     private final SessionPolicyProperties sessionPolicy;
     private final PolicyAcceptanceService policyAcceptances;
     private final SocialAccountProvisioner socialAccountProvisioner;
+    private final OnboardingProperties onboardingProperties;
+    private final OAuthRedirectUriPolicy redirectUris;
+    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
 
     public SocialAuthService(
             SocialIdentityProviderPort identityProvider,
@@ -57,7 +62,10 @@ public class SocialAuthService implements SocialLoginUseCase {
             Clock clock,
             SessionPolicyProperties sessionPolicy,
             PolicyAcceptanceService policyAcceptances,
-            SocialAccountProvisioner socialAccountProvisioner) {
+            SocialAccountProvisioner socialAccountProvisioner,
+            OnboardingProperties onboardingProperties,
+            OAuthRedirectUriPolicy redirectUris,
+            ThirdPartyProvisionConsentService thirdPartyProvisionConsents) {
         this.identityProvider = identityProvider;
         this.accountRepository = accountRepository;
         this.sessionToken = sessionToken;
@@ -68,6 +76,9 @@ public class SocialAuthService implements SocialLoginUseCase {
         this.sessionPolicy = sessionPolicy;
         this.policyAcceptances = policyAcceptances;
         this.socialAccountProvisioner = socialAccountProvisioner;
+        this.onboardingProperties = onboardingProperties;
+        this.redirectUris = redirectUris;
+        this.thirdPartyProvisionConsents = thirdPartyProvisionConsents;
     }
 
     @Override
@@ -78,16 +89,20 @@ public class SocialAuthService implements SocialLoginUseCase {
     }
 
     @Override
-    public String authorizeUrl(
-            AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance) {
+    public AuthorizeUrlResult authorizeUrl(
+            AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance, String returnTo) {
         requireConfigured(provider);
+        redirectUris.requireAllowed(redirectUri);
         if (signupPolicyAcceptance != null) {
             policyAcceptances.validate(signupPolicyAcceptance);
         }
         // 서버가 state를 발급·저장한다(콜백에서 1회 소비해 CSRF 방지).
         String state = UUID.randomUUID().toString();
-        stateStore.save(state, new OAuthStateContext(provider, redirectUri, signupPolicyAcceptance), STATE_TTL);
-        return identityProvider.authorizeUrl(provider, redirectUri, state);
+        stateStore.save(
+                state,
+                new OAuthStateContext(provider, redirectUri, signupPolicyAcceptance, OAuthReturnTo.sanitize(returnTo)),
+                STATE_TTL);
+        return new AuthorizeUrlResult(identityProvider.authorizeUrl(provider, redirectUri, state), state);
     }
 
     @Override
@@ -101,6 +116,9 @@ public class SocialAuthService implements SocialLoginUseCase {
         if (state.provider() != command.provider() || !state.redirectUri().equals(command.redirectUri())) {
             throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
         }
+        // 과거 버전에서 발급된 state도 배포 뒤 허용목록을 우회하지 못한다. state를 먼저
+        // 소비했으므로 잘못된 콜백 역시 재사용할 수 없다.
+        redirectUris.requireAllowed(command.redirectUri());
 
         SocialProfile profile =
                 identityProvider.fetchProfile(command.provider(), command.code(), command.redirectUri());
@@ -131,6 +149,16 @@ public class SocialAuthService implements SocialLoginUseCase {
         // 이메일 로그인과 동일하게 정지된 계정은 기존 OAuth 연결로도 우회할 수 없다.
         account.ensureNotSuspended();
 
+        // OAuth 동의 화면은 신규가입과 기존 계정 로그인을 구분하기 전에 열린다. 이메일 경쟁
+        // 가입에서 패자가 된 경우도 기존 계정 경로가 되므로, 신규 계정 프로비저너가 이미
+        // 기록한 경우를 제외하고 선택 동의를 멱등하게 남긴다.
+        if (!newAccount && state.signupPolicyAcceptance() != null) {
+            thirdPartyProvisionConsents.recordSignupIfAccepted(
+                    account.getId(),
+                    state.signupPolicyAcceptance(),
+                    PolicyAcceptance.Channel.social(command.provider()));
+        }
+
         if (newAccount) {
             operationalEventPublisher.publish(new OperationalEvent(
                     Category.ACCOUNT,
@@ -153,8 +181,10 @@ public class SocialAuthService implements SocialLoginUseCase {
         sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, ttl);
         // D7: 이번 스코프는 구글만 온보딩 대상이다. 카카오·네이버 신규가입은 기존 동작
         // (즉시 로그인 + newAccount 환영 화면)을 그대로 유지한다.
-        boolean onboardingRequired = command.provider() == AuthProvider.GOOGLE && account.isOnboardingRequired();
-        return new SocialLoginResult(account.getId(), token, account.getRole(), newAccount, onboardingRequired);
+        boolean onboardingRequired = command.provider() == AuthProvider.GOOGLE
+                && account.isOnboardingRequired(onboardingProperties.phoneVerificationRequired());
+        return new SocialLoginResult(
+                account.getId(), token, account.getRole(), newAccount, onboardingRequired, state.returnTo());
     }
 
     private void requireConfigured(AuthProvider provider) {

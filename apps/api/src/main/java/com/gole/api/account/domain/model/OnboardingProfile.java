@@ -60,9 +60,17 @@ public record OnboardingProfile(
         return privacyConsentedAt != null;
     }
 
-    /** 네 단계를 모두 마쳤는가. (D1의 파생 식) */
+    /** 기존 4단계 정책에서 모두 마쳤는가. */
     public boolean isComplete() {
-        return hasNickname() && isPhoneVerified() && hasInterestTags() && hasPrivacyConsent();
+        return isComplete(true);
+    }
+
+    /** 현재 배포 정책에서 요구하는 단계를 모두 마쳤는가. 완료 플래그는 여전히 저장하지 않는다. */
+    public boolean isComplete(boolean phoneVerificationRequired) {
+        return hasNickname()
+                && (!phoneVerificationRequired || isPhoneVerified())
+                && hasInterestTags()
+                && hasPrivacyConsent();
     }
 
     /**
@@ -72,7 +80,12 @@ public record OnboardingProfile(
      * 하드 게이트에 걸지 않는다는 D6의 약속이 여기 한 줄로 지켜진다.
      */
     public boolean isRequired() {
-        return !legacyExempt && !isComplete();
+        return isRequired(true);
+    }
+
+    /** 전화 인증 요구 여부를 포함한 현재 정책 기준 온보딩 게이트 판정. */
+    public boolean isRequired(boolean phoneVerificationRequired) {
+        return !legacyExempt && !isComplete(phoneVerificationRequired);
     }
 
     public OnboardingProfile withNickname(Nickname newNickname) {

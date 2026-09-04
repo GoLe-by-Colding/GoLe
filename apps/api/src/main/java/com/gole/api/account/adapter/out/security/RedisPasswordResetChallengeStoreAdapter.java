@@ -48,16 +48,15 @@ public class RedisPasswordResetChallengeStoreAdapter implements PasswordResetCha
 
     @Override
     public void store(Email email, Challenge challenge, Duration ttl) {
-        String key = key(email);
-        redis.opsForHash()
-                .putAll(
-                        key,
-                        Map.of(
-                                ACCOUNT_ID, challenge.accountId(),
-                                CODE_HASH, challenge.codeHash(),
-                                ISSUED_AT, challenge.issuedAt().toString(),
-                                FAILED_ATTEMPTS, Integer.toString(challenge.failedAttempts())));
-        redis.expire(key, ttl);
+        AtomicExpiringRedisHashStore.store(
+                redis,
+                key(email),
+                Map.of(
+                        ACCOUNT_ID, challenge.accountId(),
+                        CODE_HASH, challenge.codeHash(),
+                        ISSUED_AT, challenge.issuedAt().toString(),
+                        FAILED_ATTEMPTS, Integer.toString(challenge.failedAttempts())),
+                ttl);
     }
 
     @Override

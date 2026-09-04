@@ -3,7 +3,9 @@ package com.gole.api.media.adapter.in.web;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,13 +25,15 @@ class MediaControllerTest {
 
     private UploadImageUseCase uploads;
     private AcquireMediaUploadQuotaUseCase quota;
+    private LoadImageUseCase loads;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         uploads = mock(UploadImageUseCase.class);
         quota = mock(AcquireMediaUploadQuotaUseCase.class);
-        mvc = MockMvcBuilders.standaloneSetup(new MediaController(uploads, mock(LoadImageUseCase.class), quota))
+        loads = mock(LoadImageUseCase.class);
+        mvc = MockMvcBuilders.standaloneSetup(new MediaController(uploads, loads, quota))
                 .build();
     }
 
@@ -57,5 +61,15 @@ class MediaControllerTest {
                 .andExpect(jsonPath("$[0].key").value("images/example.png"));
 
         verify(quota).acquire("account-1", 2);
+    }
+
+    @Test
+    void userMedia_isNeverStoredByBrowserOrSharedCache() throws Exception {
+        when(loads.load(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new LoadImageUseCase.LoadedImage(new byte[] {1, 2}, "image/png"));
+
+        mvc.perform(get("/api/v1/media/images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.png"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"));
     }
 }

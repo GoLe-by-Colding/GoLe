@@ -25,6 +25,7 @@ public record OperationalEvent(
     public enum Category {
         ACCOUNT,
         PAYMENT,
+        SUPPORT,
         ADMIN,
         APPLICATION
     }

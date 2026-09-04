@@ -14,12 +14,14 @@ public interface GetOnboardingStatusUseCase {
 
     /**
      * @param maskedPhoneNumber 인증된 번호의 마스킹 표기. 미인증이면 null.
+     * @param phoneVerificationRequired 현재 배포에서 전화 인증을 완료 조건으로 요구하는가.
      * @param required 아직 온보딩을 요구해야 하는가(파생값, D1). legacyExempt면 항상 false.
      */
     record OnboardingStatus(
             String accountId,
             boolean nicknameCompleted,
             String nickname,
+            boolean phoneVerificationRequired,
             boolean phoneCompleted,
             String maskedPhoneNumber,
             boolean interestTagsCompleted,

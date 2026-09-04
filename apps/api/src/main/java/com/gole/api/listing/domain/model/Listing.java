@@ -19,7 +19,7 @@ public final class Listing {
     private final Money price;
     private final ItemCondition condition;
     private final ConditionDisclosure disclosure;
-    private final List<String> photoUrls;
+    private List<String> photoUrls;
     private final String catalogSetNumber; // nullable
     private final ListingCategory category;
     private final Instant createdAt;
@@ -45,10 +45,10 @@ public final class Listing {
         this.price = Objects.requireNonNull(price, "price");
         this.condition = Objects.requireNonNull(condition, "condition");
         this.disclosure = disclosure == null ? ConditionDisclosure.basic() : disclosure;
-        if (photoUrls == null || photoUrls.isEmpty()) {
+        if ((photoUrls == null || photoUrls.isEmpty()) && status != ListingStatus.DELETED) {
             throw new MissingPhotoException(); // 요구사항 5.2
         }
-        this.photoUrls = List.copyOf(photoUrls);
+        this.photoUrls = photoUrls == null ? List.of() : List.copyOf(photoUrls);
         this.catalogSetNumber = catalogSetNumber;
         this.category = category == null ? ListingCategory.SET : category;
         this.status = Objects.requireNonNull(status, "status");
@@ -98,6 +98,7 @@ public final class Listing {
                     "LISTING_ORDER_IN_PROGRESS", "Listing with an in-progress order cannot be deleted");
         }
         this.status = ListingStatus.DELETED;
+        this.photoUrls = List.of();
     }
 
     /**
@@ -109,6 +110,7 @@ public final class Listing {
      */
     public void takedown() {
         this.status = ListingStatus.DELETED;
+        this.photoUrls = List.of();
     }
 
     /** 선점 해제(RESERVED → ACTIVE). 결제 실패/환불 시. 이미 활성이면 무시(멱등). */

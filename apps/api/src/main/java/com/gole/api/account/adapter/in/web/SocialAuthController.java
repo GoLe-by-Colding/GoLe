@@ -1,11 +1,14 @@
 package com.gole.api.account.adapter.in.web;
 
+import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
 import com.gole.api.account.application.port.in.SocialLoginUseCase;
+import com.gole.api.account.application.port.in.SocialLoginUseCase.AuthorizeUrlResult;
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginCommand;
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginResult;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.ClientAddressResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -16,7 +19,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,10 +30,21 @@ public class SocialAuthController {
 
     private final SocialLoginUseCase socialLoginUseCase;
     private final SessionCookie sessionCookie;
+    private final OAuthTransactionCookie oauthTransactionCookie;
+    private final PublicAuthRequestLimitUseCase publicRequestLimit;
+    private final ClientAddressResolver clientAddresses;
 
-    public SocialAuthController(SocialLoginUseCase socialLoginUseCase, SessionCookie sessionCookie) {
+    public SocialAuthController(
+            SocialLoginUseCase socialLoginUseCase,
+            SessionCookie sessionCookie,
+            OAuthTransactionCookie oauthTransactionCookie,
+            PublicAuthRequestLimitUseCase publicRequestLimit,
+            ClientAddressResolver clientAddresses) {
         this.socialLoginUseCase = socialLoginUseCase;
         this.sessionCookie = sessionCookie;
+        this.oauthTransactionCookie = oauthTransactionCookie;
+        this.publicRequestLimit = publicRequestLimit;
+        this.clientAddresses = clientAddresses;
     }
 
     /** 활성(설정된) provider 목록. 프론트가 버튼 노출 여부를 결정한다. (S3) */
@@ -43,19 +56,26 @@ public class SocialAuthController {
     }
 
     /** provider 동의 화면 URL. 서버가 state를 발급한다. (S4) */
-    @GetMapping("/{provider}/authorize-url")
+    @PostMapping("/{provider}/authorize-url")
     public AuthorizeUrlResponse authorizeUrl(
             @PathVariable String provider,
-            @RequestParam("redirectUri") String redirectUri,
-            @RequestParam(required = false) String termsVersion,
-            @RequestParam(required = false) String privacyVersion,
-            @RequestParam(required = false) Boolean termsAccepted,
-            @RequestParam(required = false) Boolean privacyAcknowledged,
-            @RequestParam(required = false) Boolean minimumAgeConfirmed) {
+            @Valid @RequestBody AuthorizeUrlRequest request,
+            HttpServletRequest http,
+            HttpServletResponse response) {
+        publicRequestLimit.acquireOAuthAuthorization(clientAddresses.resolve(http));
         AuthProvider parsed = parse(provider);
-        SignupPolicyAcceptance acceptance =
-                policyAcceptance(termsVersion, privacyVersion, termsAccepted, privacyAcknowledged, minimumAgeConfirmed);
-        return new AuthorizeUrlResponse(socialLoginUseCase.authorizeUrl(parsed, redirectUri, acceptance));
+        SignupPolicyAcceptance acceptance = policyAcceptance(
+                request.termsVersion(),
+                request.privacyVersion(),
+                request.termsAccepted(),
+                request.privacyAcknowledged(),
+                request.minimumAgeConfirmed(),
+                request.thirdPartyProvisionVersion(),
+                request.thirdPartyProvisionAccepted());
+        AuthorizeUrlResult result =
+                socialLoginUseCase.authorizeUrl(parsed, request.redirectUri(), acceptance, request.returnTo());
+        oauthTransactionCookie.issue(http, response, result.state());
+        return new AuthorizeUrlResponse(result.url());
     }
 
     /** code 교환 → state 검증 → find-or-create → 세션 발급. (S5, S6) */
@@ -66,15 +86,25 @@ public class SocialAuthController {
             HttpServletRequest http,
             HttpServletResponse response) {
         AuthProvider parsed = parse(provider);
-        SocialLoginResult result = socialLoginUseCase.login(
-                new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
-        sessionCookie.issue(http, response, result.sessionToken());
-        return new SocialLoginResponse(
-                result.accountId(),
-                result.sessionToken(),
-                result.role().name(),
-                result.newAccount(),
-                result.onboardingRequired());
+        if (!oauthTransactionCookie.matches(http, request.state())) {
+            oauthTransactionCookie.clear(http, response);
+            throw new BadRequestException("OAUTH_STATE_INVALID", "유효하지 않은 로그인 요청입니다");
+        }
+        try {
+            SocialLoginResult result = socialLoginUseCase.login(
+                    new SocialLoginCommand(parsed, request.code(), request.redirectUri(), request.state()));
+            sessionCookie.issue(http, response, result.sessionToken());
+            return new SocialLoginResponse(
+                    result.accountId(),
+                    result.sessionToken(),
+                    result.role().name(),
+                    result.newAccount(),
+                    result.onboardingRequired(),
+                    result.returnTo());
+        } finally {
+            // 성공·실패와 무관하게 브라우저 결박 쿠키도 한 번만 사용한다.
+            oauthTransactionCookie.clear(http, response);
+        }
     }
 
     private static AuthProvider parse(String provider) {
@@ -88,12 +118,16 @@ public class SocialAuthController {
             String privacyVersion,
             Boolean termsAccepted,
             Boolean privacyAcknowledged,
-            Boolean minimumAgeConfirmed) {
+            Boolean minimumAgeConfirmed,
+            String thirdPartyProvisionVersion,
+            Boolean thirdPartyProvisionAccepted) {
         boolean omitted = termsVersion == null
                 && privacyVersion == null
                 && termsAccepted == null
                 && privacyAcknowledged == null
-                && minimumAgeConfirmed == null;
+                && minimumAgeConfirmed == null
+                && thirdPartyProvisionVersion == null
+                && thirdPartyProvisionAccepted == null;
         if (omitted) {
             return null;
         }
@@ -102,13 +136,32 @@ public class SocialAuthController {
                 privacyVersion,
                 Boolean.TRUE.equals(termsAccepted),
                 Boolean.TRUE.equals(privacyAcknowledged),
-                Boolean.TRUE.equals(minimumAgeConfirmed));
+                Boolean.TRUE.equals(minimumAgeConfirmed),
+                thirdPartyProvisionVersion,
+                Boolean.TRUE.equals(thirdPartyProvisionAccepted));
     }
 
     public record AuthorizeUrlResponse(String url) {}
 
+    /** 정책 확인 정보는 URL·프록시 access log에 남지 않도록 JSON 본문으로만 받는다. */
+    public record AuthorizeUrlRequest(
+            @NotBlank String redirectUri,
+            String termsVersion,
+            String privacyVersion,
+            Boolean termsAccepted,
+            Boolean privacyAcknowledged,
+            Boolean minimumAgeConfirmed,
+            String thirdPartyProvisionVersion,
+            Boolean thirdPartyProvisionAccepted,
+            String returnTo) {}
+
     public record CallbackRequest(@NotBlank String code, @NotBlank String redirectUri, @NotBlank String state) {}
 
     public record SocialLoginResponse(
-            String accountId, String sessionToken, String role, boolean newAccount, boolean onboardingRequired) {}
+            String accountId,
+            String sessionToken,
+            String role,
+            boolean newAccount,
+            boolean onboardingRequired,
+            String returnTo) {}
 }

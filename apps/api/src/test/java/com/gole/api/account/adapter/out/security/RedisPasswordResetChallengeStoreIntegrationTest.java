@@ -1,11 +1,14 @@
 package com.gole.api.account.adapter.out.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.account.application.port.out.PasswordResetChallengeStorePort.Challenge;
 import com.gole.api.account.domain.model.Email;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -47,7 +50,17 @@ class RedisPasswordResetChallengeStoreIntegrationTest {
         store.store(email, challenge, Duration.ofMinutes(10));
 
         assertThat(store.find(email)).contains(challenge);
-        assertThat(redis.keys("gole:password-reset:*")).noneMatch(key -> key.contains(email.value()));
+        Set<String> keys = redis.keys("gole:password-reset:*");
+        assertThat(keys).hasSize(1).noneMatch(key -> key.contains(email.value()));
+        String key = keys.iterator().next();
+        assertThat(redis.getExpire(key, TimeUnit.MILLISECONDS))
+                .isBetween(1L, Duration.ofMinutes(10).toMillis());
+
+        assertThatThrownBy(() -> store.store(email, challenge, Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(redis.hasKey(key)).isFalse();
+
+        store.store(email, challenge, Duration.ofMinutes(10));
         assertThat(store.incrementFailedAttempts(email)).isEqualTo(1);
         assertThat(store.find(email))
                 .get()

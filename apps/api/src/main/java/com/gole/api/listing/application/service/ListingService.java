@@ -16,11 +16,14 @@ import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.Money;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.media.domain.model.MediaTargetType;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 리스팅 유스케이스 구현. inbound port를 구현하고 outbound port에만 의존한다.
@@ -41,33 +44,40 @@ public class ListingService
     private final ListingRepositoryPort listingRepository;
     private final ListingIdGeneratorPort idGenerator;
     private final NewListingNotifierPort newListingNotifier;
+    private final ManageMediaAssetsUseCase mediaAssets;
     private final Clock clock;
 
     public ListingService(
             ListingRepositoryPort listingRepository,
             ListingIdGeneratorPort idGenerator,
             NewListingNotifierPort newListingNotifier,
+            ManageMediaAssetsUseCase mediaAssets,
             Clock clock) {
         this.listingRepository = listingRepository;
         this.idGenerator = idGenerator;
         this.newListingNotifier = newListingNotifier;
+        this.mediaAssets = mediaAssets;
         this.clock = clock;
     }
 
     @Override
+    @Transactional
     public String create(CreateListingCommand command) {
+        String listingId = idGenerator.newListingId();
         Listing listing = Listing.create(
-                idGenerator.newListingId(),
+                listingId,
                 command.sellerId(),
                 command.title(),
                 command.description(),
                 Money.won(command.price()),
                 command.condition(),
                 command.disclosure(),
-                command.photoUrls(),
+                command.photoKeys(),
                 command.catalogSetNumber(),
                 command.category(),
                 Instant.now(clock));
+        mediaAssets.replaceReferences(
+                command.sellerId(), MediaTargetType.LISTING, listingId, command.photoKeys(), true);
         Listing saved = listingRepository.save(listing);
         newListingNotifier.notifyFollowers(saved.getSellerId(), saved.getId(), saved.getTitle());
         return saved.getId();
@@ -137,10 +147,12 @@ public class ListingService
     }
 
     @Override
+    @Transactional
     public void delete(String listingId) {
         Listing listing = getById(listingId);
         listing.delete();
         listingRepository.save(listing);
+        mediaAssets.revokeTarget(MediaTargetType.LISTING, listingId);
     }
 
     /**
@@ -148,9 +160,11 @@ public class ListingService
      * (admin-console 요구사항 4.2)
      */
     @Override
+    @Transactional
     public void takedown(String listingId, String reason) {
         Listing listing = getById(listingId);
         listing.takedown();
         listingRepository.save(listing);
+        mediaAssets.revokeTarget(MediaTargetType.LISTING, listingId);
     }
 }

@@ -28,6 +28,11 @@ public class LoggingVerificationCodeSenderAdapter implements VerificationCodeSen
         log.info("[PASSWORD_RESET:LOCAL_ONLY] to={} code={}", mask(email.value()), code.code());
     }
 
+    @Override
+    public void sendAccountDeletion(Email email, VerificationCode code) {
+        log.info("[ACCOUNT_DELETION:LOCAL_ONLY] to={} code={}", mask(email.value()), code.code());
+    }
+
     private static String mask(String email) {
         int at = email.indexOf('@');
         return at <= 1 ? "***" + email.substring(Math.max(0, at)) : email.charAt(0) + "***" + email.substring(at);

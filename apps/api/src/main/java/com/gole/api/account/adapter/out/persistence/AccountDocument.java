@@ -25,8 +25,8 @@ public class AccountDocument {
 
     private String role;
 
-    // 인증 코드(검증 완료 시 null)
-    private String verificationCode;
+    // 인증 코드 단방향 hash(검증 완료 시 null). 원문용 legacy `verificationCode` 필드는 migration에서 제거한다.
+    private String verificationCodeHash;
     private Instant verificationCodeIssuedAt;
     private int verificationFailedAttempts;
 
@@ -66,7 +66,7 @@ public class AccountDocument {
             String passwordHash,
             String status,
             String role,
-            String verificationCode,
+            String verificationCodeHash,
             Instant verificationCodeIssuedAt,
             int verificationFailedAttempts,
             int failedAttempts,
@@ -79,7 +79,7 @@ public class AccountDocument {
                 passwordHash,
                 status,
                 role,
-                verificationCode,
+                verificationCodeHash,
                 verificationCodeIssuedAt,
                 verificationFailedAttempts,
                 failedAttempts,
@@ -102,7 +102,7 @@ public class AccountDocument {
             String passwordHash,
             String status,
             String role,
-            String verificationCode,
+            String verificationCodeHash,
             Instant verificationCodeIssuedAt,
             int verificationFailedAttempts,
             int failedAttempts,
@@ -130,7 +130,7 @@ public class AccountDocument {
         this.passwordHash = passwordHash;
         this.status = status;
         this.role = role;
-        this.verificationCode = verificationCode;
+        this.verificationCodeHash = verificationCodeHash;
         this.verificationCodeIssuedAt = verificationCodeIssuedAt;
         this.verificationFailedAttempts = verificationFailedAttempts;
         this.failedAttempts = failedAttempts;
@@ -159,8 +159,8 @@ public class AccountDocument {
         return role;
     }
 
-    public String getVerificationCode() {
-        return verificationCode;
+    public String getVerificationCodeHash() {
+        return verificationCodeHash;
     }
 
     public Instant getVerificationCodeIssuedAt() {

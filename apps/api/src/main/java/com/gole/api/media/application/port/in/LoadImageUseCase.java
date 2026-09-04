@@ -1,14 +1,24 @@
 package com.gole.api.media.application.port.in;
 
+import java.util.Optional;
+
 /**
  * 이미지 조회 유스케이스(인바운드 포트). (요구사항 M2)
  */
 public interface LoadImageUseCase {
 
-    LoadedImage load(String key);
+    LoadedImage load(String key, Optional<String> viewerId);
+
+    default LoadedImage load(String key) {
+        return load(key, Optional.empty());
+    }
 
     /** 지정 폭으로 축소된 이미지를 조회한다(캐시된 파생물 우선, 불가 시 원본). (백로그 N2a) */
-    LoadedImage loadResized(String key, int width);
+    LoadedImage loadResized(String key, int width, Optional<String> viewerId);
+
+    default LoadedImage loadResized(String key, int width) {
+        return loadResized(key, width, Optional.empty());
+    }
 
     /**
      * @param content     객체 바이트

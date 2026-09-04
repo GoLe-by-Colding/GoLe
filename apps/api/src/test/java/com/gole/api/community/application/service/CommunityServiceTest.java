@@ -2,6 +2,7 @@ package com.gole.api.community.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase.CommentCommand;
@@ -20,6 +21,7 @@ import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
 import com.gole.api.community.domain.model.PostStatus;
 import com.gole.api.community.domain.model.PostType;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -42,7 +44,8 @@ class CommunityServiceTest {
         posts = new InMemoryPosts();
         notifier = new RecordingPostAuthorNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new CommunityService(posts, new InMemoryComments(), new SeqIds(), notifier, clock);
+        service = new CommunityService(
+                posts, new InMemoryComments(), new SeqIds(), notifier, mock(ManageMediaAssetsUseCase.class), clock);
     }
 
     private String publish() {

@@ -17,7 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  * provider별 응답에서 providerId/email을 파싱한다. (소셜 로그인 스펙 S4, S5)
  *
  * <p>provider별 token/userinfo URL과 client 정보는 {@link OAuthProperties}로 주입되며,
- * client-id만 env로 채우면 동작한다.
+ * client-id와 client-secret을 env로 채우면 동작한다.
  */
 public class RestClientSocialIdentityProviderAdapter implements SocialIdentityProviderPort {
 
@@ -81,7 +81,9 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
             }
             return String.valueOf(token.get("access_token"));
         } catch (RestClientException e) {
-            throw new BadRequestException("OAUTH_EXCHANGE_FAILED", "Token exchange failed: " + e.getMessage());
+            // 공급자 오류 본문에는 인가 코드나 계정 관련 진단값이 포함될 수 있다. 외부 응답과
+            // 공통 유스케이스 로그에는 원문을 되비추지 않고 안정적인 오류 코드만 남긴다.
+            throw new BadRequestException("OAUTH_EXCHANGE_FAILED", "소셜 로그인 토큰 교환에 실패했습니다");
         }
     }
 
@@ -100,7 +102,7 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
             }
             return body;
         } catch (RestClientException e) {
-            throw new BadRequestException("OAUTH_PROFILE_FAILED", "Profile fetch failed: " + e.getMessage());
+            throw new BadRequestException("OAUTH_PROFILE_FAILED", "소셜 로그인 프로필 조회에 실패했습니다");
         }
     }
 

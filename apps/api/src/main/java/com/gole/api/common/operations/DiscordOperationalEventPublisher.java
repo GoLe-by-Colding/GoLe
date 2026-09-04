@@ -1,5 +1,6 @@
 package com.gole.api.common.operations;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,17 +15,15 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 /** Discord webhook 출력 어댑터. 비동기 best-effort로 동작해 사용자 요청을 지연시키지 않는다. */
 @Component
-public class DiscordOperationalEventPublisher implements OperationalEventPublisher {
+public class DiscordOperationalEventPublisher implements OperationalEventPublisher, ConfirmedOperationalEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(DiscordOperationalEventPublisher.class);
     private static final int MAX_EMBED_TEXT_LENGTH = 6_000;
@@ -47,7 +46,14 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
     private final Duration retryDelay;
     private final Duration maxRetryDelay;
     private final int maxAttempts;
-    private final ConcurrentMap<String, Long> recentApplicationEvents = new ConcurrentHashMap<>();
+
+    /** Discord가 실제로 수락한 APPLICATION 이벤트만 성공 시각을 보관한다. */
+    private final ConcurrentMap<ApplicationEventFingerprint, Long> deliveredApplicationEvents =
+            new ConcurrentHashMap<>();
+
+    /** 같은 이벤트가 전송 또는 재시도 중일 때 동시 publish가 요청을 중복 생성하지 않게 한다. */
+    private final ConcurrentMap<ApplicationEventFingerprint, Boolean> inFlightApplicationEvents =
+            new ConcurrentHashMap<>();
 
     @Autowired
     public DiscordOperationalEventPublisher(DiscordOperationsProperties properties, ObjectMapper objectMapper) {
@@ -84,101 +90,186 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         if (!properties.isEnabled() || webhookUrl == null || webhookUrl.isBlank()) {
             return;
         }
-        if (isDuplicateApplicationEvent(event)) {
+        TrackedApplicationEvent trackedEvent = trackedApplicationEvent(event);
+        if (trackedEvent != null && !tryStartDelivery(trackedEvent)) {
             return;
         }
 
         try {
-            HttpRequest request = HttpRequest.newBuilder(withWaitConfirmation(webhookUrl))
-                    .timeout(requestTimeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload(event))))
-                    .build();
-            send(request, 1);
-        } catch (IllegalArgumentException | JacksonException ex) {
-            log.warn("Discord 운영 알림 구성 오류: {}", ex.getMessage());
+            HttpRequest request = request(event, webhookUrl);
+            send(request, 1, fingerprintOf(trackedEvent));
+        } catch (RuntimeException ex) {
+            releaseDelivery(fingerprintOf(trackedEvent));
+            // URI 파싱 예외 메시지에는 webhook 토큰이 포함될 수 있으므로 메시지를 기록하지 않는다.
+            log.warn("Discord 운영 알림 구성 오류: error={}", ex.getClass().getSimpleName());
         }
     }
 
-    /** 동일 인프라 장애가 요청 수만큼 Discord를 도배하지 않도록 애플리케이션 이벤트만 묶는다. */
-    private boolean isDuplicateApplicationEvent(OperationalEvent event) {
+    /** durable outbox worker가 Discord의 실제 HTTP 수락을 확인할 때 쓰는 단일 전송 시도. */
+    @Override
+    public DeliveryResult publishAndConfirm(OperationalEvent event) {
+        String webhookUrl = properties.webhookFor(event.category());
+        if (!properties.isEnabled() || webhookUrl == null || webhookUrl.isBlank()) {
+            return DeliveryResult.retryable("DELIVERY_DISABLED", maxRetryDelay);
+        }
+        try {
+            HttpResponse<Void> response =
+                    httpClient.send(request(event, webhookUrl), HttpResponse.BodyHandlers.discarding());
+            int status = response.statusCode();
+            if (status >= 200 && status < 300) {
+                return DeliveryResult.delivered();
+            }
+            String errorCode = "HTTP_" + status;
+            if (status == 429 || status >= 500) {
+                return DeliveryResult.retryable(errorCode, retryDelay(response, 1));
+            }
+            return DeliveryResult.permanent(errorCode);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return DeliveryResult.retryable("DELIVERY_INTERRUPTED", retryDelay);
+        } catch (IOException transportFailure) {
+            return DeliveryResult.retryable("TRANSPORT_FAILURE", retryDelay);
+        } catch (RuntimeException configurationFailure) {
+            // URI·직렬화 예외 메시지에는 webhook token이나 입력값이 섞일 수 있어 코드만 반환한다.
+            return DeliveryResult.permanent("DELIVERY_CONFIGURATION");
+        }
+    }
+
+    private HttpRequest request(OperationalEvent event, String webhookUrl) {
+        return HttpRequest.newBuilder(withWaitConfirmation(webhookUrl))
+                .timeout(requestTimeout)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload(event))))
+                .build();
+    }
+
+    /** 동일 인프라 장애만 전송 중과 성공 후 일정 시간 묶어 요청 수만큼 Discord를 도배하지 않게 한다. */
+    private TrackedApplicationEvent trackedApplicationEvent(OperationalEvent event) {
         Duration window = properties.getDeduplicationWindow();
         if (event.category() != OperationalEvent.Category.APPLICATION
                 || window == null
                 || window.isZero()
                 || window.isNegative()) {
+            return null;
+        }
+
+        long windowNanos;
+        try {
+            windowNanos = window.toNanos();
+        } catch (ArithmeticException overflow) {
+            windowNanos = Long.MAX_VALUE;
+        }
+        return new TrackedApplicationEvent(
+                new ApplicationEventFingerprint(
+                        event.category().name(),
+                        event.level().name(),
+                        event.title(),
+                        event.fields().getOrDefault("예외 종류", "-")),
+                windowNanos);
+    }
+
+    private boolean tryStartDelivery(TrackedApplicationEvent trackedEvent) {
+        ApplicationEventFingerprint fingerprint = trackedEvent.fingerprint();
+        long now = System.nanoTime();
+        if (wasDeliveredRecently(fingerprint, now, trackedEvent.windowNanos())) {
+            return false;
+        }
+        if (inFlightApplicationEvents.putIfAbsent(fingerprint, Boolean.TRUE) != null) {
             return false;
         }
 
-        long now = System.nanoTime();
-        long windowNanos = window.toNanos();
-        String fingerprint = String.join(
-                "|",
-                event.category().name(),
-                event.level().name(),
-                event.title(),
-                event.fields().getOrDefault("예외 종류", "-"));
-        AtomicBoolean duplicate = new AtomicBoolean(false);
-        recentApplicationEvents.compute(fingerprint, (ignored, previous) -> {
-            if (previous != null && now - previous < windowNanos) {
-                duplicate.set(true);
-                return previous;
-            }
-            return now;
-        });
-
-        if (recentApplicationEvents.size() > 256) {
-            recentApplicationEvents.entrySet().removeIf(entry -> now - entry.getValue() >= windowNanos);
+        // 성공 완료가 첫 조회와 in-flight 선점 사이에 들어온 경우도 다시 한 번 확인한다.
+        long recheckAt = System.nanoTime();
+        if (wasDeliveredRecently(fingerprint, recheckAt, trackedEvent.windowNanos())) {
+            releaseDelivery(fingerprint);
+            return false;
         }
-        return duplicate.get();
+
+        if (deliveredApplicationEvents.size() > 256) {
+            deliveredApplicationEvents
+                    .entrySet()
+                    .removeIf(entry -> recheckAt - entry.getValue() >= trackedEvent.windowNanos());
+        }
+        return true;
     }
 
-    private void send(HttpRequest request, int attempt) {
+    private boolean wasDeliveredRecently(
+            ApplicationEventFingerprint fingerprint, long now, long deduplicationWindowNanos) {
+        Long deliveredAt = deliveredApplicationEvents.get(fingerprint);
+        return deliveredAt != null && now - deliveredAt < deduplicationWindowNanos;
+    }
+
+    private void send(HttpRequest request, int attempt, ApplicationEventFingerprint fingerprint) {
         try {
             httpClient
                     .sendAsync(request, HttpResponse.BodyHandlers.discarding())
                     .whenComplete((response, failure) -> {
                         if (failure != null) {
-                            retryOrLogFailure(request, attempt, unwrap(failure));
+                            retryOrLogFailure(request, attempt, unwrap(failure), fingerprint);
                             return;
                         }
 
                         int status = response.statusCode();
                         if (status >= 200 && status < 300) {
+                            markDelivered(fingerprint);
                             return;
                         }
                         if ((status == 429 || status >= 500) && attempt < maxAttempts) {
-                            scheduleRetry(request, attempt + 1, retryDelay(response, attempt));
+                            scheduleRetry(request, attempt + 1, retryDelay(response, attempt), fingerprint);
                             return;
                         }
+                        releaseDelivery(fingerprint);
                         log.warn("Discord 운영 알림 실패: status={}, attempts={}", status, attempt);
                     });
         } catch (RuntimeException ex) {
-            retryOrLogFailure(request, attempt, ex);
+            retryOrLogFailure(request, attempt, ex, fingerprint);
         }
     }
 
-    private void retryOrLogFailure(HttpRequest request, int attempt, Throwable failure) {
+    private void retryOrLogFailure(
+            HttpRequest request, int attempt, Throwable failure, ApplicationEventFingerprint fingerprint) {
         if (attempt < maxAttempts) {
-            scheduleRetry(request, attempt + 1, exponentialDelay(attempt));
+            scheduleRetry(request, attempt + 1, exponentialDelay(attempt), fingerprint);
             return;
         }
+        releaseDelivery(fingerprint);
         log.warn(
                 "Discord 운영 알림 전송 오류: attempts={}, error={}",
                 attempt,
                 failure.getClass().getSimpleName());
     }
 
-    private void scheduleRetry(HttpRequest request, int nextAttempt, Duration delay) {
+    private void scheduleRetry(
+            HttpRequest request, int nextAttempt, Duration delay, ApplicationEventFingerprint fingerprint) {
         try {
             CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS)
-                    .execute(() -> send(request, nextAttempt));
+                    .execute(() -> send(request, nextAttempt, fingerprint));
         } catch (RuntimeException ex) {
+            releaseDelivery(fingerprint);
             log.warn(
                     "Discord 운영 알림 재시도 예약 실패: nextAttempt={}, error={}",
                     nextAttempt,
                     ex.getClass().getSimpleName());
         }
+    }
+
+    private void markDelivered(ApplicationEventFingerprint fingerprint) {
+        if (fingerprint == null) {
+            return;
+        }
+        // 성공 시각을 먼저 보이고 in-flight를 풀어야 새 publish가 사이에 끼어들지 못한다.
+        deliveredApplicationEvents.put(fingerprint, System.nanoTime());
+        releaseDelivery(fingerprint);
+    }
+
+    private void releaseDelivery(ApplicationEventFingerprint fingerprint) {
+        if (fingerprint != null) {
+            inFlightApplicationEvents.remove(fingerprint);
+        }
+    }
+
+    private static ApplicationEventFingerprint fingerprintOf(TrackedApplicationEvent trackedEvent) {
+        return trackedEvent == null ? null : trackedEvent.fingerprint();
     }
 
     private Duration retryDelay(HttpResponse<?> response, int attempt) {
@@ -324,4 +415,8 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         String safe = value == null || value.isBlank() ? "-" : value;
         return safe.length() <= maxLength ? safe : safe.substring(0, maxLength - 1) + "…";
     }
+
+    private record ApplicationEventFingerprint(String category, String level, String title, String exceptionType) {}
+
+    private record TrackedApplicationEvent(ApplicationEventFingerprint fingerprint, long windowNanos) {}
 }

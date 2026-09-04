@@ -11,12 +11,18 @@ import java.util.Optional;
  */
 public interface OAuthStateStorePort {
 
-    /** state→요청 문맥 매핑을 TTL과 함께 저장한다. 신규 가입 확인 정보도 여기 결박한다. */
+    /** state→요청 문맥 매핑을 TTL과 함께 저장한다. 신규 가입 확인 정보와 복귀 경로도 여기 결박한다. */
     void save(String state, OAuthStateContext context, Duration ttl);
 
     /** state를 1회 소비한다. 알 수 없거나 이미 소비된 state면 empty다. */
     Optional<OAuthStateContext> consume(String state);
 
     record OAuthStateContext(
-            AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance) {}
+            AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance, String returnTo) {
+
+        public OAuthStateContext(
+                AuthProvider provider, String redirectUri, SignupPolicyAcceptance signupPolicyAcceptance) {
+            this(provider, redirectUri, signupPolicyAcceptance, null);
+        }
+    }
 }

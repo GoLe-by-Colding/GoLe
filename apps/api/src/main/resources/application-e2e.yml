@@ -16,6 +16,9 @@ storage:
 # e2e 프로필은 전용 Mongo/Redis/버킷만 사용하므로 화면 탐색용 샘플을 명시적으로 허용한다.
 # 기본 프로필과 공개 staging은 모두 false라 실제 데이터에 섞이지 않는다.
 gole:
+  # 쓰기 E2E는 인증된 판매자 fixture를 사용하므로 신원확인 운영 래치를 명시적으로 연다.
+  seller-identity:
+    verification-ready: ${GOLE_SELLER_IDENTITY_VERIFICATION_READY:true}
   catalog:
     seed-on-empty: true
   listing:

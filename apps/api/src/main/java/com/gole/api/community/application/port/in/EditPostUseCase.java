@@ -9,5 +9,5 @@ public interface EditPostUseCase {
 
     void edit(EditPostCommand command);
 
-    record EditPostCommand(String postId, String requesterId, String content, List<String> imageUrls) {}
+    record EditPostCommand(String postId, String requesterId, String content, List<String> imageKeys) {}
 }

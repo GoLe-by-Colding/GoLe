@@ -65,6 +65,18 @@ class OnboardingProfileTest {
     }
 
     @Test
+    void phoneCanBeExcludedByTheDeploymentPolicyWithoutPersistingACompletionFlag() {
+        OnboardingProfile profile = OnboardingProfile.empty()
+                .withNickname(new Nickname("고레"))
+                .withInterestTags(Set.of("technic"))
+                .withConsents(NOW, null);
+
+        assertThat(profile.isComplete()).isFalse();
+        assertThat(profile.isComplete(false)).isTrue();
+        assertThat(profile.isRequired(false)).isFalse();
+    }
+
+    @Test
     void legacyExemptAccountIsNeverRequiredEvenWhenIncomplete() {
         // D6: 배포 이전 가입자를 하드 게이트에 걸지 않는다.
         OnboardingProfile profile = OnboardingProfile.empty().asLegacyExempt();

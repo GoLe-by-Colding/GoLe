@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -53,12 +52,12 @@ public class MediaController {
 
     @Operation(
             summary = "이미지 단일 업로드",
-            description = "이미지 파일을 MinIO에 업로드하고 공개 URL을 반환합니다. Content-Type: multipart/form-data")
+            description = "JPEG/PNG 정지 이미지를 메타데이터 없이 재인코딩해 저장하고 소유자 미리보기 URL을 반환합니다. Content-Type: multipart/form-data")
     @PostMapping("/images")
     @ResponseStatus(HttpStatus.CREATED)
     public UploadResponse upload(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
         uploadQuota.acquire(AuthenticatedUser.id(request), 1);
-        return storeOne(file);
+        return storeOne(file, AuthenticatedUser.id(request));
     }
 
     /** 다중 이미지 업로드. 매물 사진 등 여러 장을 한 번에 올린다. (요구사항 M1, N2) */
@@ -73,10 +72,11 @@ public class MediaController {
             throw new InvalidImageException("Too many files: max " + MAX_BATCH_SIZE + " per request");
         }
         uploadQuota.acquire(AuthenticatedUser.id(request), files.size());
-        return files.stream().map(this::storeOne).toList();
+        String ownerId = AuthenticatedUser.id(request);
+        return files.stream().map(file -> storeOne(file, ownerId)).toList();
     }
 
-    private UploadResponse storeOne(MultipartFile file) {
+    private UploadResponse storeOne(MultipartFile file, String ownerId) {
         if (file == null || file.isEmpty()) {
             throw new InvalidImageException("Uploaded file is empty");
         }
@@ -87,7 +87,7 @@ public class MediaController {
             throw new InvalidImageException("Failed to read uploaded file");
         }
         StoredImage stored = uploadImageUseCase.upload(
-                new UploadImageCommand(content, file.getContentType(), file.getOriginalFilename()));
+                new UploadImageCommand(ownerId, content, file.getContentType(), file.getOriginalFilename()));
         return new UploadResponse(stored.key(), stored.url());
     }
 
@@ -95,13 +95,18 @@ public class MediaController {
      *  {@code ?w=240} 지정 시 해당 폭 썸네일을 제공한다(없거나 불가 시 원본). (백로그 N2a) */
     @GetMapping("/{*key}")
     public ResponseEntity<byte[]> get(
-            @PathVariable String key, @RequestParam(value = "w", required = false) Integer w) {
+            @PathVariable String key,
+            @RequestParam(value = "w", required = false) Integer w,
+            HttpServletRequest request) {
         String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
-        LoadedImage image =
-                (w == null) ? loadImageUseCase.load(normalizedKey) : loadImageUseCase.loadResized(normalizedKey, w);
+        java.util.Optional<String> viewerId = AuthenticatedUser.optionalId(request);
+        LoadedImage image = (w == null)
+                ? loadImageUseCase.load(normalizedKey, viewerId)
+                : loadImageUseCase.loadResized(normalizedKey, w, viewerId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.contentType()))
-                .cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePublic())
+                // 폐기 직후 브라우저·공유 캐시에서도 재노출되지 않도록 사용자 미디어를 저장하지 않는다.
+                .cacheControl(CacheControl.noStore())
                 .body(image.content());
     }
 

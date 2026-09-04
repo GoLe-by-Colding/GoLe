@@ -9,6 +9,8 @@ public interface SupportTicketMongoRepository extends MongoRepository<SupportTic
 
     List<SupportTicketDocument> findByStatus(String status, Pageable pageable);
 
+    long countByStatus(String status);
+
     List<SupportTicketDocument> findByCategory(String category, Pageable pageable);
 
     List<SupportTicketDocument> findByStatusAndCategory(String status, String category, Pageable pageable);
@@ -20,6 +22,8 @@ public interface SupportTicketMongoRepository extends MongoRepository<SupportTic
     List<SupportTicketDocument> findGeneralByStatus(String status, Pageable pageable);
 
     List<SupportTicketDocument> findBy(Pageable pageable);
+
+    List<SupportTicketDocument> findByStatusNot(String status, Pageable pageable);
 
     @Query("{ $or: [ { 'requesterId': ?0 }, { 'assigneeId': ?0 } ] }")
     List<SupportTicketDocument> findByParticipant(String accountId, Pageable pageable);

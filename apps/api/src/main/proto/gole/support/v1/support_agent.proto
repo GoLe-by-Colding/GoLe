@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package gole.support.v1;
+
+option java_multiple_files = true;
+option java_package = "com.gole.support.v1";
+option java_outer_classname = "SupportAgentContract";
+
+service SupportAgent {
+  rpc Analyze(AnalyzeSupportRequest) returns (AnalyzeSupportResponse);
+}
+
+enum SupportCategory {
+  SUPPORT_CATEGORY_UNSPECIFIED = 0;
+  SUPPORT_CATEGORY_GENERAL = 1;
+  SUPPORT_CATEGORY_TRADE = 2;
+  SUPPORT_CATEGORY_PAYMENT = 3;
+  SUPPORT_CATEGORY_PRODUCT_FEEDBACK = 4;
+  SUPPORT_CATEGORY_PRIVACY_ACCESS = 5;
+  SUPPORT_CATEGORY_PRIVACY_CORRECTION_DELETION = 6;
+  SUPPORT_CATEGORY_PRIVACY_PROCESSING_STOP = 7;
+}
+
+enum SupportPriority {
+  SUPPORT_PRIORITY_UNSPECIFIED = 0;
+  SUPPORT_PRIORITY_LOW = 1;
+  SUPPORT_PRIORITY_NORMAL = 2;
+  SUPPORT_PRIORITY_HIGH = 3;
+  SUPPORT_PRIORITY_URGENT = 4;
+}
+
+message AnalyzeSupportRequest {
+  string ticket_id = 1;
+  SupportCategory declared_category = 2;
+  string title = 3;
+  string message = 4;
+  string locale = 5;
+}
+
+message AnalyzeSupportResponse {
+  SupportCategory recommended_category = 1;
+  SupportPriority priority = 2;
+  string summary = 3;
+  string draft_reply = 4;
+  repeated string risk_flags = 5;
+  bool human_review_required = 6;
+  bool external_model_used = 7;
+  string engine_version = 8;
+}

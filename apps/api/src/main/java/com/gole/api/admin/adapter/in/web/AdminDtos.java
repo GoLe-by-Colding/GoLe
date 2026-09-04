@@ -14,6 +14,7 @@ import com.gole.api.report.domain.model.Report;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
@@ -39,6 +40,7 @@ public final class AdminDtos {
             Map<String, Long> ordersByStatus,
             long activeListings,
             long pendingReports,
+            long unassignedSupportTickets,
             long pendingSettlements,
             PaymentReadinessResponse paymentReadiness) {}
 
@@ -223,7 +225,7 @@ public final class AdminDtos {
             @Min(0) int pieceCount,
             int releaseYear,
             @NotNull RetirementStatus retirementStatus,
-            String imageUrl,
+            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP) String imageUrl,
             boolean featured) {}
 
     public record UpdateSetRequest(
@@ -232,7 +234,7 @@ public final class AdminDtos {
             @Min(0) int pieceCount,
             int releaseYear,
             @NotNull RetirementStatus retirementStatus,
-            String imageUrl,
+            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP) String imageUrl,
             boolean featured) {}
 
     public record LegoSetResponse(

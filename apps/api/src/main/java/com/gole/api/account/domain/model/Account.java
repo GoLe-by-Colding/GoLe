@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * 계정 애그리거트 루트. 인증 상태/로그인 잠금 등 불변식을 캡슐화한다.
@@ -24,7 +25,7 @@ public final class Account {
     private PasswordHash passwordHash;
     private AccountStatus status;
     private Role role;
-    private VerificationCode verificationCode; // nullable (검증 완료 시 제거)
+    private EmailVerificationChallenge verificationChallenge; // nullable (검증 완료 시 제거)
     private int verificationFailedAttempts;
     private int failedAttempts;
     private Instant failureWindowStartedAt; // nullable
@@ -39,7 +40,7 @@ public final class Account {
             PasswordHash passwordHash,
             AccountStatus status,
             Role role,
-            VerificationCode verificationCode,
+            EmailVerificationChallenge verificationChallenge,
             int failedAttempts,
             Instant failureWindowStartedAt,
             Instant lockedUntil) {
@@ -49,7 +50,7 @@ public final class Account {
                 passwordHash,
                 status,
                 role,
-                verificationCode,
+                verificationChallenge,
                 failedAttempts,
                 failureWindowStartedAt,
                 lockedUntil,
@@ -63,7 +64,7 @@ public final class Account {
             PasswordHash passwordHash,
             AccountStatus status,
             Role role,
-            VerificationCode verificationCode,
+            EmailVerificationChallenge verificationChallenge,
             int failedAttempts,
             Instant failureWindowStartedAt,
             Instant lockedUntil,
@@ -74,7 +75,7 @@ public final class Account {
                 passwordHash,
                 status,
                 role,
-                verificationCode,
+                verificationChallenge,
                 0,
                 failedAttempts,
                 failureWindowStartedAt,
@@ -89,7 +90,7 @@ public final class Account {
             PasswordHash passwordHash,
             AccountStatus status,
             Role role,
-            VerificationCode verificationCode,
+            EmailVerificationChallenge verificationChallenge,
             int verificationFailedAttempts,
             int failedAttempts,
             Instant failureWindowStartedAt,
@@ -101,7 +102,7 @@ public final class Account {
                 passwordHash,
                 status,
                 role,
-                verificationCode,
+                verificationChallenge,
                 verificationFailedAttempts,
                 failedAttempts,
                 failureWindowStartedAt,
@@ -117,7 +118,7 @@ public final class Account {
             PasswordHash passwordHash,
             AccountStatus status,
             Role role,
-            VerificationCode verificationCode,
+            EmailVerificationChallenge verificationChallenge,
             int verificationFailedAttempts,
             int failedAttempts,
             Instant failureWindowStartedAt,
@@ -129,7 +130,7 @@ public final class Account {
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
         this.status = Objects.requireNonNull(status, "status");
         this.role = Objects.requireNonNull(role, "role");
-        this.verificationCode = verificationCode;
+        this.verificationChallenge = verificationChallenge;
         this.verificationFailedAttempts = verificationFailedAttempts;
         this.failedAttempts = failedAttempts;
         this.failureWindowStartedAt = failureWindowStartedAt;
@@ -139,8 +140,9 @@ public final class Account {
     }
 
     /** 신규 가입: 미인증 + 일반(USER) 권한 + 인증코드 발급 상태로 생성. (요구사항 1.1) */
-    public static Account register(String id, Email email, PasswordHash passwordHash, VerificationCode code) {
-        return new Account(id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, code, 0, null, null);
+    public static Account register(
+            String id, Email email, PasswordHash passwordHash, EmailVerificationChallenge challenge) {
+        return new Account(id, email, passwordHash, AccountStatus.UNVERIFIED, Role.USER, challenge, 0, null, null);
     }
 
     /**
@@ -177,20 +179,20 @@ public final class Account {
     }
 
     /** 이메일 인증. 만료(1.5)/불일치 시 예외, 성공 시 VERIFIED 전이(1.4). */
-    public void verify(String candidateCode, Instant now) {
+    public void verify(String candidateCode, Instant now, BiPredicate<String, String> hashMatcher) {
         if (status == AccountStatus.VERIFIED) {
             return; // 멱등
         }
-        if (verificationCode == null) {
+        if (verificationChallenge == null) {
             throw new VerificationException("VERIFICATION_CODE_MISSING", "No verification code issued");
         }
-        if (verificationCode.isExpired(now)) {
+        if (verificationChallenge.isExpired(now)) {
             throw new VerificationException("VERIFICATION_CODE_EXPIRED", "Verification code has expired");
         }
         if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
             throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
         }
-        if (!verificationCode.matches(candidateCode)) {
+        if (!hashMatcher.test(candidateCode, verificationChallenge.codeHash())) {
             verificationFailedAttempts++;
             if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                 throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
@@ -198,19 +200,20 @@ public final class Account {
             throw new VerificationException("VERIFICATION_CODE_MISMATCH", "Verification code does not match");
         }
         this.status = AccountStatus.VERIFIED;
-        this.verificationCode = null;
+        this.verificationChallenge = null;
         this.verificationFailedAttempts = 0;
     }
 
     /** 인증 대기 계정에 새 코드를 발급한다. 과도한 재요청은 60초 동안 차단한다. */
-    public void reissueVerificationCode(VerificationCode code, Instant now) {
+    public void reissueVerificationCode(EmailVerificationChallenge challenge, Instant now) {
         if (status != AccountStatus.UNVERIFIED) {
             throw new VerificationException("ALREADY_VERIFIED", "Email is already verified");
         }
-        if (verificationCode != null && now.isBefore(verificationCode.issuedAt().plusSeconds(60))) {
+        if (verificationChallenge != null
+                && now.isBefore(verificationChallenge.issuedAt().plusSeconds(60))) {
             throw new VerificationException("VERIFICATION_RESEND_TOO_SOON", "인증 코드는 60초 후 다시 요청할 수 있습니다");
         }
-        this.verificationCode = Objects.requireNonNull(code, "code");
+        this.verificationChallenge = Objects.requireNonNull(challenge, "challenge");
         this.verificationFailedAttempts = 0;
     }
 
@@ -285,9 +288,9 @@ public final class Account {
         this.onboarding = onboarding.asLegacyExempt();
     }
 
-    /** 온보딩을 더 요구해야 하는가. 저장된 플래그가 아니라 필드 조합에서 파생한다. (D1) */
-    public boolean isOnboardingRequired() {
-        return onboarding.isRequired();
+    /** 배포별 전화 인증 정책을 반영한 온보딩 판정. */
+    public boolean isOnboardingRequired(boolean phoneVerificationRequired) {
+        return onboarding.isRequired(phoneVerificationRequired);
     }
 
     public OnboardingProfile getOnboarding() {
@@ -402,8 +405,8 @@ public final class Account {
         return status;
     }
 
-    public VerificationCode getVerificationCode() {
-        return verificationCode;
+    public EmailVerificationChallenge getVerificationChallenge() {
+        return verificationChallenge;
     }
 
     public int getVerificationFailedAttempts() {

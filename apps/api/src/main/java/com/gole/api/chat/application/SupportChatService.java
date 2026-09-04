@@ -54,6 +54,10 @@ public class SupportChatService {
         return tickets.findByStatusAndCategory(status, category, limit);
     }
 
+    public long countUnassigned() {
+        return tickets.countByStatus(SupportStatus.UNASSIGNED);
+    }
+
     @Transactional
     public SupportConversation assignToSelf(String roomId, String adminId) {
         requireAdmin(adminId);

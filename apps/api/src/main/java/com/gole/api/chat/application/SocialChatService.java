@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -112,6 +113,12 @@ public class SocialChatService {
         } catch (ConflictException concurrentCreation) {
             return rooms.findByDedupeKey(key).orElseThrow(() -> concurrentCreation);
         }
+    }
+
+    /** 기존 1:1 방 재진입 여부를 개인정보를 새로 제공하는 생성 경로와 분리한다. */
+    public Optional<SocialChatRoom> findExistingDirect(String actorId, String peerId) {
+        requireCanStartPrivateConversation(actorId, peerId);
+        return rooms.findByDedupeKey(SocialChatRoom.directDedupeKey(actorId, peerId));
     }
 
     public SocialChatRoom createGroup(String actorId, String title, List<String> inviteeIds) {
@@ -263,9 +270,9 @@ public class SocialChatService {
     }
 
     /** 메시지 저장 뒤 SUPPORT 상태를 발신자 역할에 맞게 갱신한다. */
-    public void onMessageSent(SocialChatRoom room, String senderId) {
+    public Optional<SupportTicket> onMessageSent(SocialChatRoom room, String senderId) {
         if (room.type() != ChatRoomType.SUPPORT) {
-            return;
+            return Optional.empty();
         }
         SupportTicket ticket = supportTickets
                 .findByRoomId(room.id())
@@ -273,7 +280,7 @@ public class SocialChatService {
         SupportTicket next = senderId.equals(ticket.requesterId())
                 ? ticket.userReplied(Instant.now(clock))
                 : ticket.agentReplied(Instant.now(clock));
-        supportTickets.save(next);
+        return Optional.of(supportTickets.save(next));
     }
 
     public void touchActivity(String roomId, Instant occurredAt) {

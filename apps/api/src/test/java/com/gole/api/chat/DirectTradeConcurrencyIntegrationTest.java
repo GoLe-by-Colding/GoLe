@@ -13,10 +13,12 @@ import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.notification.adapter.out.persistence.NotificationDocument;
 import com.gole.api.notification.adapter.out.persistence.NotificationMongoRepository;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -69,6 +71,9 @@ class DirectTradeConcurrencyIntegrationTest {
     @Autowired
     NotificationMongoRepository notifications;
 
+    @Autowired
+    ManageMediaAssetsUseCase mediaAssets;
+
     @BeforeEach
     void setUp() {
         notifications.deleteAll();
@@ -85,7 +90,7 @@ class DirectTradeConcurrencyIntegrationTest {
                 100_000,
                 ItemCondition.NEW_SEALED,
                 ConditionDisclosure.basic(),
-                List.of("trade.jpg"),
+                List.of(stagedPhoto("seller-1")),
                 "10307"));
         String roomId = "direct-race-" + listingId;
         rooms.save(new ChatRoomDocument(roomId, listingId, "buyer-1", "seller-1", Instant.now()));
@@ -125,7 +130,7 @@ class DirectTradeConcurrencyIntegrationTest {
                 100_000,
                 ItemCondition.NEW_SEALED,
                 ConditionDisclosure.basic(),
-                List.of("trade-cancel.jpg"),
+                List.of(stagedPhoto("seller-1")),
                 "10307"));
         String roomId = "direct-confirm-cancel-" + listingId;
         rooms.save(new ChatRoomDocument(roomId, listingId, "buyer-1", "seller-1", Instant.now()));
@@ -166,6 +171,12 @@ class DirectTradeConcurrencyIntegrationTest {
     private ChatRoomDocument cancelAfter(CountDownLatch start, String roomId, String actorId) throws Exception {
         start.await(20, TimeUnit.SECONDS);
         return directTrades.cancelConfirmation(roomId, actorId);
+    }
+
+    private String stagedPhoto(String ownerId) {
+        String key = "images/" + UUID.randomUUID() + ".jpg";
+        mediaAssets.registerStaged(ownerId, key, "image/jpeg", 1);
+        return key;
     }
 
     private static Outcome await(Future<ChatRoomDocument> future) throws Exception {

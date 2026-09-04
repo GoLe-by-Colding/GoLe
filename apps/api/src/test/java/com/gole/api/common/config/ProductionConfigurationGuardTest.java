@@ -23,6 +23,31 @@ class ProductionConfigurationGuardTest {
     }
 
     @Test
+    void stagingRejectsLoggingVerificationCodeAdapter() {
+        ProductionConfigurationGuard guard = guard("staging", false, false);
+
+        assertThatThrownBy(() -> guard.run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("verification email");
+    }
+
+    @Test
+    void unknownOrBlankEnvironmentFailsClosedInsteadOfEnablingDevelopmentSeeds() {
+        for (String environment : new String[] {"production-typo", "", "preview"}) {
+            assertThatThrownBy(() -> guard(environment, false, true).run(NO_ARGS))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("verification email");
+        }
+    }
+
+    @Test
+    void publicEnvironmentNormalizationCannotBeBypassedWithWhitespaceOrCase() {
+        assertThatThrownBy(() -> guard(" Production ", false, true).run(NO_ARGS))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("verification email");
+    }
+
+    @Test
     void productionRejectsAnySampleSeed() {
         ProductionConfigurationGuard guard = guard("prod", true, true);
 
@@ -34,7 +59,7 @@ class ProductionConfigurationGuardTest {
 
     @Test
     void stagingAlsoRejectsAnySampleSeed() {
-        ProductionConfigurationGuard guard = guard("staging", false, true);
+        ProductionConfigurationGuard guard = guard("staging", true, true);
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -50,7 +75,7 @@ class ProductionConfigurationGuardTest {
     @Test
     void stagingRejectsDemoOrUnverifiedPricingEvidence() {
         ProductionConfigurationGuard guard = new ProductionConfigurationGuard(
-                "staging", false, false, false, false, false, false, false, false, true, false);
+                "staging", true, false, false, false, false, false, false, false, true, false);
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)

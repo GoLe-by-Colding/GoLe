@@ -87,6 +87,23 @@ class OnboardingServiceTest {
         assertThat(status.maskedPhoneNumber()).isEqualTo("010-****-5678");
     }
 
+    @Test
+    void statusSkipsPhoneWhenCurrentPolicyDoesNotRequireIt() {
+        OnboardingProperties phoneOptional = properties();
+        phoneOptional.setPhoneVerificationRequired(false);
+        OnboardingService optionalPhoneService = new OnboardingService(
+                accounts, phoneVerifications, () -> "123456", Optional.of(alimtalk), phoneOptional, clock);
+
+        optionalPhoneService.setNickname(new SetNicknameCommand(ACCOUNT_ID, "고레마스터"));
+        optionalPhoneService.select(new SelectInterestTagsCommand(ACCOUNT_ID, Set.of("technic")));
+        optionalPhoneService.submit(new SubmitConsentCommand(ACCOUNT_ID, true, false));
+
+        var status = optionalPhoneService.status(ACCOUNT_ID);
+        assertThat(status.phoneVerificationRequired()).isFalse();
+        assertThat(status.phoneCompleted()).isFalse();
+        assertThat(status.required()).isFalse();
+    }
+
     // --- R3: 닉네임 ---
 
     @Test

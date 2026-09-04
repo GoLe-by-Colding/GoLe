@@ -6,11 +6,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 객체 스토리지/공개 URL 설정. (설계: storage.*)
  */
 @ConfigurationProperties(prefix = "storage")
-public record StorageProperties(S3 s3, String publicBaseUrl, long maxImageBytes) {
+public record StorageProperties(
+        S3 s3, String publicBaseUrl, long maxImageBytes, int maxImageWidth, int maxImageHeight, long maxImagePixels) {
 
     public StorageProperties {
         if (maxImageBytes <= 0) {
             maxImageBytes = 5_242_880L; // 5MB 기본값
+        }
+        if (maxImageWidth <= 0) {
+            maxImageWidth = 8_192;
+        }
+        if (maxImageHeight <= 0) {
+            maxImageHeight = 8_192;
+        }
+        if (maxImagePixels <= 0) {
+            maxImagePixels = 16_000_000L;
         }
     }
 
