@@ -189,10 +189,14 @@ public class OnboardingService
     }
 
     private void sendCode(PhoneNumber phoneNumber, String code) {
-        String templateId = properties.phoneVerificationTemplateId();
-        if (alimtalkSender.isEmpty() || templateId == null || templateId.isBlank()) {
+        // 발송 가능 여부는 coolsms.enabled 하나로만 결정한다 — 꺼져 있으면 로깅 스텁 빈이 대신
+        // 등록되어 있으므로(coolsms 미승인·로컬 개발에서도) 여기서 템플릿 ID를 따로 검증하지
+        // 않는다. 승인된 템플릿이 필요한 건 실제 CoolSMS 어댑터뿐이고, 그 요구는
+        // CoolsmsAlimtalkAdapter.validate()가 이미 강제한다(빈 값이면 AlimtalkSendException).
+        if (alimtalkSender.isEmpty()) {
             throw new PhoneVerificationUnavailableException();
         }
+        String templateId = properties.phoneVerificationTemplateId();
         try {
             alimtalkSender
                     .get()
