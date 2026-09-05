@@ -11,6 +11,7 @@ test.describe("동적 SEO 경로 HTTP 상태", () => {
     ["게시글", "/community/e2e-missing-post-404"],
   ] as const) {
     test(`없는 ${label} 상세는 실제 HTTP 404를 반환한다`, async ({ request }) => {
+      test.skip(process.env.E2E_WITH_BACKEND !== "1", "실제 API의 404 응답이 필요한 통합 테스트");
       const response = await request.get(path, { headers: { Accept: "text/html" } });
 
       expect(response.status()).toBe(404);
