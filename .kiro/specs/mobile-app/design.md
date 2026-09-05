@@ -266,5 +266,10 @@ notification/adapter/in/web/DeviceTokenController.java   # POST·DELETE /api/v1/
 **웹 회귀.** 마이그레이션은 화면을 바꾸지 않는다(R1.7). 파사드 덕에 상위 75파일이 그대로이므로
 품질 게이트 5종 + 기존 Playwright 스위트 통과가 곧 완료 기준이다.
 
+**typedRoutes를 CI가 검증하지 못한다.** expo-router의 라우트 타입(`.expo/types/router.d.ts`)은
+`expo start`가 생성하고 `.expo/`는 gitignore 대상이다. 따라서 CI에는 그 파일이 아예 없고,
+잘못된 라우트 문자열이 typecheck를 통과한다. 반대로 로컬에서는 라우트를 추가한 뒤 dev 서버를
+재시작하기 전까지 <b>낡은 타입이 오탐을 낸다</b>. 라우트를 늘릴 때는 dev 서버를 한 번 돌린다.
+
 **토큰 복제.** 디자인 토큰이 두 곳에 존재한다. 자동 동기화 대신 주석으로 출처를 고정한다 —
 빌드 파이프라인을 하나 더 만들 만큼 자주 바뀌는 값이 아니다.
