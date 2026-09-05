@@ -11,6 +11,9 @@
 
 | 문서 | 언제 |
 |---|---|
+| [온보딩](onboarding.md) | **처음 왔을 때.** 환경 구성부터 첫 기여까지 |
+| [러닝북](operations/runbook.md) | **뭔가 안 될 때.** 증상별 대응 |
+| [외부 서비스 대장](external-services.md) | Firebase·Apple·포트원·GCP 식별자를 찾을 때 |
 | [README](../README.md) | 프로젝트 전체 그림, 스택, 기능 목록 |
 | [개발 규약](../.kiro/steering/dev-conventions.md) | 커밋·PR·레이어 분리·SDD 절차 |
 | [배포](../.kiro/steering/deploy.md) | 서버·pm2·CD를 건드릴 때 |
@@ -19,8 +22,9 @@
 
 ## 운영 문서
 
-실제로 돌아가는 것들의 동작 방식. 장애를 만났을 때 여기부터 본다.
+실제로 돌아가는 것들의 동작 방식.
 
+- [러닝북 — 증상별 대응](operations/runbook.md)
 - [분석 동의](operations/analytics-consent.md)
 - [디스코드 알림 라우팅](operations/discord-routing.md)
 - [미디어 생명주기](operations/media-lifecycle.md)
