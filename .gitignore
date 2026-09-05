@@ -66,3 +66,9 @@ CLAUDE.md
 # .env 와 달리 확장자가 .json 이라 일반 패턴에 걸리지 않으므로 명시적으로 막는다.
 gole-fcm-service-account.json
 *-service-account.json
+
+# APNs 인증키. 팀 전체의 푸시를 보낼 수 있고 발급 시 한 번만 내려받을 수 있다.
+# apps/mobile/.gitignore 에도 있지만 루트에 받아둘 수 있으므로 여기서도 막는다.
+*.p8
+*.p12
+*.mobileprovision

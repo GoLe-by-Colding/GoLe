@@ -8,13 +8,13 @@
     "scheme": "gole",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.gole.app",
+      "bundleIdentifier": "kr.gole.app",
       "supportsTablet": false,
       "icon": "./assets/expo.icon",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
-      "package": "com.gole.app",
+      "package": "kr.gole.app",
       "adaptiveIcon": {
         "backgroundColor": "#1d4ed8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

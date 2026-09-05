@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.gole.app</string>
+	<string>kr.gole.app</string>
 	<key>PROJECT_ID</key>
 	<string>gole-prod</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:704790528027:ios:7e30acff0556137936f8be</string>
+	<string>1:704790528027:ios:81b43eb6072eada036f8be</string>
 </dict>
 </plist>

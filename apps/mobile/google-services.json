@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:704790528027:android:99bd1d216962b55736f8be",
+        "mobilesdk_app_id": "1:704790528027:android:1dbe6d8a1d6b7a7836f8be",
         "android_client_info": {
-          "package_name": "com.gole.app"
+          "package_name": "kr.gole.app"
         }
       },
       "oauth_client": [],

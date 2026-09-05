@@ -107,11 +107,29 @@ Firebase 인프라는 준비 완료(2026-09-05):
 | 항목 | 값 |
 |---|---|
 | 프로젝트 | `gole-prod` (projectNumber 704790528027) |
-| Android 앱 | `com.gole.app` → `apps/mobile/google-services.json` |
-| iOS 앱 | `com.gole.app` → `apps/mobile/GoogleService-Info.plist` |
+| Android 앱 | `kr.gole.app` → `apps/mobile/google-services.json` |
+| iOS 앱 | `kr.gole.app` → `apps/mobile/GoogleService-Info.plist` |
 | 발송 계정 | `gole-fcm-sender@gole-prod.iam.gserviceaccount.com` |
 | 권한 | 커스텀 역할 `goleFcmSender` — `cloudmessaging.messages.create` **하나뿐** |
 | 검증 | FCM v1에 실제 요청 → 인증·인가 통과, 가짜 토큰만 400으로 거부됨 |
+
+**번들 ID가 `com.gole.app` → `kr.gole.app`으로 바뀌었다.** Apple 번들 ID는 전 세계에서 유일해야
+하는데 `com.gole.app`은 다른 개발자 계정이 선점하고 있었다. 포퐁이 `kr.pawpong.app`을 쓰는
+선례와 `gole.co.kr` 도메인에 맞춰 `kr.gole.app`으로 정하고 Firebase 앱도 다시 만들었다.
+
+Apple 쪽도 준비 완료(2026-09-05, Team `BWRD8QZVDN`):
+
+| 항목 | 값 |
+|---|---|
+| App ID | `kr.gole.app` — Push Notifications 활성 |
+| APNs 인증키 | `GoLe APNs Key` / Key ID `U5GSKYBD9V` |
+| 구성 | Sandbox & Production · Team Scoped |
+| Firebase 업로드 | 개발·프로덕션 슬롯 모두 완료 |
+
+**Team Scoped를 택한 이유는 할당량이다.** Topic Specific(앱 하나로 제한)은 단일 환경에서만
+고를 수 있어 Sandbox·Production 각각 키가 필요한데, Apple은 팀당 APNs 인증키를 2개까지만
+허용하고 그중 하나는 이미 포퐁이 쓰고 있다. 그래서 이 키는 같은 팀의 다른 앱에도 푸시를 보낼 수
+있다 — 유출 시 영향 범위가 GoLe에 그치지 않는다는 뜻이다.
 
 키 파일은 저장소 밖이다(`gole-fcm-service-account.json`, gitignore). 배포 시 볼트에
 `FCM_ENABLED`·`FCM_PROJECT_ID`·`FCM_CREDENTIALS_BASE64` 3개를 넣는다.
