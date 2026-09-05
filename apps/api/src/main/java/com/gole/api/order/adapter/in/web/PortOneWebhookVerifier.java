@@ -18,21 +18,20 @@ public class PortOneWebhookVerifier {
     private final WebhookVerifier verifier;
 
     public PortOneWebhookVerifier(@Value("${portone.webhook-secret:}") String webhookSecret) {
-        this.verifier = webhookSecret.isBlank() ? null : createVerifier(webhookSecret);
+        this.verifier = webhookSecret == null || webhookSecret.isBlank() ? null : createVerifier(webhookSecret);
     }
 
-    /**
-     * 로컬 스텁 환경에서는 검증기를 비활성화할 수 있다. 실결제를 켜면
-     * {@link com.gole.api.order.adapter.out.payment.PaymentConfigurationGuard}가 secret 누락을 차단한다.
-     */
+    /** 검증기나 서명 비밀이 없으면 어떤 환경에서도 웹훅을 신뢰하지 않는다. */
     public void verify(String body, String messageId, String signature, String timestamp) {
         if (verifier == null) {
-            return;
+            throw new BadRequestException("INVALID_PAYMENT_WEBHOOK", "유효하지 않은 결제 웹훅입니다.");
         }
         try {
             verifier.verify(body, messageId, signature, timestamp);
         } catch (WebhookVerificationException | SerializationException ex) {
-            log.warn("[PortOne webhook] signature verification failed: {}", ex.getMessage());
+            log.warn(
+                    "[PortOne webhook] signature verification failed cause={}",
+                    ex.getClass().getSimpleName());
             throw new BadRequestException("INVALID_PAYMENT_WEBHOOK", "유효하지 않은 결제 웹훅입니다.");
         }
     }

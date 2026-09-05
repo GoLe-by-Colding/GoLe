@@ -9,6 +9,35 @@ test.describe("Seller fee disclosure", () => {
     await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
+    // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneVerificationRequired: true,
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 2,
+          tradeMode: "MANUAL_SETTLEMENT",
+          features: { payments: true, reviews: true, partnerPayout: false },
+          sellerIdentityVerificationReady: true,
+          updatedAt: null,
+        },
+      }),
+    );
   });
 
   test("공개 수수료 정책으로 예상 정산액을 계산한다", async ({ page }) => {
@@ -51,6 +80,91 @@ test.describe("Seller fee disclosure", () => {
     await expect(page.getByText(/판매 금액의 \d/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "상품 등록" })).toBeEnabled();
   });
+
+  test("결제가 닫힌 단계에서는 수수료 대신 직접 거래 방식을 안내한다", async ({ page }) => {
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: true,
+          updatedAt: null,
+        },
+      }),
+    );
+    let feeRequests = 0;
+    await page.route("**/api/v1/config/fees", (route) => {
+      feeRequests += 1;
+      return route.fulfill({ json: { rate: 0.05, minFee: 1_000, maxFee: 50_000 } });
+    });
+
+    await page.goto("/sell");
+
+    await expect(page.getByText(/플랫폼 결제와 정산 수수료 없이/)).toBeVisible();
+    await expect(page.getByText("판매 수수료와 예상 정산액")).toHaveCount(0);
+    expect(feeRequests).toBe(0);
+  });
+
+  test("판매자 신원확인 준비 전에는 신규 등록을 숨기고 이용 가능한 경로만 안내한다", async ({
+    page,
+  }) => {
+    await page.unroute("**/api/v1/config/launch");
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: false,
+          updatedAt: null,
+        },
+      }),
+    );
+
+    await page.goto("/sell");
+
+    await expect(page.getByText("신규 상품 등록 준비 중")).toBeVisible();
+    await expect(page.getByRole("button", { name: "상품 등록" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "상품 둘러보기" })).toHaveAttribute(
+      "href",
+      "/search",
+    );
+    await expect(page.getByRole("link", { name: "운영 문의" })).toHaveAttribute(
+      "href",
+      "/chat?compose=support&category=PRODUCT_FEEDBACK",
+    );
+  });
+
+  test("운영 준비 후에도 인증된 전화번호가 없으면 판매 양식을 열지 않는다", async ({ page }) => {
+    await page.unroute("**/api/v1/accounts/me/onboarding");
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: true,
+          legacyExempt: false,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneVerificationRequired: true,
+          phoneCompleted: false,
+          maskedPhoneNumber: null,
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
+
+    await page.goto("/sell");
+
+    await expect(page.getByText("판매자 전화번호 확인이 필요해요")).toBeVisible();
+    await expect(page.getByRole("button", { name: "상품 등록" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "본인확인 진행하기" })).toHaveAttribute(
+      "href",
+      "/onboarding",
+    );
+  });
 });
 
 // 백엔드(MongoDB + MinIO)가 떠 있는 로컬/테스트 환경 전용 풀 플로우 E2E.
@@ -77,7 +191,7 @@ test.describe("Create listing", () => {
       name: "e2e.png",
       mimeType: "image/png",
       buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4XmPQqLizBYQZYAwASsIIwRFEXsMAAAAASUVORK5CYII=",
         "base64",
       ),
     });

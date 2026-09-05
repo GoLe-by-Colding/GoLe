@@ -14,6 +14,7 @@ public class DiscordOperationsProperties {
     private String webhookUrl = "";
     private String accountWebhookUrl = "";
     private String paymentWebhookUrl = "";
+    private String supportWebhookUrl = "";
     private String operationsWebhookUrl = "";
     private String avatarUrl = "";
     private boolean suppressNotifications = true;
@@ -59,6 +60,14 @@ public class DiscordOperationsProperties {
         this.paymentWebhookUrl = paymentWebhookUrl;
     }
 
+    public String getSupportWebhookUrl() {
+        return supportWebhookUrl;
+    }
+
+    public void setSupportWebhookUrl(String supportWebhookUrl) {
+        this.supportWebhookUrl = supportWebhookUrl;
+    }
+
     public String getOperationsWebhookUrl() {
         return operationsWebhookUrl;
     }
@@ -96,6 +105,7 @@ public class DiscordOperationsProperties {
                 switch (category) {
                     case ACCOUNT -> accountWebhookUrl;
                     case PAYMENT -> paymentWebhookUrl;
+                    case SUPPORT -> supportWebhookUrl;
                     case ADMIN -> operationsWebhookUrl;
                     case APPLICATION -> operationsWebhookUrl;
                 };

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchConfigResponse;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.domain.model.LaunchConfig;
@@ -15,14 +16,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 공개 응답은 프론트와 고정된 계약이다. 필드 이름·타입이 바뀌면 프론트가 Stage 0 으로 닫히므로
- * 직렬화 결과를 직접 단정한다.
- */
+/** 공개 응답은 프론트와 고정된 계약이다. 필드 이름·타입이 바뀌면 프론트가 Stage 0 으로 닫히므로 직렬화 결과를 직접 단정한다. */
 class LaunchConfigControllerTest {
 
     private final GetLaunchConfigUseCase launchConfig = mock(GetLaunchConfigUseCase.class);
-    private final LaunchConfigController controller = new LaunchConfigController(launchConfig);
+    private final SellerIdentityVerificationProperties sellerIdentityVerification =
+            new SellerIdentityVerificationProperties();
+    private final LaunchConfigController controller =
+            new LaunchConfigController(launchConfig, sellerIdentityVerification);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -39,12 +40,14 @@ class LaunchConfigControllerTest {
         assertThat(response.features().payments()).isTrue();
         assertThat(response.features().reviews()).isTrue();
         assertThat(response.features().partnerPayout()).isFalse();
+        assertThat(response.sellerIdentityVerificationReady()).isFalse();
         assertThat(json)
                 .contains("\"stage\":2")
                 .contains("\"tradeMode\":\"MANUAL_SETTLEMENT\"")
                 .contains("\"payments\":true")
                 .contains("\"reviews\":true")
-                .contains("\"partnerPayout\":false");
+                .contains("\"partnerPayout\":false")
+                .contains("\"sellerIdentityVerificationReady\":false");
     }
 
     @Test
@@ -77,5 +80,14 @@ class LaunchConfigControllerTest {
                 .thenReturn(new LaunchConfig(LaunchStage.FULL, Map.of(LaunchFeature.PAYMENTS, false), null, null));
 
         assertThat(controller.launch().features().payments()).isFalse();
+    }
+
+    @Test
+    @DisplayName("판매자 신원확인 준비 상태는 배포 래치의 실제 값을 공개한다")
+    void sellerIdentityReadinessReflectsDeploymentLatch() {
+        sellerIdentityVerification.setVerificationReady(true);
+        when(launchConfig.current()).thenReturn(LaunchConfig.unset());
+
+        assertThat(controller.launch().sellerIdentityVerificationReady()).isTrue();
     }
 }

@@ -9,6 +9,8 @@ export interface AdminOverview {
   readonly ordersByStatus: Readonly<Record<string, number>>;
   readonly activeListings: number;
   readonly pendingReports: number;
+  /** 롤링 배포 중 구버전 API에는 없을 수 있다. */
+  readonly unassignedSupportTickets?: number;
   readonly pendingSettlements: number;
   /** 롤링 배포 중 구버전 API에는 없을 수 있다. */
   readonly paymentReadiness?: AdminPaymentReadiness;
@@ -77,6 +79,8 @@ export interface AdminLaunchConfig {
       readonly reviews: boolean;
       readonly partnerPayout: boolean;
     };
+    /** 구버전 API의 필드 누락은 false로 해석해 신규 판매를 열지 않는다. */
+    readonly sellerIdentityVerificationReady?: boolean;
     readonly updatedAt: string | null;
   };
   /** 운영자가 저장한 단계. config.stage는 현재 정산 모드로 낮춘 실제 실행 단계다. */
@@ -138,6 +142,33 @@ export interface AdminAccount {
   readonly suspendedReason: string | null;
 }
 
+export type AdminAccountDeletionStatus = "BLOCKED" | "READY" | "COMPLETED";
+export type AdminAccountDeletionBlocker =
+  | "ACTIVE_ORDER"
+  | "UNSETTLED_PAYOUT"
+  | "PENDING_REPORT"
+  | "SUPPORT_RECORDS_REQUIRE_PURGE"
+  | "PUBLIC_CONTENT_REQUIRES_LIFECYCLE_REVIEW"
+  | "MEDIA_REQUIRES_LIFECYCLE_REVIEW"
+  | "OWNED_GROUP_REQUIRES_TRANSFER"
+  | "EXPLICIT_RETENTION_HOLD";
+export type AdminAccountDeletionHoldReason =
+  | "LEGAL_OBLIGATION"
+  | "DISPUTE_OR_CLAIM"
+  | "FRAUD_OR_SECURITY_INVESTIGATION";
+
+/** 탈퇴 대상 이메일/accountId를 의도적으로 포함하지 않는 운영 행. */
+export interface AdminAccountDeletionRequest {
+  readonly requestId: string;
+  readonly status: AdminAccountDeletionStatus;
+  readonly blockers: readonly AdminAccountDeletionBlocker[];
+  readonly holdReason: AdminAccountDeletionHoldReason | null;
+  readonly requestedAt: string;
+  readonly updatedAt: string;
+  readonly completedAt: string | null;
+  readonly deletionCounts: Readonly<Record<string, number>>;
+}
+
 export interface AdminReport {
   readonly id: string;
   readonly reporterId: string;
@@ -170,6 +201,19 @@ export type AdminSupportCategory =
   | "PRIVACY_CORRECTION_DELETION"
   | "PRIVACY_PROCESSING_STOP";
 
+export type AdminSupportPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+
+export interface AdminSupportAssistantAnalysis {
+  readonly category: AdminSupportCategory;
+  readonly priority: AdminSupportPriority;
+  readonly summary: string;
+  readonly draft: string;
+  readonly risk: readonly string[];
+  readonly humanReview: boolean;
+  readonly externalModel: boolean;
+  readonly engine: string;
+}
+
 export interface AdminSupportTicket {
   readonly roomId: string;
   readonly requesterId: string;
@@ -180,7 +224,9 @@ export interface AdminSupportTicket {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly resolvedAt: string | null;
+  readonly progressDueAt: string;
   readonly responseDueAt: string | null;
+  readonly assistantAnalysis?: AdminSupportAssistantAnalysis | null;
 }
 
 export interface AdminSupportMessage {
@@ -262,8 +308,13 @@ function get<T>(token: string, path: string): Promise<T> {
   return apiRequest<T>(path, { cache: "no-store", headers: auth(token) });
 }
 
-function post<T>(token: string, path: string, body?: unknown): Promise<T> {
-  return apiRequest<T>(path, { method: "POST", headers: auth(token), body });
+function post<T>(
+  token: string,
+  path: string,
+  body?: unknown,
+  headers: Readonly<Record<string, string>> = {},
+): Promise<T> {
+  return apiRequest<T>(path, { method: "POST", headers: { ...auth(token), ...headers }, body });
 }
 
 // ── 대시보드 · 감사 ───────────────────────────────────────────
@@ -583,6 +634,65 @@ export function changeAdminAccountRole(
   role: AdminRole,
 ): Promise<AdminAccount> {
   return post<AdminAccount>(token, `/api/admin/accounts/${accountId}/role`, { role });
+}
+
+// ── 회원 탈퇴 보존 검토 ───────────────────────────────────────
+
+export function fetchAdminAccountDeletionRequests(
+  token: string,
+  status?: AdminAccountDeletionStatus,
+): Promise<readonly AdminAccountDeletionRequest[]> {
+  const query = status ? `?status=${status}` : "";
+  return get<readonly AdminAccountDeletionRequest[]>(
+    token,
+    `/api/admin/account-deletion-requests${query}`,
+  );
+}
+
+export function reviewAdminAccountDeletion(
+  token: string,
+  requestId: string,
+): Promise<AdminAccountDeletionRequest> {
+  return post<AdminAccountDeletionRequest>(
+    token,
+    `/api/admin/account-deletion-requests/${requestId}/review`,
+  );
+}
+
+export function holdAdminAccountDeletion(
+  token: string,
+  requestId: string,
+  reasonCode: AdminAccountDeletionHoldReason,
+): Promise<AdminAccountDeletionRequest> {
+  return post<AdminAccountDeletionRequest>(
+    token,
+    `/api/admin/account-deletion-requests/${requestId}/hold`,
+    { confirmation: requestId, reasonCode },
+  );
+}
+
+export function releaseAdminAccountDeletionHold(
+  token: string,
+  requestId: string,
+): Promise<AdminAccountDeletionRequest> {
+  return post<AdminAccountDeletionRequest>(
+    token,
+    `/api/admin/account-deletion-requests/${requestId}/hold/release`,
+    { confirmation: requestId },
+  );
+}
+
+export function completeAdminAccountDeletion(
+  token: string,
+  requestId: string,
+  idempotencyKey: string,
+): Promise<AdminAccountDeletionRequest> {
+  return post<AdminAccountDeletionRequest>(
+    token,
+    `/api/admin/account-deletion-requests/${requestId}/complete`,
+    { confirmation: requestId, preservationReviewed: true },
+    { "Idempotency-Key": idempotencyKey },
+  );
 }
 
 // ── 카탈로그 ─────────────────────────────────────────────────

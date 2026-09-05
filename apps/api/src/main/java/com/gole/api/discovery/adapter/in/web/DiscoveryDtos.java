@@ -3,6 +3,7 @@ package com.gole.api.discovery.adapter.in.web;
 import com.gole.api.discovery.domain.model.WishlistEntry;
 import com.gole.api.discovery.domain.model.WishlistTargetType;
 import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.media.domain.model.MediaKey;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
@@ -38,7 +39,9 @@ public final class DiscoveryDtos {
                     l.getCatalogSetNumber(),
                     l.getCategory().name().toLowerCase(),
                     l.getStatus().name().toLowerCase(),
-                    l.getPhotoUrls(),
+                    l.getPhotoUrls().stream()
+                            .flatMap(value -> MediaKey.safePublicPath(value).stream())
+                            .toList(),
                     l.getCreatedAt());
         }
     }

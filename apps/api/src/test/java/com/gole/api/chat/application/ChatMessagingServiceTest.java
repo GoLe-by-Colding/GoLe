@@ -5,12 +5,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
+import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
 import java.time.Instant;
@@ -25,8 +29,15 @@ class ChatMessagingServiceTest {
     private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
     private final ChatRedisPublisher publisher = mock(ChatRedisPublisher.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
+    private final SupportOperationalEventNotifier supportEvents = mock(SupportOperationalEventNotifier.class);
+    private final SupportAssistantAnalysisService supportAnalysis = mock(SupportAssistantAnalysisService.class);
     private final ChatMessagingService service = new ChatMessagingService(
-            messages, publisher, socialChats, Clock.fixed(Instant.parse("2026-08-30T00:00:00Z"), ZoneOffset.UTC));
+            messages,
+            publisher,
+            socialChats,
+            supportEvents,
+            supportAnalysis,
+            Clock.fixed(Instant.parse("2026-08-30T00:00:00Z"), ZoneOffset.UTC));
 
     @Test
     void history_returnsOlderPageInChronologicalOrder() {
@@ -70,6 +81,38 @@ class ChatMessagingServiceTest {
 
         assertThatThrownBy(() -> service.after("room-1", "account-1", "foreign", 200))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void supportOpeningPublishesOnlyOpenedEvent() {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        SocialChatRoom room = SocialChatRoom.support("room-1", "account-1", "private title", now);
+        SupportTicket ticket = SupportTicket.opened("room-1", "account-1", SupportCategory.PRODUCT_FEEDBACK, now);
+        when(socialChats.requireSendable("room-1", "account-1")).thenReturn(room);
+        when(messages.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(socialChats.onMessageSent(room, "account-1")).thenReturn(Optional.of(ticket));
+
+        service.sendSupportOpening("room-1", "account-1", "private first message");
+
+        verify(supportEvents).opened(ticket);
+        verify(supportEvents, never()).requesterReplied(any());
+        verify(supportAnalysis).analyzeOpeningAfterCommit(ticket, "private title", "private first message", "ko-KR");
+    }
+
+    @Test
+    void requesterSupportMessagePublishesReplyEvent() {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        SocialChatRoom room = SocialChatRoom.support("room-2", "account-1", "private title", now);
+        SupportTicket ticket = SupportTicket.opened("room-2", "account-1", SupportCategory.GENERAL, now);
+        when(socialChats.requireSendable("room-2", "account-1")).thenReturn(room);
+        when(messages.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(socialChats.onMessageSent(room, "account-1")).thenReturn(Optional.of(ticket));
+
+        service.send("room-2", "account-1", "private follow-up message");
+
+        verify(supportEvents).requesterReplied(ticket);
+        verify(supportEvents, never()).opened(any());
+        verify(supportAnalysis, never()).analyzeOpeningAfterCommit(any(), any(), any(), any());
     }
 
     private static ChatMessageDocument message(String id, String sentAt) {

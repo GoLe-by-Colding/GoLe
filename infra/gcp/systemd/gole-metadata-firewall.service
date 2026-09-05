@@ -1,0 +1,15 @@
+[Unit]
+Description=Restrict GCE metadata to the GoLe root cloud broker
+DefaultDependencies=no
+After=network-pre.target
+Before=network.target docker.service gole-cloud-broker.service gole-github-runner.service
+OnFailure=poweroff.target
+OnFailureJobMode=replace-irreversibly
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gole-metadata-firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

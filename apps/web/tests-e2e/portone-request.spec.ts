@@ -4,6 +4,7 @@ import {
   isCardPaymentAvailable,
   isPortOneEnabled,
 } from "../src/shared/lib/portone";
+import { isPaymentRuntimeAvailable } from "../src/shared/config/env";
 
 const CARD_CUSTOMER = {
   fullName: "홍길동",
@@ -12,6 +13,52 @@ const CARD_CUSTOMER = {
 } as const;
 
 test.describe("PortOne request contract", () => {
+  test("운영 disabled·stub과 공개 키 누락을 신규 결제 불가로 판정한다", () => {
+    expect(
+      isPaymentRuntimeAvailable({
+        paymentMode: "disabled",
+        nodeEnv: "production",
+        portOneStoreId: "store-test",
+        portOneChannelKey: "channel-test",
+      }),
+    ).toBe(false);
+    expect(
+      isPaymentRuntimeAvailable({
+        paymentMode: "stub",
+        nodeEnv: "production",
+        portOneStoreId: "",
+        portOneChannelKey: "",
+      }),
+    ).toBe(false);
+    expect(
+      isPaymentRuntimeAvailable({
+        paymentMode: "portone-live",
+        nodeEnv: "production",
+        portOneStoreId: "store-live",
+        portOneChannelKey: "",
+      }),
+    ).toBe(false);
+  });
+
+  test("개발 스텁과 공개 키가 갖춰진 PortOne만 신규 결제를 연다", () => {
+    expect(
+      isPaymentRuntimeAvailable({
+        paymentMode: "stub",
+        nodeEnv: "development",
+        portOneStoreId: "",
+        portOneChannelKey: "",
+      }),
+    ).toBe(true);
+    expect(
+      isPaymentRuntimeAvailable({
+        paymentMode: "portone-test",
+        nodeEnv: "production",
+        portOneStoreId: "store-test",
+        portOneChannelKey: "channel-test",
+      }),
+    ).toBe(true);
+  });
+
   test("uses the configured test channel, EASY_PAY, KRW and a mobile return URL", () => {
     expect(isPortOneEnabled()).toBe(true);
 

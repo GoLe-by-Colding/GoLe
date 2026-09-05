@@ -51,6 +51,7 @@ async function mockMe(
         ordersByStatus: {},
         activeListings: 0,
         pendingReports: 0,
+        unassignedSupportTickets: 0,
         pendingSettlements: 0,
       },
     }),
@@ -64,6 +65,25 @@ test.beforeEach(async ({ page }) => {
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );
+  // (main) 레이아웃의 OnboardingBanner가 마운트되자마자 이 상태를 조회한다(onboarding).
+  // 목킹하지 않으면 실제 백엔드로 새어나가 401을 받고, 그 401이 합성 세션을 지운다 —
+  // 위 알림 폴링과 같은 이유로 여기서도 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 });
 
 test.describe("운영자 콘솔 — 화면 게이트", () => {
@@ -71,6 +91,9 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "관리자 로그인이 필요합니다" })).toBeVisible();
     await expect(page.getByRole("link", { name: "로그인" })).toBeVisible();
+    // 링크 안에 버튼을 중첩하면 포인터·키보드 활성화가 브라우저마다 달라진다.
+    // CTA 하나가 하나의 링크 역할만 갖는지 계약으로 고정한다.
+    await expect(page.locator("a button, button a")).toHaveCount(0);
   });
 
   test("비로그인 사용자에게 콘솔 하위 경로도 동일하게 차단된다 (R1.3)", async ({ page }) => {
@@ -257,7 +280,21 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
             createdAt: "2026-09-03T09:00:00Z",
             updatedAt: "2026-09-03T09:00:00Z",
             resolvedAt: null,
+            progressDueAt: "2099-09-06T09:00:00Z",
             responseDueAt: "2099-09-13T09:00:00Z",
+          },
+          {
+            roomId: "resolved-room",
+            requesterId: "user-resolved",
+            title: "처리 완료 문의",
+            category: "GENERAL",
+            status: "RESOLVED",
+            assigneeId: "admin-1",
+            createdAt: "2026-09-01T09:00:00Z",
+            updatedAt: "2026-09-02T09:00:00Z",
+            resolvedAt: "2026-09-02T09:00:00Z",
+            progressDueAt: "2026-09-04T09:00:00Z",
+            responseDueAt: "2026-09-11T09:00:00Z",
           },
         ],
       });
@@ -268,12 +305,78 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(page.getByRole("heading", { name: "운영 문의" })).toBeVisible();
     const inbox = page.getByRole("complementary");
     await expect(inbox.getByText("개인정보 열람", { exact: true })).toBeVisible();
-    await expect(inbox.getByText(/일 남음/)).toBeVisible();
+    await expect(inbox.getByText(/진행 안내 .*일 남음/)).toBeVisible();
+    await expect(inbox.getByText(/결과·방안 .*일 남음/)).toBeVisible();
+    await expect(inbox.getByText("진행 안내 기한 내 처리")).toBeVisible();
+    await expect(inbox.getByText("결과·방안 기한 내 처리")).toBeVisible();
 
     await page.getByRole("combobox", { name: "유형" }).selectOption("PRIVACY_ACCESS");
     await expect
       .poll(() => requestedUrls.some((url) => url.includes("category=PRIVACY_ACCESS")))
       .toBe(true);
+  });
+
+  test("AI 문의 분석은 담당자에게만 검토용 초안으로 표시되고 자동 전송하지 않는다", async ({
+    page,
+  }) => {
+    await seedLocalSession(page, {
+      accountId: "admin-1",
+      sessionToken: "admin-test-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
+    });
+    let replyPosts = 0;
+    await page.route(/\/api\/admin\/support(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            roomId: "room-ai",
+            requesterId: "user-1",
+            title: "거래 문의",
+            category: "GENERAL",
+            status: "IN_PROGRESS",
+            assigneeId: "admin-1",
+            createdAt: "2026-09-04T01:00:00Z",
+            updatedAt: "2026-09-04T01:00:00Z",
+            resolvedAt: null,
+            responseDueAt: null,
+            assistantAnalysis: {
+              category: "TRADE",
+              priority: "HIGH",
+              summary: "거래 조건을 확인해야 합니다.",
+              draft: "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
+              risk: ["ESCROW_REVIEW"],
+              humanReview: true,
+              externalModel: false,
+              engine: "rules-v1",
+            },
+          },
+        ],
+      }),
+    );
+    await page.route(/\/api\/admin\/support\/room-ai\/messages(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "POST") replyPosts += 1;
+      await route.fulfill({ json: [] });
+    });
+    await page.route(/\/api\/admin\/support\/room-ai\/notes(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [] }),
+    );
+
+    await page.goto("/admin/support");
+
+    const assistant = page.getByRole("region", { name: "AI 답변 보조" });
+    await expect(assistant.getByText("거래 조건을 확인해야 합니다.")).toBeVisible();
+    await expect(assistant.getByText("사람의 검토가 필요합니다.")).toBeVisible();
+    expect(replyPosts).toBe(0);
+
+    await assistant.getByRole("button", { name: "초안을 답변에 넣기" }).click();
+    await expect(page.getByPlaceholder("사용자에게 보낼 답변")).toHaveValue(
+      "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
+    );
+    expect(replyPosts).toBe(0);
   });
 
   test("콘솔 로그인 안내는 원래 경로를 returnTo로 전달한다", async ({ page }) => {
@@ -325,6 +428,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             COMPLETED: 12,
           },
           pendingReports: 3,
+          unassignedSupportTickets: 4,
           pendingSettlements: 2,
         }),
       });
@@ -344,9 +448,46 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       "page",
     );
     await expect(page.getByText("미처리 신고").locator("..").getByText("3건")).toBeVisible();
+    await expect(page.getByText("미배정 문의").locator("..").getByText("4건")).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "운영자 메뉴" }).locator('a[href="/admin/support"]'),
+    ).toContainText("4");
     await expect(page.getByText("결제 실패 주문").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("결제 확인 필요").locator("..").getByText("1건")).toBeVisible();
     await expect(page.getByText("지급 대기 정산").locator("..").getByText("2건")).toBeVisible();
+  });
+
+  test("운영자 메뉴의 모든 항목이 해당 콘솔 화면으로 이동한다", async ({ page }) => {
+    // 이 테스트는 내비게이션 계약만 확인한다. 각 화면의 데이터 요청은 실패 화면으로
+    // 안전하게 떨어뜨려, 합성 토큰의 401이 세션을 지우는 외부 효과를 차단한다.
+    await page.route("**/api/admin/**", (route) => route.abort("failed"));
+    await page.goto("/admin");
+
+    const routes = [
+      ["대시보드", "/admin"],
+      ["출시 단계", "/admin/launch"],
+      ["문의", "/admin/support"],
+      ["신고", "/admin/reports"],
+      ["매물", "/admin/listings"],
+      ["주문", "/admin/orders"],
+      ["예외 큐", "/admin/exceptions"],
+      ["정산", "/admin/settlements"],
+      ["커뮤니티", "/admin/community"],
+      ["회원", "/admin/accounts"],
+      ["카탈로그", "/admin/catalog"],
+      ["감사 로그", "/admin/audit"],
+    ] as const;
+
+    for (const [label, href] of routes) {
+      const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+      await navigation.locator(`a[href="${href}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`${href.replace("/", "\\/")}$`));
+      await expect(navigation.locator(`a[href="${href}"]`)).toHaveAttribute("aria-current", "page");
+      await expect(
+        navigation.locator(`a[href="${href}"]`),
+        `${label} 메뉴가 보여야 함`,
+      ).toBeVisible();
+    }
   });
 
   test("비활성 메뉴는 Figma Admin/Navigation Item 규격을 따른다", async ({ page }) => {
@@ -409,11 +550,26 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin");
 
-    await expect(page.getByRole("navigation", { name: "운영자 메뉴" })).toBeVisible();
+    const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
+    await expect(navigation).toBeVisible();
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
+
+    const navigationBounds = await navigation.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(navigationBounds.scrollWidth).toBeLessThanOrEqual(navigationBounds.clientWidth);
+
+    const [dashboardBox, reportsBox] = await Promise.all([
+      navigation.getByRole("link", { name: "대시보드", exact: true }).boundingBox(),
+      navigation.getByRole("link", { name: /신고/ }).boundingBox(),
+    ]);
+    expect(dashboardBox).not.toBeNull();
+    expect(reportsBox).not.toBeNull();
+    expect(reportsBox!.y).toBeGreaterThan(dashboardBox!.y + dashboardBox!.height);
   });
 
   test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({
@@ -438,7 +594,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     });
 
     await page.goto("/admin/catalog");
-    await expect(page.getByRole("table", { name: /레고 세트 카탈로그 목록/ })).toBeVisible();
+    await expect(page.getByRole("table", { name: /브릭 세트 카탈로그 목록/ })).toBeVisible();
 
     const pieceCount = page.getByRole("spinbutton", { name: "피스 수" });
     const releaseYear = page.getByRole("spinbutton", { name: "출시 연도" });
@@ -451,7 +607,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(yearBox!.y).toBeGreaterThan(pieceBox!.y + pieceBox!.height);
 
     const tableScroller = page
-      .getByRole("table", { name: /레고 세트 카탈로그 목록/ })
+      .getByRole("table", { name: /브릭 세트 카탈로그 목록/ })
       .locator("..");
     const dimensions = await tableScroller.evaluate((element) => ({
       clientWidth: element.clientWidth,

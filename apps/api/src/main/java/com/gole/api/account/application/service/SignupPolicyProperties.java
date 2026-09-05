@@ -13,10 +13,13 @@ import org.springframework.validation.annotation.Validated;
 public class SignupPolicyProperties {
 
     @NotBlank
-    private String termsVersion = "2026-09-03";
+    private String termsVersion = "2026-09-04";
 
     @NotBlank
-    private String privacyVersion = "2026-09-03";
+    private String privacyVersion = "2026-09-04";
+
+    @NotBlank
+    private String thirdPartyProvisionVersion = "2026-09-04";
 
     @Min(14)
     private int minimumAge = 14;
@@ -35,6 +38,14 @@ public class SignupPolicyProperties {
 
     public void setPrivacyVersion(String privacyVersion) {
         this.privacyVersion = privacyVersion;
+    }
+
+    public String getThirdPartyProvisionVersion() {
+        return thirdPartyProvisionVersion;
+    }
+
+    public void setThirdPartyProvisionVersion(String thirdPartyProvisionVersion) {
+        this.thirdPartyProvisionVersion = thirdPartyProvisionVersion;
     }
 
     public int getMinimumAge() {

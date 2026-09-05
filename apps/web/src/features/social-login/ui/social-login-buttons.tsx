@@ -44,23 +44,36 @@ const PROVIDERS: readonly ProviderMeta[] = [
 export interface SocialLoginButtonsProps {
   readonly mode?: "signin" | "signup";
   readonly signupPolicyAcceptance: SignupPolicyAcceptance | undefined;
+  readonly returnTo?: string | null;
 }
 
 export function SocialLoginButtons({
   mode = "signin",
   signupPolicyAcceptance,
+  returnTo = null,
 }: SocialLoginButtonsProps) {
   const [enabled, setEnabled] = useState<readonly string[]>([]);
+  const [providerState, setProviderState] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchSocialProviders(controller.signal)
-      .then(setEnabled)
-      .catch(() => setEnabled([]));
+      .then((providers) => {
+        if (!controller.signal.aborted) {
+          setEnabled(providers);
+          setProviderState("ready");
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setProviderState("error");
+        }
+      });
     return () => controller.abort();
-  }, []);
+  }, [reloadKey]);
 
   async function start(provider: string) {
     setError(undefined);
@@ -71,6 +84,7 @@ export function SocialLoginButtons({
         provider,
         redirectUri,
         mode === "signup" ? signupPolicyAcceptance : undefined,
+        returnTo,
       );
       window.location.assign(url);
     } catch {
@@ -107,18 +121,46 @@ export function SocialLoginButtons({
           {error}
         </p>
       ) : null}
+      {providerState === "error" ? (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md bg-danger-soft p-3"
+          role="alert"
+        >
+          <p className="text-sm text-danger">소셜 로그인 설정을 확인하지 못했습니다.</p>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-semibold text-danger underline underline-offset-2"
+            onClick={() => {
+              setProviderState("loading");
+              setEnabled([]);
+              setReloadKey((current) => current + 1);
+            }}
+          >
+            다시 시도
+          </button>
+        </div>
+      ) : null}
       {PROVIDERS.map((provider) => {
         const isEnabled = enabled.includes(provider.key);
+        const availabilityPending = providerState === "loading";
+        const availabilityFailed = providerState === "error";
+        const unavailableLabel = availabilityPending
+          ? `${provider.label} (확인 중)`
+          : availabilityFailed
+            ? `${provider.label} (확인 실패)`
+            : `${provider.label} (준비 중)`;
         return (
           <button
             key={provider.key}
             type="button"
-            disabled={!isEnabled || pending !== undefined || !signupPolicyReady}
+            disabled={
+              providerState !== "ready" || !isEnabled || pending !== undefined || !signupPolicyReady
+            }
             onClick={() => start(provider.key)}
             aria-label={
               isEnabled
                 ? `${provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")}`
-                : `${provider.label} (준비 중)`
+                : unavailableLabel
             }
             className="relative inline-flex h-12 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-12 text-sm font-semibold text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -132,7 +174,7 @@ export function SocialLoginButtons({
               ? "이동 중..."
               : isEnabled
                 ? provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")
-                : `${provider.label} (준비 중)`}
+                : unavailableLabel}
           </button>
         );
       })}

@@ -26,6 +26,6 @@ public class LaunchWebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(launchGateInterceptor)
-                .addPathPatterns("/api/v1/orders/**", "/api/v1/orders", "/api/v1/reviews");
+                .addPathPatterns("/api/v1/orders", "/api/v1/orders/**", "/api/v1/reviews", "/api/v1/reviews/**");
     }
 }

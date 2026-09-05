@@ -2,6 +2,8 @@ package com.gole.api.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginCommand;
 import com.gole.api.account.application.port.in.SocialLoginUseCase.SocialLoginResult;
@@ -16,6 +18,7 @@ import com.gole.api.account.domain.exception.AccountSuspendedException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PolicyAcceptance;
 import com.gole.api.account.domain.model.Role;
@@ -23,11 +26,13 @@ import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +47,8 @@ class SocialAuthServiceTest {
     private InMemoryStateStore stateStore;
     private SocialAuthService service;
     private List<PolicyAcceptance> policyAcceptances;
+    private OnboardingProperties onboardingProperties;
+    private ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
 
     @BeforeEach
     void setUp() {
@@ -50,6 +57,8 @@ class SocialAuthServiceTest {
         sessions = new InMemorySessions();
         stateStore = new InMemoryStateStore();
         policyAcceptances = new ArrayList<>();
+        onboardingProperties = new OnboardingProperties();
+        thirdPartyProvisionConsents = mock(ThirdPartyProvisionConsentService.class);
         PasswordHasherPort hasher = new PasswordHasherPort() {
             @Override
             public PasswordHash hash(String raw) {
@@ -61,8 +70,8 @@ class SocialAuthServiceTest {
                 return h.value().equals("hash:" + raw);
             }
         };
-        PolicyAcceptanceService policies =
-                new PolicyAcceptanceService(policyAcceptances::add, new SignupPolicyProperties(), Clock.systemUTC());
+        PolicyAcceptanceService policies = new PolicyAcceptanceService(
+                policyAcceptances::add, new SignupPolicyProperties(), Clock.systemUTC(), thirdPartyProvisionConsents);
         SocialAccountProvisioner provisioner =
                 new SocialAccountProvisioner(accounts, new SequentialIds(), hasher, policies);
         service = new SocialAuthService(
@@ -75,7 +84,10 @@ class SocialAuthServiceTest {
                 Clock.systemUTC(),
                 new SessionPolicyProperties(),
                 policies,
-                provisioner);
+                provisioner,
+                onboardingProperties,
+                new OAuthRedirectUriPolicy("https://app/cb"),
+                thirdPartyProvisionConsents);
     }
 
     @Test
@@ -85,7 +97,7 @@ class SocialAuthServiceTest {
                 new SocialIdentityProviderPort.SocialProfile(AuthProvider.GOOGLE, "g-123", "new@example.com", true);
         stateStore.save(
                 "s1",
-                new OAuthStateContext(AuthProvider.GOOGLE, "https://app/cb", acceptedPolicy()),
+                new OAuthStateContext(AuthProvider.GOOGLE, "https://app/cb", acceptedThirdPartyPolicy()),
                 Duration.ofMinutes(10));
 
         SocialLoginResult result =
@@ -93,12 +105,16 @@ class SocialAuthServiceTest {
 
         assertThat(result.sessionToken()).startsWith("token-");
         assertThat(result.role()).isEqualTo(Role.USER);
+        assertThat(result.onboardingRequired()).isTrue();
         assertThat(accounts.findByEmail(new Email("new@example.com"))).isPresent();
         assertThat(sessions.store).containsKey(result.sessionToken());
         assertThat(policyAcceptances).singleElement().satisfies(acceptance -> {
             assertThat(acceptance.accountId()).isEqualTo(result.accountId());
             assertThat(acceptance.channel()).isEqualTo(PolicyAcceptance.Channel.SOCIAL_GOOGLE);
         });
+        verify(thirdPartyProvisionConsents)
+                .recordSignupIfAccepted(
+                        result.accountId(), acceptedThirdPartyPolicy(), PolicyAcceptance.Channel.SOCIAL_GOOGLE);
     }
 
     @Test
@@ -118,6 +134,54 @@ class SocialAuthServiceTest {
         assertThat(result.accountId()).isEqualTo("acc-existing");
         assertThat(accounts.saved).isEqualTo(1); // 신규 생성 없음
         assertThat(policyAcceptances).isEmpty();
+    }
+
+    @Test
+    void login_recordsOptionalProvisionConsent_whenExistingAccountAcceptedIt() {
+        provider.configured = true;
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(
+                AuthProvider.GOOGLE, "g-existing-consent", "existing-consent@example.com", true);
+        Account existing = Account.provisioned(
+                "acc-existing-consent",
+                new Email("existing-consent@example.com"),
+                new PasswordHash("hash:x"),
+                Role.USER);
+        accounts.save(existing);
+        stateStore.save(
+                "s-existing-consent",
+                new OAuthStateContext(AuthProvider.GOOGLE, "https://app/cb", acceptedThirdPartyPolicy()),
+                Duration.ofMinutes(10));
+
+        SocialLoginResult result = service.login(
+                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s-existing-consent"));
+
+        assertThat(result.accountId()).isEqualTo("acc-existing-consent");
+        verify(thirdPartyProvisionConsents)
+                .recordSignupIfAccepted(
+                        "acc-existing-consent", acceptedThirdPartyPolicy(), PolicyAcceptance.Channel.SOCIAL_GOOGLE);
+    }
+
+    @Test
+    void googleLoginUsesTheConfiguredOptionalPhonePolicy() {
+        provider.configured = true;
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(
+                AuthProvider.GOOGLE, "g-phone-optional", "ready@example.com", true);
+        Account existing =
+                Account.provisioned("acc-ready", new Email("ready@example.com"), new PasswordHash("hash:x"), Role.USER);
+        existing.changeNickname(new Nickname("브릭러버"));
+        existing.selectInterestTags(Set.of("technic"));
+        existing.consent(true, false, Instant.parse("2026-09-04T00:00:00Z"));
+        accounts.save(existing);
+        onboardingProperties.setPhoneVerificationRequired(false);
+        stateStore.save(
+                "s-phone-optional",
+                new OAuthStateContext(AuthProvider.GOOGLE, "https://app/cb", null),
+                Duration.ofMinutes(10));
+
+        SocialLoginResult result = service.login(
+                new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s-phone-optional"));
+
+        assertThat(result.onboardingRequired()).isFalse();
     }
 
     @Test
@@ -204,12 +268,75 @@ class SocialAuthServiceTest {
     }
 
     @Test
+    void authorizeUrl_rejectsRedirectUriOutsideServerAllowlistBeforeStateIsCreated() {
+        provider.configured = true;
+
+        assertThatThrownBy(() -> service.authorizeUrl(
+                        AuthProvider.GOOGLE, "https://evil.test/auth/callback/google", acceptedPolicy(), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageNotContaining("evil.test");
+        assertThat(stateStore.store).isEmpty();
+    }
+
+    @Test
+    void login_consumesAndRejectsLegacyStateWithRedirectUriOutsideAllowlist() {
+        provider.configured = true;
+        stateStore.save(
+                "legacy-unsafe-state",
+                new OAuthStateContext(AuthProvider.GOOGLE, "https://evil.test/callback", acceptedPolicy()),
+                Duration.ofMinutes(10));
+
+        assertThatThrownBy(() -> service.login(new SocialLoginCommand(
+                        AuthProvider.GOOGLE, "code", "https://evil.test/callback", "legacy-unsafe-state")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageNotContaining("evil.test");
+        assertThat(stateStore.store).doesNotContainKey("legacy-unsafe-state");
+        assertThat(accounts.byEmail).isEmpty();
+    }
+
+    @Test
     void enabledProviders_reflectsConfiguration() {
         provider.configured = true;
         assertThat(service.enabledProviders())
                 .containsExactly(AuthProvider.GOOGLE, AuthProvider.KAKAO, AuthProvider.NAVER);
         provider.configured = false;
         assertThat(service.enabledProviders()).isEmpty();
+    }
+
+    @Test
+    void authorizeUrl_bindsOnlySafeReturnToIntoSingleUseState() {
+        provider.configured = true;
+
+        service.authorizeUrl(AuthProvider.GOOGLE, "https://app/cb", acceptedPolicy(), "/collection?tab=sets");
+
+        assertThat(stateStore.store.values())
+                .singleElement()
+                .extracting(OAuthStateContext::returnTo)
+                .isEqualTo("/collection?tab=sets");
+
+        stateStore.store.clear();
+        service.authorizeUrl(AuthProvider.GOOGLE, "https://app/cb", acceptedPolicy(), "https://evil.test");
+
+        assertThat(stateStore.store.values())
+                .singleElement()
+                .extracting(OAuthStateContext::returnTo)
+                .isNull();
+    }
+
+    @Test
+    void login_returnsTheReturnToBoundToValidatedState() {
+        provider.configured = true;
+        provider.profile = new SocialIdentityProviderPort.SocialProfile(
+                AuthProvider.GOOGLE, "g-return", "return@example.com", true);
+        stateStore.save(
+                "s-return",
+                new OAuthStateContext(AuthProvider.GOOGLE, "https://app/cb", acceptedPolicy(), "/prices?set=10307"),
+                Duration.ofMinutes(10));
+
+        SocialLoginResult result =
+                service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s-return"));
+
+        assertThat(result.returnTo()).isEqualTo("/prices?set=10307");
     }
 
     @Test
@@ -289,6 +416,18 @@ class SocialAuthServiceTest {
         public long countByRole(com.gole.api.account.domain.model.Role role) {
             return byEmail.values().stream().filter(a -> a.getRole() == role).count();
         }
+
+        @Override
+        public boolean existsByNickname(
+                com.gole.api.account.domain.model.Nickname nickname, String excludingAccountId) {
+            return false; // 온보딩은 이 테스트의 관심사가 아니다.
+        }
+
+        @Override
+        public boolean existsByVerifiedPhoneNumber(
+                com.gole.api.account.domain.model.PhoneNumber phoneNumber, String excludingAccountId) {
+            return false;
+        }
     }
 
     private static final class InMemoryStateStore implements OAuthStateStorePort {
@@ -306,7 +445,11 @@ class SocialAuthServiceTest {
     }
 
     private static SignupPolicyAcceptance acceptedPolicy() {
-        return new SignupPolicyAcceptance("2026-09-03", "2026-09-03", true, true, true);
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true);
+    }
+
+    private static SignupPolicyAcceptance acceptedThirdPartyPolicy() {
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
     }
 
     private static final class SequentialIds implements IdentifierGeneratorPort {

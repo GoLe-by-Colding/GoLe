@@ -18,7 +18,10 @@ class ObjectStorageHealthIndicatorTest {
     private final StorageProperties properties = new StorageProperties(
             new StorageProperties.S3("http://localhost:9000", "key", "secret", "us-east-1", "gole"),
             "http://localhost:8080",
-            1024);
+            1024,
+            8192,
+            8192,
+            16_000_000);
 
     @Test
     void reportsUpWhenBucketIsReachable() {

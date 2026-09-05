@@ -264,21 +264,37 @@ export function CollectionPage() {
           <ul className="flex flex-col gap-2">
             {visibleCollection.items.map((item) => (
               <li key={item.id}>
-                <Card padded className="flex items-center justify-between">
+                <Card padded className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Badge tone={item.status === "owned" ? "brand" : "neutral"}>
                       {ownershipLabel(item.status)}
                     </Badge>
                     <span className="font-mono text-sm">#{item.setNumber}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void handleRemove(item.id)}
-                  >
-                    삭제
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <LinkButton
+                      href={`/prices?set=${encodeURIComponent(item.setNumber)}`}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      시세 보기
+                    </LinkButton>
+                    <LinkButton
+                      href={`/sets/${encodeURIComponent(item.setNumber)}#set-listings-heading`}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      매물 보기
+                    </LinkButton>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void handleRemove(item.id)}
+                    >
+                      삭제
+                    </Button>
+                  </div>
                 </Card>
               </li>
             ))}

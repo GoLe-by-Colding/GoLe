@@ -62,6 +62,11 @@ public class MongoSupportTicketAdapter implements SupportTicketRepositoryPort {
     }
 
     @Override
+    public long countByStatus(SupportStatus status) {
+        return tickets.countByStatus(status.name());
+    }
+
+    @Override
     public List<SupportTicket> findByStatusAndCategory(SupportStatus status, SupportCategory category, int limit) {
         var page = PageRequest.of(0, Math.clamp(limit, 1, 100), Sort.by(Sort.Direction.DESC, "updatedAt"));
         if (category == null) {

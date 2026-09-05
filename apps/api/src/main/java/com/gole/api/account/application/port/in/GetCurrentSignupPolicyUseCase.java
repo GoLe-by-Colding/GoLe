@@ -5,5 +5,6 @@ public interface GetCurrentSignupPolicyUseCase {
 
     CurrentSignupPolicy currentSignupPolicy();
 
-    record CurrentSignupPolicy(String termsVersion, String privacyVersion, int minimumAge) {}
+    record CurrentSignupPolicy(
+            String termsVersion, String privacyVersion, String thirdPartyProvisionVersion, int minimumAge) {}
 }

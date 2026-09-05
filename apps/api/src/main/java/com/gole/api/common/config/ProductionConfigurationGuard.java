@@ -1,6 +1,8 @@
 package com.gole.api.common.config;
 
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ProductionConfigurationGuard implements ApplicationRunner {
+
+    private static final Set<String> DEVELOPER_ENVIRONMENTS = Set.of("local", "development", "dev", "test", "e2e");
 
     private final String environment;
     private final boolean verificationEmailEnabled;
@@ -31,7 +35,7 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
             @Value("${gole.media.seed-on-startup:false}") boolean mediaSeed,
             @Value("${gole.pricing.evidence.include-demo:false}") boolean demoPricingEvidence,
             @Value("${gole.pricing.evidence.include-legacy:false}") boolean legacyPricingEvidence) {
-        this.environment = environment;
+        this.environment = environment == null ? "" : environment.trim().toLowerCase(Locale.ROOT);
         this.verificationEmailEnabled = verificationEmailEnabled;
         this.demoPricingEvidence = demoPricingEvidence;
         this.legacyPricingEvidence = legacyPricingEvidence;
@@ -47,11 +51,11 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (isProduction() && !verificationEmailEnabled) {
+        if (requiresPublicSafety() && !verificationEmailEnabled) {
             throw new IllegalStateException(
-                    "Production must enable verification email; refusing to log verification codes");
+                    "Public environments must enable verification email; refusing to log verification codes");
         }
-        if (!isPublicEnvironment()) {
+        if (!requiresPublicSafety()) {
             return;
         }
         if (demoPricingEvidence || legacyPricingEvidence) {
@@ -69,11 +73,9 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
         }
     }
 
-    private boolean isProduction() {
-        return "production".equalsIgnoreCase(environment) || "prod".equalsIgnoreCase(environment);
-    }
-
-    private boolean isPublicEnvironment() {
-        return isProduction() || "staging".equalsIgnoreCase(environment);
+    private boolean requiresPublicSafety() {
+        // 환경명이 잘못됐을 때 로컬로 완화하지 않는다. 명시한 개발 환경만 시드·로깅
+        // 어댑터를 쓸 수 있고, 그 외 값은 모두 공개 환경 수준으로 실패시킨다.
+        return !DEVELOPER_ENVIRONMENTS.contains(environment);
     }
 }

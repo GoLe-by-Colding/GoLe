@@ -63,8 +63,10 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
   const [signupPolicyAcceptance, setSignupPolicyAcceptance] = useState<SignupPolicyAcceptance>({
     termsVersion: "",
     privacyVersion: "",
+    thirdPartyProvisionVersion: "",
     termsAccepted: false,
     privacyAcknowledged: false,
+    thirdPartyProvisionAccepted: false,
     minimumAgeConfirmed: false,
   });
 
@@ -80,6 +82,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
           ...current,
           termsVersion: policy.termsVersion,
           privacyVersion: policy.privacyVersion,
+          thirdPartyProvisionVersion: policy.thirdPartyProvisionVersion,
         }));
       })
       .catch((cause: unknown) => {
@@ -91,9 +94,22 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     return () => controller.abort();
   }, [mode, signupPolicy]);
 
-  /** 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다. */
-  function goAfterAuth(role: "USER" | "ADMIN" | null | undefined): void {
-    router.replace(applyRoleGuard(returnTo, role) ?? "/");
+  /**
+   * 인증 성공 후 이동. 히스토리에 /login을 남기지 않도록 replace를 쓴다.
+   *
+   * 온보딩이 남은 계정은 목적지 대신 온보딩으로 보내고, 원래 가려던 곳을 `returnTo`로
+   * 넘겨 끝난 뒤 이어서 도착하게 한다(R12).
+   */
+  function goAfterAuth(
+    role: "USER" | "ADMIN" | null | undefined,
+    onboardingRequired = false,
+  ): void {
+    const target = applyRoleGuard(returnTo, role) ?? "/";
+    if (onboardingRequired) {
+      router.replace(`/onboarding?${new URLSearchParams({ returnTo: target }).toString()}`);
+      return;
+    }
+    router.replace(target);
   }
 
   if (welcome) {
@@ -101,13 +117,13 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
       <AuthCard title="환영합니다" subtitle="소셜 계정으로 가입이 완료됐어요.">
         <div className="flex flex-col gap-5">
           <p className="text-sm leading-relaxed text-neutral-600">
-            이제 GoLe에서 레고 시세를 확인하고, 안전하게 거래하고, 컬렉션을 자랑할 수 있어요.
+            이제 GoLe에서 브릭 시세를 확인하고, 판매자와 대화하고, 컬렉션을 자랑할 수 있어요.
           </p>
           <Button
             size="lg"
             fullWidth
             disabled={session === null}
-            onClick={() => goAfterAuth(session?.role ?? null)}
+            onClick={() => goAfterAuth(session?.role ?? null, session?.onboardingRequired ?? false)}
           >
             {session === null ? "세션 확인 중…" : "시작하기"}
           </Button>
@@ -133,7 +149,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     <AuthCard
       title={mode === "signup" ? "회원가입" : "로그인"}
       subtitle={
-        mode === "signup" ? "레고를 사고팔고 컬렉션을 자랑해보세요." : "다시 오신 것을 환영합니다."
+        mode === "signup" ? "브릭을 사고팔고 컬렉션을 자랑해보세요." : "다시 오신 것을 환영합니다."
       }
     >
       <div className="flex flex-col gap-5">
@@ -174,7 +190,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
                 ? "/forgot-password"
                 : `/forgot-password?returnTo=${encodeURIComponent(returnTo)}`
             }
-            onSignedIn={(signedIn) => goAfterAuth(signedIn.role)}
+            onSignedIn={(signedIn) => goAfterAuth(signedIn.role, signedIn.onboardingRequired)}
           />
         ) : (
           <SignUpForm
@@ -195,6 +211,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
         <SocialLoginButtons
           mode={mode}
           signupPolicyAcceptance={mode === "signup" ? signupPolicyAcceptance : undefined}
+          returnTo={returnTo}
         />
       </div>
     </AuthCard>

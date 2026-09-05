@@ -2,6 +2,8 @@ package com.gole.api.account.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
 import com.gole.api.account.application.port.in.ResendVerificationUseCase.ResendVerificationCommand;
@@ -23,6 +25,7 @@ import com.gole.api.account.domain.exception.VerificationException;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PolicyAcceptance;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
@@ -36,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +54,8 @@ class AccountServiceTest {
     private MutableClock clock;
     private AccountService service;
     private List<PolicyAcceptance> policyAcceptances;
+    private AtomicInteger verificationSends;
+    private ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
 
     @BeforeEach
     void setUp() {
@@ -57,19 +63,9 @@ class AccountServiceTest {
         sessionStore = new InMemorySessionStore();
         clock = new MutableClock(Instant.parse("2026-01-01T00:00:00Z"));
         policyAcceptances = new ArrayList<>();
-        service = new AccountService(
-                repository,
-                new PlainHasher(),
-                (email, code) -> {
-                    /* no-op */
-                },
-                () -> "123456",
-                new SequentialIdGenerator(),
-                account -> "token-" + account.getId(),
-                sessionStore,
-                clock,
-                new SessionPolicyProperties(),
-                policyService(clock));
+        verificationSends = new AtomicInteger();
+        thirdPartyProvisionConsents = mock(ThirdPartyProvisionConsentService.class);
+        service = serviceWithPolicy(new OnboardingProperties());
     }
 
     // --- admin-console 요구사항 6.4 / 6.5: 정지 계정 차단 ---
@@ -148,8 +144,8 @@ class AccountServiceTest {
 
         assertThat(policyAcceptances).singleElement().satisfies(acceptance -> {
             assertThat(acceptance.accountId()).isEqualTo(accountId);
-            assertThat(acceptance.termsVersion()).isEqualTo("2026-09-03");
-            assertThat(acceptance.privacyVersion()).isEqualTo("2026-09-03");
+            assertThat(acceptance.termsVersion()).isEqualTo("2026-09-04");
+            assertThat(acceptance.privacyVersion()).isEqualTo("2026-09-04");
             assertThat(acceptance.minimumAgeConfirmed()).isTrue();
             assertThat(acceptance.channel()).isEqualTo(PolicyAcceptance.Channel.EMAIL);
         });
@@ -157,7 +153,7 @@ class AccountServiceTest {
 
     @Test
     void register_rejectsStaleOrIncompletePolicyBeforeCreatingAccount() {
-        var stale = new SignupPolicyAcceptance("old", "2026-09-03", true, true, true);
+        var stale = new SignupPolicyAcceptance("old", "2026-09-04", true, true, true);
 
         assertThatThrownBy(() -> service.register(new RegisterAccountCommand("stale@b.com", "password1", stale)))
                 .isInstanceOf(BadRequestException.class)
@@ -172,6 +168,15 @@ class AccountServiceTest {
         service.verify(new VerifyEmailCommand("a@b.com", "123456"));
         assertThat(repository.findByEmail(new Email("a@b.com")).orElseThrow().isVerified())
                 .isTrue();
+    }
+
+    @Test
+    void registerStoresOnlyVerificationCodeHash() {
+        service.register(registerCommand("hash-only@b.com", "password1"));
+
+        Account account = repository.findByEmail(new Email("hash-only@b.com")).orElseThrow();
+        assertThat(account.getVerificationChallenge().codeHash()).isEqualTo("plain:123456");
+        assertThat(account.getVerificationChallenge().codeHash()).isNotEqualTo("123456");
     }
 
     @Test
@@ -195,7 +200,7 @@ class AccountServiceTest {
                 .hasMessageContaining("초과");
 
         Account account = repository.findByEmail(new Email("a@b.com")).orElseThrow();
-        assertThat(account.getVerificationCode()).isNotNull();
+        assertThat(account.getVerificationChallenge()).isNotNull();
         assertThat(account.getVerificationFailedAttempts()).isEqualTo(5);
         assertThatThrownBy(() -> service.verify(new VerifyEmailCommand("a@b.com", "123456")))
                 .isInstanceOf(VerificationException.class);
@@ -207,6 +212,31 @@ class AccountServiceTest {
         service.verify(new VerifyEmailCommand("a@b.com", "123456"));
         SignInResult result = service.signIn(new SignInCommand("a@b.com", "password1"));
         assertThat(result.sessionToken()).startsWith("token-");
+    }
+
+    @Test
+    void signInAndSessionResolutionUseTheConfiguredPhoneRequirement() {
+        service.register(registerCommand("optional-phone@b.com", "password1"));
+        service.verify(new VerifyEmailCommand("optional-phone@b.com", "123456"));
+        Account account =
+                repository.findByEmail(new Email("optional-phone@b.com")).orElseThrow();
+        account.changeNickname(new Nickname("브릭러버"));
+        account.selectInterestTags(Set.of("technic"));
+        account.consent(true, false, clock.instant());
+        repository.save(account);
+
+        OnboardingProperties phoneOptional = new OnboardingProperties();
+        phoneOptional.setPhoneVerificationRequired(false);
+        AccountService optionalPhoneService = serviceWithPolicy(phoneOptional);
+
+        SignInResult result = optionalPhoneService.signIn(new SignInCommand("optional-phone@b.com", "password1"));
+
+        assertThat(result.onboardingRequired()).isFalse();
+        assertThat(optionalPhoneService
+                        .resolve(result.sessionToken())
+                        .orElseThrow()
+                        .onboardingRequired())
+                .isFalse();
     }
 
     @Test
@@ -233,17 +263,19 @@ class AccountServiceTest {
         service.resend(new ResendVerificationCommand("pending@b.com"));
 
         Account account = repository.findByEmail(new Email("pending@b.com")).orElseThrow();
-        assertThat(account.getVerificationCode()).isNotNull();
-        assertThat(account.getVerificationCode().issuedAt()).isEqualTo(clock.instant());
+        assertThat(account.getVerificationChallenge()).isNotNull();
+        assertThat(account.getVerificationChallenge().codeHash()).isEqualTo("plain:123456");
+        assertThat(account.getVerificationChallenge().codeHash()).isNotEqualTo("123456");
+        assertThat(account.getVerificationChallenge().issuedAt()).isEqualTo(clock.instant());
     }
 
     @Test
-    void resend_rejectsRapidRepeat() {
+    void resend_silentlyAppliesCooldownWithoutRevealingAccount() {
         service.register(registerCommand("pending@b.com", "password1"));
 
-        assertThatThrownBy(() -> service.resend(new ResendVerificationCommand("pending@b.com")))
-                .isInstanceOf(VerificationException.class)
-                .hasMessageContaining("60초");
+        service.resend(new ResendVerificationCommand("pending@b.com"));
+
+        assertThat(verificationSends).hasValue(1);
     }
 
     @Test
@@ -308,7 +340,8 @@ class AccountServiceTest {
                 rotatingStore,
                 clock,
                 new SessionPolicyProperties(),
-                policyService(clock));
+                policyService(clock),
+                new OnboardingProperties());
         rotatingService.register(registerCommand("rotate@b.com", "password1"));
         rotatingService.verify(new VerifyEmailCommand("rotate@b.com", "123456"));
         SignInResult signedIn = rotatingService.signIn(new SignInCommand("rotate@b.com", "password1"));
@@ -360,7 +393,8 @@ class AccountServiceTest {
                 new InMemorySessionStore(),
                 clock,
                 new SessionPolicyProperties(),
-                policyService(clock));
+                policyService(clock),
+                new OnboardingProperties());
         repository.save(Account.provisioned(
                 "acc-legacy",
                 new Email("legacy@b.com"),
@@ -377,16 +411,43 @@ class AccountServiceTest {
 
     // --- 가짜 구현들 ---
 
+    private AccountService serviceWithPolicy(OnboardingProperties onboardingProperties) {
+        return new AccountService(
+                repository,
+                new PlainHasher(),
+                (email, code) -> verificationSends.incrementAndGet(),
+                () -> "123456",
+                new SequentialIdGenerator(),
+                account -> "token-" + account.getId(),
+                sessionStore,
+                clock,
+                new SessionPolicyProperties(),
+                policyService(clock),
+                onboardingProperties);
+    }
+
     private static RegisterAccountCommand registerCommand(String email, String password) {
         return new RegisterAccountCommand(email, password, acceptedPolicy());
     }
 
+    @Test
+    void emailRegistrationRecordsCheckedThirdPartyChoiceThroughAppendOnlyService() {
+        SignupPolicyAcceptance acceptance =
+                new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
+
+        String accountId = service.register(new RegisterAccountCommand("consented@gole.test", "password1", acceptance));
+
+        verify(thirdPartyProvisionConsents)
+                .recordSignupIfAccepted(accountId, acceptance, PolicyAcceptance.Channel.EMAIL);
+    }
+
     private static SignupPolicyAcceptance acceptedPolicy() {
-        return new SignupPolicyAcceptance("2026-09-03", "2026-09-03", true, true, true);
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true);
     }
 
     private PolicyAcceptanceService policyService(Clock policyClock) {
-        return new PolicyAcceptanceService(policyAcceptances::add, new SignupPolicyProperties(), policyClock);
+        return new PolicyAcceptanceService(
+                policyAcceptances::add, new SignupPolicyProperties(), policyClock, thirdPartyProvisionConsents);
     }
 
     private static final class InMemoryAccountRepository implements AccountRepositoryPort {
@@ -426,6 +487,18 @@ class AccountServiceTest {
         @Override
         public long countByRole(com.gole.api.account.domain.model.Role role) {
             return byEmail.values().stream().filter(a -> a.getRole() == role).count();
+        }
+
+        @Override
+        public boolean existsByNickname(
+                com.gole.api.account.domain.model.Nickname nickname, String excludingAccountId) {
+            return false; // 온보딩은 이 테스트의 관심사가 아니다.
+        }
+
+        @Override
+        public boolean existsByVerifiedPhoneNumber(
+                com.gole.api.account.domain.model.PhoneNumber phoneNumber, String excludingAccountId) {
+            return false;
         }
     }
 

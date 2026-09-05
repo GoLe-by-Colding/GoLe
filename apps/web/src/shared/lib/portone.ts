@@ -7,7 +7,7 @@ import {
   type PortOneCustomer,
   type PortOneMethod,
 } from "@gole/core";
-import { env } from "@shared/config";
+import { env, isPaymentRuntimeAvailable } from "@shared/config";
 
 export type { PortOneCustomer, PortOneMethod };
 
@@ -44,7 +44,10 @@ export interface PortOnePayParams {
 }
 
 export function isPortOneEnabled(): boolean {
-  return env.paymentMode !== "stub" && getPortOneConfigurationError() === undefined;
+  return (
+    (env.paymentMode === "portone-test" || env.paymentMode === "portone-live") &&
+    getPortOneConfigurationError() === undefined
+  );
 }
 
 /**
@@ -57,7 +60,13 @@ export function isCardPaymentAvailable(): boolean {
 
 /** 공개 브라우저 설정 누락을 조용히 스텁 결제로 우회하지 않고 화면에 드러낸다. */
 export function getPortOneConfigurationError(): string | undefined {
-  if (env.paymentMode === "stub") {
+  if (
+    env.paymentMode === "disabled" ||
+    (env.paymentMode === "stub" && env.nodeEnv === "production")
+  ) {
+    return "현재 플랫폼 결제 기능을 제공하지 않습니다.";
+  }
+  if (env.paymentMode === "stub" && isPaymentRuntimeAvailable()) {
     return undefined;
   }
   if (env.portOneStoreId.length === 0) {
@@ -82,6 +91,9 @@ export function buildPortOnePaymentRequest(
 ): PaymentRequest {
   if (origin === undefined) {
     throw new Error("PortOne SDK는 브라우저에서만 사용할 수 있습니다.");
+  }
+  if (!isPortOneEnabled()) {
+    throw new Error("현재 플랫폼 결제 기능을 제공하지 않습니다.");
   }
   const configurationError = getPortOneConfigurationError();
   if (configurationError !== undefined) {

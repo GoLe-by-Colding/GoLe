@@ -71,7 +71,7 @@ export function fetchComments(postId: string, signal?: AbortSignal): Promise<rea
 export interface PublishPostInput {
   readonly authorId: string;
   readonly content: string;
-  readonly imageUrls: readonly string[];
+  readonly imageKeys: readonly string[];
   readonly topic: import("../model/types").PostType;
 }
 
@@ -106,7 +106,7 @@ export function deleteComment(postId: string, commentId: string): Promise<void> 
 export interface EditPostInput {
   readonly requesterId: string;
   readonly content: string;
-  readonly imageUrls: readonly string[];
+  readonly imageKeys: readonly string[];
 }
 
 /** 게시글 본문/이미지 수정(작성자 본인). */

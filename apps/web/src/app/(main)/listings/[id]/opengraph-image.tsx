@@ -13,7 +13,7 @@ export default async function OpengraphImage({
   const { id } = await params;
 
   // 백엔드에서 매물 정보를 가져온다. 실패 시 기본 OG 폴백.
-  let title = "GoLe 레고 매물";
+  let title = "GoLe 브릭 매물";
   let price = "";
   let category = "";
   try {

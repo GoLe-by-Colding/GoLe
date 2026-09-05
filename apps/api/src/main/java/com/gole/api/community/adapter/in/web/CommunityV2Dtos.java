@@ -16,7 +16,7 @@ public final class CommunityV2Dtos {
                     """
                     {
                       "body": "",
-                      "photos": ["community/example.jpg"],
+                      "mediaKeys": ["images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg"],
                       "visibility": "public",
                       "status": "draft"
                     }
@@ -27,7 +27,7 @@ public final class CommunityV2Dtos {
         private String body;
 
         @Size(max = 10)
-        private List<@NotBlank @Size(max = 2048) String> photos;
+        private List<@NotBlank @Size(max = 80) String> mediaKeys;
 
         @Size(max = 16)
         private String visibility;
@@ -36,7 +36,7 @@ public final class CommunityV2Dtos {
         private String status;
 
         private boolean bodyProvided;
-        private boolean photosProvided;
+        private boolean mediaKeysProvided;
         private boolean visibilityProvided;
         private boolean statusProvided;
 
@@ -51,13 +51,13 @@ public final class CommunityV2Dtos {
             this.body = body;
         }
 
-        public List<String> photos() {
-            return photos;
+        public List<String> mediaKeys() {
+            return mediaKeys;
         }
 
-        public void setPhotos(List<String> photos) {
-            this.photosProvided = true;
-            this.photos = photos;
+        public void setMediaKeys(List<String> mediaKeys) {
+            this.mediaKeysProvided = true;
+            this.mediaKeys = mediaKeys;
         }
 
         public String visibility() {
@@ -82,8 +82,8 @@ public final class CommunityV2Dtos {
             return bodyProvided;
         }
 
-        public boolean photosProvided() {
-            return photosProvided;
+        public boolean mediaKeysProvided() {
+            return mediaKeysProvided;
         }
 
         public boolean visibilityProvided() {
@@ -95,13 +95,19 @@ public final class CommunityV2Dtos {
         }
     }
 
-    public record PatchPostResponse(String id, String body, List<String> photos, String visibility, String status) {
+    public record PatchPostResponse(
+            String id, String body, List<String> mediaKeys, List<String> imageUrls, String visibility, String status) {
 
         public static PatchPostResponse from(Post post) {
             return new PatchPostResponse(
                     post.getId(),
                     post.getContent(),
-                    post.getImageUrls(),
+                    post.getImageUrls().stream()
+                            .flatMap(value -> com.gole.api.media.domain.model.MediaKey.safeStoredKey(value).stream())
+                            .toList(),
+                    post.getImageUrls().stream()
+                            .flatMap(value -> com.gole.api.media.domain.model.MediaKey.safePublicPath(value).stream())
+                            .toList(),
                     "public",
                     post.getStatus().name().toLowerCase());
         }

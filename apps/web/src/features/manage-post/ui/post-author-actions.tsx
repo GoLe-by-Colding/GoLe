@@ -42,7 +42,13 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
       const updated = await editPost(post.id, {
         requesterId: session.accountId,
         content,
-        imageUrls: post.imageUrls,
+        imageKeys:
+          post.imageKeys ??
+          post.imageUrls.flatMap((url) => {
+            const marker = "/api/v1/media/";
+            const offset = url.indexOf(marker);
+            return offset < 0 ? [] : [url.slice(offset + marker.length)];
+          }),
       });
       onUpdated(updated);
       setEditing(false);

@@ -7,6 +7,7 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.ItemCondition;
+import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
@@ -14,6 +15,7 @@ import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderComman
 import com.gole.api.order.domain.model.PaymentMethod;
 import com.gole.api.order.domain.model.PaymentMethodType;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -65,6 +67,9 @@ class PaymentMethodPersistenceIntegrationTest {
     @Autowired
     AdminReadModelPort adminReadModel;
 
+    @Autowired
+    ManageMediaAssetsUseCase mediaAssets;
+
     /** 자기거래는 금지되므로 판매자와 구매자를 반드시 다르게 둔다. */
     private String placedOrder(long price, String buyerId) {
         String listingId = createListing.create(new CreateListingCommand(
@@ -74,9 +79,15 @@ class PaymentMethodPersistenceIntegrationTest {
                 price,
                 ItemCondition.NEW_SEALED,
                 ConditionDisclosure.basic(),
-                List.of("p.jpg"),
+                List.of(stagedPhoto("seller-pm")),
                 "10307"));
         return placeOrder.place(new PlaceOrderCommand(listingId, buyerId));
+    }
+
+    private String stagedPhoto(String ownerId) {
+        String key = "images/" + UUID.randomUUID() + ".jpg";
+        mediaAssets.registerStaged(ownerId, key, "image/jpeg", 1);
+        return key;
     }
 
     @Test

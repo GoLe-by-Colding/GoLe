@@ -18,6 +18,9 @@ public interface ChatReportSnapshotPort {
 
     Optional<StoredSnapshot> findByReportId(String reportId);
 
+    /** 신고 증거 사본이 하나라도 있으면 원 대화를 파기하지 않기 위한 보존 신호다. */
+    boolean existsByRoomId(String roomId);
+
     record SnapshotMessage(String messageId, String senderId, String content, Instant sentAt) {}
 
     record Snapshot(

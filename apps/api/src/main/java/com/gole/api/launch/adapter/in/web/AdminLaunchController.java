@@ -5,6 +5,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.AdminLaunchConfigResponse;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ChangeStageRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.FeatureOverrideRequest;
@@ -38,9 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 공개 단계 운영 API.
  *
- * <p>경로가 {@code /api/admin/**} 이므로 {@code AdminAuthInterceptor} 가 세션을 해석해 ADMIN 만
- * 통과시킨다. 이 컨트롤러는 권한을 다시 확인하지 않는다 — 인증 로직이 인터셉터 한 곳에만
- * 있어야 한다는 기존 규칙을 따른다. 조치자는 인터셉터가 넣어준 요청 속성에서만 읽는다.
+ * <p>경로가 {@code /api/admin/**} 이므로 {@code AdminAuthInterceptor} 가 세션을 해석해 ADMIN 만 통과시킨다. 이 컨트롤러는
+ * 권한을 다시 확인하지 않는다 — 인증 로직이 인터셉터 한 곳에만 있어야 한다는 기존 규칙을 따른다. 조치자는 인터셉터가 넣어준 요청 속성에서만 읽는다.
  */
 @Tag(name = "Admin · 공개 단계", description = "서비스 공개 단계와 기능별 개방 관리")
 @RestController
@@ -51,16 +51,19 @@ public class AdminLaunchController {
     private final ManageLaunchConfigUseCase manageLaunchConfig;
     private final RecordAdminActionUseCase audit;
     private final LaunchSettlementModePort settlementMode;
+    private final SellerIdentityVerificationProperties sellerIdentityVerification;
 
     public AdminLaunchController(
             GetLaunchConfigUseCase getLaunchConfig,
             ManageLaunchConfigUseCase manageLaunchConfig,
             RecordAdminActionUseCase audit,
-            LaunchSettlementModePort settlementMode) {
+            LaunchSettlementModePort settlementMode,
+            SellerIdentityVerificationProperties sellerIdentityVerification) {
         this.getLaunchConfig = getLaunchConfig;
         this.manageLaunchConfig = manageLaunchConfig;
         this.audit = audit;
         this.settlementMode = settlementMode;
+        this.sellerIdentityVerification = sellerIdentityVerification;
     }
 
     @Operation(summary = "현재 공개 단계 조회", description = "공개 응답에 override 원본과 마지막 조치자를 더해 돌려준다.")
@@ -139,6 +142,10 @@ public class AdminLaunchController {
 
     private AdminLaunchConfigResponse response(LaunchConfig effective, LaunchConfig requested) {
         return AdminLaunchConfigResponse.from(
-                effective, requested, settlementMode.currentMode(), settlementMode.payoutContractVerified());
+                effective,
+                requested,
+                settlementMode.currentMode(),
+                settlementMode.payoutContractVerified(),
+                sellerIdentityVerification.verificationReady());
     }
 }

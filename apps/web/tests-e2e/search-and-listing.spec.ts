@@ -94,6 +94,22 @@ test.describe("Search & listing detail", () => {
     await page.route("**/api/v1/users/chat-e2e-buyer/notifications/unread-count", (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",

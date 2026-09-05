@@ -22,6 +22,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.HandlerMapping;
 
 class LaunchGateInterceptorTest {
 
@@ -34,7 +35,23 @@ class LaunchGateInterceptorTest {
     }
 
     private static MockHttpServletRequest request(String method, String path) {
-        return new MockHttpServletRequest(method, path);
+        MockHttpServletRequest request = new MockHttpServletRequest(method, path);
+        request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, canonicalPattern(path));
+        return request;
+    }
+
+    private static String canonicalPattern(String path) {
+        return switch (path) {
+            case "/api/v1/orders" -> "/api/v1/orders";
+            case "/api/v1/orders/order-1/payment" -> "/api/v1/orders/{orderId}/payment";
+            case "/api/v1/orders/order-1/completion" -> "/api/v1/orders/{orderId}/completion";
+            case "/api/v1/orders/order-1/refund" -> "/api/v1/orders/{orderId}/refund";
+            case "/api/v1/orders/order-1/dispute" -> "/api/v1/orders/{orderId}/dispute";
+            case "/api/v1/orders/order-1/shipment/tracking" -> "/api/v1/orders/{orderId}/shipment/tracking";
+            case "/api/v1/reviews" -> "/api/v1/reviews";
+            case "/api/v1/reviews/review-1/reply" -> "/api/v1/reviews/{reviewId}/reply";
+            default -> path;
+        };
     }
 
     @Test
@@ -146,12 +163,16 @@ class LaunchGateInterceptorTest {
     }
 
     @Test
-    @DisplayName("후기 기능이 닫히면 작성만 막고 기존 후기 조회는 허용한다")
+    @DisplayName("후기 기능이 닫히면 후기·답글 작성만 막고 기존 후기 조회는 허용한다")
     void closedReviewsBlockOnlyWrites() {
         when(launchConfig.current())
                 .thenReturn(new LaunchConfig(LaunchStage.TRADING, Map.of(LaunchFeature.REVIEWS, false), null, null));
 
         assertThatThrownBy(() -> interceptor.preHandle(request("POST", "/api/v1/reviews"), response, new Object()))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("후기");
+        assertThatThrownBy(() -> interceptor.preHandle(
+                        request("POST", "/api/v1/reviews/review-1/reply"), response, new Object()))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("후기");
         assertThat(interceptor.preHandle(request("GET", "/api/v1/sellers/seller-1/reviews"), response, new Object()))
@@ -165,6 +186,48 @@ class LaunchGateInterceptorTest {
 
         assertThat(interceptor.preHandle(request("POST", "/api/v1/reviews"), response, new Object()))
                 .isTrue();
+        assertThat(interceptor.preHandle(request("POST", "/api/v1/reviews/review-1/reply"), response, new Object()))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("원문 URI의 matrix parameter와 인코딩 여부는 canonical handler 분류를 우회하지 못한다")
+    void canonicalHandlerPatternBlocksPathParameterBypass() {
+        stage(LaunchStage.BROWSE_ONLY);
+
+        for (String rawPath : new String[] {
+            "/api/v1/orders;x=1",
+            "/api/v1/orders%3Bx=1",
+            "/api/v1/orders/order-1/payment;x=1",
+            "/api/v1/reviews/review-1/reply;x=1"
+        }) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", rawPath);
+            String pattern = rawPath.contains("reply")
+                    ? "/api/v1/reviews/{reviewId}/reply"
+                    : rawPath.contains("payment") ? "/api/v1/orders/{orderId}/payment" : "/api/v1/orders";
+            request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, pattern);
+
+            assertThatThrownBy(() -> interceptor.preHandle(request, response, new Object()))
+                    .as(rawPath)
+                    .isInstanceOf(ForbiddenException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("새 주문·후기 POST mapping은 분류 전까지 안전하게 거부한다")
+    void unclassifiedPostFailsClosed() {
+        stage(LaunchStage.FULL);
+        MockHttpServletRequest missingPattern = new MockHttpServletRequest("POST", "/api/v1/orders/new-operation");
+        MockHttpServletRequest unknownPattern = new MockHttpServletRequest("POST", "/api/v1/orders/new-operation");
+        unknownPattern.setAttribute(
+                HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/orders/{orderId}/new-operation");
+
+        assertThatThrownBy(() -> interceptor.preHandle(missingPattern, response, new Object()))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("운영 단계");
+        assertThatThrownBy(() -> interceptor.preHandle(unknownPattern, response, new Object()))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("운영 단계");
     }
 
     @Test

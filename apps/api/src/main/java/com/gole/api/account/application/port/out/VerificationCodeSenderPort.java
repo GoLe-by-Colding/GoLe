@@ -17,4 +17,9 @@ public interface VerificationCodeSenderPort {
     default void sendPasswordReset(Email email, VerificationCode code) {
         send(email, code);
     }
+
+    /** 회원 탈퇴 본인확인 코드를 목적이 구분된 메일로 보낸다. */
+    default void sendAccountDeletion(Email email, VerificationCode code) {
+        send(email, code);
+    }
 }

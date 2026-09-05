@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inbound 어댑터(REST). use case 인터페이스에만 의존한다.
  */
-@Tag(name = "Catalog", description = "레고 카탈로그 세트 조회·검색")
+@Tag(name = "Catalog", description = "브릭 카탈로그 세트 조회·검색")
 @RestController
 @RequestMapping("/api/v1/catalog/sets")
 public class CatalogController {

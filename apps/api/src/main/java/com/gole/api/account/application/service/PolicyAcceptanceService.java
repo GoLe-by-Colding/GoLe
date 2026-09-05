@@ -18,18 +18,26 @@ public class PolicyAcceptanceService implements GetCurrentSignupPolicyUseCase {
     private final PolicyAcceptanceRepositoryPort repository;
     private final SignupPolicyProperties properties;
     private final Clock clock;
+    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
 
     public PolicyAcceptanceService(
-            PolicyAcceptanceRepositoryPort repository, SignupPolicyProperties properties, Clock clock) {
+            PolicyAcceptanceRepositoryPort repository,
+            SignupPolicyProperties properties,
+            Clock clock,
+            ThirdPartyProvisionConsentService thirdPartyProvisionConsents) {
         this.repository = repository;
         this.properties = properties;
         this.clock = clock;
+        this.thirdPartyProvisionConsents = thirdPartyProvisionConsents;
     }
 
     @Override
     public CurrentSignupPolicy currentSignupPolicy() {
         return new CurrentSignupPolicy(
-                properties.getTermsVersion(), properties.getPrivacyVersion(), properties.getMinimumAge());
+                properties.getTermsVersion(),
+                properties.getPrivacyVersion(),
+                properties.getThirdPartyProvisionVersion(),
+                properties.getMinimumAge());
     }
 
     public void record(String accountId, SignupPolicyAcceptance input, Channel channel) {
@@ -44,6 +52,7 @@ public class PolicyAcceptanceService implements GetCurrentSignupPolicyUseCase {
                 input.minimumAgeConfirmed(),
                 channel,
                 Instant.now(clock)));
+        thirdPartyProvisionConsents.recordSignupIfAccepted(accountId, input, channel);
     }
 
     public void validate(SignupPolicyAcceptance input) {
@@ -54,5 +63,6 @@ public class PolicyAcceptanceService implements GetCurrentSignupPolicyUseCase {
                 || !properties.getPrivacyVersion().equals(input.privacyVersion())) {
             throw new BadRequestException("POLICY_VERSION_STALE", "정책이 변경되었습니다. 최신 내용을 확인한 뒤 다시 시도해 주세요");
         }
+        thirdPartyProvisionConsents.validateSignupChoice(input);
     }
 }

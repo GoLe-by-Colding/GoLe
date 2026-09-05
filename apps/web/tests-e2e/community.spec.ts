@@ -5,6 +5,28 @@ const targetsRemoteHost =
   externalBaseUrl !== undefined &&
   !["localhost", "127.0.0.1"].includes(new URL(externalBaseUrl).hostname);
 
+test.beforeEach(async ({ page }) => {
+  // (main) 레이아웃의 OnboardingBanner가 마운트되자마자 상태를 조회한다. 이 스펙은
+  // HttpOnly 쿠키 없는 합성 세션을 쓰므로, 목킹하지 않으면 실제 백엔드 401이 그 세션을
+  // 지운다 — 알림 폴링과 같은 이유다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
+});
+
 // 커뮤니티: 주제 탭 필터 + 글쓰기 진입. (데이터가 있는 환경 대상)
 test.describe("Community topics", () => {
   test("주제 탭과 피드가 렌더된다", async ({ page }) => {
@@ -61,7 +83,9 @@ test.describe("Community topics", () => {
 
   test("글쓰기 화면으로 이동하고 주제를 고를 수 있다", async ({ page }) => {
     await page.goto("/community");
-    await page.getByRole("link", { name: "글쓰기" }).click();
+    const composeLink = page.getByRole("link", { name: "글쓰기", exact: true });
+    await expect(composeLink).toHaveCount(1);
+    await composeLink.click();
     await expect(page).toHaveURL(/\/community\/new$/);
   });
 

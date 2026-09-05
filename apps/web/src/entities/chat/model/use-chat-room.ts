@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "@shared/api";
 import type { ChatMessage, ChatRoom } from "@gole/core/chat";
 import {
   cancelDirectTradeConfirmation,
@@ -17,6 +18,8 @@ export interface UseChatRoomOptions {
   readonly otherId: string;
   /** myId가 구매자인지 여부. 구매자=buyerId, 판매자=sellerId. */
   readonly isBuyer: boolean;
+  /** 상위 레이어가 동의 같은 선행 조건을 처리하면서 방 생성 요청을 감쌀 때 사용한다. */
+  readonly runCreate?: (action: () => Promise<ChatRoom>) => Promise<ChatRoom>;
 }
 
 export interface UseChatRoomResult {
@@ -38,6 +41,7 @@ export function useChatRoom({
   myId,
   otherId,
   isBuyer,
+  runCreate,
 }: UseChatRoomOptions): UseChatRoomResult {
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -69,7 +73,8 @@ export function useChatRoom({
 
       void (async () => {
         try {
-          const nextRoom = await createOrGetRoom(listingId, buyerId, sellerId);
+          const create = () => createOrGetRoom(listingId, buyerId, sellerId);
+          const nextRoom = runCreate === undefined ? await create() : await runCreate(create);
           if (!active) return;
           setRoom(nextRoom);
           const history = await fetchMessages(nextRoom.id);
@@ -78,8 +83,17 @@ export function useChatRoom({
           setMessages((current) => mergeChatMessages(history, current));
           setError(undefined);
           setStreamCursor({ roomId: nextRoom.id, afterId: history.at(-1)?.id });
-        } catch {
-          if (active) setError("채팅방을 열 수 없습니다.");
+        } catch (cause) {
+          if (!active) return;
+          if (
+            cause instanceof ApiError &&
+            (cause.code === "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE" ||
+              cause.code === "SELLER_IDENTITY_VERIFICATION_REQUIRED")
+          ) {
+            setError(cause.message);
+          } else {
+            setError("채팅방을 열 수 없습니다.");
+          }
         } finally {
           if (active) setLoading(false);
         }
@@ -90,7 +104,7 @@ export function useChatRoom({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [attempt, listingId, myId, otherId, isBuyer]);
+  }, [attempt, listingId, myId, otherId, isBuyer, runCreate]);
 
   // 이력 조회로 멤버십을 확인한 뒤 구독한다. 서버가 afterId 이후를 재생해 조회↔구독 틈을 메운다.
   useEffect(() => {

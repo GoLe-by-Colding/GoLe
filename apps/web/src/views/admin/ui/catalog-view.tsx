@@ -35,8 +35,11 @@ function validateCatalogForm(form: CreateSetInput, editing: string | null): stri
   if (!Number.isInteger(form.releaseYear) || form.releaseYear < 1949 || form.releaseYear > maxYear)
     return `출시 연도는 1949~${maxYear} 사이여야 합니다.`;
   const imageUrl = form.imageUrl.trim();
-  if (imageUrl !== "" && !imageUrl.startsWith("/") && !/^https?:\/\//i.test(imageUrl))
-    return "이미지 URL은 /로 시작하는 내부 경로 또는 http(s) 주소여야 합니다.";
+  if (
+    imageUrl !== "" &&
+    !/^\/api\/v1\/media\/catalog\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.svg$/.test(imageUrl)
+  )
+    return "이미지는 /api/v1/media/catalog/...svg 내부 경로만 사용할 수 있습니다.";
   return undefined;
 }
 
@@ -102,7 +105,11 @@ export function AdminCatalogView() {
     setError(undefined);
     setBusy(true);
     try {
-      const payload = { ...form, pieceCount: Number(form.pieceCount) };
+      const payload = {
+        ...form,
+        pieceCount: Number(form.pieceCount),
+        imageUrl: form.imageUrl.trim(),
+      };
       if (editing !== null) {
         await updateAdminSet(token, editing, {
           name: payload.name,
@@ -218,7 +225,7 @@ export function AdminCatalogView() {
               </Select>
             )}
           </Field>
-          <Field label="이미지 URL">
+          <Field label="내부 이미지 경로">
             {({ inputId }) => (
               <Input
                 id={inputId}
@@ -279,7 +286,7 @@ export function AdminCatalogView() {
             </Text>
           </div>
           <AdminTable
-            caption="레고 세트 카탈로그 목록"
+            caption="브릭 세트 카탈로그 목록"
             headers={["번호", "이름", "테마", "피스", "상태", "관리"]}
             alignRight={[3, 5]}
             minWidth={640}

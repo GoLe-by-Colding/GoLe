@@ -5,6 +5,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
+import com.gole.api.chat.application.SupportChatService;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
@@ -35,6 +36,7 @@ public class AdminDashboardController {
     private final AdminReadModelPort readModel;
     private final ListAdminActionsUseCase listAdminActions;
     private final ManageReportsUseCase manageReports;
+    private final SupportChatService support;
     private final ManageSettlementsUseCase manageSettlements;
     private final GetPaymentReadinessUseCase paymentReadiness;
 
@@ -42,11 +44,13 @@ public class AdminDashboardController {
             AdminReadModelPort readModel,
             ListAdminActionsUseCase listAdminActions,
             ManageReportsUseCase manageReports,
+            SupportChatService support,
             ManageSettlementsUseCase manageSettlements,
             GetPaymentReadinessUseCase paymentReadiness) {
         this.readModel = readModel;
         this.listAdminActions = listAdminActions;
         this.manageReports = manageReports;
+        this.support = support;
         this.manageSettlements = manageSettlements;
         this.paymentReadiness = paymentReadiness;
     }
@@ -61,6 +65,7 @@ public class AdminDashboardController {
                 stats.countByStatus(),
                 readModel.activeListingCount(),
                 manageReports.count(ReportStatus.PENDING),
+                support.countUnassigned(),
                 manageSettlements.count(SettlementStatus.PENDING),
                 AdminDtos.PaymentReadinessResponse.from(paymentReadiness.getPaymentReadiness()));
     }

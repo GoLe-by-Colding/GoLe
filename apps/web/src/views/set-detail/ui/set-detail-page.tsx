@@ -5,7 +5,7 @@ import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
 import { ListingGrid } from "@widgets/listing-grid";
-import { Badge, Card, Container, Heading, MediaImage, Text } from "@shared/ui";
+import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface SetDetailPageProps {
@@ -67,7 +67,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
           </div>
 
           <Heading level={1}>
-            레고 {set.setNumber} {set.name}
+            브릭 세트 {set.setNumber} {set.name}
           </Heading>
 
           <Text tone="muted">
@@ -87,7 +87,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
             rel="noopener noreferrer nofollow"
             className="mt-2 inline-flex w-fit items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
           >
-            레고 공식 페이지에서 보기 ↗
+            제조사 공식 페이지에서 보기 ↗
           </a>
         </div>
       </header>
@@ -107,6 +107,14 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
                 체결 데이터가 없는 상태와 구분되는 일시적인 조회 오류입니다. 잠시 후 다시 확인해
                 주세요.
               </Text>
+              <LinkButton
+                href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
+                size="sm"
+                variant="secondary"
+                className="mt-1 self-start"
+              >
+                시세판에서 다시 확인
+              </LinkButton>
             </div>
           ) : snapshot.state === "EMPTY" ? (
             <div className="flex flex-col gap-2 py-4">
@@ -115,7 +123,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
               </Badge>
               <Text weight="semibold">아직 체결 시세가 없어요</Text>
               <Text size="sm" tone="muted">
-                GoLe에서 결제하고 구매를 확정한 거래가 생기면 실제 체결가가 여기에 쌓여요.
+                플랫폼 결제가 열리고 구매확정된 거래가 생기면 검증된 체결가가 여기에 쌓여요.
               </Text>
             </div>
           ) : snapshot.state === "OBSERVATIONS_ONLY" ? (
@@ -206,7 +214,21 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
         <div className="mt-4">
           <ListingGrid
             listings={listings}
-            emptyMessage={`아직 등록된 ${set.name} 매물이 없습니다. 가장 먼저 판매해 보세요.`}
+            emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
+            emptyAction={
+              <div className="flex flex-wrap justify-center gap-2">
+                <LinkButton href="/community" size="sm">
+                  브릭 이야기 보기
+                </LinkButton>
+                <LinkButton
+                  href="/chat?compose=support&category=PRODUCT_FEEDBACK"
+                  size="sm"
+                  variant="ghost"
+                >
+                  등록 준비 문의
+                </LinkButton>
+              </div>
+            }
           />
         </div>
       </section>

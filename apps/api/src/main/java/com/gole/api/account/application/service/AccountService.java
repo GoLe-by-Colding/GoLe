@@ -23,6 +23,7 @@ import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.EmailVerificationChallenge;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
 import com.gole.api.account.domain.model.VerificationCode;
@@ -63,6 +64,7 @@ public class AccountService
     private final Clock clock;
     private final SessionPolicyProperties sessionPolicy;
     private final PolicyAcceptanceService policyAcceptances;
+    private final OnboardingProperties onboardingProperties;
 
     public AccountService(
             AccountRepositoryPort accountRepository,
@@ -74,7 +76,8 @@ public class AccountService
             SessionStorePort sessionStore,
             Clock clock,
             SessionPolicyProperties sessionPolicy,
-            PolicyAcceptanceService policyAcceptances) {
+            PolicyAcceptanceService policyAcceptances,
+            OnboardingProperties onboardingProperties) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.verificationCodeSender = verificationCodeSender;
@@ -85,6 +88,7 @@ public class AccountService
         this.clock = clock;
         this.sessionPolicy = sessionPolicy;
         this.policyAcceptances = policyAcceptances;
+        this.onboardingProperties = onboardingProperties;
     }
 
     @Override
@@ -111,24 +115,32 @@ public class AccountService
         }
 
         PasswordHash hash = passwordHasher.hash(command.rawPassword());
-        VerificationCode code = new VerificationCode(verificationCodeGenerator.generateCode(), Instant.now(clock));
+        Instant now = Instant.now(clock);
+        String rawCode = verificationCodeGenerator.generateCode();
+        VerificationCode outboundCode = new VerificationCode(rawCode, now);
+        EmailVerificationChallenge challenge =
+                new EmailVerificationChallenge(passwordHasher.hash(rawCode).value(), now);
 
-        Account account = Account.register(identifierGenerator.newAccountId(), email, hash, code);
+        Account account = Account.register(identifierGenerator.newAccountId(), email, hash, challenge);
         Account saved = accountRepository.save(account);
         policyAcceptances.record(saved.getId(), command.policyAcceptance(), Channel.EMAIL);
 
         // 요구사항 1.1: 인증 코드 발송
-        verificationCodeSender.send(email, code);
+        verificationCodeSender.send(email, outboundCode);
         return saved.getId();
     }
 
     @Override
+    @Transactional(noRollbackFor = VerificationException.class)
     public void verify(VerifyEmailCommand command) {
         Email email = new Email(command.email());
         Account account = accountRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
         try {
-            account.verify(command.code(), Instant.now(clock)); // 1.4 성공 / 1.5 만료
+            account.verify(
+                    command.code(),
+                    Instant.now(clock),
+                    (candidate, codeHash) -> passwordHasher.matches(candidate, new PasswordHash(codeHash)));
             accountRepository.save(account);
         } catch (VerificationException ex) {
             // 코드 불일치 횟수도 보안 상태이므로 실패 응답 전에 영속화한다.
@@ -138,6 +150,7 @@ public class AccountService
     }
 
     @Override
+    @Transactional
     public void resend(ResendVerificationCommand command) {
         Email email = new Email(command.email());
         Optional<Account> found = accountRepository.findByEmail(email);
@@ -147,13 +160,24 @@ public class AccountService
         }
         Account account = found.get();
         Instant now = Instant.now(clock);
-        VerificationCode code = new VerificationCode(verificationCodeGenerator.generateCode(), now);
-        account.reissueVerificationCode(code, now);
+        EmailVerificationChallenge existingChallenge = account.getVerificationChallenge();
+        if (existingChallenge != null
+                && now.isBefore(existingChallenge.issuedAt().plusSeconds(60))) {
+            // 미가입 이메일과 동일한 204 응답을 유지한다. 공개 요청의 원자적 60초 쿨다운은
+            // Redis 한도에서 먼저 적용되며, 이 검사는 다른 내부 호출도 메일을 중복 발송하지 않게 한다.
+            return;
+        }
+        String rawCode = verificationCodeGenerator.generateCode();
+        VerificationCode outboundCode = new VerificationCode(rawCode, now);
+        EmailVerificationChallenge challenge =
+                new EmailVerificationChallenge(passwordHasher.hash(rawCode).value(), now);
+        account.reissueVerificationCode(challenge, now);
         accountRepository.save(account);
-        verificationCodeSender.send(email, code);
+        verificationCodeSender.send(email, outboundCode);
     }
 
     @Override
+    @Transactional(noRollbackFor = InvalidCredentialsException.class)
     public SignInResult signIn(SignInCommand command) {
         Email email = new Email(command.email());
         if (command.rawPassword() == null || utf8Length(command.rawPassword()) > MAX_PASSWORD_BYTES) {
@@ -186,7 +210,11 @@ public class AccountService
         String token = sessionToken.issue(account);
         Instant issuedAt = Instant.now(clock);
         sessionStore.store(token, account.getId(), account.getRole(), issuedAt, issuedAt, initialStoreTtl());
-        return new SignInResult(account.getId(), token, account.getRole());
+        return new SignInResult(
+                account.getId(),
+                token,
+                account.getRole(),
+                account.isOnboardingRequired(onboardingProperties.phoneVerificationRequired()));
     }
 
     @Override
@@ -210,8 +238,11 @@ public class AccountService
         return principal
                 .flatMap(p -> accountRepository.findById(p.accountId()))
                 .filter(account -> !account.isSuspended())
-                .map(account ->
-                        new CurrentSession(account.getId(), account.getEmail().value(), account.getRole()));
+                .map(account -> new CurrentSession(
+                        account.getId(),
+                        account.getEmail().value(),
+                        account.getRole(),
+                        account.isOnboardingRequired(onboardingProperties.phoneVerificationRequired())));
     }
 
     @Override

@@ -38,12 +38,36 @@ async function mockProfileApis(page: Page): Promise<void> {
   await page.route("**/api/v1/accounts/me", (route) =>
     route.fulfill({ json: { accountId: "acc-1", email: "seller@gole.test", role: "USER" } }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다 — 목킹 안 하면 실제
+  // 백엔드 401이 위 알림 폴링과 똑같이 전역 stale-session 정리를 먼저 실행시킨다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
+  await page.route("**/api/v1/accounts/me/third-party-provision-consents/current", (route) =>
+    route.fulfill({
+      json: { noticeVersion: "2026-09-04", consented: false, lastDecisionAt: null },
+    }),
+  );
   await page.route("**/api/v1/config/launch", (route) =>
     route.fulfill({
       json: {
         stage: 2,
         tradeMode: "MANUAL_SETTLEMENT",
         features: { payments: true, reviews: true, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
         updatedAt: "2026-09-03T00:00:00Z",
       },
     }),
@@ -253,5 +277,66 @@ test.describe("내 정보", () => {
     await expect
       .poll(() => page.evaluate(() => window.localStorage.getItem("gole.session")))
       .toBeNull();
+  });
+
+  test("회원 탈퇴 접수 직후 계정 관련 브라우저 값만 정리한다", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("gole.buyer-phone", "01012345678");
+      window.localStorage.setItem("gole.buyer-name", "테스트 구매자");
+      window.localStorage.setItem("gole.unrelated-preference", "keep");
+      window.sessionStorage.setItem("gole.order.payment-attempted:order-1", "1");
+      window.sessionStorage.setItem("gole.order.payment-attempted:order-2", "1");
+      window.sessionStorage.setItem("gole.unrelated-tab-state", "keep");
+    });
+    await page.route("**/api/v1/accounts/me/third-party-provision-consents/current", (route) =>
+      route.fulfill({
+        json: { noticeVersion: "2026-09-04", consented: false, lastDecisionAt: null },
+      }),
+    );
+    await page.route("**/api/v1/accounts/me/deletion-verifications", (route) =>
+      route.fulfill({ status: 204 }),
+    );
+    await page.route("**/api/v1/accounts/me/deletion-requests", (route) =>
+      route.fulfill({
+        status: 202,
+        json: {
+          requestId: "account-deletion-request-1",
+          status: "READY",
+          blockers: [],
+          requestedAt: "2026-09-04T00:00:00Z",
+        },
+      }),
+    );
+    page.on("dialog", (dialog) => void dialog.accept());
+
+    await page.goto("/profile/security");
+    await page.getByRole("button", { name: "탈퇴 본인확인 코드 받기" }).click();
+    await page.getByLabel("현재 계정 이메일").fill("seller@gole.test");
+    await page.getByLabel("확인 문구").fill("회원 탈퇴");
+    await page.getByLabel("이메일 본인확인 코드").fill("123456");
+    await page.getByRole("button", { name: "회원 탈퇴 요청" }).click();
+
+    await expect(page).toHaveURL(/\/login\?deletionRequested=1/);
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          session: window.localStorage.getItem("gole.session"),
+          buyerPhone: window.localStorage.getItem("gole.buyer-phone"),
+          buyerName: window.localStorage.getItem("gole.buyer-name"),
+          paymentAttempt1: window.sessionStorage.getItem("gole.order.payment-attempted:order-1"),
+          paymentAttempt2: window.sessionStorage.getItem("gole.order.payment-attempted:order-2"),
+          unrelatedLocal: window.localStorage.getItem("gole.unrelated-preference"),
+          unrelatedSession: window.sessionStorage.getItem("gole.unrelated-tab-state"),
+        })),
+      )
+      .toEqual({
+        session: null,
+        buyerPhone: null,
+        buyerName: null,
+        paymentAttempt1: null,
+        paymentAttempt2: null,
+        unrelatedLocal: "keep",
+        unrelatedSession: "keep",
+      });
   });
 });

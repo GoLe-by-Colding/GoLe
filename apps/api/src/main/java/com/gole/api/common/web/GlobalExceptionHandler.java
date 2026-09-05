@@ -5,6 +5,7 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.DomainException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.exception.TooManyRequestsException;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.operations.OperationalEvent;
@@ -37,9 +38,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-/**
- * inbound 웹 어댑터 공통 예외 변환. 도메인 예외를 HTTP 상태/표준 바디로 매핑한다.
- */
+/** inbound 웹 어댑터 공통 예외 변환. 도메인 예외를 HTTP 상태/표준 바디로 매핑한다. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -97,6 +96,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(ServiceUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
+    }
+
     @ExceptionHandler(PaymentGatewayUnavailableException.class)
     public ResponseEntity<ErrorResponse> handlePaymentGatewayUnavailable(
             PaymentGatewayUnavailableException ex, HttpServletRequest request) {
@@ -151,11 +156,10 @@ public class GlobalExceptionHandler {
     /**
      * 요청 파라미터 타입 변환 실패 → 400. (예: {@code ?condition=오타}, {@code ?minPrice=abc})
      *
-     * <p>이 핸들러가 <b>반드시 있어야 하는</b> 이유 — 아래 {@code @ExceptionHandler(Exception.class)}
-     * catch-all이 Spring 기본 400 매핑({@code DefaultHandlerExceptionResolver})보다 먼저 잡는다.
-     * 그래서 이 핸들러가 없으면 클라이언트의 단순 오타가 500으로 나가고, 그때마다
-     * {@code handleUnexpected}가 ERROR 등급 운영 이벤트까지 발행한다. 쿼리스트링을 훑는 봇 하나로
-     * 운영 알림 채널이 막힌다.
+     * <p>이 핸들러가 <b>반드시 있어야 하는</b> 이유 — 아래 {@code @ExceptionHandler(Exception.class)} catch-all이
+     * Spring 기본 400 매핑({@code DefaultHandlerExceptionResolver})보다 먼저 잡는다. 그래서 이 핸들러가 없으면 클라이언트의 단순
+     * 오타가 500으로 나가고, 그때마다 {@code handleUnexpected}가 ERROR 등급 운영 이벤트까지 발행한다. 쿼리스트링을 훑는 봇 하나로 운영 알림 채널이
+     * 막힌다.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {

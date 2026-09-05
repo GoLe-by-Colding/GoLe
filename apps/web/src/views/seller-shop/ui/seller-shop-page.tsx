@@ -96,7 +96,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                 1:1 대화
               </LinkButton>
             ) : null}
-            <FollowButton sellerId={sellerId} />
+            {session?.accountId !== sellerId ? <FollowButton sellerId={sellerId} /> : null}
           </div>
         </div>
 
@@ -124,7 +124,15 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
 
         {reviewsOpen ? (
           <section className="flex flex-col gap-3 pt-4">
-            <Heading level={2}>거래 후기</Heading>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Heading level={2}>거래 후기</Heading>
+              <Link
+                href="/review-policy"
+                className="text-xs font-semibold text-brand-700 underline underline-offset-2"
+              >
+                후기 작성·게시·평점·삭제 기준
+              </Link>
+            </div>
             {reviews.length === 0 ? (
               <Text tone="muted">아직 등록된 후기가 없습니다.</Text>
             ) : (

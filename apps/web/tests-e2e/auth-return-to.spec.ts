@@ -21,6 +21,23 @@ async function mockMe(page: Page, role: "USER" | "ADMIN"): Promise<void> {
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 }
 
 /** 로그인 API를 흉내 내 실제 폼 제출로 복귀 동작까지 확인한다. */
@@ -85,6 +102,68 @@ test.describe("returnTo 허용목록", () => {
     await page.goto(`/login?returnTo=${encodeURIComponent(injected)}`);
     await expect(notice(page)).toContainText("이전 화면");
     await expect(notice(page)).not.toContainText(injected);
+  });
+});
+
+test.describe("소셜 로그인 복귀 경로", () => {
+  test("인가 URL 요청에 검증된 returnTo를 함께 보낸다", async ({ page }) => {
+    let requestedReturnTo: string | null = null;
+    await page.route("**/api/v1/auth/oauth/providers", (route) =>
+      route.fulfill({ json: ["google"] }),
+    );
+    await page.route("**/api/v1/auth/oauth/google/authorize-url", async (route) => {
+      requestedReturnTo =
+        (route.request().postDataJSON() as { returnTo?: string }).returnTo ?? null;
+      await route.fulfill({ json: { url: "/oauth-started" } });
+    });
+
+    await page.goto(`/login?returnTo=${encodeURIComponent("/collection?tab=sets")}`);
+    await page.getByRole("button", { name: "Google로 로그인" }).click();
+
+    await expect.poll(() => requestedReturnTo).toBe("/collection?tab=sets");
+  });
+
+  test("콜백 성공 뒤 state에 결박된 원래 화면으로 이동한다", async ({ page }) => {
+    await mockMe(page, "USER");
+    await page.route("**/api/v1/auth/oauth/google/callback", (route) =>
+      route.fulfill({
+        json: {
+          accountId: "acc-1",
+          sessionToken: "session-token",
+          role: "USER",
+          newAccount: false,
+          onboardingRequired: false,
+          returnTo: "/privacy?source=social",
+        },
+      }),
+    );
+
+    await page.goto("/auth/callback/google?code=oauth-code&state=oauth-state");
+
+    await expect(page).toHaveURL(/\/privacy\?source=social$/);
+  });
+
+  test("provider 조회 실패를 준비 중으로 숨기지 않고 다시 확인한다", async ({ page }) => {
+    let recovered = false;
+    let attempts = 0;
+    await page.route("**/api/v1/auth/oauth/providers", (route) => {
+      attempts += 1;
+      return recovered
+        ? route.fulfill({ json: ["google"] })
+        : route.fulfill({ status: 503, json: { code: "TEMPORARY", message: "temporary" } });
+    });
+
+    await page.goto("/login");
+    await expect(page.getByText("소셜 로그인 설정을 확인하지 못했습니다.")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Google로 계속하기 (확인 실패)" }),
+    ).toBeDisabled();
+
+    recovered = true;
+    await page.getByRole("button", { name: "다시 시도" }).click();
+
+    await expect(page.getByRole("button", { name: "Google로 로그인" })).toBeEnabled();
+    expect(attempts).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -224,8 +303,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await page.route("**/api/v1/policies/current", (route) =>
       route.fulfill({
         json: {
-          termsVersion: "2026-09-03",
-          privacyVersion: "2026-09-03",
+          termsVersion: "2026-09-04",
+          privacyVersion: "2026-09-04",
+          thirdPartyProvisionVersion: "2026-09-04",
           minimumAge: 14,
         },
       }),

@@ -2,7 +2,7 @@
   "name": "gole",
   "version": "0.1.0",
   "private": true,
-  "description": "GoLe - LEGO Marketplace monorepo",
+  "description": "GoLe - 브릭 중고거래 플랫폼 모노레포",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:mobile": "pnpm --filter mobile start",
@@ -10,16 +10,30 @@
     "test:web": "pnpm --filter web test",
     "e2e:web": "pnpm --filter web e2e",
     "e2e:seed": "bash scripts/seed-e2e-accounts.sh",
+    "sync:dev-env": "bash scripts/sync-dev-env.sh",
     "dev:api": "GOLE_CATALOG_SEED=true GOLE_LISTING_SEED=true GOLE_PRICING_SEED=true GOLE_PRICING_INCLUDE_DEMO=true GOLE_PRICING_INCLUDE_LEGACY=true GOLE_COMMUNITY_SEED=true GOLE_REPORT_SEED=true GOLE_REVIEW_SEED=true GOLE_MEDIA_SEED=true node scripts/gradle.mjs --local bootRun",
     "dev:api:e2e": "SPRING_PROFILES_ACTIVE=e2e GOLE_ENVIRONMENT=e2e REDIS_DATABASE=15 PORTONE_ENABLED=false GOLE_SETTLEMENT_MODE=MANUAL GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED=true GOLE_SETTLEMENT_PAYOUT_HOLDBACK=PT0S node scripts/gradle.mjs bootRun",
     "build:api": "node scripts/gradle.mjs build",
     "test:api": "node scripts/gradle.mjs test",
-    "infra:up": "docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init",
+    "infra:up": "docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps minio-init && docker compose run --rm --no-deps mongo-init",
+    "infra:agent:up": "docker compose --profile support-agent up -d --wait support-agent",
+    "infra:agent:down": "docker compose --profile support-agent stop support-agent",
     "infra:down": "docker compose down",
-    "infra:reset": "docker compose down -v && docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps mongo-init"
+    "infra:reset": "docker compose down -v && docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps minio-init && docker compose run --rm --no-deps mongo-init"
   },
   "engines": {
     "node": ">=22"
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@<2.0.0": "1.1.18",
+      "brace-expansion@>=5.0.0 <6.0.0": "5.0.9",
+      "browserslist": "4.28.7",
+      "handlebars": "4.7.9",
+      "js-yaml": "4.3.1",
+      "nanoid@<4.0.0": "3.3.18",
+      "postcss@<9.0.0": "8.5.23"
+    }
   },
   "packageManager": "pnpm@10.30.3"
 }

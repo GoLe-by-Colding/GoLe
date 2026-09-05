@@ -2,6 +2,7 @@ package com.gole.api.media.adapter.out.s3;
 
 import com.gole.api.media.application.port.out.BundledMediaPort;
 import com.gole.api.media.application.port.out.ObjectStoragePort;
+import com.gole.api.media.application.service.MediaLifecycleProperties;
 import com.gole.api.media.application.service.MediaService;
 import java.net.URI;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -18,7 +19,7 @@ import software.amazon.awssdk.services.s3.S3Configuration;
  * application 레이어(MediaService)를 프레임워크로부터 분리하기 위해 빈 등록은 여기서 한다.
  */
 @Configuration
-@EnableConfigurationProperties(StorageProperties.class)
+@EnableConfigurationProperties({StorageProperties.class, MediaLifecycleProperties.class})
 public class S3Config {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(S3Config.class);
@@ -56,8 +57,16 @@ public class S3Config {
             ObjectStoragePort objectStorage,
             BundledMediaPort bundledMedia,
             com.gole.api.media.application.port.out.ImageProcessorPort imageProcessor,
+            com.gole.api.media.application.port.in.ManageMediaAssetsUseCase mediaAssets,
+            com.gole.api.media.application.port.in.AuthorizeMediaReadUseCase mediaReadAuthorization,
             StorageProperties properties) {
         return new MediaService(
-                objectStorage, bundledMedia, imageProcessor, properties.publicBaseUrl(), properties.maxImageBytes());
+                objectStorage,
+                bundledMedia,
+                imageProcessor,
+                mediaAssets,
+                mediaReadAuthorization,
+                properties.publicBaseUrl(),
+                properties.maxImageBytes());
     }
 }

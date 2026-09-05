@@ -3,6 +3,7 @@ package com.gole.api.order.adapter.out.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import org.junit.jupiter.api.Test;
 
 class StubPaymentGatewayAdapterTest {
@@ -18,14 +19,20 @@ class StubPaymentGatewayAdapterTest {
     }
 
     @Test
-    void productionStubNeverSimulatesPaymentOrRefund() {
-        StubPaymentGatewayAdapter adapter = new StubPaymentGatewayAdapter("production");
+    void publicEnvironmentStubNeverSimulatesPaymentOrRefund() {
+        for (String environment : new String[] {"staging", "production"}) {
+            StubPaymentGatewayAdapter adapter = new StubPaymentGatewayAdapter(environment);
 
-        assertThatThrownBy(() -> adapter.preparePayment("order-1", 10_000))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("refusing to simulate");
-        assertThatThrownBy(() -> adapter.verifyPayment("order-1", 10_000)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> adapter.refund("order-1", 10_000)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> adapter.isFullyRefunded("order-1", 10_000)).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> adapter.requireAvailable("order-1"))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> adapter.preparePayment("order-1", 10_000))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> adapter.verifyPayment("order-1", 10_000))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> adapter.refund("order-1", 10_000))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> adapter.isFullyRefunded("order-1", 10_000))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+        }
     }
 }

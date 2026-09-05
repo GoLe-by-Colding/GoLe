@@ -19,18 +19,24 @@ jobs:
   deploy:
     name: Deploy to GCP production
     # PR용 CI 완료 이벤트는 배포하지 않고, main push의 성공한 CI만 배포한다.
+    # 기존 host에 새 root helper/rollout lock/전용 runner를 이관하기 전에는 main
+    # merge가 되어도 배포 job 자체를 만들지 않는다.
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.conclusion == 'success')
+      vars.GOLE_PRODUCTION_HOST_READY == 'true' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'success'))
     runs-on: [self-hosted, Linux, X64, gole-gcp-production]
-    timeout-minutes: 30
+    # 첫 legacy strict rollout은 digest 고정으로 data image 변경을 감지해 논리 백업을
+    # 수행한다. 백업 command별 순차 상한(최대 32분)에 build/검증/rollback 여유를 더한다.
+    # VM 비용의 hard guard와 절대 종료 시각은 root broker가 이 job과 독립적으로 강제한다.
+    timeout-minutes: 60
     steps:
-      - name: Verify manually selected main SHA passed CI
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Verify candidate is the current main with successful CI
         env:
           GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: |
           python3 - <<'PY'
           import json
@@ -38,30 +44,79 @@ jobs:
           import urllib.request
 
           repository = os.environ["GITHUB_REPOSITORY"]
-          sha = os.environ["GITHUB_SHA"]
-          url = (
+          sha = os.environ["CANDIDATE_SHA"]
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          ref_request = urllib.request.Request(
+              f"https://api.github.com/repos/{repository}/git/ref/heads/main",
+              headers=headers,
+          )
+          with urllib.request.urlopen(ref_request, timeout=15) as response:
+              current_main = json.load(response).get("object", {}).get("sha")
+          if current_main != sha:
+              raise SystemExit(
+                  "배포 후보가 현재 main이 아닙니다. 과거 CI 재실행이나 뒤처진 배포를 거부합니다."
+              )
+
+          runs_url = (
               f"https://api.github.com/repos/{repository}/actions/workflows/ci.yml/runs"
               "?branch=main&event=push&status=completed&per_page=100"
           )
-          request = urllib.request.Request(
-              url,
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              },
-          )
+          request = urllib.request.Request(runs_url, headers=headers)
           with urllib.request.urlopen(request, timeout=15) as response:
               runs = json.load(response).get("workflow_runs", [])
           if not any(
               run.get("head_sha") == sha and run.get("conclusion") == "success"
               for run in runs
           ):
-              raise SystemExit("선택한 main SHA의 성공한 CI 실행을 찾지 못했습니다.")
+              raise SystemExit("현재 main SHA의 성공한 push CI 실행을 찾지 못했습니다.")
           PY
 
-      # Discord 라우팅 값은 서버 환경파일에 저장하지 않고 배포 시점에만 주입한다.
-      # Compose가 이 실행의 환경변수를 backend 컨테이너에 전달한다.
+      - name: Install root-owned Discord routing overlay
+        env:
+          DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
+          DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+          DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
+          DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
+          DISCORD_SUPPORT_WEBHOOK_URL: ${{ secrets.DISCORD_SUPPORT_WEBHOOK_URL }}
+          DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
+        run: |
+          set -Eeuo pipefail
+          required=(
+            DISCORD_OPERATIONS_WEBHOOK_URL
+            DISCORD_ACCOUNT_WEBHOOK_URL
+            DISCORD_PAYMENT_WEBHOOK_URL
+          )
+          for variable_name in "${required[@]}"; do
+            if [ -z "${!variable_name:-}" ]; then
+              echo "필수 Discord GitHub secret 누락: ${variable_name}" >&2
+              exit 1
+            fi
+          done
+          operations="$DISCORD_OPERATIONS_WEBHOOK_URL"
+          deploy="${DISCORD_DEPLOY_WEBHOOK_URL:-$operations}"
+          support="${DISCORD_SUPPORT_WEBHOOK_URL:-$operations}"
+          [[ "$DISCORD_SUPPRESS_NOTIFICATIONS" =~ ^(true|false)$ ]] || {
+            echo "Discord suppress 설정은 true 또는 false여야 합니다." >&2
+            exit 1
+          }
+          set +x
+          printf '%s\n' \
+            'GOLE_DISCORD_ALERTS_ENABLED=true' \
+            "DISCORD_DEPLOY_WEBHOOK_URL=$deploy" \
+            "DISCORD_OPERATIONS_WEBHOOK_URL=$operations" \
+            "DISCORD_ACCOUNT_WEBHOOK_URL=$DISCORD_ACCOUNT_WEBHOOK_URL" \
+            "DISCORD_PAYMENT_WEBHOOK_URL=$DISCORD_PAYMENT_WEBHOOK_URL" \
+            "DISCORD_SUPPORT_WEBHOOK_URL=$support" \
+            "DISCORD_SUPPRESS_NOTIFICATIONS=$DISCORD_SUPPRESS_NOTIFICATIONS" |
+            sudo -n /usr/local/sbin/gole-hostctl discord-overlay-install
+
+      # 알림 전송과 overlay 요청에는 GitHub Secret을 쓰지만 root Compose는 runner
+      # 환경을 받지 않고 방금 검증·설치된 /etc/gole/discord.env만 읽는다.
       - name: Deploy latest main
         id: deploy
         env:
@@ -70,11 +125,11 @@ jobs:
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
-          DISCORD_ACCOUNT_WEBHOOK_URL: ${{ secrets.DISCORD_ACCOUNT_WEBHOOK_URL }}
-          DISCORD_PAYMENT_WEBHOOK_URL: ${{ secrets.DISCORD_PAYMENT_WEBHOOK_URL }}
           GOLE_DISCORD_ALERTS_ENABLED: "true"
           # Billing Budget의 실제비용을 Pub/Sub에서 받아 GoLe 운영 Discord로 중계한다.
-          # 계정 이동 시에는 아래 repository variables만 새 프로젝트/크레딧 기간으로 바꾼다.
+          # 아래 repository variables는 runner 사전 확인·Actions 알림용 mirror다. root
+          # Compose의 source는 bootstrap이 검증·설치한 /etc/gole/infra.env이며, 이전 시
+          # 코드/validator/bootstrap 계약과 host를 먼저 갱신한 뒤 이 mirror를 맞춘다.
           GCP_BUDGET_PUBSUB_SUBSCRIPTION: ${{ vars.GCP_BUDGET_PUBSUB_SUBSCRIPTION }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_CREDIT_AMOUNT_KRW: ${{ vars.GCP_CREDIT_AMOUNT_KRW }}
@@ -115,9 +170,23 @@ jobs:
           # application.yml의 기본값(true)이 이겨서 ERROR 경보까지 푸시 없이 나간다.
           # 야간 검증 때만 repository variable을 true로 올리고, 평시에는 false다.
           DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
-          # SMTP/PortOne 운영 키가 아직 등록되지 않은 공개 검증 환경이다. 키 없이
-          # production 가드를 우회하지 말고 staging으로 정직하게 표시한다.
-          GOLE_ENVIRONMENT: staging
+          # 이 GCP 인스턴스가 실제 단일 운영 서버다. 운영 가드를 staging 명칭으로 우회하지 않는다.
+          # SMTP 자격증명과 공개환경 안전 설정이 불완전하면 배포가 실패하고 이전 컨테이너를 유지한다.
+          GOLE_ENVIRONMENT: production
+          # CoolSMS/승인 템플릿을 실제로 켜기 전까지 신규 가입자는 전화 인증을 건너뛴다.
+          GOLE_ONBOARDING_PHONE_REQUIRED: "false"
+          GOLE_ONBOARDING_LOG_VERIFICATION_CODES: "false"
+          GOLE_VERIFICATION_EMAIL_ENABLED: "true"
+          GOLE_MAIL_HEALTH_ENABLED: "true"
+          GOLE_SESSION_COOKIE_SECURE: "true"
+          GOLE_WEB_ALLOWED_ORIGINS: https://gole.co.kr,https://www.gole.co.kr
+          GOLE_OAUTH_ALLOWED_REDIRECT_URIS: https://gole.co.kr/auth/callback/google,https://gole.co.kr/auth/callback/kakao,https://gole.co.kr/auth/callback/naver
+          GOLE_TERMS_VERSION: "2026-09-04"
+          GOLE_PRIVACY_VERSION: "2026-09-04"
+          SMTP_AUTH: "true"
+          SMTP_STARTTLS: "true"
+          SMTP_STARTTLS_REQUIRED: "true"
+          SMTP_SSL_CHECKSERVERIDENTITY: "true"
           # 공개 환경에는 데모 데이터를 절대 적재하지 않는다. 기본값도 false지만 배포 계약에
           # 명시해 설정 회귀를 막는다.
           GOLE_CATALOG_SEED: "false"
@@ -130,39 +199,109 @@ jobs:
           GOLE_REVIEW_SEED: "false"
           # 번들 SVG는 classpath에서 직접 제공하므로 MinIO 시드 재업로드가 필요 없다.
           GOLE_MEDIA_SEED: "false"
-          # NEXT_PUBLIC_*은 Next.js 빌드 타임에 번들로 인라인된다. 컨테이너가 재생성돼
-          # .env.production이 없어져도 repository variables에서 매번 동일하게 주입한다.
-          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
-          NEXT_PUBLIC_PAYMENT_MODE: ${{ vars.NEXT_PUBLIC_PAYMENT_MODE }}
-          NEXT_PUBLIC_PORTONE_STORE_ID: ${{ vars.NEXT_PUBLIC_PORTONE_STORE_ID }}
-          NEXT_PUBLIC_PORTONE_CHANNEL_KEY: ${{ vars.NEXT_PUBLIC_PORTONE_CHANNEL_KEY }}
-          NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: ${{ vars.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY }}
-        run: bash /app/scripts/deploy.sh all
+          # 사용자 모집 단계에서는 결제와 정산을 코드 배포로만 열 수 있게 고정한다.
+          # Secret/Repository variable의 과거 테스트값이 운영 결제를 다시 켤 수 없다.
+          PORTONE_ENABLED: "false"
+          GOLE_SETTLEMENT_MODE: DISABLED
+          GOLE_SUPPORT_AGENT_ENABLED: "true"
+          GOLE_SUPPORT_AGENT_GRPC_TARGET: support-agent:50051
+          GOLE_SUPPORT_AGENT_TIMEOUT: PT2S
+          # API/site/payment mode는 운영 Compose에서 고정한다. PortOne 채널과 optional
+          # GA/GTM ID는 root-owned production Secret의 exact version만 source로 사용한다.
+          NEXT_PUBLIC_API_BASE_URL: https://gole.co.kr
+          NEXT_PUBLIC_SITE_URL: https://gole.co.kr
+          NEXT_PUBLIC_PAYMENT_MODE: disabled
+        run: |
+          set -Eeuo pipefail
+          cd /app
+          if [ ! -f /run/lock/gole-production-rollout.lock ] ||
+            [ -L /run/lock/gole-production-rollout.lock ]; then
+            echo "운영 rollout lock이 설치되지 않았습니다." >&2
+            exit 1
+          fi
+          exec 7>>/run/lock/gole-production-rollout.lock
+          flock -n 7 || {
+            echo "다른 운영 배포 또는 환경 동기화가 진행 중입니다." >&2
+            exit 1
+          }
+          # checkout HEAD가 아니라 root 소유 LKG marker만 rollback 기준으로 신뢰한다.
+          # 신규 VM은 env/version만 안전하게 bootstrap된 빈 상태임을 hostctl이 증명한
+          # 경우에 한해 rollback 대상 없이 최초 배포한다.
+          initial_deploy=0
+          if ! previous_sha="$(sudo -n /usr/local/sbin/gole-hostctl deployment-read-sha 2>/dev/null)"; then
+            sudo -n /usr/local/sbin/gole-hostctl deployment-is-uninitialized
+            initial_deploy=1
+            previous_sha="$(git rev-parse HEAD)"
+          fi
+          restore_checkout_on_failure() {
+            status=$?
+            if [ "$status" -ne 0 ] && [ -n "${previous_sha:-}" ]; then
+              git reset --hard "$previous_sha" >/dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap restore_checkout_on_failure EXIT
+          git fetch --prune origin main
+          if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+            echo "운영 checkout에 커밋되지 않은 변경이 있어 배포를 중단한다" >&2
+            git status --short >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "DEPLOY_SHA는 40자리 Git SHA여야 한다" >&2
+            exit 1
+          fi
+          git cat-file -e "${previous_sha}^{commit}"
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          if [ "$(git rev-parse refs/remotes/origin/main)" != "$DEPLOY_SHA" ]; then
+            echo "배포 시작 시점의 origin/main과 CI 검증 SHA가 달라 배포를 중단한다" >&2
+            exit 1
+          fi
+          if [ "$initial_deploy" = 0 ] &&
+            ! git merge-base --is-ancestor "$previous_sha" "$DEPLOY_SHA"; then
+            echo "배포 후보가 마지막 정상 배포의 후속 커밋이 아니어서 자동 롤백을 거부한다" >&2
+            exit 1
+          fi
+          git reset --hard "$DEPLOY_SHA"
+          # workflow 파일이 바뀌는 첫 rollout도 방금 CI를 통과한 새 deploy.sh를 사용한다.
+          # 실패 시에는 시작 직전 SHA와 이미지 태그로 복구한다.
+          GOLE_ROLLOUT_LOCK_HELD=1 GOLE_INITIAL_DEPLOY="$initial_deploy" \
+            ROLLBACK_SHA="$previous_sha" DEPLOY_SHA="$DEPLOY_SHA" \
+            bash /app/scripts/deploy.sh all
+          trap - EXIT
 
-      # 첫 rollout은 실행 시작 시점의 이전 deploy.sh inode를 사용하므로, 새 파일로
-      # 갱신된 뒤 workflow 자체에서도 watchdog을 멱등 설치한다.
+      # deploy.sh 성공 뒤에도 workflow 자체에서 watchdog을 멱등 설치해 호스트 수준
+      # 보호가 실제 활성 상태인지 별도로 검증한다.
       - name: Install fail-closed host watchdog
         id: watchdog
         run: |
-          sudo install -m 0755 /app/infra/gcp/scripts/cost-guard-watchdog.sh \
-            /usr/local/sbin/gole-cost-guard-watchdog
-          sudo install -m 0644 /app/infra/gcp/systemd/gole-cost-guard-watchdog.service \
-            /etc/systemd/system/gole-cost-guard-watchdog.service
-          sudo install -m 0644 /app/infra/gcp/systemd/gole-cost-guard-watchdog.timer \
-            /etc/systemd/system/gole-cost-guard-watchdog.timer
-          sudo systemctl daemon-reload
-          sudo systemctl enable --now gole-cost-guard-watchdog.timer
+          sudo -n /usr/local/sbin/gole-hostctl watchdog-install
+          sudo -n /usr/local/sbin/gole-hostctl watchdog-active
 
       - name: Verify production readiness
         id: readiness
-        run: curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness
+        run: |
+          # 첫 legacy migration의 one-way ratchet이 끝나지 않았는데도 앱 health만으로
+          # 성공 처리하지 않는다. marker는 root-owned 0644라 runner가 secret 없이
+          # 부재만 검증할 수 있고, dangling symlink도 별도로 거부한다.
+          if [ -e /etc/gole/metadata-migration.pending ] ||
+            [ -L /etc/gole/metadata-migration.pending ]; then
+            echo "metadata isolation migration이 아직 완료되지 않았습니다." >&2
+            exit 1
+          fi
+          /usr/local/libexec/gole/runner-start-allowed.sh
+          deployed_sha="$(sudo -n /usr/local/sbin/gole-hostctl deployment-read-sha)"
+          sudo -n /usr/local/sbin/gole-hostctl deployment-verify-runtime "$deployed_sha"
+          sudo -n /usr/local/sbin/gole-hostctl deployment-budget-healthy
+          sudo -n /usr/local/sbin/gole-hostctl watchdog-active
 
       # deploy.sh가 실패했다면 그쪽에서 이미 실패 알림을 한 건 보냈다. 여기서 또 보내지
       # 않도록 "배포는 성공했는데 공개 readiness가 죽은" 경우로만 좁힌다. 배포 실패 알림은
       # 어느 경로로 실패하든 실행당 정확히 한 건이어야 한다.
       - name: Notify post-deploy readiness failure
-        if: ${{ failure() && steps.readiness.outcome == 'failure' }}
+        if: >-
+          ${{ failure() && steps.deploy.outcome == 'success' &&
+              steps.readiness.outcome == 'failure' }}
         env:
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
@@ -186,8 +325,9 @@ jobs:
             --data "{\"content\":\"${content}\",\"avatar_url\":\"${DISCORD_AVATAR_URL}\",\"allowed_mentions\":{\"parse\":[]}${flags}}" \
             "$webhook_url" >/dev/null
 
-      - name: Fail closed when deployment or watchdog installation failed
-        if: >-
-          ${{ failure() &&
-              (steps.deploy.outcome == 'failure' || steps.watchdog.outcome == 'failure') }}
-        run: sudo systemctl poweroff --no-block
+      - name: Fail closed only when both host and container cost guards are unavailable
+        if: ${{ failure() && steps.watchdog.outcome == 'failure' }}
+        run: |
+          # Docker socket이나 일반 poweroff 권한은 runner에 주지 않는다. root
+          # helper가 host watchdog 또는 budget-relay health를 직접 판단한다.
+          sudo -n /usr/local/sbin/gole-hostctl cost-guard-fail-closed

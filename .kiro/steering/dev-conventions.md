@@ -114,7 +114,8 @@ cd /app && pnpm --filter web build
 ```
 
 - Next.js 16.2.7, React 19, Node 22, pnpm 10.30.3
-- `NEXT_PUBLIC_API_BASE_URL=https://gole.kscold.com` (이미 빌드됨)
+- 로컬 개발은 `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`을 사용함
+- 운영 빌드는 `NEXT_PUBLIC_API_BASE_URL=https://gole.co.kr`을 사용하며 `main` CD에서 생성함
 - 실행: `pnpm exec next start -p 3000` (--cwd /app/apps/web)
 
 ---
@@ -124,45 +125,40 @@ cd /app && pnpm --filter web build
 ### 형식
 
 ```
-<type>(<scope>): <한국어 설명>
+<한국어 제목>
+
+- <변경한 일>함
+- <검증한 일>함
 ```
 
-### type
+제목과 본문을 모두 한국어로 쓰고, 본문은 `- ...함` 형태의 한 줄 항목으로 실제 변경과
+검증을 기록한다. Conventional Commit 영문 type은 필수로 사용하지 않는다.
 
-| type | 용도 |
+### 제목 분류
+
+| 분류 | 용도 |
 |---|---|
-| `feat` | 새 기능 |
-| `fix` | 버그 수정 |
-| `refactor` | 리팩토링 (기능 변경 없음) |
-| `docs` | 문서 |
-| `chore` | 빌드/설정 변경 |
-
-### scope
-
-| scope | 용도 |
-|---|---|
-| `(backend)` | Spring Boot 백엔드 |
-| `(frontend)` | Next.js 프론트엔드 |
-| `(mobile)` | React Native(Expo) 앱 |
-| `(core)` | packages/core — 웹·앱 공유 코어 |
-| `(infra)` | Docker, nginx, 배포 |
-| `(spec)` | .kiro 스펙 문서 |
+| `기능` | 새 기능 |
+| `수정` | 버그·보안 수정 |
+| `개선` | 리팩터링·운영 개선 |
+| `문서` | 문서 변경 |
+| `관리` | 빌드·설정 변경 |
 
 ### 예시
 
-```
-feat(backend): 레고 세트 즐겨찾기 기능 추가
-fix(frontend): 카탈로그 무한 스크롤 끝 감지 오류 수정
-refactor(backend): LegoSetService 포트 분리 개선
-feat(backend): 계정 인증 JWT 토큰 발급 구현
-fix(infra): nginx gole.kscold.com HTTPS 설정 수정
+```text
+기능: 브릭 세트 즐겨찾기를 추가함
+
+- 즐겨찾기 저장과 해제를 연결함
+- 사용자 흐름과 회귀 테스트를 검증함
 ```
 
 ### 절대 금지
 
 - `Co-Authored-By: Claude` 또는 AI 작성 명시 금지
 - 영문 커밋 메시지 (특별한 이유 없는 한)
-- `git commit --amend` 후 force push (main 브랜치)
+- `main` 브랜치 force push
+- 피처 브랜치에서 `--force` 사용 (`--force-with-lease`만 허용)
 
 ---
 
@@ -173,14 +169,18 @@ fix(infra): nginx gole.kscold.com HTTPS 설정 수정
 git checkout -b feat/lego-set-wishlist
 
 # 작업 후 PR 생성
-gh pr create --title "feat: 레고 세트 위시리스트 기능" --body "..."
+gh pr create --title "기능: 브릭 세트 위시리스트를 추가함" --body "$(cat <<'EOF'
+- 즐겨찾기 저장과 해제를 연결함
+- 전체 검증을 통과함
+EOF
+)"
 
 # main 머지 후 배포
 git checkout main && git pull
 # → 배포 절차 (deploy.md 참고)
 ```
 
-PR body는 영어로 작성한다 (오픈소스 기여자 프로그램 대응).
+PR 제목과 본문도 커밋과 같은 한국어 `- ...함` 형식으로 작성한다.
 
 ---
 
@@ -196,7 +196,7 @@ SPRING_DATA_REDIS_HOST=localhost
 ### 프론트엔드
 
 ```
-NEXT_PUBLIC_API_BASE_URL=https://gole.kscold.com
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
 ---

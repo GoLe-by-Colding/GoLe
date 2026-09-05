@@ -30,14 +30,24 @@ export function openDispute(orderId: string, reason: string, detail: string): Pr
 }
 
 export interface OrderContacts {
-  readonly buyerPhone: string | null;
-  readonly sellerPhone: string | null;
+  readonly counterpartPhone: string | null;
   readonly notice: string;
 }
 
-/** 거래 당사자 전용 — 마스킹 없는 전체 연락처(R8.4). */
+export interface MyOrderContact {
+  readonly phone: string | null;
+}
+
+/** 거래 당사자 전용 — 별도 제3자 제공 동의 뒤 상대방 연락처만 최소 공개한다. */
 export function fetchOrderContacts(orderId: string): Promise<OrderContacts> {
   return apiRequest<OrderContacts>(`/api/v1/orders/${orderId}/contacts`, { cache: "no-store" });
+}
+
+/** 카드 결제 프리필 등 본인 용도 — 다른 이용자의 연락처를 반환하지 않는다. */
+export function fetchMyOrderContact(orderId: string): Promise<MyOrderContact> {
+  return apiRequest<MyOrderContact>(`/api/v1/orders/${orderId}/contacts/me`, {
+    cache: "no-store",
+  });
 }
 
 /** 판매자에게 보이는 정산 한 건. 지급 확인(paidAt)까지의 전 구간을 담는다. */

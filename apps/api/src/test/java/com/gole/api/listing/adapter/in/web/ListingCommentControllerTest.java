@@ -3,6 +3,7 @@ package com.gole.api.listing.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
+import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
@@ -43,7 +46,9 @@ class ListingCommentControllerTest {
     private final ListingCommentMongoRepository comments = mock(ListingCommentMongoRepository.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
     private final NotifyUseCase notifications = mock(NotifyUseCase.class);
-    private final ListingCommentController controller = new ListingCommentController(comments, listings, notifications);
+    private final SellerIdentityVerificationService sellerIdentity = mock(SellerIdentityVerificationService.class);
+    private final ListingCommentController controller =
+            new ListingCommentController(comments, listings, notifications, sellerIdentity);
 
     @Test
     void listDoesNotReadCommentsWhenListingIsHidden() {
@@ -98,11 +103,29 @@ class ListingCommentControllerTest {
                 authenticated("buyer-1"));
 
         assertThat(response.authorId()).isEqualTo("buyer-1");
+        verify(sellerIdentity).requireVerifiedSeller("seller-1");
         ArgumentCaptor<NotifyCommand> command = ArgumentCaptor.forClass(NotifyCommand.class);
         verify(notifications).notify(command.capture());
         assertThat(command.getValue())
                 .isEqualTo(new NotifyCommand(
                         "seller-1", NotificationType.COMMENT, "매물 '에펠탑 10307'에 문의가 달렸어요.", "/listings/listing-1"));
+    }
+
+    @Test
+    void createFailsClosedBeforeWriteWhenListingSellerIdentityIsNotReady() {
+        when(listings.getPublicById("listing-1")).thenReturn(listing("seller-1"));
+        doThrow(new ServiceUnavailableException("SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "판매자 신원확인 준비 중"))
+                .when(sellerIdentity)
+                .requireVerifiedSeller("seller-1");
+
+        assertThatThrownBy(() -> controller.create(
+                        "listing-1",
+                        new ListingCommentController.CreateCommentRequest("forged-author", "구매 가능한가요?"),
+                        authenticated("buyer-1")))
+                .isInstanceOf(ServiceUnavailableException.class);
+
+        verify(comments, never()).save(any());
+        verifyNoInteractions(notifications);
     }
 
     private static Listing listing(String sellerId) {

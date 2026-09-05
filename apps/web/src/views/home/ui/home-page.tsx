@@ -8,7 +8,7 @@ import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { formatKrw } from "@shared/lib";
-import { env } from "@shared/config";
+import { env, isPaymentRuntimeAvailable } from "@shared/config";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
@@ -104,7 +104,8 @@ export async function HomePage() {
     loadStats(),
     fetchLaunchConfig(),
   ]);
-  const paymentsOpen = launch.features.payments;
+  const sellerTradingOpen = launch.sellerIdentityVerificationReady;
+  const paymentsOpen = sellerTradingOpen && launch.features.payments && isPaymentRuntimeAvailable();
   // 데이터가 없는 칸을 마케팅 문구로 채우면 "실시간"이라는 라벨이 거짓이 된다.
   const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
     ...(stats.listings > 0
@@ -130,7 +131,9 @@ export async function HomePage() {
               <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
                 {paymentsOpen
                   ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
-                  : "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."}
+                  : sellerTradingOpen
+                    ? "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."
+                    : "체결가 기반 시세 · 브릭 탐색 · 커뮤니티 · 컬렉션."}
                 <br className="max-sm:hidden" />
                 흩어져 있던 브릭 거래를 한곳에서.
               </p>
@@ -157,13 +160,13 @@ export async function HomePage() {
 
               {liveStats.length > 0 ? (
                 <div
-                  aria-label="실시간 거래 현황"
+                  aria-label={sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
                   className="divide-y divide-white/15 border-y border-white/20"
                 >
                   <div className="flex items-center gap-2 py-2.5">
                     <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
                     <span className="text-xs font-semibold tracking-wide text-accent-300">
-                      실시간 거래 현황
+                      {sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
                     </span>
                   </div>
                   {liveStats.map((stat) => (
@@ -187,12 +190,16 @@ export async function HomePage() {
                   상품 둘러보기
                 </LinkButton>
                 <LinkButton
-                  href={paymentsOpen ? "/prices" : "/chat"}
+                  href={sellerTradingOpen ? (paymentsOpen ? "/prices" : "/chat") : "/community"}
                   variant="inverse"
                   size="lg"
                   fullWidth
                 >
-                  {paymentsOpen ? "시세 확인하기" : "대화 이어가기"}
+                  {sellerTradingOpen
+                    ? paymentsOpen
+                      ? "시세 확인하기"
+                      : "대화 이어가기"
+                    : "커뮤니티 둘러보기"}
                 </LinkButton>
               </div>
             </div>
@@ -265,15 +272,34 @@ export async function HomePage() {
             <div className="flex flex-wrap items-center justify-between gap-6">
               <div className="flex flex-col gap-2">
                 <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-                  잠자는 브릭, 바다로 보내세요
+                  {sellerTradingOpen
+                    ? "잠자는 브릭, 바다로 보내세요"
+                    : "GoLe 공개 준비에 함께해 주세요"}
                 </h2>
                 <p className="text-neutral-600">
-                  사진 5장이면 등록 끝 — 시세 기반 추천가로 빠르게 판매됩니다.
+                  {sellerTradingOpen
+                    ? "사진 5장이면 등록 끝 — 시세 기반 추천가로 빠르게 판매됩니다."
+                    : "신규 판매 등록은 본인확인 준비가 끝난 뒤 열립니다. 지금은 브릭을 탐색하고 커뮤니티에서 의견을 나눌 수 있어요."}
                 </p>
               </div>
-              <LinkButton href="/sell" variant="primary" size="lg">
-                판매 시작하기
-              </LinkButton>
+              {sellerTradingOpen ? (
+                <LinkButton href="/sell" variant="primary" size="lg">
+                  판매 시작하기
+                </LinkButton>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <LinkButton href="/community" variant="primary" size="lg">
+                    커뮤니티 참여하기
+                  </LinkButton>
+                  <LinkButton
+                    href="/chat?compose=support&category=PRODUCT_FEEDBACK"
+                    variant="secondary"
+                    size="lg"
+                  >
+                    의견 보내기
+                  </LinkButton>
+                </div>
+              )}
             </div>
           </section>
         </div>

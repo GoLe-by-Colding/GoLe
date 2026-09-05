@@ -201,6 +201,18 @@ class AccountAdminServiceTest {
         public long countByRole(Role role) {
             return byId.values().stream().filter(a -> a.getRole() == role).count();
         }
+
+        @Override
+        public boolean existsByNickname(
+                com.gole.api.account.domain.model.Nickname nickname, String excludingAccountId) {
+            return false; // 온보딩은 이 테스트의 관심사가 아니다.
+        }
+
+        @Override
+        public boolean existsByVerifiedPhoneNumber(
+                com.gole.api.account.domain.model.PhoneNumber phoneNumber, String excludingAccountId) {
+            return false;
+        }
     }
 
     private static final class RecordingSessionStore implements SessionStorePort {

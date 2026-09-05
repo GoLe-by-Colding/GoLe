@@ -20,6 +20,9 @@ public record SupportTicket(
         Instant resolvedAt,
         long version) {
 
+    private static final Duration PROGRESS_NOTICE_INTERNAL_TARGET = Duration.ofDays(3);
+    private static final Duration RESULT_NOTICE_INTERNAL_TARGET = Duration.ofDays(10);
+
     /** 영속성 버전이 없던 호출부와 테스트를 위한 신규 티켓 생성 생성자. */
     public SupportTicket(
             String roomId,
@@ -48,9 +51,24 @@ public record SupportTicket(
         return new SupportTicket(roomId, requesterId, category, SupportStatus.UNASSIGNED, null, now, now, null, 0L);
     }
 
-    /** 개인정보 권리 요청 누락을 막기 위한 내부 응답 목표다. 자동 삭제 기한은 아니다. */
+    /**
+     * 모든 소비자 불만·분쟁 문의의 진행 경과 안내를 놓치지 않기 위한 내부 목표다.
+     *
+     * <p>법정 기준은 3영업일이지만 공휴일 달력을 임의로 구현하지 않고 접수 후 72시간으로 더 이르게
+     * 잡는다. 이 값은 자동 해결·삭제 기한이 아니다.
+     */
+    public Instant progressDueAt() {
+        return createdAt.plus(PROGRESS_NOTICE_INTERNAL_TARGET);
+    }
+
+    /**
+     * 모든 소비자 불만·분쟁 문의의 조사 결과 또는 처리방안 안내를 위한 내부 목표다.
+     *
+     * <p>법정 기준은 10영업일이지만 접수 후 240시간으로 더 이르게 잡는다. 개인정보 권리 요청에도
+     * 같은 보수적 목표를 적용하며, 실제 해결 완료를 보장하는 시각은 아니다.
+     */
     public Instant responseDueAt() {
-        return category.isPrivacyRightsRequest() ? createdAt.plus(Duration.ofDays(10)) : null;
+        return createdAt.plus(RESULT_NOTICE_INTERNAL_TARGET);
     }
 
     /** 관리자가 가져간다. 완료된 문의는 재개 후에 배정한다. */

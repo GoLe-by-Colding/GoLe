@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { ListingCard, type Listing } from "@entities/listing";
 import { Button, Text } from "@shared/ui";
@@ -8,6 +8,7 @@ import { Button, Text } from "@shared/ui";
 export interface ListingGridProps {
   readonly listings: readonly Listing[];
   readonly emptyMessage?: string;
+  readonly emptyAction?: ReactNode;
   /** 초기 노출 수. 기본 20. */
   readonly pageSize?: number;
 }
@@ -19,6 +20,7 @@ export interface ListingGridProps {
 export function ListingGrid({
   listings,
   emptyMessage = "표시할 상품이 없습니다.",
+  emptyAction,
   pageSize = 20,
 }: ListingGridProps) {
   const [visible, setVisible] = useState(pageSize);
@@ -42,8 +44,9 @@ export function ListingGrid({
 
   if (listings.length === 0) {
     return (
-      <div className="p-12 text-center">
+      <div className="flex flex-col items-center gap-4 p-12 text-center">
         <Text tone="muted">{emptyMessage}</Text>
+        {emptyAction === undefined ? null : emptyAction}
       </div>
     );
   }

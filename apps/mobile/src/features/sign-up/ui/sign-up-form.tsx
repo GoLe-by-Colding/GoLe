@@ -43,14 +43,17 @@ function Form({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [minimumAgeConfirmed, setMinimumAgeConfirmed] = useState(false);
+  const [thirdPartyProvisionAccepted, setThirdPartyProvisionAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const acceptance: SignupPolicyAcceptance = {
     termsVersion: policy.termsVersion,
     privacyVersion: policy.privacyVersion,
+    thirdPartyProvisionVersion: policy.thirdPartyProvisionVersion,
     termsAccepted,
     privacyAcknowledged,
+    thirdPartyProvisionAccepted,
     minimumAgeConfirmed,
   };
   const ready =
@@ -115,6 +118,12 @@ function Form({
           label={`만 ${policy.minimumAge}세 이상입니다`}
           checked={minimumAgeConfirmed}
           onToggle={() => setMinimumAgeConfirmed((v) => !v)}
+        />
+        {/* 제3자 제공은 선택이다. ready 조건에 넣지 않는다 — 웹과 같은 규칙. */}
+        <Check
+          label={`개인정보 제3자 제공에 동의합니다 (선택, ${policy.thirdPartyProvisionVersion})`}
+          checked={thirdPartyProvisionAccepted}
+          onToggle={() => setThirdPartyProvisionAccepted((v) => !v)}
         />
       </View>
       <Button

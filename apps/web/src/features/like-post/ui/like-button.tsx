@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { likePost, unlikePost } from "@entities/community";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { cn } from "@shared/lib";
+import { cn, loginHrefForCurrentPage } from "@shared/lib";
 import { HeartIcon } from "@shared/ui";
 
 export interface LikeButtonProps {
@@ -24,8 +24,7 @@ export function LikeButton({ postId, initialLikeCount, initialLiked = false }: L
 
   async function handleToggle() {
     if (!session) {
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      router.push(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      router.push(loginHrefForCurrentPage());
       return;
     }
     if (busy) {

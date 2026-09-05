@@ -48,10 +48,12 @@ class PortOneWebhookVerifierTest {
     }
 
     @Test
-    void localStubCanDisableSignatureVerification() {
+    void missingSecretAlwaysFailsClosed() {
         PortOneWebhookVerifier verifier = new PortOneWebhookVerifier("");
 
-        assertThatCode(() -> verifier.verify(BODY, null, null, null)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> verifier.verify(BODY, null, null, null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("유효하지 않은");
     }
 
     private static String signature(String messageId, long timestamp, String body) throws Exception {

@@ -14,5 +14,5 @@ public interface UploadImageUseCase {
      * @param contentType     MIME 타입 (예: image/jpeg)
      * @param originalFilename 원본 파일명(신뢰하지 않음, 로깅/확장자 힌트용)
      */
-    record UploadImageCommand(byte[] content, String contentType, String originalFilename) {}
+    record UploadImageCommand(String ownerId, byte[] content, String contentType, String originalFilename) {}
 }

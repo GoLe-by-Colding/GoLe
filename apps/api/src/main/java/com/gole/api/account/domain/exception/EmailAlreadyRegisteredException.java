@@ -7,7 +7,8 @@ import com.gole.api.common.exception.ConflictException;
  */
 public class EmailAlreadyRegisteredException extends ConflictException {
 
-    public EmailAlreadyRegisteredException(String email) {
-        super("EMAIL_ALREADY_REGISTERED", "Email is already registered: " + email);
+    public EmailAlreadyRegisteredException(String ignoredEmail) {
+        // 서비스 내부 예외도 AOP 로그에 남으므로 이메일 원문을 메시지에 포함하지 않는다.
+        super("EMAIL_ALREADY_REGISTERED", "Registration request cannot create a new account");
     }
 }

@@ -41,6 +41,23 @@ async function seedSession(page: Page, session: SeedSession): Promise<void> {
   await page.route(`**/api/v1/users/${session.accountId}/following`, (route) =>
     route.fulfill({ json: [] }),
   );
+  // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다.
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "e2e",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
 }
 
 async function mockSellerShop(page: Page): Promise<void> {
@@ -50,6 +67,7 @@ async function mockSellerShop(page: Page): Promise<void> {
         stage: 2,
         tradeMode: "MANUAL_SETTLEMENT",
         features: { payments: true, reviews: true, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
         updatedAt: "2026-09-03T00:00:00Z",
       },
     }),
@@ -84,6 +102,10 @@ test.describe("후기 신뢰 흐름", () => {
 
     await page.goto("/shops/seller-1");
     await expect(page.getByText(review.content)).toBeVisible();
+    await expect(page.getByRole("link", { name: "후기 작성·게시·평점·삭제 기준" })).toHaveAttribute(
+      "href",
+      "/review-policy",
+    );
     await page.getByRole("button", { name: "답글 남기기" }).click();
     await page.getByLabel("판매자 답글").fill("좋은 거래 고맙습니다. 즐거운 조립 되세요!");
     await page.getByRole("button", { name: "답글 저장" }).click();

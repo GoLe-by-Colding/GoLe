@@ -53,7 +53,7 @@ public class AdminAccountSeeder implements CommandLineRunner {
             return; // 이미 존재 → 멱등
         }
         PasswordHash hash = passwordHasher.hash(adminPassword);
-        Account admin = Account.provisioned(identifierGenerator.newAccountId(), email, hash, Role.ADMIN);
+        Account admin = Account.operationalBootstrap(identifierGenerator.newAccountId(), email, hash, Role.ADMIN);
         accountRepository.save(admin);
         log.info("[seed] admin 계정 생성: {}", adminEmail);
     }

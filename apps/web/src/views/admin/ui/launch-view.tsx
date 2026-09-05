@@ -237,6 +237,15 @@ export function AdminLaunchView() {
                 }
               />
               <ReadinessCard
+                title="신규 매물 · 판매자 신원확인"
+                ready={config.config.sellerIdentityVerificationReady === true}
+                detail={
+                  config.config.sellerIdentityVerificationReady === true
+                    ? "배포 래치 확인됨 · 각 판매자의 실제 전화번호 인증이 추가로 필요하며 관리자 승인으로 대체할 수 없음"
+                    : "배포 래치 미확인 · 신규 매물과 새 거래 대화만 서버에서 차단하고 조회·커뮤니티·운영 문의는 유지"
+                }
+              />
+              <ReadinessCard
                 title="판매자 지급 계약"
                 ready={config.payoutContractVerified}
                 detail={

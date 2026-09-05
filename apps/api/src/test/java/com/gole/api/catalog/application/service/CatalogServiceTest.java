@@ -3,6 +3,8 @@ package com.gole.api.catalog.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
+import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase.UpdateLegoSetCommand;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort.StoredLegoSet;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
@@ -68,6 +70,42 @@ class CatalogServiceTest {
             assertThat(summary.set()).isEqualTo(eiffel);
             assertThat(summary.featured()).isTrue();
         });
+    }
+
+    @Test
+    void createAndUpdate_rejectExternalCatalogImageUrl() {
+        CatalogService service =
+                new CatalogService(new FakeLoadPort(Optional.of(eiffel), List.of()), new FakeAdminPort());
+
+        assertThatThrownBy(() -> service.create(new CreateLegoSetCommand(
+                        "10308",
+                        "External",
+                        "Icons",
+                        1,
+                        2026,
+                        RetirementStatus.ACTIVE,
+                        "https://tracker.example/image.jpg",
+                        false)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("내부 catalog SVG");
+        assertThatThrownBy(() -> service.update(new UpdateLegoSetCommand(
+                        "10307",
+                        "External",
+                        "Icons",
+                        1,
+                        2026,
+                        RetirementStatus.ACTIVE,
+                        "/api/v1/media/images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg",
+                        false)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void legacyExternalCatalogImage_isQuarantinedFromDomainOutput() {
+        LegoSet legacy = new LegoSet(
+                "10308", "Legacy", "Icons", 1, 2026, RetirementStatus.ACTIVE, "https://tracker.example/pixel.gif");
+
+        assertThat(legacy.getImageUrl()).isNull();
     }
 
     private record FakeLoadPort(Optional<LegoSet> byNumber, List<LegoSet> bySearch) implements LoadLegoSetPort {

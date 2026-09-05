@@ -1,195 +1,142 @@
 # GoLe 배포 가이드
 
-## 서버 구성
+## 배포 기준
 
-| 항목 | 값 |
+| 구분 | 기준 |
 |---|---|
-| 컨테이너 이름 | `ubuntu-gole` |
-| SSH 포트 | `2223` (host → container 22) |
-| SSH 비밀번호 | `gole` |
-| API 포트 | `8081` → container `8080` (Spring Boot) |
-| Web 포트 | `3004` → container `3000` (Next.js) |
-| 공인 도메인 | `https://gole.kscold.com` |
-| Docker 소켓 | `unix:///Users/kscold/.colima/default/docker.sock` |
+| 로컬 개발 | 현재 Mac의 `/Users/kscold/Desktop/GoLe`와 루트 `docker-compose.yml` |
+| 실제 운영 | GCP Compute Engine의 단일 VM `gole-production` |
+| GCP 프로젝트 | `project-72a52bf1-06aa-4519-b2c` |
+| 리전/영역 | `asia-northeast3` / `asia-northeast3-a` |
+| 공인 도메인 | `https://gole.co.kr` (`www`는 apex로 영구 이동) |
+| 운영 방식 | `infra/gcp/docker-compose.yml` 기반 Docker Compose |
+| 자동 배포 | 성공한 `main` CI의 정확한 커밋 SHA만 CD가 배포함 |
 
-모든 docker 명령은 반드시 앞에 `DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock` 를 붙여야 한다.
+예전 `ubuntu-gole` 컨테이너와 `gole.kscold.com`은 개발·운영·DNS·배포 대상이 아니다.
+해당 호스트로 SSH하거나 그곳의 컨테이너와 Nginx를 수정하지 않는다. 다른 서비스와 함께 쓰는
+Mac의 전역 Nginx도 GoLe 배포를 위해 중지하거나 재시작하지 않는다.
 
----
+운영 인프라의 상세한 생성·이전·기존 호스트 인수·Secret Sync·복구 절차는
+[`infra/gcp/README.md`](../../infra/gcp/README.md)를 단일 기준으로 사용한다.
 
-## 표준 배포 (권장 — git 기반 재현 가능 패턴)
+## 개발과 배포 흐름
 
-`/app` 은 `origin/main` 을 추적하는 정식 git 체크아웃이며, PM2 프로세스는 `ecosystem.config.js`(infra-as-code)로 정의된다. 배포는 `scripts/deploy.sh` 한 줄로 수행한다.
-
-```bash
-# 로컬에서 코드 push 후
-git push origin main
-
-# ubuntu-gole 컨테이너에서 표준 배포 (git pull → 빌드 → pm2 reload → health)
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -lc "cd /app && bash scripts/deploy.sh all"
-# 일부만:  ... scripts/deploy.sh backend   |   ... scripts/deploy.sh frontend
-```
-
-- 이 절차는 **`ubuntu-gole` 컨테이너 한정**이며 다른 컨테이너/호스트에 영향을 주지 않는다.
-- 프로세스 정의 변경이 필요하면 `ecosystem.config.js` 를 수정해 커밋한다(런타임 형태는 `bash -c` 유지).
-- 아래의 수동 절차는 스크립트가 막힐 때를 위한 참고용으로 남겨둔다.
-
-### GitHub Actions CD
-
-`.github/workflows/cd.yml`은 `main` push의 CI가 성공한 뒤 `ubuntu-gole` 안의 저장소 전용 self-hosted runner에서 자동 실행된다. 외부 SSH 인바운드 포트를 사용하지 않으며, runner 라벨(`self-hosted`, `Linux`, `ARM64`, `gole-production`) 때문에 다른 인스턴스에서는 실행되지 않는다.
-
-GitHub의 **Actions → CD → Run workflow**에서 같은 배포를 수동 실행할 수도 있다.
-
----
-
-## 컨테이너 내부 구조
-
-```
-/app/
-├── apps/
-│   ├── api/          # Spring Boot 백엔드
-│   │   └── build/libs/api-0.0.1-SNAPSHOT.jar   # 배포 jar
-│   └── web/          # Next.js 프론트엔드
-├── pnpm-workspace.yaml
-└── package.json
-```
-
-PM2 프로세스:
-- `gole-backend`  — `java -jar /app/apps/api/build/libs/api-0.0.1-SNAPSHOT.jar`
-- `gole-frontend` — `pnpm exec next start -p 3000` (cwd: `/app/apps/web`)
-
----
-
-## 배포 절차 (표준)
-
-### 1단계 — 로컬에서 커밋 & 푸시
+운영 수정은 피처 브랜치에서 충분히 검증한 뒤 `main`에 병합한다. 피처 브랜치 push와 PR은
+CI만 실행하며 운영 배포를 만들지 않는다. `main` push의 CI가 성공하면 저장소 전용
+self-hosted runner가 GCP VM에서 CD를 실행한다.
 
 ```bash
 cd /Users/kscold/Desktop/GoLe
-git add <변경된 파일>
-git commit -m "feat(backend): ..."   # 한국어 커밋, feat/fix/refactor + (backend)/(frontend) 스코프
-git push origin main
+git switch -c feat/<작업명>
+
+# 로컬 검증 후
+git push --force-with-lease origin feat/<작업명>
+gh pr create --base main --head feat/<작업명>
 ```
 
-커밋 컨벤션:
-- `feat(backend): ...` / `feat(frontend): ...`
-- `fix(backend): ...` / `fix(frontend): ...`
-- `refactor(backend): ...` / `refactor(frontend): ...`
+커밋 제목과 본문은 한국어로 쓴다. 본문은 변경한 일을 `- ...함` 한 줄씩 기록한다.
 
-### 2단계 — 컨테이너에서 pull & 빌드
+```text
+기능: 운영 출시 흐름을 완성함
+
+- 단일 GCP 배포 경로를 고정함
+- 운영 안전 검증을 추가함
+```
+
+PR CI가 모두 성공한 뒤 `main`에 병합한다. CD를 우회하는 서버 수동 pull·빌드·재시작은
+장애 복구가 아닌 이상 사용하지 않는다. CD는 CI를 통과한 SHA를 직접 checkout하고,
+Compose 갱신·내부 readiness·공개 HTTPS 확인까지 성공해야 배포 완료 SHA를 기록한다.
+
+## 로컬 개발
 
 ```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -c "cd /app && git pull origin main"
+cd /Users/kscold/Desktop/GoLe
+docker compose up -d mongo redis minio minio-init
+pnpm install --frozen-lockfile
+pnpm --filter web dev
+
+# 별도 터미널
+cd apps/api
+./gradlew bootRun
 ```
 
-#### 백엔드만 변경된 경우
-```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -c "
-    cd /app/apps/api && ./gradlew bootJar --no-daemon -q
-    pm2 restart gole-backend
-    pm2 logs gole-backend --lines 20 --nostream
-  "
-```
-
-#### 프론트엔드만 변경된 경우
-```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -c "
-    cd /app && pnpm --filter web build
-    pm2 restart gole-frontend
-    pm2 logs gole-frontend --lines 20 --nostream
-  "
-```
-
-#### 백엔드 + 프론트엔드 모두 변경된 경우
-```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -c "
-    cd /app/apps/api && ./gradlew bootJar --no-daemon -q
-    cd /app && pnpm --filter web build
-    pm2 restart gole-backend gole-frontend
-    pm2 logs --lines 30 --nostream
-  "
-```
-
-### 3단계 — 배포 확인
+로컬 주소는 Web `http://localhost:3000`, API `http://localhost:8080`이다. 운영 Secret은
+직접 복사하지 않고 `scripts/sync-dev-env.sh`로 필요한 값만 동기화한다. 이 스크립트는
+로컬 환경을 강제로 development로 유지하고 운영 동작과 결제를 켜지 않는다.
 
 ```bash
-# 헬스체크
-curl -s http://localhost:8081/actuator/health
-# 또는 도메인으로
-curl -s https://gole.kscold.com/actuator/health
-
-# PM2 상태
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole pm2 list
+cd /Users/kscold/Desktop/GoLe
+bash scripts/sync-dev-env.sh
 ```
 
----
+## 운영 접속과 확인
 
-## 파일 직접 복사 방식 (git pull 불가할 때)
-
-GitHub 인증 없이 특정 파일만 바꿔야 할 때:
+운영 SSH는 공개 22번 포트가 아니라 Google IAP만 사용한다.
 
 ```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker cp /Users/kscold/Desktop/GoLe/apps/api/src ubuntu-gole:/app/apps/api/src
+gcloud compute ssh gole-production \
+  --project project-72a52bf1-06aa-4519-b2c \
+  --zone asia-northeast3-a \
+  --tunnel-through-iap
 ```
 
----
-
-## 로그 확인
+운영 Compose 상태와 로그는 VM 안에서 아래처럼 확인한다.
 
 ```bash
-# 실시간 백엔드 로그
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole pm2 logs gole-backend --lines 50
+cd /app
+sudo docker compose \
+  --env-file /etc/gole/infra.env \
+  --env-file /etc/gole/gole.env \
+  -f infra/gcp/docker-compose.yml ps
 
-# 실시간 프론트 로그
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole pm2 logs gole-frontend --lines 50
-
-# 파일 로그
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec ubuntu-gole bash -c "tail -100 /var/log/gole-backend.log"
+sudo docker compose \
+  --env-file /etc/gole/infra.env \
+  --env-file /etc/gole/gole.env \
+  -f infra/gcp/docker-compose.yml logs --tail=100 backend frontend nginx
 ```
 
----
-
-## SSH 직접 접속
+공개 상태는 비밀값이나 쓰기 요청 없이 확인한다.
 
 ```bash
-ssh -p 2223 root@localhost   # 비밀번호: gole
-# 또는
-ssh -p 2223 root@kscold.iptime.org
+curl --fail --silent --show-error https://gole.co.kr/actuator/health
+curl --head https://www.gole.co.kr/
 ```
 
----
+## DNS와 TLS
 
-## nginx (리버스 프록시)
+Gabia DNS에는 아래 두 A 레코드만 운영 IP로 둔다.
 
-nginx 설정 파일: `/Users/kscold/Desktop/kscold-control/nginx/conf.d/gole.kscold.com.conf`
+| 타입 | 호스트 | 값 |
+|---|---|---|
+| A | `@` | `35.216.80.123` |
+| A | `www` | `35.216.80.123` |
 
-라우팅:
-- `https://gole.kscold.com/api/` → `ubuntu-gole:8080`
-- `https://gole.kscold.com/actuator/` → `ubuntu-gole:8080`
-- `https://gole.kscold.com/` → `ubuntu-gole:3000`
+TLS는 VM의 Google Trust Services 인증서 갱신 작업이 관리한다. 인증서·개인키를 저장소,
+GitHub Actions 로그 또는 채팅에 복사하지 않는다. Nginx 변경은 소스 템플릿을 수정해 CD의
+검증·원자적 적용·롤백 경로로만 반영한다.
 
-nginx 리로드:
-```bash
-DOCKER_HOST=unix:///Users/kscold/.colima/default/docker.sock \
-  docker exec kscold-nginx sh -c "nginx -t && nginx -s reload"
-```
+## 환경 변수와 외부 자격증명
 
----
+실제 비밀값은 GitHub Secrets 또는 GCP Secret Manager에만 저장한다. `.env` 파일과 토큰,
+SMTP 앱 비밀번호, Discord webhook URL을 커밋하거나 채팅에 붙여 넣지 않는다.
 
-## 주의사항
+초기 사용자 모집 기간에는 다음 정책을 동시에 유지한다.
 
-- `ubuntu-congbang` 컨테이너는 절대 건드리지 않는다.
-- `docker rm`, `docker stop`은 명시적 지시 없이 실행 금지.
-- 빌드 시 `--no-daemon` 옵션 필수 (컨테이너 내 Gradle daemon 불안정).
-- 프론트엔드 실행은 반드시 `pnpm exec next start -p 3000` 사용 (`pnpm --filter web start -- -p 3000` 금지 — Next.js가 `-p`를 디렉토리로 오인).
-- API 경로 prefix: `/api/v1/...`
-- MongoDB는 replica set rs0로 실행 중 (멀티도큐먼트 트랜잭션 지원).
+- Frontend 결제 모드는 `disabled`로 유지함
+- Backend PortOne 연동은 `false`로 유지함
+- 정산 모드는 `DISABLED`로 유지함
+- 이메일 인증은 production에서 Gmail SMTP 연결 검증까지 성공해야 함
+- 문의 원문은 Discord에 전송하지 않고 서버가 만든 최소 운영 이벤트만 전송함
+
+환경 갱신은 `Secret Sync` workflow와 `gole-hostctl`의 검증·트랜잭션을 통과해야 한다.
+서버의 `/etc/gole/gole.env`를 편집기로 직접 고치지 않는다.
+
+## 운영 안전 규칙
+
+- `main` CI를 통과하지 않은 SHA를 운영에 배포하지 않음
+- 운영 checkout에 직접 수정하거나 `git pull`로 최신 브랜치를 따라가지 않음
+- 운영 데이터 삭제·인프라 삭제·Terraform apply는 dry-run 또는 plan 검토 없이 실행하지 않음
+- 비용 정지선·절대 정지 시각·Discord 예산 알림을 비활성화하지 않음
+- CORS와 애플리케이션 헤더 제한은 Backend 설정을 단일 기준으로 사용함
+- Nginx에는 TLS·라우팅·유한한 전송 버퍼 같은 인프라 안전 상한만 둠
+- 성공 확인 전에는 이전 배포 SHA, 환경 파일, Nginx 설정을 복구 가능하게 유지함

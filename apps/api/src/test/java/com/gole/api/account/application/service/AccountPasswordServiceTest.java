@@ -15,7 +15,9 @@ import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
+import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.PasswordHash;
+import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.VerificationCode;
 import com.gole.api.common.exception.BadRequestException;
@@ -199,6 +201,16 @@ class AccountPasswordServiceTest {
             return values.values().stream()
                     .filter(account -> account.getRole() == role)
                     .count();
+        }
+
+        @Override
+        public boolean existsByNickname(Nickname nickname, String excludingAccountId) {
+            return false;
+        }
+
+        @Override
+        public boolean existsByVerifiedPhoneNumber(PhoneNumber phoneNumber, String excludingAccountId) {
+            return false;
         }
     }
 

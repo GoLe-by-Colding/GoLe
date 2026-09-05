@@ -15,6 +15,7 @@ import {
   type AdminSupportMessage,
   type AdminSupportNote,
   type AdminSupportCategory,
+  type AdminSupportPriority,
   type AdminSupportStatus,
   type AdminSupportTicket,
 } from "@entities/admin";
@@ -51,32 +52,69 @@ const STATUS_TONE: Record<AdminSupportStatus, "neutral" | "brand" | "warning" | 
   RESOLVED: "success",
 };
 
-function PrivacyDueBadge({
+const PRIORITY_LABEL: Record<AdminSupportPriority, string> = {
+  LOW: "낮음",
+  NORMAL: "보통",
+  HIGH: "높음",
+  URGENT: "긴급",
+};
+
+const PRIORITY_TONE: Record<AdminSupportPriority, "neutral" | "brand" | "warning" | "danger"> = {
+  LOW: "neutral",
+  NORMAL: "brand",
+  HIGH: "warning",
+  URGENT: "danger",
+};
+
+function DeadlineBadge({
   ticket,
   nowMs,
+  kind,
 }: {
   readonly ticket: AdminSupportTicket;
   readonly nowMs: number | null;
+  readonly kind: "PROGRESS" | "RESULT";
 }) {
-  if (ticket.responseDueAt === null) return null;
-  const dueAt = new Date(ticket.responseDueAt).getTime();
+  const value = kind === "PROGRESS" ? ticket.progressDueAt : ticket.responseDueAt;
+  if (value === null || value === undefined) return null;
+  const dueAt = new Date(value).getTime();
   if (!Number.isFinite(dueAt)) return null;
-  if (ticket.status === "RESOLVED") {
-    const resolvedAt =
-      ticket.resolvedAt === null ? Number.NaN : new Date(ticket.resolvedAt).getTime();
-    const late = Number.isFinite(resolvedAt) && resolvedAt > dueAt;
-    return (
-      <Badge tone={late ? "danger" : "success"}>{late ? "기한 후 처리" : "기한 내 처리"}</Badge>
-    );
+  const label = kind === "PROGRESS" ? "진행 안내" : "결과·방안";
+  if (ticket.status === "RESOLVED" && ticket.resolvedAt !== null) {
+    const resolvedAt = new Date(ticket.resolvedAt).getTime();
+    if (Number.isFinite(resolvedAt)) {
+      const late = resolvedAt > dueAt;
+      return (
+        <Badge
+          tone={late ? "danger" : "success"}
+          title="해결 처리 시각과 내부 목표를 비교한 표시이며 실제 안내 발송 이행 원장은 아닙니다."
+        >
+          {label} {late ? "기한 후 처리" : "기한 내 처리"}
+        </Badge>
+      );
+    }
   }
   if (nowMs === null) {
-    return <Badge tone="brand">응답 목표 {formatDateTime(ticket.responseDueAt)}</Badge>;
+    return (
+      <Badge tone="brand">
+        {label} 목표 {formatDateTime(value)}
+      </Badge>
+    );
   }
   const remainingDays = Math.ceil((dueAt - nowMs) / 86_400_000);
   if (remainingDays < 0) {
-    return <Badge tone="danger">{Math.abs(remainingDays)}일 지남</Badge>;
+    return (
+      <Badge tone="danger">
+        {label} {Math.abs(remainingDays)}일 지남
+      </Badge>
+    );
   }
-  return <Badge tone={remainingDays <= 2 ? "warning" : "brand"}>{remainingDays}일 남음</Badge>;
+  const warningThreshold = kind === "PROGRESS" ? 1 : 2;
+  return (
+    <Badge tone={remainingDays <= warningThreshold ? "warning" : "brand"}>
+      {label} {remainingDays}일 남음
+    </Badge>
+  );
 }
 
 /** 문의 인박스. 운영자는 배정받은 문의의 본문만 읽고 답할 수 있다. */
@@ -391,6 +429,9 @@ export function AdminSupportView() {
           <Heading level={2}>운영 문의</Heading>
           <Text className="mt-1" size="sm" tone="muted">
             먼저 배정받은 뒤 필요한 대화만 확인합니다. 답변·이관·메모·열람은 감사 로그에 남습니다.
+            모든 문의에는 3영업일 진행 경과·10영업일 결과 또는 처리방안 안내보다 이른 내부 목표가
+            표시됩니다. 해결 티켓의 기한 표시는 해결 시각 기준이며 실제 안내 발송 이력 증명은
+            아닙니다.
           </Text>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -468,7 +509,8 @@ export function AdminSupportView() {
                     <Badge tone={ticket.category.startsWith("PRIVACY_") ? "warning" : "neutral"}>
                       {CATEGORY_LABEL[ticket.category]}
                     </Badge>
-                    <PrivacyDueBadge ticket={ticket} nowMs={nowMs} />
+                    <DeadlineBadge ticket={ticket} nowMs={nowMs} kind="PROGRESS" />
+                    <DeadlineBadge ticket={ticket} nowMs={nowMs} kind="RESULT" />
                   </span>
                   <span className="flex w-full justify-between text-xs text-neutral-500">
                     <span>문의자 {shortId(ticket.requesterId)}</span>
@@ -515,7 +557,8 @@ export function AdminSupportView() {
                     <Badge tone={selected.category.startsWith("PRIVACY_") ? "warning" : "neutral"}>
                       {CATEGORY_LABEL[selected.category]}
                     </Badge>
-                    <PrivacyDueBadge ticket={selected} nowMs={nowMs} />
+                    <DeadlineBadge ticket={selected} nowMs={nowMs} kind="PROGRESS" />
+                    <DeadlineBadge ticket={selected} nowMs={nowMs} kind="RESULT" />
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
                     문의자 {shortId(selected.requesterId)} · 담당{" "}
@@ -701,6 +744,71 @@ export function AdminSupportView() {
                   </div>
 
                   <aside className="flex flex-col gap-5 bg-neutral-50/70 p-4">
+                    {selected.assistantAnalysis ? (
+                      <section aria-label="AI 답변 보조">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-bold uppercase tracking-wide text-neutral-500">
+                            AI 답변 보조
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={PRIORITY_TONE[selected.assistantAnalysis.priority]}>
+                              {PRIORITY_LABEL[selected.assistantAnalysis.priority]}
+                            </Badge>
+                            <Badge
+                              tone={
+                                selected.assistantAnalysis.category.startsWith("PRIVACY_")
+                                  ? "warning"
+                                  : "neutral"
+                              }
+                            >
+                              {CATEGORY_LABEL[selected.assistantAnalysis.category]}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="mt-2 rounded-lg border border-neutral-200 bg-white p-3 text-xs text-neutral-700">
+                          <p className="font-semibold">요약</p>
+                          <p className="mt-1 whitespace-pre-wrap leading-5">
+                            {selected.assistantAnalysis.summary}
+                          </p>
+                          {selected.assistantAnalysis.risk.length > 0 ? (
+                            <p className="mt-2 break-words text-warning">
+                              검토 신호 · {selected.assistantAnalysis.risk.join(", ")}
+                            </p>
+                          ) : null}
+                          {selected.assistantAnalysis.humanReview ? (
+                            <p className="mt-2 font-semibold text-danger">
+                              사람의 검토가 필요합니다.
+                            </p>
+                          ) : null}
+                          <p className="mt-3 font-semibold">답변 초안</p>
+                          <p className="mt-1 whitespace-pre-wrap leading-5">
+                            {selected.assistantAnalysis.draft}
+                          </p>
+                          <Button
+                            type="button"
+                            className="mt-3 w-full"
+                            size="sm"
+                            variant="secondary"
+                            disabled={
+                              busy ||
+                              selected.status === "RESOLVED" ||
+                              selected.assistantAnalysis.draft.trim().length === 0
+                            }
+                            onClick={() => setReply(selected.assistantAnalysis?.draft ?? "")}
+                          >
+                            초안을 답변에 넣기
+                          </Button>
+                          <p className="mt-2 text-[11px] leading-4 text-neutral-400">
+                            {selected.assistantAnalysis.engine} ·
+                            {selected.assistantAnalysis.externalModel
+                              ? " 외부 모델 사용"
+                              : " 내부 규칙 사용"}{" "}
+                            · 검토 후 직접 전송
+                          </p>
+                        </div>
+                      </section>
+                    ) : null}
+
                     <section>
                       <p className="text-xs font-bold uppercase tracking-wide text-neutral-500">
                         내부 메모

@@ -3,6 +3,15 @@ import { env } from "@shared/config";
 
 const REVALIDATE = { next: { revalidate: 3600 } } as const;
 
+function validDate(value: string | undefined): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 /** 백엔드 조회 실패 시 sitemap 전체를 잃지 않도록 개별 섹션을 격리한다. */
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
@@ -23,18 +32,18 @@ async function fetchJson<T>(path: string): Promise<T | null> {
  * 로그인 사용자 본인 데이터라 색인 가치가 없고, 크롤러에는 빈 화면으로 보인다.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const staticRoutes: MetadataRoute.Sitemap = [
-    { url: `${env.siteUrl}/`, lastModified: now, changeFrequency: "daily", priority: 1.0 },
-    { url: `${env.siteUrl}/search`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
-    { url: `${env.siteUrl}/prices`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${env.siteUrl}/`, changeFrequency: "daily", priority: 1.0 },
+    { url: `${env.siteUrl}/search`, changeFrequency: "daily", priority: 0.9 },
+    { url: `${env.siteUrl}/prices`, changeFrequency: "daily", priority: 0.8 },
     {
       url: `${env.siteUrl}/community`,
-      lastModified: now,
       changeFrequency: "hourly",
       priority: 0.7,
     },
+    { url: `${env.siteUrl}/terms`, changeFrequency: "monthly", priority: 0.2 },
+    { url: `${env.siteUrl}/privacy`, changeFrequency: "monthly", priority: 0.2 },
+    { url: `${env.siteUrl}/review-policy`, changeFrequency: "monthly", priority: 0.2 },
   ];
 
   const listings = await fetchJson<
@@ -48,7 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const listingRoutes: MetadataRoute.Sitemap = (listings ?? []).slice(0, 100).map((l) => ({
     url: `${env.siteUrl}/listings/${l.id}`,
-    lastModified: l.createdAt ? new Date(l.createdAt) : now,
+    lastModified: validDate(l.createdAt),
     changeFrequency: "weekly" as const,
     priority: 0.6,
   }));
@@ -59,7 +68,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   const shopRoutes: MetadataRoute.Sitemap = sellerIds.slice(0, 100).map((sellerId) => ({
     url: `${env.siteUrl}/shops/${sellerId}`,
-    lastModified: now,
     changeFrequency: "weekly" as const,
     priority: 0.5,
   }));
@@ -68,7 +76,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     await fetchJson<ReadonlyArray<{ id: string; createdAt?: string }>>("/api/v1/community/posts");
   const communityRoutes: MetadataRoute.Sitemap = (posts ?? []).slice(0, 100).map((p) => ({
     url: `${env.siteUrl}/community/${p.id}`,
-    lastModified: p.createdAt ? new Date(p.createdAt) : now,
+    lastModified: validDate(p.createdAt),
     changeFrequency: "weekly" as const,
     priority: 0.5,
   }));
@@ -88,7 +96,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   const setRoutes: MetadataRoute.Sitemap = setNumbers.map((setNumber) => ({
     url: `${env.siteUrl}/sets/${setNumber}`,
-    lastModified: now,
     changeFrequency: "daily" as const,
     priority: 0.8,
   }));

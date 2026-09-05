@@ -26,6 +26,7 @@ const NAV: readonly NavItem[] = [
   { href: "/admin/settlements", label: "정산" },
   { href: "/admin/community", label: "커뮤니티" },
   { href: "/admin/accounts", label: "회원" },
+  { href: "/admin/account-deletions", label: "탈퇴 검토" },
   { href: "/admin/catalog", label: "카탈로그" },
   { href: "/admin/audit", label: "감사 로그" },
 ];
@@ -70,6 +71,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     readonly access: Exclude<Access, "checking">;
   } | null>(null);
   const [pendingReports, setPendingReports] = useState(0);
+  const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
   const search = useSyncExternalStore(
     subscribeLocation,
     getLocationSearch,
@@ -124,6 +126,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       .then((overview) => {
         if (active) {
           setPendingReports(overview.pendingReports ?? 0);
+          setUnassignedSupportTickets(overview.unassignedSupportTickets ?? 0);
         }
       })
       .catch(() => undefined);
@@ -199,15 +202,18 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       nav={
         <nav
           aria-label="운영자 메뉴"
-          className="border-b border-neutral-200/70 bg-white p-4 max-lg:overflow-x-auto lg:border-r lg:border-b-0"
+          className="border-b border-neutral-200/70 bg-white p-3 sm:p-4 lg:border-r lg:border-b-0"
         >
-          <ul className="flex gap-2 lg:sticky lg:top-20 lg:flex-col">
+          <ul className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col">
             {NAV.map((item) => {
               const active =
                 item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
               return (
                 <li key={item.href}>
                   <AdminNavigationItem href={item.href} label={item.label} active={active}>
+                    {item.href === "/admin/support" && unassignedSupportTickets > 0 ? (
+                      <Badge tone="warning">{unassignedSupportTickets}</Badge>
+                    ) : null}
                     {item.href === "/admin/reports" && pendingReports > 0 ? (
                       <Badge tone="warning">{pendingReports}</Badge>
                     ) : null}
@@ -286,7 +292,7 @@ function AdminNavigationItem({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-10 w-[200px] items-center justify-between gap-2 whitespace-nowrap rounded-lg p-3 text-sm font-medium transition-colors motion-reduce:transition-none",
+        "flex h-10 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium transition-colors motion-reduce:transition-none lg:w-[200px] lg:justify-between lg:p-3",
         active
           ? "bg-brand-600 text-white shadow-brand"
           : "bg-surface-raised text-text-secondary hover:bg-neutral-100 hover:text-neutral-900",
@@ -342,9 +348,7 @@ function Gate({
     <GateFrame>
       <Heading level={2}>{title}</Heading>
       <Text tone="muted">{body}</Text>
-      <Link href={href}>
-        <Button>{cta}</Button>
-      </Link>
+      <LinkButton href={href}>{cta}</LinkButton>
     </GateFrame>
   );
 }

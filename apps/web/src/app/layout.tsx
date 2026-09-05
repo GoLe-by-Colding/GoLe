@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 // 서버 모듈 그래프의 코어 부트스트랩. 클라이언트 그래프는 아래 <CoreBootstrap />가 맡는다.
 import "@shared/config/bootstrap";
 import { CoreBootstrap } from "@shared/config/core-bootstrap";
-import { env } from "@shared/config";
+import { AnalyticsConsentManager } from "@widgets/analytics-consent";
+import { analyticsRuntimeConfig, BUSINESS_INFO, env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import "./globals.css";
 
@@ -33,7 +34,6 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   keywords: KEYWORDS,
   applicationName: SITE_NAME,
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
@@ -64,8 +64,21 @@ function StructuredData() {
         "@type": "Organization",
         "@id": `${env.siteUrl}/#organization`,
         name: SITE_NAME,
+        legalName: BUSINESS_INFO.name,
         url: env.siteUrl,
         description: SITE_DESCRIPTION,
+        email: BUSINESS_INFO.contactEmail,
+        telephone: BUSINESS_INFO.phone,
+        identifier: {
+          "@type": "PropertyValue",
+          propertyID: "사업자등록번호",
+          value: BUSINESS_INFO.registrationNumber,
+        },
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: BUSINESS_INFO.address,
+          addressCountry: "KR",
+        },
       },
       {
         "@type": "WebSite",
@@ -95,6 +108,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <CoreBootstrap />
         {children}
         <StructuredData />
+        <Suspense fallback={null}>
+          <AnalyticsConsentManager configuration={analyticsRuntimeConfig} />
+        </Suspense>
       </body>
     </html>
   );

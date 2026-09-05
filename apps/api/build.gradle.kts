@@ -3,16 +3,17 @@ plugins {
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "7.0.2"
+    id("com.google.protobuf") version "0.9.6"
 }
 
 group = "com.gole"
 version = "0.0.1-SNAPSHOT"
-description = "GoLe LEGO Marketplace API (hexagonal)"
+description = "GoLe 브릭 중고거래 API (hexagonal)"
 
 java {
     toolchain {
         // Java 21 LTS. Spring Boot 4는 Java 17~26을 지원한다.
-        // 배포 컨테이너(ubuntu-gole)가 Temurin 21을 사용하므로 21로 고정한다.
+        // 로컬과 GCP 운영 이미지가 Temurin 21을 사용하므로 21로 고정한다.
         languageVersion = JavaLanguageVersion.of(21)
     }
 }
@@ -29,6 +30,8 @@ repositories {
 
 extra["testcontainersVersion"] = "1.21.4"
 extra["awsSdkVersion"] = "2.31.6"
+extra["grpcVersion"] = "1.84.0"
+extra["protobufVersion"] = "4.36.1"
 
 dependencies {
     // Web / Validation / Actuator
@@ -36,6 +39,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-mail")
+
+    // 문의 분류 LangGraph 서비스와 공유하는 protobuf 계약 및 내부 gRPC 클라이언트.
+    implementation("io.grpc:grpc-protobuf:${property("grpcVersion")}")
+    implementation("io.grpc:grpc-stub:${property("grpcVersion")}")
+    implementation("io.grpc:grpc-netty-shaded:${property("grpcVersion")}")
+    implementation("com.google.protobuf:protobuf-java:${property("protobufVersion")}")
+    compileOnly("javax.annotation:javax.annotation-api:1.3.2")
 
     // CoolSMS(SOLAPI) 카카오 알림톡 발송 공식 SDK.
     implementation("com.solapi:sdk:1.1.0")
@@ -75,6 +85,24 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:mongodb")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${property("protobufVersion")}"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:${property("grpcVersion")}"
+        }
+    }
+    generateProtoTasks {
+        all().forEach {
+            it.plugins {
+                create("grpc")
+            }
+        }
+    }
 }
 
 dependencyManagement {

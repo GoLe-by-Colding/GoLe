@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { commentOnPost } from "@entities/community";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { loginHrefForCurrentPage } from "@shared/lib";
 import { Button, Input } from "@shared/ui";
 
 export interface CommentFormProps {
@@ -22,7 +23,7 @@ export function CommentForm({ postId, onAdded }: CommentFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session) {
-      router.push("/login");
+      router.push(loginHrefForCurrentPage());
       return;
     }
     if (content.trim().length === 0) {

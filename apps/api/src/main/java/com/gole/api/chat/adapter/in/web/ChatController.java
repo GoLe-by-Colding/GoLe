@@ -1,6 +1,9 @@
 package com.gole.api.chat.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.account.adapter.in.web.RequiresOnboarding;
+import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
@@ -51,9 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 채팅 REST API. 방 생성/조회 + 메시지 전송 + SSE 스트림(Redis Pub/Sub).
- */
+/** 채팅 REST API. 방 생성/조회 + 메시지 전송 + SSE 스트림(Redis Pub/Sub). */
 @Tag(name = "Chat", description = "실시간 채팅(SSE) — 방 관리·메시지 송수신")
 @RestController
 @RequestMapping("/api/v1/chat")
@@ -73,6 +74,8 @@ public class ChatController {
     private final ChatMessagingService messaging;
     private final ChatReadService reads;
     private final SupportTicketRepositoryPort supportTickets;
+    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
+    private final SellerIdentityVerificationService sellerIdentityVerification;
 
     public ChatController(
             ChatRoomMongoRepository roomRepo,
@@ -83,7 +86,9 @@ public class ChatController {
             SocialChatService socialChats,
             ChatMessagingService messaging,
             ChatReadService reads,
-            SupportTicketRepositoryPort supportTickets) {
+            SupportTicketRepositoryPort supportTickets,
+            ThirdPartyProvisionConsentService thirdPartyProvisionConsents,
+            SellerIdentityVerificationService sellerIdentityVerification) {
         this.roomRepo = roomRepo;
         this.listenerContainer = listenerContainer;
         this.getListingUseCase = getListingUseCase;
@@ -93,10 +98,13 @@ public class ChatController {
         this.messaging = messaging;
         this.reads = reads;
         this.supportTickets = supportTickets;
+        this.thirdPartyProvisionConsents = thirdPartyProvisionConsents;
+        this.sellerIdentityVerification = sellerIdentityVerification;
     }
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
     @PostMapping("/rooms")
+    @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req, HttpServletRequest http) {
         String buyerId = AuthenticatedUser.id(http);
@@ -105,22 +113,28 @@ public class ChatController {
             throw new ForbiddenException("CHAT_SELF_ROOM_NOT_ALLOWED", "자신의 매물에는 채팅을 시작할 수 없습니다");
         }
         socialChats.requireCanStartPrivateConversation(buyerId, sellerId);
-        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
-                .map(RoomResponse::from)
-                .orElseGet(() -> {
-                    // 삭제 전 만들어진 거래방은 이력 보존을 위해 계속 반환하되,
-                    // 공개되지 않는 매물에 새 방을 만드는 것은 막는다.
-                    getListingUseCase.getPublicById(req.listingId());
-                    ChatRoomDocument doc = new ChatRoomDocument(
-                            UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
-                    try {
-                        return RoomResponse.from(roomRepo.save(doc));
-                    } catch (DuplicateKeyException concurrentCreation) {
-                        return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
-                                .map(RoomResponse::from)
-                                .orElseThrow(() -> concurrentCreation);
-                    }
-                });
+        var existing = roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId());
+        if (existing.isPresent()) {
+            // 철회 뒤에도 이미 참여 중인 방과 과거 대화는 계속 열 수 있다.
+            return RoomResponse.from(existing.get());
+        }
+        // 기존 방 재진입은 유지하되, 새 거래 연결은 대상 판매자의 실제 전화번호 인증과
+        // 운영 준비 래치를 모두 통과해야 한다. 구매자의 인증 상태로 대신 판단하지 않는다.
+        sellerIdentityVerification.requireVerifiedSeller(sellerId);
+        thirdPartyProvisionConsents.requireCurrent(buyerId);
+        thirdPartyProvisionConsents.requireCurrentSubject(sellerId);
+        // 삭제 전 만들어진 거래방은 이력 보존을 위해 계속 반환하되,
+        // 공개되지 않는 매물에 새 방을 만드는 것은 막는다.
+        getListingUseCase.getPublicById(req.listingId());
+        ChatRoomDocument doc =
+                new ChatRoomDocument(UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
+        try {
+            return RoomResponse.from(roomRepo.save(doc));
+        } catch (DuplicateKeyException concurrentCreation) {
+            return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
+                    .map(RoomResponse::from)
+                    .orElseThrow(() -> concurrentCreation);
+        }
     }
 
     @GetMapping("/rooms")
@@ -174,7 +188,11 @@ public class ChatController {
     @PostMapping("/rooms/{roomId}/direct-trade/confirmation")
     public RoomResponse confirmDirectTrade(@PathVariable String roomId, HttpServletRequest http) {
         String actorId = AuthenticatedUser.id(http);
-        socialChats.requireReadable(roomId, actorId).requireDirectTradeAllowed();
+        SocialChatRoom room = socialChats.requireReadable(roomId, actorId);
+        room.requireDirectTradeAllowed();
+        ChatRoomDocument listingRoom = roomRepo.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
+        sellerIdentityVerification.requireVerifiedSeller(listingRoom.getSellerId());
         return RoomResponse.from(directTrades.confirm(roomId, actorId));
     }
 
@@ -189,7 +207,12 @@ public class ChatController {
     @ResponseStatus(HttpStatus.CREATED)
     public MessageResponse sendMessage(
             @PathVariable String roomId, @Valid @RequestBody SendMessageRequest req, HttpServletRequest http) {
-        return MessageResponse.from(messaging.send(roomId, AuthenticatedUser.id(http), req.content()));
+        String actorId = AuthenticatedUser.id(http);
+        SocialChatRoom room = socialChats.requireReadable(roomId, actorId);
+        if (room.type() != ChatRoomType.SUPPORT) {
+            thirdPartyProvisionConsents.requireCurrent(actorId);
+        }
+        return MessageResponse.from(messaging.send(roomId, actorId, req.content()));
     }
 
     @Operation(
@@ -225,7 +248,12 @@ public class ChatController {
                     }
                 }
             } catch (IOException | RuntimeException e) {
-                log.warn("Chat SSE payload handling failed roomId={}: {}", roomId, e.getMessage());
+                // Jackson 예외 메시지에는 원문 payload 일부가 들어갈 수 있으므로 채팅 내용을
+                // 운영 로그에 복사하지 않고 예외 종류만 남긴다.
+                log.warn(
+                        "Chat SSE payload handling failed roomId={} errorType={}",
+                        roomId,
+                        e.getClass().getSimpleName());
                 cleanupRef.get().run();
                 emitter.completeWithError(e);
             }

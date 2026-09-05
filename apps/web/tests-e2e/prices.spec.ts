@@ -12,10 +12,7 @@ test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않�
     source: "platform_payment",
     condition: "new_sealed",
   });
-  const points = [
-    point("2025-01-01T00:00:00Z", 100),
-    point("2026-08-20T00:00:00Z", 200),
-  ];
+  const points = [point("2025-01-01T00:00:00Z", 100), point("2026-08-20T00:00:00Z", 200)];
 
   expect(filterPricePointsByPeriod(points, 31, now)).toEqual([points[1]]);
   expect(filterPricePointsByPeriod(points, 1, now)).toEqual([]);

@@ -11,6 +11,7 @@ import com.gole.api.account.adapter.in.web.AccountResponses.SignInResponse;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.application.port.in.LogoutUseCase;
+import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
 import com.gole.api.account.application.port.in.RefreshSessionUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase;
 import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterAccountCommand;
@@ -21,8 +22,10 @@ import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
+import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.ClientAddressResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -47,6 +50,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/accounts")
 public class AccountController {
 
+    private static final String PUBLIC_REGISTRATION_REFERENCE = "registration-pending";
+
     private final RegisterAccountUseCase registerAccountUseCase;
     private final ResendVerificationUseCase resendVerificationUseCase;
     private final VerifyEmailUseCase verifyEmailUseCase;
@@ -55,6 +60,8 @@ public class AccountController {
     private final LogoutUseCase logoutUseCase;
     private final RefreshSessionUseCase refreshSessionUseCase;
     private final SessionCookie sessionCookie;
+    private final PublicAuthRequestLimitUseCase publicRequestLimit;
+    private final ClientAddressResolver clientAddresses;
 
     public AccountController(
             RegisterAccountUseCase registerAccountUseCase,
@@ -64,7 +71,9 @@ public class AccountController {
             GetCurrentSessionUseCase getCurrentSessionUseCase,
             LogoutUseCase logoutUseCase,
             RefreshSessionUseCase refreshSessionUseCase,
-            SessionCookie sessionCookie) {
+            SessionCookie sessionCookie,
+            PublicAuthRequestLimitUseCase publicRequestLimit,
+            ClientAddressResolver clientAddresses) {
         this.registerAccountUseCase = registerAccountUseCase;
         this.resendVerificationUseCase = resendVerificationUseCase;
         this.verifyEmailUseCase = verifyEmailUseCase;
@@ -73,26 +82,33 @@ public class AccountController {
         this.logoutUseCase = logoutUseCase;
         this.refreshSessionUseCase = refreshSessionUseCase;
         this.sessionCookie = sessionCookie;
+        this.publicRequestLimit = publicRequestLimit;
+        this.clientAddresses = clientAddresses;
     }
 
-    @Operation(summary = "회원가입", description = "이메일·비밀번호로 계정을 생성합니다. 이메일 인증 코드가 발송됩니다.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "가입 성공 — accountId 반환"),
-        @ApiResponse(responseCode = "409", description = "이메일 중복")
-    })
+    @Operation(summary = "회원가입", description = "가입 가능 여부와 무관하게 요청을 접수하며, 가입 가능하면 인증 코드가 발송됩니다.")
+    @ApiResponses({@ApiResponse(responseCode = "201", description = "가입 요청 접수 — 계정 존재 여부는 반환하지 않음")})
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
-        String accountId = registerAccountUseCase.register(new RegisterAccountCommand(
-                request.email(),
-                request.password(),
-                new SignupPolicyAcceptance(
-                        request.termsVersion(),
-                        request.privacyVersion(),
-                        request.termsAccepted(),
-                        request.privacyAcknowledged(),
-                        request.minimumAgeConfirmed())));
-        return new RegisterResponse(accountId);
+    public RegisterResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        publicRequestLimit.acquireRegistration(request.email(), clientAddresses.resolve(http));
+        try {
+            registerAccountUseCase.register(new RegisterAccountCommand(
+                    request.email(),
+                    request.password(),
+                    new SignupPolicyAcceptance(
+                            request.termsVersion(),
+                            request.privacyVersion(),
+                            request.termsAccepted(),
+                            request.privacyAcknowledged(),
+                            request.minimumAgeConfirmed(),
+                            request.thirdPartyProvisionVersion(),
+                            Boolean.TRUE.equals(request.thirdPartyProvisionAccepted()))));
+        } catch (EmailAlreadyRegisteredException duplicate) {
+            // 공개 응답에서 기존 가입 여부와 내부 accountId를 구분하지 않는다. 가입 화면은
+            // 응답 ID를 사용하지 않고 사용자가 입력한 이메일로 인증 단계에 진입한다.
+        }
+        return new RegisterResponse(PUBLIC_REGISTRATION_REFERENCE);
     }
 
     @Operation(summary = "이메일 인증", description = "가입 시 발송된 인증 코드로 계정을 활성화합니다.")
@@ -105,7 +121,10 @@ public class AccountController {
     @Operation(summary = "이메일 인증 코드 재발급", description = "인증 대기 계정에 새 인증 코드를 발송합니다. 60초 재요청 제한이 적용됩니다.")
     @PostMapping("/verification/resend")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+    public void resendVerification(@Valid @RequestBody ResendVerificationRequest request, HttpServletRequest http) {
+        if (!publicRequestLimit.acquireVerificationResend(request.email(), clientAddresses.resolve(http))) {
+            return;
+        }
         resendVerificationUseCase.resend(new ResendVerificationCommand(request.email()));
     }
 
@@ -121,7 +140,7 @@ public class AccountController {
         SignInResult result = signInUseCase.signIn(new SignInCommand(request.email(), request.password()));
         sessionCookie.issue(http, response, result.sessionToken());
         return new SignInResponse(
-                result.accountId(), result.sessionToken(), result.role().name());
+                result.accountId(), result.sessionToken(), result.role().name(), result.onboardingRequired());
     }
 
     @Operation(summary = "세션 갱신", description = "현재 세션을 재검증하고 회전 주기가 지난 불투명 토큰만 교체합니다. 최초 발급 시각은 보존됩니다.")
@@ -151,7 +170,7 @@ public class AccountController {
                 .resolve(token)
                 .orElseThrow(() -> new UnauthorizedException("INVALID_SESSION", "유효한 세션이 아닙니다"));
         return new MeResponse(
-                session.accountId(), session.email(), session.role().name());
+                session.accountId(), session.email(), session.role().name(), session.onboardingRequired());
     }
 
     @Operation(summary = "로그아웃", description = "브라우저 쿠키 또는 Bearer 토큰에 연결된 서버 세션을 폐기하고 쿠키를 삭제합니다.")
