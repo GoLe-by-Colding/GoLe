@@ -47,7 +47,6 @@ packages/core/
 ```ts
 export interface CoreConfig {
   readonly apiBaseUrl: string;
-  readonly publicApiBaseUrl: string;
 }
 
 let config: CoreConfig | null = null;
@@ -61,8 +60,13 @@ export function requireConfig(): CoreConfig {
 }
 ```
 
-웹의 `shared/config/env.ts`는 **그대로 남는다** — `siteUrl`·포트원 키 등 웹 전용 값이 있다.
-그중 코어가 쓰는 두 개만 부트스트랩에서 넘긴다.
+웹의 `shared/config/env.ts`는 **그대로 남는다** — `siteUrl`·`publicApiBaseUrl`·포트원 키 등
+웹 전용 값이 있다. 그중 코어가 쓰는 `apiBaseUrl` 하나만 부트스트랩에서 넘긴다.
+
+**플랫폼 중립은 타입으로 못 막는다.** `fetch`·`FormData`·`AbortSignal`은 웹과 RN 모두에 있지만
+`lib: ES2022`에는 없어 DOM lib이 필요하고, 그걸 켜면 `window`·`document`까지 타입이 통과한다.
+그래서 `scripts/check-platform.mjs`가 실제 결합만 골라 금지한다 — `window`, `document`,
+`localStorage`, `navigator`, `EventSource`, `react`/`react-native`/`next` import, `process.env`.
 
 ### 세션 저장소 — `runtime/session-store.ts`
 

@@ -13,42 +13,42 @@
 
 ## 1. `packages/core` — 런타임
 
-- [ ] 1.1 패키지 스캐폴드. tsconfig는 웹의 strict 풀세트와 동일 수준 (R1.8)
-- [ ] 1.2 `runtime/config.ts` — `configureCore()` / `requireConfig()`, 미설정 시 throw (R1.4, R1.5)
-- [ ] 1.3 `runtime/session-store.ts` — `SessionStore` 인터페이스 + 주입 (R1.3)
-- [ ] 1.4 `runtime/http-client.ts` — `apiRequest`·`ApiError` 이동. 설정·세션을 **호출 시점**에 읽는다
-- [ ] 1.5 `runtime/upload-client.ts` — `UploadableImage` 합타입으로 어댑터화 (R1.6)
-- [ ] 1.6 `lib/{format,thumbnail,payment-method}.ts` 이동
-- [ ] 1.7 `lib/payment-channel.ts` — `resolveChannel`·`requireCardCustomer` 분리 (R7.2, R7.3)
-- [ ] 1.8 `package.json` exports 맵 — 슬라이스별 subpath
+- [x] 1.1 패키지 스캐폴드. tsconfig는 웹의 strict 풀세트와 동일 수준 (R1.8)
+- [x] 1.2 `runtime/config.ts` — `configureCore()` / `requireConfig()`, 미설정 시 throw (R1.4, R1.5)
+- [x] 1.3 `runtime/session-store.ts` — `SessionStore` 인터페이스 + 주입 (R1.3)
+- [x] 1.4 `runtime/http-client.ts` — `apiRequest`·`ApiError` 이동. 설정·세션을 **호출 시점**에 읽는다
+- [x] 1.5 `runtime/upload-client.ts` — `UploadableImage` 합타입으로 어댑터화 (R1.6)
+- [x] 1.6 `lib/{format,thumbnail,payment-method}.ts` 이동
+- [x] 1.7 `lib/payment-channel.ts` — `resolveChannel`·`requireCardCustomer` 분리 (R7.2, R7.3)
+- [x] 1.8 `package.json` exports 맵 — 슬라이스별 subpath
 
 ## 2. `packages/core` — 엔티티 15개
 
-- [ ] 2.1 `entities/*/model/types.ts` 15개 이동 (R1.2)
-- [ ] 2.2 `entities/*/api/*.ts` 15개 이동, import를 코어 내부 경로로 교체
-- [ ] 2.3 코어에 `next`·`react`·`react-native`·DOM 전역 참조가 없는지 검사 (R1.1)
-- [ ] 2.4 `tsc --noEmit` 통과
+- [x] 2.1 `entities/*/model/types.ts` 15개 이동 (R1.2)
+- [x] 2.2 `entities/*/api/*.ts` 15개 이동, import를 코어 내부 경로로 교체
+- [x] 2.3 코어에 `next`·`react`·`react-native`·DOM 전역 참조가 없는지 검사 (R1.1)
+- [x] 2.4 `tsc --noEmit` 통과
 
 ## 3. 웹 마이그레이션 — 화면 변경 없음
 
-- [ ] 3.1 `shared/config/bootstrap.ts` 추가, `app/layout.tsx`·최상위 클라이언트에서 호출
-- [ ] 3.2 `shared/api/session-auth.ts`를 localStorage `SessionStore` 구현으로 축소.
+- [x] 3.1 `shared/config/bootstrap.ts` 추가, `app/layout.tsx`·최상위 클라이언트에서 호출
+- [x] 3.2 `shared/api/session-auth.ts`를 localStorage `SessionStore` 구현으로 축소.
       `gole:session-change` 이벤트는 웹에 유지
-- [ ] 3.3 `shared/api/index.ts`·`shared/lib/index.ts`를 코어 재수출 파사드로 교체
-- [ ] 3.4 `shared/lib/portone.ts`가 코어의 짝짓기·검증을 호출하도록 교체
-- [ ] 3.5 엔티티 15개를 파사드 `index.ts`로 축소, 이동한 `model/`·`api/` 삭제
-- [ ] 3.6 `steiger.config.ts`에 `./src/entities/**` → `fsd/no-segmentless-slices` off, **사유 주석**
-- [ ] 3.7 품질 게이트 5종 통과 — `format:check` → `lint` → `typecheck` → `fsd:lint` → `build` (R1.7)
-- [ ] 3.8 기존 Playwright 스위트 통과 (인프라 + API 서버 + `pnpm e2e:seed` 선행)
+- [x] 3.3 `shared/api/index.ts`·`shared/lib/index.ts`를 코어 재수출 파사드로 교체
+- [x] 3.4 `shared/lib/portone.ts`가 코어의 짝짓기·검증을 호출하도록 교체
+- [x] 3.5 엔티티 15개를 파사드 `index.ts`로 축소, 이동한 `model/`·`api/` 삭제
+- [x] 3.6 `steiger.config.ts`에 `./src/entities/**` → `fsd/no-segmentless-slices` off, **사유 주석**
+- [x] 3.7 품질 게이트 5종 통과 — `format:check` → `lint` → `typecheck` → `fsd:lint` → `build` (R1.7)
+- [x] 3.8 기존 Playwright 스위트 통과 (인프라 + API 서버 + `pnpm e2e:seed` 선행)
 
 ## 4. `apps/mobile` — 셸
 
 - [x] 4.1 Expo + expo-router 스캐폴드, `@gole/core` 워크스페이스 의존 (R2.1)
 - [x] 4.2 `shared/theme/tokens.ts` — `globals.css` `@theme` 값 이식. `rise`/`fall` 포함 (R2.3)
-- [ ] 4.3 부트스트랩 — `configureCore()` + SecureStore `SessionStore` 구현 (R3.2)
+- [x] 4.3 부트스트랩 — `configureCore()` + SecureStore `SessionStore` 구현 (R3.2)
 - [x] 4.4 하단 탭 5개 (R2.2)
-- [ ] 4.5 공통 오류·로딩·빈 상태 컴포넌트 (R5.4)
-- [ ] 4.6 iOS·Android 빌드 확인 (R2.4)
+- [x] 4.5 공통 오류·로딩·빈 상태 컴포넌트 + `useAsync` (R5.4)
+- [~] 4.6 iOS 확인 완료(시뮬레이터 실기동). **Android는 SDK 미설치로 미확인** (R2.4)
 
 ## 5. 인증
 
@@ -59,7 +59,7 @@
 
 ## 6. 읽기 화면
 
-- [ ] 6.1 홈 (R5.1)
+- [x] 6.1 홈 — 트렌딩 세트를 코어 API로 조회 (R5.1)
 - [ ] 6.2 검색 + 필터, 페이지네이션·무한 스크롤 (R5.1, R5.2)
 - [ ] 6.3 매물 상세 + 갤러리, `thumbnailUrl` 공유 (R5.1, R5.3)
 - [ ] 6.4 세트 상세·시세, 시세 탐색 (R5.1)
@@ -78,6 +78,9 @@
 
 ## 8. 소셜 로그인
 
+- [ ] 8.0 **백엔드**: `OAuthProperties`에 플랫폼별 등록(google-ios·google-android) 추가.
+      Google은 웹과 네이티브의 client_id가 다른데 현재는 provider당 하나뿐이라,
+      앱이 네이티브 ID로 받은 code를 서버가 웹 ID로 교환해 실패한다 (R4.2 정정)
 - [ ] 8.1 provider 콘솔에 iOS·Android 앱 등록 + 커스텀 스킴 redirect (3 provider × 2 플랫폼) (R4.2)
 - [ ] 8.2 인앱 브라우저 인증 흐름 — 서버 state 왕복 (R4.1, R4.4)
 - [ ] 8.3 딥링크 콜백 처리 → 세션 저장
@@ -110,8 +113,8 @@
 
 ## 12. CI / 문서
 
-- [ ] 12.1 `ci.yml`에 `mobile` 잡 추가 (R9.1)
-- [ ] 12.2 코어를 web·mobile 잡 양쪽에서 검사 (R9.2)
+- [x] 12.1 `ci.yml`에 `mobile` 잡 추가 (R9.1)
+- [x] 12.2 코어를 web·mobile 잡 양쪽에서 검사 (R9.2)
 - [ ] 12.3 `mobile-release.yml` — 수동 실행 (R9.3)
 - [ ] 12.4 `AGENTS.md` — 프로젝트·명령어·아키텍처 절 갱신 (R9.4)
 - [ ] 12.5 `.env.example`에 앱 관련 설정(FCM·소셜 네이티브 client ID) 문서화
