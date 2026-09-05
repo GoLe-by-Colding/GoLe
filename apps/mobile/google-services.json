@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "704790528027",
+    "project_id": "gole-prod",
+    "storage_bucket": "gole-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:704790528027:android:99bd1d216962b55736f8be",
+        "android_client_info": {
+          "package_name": "com.gole.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhSOojanBVwkbMi24G7nGUwXgsaXOaHw4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
