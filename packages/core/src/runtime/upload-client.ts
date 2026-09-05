@@ -1,5 +1,5 @@
 import { requireConfig } from "./config";
-import { ApiError, type ApiErrorBody } from "./http-client";
+import { ApiError, type ApiErrorBody } from "./api-error";
 import { getSessionStore } from "./session-store";
 
 export interface UploadedImage {

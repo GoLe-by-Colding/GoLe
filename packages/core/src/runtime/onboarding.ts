@@ -1,4 +1,4 @@
-import { ApiError } from "./http-client";
+import { ApiError } from "./api-error";
 
 /**
  * 서버측 온보딩 게이트(onboarding D5, R13) 대응.
