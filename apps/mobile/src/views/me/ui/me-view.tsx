@@ -32,6 +32,12 @@ function SignedOut() {
           onPress={() => router.push("/sign-up")}
           style={styles.action}
         />
+        <Button
+          label="커뮤니티"
+          variant="secondary"
+          onPress={() => router.push("/community")}
+          style={styles.action}
+        />
       </View>
     </Screen>
   );
@@ -45,6 +51,7 @@ function SignedIn({
   readonly onSignOut: () => Promise<void>;
 }) {
   const colors = useTheme();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   // 세션에는 계정 ID와 권한만 있다. 이메일은 서버에 물어봐야 한다.
   const me = useAsync<Me>(() => fetchMe(token), [token]);
@@ -70,6 +77,8 @@ function SignedIn({
             ) : null}
           </View>
         )}
+        <Button label="알림" variant="secondary" onPress={() => router.push("/notifications")} />
+        <Button label="커뮤니티" variant="secondary" onPress={() => router.push("/community")} />
         <Button
           label="로그아웃"
           variant="danger"

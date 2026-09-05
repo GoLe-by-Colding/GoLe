@@ -2,7 +2,9 @@ export { configureCore, isCoreConfigured, requireConfig, resetCoreConfigForTest 
 export type { CoreConfig } from "./config";
 export { getSessionStore, resetSessionStoreForTest, setSessionStore } from "./session-store";
 export type { SessionStore } from "./session-store";
-export { ApiError, apiRequest } from "./http-client";
+export { ApiError } from "./api-error";
+export type { ApiErrorBody } from "./api-error";
+export { apiRequest } from "./http-client";
 export {
   getOnboardingRequiredHandler,
   isOnboardingRequiredError,
@@ -11,6 +13,6 @@ export {
   setOnboardingRequiredHandler,
 } from "./onboarding";
 export type { OnboardingRequiredHandler } from "./onboarding";
-export type { ApiErrorBody, RequestOptions } from "./http-client";
+export type { RequestOptions } from "./http-client";
 export { uploadImage, uploadImages } from "./upload-client";
 export type { NativeImageFile, UploadableImage, UploadedImage } from "./upload-client";

@@ -1,25 +1,7 @@
+import { ApiError, type ApiErrorBody } from "./api-error";
 import { requireConfig } from "./config";
 import { getOnboardingRequiredHandler, isOnboardingRequiredError } from "./onboarding";
 import { getSessionStore } from "./session-store";
-
-export interface ApiErrorBody {
-  readonly code: string;
-  readonly message: string;
-}
-
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly retryAfterMs: number | null;
-
-  constructor(status: number, body: ApiErrorBody, retryAfterMs: number | null = null) {
-    super(body.message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = body.code;
-    this.retryAfterMs = retryAfterMs;
-  }
-}
 
 export interface RequestOptions {
   readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -109,3 +91,6 @@ function parseRetryAfter(value: string | null): number | null {
   if (Number.isNaN(retryAt)) return null;
   return Math.max(0, retryAt - Date.now());
 }
+
+export { ApiError };
+export type { ApiErrorBody };

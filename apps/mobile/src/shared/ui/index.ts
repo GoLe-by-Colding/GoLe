@@ -1,5 +1,7 @@
 export { Button } from "./button";
 export type { ButtonProps } from "./button";
+export { MediaImage } from "./media-image";
+export type { MediaImageProps } from "./media-image";
 export { Screen } from "./screen";
 export type { ScreenProps } from "./screen";
 export { EmptyState, ErrorState, LoadingState } from "./states";

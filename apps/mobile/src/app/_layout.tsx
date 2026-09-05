@@ -62,6 +62,11 @@ export default function RootLayout() {
         <Stack.Screen name="sign-up" options={{ title: "가입하기" }} />
         {/* 인증은 가입·미인증 로그인 양쪽에서 들어오므로 뒤로 가기로 되돌아갈 곳이 없다. */}
         <Stack.Screen name="verify-email" options={{ title: "이메일 인증" }} />
+        <Stack.Screen name="listing/[id]" options={{ title: "매물" }} />
+        <Stack.Screen name="set/[setNumber]" options={{ title: "세트 · 시세" }} />
+        <Stack.Screen name="seller/[sellerId]" options={{ title: "판매자 상점" }} />
+        <Stack.Screen name="community/index" options={{ title: "커뮤니티" }} />
+        <Stack.Screen name="notifications" options={{ title: "알림" }} />
       </Stack>
     </SafeAreaProvider>
   );
