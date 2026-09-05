@@ -1,11 +1,6 @@
-import { Screen, Text } from "@/shared/ui";
+import { MeView } from "@/views/me";
 
-/** 내 정보 탭. 웹 `views/profile`에 대응한다. (스펙 6단계에서 실제 화면으로 교체) */
+/** 내 정보 탭. 라우트는 얇게 — 화면 조합은 view가 한다. */
 export default function MeScreen() {
-  return (
-    <Screen>
-      <Text variant="title">내 정보</Text>
-      <Text muted>준비 중입니다.</Text>
-    </Screen>
-  );
+  return <MeView />;
 }

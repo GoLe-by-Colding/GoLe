@@ -1,7 +1,8 @@
 export {
-  clearSessionToken,
-  currentSessionToken,
+  clearSession,
+  getSession,
   nativeSessionStore,
   restoreSession,
-  saveSessionToken,
+  saveSession,
+  subscribeSession,
 } from "./session-store";
