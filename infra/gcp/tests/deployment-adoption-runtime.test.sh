@@ -26,6 +26,10 @@ done
 
 grep -q 'create_release "$adoption_sha" historical-main' \
   /source/infra/gcp/scripts/gole-hostctl.sh
-grep -q 'deployment-migrate-adopt-secret' /source/infra/gcp/scripts/migrate-and-adopt-existing.sh
+grep -q 'deployment-migrate-adopt-existing' /source/infra/gcp/scripts/migrate-and-adopt-existing.sh
+if grep -q 'deployment-migrate-adopt-secret' /source/infra/gcp/scripts/gole-hostctl.sh; then
+  echo 'retired Secret-changing adoption operation remained callable' >&2
+  exit 1
+fi
 echo 'Unsafe marker-only adoption is retired; transactional adoption provenance is required.'
 CONTAINER_TEST

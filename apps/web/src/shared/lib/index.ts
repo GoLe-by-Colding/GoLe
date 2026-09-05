@@ -18,4 +18,9 @@ export {
   loginHrefWithReturnTo,
 } from "./return-to";
 export { schemaAvailability, schemaItemCondition, absoluteUrl, breadcrumbJsonLd } from "./seo";
+export {
+  clearPendingVerificationEmail,
+  readPendingVerificationEmail,
+  storePendingVerificationEmail,
+} from "./pending-verification-email";
 export type { BreadcrumbItem } from "./seo";

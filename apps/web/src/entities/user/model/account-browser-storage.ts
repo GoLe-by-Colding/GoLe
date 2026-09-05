@@ -1,4 +1,5 @@
 import { clearStoredSession } from "@shared/api";
+import { clearPendingVerificationEmail } from "@shared/lib";
 
 const ACCOUNT_LOCAL_STORAGE_KEYS = ["gole.buyer-phone", "gole.buyer-name"] as const;
 const PAYMENT_ATTEMPT_KEY_PREFIX = "gole.order.payment-attempted:";
@@ -14,6 +15,7 @@ export function clearAccountBrowserStorage(): void {
 
   try {
     clearStoredSession();
+    clearPendingVerificationEmail();
   } catch {
     // 브라우저 정책이 storage 접근을 막아도 나머지 저장소 정리는 각각 시도한다.
   }

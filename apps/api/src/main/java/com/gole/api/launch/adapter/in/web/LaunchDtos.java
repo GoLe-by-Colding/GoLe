@@ -30,13 +30,11 @@ public final class LaunchDtos {
             String tradeMode,
             Features features,
             boolean sellerIdentityVerificationReady,
+            boolean emailAuthenticationAvailable,
             Instant updatedAt) {
 
-        public static LaunchConfigResponse from(LaunchConfig config) {
-            return from(config, false);
-        }
-
-        public static LaunchConfigResponse from(LaunchConfig config, boolean sellerIdentityVerificationReady) {
+        public static LaunchConfigResponse from(
+                LaunchConfig config, boolean sellerIdentityVerificationReady, boolean emailAuthenticationAvailable) {
             return new LaunchConfigResponse(
                     config.stage().level(),
                     config.tradeMode().name(),
@@ -45,6 +43,7 @@ public final class LaunchDtos {
                             config.isEnabled(LaunchFeature.REVIEWS),
                             config.isEnabled(LaunchFeature.PARTNER_PAYOUT)),
                     sellerIdentityVerificationReady,
+                    emailAuthenticationAvailable,
                     config.updatedAt());
         }
     }
@@ -72,7 +71,8 @@ public final class LaunchDtos {
                 LaunchConfig requested,
                 Mode settlementMode,
                 boolean payoutContractVerified,
-                boolean sellerIdentityVerificationReady) {
+                boolean sellerIdentityVerificationReady,
+                boolean emailAuthenticationAvailable) {
             java.util.Map<String, Boolean> overrides = new java.util.LinkedHashMap<>();
             requested.overrides().forEach((feature, enabled) -> overrides.put(feature.apiName(), enabled));
             java.util.Map<String, Boolean> readiness = new java.util.LinkedHashMap<>();
@@ -80,7 +80,7 @@ public final class LaunchDtos {
                 readiness.put(check.apiName(), requested.isConfirmed(check));
             }
             return new AdminLaunchConfigResponse(
-                    LaunchConfigResponse.from(effective, sellerIdentityVerificationReady),
+                    LaunchConfigResponse.from(effective, sellerIdentityVerificationReady, emailAuthenticationAvailable),
                     requested.stage().level(),
                     overrides,
                     readiness,

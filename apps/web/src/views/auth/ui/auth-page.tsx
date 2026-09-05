@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInForm } from "@features/sign-in";
 import { SignUpForm } from "@features/sign-up";
 import { SocialLoginButtons } from "@features/social-login";
+import { fetchLaunchConfig } from "@entities/launch";
 import {
   fetchCurrentSignupPolicy,
   type CurrentSignupPolicy,
@@ -14,6 +15,7 @@ import {
 } from "@entities/user";
 import { AuthCard } from "@widgets/auth-layout";
 import { Button } from "@shared/ui";
+import { clearPendingVerificationEmail, storePendingVerificationEmail } from "@shared/lib";
 import { applyRoleGuard, resolveReturnTo, returnToLabel } from "../model/return-to";
 
 export interface AuthPageProps {
@@ -59,6 +61,9 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
   const passwordChanged =
     searchParams.get("passwordChanged") === "1" || searchParams.get("passwordReset") === "1";
   const [signupPolicy, setSignupPolicy] = useState<CurrentSignupPolicy | undefined>(undefined);
+  const [emailAuthenticationAvailable, setEmailAuthenticationAvailable] = useState<boolean | null>(
+    null,
+  );
   const [signupPolicyError, setSignupPolicyError] = useState<string | undefined>(undefined);
   const [signupPolicyAcceptance, setSignupPolicyAcceptance] = useState<SignupPolicyAcceptance>({
     termsVersion: "",
@@ -69,6 +74,16 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     thirdPartyProvisionAccepted: false,
     minimumAgeConfirmed: false,
   });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchLaunchConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) {
+        setEmailAuthenticationAvailable(config.emailAuthenticationAvailable);
+      }
+    });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (mode !== "signup" || signupPolicy !== undefined) {
@@ -104,6 +119,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     role: "USER" | "ADMIN" | null | undefined,
     onboardingRequired = false,
   ): void {
+    clearPendingVerificationEmail();
     const target = applyRoleGuard(returnTo, role) ?? "/";
     if (onboardingRequired) {
       router.replace(`/onboarding?${new URLSearchParams({ returnTo: target }).toString()}`);
@@ -185,6 +201,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
 
         {mode === "signin" ? (
           <SignInForm
+            emailAuthenticationAvailable={emailAuthenticationAvailable === true}
             resetHref={
               returnTo === null
                 ? "/forgot-password"
@@ -194,16 +211,19 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
           />
         ) : (
           <SignUpForm
+            emailRegistrationAvailable={emailAuthenticationAvailable}
             policy={signupPolicy}
             policyError={signupPolicyError}
             policyAcceptance={signupPolicyAcceptance}
             onPolicyAcceptanceChange={setSignupPolicyAcceptance}
             onRegistered={(email) => {
-              const next = new URLSearchParams({ email });
+              storePendingVerificationEmail(email);
+              const next = new URLSearchParams();
               if (returnTo !== null) {
                 next.set("returnTo", returnTo);
               }
-              router.push(`/verify?${next.toString()}`);
+              const query = next.toString();
+              router.push(query.length === 0 ? "/verify" : `/verify?${query}`);
             }}
           />
         )}

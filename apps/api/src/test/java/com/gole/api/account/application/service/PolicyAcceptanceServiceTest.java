@@ -51,7 +51,7 @@ class PolicyAcceptanceServiceTest {
     @Test
     void rejectsMissingConfirmationAndStaleVersion() {
         assertThatThrownBy(() ->
-                        service.validate(new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, false, true)))
+                        service.validate(new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, false, true)))
                 .isInstanceOf(BadRequestException.class)
                 .extracting("code")
                 .isEqualTo("POLICY_ACCEPTANCE_REQUIRED");
@@ -64,7 +64,7 @@ class PolicyAcceptanceServiceTest {
 
     @Test
     void optionalThirdPartyChoiceIsValidatedAndRecordedSeparately() {
-        var input = new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
+        var input = new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "2026-09-04", true);
 
         service.record("account-1", input, PolicyAcceptance.Channel.EMAIL);
 

@@ -1,5 +1,6 @@
 package com.gole.api.launch.adapter.in.web;
 
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
@@ -52,18 +53,21 @@ public class AdminLaunchController {
     private final RecordAdminActionUseCase audit;
     private final LaunchSettlementModePort settlementMode;
     private final SellerIdentityVerificationProperties sellerIdentityVerification;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AdminLaunchController(
             GetLaunchConfigUseCase getLaunchConfig,
             ManageLaunchConfigUseCase manageLaunchConfig,
             RecordAdminActionUseCase audit,
             LaunchSettlementModePort settlementMode,
-            SellerIdentityVerificationProperties sellerIdentityVerification) {
+            SellerIdentityVerificationProperties sellerIdentityVerification,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.getLaunchConfig = getLaunchConfig;
         this.manageLaunchConfig = manageLaunchConfig;
         this.audit = audit;
         this.settlementMode = settlementMode;
         this.sellerIdentityVerification = sellerIdentityVerification;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Operation(summary = "현재 공개 단계 조회", description = "공개 응답에 override 원본과 마지막 조치자를 더해 돌려준다.")
@@ -146,6 +150,7 @@ public class AdminLaunchController {
                 requested,
                 settlementMode.currentMode(),
                 settlementMode.payoutContractVerified(),
-                sellerIdentityVerification.verificationReady());
+                sellerIdentityVerification.verificationReady(),
+                emailAuthentication.available());
     }
 }

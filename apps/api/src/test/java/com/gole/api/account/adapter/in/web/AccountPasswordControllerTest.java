@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.adapter.in.web.AccountRequests.ChangePasswordRequest;
@@ -17,7 +18,9 @@ import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
 import com.gole.api.account.application.port.in.RequestPasswordResetUseCase;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.model.Role;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.web.ClientAddressResolver;
 import jakarta.servlet.http.Cookie;
@@ -43,7 +46,8 @@ class AccountPasswordControllerTest {
             sessions,
             sessionCookie,
             publicRequestLimit,
-            new ClientAddressResolver());
+            new ClientAddressResolver(),
+            new EmailAuthenticationAvailability("test", false));
 
     @Test
     void changePasswordUsesCurrentSessionAndClearsCookie() {
@@ -82,6 +86,25 @@ class AccountPasswordControllerTest {
 
         verify(requestReset).request(any());
         verify(confirmReset).confirm(any());
+    }
+
+    @Test
+    void unavailableEmailResetRejectsBeforeRateLimitMutation() {
+        AccountPasswordController unavailable = new AccountPasswordController(
+                changePassword,
+                requestReset,
+                confirmReset,
+                sessions,
+                sessionCookie,
+                publicRequestLimit,
+                new ClientAddressResolver(),
+                new EmailAuthenticationAvailability("production", false));
+
+        assertThatThrownBy(() -> unavailable.requestReset(
+                        new RequestPasswordResetRequest("member@gole.test"), new MockHttpServletRequest()))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", EmailAuthenticationAvailability.UNAVAILABLE_CODE);
+        verifyNoInteractions(publicRequestLimit, requestReset);
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.gole.api.account.application.port.out.PasswordResetChallengeStorePort
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.PasswordTooLongException;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
@@ -42,6 +43,7 @@ public class AccountPasswordService
     private final VerificationCodeSenderPort codeSender;
     private final SessionStorePort sessionStore;
     private final Clock clock;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AccountPasswordService(
             AccountRepositoryPort accountRepository,
@@ -50,7 +52,8 @@ public class AccountPasswordService
             VerificationCodeGeneratorPort codeGenerator,
             VerificationCodeSenderPort codeSender,
             SessionStorePort sessionStore,
-            Clock clock) {
+            Clock clock,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.resetStore = resetStore;
@@ -58,6 +61,7 @@ public class AccountPasswordService
         this.codeSender = codeSender;
         this.sessionStore = sessionStore;
         this.clock = clock;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Override
@@ -84,6 +88,7 @@ public class AccountPasswordService
 
     @Override
     public void request(RequestPasswordResetCommand command) {
+        emailAuthentication.requireAvailable();
         Email email = new Email(command.email());
         Instant now = Instant.now(clock);
 
@@ -108,6 +113,7 @@ public class AccountPasswordService
     @Override
     @Transactional
     public void confirm(ConfirmPasswordResetCommand command) {
+        emailAuthentication.requireAvailable();
         validatePassword(command.newPassword());
         Email email = new Email(command.email());
         Challenge challenge = resetStore.find(email).orElseThrow(AccountPasswordService::invalidReset);

@@ -12,16 +12,20 @@ EXACT_VALUES = {
     "GOLE_ENVIRONMENT": "production",
     "GOLE_ONBOARDING_PHONE_REQUIRED": "false",
     "GOLE_ONBOARDING_LOG_VERIFICATION_CODES": "false",
-    "GOLE_VERIFICATION_EMAIL_ENABLED": "true",
-    "GOLE_MAIL_HEALTH_ENABLED": "true",
+    # SMTP is deliberately unavailable for the initial public launch.  These
+    # values are exact so an old Secret version cannot silently turn delivery
+    # (or Spring's mail health probe) back on.
+    "GOLE_VERIFICATION_EMAIL_ENABLED": "false",
+    "GOLE_MAIL_HEALTH_ENABLED": "false",
     "SMTP_HOST": "smtp.gmail.com",
     "SMTP_PORT": "587",
-    "SMTP_USERNAME": "coldingcontact@gmail.com",
+    "SMTP_USERNAME": "",
+    "SMTP_PASSWORD": "",
     "SMTP_AUTH": "true",
     "SMTP_STARTTLS": "true",
     "SMTP_STARTTLS_REQUIRED": "true",
     "SMTP_SSL_CHECKSERVERIDENTITY": "true",
-    "GOLE_VERIFICATION_EMAIL_FROM": "coldingcontact@gmail.com",
+    "GOLE_VERIFICATION_EMAIL_FROM": "",
     "GOLE_CATALOG_SEED": "false",
     "GOLE_LISTING_SEED": "false",
     "GOLE_PRICING_SEED": "false",
@@ -39,7 +43,7 @@ EXACT_VALUES = {
         "https://gole.co.kr/auth/callback/naver"
     ),
     "GOLE_TERMS_VERSION": "2026-09-04",
-    "GOLE_PRIVACY_VERSION": "2026-09-04",
+    "GOLE_PRIVACY_VERSION": "2026-09-05",
     "GOLE_THIRD_PARTY_PROVISION_VERSION": "2026-09-04",
     "GOLE_SELLER_IDENTITY_VERIFICATION_READY": "false",
     "GOLE_AUTH_EMAIL_RECIPIENT_COOLDOWN_MAXIMUM": "1",
@@ -72,9 +76,6 @@ EXACT_VALUES = {
 }
 
 KEY_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-PLACEHOLDER_PATTERN = re.compile(r"^(replace([_-]?with)?|change[_-]?me|example)", re.IGNORECASE)
-
-
 class PolicyError(ValueError):
     """Production environment violates a deploy-time invariant."""
 
@@ -109,14 +110,6 @@ def validate(values: dict[str, str]) -> None:
         for key, expected in EXACT_VALUES.items()
         if values.get(key) != expected
     ]
-
-    smtp_password = values.get("SMTP_PASSWORD", "")
-    if not re.fullmatch(r"[A-Za-z0-9]{16}", smtp_password) or PLACEHOLDER_PATTERN.match(
-        smtp_password
-    ):
-        violations.append(
-            "SMTP_PASSWORD must contain exactly 16 ASCII alphanumeric Google app-password characters"
-        )
 
     optional_public_ids = {
         "NEXT_PUBLIC_GA_MEASUREMENT_ID": r"G-[A-Z0-9]+",

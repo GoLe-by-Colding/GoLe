@@ -4,14 +4,20 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { saveSession, signIn, type Session } from "@entities/user";
 import { ApiError } from "@shared/api";
+import { storePendingVerificationEmail } from "@shared/lib";
 import { Button, Field, Input } from "@shared/ui";
 
 export interface SignInFormProps {
   readonly onSignedIn: (session: Session) => void;
   readonly resetHref?: string;
+  readonly emailAuthenticationAvailable?: boolean;
 }
 
-export function SignInForm({ onSignedIn, resetHref = "/forgot-password" }: SignInFormProps) {
+export function SignInForm({
+  onSignedIn,
+  resetHref = "/forgot-password",
+  emailAuthenticationAvailable = true,
+}: SignInFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -40,10 +46,11 @@ export function SignInForm({ onSignedIn, resetHref = "/forgot-password" }: SignI
       {error ? (
         <div className="p-3 rounded-md bg-danger-soft text-danger text-sm" role="alert">
           <p>{error}</p>
-          {needsVerification ? (
+          {needsVerification && emailAuthenticationAvailable ? (
             <Link
               className="mt-2 inline-flex font-semibold underline underline-offset-4"
-              href={`/verify?email=${encodeURIComponent(email)}`}
+              href="/verify"
+              onClick={() => storePendingVerificationEmail(email)}
             >
               이메일 인증하러 가기
             </Link>
@@ -78,14 +85,16 @@ export function SignInForm({ onSignedIn, resetHref = "/forgot-password" }: SignI
           />
         )}
       </Field>
-      <div className="-mt-2 flex justify-end">
-        <Link
-          href={resetHref}
-          className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
-        >
-          비밀번호를 잊으셨나요?
-        </Link>
-      </div>
+      {emailAuthenticationAvailable ? (
+        <div className="-mt-2 flex justify-end">
+          <Link
+            href={resetHref}
+            className="text-sm font-semibold text-brand-700 underline-offset-4 hover:underline"
+          >
+            비밀번호를 잊으셨나요?
+          </Link>
+        </div>
+      ) : null}
       <Button type="submit" size="lg" fullWidth disabled={submitting}>
         {submitting ? "로그인 중..." : "로그인"}
       </Button>

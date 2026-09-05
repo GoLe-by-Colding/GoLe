@@ -77,7 +77,7 @@ class SocialAuthControllerTest {
                 new AuthorizeUrlRequest(
                         "https://gole.co.kr/auth/callback/google",
                         "2026-09-04",
-                        "2026-09-04",
+                        "2026-09-05",
                         true,
                         true,
                         true,

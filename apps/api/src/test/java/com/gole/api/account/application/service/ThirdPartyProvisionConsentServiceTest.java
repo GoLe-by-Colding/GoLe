@@ -104,12 +104,12 @@ class ThirdPartyProvisionConsentServiceTest {
 
     @Test
     void signupChoiceIsOptionalButCheckedChoiceRecordsProviderSpecificEvidence() {
-        var declined = new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", false);
+        var declined = new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "2026-09-04", false);
         service.validateSignupChoice(declined);
         service.recordSignupIfAccepted("account-1", declined, Channel.EMAIL);
         assertThat(events.all).isEmpty();
 
-        var accepted = new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
+        var accepted = new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "2026-09-04", true);
         service.validateSignupChoice(accepted);
         service.recordSignupIfAccepted("account-2", accepted, Channel.SOCIAL_GOOGLE);
         service.recordSignupIfAccepted("account-2", accepted, Channel.SOCIAL_GOOGLE);
@@ -122,7 +122,7 @@ class ThirdPartyProvisionConsentServiceTest {
 
     @Test
     void checkedSignupChoiceCannotOmitNoticeVersion() {
-        var input = new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, null, true);
+        var input = new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, null, true);
 
         assertThatThrownBy(() -> service.validateSignupChoice(input))
                 .isInstanceOf(BadRequestException.class)
@@ -133,7 +133,7 @@ class ThirdPartyProvisionConsentServiceTest {
     @Test
     void declinedSignupChoiceDoesNotDependOnTheOptionalNoticeVersion() {
         var declinedWithStaleVersion =
-                new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "old-version", false);
+                new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "old-version", false);
 
         service.validateSignupChoice(declinedWithStaleVersion);
         service.recordSignupIfAccepted("account-1", declinedWithStaleVersion, Channel.EMAIL);

@@ -13,6 +13,8 @@ export interface LaunchConfig {
   readonly features: LaunchFeatures;
   /** 배포 래치와 판매자 확인 절차가 모두 준비됐을 때만 true. 누락은 false로 해석한다. */
   readonly sellerIdentityVerificationReady: boolean;
+  /** 메일 발송 또는 명시적 개발 전달 수단이 있어 이메일 challenge를 완료할 수 있을 때만 true. */
+  readonly emailAuthenticationAvailable: boolean;
   readonly updatedAt: string | null;
 }
 
@@ -36,6 +38,7 @@ export const SAFE_LAUNCH_CONFIG: LaunchConfig = Object.freeze({
     partnerPayout: false,
   }),
   sellerIdentityVerificationReady: false,
+  emailAuthenticationAvailable: false,
   updatedAt: null,
 });
 
@@ -100,6 +103,8 @@ export function parseLaunchConfig(value: unknown): LaunchConfig {
     features,
     // 롤링 배포 중 구버전 API 응답의 필드 누락도 판매 개방으로 추측하지 않는다.
     sellerIdentityVerificationReady: value.sellerIdentityVerificationReady === true,
+    // SMTP가 아직 없는 초기 공개에서는 가입·복구 폼을 먼저 닫는다. 필드 누락도 false다.
+    emailAuthenticationAvailable: value.emailAuthenticationAvailable === true,
     updatedAt: value.updatedAt,
   });
 }

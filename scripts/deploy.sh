@@ -78,6 +78,10 @@ validate_production_invocation() {
   require_exact_production_env RUNNER_ARCH X64
   require_exact_production_env GITHUB_SHA "$DEPLOY_SHA"
   require_exact_production_env GITHUB_WORKFLOW_SHA "$DEPLOY_SHA"
+  if [[ ! "${GOLE_PRODUCTION_ENV_SECRET_VERSION:-}" =~ ^[1-9][0-9]{0,11}$ ]]; then
+    echo "운영 Secret Manager 버전 repository variable이 올바르지 않습니다." >&2
+    exit 1
+  fi
 
   case "${GITHUB_EVENT_NAME:-}" in
     workflow_run | workflow_dispatch) ;;
@@ -582,6 +586,12 @@ if [ "$HOST_DOCKER_CONTROL" = "1" ]; then
   DEPLOYMENT_TRANSACTION_ACTIVE=1
 fi
 snapshot_deployment_images
+if [ "$PRODUCTION_DEPLOY_CONTEXT" = "1" ]; then
+  log "검증된 운영 Secret 버전 준비"
+  sudo -n "$HOSTCTL" deployment-environment-prepare \
+    "$GOLE_PRODUCTION_ENV_SECRET_VERSION" "$current_deploy_sha" \
+    "$DEPLOYMENT_TRANSACTION_ID"
+fi
 
 log "Docker Compose build"
 compose_build_target "$current_deploy_sha" "${SERVICES[@]}"

@@ -1,20 +1,87 @@
 "use client";
 
-import { Suspense } from "react";
+import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { fetchLaunchConfig } from "@entities/launch";
 import { VerifyEmailForm } from "@features/verify-email";
 import { AuthCard } from "@widgets/auth-layout";
-import { resolveReturnTo } from "@shared/lib";
+import {
+  clearPendingVerificationEmail,
+  readPendingVerificationEmail,
+  resolveReturnTo,
+} from "@shared/lib";
 
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const email = searchParams.get("email") ?? "";
+  const hasLegacyEmailQuery = searchParams.has("email");
+  const [email] = useState(readPendingVerificationEmail);
   const returnTo = resolveReturnTo(searchParams.get("returnTo"));
   const loginHref =
     returnTo === null ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
+  const [emailAuthenticationAvailable, setEmailAuthenticationAvailable] = useState<boolean | null>(
+    null,
+  );
 
-  return <VerifyEmailForm initialEmail={email} onVerified={() => router.replace(loginHref)} />;
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchLaunchConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) {
+        setEmailAuthenticationAvailable(config.emailAuthenticationAvailable);
+      }
+    });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (hasLegacyEmailQuery) {
+      const next = new URLSearchParams();
+      if (returnTo !== null) next.set("returnTo", returnTo);
+      const query = next.toString();
+      router.replace(query.length === 0 ? "/verify" : `/verify?${query}`);
+    }
+  }, [hasLegacyEmailQuery, returnTo, router]);
+
+  if (emailAuthenticationAvailable === null) {
+    return (
+      <p role="status" className="py-6 text-center text-sm text-neutral-500">
+        이메일 발송 상태를 확인하는 중…
+      </p>
+    );
+  }
+
+  if (!emailAuthenticationAvailable) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p
+          role="status"
+          className="rounded-xl bg-brand-50 p-4 text-sm leading-relaxed text-brand-900"
+        >
+          이메일 인증 코드 발송을 준비하고 있어요. 준비 전에는 이메일 가입을 완료할 수 없습니다.
+        </p>
+        <Link className="text-center text-sm font-semibold text-brand-700" href={loginHref}>
+          로그인으로 돌아가기
+        </Link>
+        <a
+          className="text-center text-sm font-semibold text-neutral-600 underline underline-offset-4"
+          href="mailto:coldingcontact@gmail.com?subject=GoLe%20이메일%20인증%20문의"
+        >
+          운영팀에 이메일 보내기
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <VerifyEmailForm
+      initialEmail={email}
+      onVerified={() => {
+        clearPendingVerificationEmail();
+        router.replace(loginHref);
+      }}
+    />
+  );
 }
 
 export function VerifyEmailPage() {

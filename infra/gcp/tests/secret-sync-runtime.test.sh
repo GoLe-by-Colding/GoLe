@@ -31,6 +31,9 @@ chmod -R go-w /var/lib/gole
 
 install -d /fixtures
 install -m 0600 /source/infra/gcp/tests/fixtures/production.env /fixtures/base.env
+cp /fixtures/base.env /fixtures/credentialed-smtp.env
+sed -i 's/^SMTP_PASSWORD=$/SMTP_PASSWORD=legacy-private-app-password/' \
+  /fixtures/credentialed-smtp.env
 cp /fixtures/base.env /fixtures/v6.env
 printf 'SAFE_POLICY_REVISION=6\n' >> /fixtures/v6.env
 cp /fixtures/base.env /fixtures/v8.env
@@ -61,6 +64,7 @@ case "$version" in
   7) cp /fixtures/development.env "$output" ;;
   8) cp /fixtures/v8.env "$output" ;;
   9) cp /fixtures/v9.env "$output" ;;
+  10) cp /fixtures/credentialed-smtp.env "$output" ;;
   *) exit 94 ;;
 esac
 FAKE_GCLOUD
@@ -336,6 +340,16 @@ fi
 [ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$baseline_hash" ]
 ! grep -Fq 'developer@example.test' /tmp/development.out
 
+# A newer payload carrying a stale SMTP credential is rejected before install
+# and the credential value never reaches the retained workflow output.
+if run_sync 10 00000000-0000-0000-0000-000000000010 >/tmp/smtp.out 2>&1; then
+  echo 'credentialed SMTP environment was accepted during Stage 0' >&2
+  exit 1
+fi
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$baseline_hash" ]
+! grep -Fq 'legacy-private-app-password' /tmp/smtp.out
+
 v6_hash="$(sha256sum /fixtures/v6.env | cut -d' ' -f1)"
 : > /tmp/restart-trace
 : > /tmp/provenance-trace
@@ -428,8 +442,8 @@ if find /etc/gole -maxdepth 1 -type f \( -name '.secret.*' -o -name '.environmen
   echo 'Secret Sync left a plaintext temporary behind' >&2
   exit 1
 fi
-for output in /tmp/equal.out /tmp/development.out /tmp/success.out /tmp/failure.out /tmp/v8.out /tmp/v9.out; do
-  ! grep -Fq 'abcdefghijklmnop' "$output"
+for output in /tmp/equal.out /tmp/development.out /tmp/smtp.out /tmp/success.out /tmp/failure.out /tmp/v8.out /tmp/v9.out; do
+  ! grep -Fq 'legacy-private-app-password' "$output"
   ! grep -Eq '[0-9a-f]{64}' "$output"
 done
 

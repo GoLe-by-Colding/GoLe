@@ -278,6 +278,56 @@ fi
 grep -q 'active listings with incomplete verified seller identity remain: 1' /tmp/preflight.out
 ! grep -Eq 'sellerId|phoneNumber|phoneVerifiedAt|[0-9a-f]{24}' /tmp/preflight.out
 
+# The LKG marker cannot advance while the first-main environment is merely
+# installed. Recording the new SHA first commits the linked env version under
+# the same request, and deliberately retains that journal for final rollback.
+legacy_sha=1111111111111111111111111111111111111111
+install -d -m 0700 /var/backups/gole-env /var/backups/gole-nginx
+env_backup="/var/backups/gole-env/gole.env.20260905T000000Z.v6.$request_id"
+nginx_backup="/var/backups/gole-nginx/nginx.conf.$request_id"
+install -m 0600 /source/infra/gcp/tests/fixtures/development.env "$env_backup"
+printf 'candidate-nginx\n' > /etc/gole/nginx.conf
+printf 'legacy-nginx\n' > "$nginx_backup"
+chmod 0644 /etc/gole/nginx.conf
+chmod 0600 "$nginx_backup"
+candidate_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+nginx_hash="$(sha256sum /etc/gole/nginx.conf | cut -d' ' -f1)"
+printf '5\n' > /etc/gole/gole.env.version
+cat > /etc/gole/gole.env.transaction <<EOF
+state=installed
+previous_version=5
+requested_version=6
+request_id=$request_id
+backup_file=$env_backup
+candidate_sha256=$candidate_env_hash
+EOF
+cat > /etc/gole/nginx.conf.transaction <<EOF
+state=committed
+request_id=$request_id
+backup_file=$nginx_backup
+candidate_sha256=$nginx_hash
+deploy_sha=$expected_sha
+EOF
+cat > /etc/gole/deployment.transaction <<EOF
+state=verified
+target=all
+request_id=$request_id
+new_sha=$expected_sha
+previous_sha=$legacy_sha
+EOF
+printf '%s\n' "$legacy_sha" > /etc/gole/deployed.sha
+chmod 0600 /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction \
+  /etc/gole/deployment.transaction
+chmod 0644 /etc/gole/gole.env.version /etc/gole/deployed.sha
+SUDO_USER=root /usr/local/sbin/gole-hostctl \
+  deployment-record-sha "$expected_sha" "$request_id"
+[ "$(cat /etc/gole/gole.env.version)" = 6 ]
+grep -qx 'state=committed' /etc/gole/gole.env.transaction
+grep -qx 'state=marker-recorded' /etc/gole/deployment.transaction
+[ "$(cat /etc/gole/deployed.sha)" = "$expected_sha" ]
+rm -f /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction \
+  /etc/gole/deployment.transaction
+
 # Simulate SIGKILL after the committed Nginx journal was removed but before
 # deployment-finalize. The exact new LKG/full runtime is re-proved and recovery
 # advances cleanup-pending instead of recreating the previous application.

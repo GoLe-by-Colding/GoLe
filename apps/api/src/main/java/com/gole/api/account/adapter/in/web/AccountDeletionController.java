@@ -50,14 +50,14 @@ public class AccountDeletionController {
         this.mutationGate = mutationGate;
     }
 
-    @Operation(summary = "회원 탈퇴 본인확인 코드 발송", description = "현재 로그인 계정 이메일로 10분짜리 일회용 코드를 발송합니다.")
+    @Operation(summary = "회원 탈퇴 본인확인 코드 발송", description = "이메일 발송이 준비된 때 현재 로그인 계정 이메일로 10분짜리 일회용 코드를 발송합니다.")
     @PostMapping("/deletion-verifications")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void issueVerification(HttpServletRequest request) {
         accountDeletion.issueVerification(requireAccountId(request));
     }
 
-    @Operation(summary = "회원 탈퇴 요청", description = "이메일·확인 문구·일회용 코드를 검증한 뒤 계정을 즉시 비활성화하고 모든 세션을 폐기합니다.")
+    @Operation(summary = "회원 탈퇴 요청", description = "이메일 발송이 준비된 때 이메일·확인 문구·일회용 코드를 검증한 뒤 계정을 즉시 비활성화하고 모든 세션을 폐기합니다.")
     @PostMapping("/deletion-requests")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public DeletionResponse request(

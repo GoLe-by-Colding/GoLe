@@ -14,6 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 PREPARER = ROOT / "infra/gcp/scripts/prepare-production-env.py"
 VALIDATOR_PATH = ROOT / "infra/gcp/scripts/validate-production-env.py"
 PRODUCTION_FIXTURE = ROOT / "infra/gcp/tests/fixtures/production.env"
+RUNBOOK = ROOT / "infra/gcp/README.md"
 
 
 def load_validator():
@@ -35,11 +36,22 @@ class PrepareProductionEnvironmentTest(unittest.TestCase):
             key = line.split("=", 1)[0]
             if key in exact_keys:
                 continue
-            if key == "SMTP_PASSWORD":
-                retained.append("SMTP_PASSWORD=")
-            else:
-                retained.append(line)
+            retained.append(line)
         retained.insert(0, "# existing payload must remain a plain file")
+        retained.extend(
+            (
+                "# SMTP_USERNAME=commented-private-mailbox@example.test",
+                "#SMTP_PASSWORD=commented-private-app-password",
+                "  # export GOLE_VERIFICATION_EMAIL_FROM=commented-private-sender@example.test",
+            )
+        )
+        retained.extend(
+            (
+                "SMTP_USERNAME=legacy-private-mailbox@example.test",
+                "SMTP_PASSWORD=legacy-private-app-password",
+                "GOLE_VERIFICATION_EMAIL_FROM=legacy-private-sender@example.test",
+            )
+        )
         retained.append("CUSTOM_PRESERVED_SECRET=do-not-log-this-value")
         self.input.write_text("\n".join(retained) + "\n")
         self.original_hash = hashlib.sha256(self.input.read_bytes()).hexdigest()
@@ -47,7 +59,7 @@ class PrepareProductionEnvironmentTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def run_preparer(self, password: str | None = None):
+    def run_preparer(self, attempted_password: str | None = None):
         command = [
             "python3",
             str(PREPARER),
@@ -55,26 +67,18 @@ class PrepareProductionEnvironmentTest(unittest.TestCase):
             "--output-directory",
             str(self.directory),
         ]
-        if password is not None:
+        if attempted_password is not None:
             command.append("--smtp-password-stdin")
         return subprocess.run(
             command,
-            input=None if password is None else password + "\n",
+            input=None if attempted_password is None else attempted_password + "\n",
             check=False,
             capture_output=True,
             text=True,
         )
 
-    def test_requires_valid_smtp_before_creating_candidate(self) -> None:
+    def test_preserves_payload_scrubs_smtp_and_enforces_policy_in_0600_candidate(self) -> None:
         result = self.run_preparer()
-        self.assertEqual(1, result.returncode)
-        self.assertEqual("", result.stdout)
-        self.assertEqual([], list(self.directory.glob("gole-env.*")))
-        self.assertNotIn("do-not-log-this-value", result.stderr)
-
-    def test_preserves_payload_and_enforces_policy_in_0600_candidate(self) -> None:
-        password = "Abcd1234Efgh5678"
-        result = self.run_preparer(password)
         self.assertEqual(0, result.returncode, result.stderr)
         candidate = pathlib.Path(result.stdout.strip())
         self.assertEqual(self.directory.resolve(), candidate.parent)
@@ -82,29 +86,54 @@ class PrepareProductionEnvironmentTest(unittest.TestCase):
         contents = candidate.read_text()
         self.assertIn("# existing payload must remain a plain file", contents)
         self.assertIn("CUSTOM_PRESERVED_SECRET=do-not-log-this-value", contents)
-        self.assertNotIn(password, result.stdout + result.stderr)
+        for stale_secret in (
+            "legacy-private-mailbox@example.test",
+            "legacy-private-app-password",
+            "legacy-private-sender@example.test",
+            "commented-private-mailbox@example.test",
+            "commented-private-app-password",
+            "commented-private-sender@example.test",
+        ):
+            self.assertNotIn(stale_secret, contents)
+            self.assertNotIn(stale_secret, result.stdout + result.stderr)
         validator = load_validator()
         values = validator.parse_env(candidate)
         validator.validate(values)
         for key, value in validator.EXACT_VALUES.items():
             self.assertEqual(value, values[key])
-        self.assertEqual(password, values["SMTP_PASSWORD"])
+        self.assertEqual("", values["SMTP_USERNAME"])
+        self.assertEqual("", values["SMTP_PASSWORD"])
+        self.assertEqual("", values["GOLE_VERIFICATION_EMAIL_FROM"])
         self.assertEqual(self.original_hash, hashlib.sha256(self.input.read_bytes()).hexdigest())
 
-    def test_rejects_non_exact_smtp_without_leaving_candidate(self) -> None:
-        for password in ("abc", "Abcd 234Efgh5678", "Abcd1234Efgh56789", "Abcd1234Efgh567한"):
-            with self.subTest(password=password):
-                result = self.run_preparer(password)
-                self.assertEqual(1, result.returncode)
-                self.assertEqual([], list(self.directory.glob("gole-env.*")))
-                self.assertNotIn(password, result.stdout + result.stderr)
+    def test_explicitly_rejects_legacy_smtp_stdin_mode_without_leaving_candidate(self) -> None:
+        password = "do-not-print-this-app-password"
+        result = self.run_preparer(password)
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("--smtp-password-stdin is unavailable", result.stderr)
+        self.assertEqual([], list(self.directory.glob("gole-env.*")))
+        self.assertNotIn(password, result.stdout + result.stderr)
 
     def test_rejects_duplicate_input_key(self) -> None:
         with self.input.open("a") as stream:
             stream.write("MONGODB_URI=duplicate\n")
-        result = self.run_preparer("Abcd1234Efgh5678")
+        result = self.run_preparer()
         self.assertEqual(1, result.returncode)
         self.assertEqual([], list(self.directory.glob("gole-env.*")))
+
+    def test_runbook_prepares_stage_zero_without_collecting_an_smtp_secret(self) -> None:
+        runbook = RUNBOOK.read_text(encoding="utf-8")
+        self.assertIn(
+            'candidate_path="$(python3 infra/gcp/scripts/prepare-production-env.py',
+            runbook,
+        )
+        self.assertNotIn("IFS= read -r -s SMTP_APP_PASSWORD", runbook)
+        self.assertNotIn("printf '%s' \"$SMTP_APP_PASSWORD\"", runbook)
+        self.assertIn(
+            "`--smtp-password-stdin`은 Stage 0에서 명시적으로 실패한다",
+            runbook,
+        )
 
 
 if __name__ == "__main__":

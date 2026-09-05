@@ -681,9 +681,15 @@ for readiness_contract in \
   grep -Fq "$readiness_contract" .github/workflows/cd.yml ||
     fail "CD final readiness is missing $readiness_contract"
 done
-grep -Fq '"$HOSTCTL" deployment-migrate-adopt-secret' \
+grep -Fq '"$HOSTCTL" deployment-migrate-adopt-existing' \
   infra/gcp/scripts/migrate-and-adopt-existing.sh ||
-  fail "adoption migration must delegate exact-version fetch to the root host transaction"
+  fail "adoption migration must delegate preserved-env adoption to the root host transaction"
+grep -Fq 'GOLE_PRODUCTION_ENV_SECRET_VERSION --body "$NEW_SECRET_VERSION"' \
+  infra/gcp/README.md ||
+  fail "first migrated CD must pin the reviewed SMTP-off Secret version"
+if grep -q -- '--version-stdin' infra/gcp/scripts/migrate-and-adopt-existing.sh; then
+  fail "preserved-env adoption must not accept a replacement Secret version"
+fi
 if grep -Eq 'gcloud|CANDIDATE|/app/' infra/gcp/scripts/migrate-and-adopt-existing.sh; then
   fail "adoption wrapper must not fetch payloads or trust runner-owned code"
 fi
@@ -718,6 +724,7 @@ for hostctl_operation in \
   deployment-compose-up \
   deployment-compose-ps \
   deployment-images-snapshot \
+  deployment-environment-prepare \
   deployment-images-cleanup \
   deployment-budget-healthy \
   discord-overlay-install \

@@ -18,14 +18,12 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
     private static final Set<String> DEVELOPER_ENVIRONMENTS = Set.of("local", "development", "dev", "test", "e2e");
 
     private final String environment;
-    private final boolean verificationEmailEnabled;
     private final Map<String, Boolean> seedFlags;
     private final boolean demoPricingEvidence;
     private final boolean legacyPricingEvidence;
 
     public ProductionConfigurationGuard(
             @Value("${gole.environment:local}") String environment,
-            @Value("${gole.verification.email.enabled:false}") boolean verificationEmailEnabled,
             @Value("${gole.catalog.seed-on-empty:false}") boolean catalogSeed,
             @Value("${gole.listing.seed-on-empty:false}") boolean listingSeed,
             @Value("${gole.pricing.seed-on-empty:false}") boolean pricingSeed,
@@ -36,7 +34,6 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
             @Value("${gole.pricing.evidence.include-demo:false}") boolean demoPricingEvidence,
             @Value("${gole.pricing.evidence.include-legacy:false}") boolean legacyPricingEvidence) {
         this.environment = environment == null ? "" : environment.trim().toLowerCase(Locale.ROOT);
-        this.verificationEmailEnabled = verificationEmailEnabled;
         this.demoPricingEvidence = demoPricingEvidence;
         this.legacyPricingEvidence = legacyPricingEvidence;
         this.seedFlags = Map.of(
@@ -51,10 +48,6 @@ public class ProductionConfigurationGuard implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (requiresPublicSafety() && !verificationEmailEnabled) {
-            throw new IllegalStateException(
-                    "Public environments must enable verification email; refusing to log verification codes");
-        }
         if (!requiresPublicSafety()) {
             return;
         }

@@ -39,13 +39,13 @@ chmod 0755 /test-bin/sudo /test-bin/git /test-bin/gcloud
 exec 7>>/run/lock/gole-production-rollout.lock
 flock -n 7
 expected_sha='0123456789abcdef0123456789abcdef01234567'
-if printf '6\n' | env \
+if env \
   PATH="/test-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
   GCP_PROJECT_ID=test-project EXPECTED_SHA="$expected_sha" \
   bash /source/infra/gcp/scripts/migrate-and-adopt-existing.sh \
     --sha "$expected_sha" \
     --request-id 10000000-0000-0000-0000-000000000001 \
-    --version-stdin >/tmp/concurrent.out 2>&1; then
+    >/tmp/concurrent.out 2>&1; then
   echo 'concurrent adoption rollout was accepted' >&2
   exit 1
 fi

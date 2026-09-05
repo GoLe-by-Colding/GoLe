@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a fail-closed production env candidate without sourcing the input."""
+"""Create a fail-closed SMTP-disabled Stage 0 env without sourcing the input."""
 
 from __future__ import annotations
 
@@ -16,7 +16,12 @@ from types import ModuleType
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 VALIDATOR_PATH = SCRIPT_DIR / "validate-production-env.py"
 KEY_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-SMTP_PASSWORD_PATTERN = re.compile(r"[A-Za-z0-9]{16}")
+COMMENTED_ASSIGNMENT_PATTERN = re.compile(
+    r"^\s*#\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*="
+)
+DISABLED_SMTP_SECRET_KEYS = frozenset(
+    {"SMTP_USERNAME", "SMTP_PASSWORD", "GOLE_VERIFICATION_EMAIL_FROM"}
+)
 
 
 def load_validator() -> ModuleType:
@@ -55,38 +60,29 @@ def read_input(path: pathlib.Path) -> tuple[list[str], dict[str, str]]:
     return lines, values
 
 
-def read_smtp_password() -> str:
-    raw = sys.stdin.buffer.read(128)
-    if raw.endswith(b"\n"):
-        raw = raw[:-1]
-    if raw.endswith(b"\r"):
-        raw = raw[:-1]
-    try:
-        password = raw.decode("ascii")
-    except UnicodeDecodeError as exception:
-        raise ValueError("SMTP app password must be ASCII") from exception
-    if not SMTP_PASSWORD_PATTERN.fullmatch(password):
-        raise ValueError("SMTP app password must contain exactly 16 ASCII alphanumeric characters")
-    return password
-
-
 def render_candidate(
     original_lines: list[str], values: dict[str, str], policy_values: dict[str, str]
 ) -> str:
     replaced: set[str] = set()
     output: list[str] = []
     for line in original_lines:
+        commented_assignment = COMMENTED_ASSIGNMENT_PATTERN.match(line)
+        if (
+            commented_assignment is not None
+            and commented_assignment.group(1) in DISABLED_SMTP_SECRET_KEYS
+        ):
+            continue
         if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
             output.append(line)
             continue
         key = line.split("=", 1)[0]
-        if key in policy_values or key == "SMTP_PASSWORD":
+        if key in policy_values:
             output.append(f"{key}={values[key]}")
             replaced.add(key)
         else:
             output.append(line)
 
-    for key in (*policy_values, "SMTP_PASSWORD"):
+    for key in policy_values:
         if key not in replaced:
             output.append(f"{key}={values[key]}")
     return "\n".join(output) + "\n"
@@ -120,19 +116,25 @@ def create_candidate(contents: str, output_directory: pathlib.Path) -> pathlib.P
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="Preserve an env payload while enforcing the exact production policy."
+        description="Preserve an env payload while enforcing the SMTP-disabled Stage 0 policy."
     )
     parser.add_argument("input", type=pathlib.Path)
-    parser.add_argument("--smtp-password-stdin", action="store_true")
+    parser.add_argument(
+        "--smtp-password-stdin",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--output-directory", type=pathlib.Path, default=pathlib.Path("/tmp"))
     arguments = parser.parse_args(argv[1:])
 
     candidate: pathlib.Path | None = None
     try:
+        if arguments.smtp_password_stdin:
+            raise ValueError(
+                "--smtp-password-stdin is unavailable while the Stage 0 production email channel is disabled"
+            )
         validator = load_validator()
         lines, values = read_input(arguments.input)
-        if arguments.smtp_password_stdin:
-            values["SMTP_PASSWORD"] = read_smtp_password()
         values.update(validator.EXACT_VALUES)
         validator.validate(values)
         rendered = render_candidate(lines, values, validator.EXACT_VALUES)

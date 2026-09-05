@@ -445,11 +445,11 @@ class SocialAuthServiceTest {
     }
 
     private static SignupPolicyAcceptance acceptedPolicy() {
-        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true);
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true);
     }
 
     private static SignupPolicyAcceptance acceptedThirdPartyPolicy() {
-        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "2026-09-04", true);
     }
 
     private static final class SequentialIds implements IdentifierGeneratorPort {

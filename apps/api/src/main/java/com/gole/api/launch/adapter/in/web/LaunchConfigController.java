@@ -1,5 +1,6 @@
 package com.gole.api.launch.adapter.in.web;
 
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchConfigResponse;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
@@ -22,11 +23,15 @@ public class LaunchConfigController {
 
     private final GetLaunchConfigUseCase launchConfig;
     private final SellerIdentityVerificationProperties sellerIdentityVerification;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public LaunchConfigController(
-            GetLaunchConfigUseCase launchConfig, SellerIdentityVerificationProperties sellerIdentityVerification) {
+            GetLaunchConfigUseCase launchConfig,
+            SellerIdentityVerificationProperties sellerIdentityVerification,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.launchConfig = launchConfig;
         this.sellerIdentityVerification = sellerIdentityVerification;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Operation(
@@ -34,6 +39,9 @@ public class LaunchConfigController {
             description = "서비스 공개 단계(0~3)와 기능별 개방 여부. 인증이 필요 없다. " + "조회에 실패하면 클라이언트는 Stage 0(공사중)으로 닫아야 한다.")
     @GetMapping("/launch")
     public LaunchConfigResponse launch() {
-        return LaunchConfigResponse.from(launchConfig.current(), sellerIdentityVerification.verificationReady());
+        return LaunchConfigResponse.from(
+                launchConfig.current(),
+                sellerIdentityVerification.verificationReady(),
+                emailAuthentication.available());
     }
 }

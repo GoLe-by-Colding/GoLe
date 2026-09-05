@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.out.verification;
 
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.VerificationCode;
 import org.slf4j.Logger;
@@ -16,20 +17,28 @@ import org.springframework.stereotype.Component;
 public class LoggingVerificationCodeSenderAdapter implements VerificationCodeSenderPort {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingVerificationCodeSenderAdapter.class);
+    private final EmailAuthenticationAvailability emailAuthentication;
+
+    public LoggingVerificationCodeSenderAdapter(EmailAuthenticationAvailability emailAuthentication) {
+        this.emailAuthentication = emailAuthentication;
+    }
 
     @Override
     public void send(Email email, VerificationCode code) {
+        emailAuthentication.requireAvailable();
         // 로컬 개발에서만 사용하는 전달 수단이다. 운영은 SMTP 어댑터를 활성화해 코드 로그를 남기지 않는다.
         log.info("[VERIFICATION:LOCAL_ONLY] to={} code={}", mask(email.value()), code.code());
     }
 
     @Override
     public void sendPasswordReset(Email email, VerificationCode code) {
+        emailAuthentication.requireAvailable();
         log.info("[PASSWORD_RESET:LOCAL_ONLY] to={} code={}", mask(email.value()), code.code());
     }
 
     @Override
     public void sendAccountDeletion(Email email, VerificationCode code) {
+        emailAuthentication.requireAvailable();
         log.info("[ACCOUNT_DELETION:LOCAL_ONLY] to={} code={}", mask(email.value()), code.code());
     }
 
