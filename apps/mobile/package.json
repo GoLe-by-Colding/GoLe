@@ -26,14 +26,19 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "~57.0.2",
+    "prettier": "^3.8.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
-    "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

@@ -13,10 +13,7 @@ export interface ScreenProps {
 export function Screen({ children, edges = ["top"], padded = true }: ScreenProps) {
   const colors = useTheme();
   return (
-    <SafeAreaView
-      edges={[...edges]}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <SafeAreaView edges={[...edges]} style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={padded ? styles.padded : styles.plain}>{children}</View>
     </SafeAreaView>
   );

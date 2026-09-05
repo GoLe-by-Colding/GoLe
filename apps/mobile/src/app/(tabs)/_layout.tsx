@@ -38,9 +38,7 @@ export default function TabsLayout() {
         name="sell"
         options={{
           title: "판매",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pricetag" color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="pricetag" color={color} size={size} />,
         }}
       />
       <Tabs.Screen

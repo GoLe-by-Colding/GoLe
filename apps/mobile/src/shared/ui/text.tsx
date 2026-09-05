@@ -13,11 +13,7 @@ export function Text({ variant = "body", muted = false, style, ...rest }: TextPr
   const colors = useTheme();
   return (
     <RNText
-      style={[
-        styles[variant],
-        { color: muted ? colors.textSecondary : colors.text },
-        style,
-      ]}
+      style={[styles[variant], { color: muted ? colors.textSecondary : colors.text }, style]}
       {...rest}
     />
   );
