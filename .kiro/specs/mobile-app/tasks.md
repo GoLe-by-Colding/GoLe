@@ -97,19 +97,35 @@
 
 ## 10. 푸시 알림 — 백엔드
 
-- [ ] 10.1 `domain/model/DeviceToken` (R8.1)
-- [ ] 10.2 `port/in/RegisterDeviceTokenUseCase`, `port/out/{DeviceTokenRepositoryPort,PushSenderPort}`
-- [ ] 10.3 `application/service/DeviceTokenService`
-- [ ] 10.4 `adapter/out/persistence` — Mongo. Document와 도메인 모델 분리
-- [ ] 10.5 `adapter/out/push/FcmPushSenderAdapter` + 미설정 시 no-op (R8.2, R8.5)
-- [ ] 10.6 `adapter/in/web/DeviceTokenController` — POST·DELETE `/api/v1/notifications/devices`
-- [ ] 10.7 발송 실패를 삼키는지 테스트 (R8.3)
-- [ ] 10.8 `./gradlew spotlessApply && ./gradlew cleanTest test`
+Firebase 인프라는 준비 완료(2026-09-05):
+
+| 항목 | 값 |
+|---|---|
+| 프로젝트 | `gole-prod` (projectNumber 704790528027) |
+| Android 앱 | `com.gole.app` → `apps/mobile/google-services.json` |
+| iOS 앱 | `com.gole.app` → `apps/mobile/GoogleService-Info.plist` |
+| 발송 계정 | `gole-fcm-sender@gole-prod.iam.gserviceaccount.com` |
+| 권한 | 커스텀 역할 `goleFcmSender` — `cloudmessaging.messages.create` **하나뿐** |
+| 검증 | FCM v1에 실제 요청 → 인증·인가 통과, 가짜 토큰만 400으로 거부됨 |
+
+키 파일은 저장소 밖이다(`gole-fcm-service-account.json`, gitignore). 배포 시 볼트에
+`FCM_ENABLED`·`FCM_PROJECT_ID`·`FCM_CREDENTIALS_BASE64` 3개를 넣는다.
+
+
+- [x] 10.1 `domain/model/DeviceToken` (R8.1)
+- [x] 10.2 `port/in/RegisterDeviceTokenUseCase`, `port/out/{DeviceTokenRepositoryPort,PushSenderPort}`
+- [x] 10.3 `application/service/DeviceTokenService`
+- [x] 10.4 `adapter/out/persistence` — Mongo. Document와 도메인 모델 분리
+- [x] 10.5 `adapter/out/push/FcmPushSenderAdapter` + 미설정 시 no-op (R8.2, R8.5)
+- [x] 10.6 `adapter/in/web/DeviceTokenController` — POST·DELETE `/api/v1/notifications/devices`
+- [x] 10.7 발송 실패를 삼키는지 테스트 (R8.3)
+- [x] 10.8 `./gradlew spotlessApply && ./gradlew cleanTest test`
 
 ## 11. 푸시 알림 — 앱
 
-- [ ] 11.1 권한 요청 + 토큰 등록·해제 (R8.1)
-- [ ] 11.2 푸시 탭 → 해당 화면 이동 (R8.4)
+- [~] 11.1 권한 요청 + 토큰 등록·해제 구현 완료. **실기기 검증 불가** — FCM 토큰은
+      개발 빌드(Expo Go 아님)의 실기기에서만 발급되는데 Android SDK 미설치·Apple 미가입 (R8.1)
+- [~] 11.2 푸시 탭 → 해당 화면 이동 구현 완료. 검증은 11.1과 같은 이유로 보류 (R8.4)
 
 ## 12. CI / 문서
 
