@@ -21,6 +21,8 @@ printf '%s\n' \
   'PORTONE_CHANNEL_KEY=channel-local-contract' \
   'COOLSMS_ENABLED=true' \
   'COOLSMS_API_SECRET=fake-local-contract-secret' \
+  'SMTP_USERNAME=production-smtp@example.test' \
+  'SMTP_PASSWORD=must-not-copy-smtp-secret' \
   > "$fixture_dir/production.env"
 
 # 최신 production Secret에서 빠진 외부 자격증명은 기존 로컬 파일에 남아 있어도
@@ -67,6 +69,9 @@ assert_line 'GOLE_ADMIN_EMAIL=local-admin@example.test'
 assert_line 'MINIO_ROOT_USER=existing-local-minio'
 assert_absent 'production.invalid'
 assert_absent 'must-not-cross-the-boundary'
+assert_absent 'SMTP_USERNAME='
+assert_absent 'SMTP_PASSWORD='
+assert_absent 'must-not-copy-smtp-secret'
 assert_absent 'GOOGLE_OAUTH_CLIENT_SECRET='
 assert_absent 'stale-local-oauth-secret'
 

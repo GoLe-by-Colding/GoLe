@@ -12,6 +12,7 @@ import com.gole.api.account.application.port.out.PasswordResetChallengeStorePort
 import com.gole.api.account.application.port.out.PasswordResetChallengeStorePort.Challenge;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.WeakPasswordException;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
@@ -21,6 +22,7 @@ import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.VerificationCode;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -50,7 +52,15 @@ class AccountPasswordServiceTest {
         sessions.reset();
         sender.reset();
         clock.reset();
-        service = new AccountPasswordService(accounts, hasher, resets, () -> "123456", sender, sessions, clock);
+        service = new AccountPasswordService(
+                accounts,
+                hasher,
+                resets,
+                () -> "123456",
+                sender,
+                sessions,
+                clock,
+                new EmailAuthenticationAvailability("test", false));
     }
 
     @Test
@@ -65,6 +75,25 @@ class AccountPasswordServiceTest {
         assertThat(sessions.resolve("token-1")).isEmpty();
         assertThat(sessions.resolve("token-2")).isEmpty();
         assertThat(sessions.revokeAllCalls).isEqualTo(1);
+    }
+
+    @Test
+    void publicEnvironmentWithoutMailRejectsResetBeforeChallengeMutation() {
+        AccountPasswordService unavailable = new AccountPasswordService(
+                accounts,
+                hasher,
+                resets,
+                () -> "123456",
+                sender,
+                sessions,
+                clock,
+                new EmailAuthenticationAvailability("production", false));
+
+        assertThatThrownBy(() -> unavailable.request(new RequestPasswordResetCommand("member@gole.test")))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", EmailAuthenticationAvailability.UNAVAILABLE_CODE);
+        assertThat(resets.values).isEmpty();
+        assertThat(sender.resetCount).isZero();
     }
 
     @Test

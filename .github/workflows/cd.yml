@@ -171,18 +171,22 @@ jobs:
           # 야간 검증 때만 repository variable을 true로 올리고, 평시에는 false다.
           DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
           # 이 GCP 인스턴스가 실제 단일 운영 서버다. 운영 가드를 staging 명칭으로 우회하지 않는다.
-          # SMTP 자격증명과 공개환경 안전 설정이 불완전하면 배포가 실패하고 이전 컨테이너를 유지한다.
+          # Stage 0는 SMTP를 보류한다. Secret에 예전 SMTP 자격증명이 남거나 아래 래치가
+          # 켜져 있으면 root validator가 배포를 거부하고 이전 컨테이너를 유지한다.
           GOLE_ENVIRONMENT: production
+          # payload는 root helper가 Secret Manager에서 exact version으로 직접 가져온다.
+          # Actions에는 비밀값이 아닌 immutable version 번호만 전달한다.
+          GOLE_PRODUCTION_ENV_SECRET_VERSION: ${{ vars.GOLE_PRODUCTION_ENV_SECRET_VERSION }}
           # CoolSMS/승인 템플릿을 실제로 켜기 전까지 신규 가입자는 전화 인증을 건너뛴다.
           GOLE_ONBOARDING_PHONE_REQUIRED: "false"
           GOLE_ONBOARDING_LOG_VERIFICATION_CODES: "false"
-          GOLE_VERIFICATION_EMAIL_ENABLED: "true"
-          GOLE_MAIL_HEALTH_ENABLED: "true"
+          GOLE_VERIFICATION_EMAIL_ENABLED: "false"
+          GOLE_MAIL_HEALTH_ENABLED: "false"
           GOLE_SESSION_COOKIE_SECURE: "true"
           GOLE_WEB_ALLOWED_ORIGINS: https://gole.co.kr,https://www.gole.co.kr
           GOLE_OAUTH_ALLOWED_REDIRECT_URIS: https://gole.co.kr/auth/callback/google,https://gole.co.kr/auth/callback/kakao,https://gole.co.kr/auth/callback/naver
           GOLE_TERMS_VERSION: "2026-09-04"
-          GOLE_PRIVACY_VERSION: "2026-09-04"
+          GOLE_PRIVACY_VERSION: "2026-09-05"
           SMTP_AUTH: "true"
           SMTP_STARTTLS: "true"
           SMTP_STARTTLS_REQUIRED: "true"

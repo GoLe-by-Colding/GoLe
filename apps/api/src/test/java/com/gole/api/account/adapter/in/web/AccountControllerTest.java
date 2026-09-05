@@ -1,14 +1,17 @@
 package com.gole.api.account.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.gole.api.account.adapter.in.web.AccountRequests.RegisterRequest;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.LogoutUseCase;
 import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
@@ -19,8 +22,10 @@ import com.gole.api.account.application.port.in.RegisterAccountUseCase.RegisterA
 import com.gole.api.account.application.port.in.ResendVerificationUseCase;
 import com.gole.api.account.application.port.in.SignInUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Role;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.web.ClientAddressResolver;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
@@ -30,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -57,7 +63,8 @@ class AccountControllerTest {
                 refreshSessions,
                 new SessionCookie("false", Duration.ofDays(7)),
                 publicRequestLimit,
-                new ClientAddressResolver());
+                new ClientAddressResolver(),
+                new EmailAuthenticationAvailability("test", false));
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -74,7 +81,7 @@ class AccountControllerTest {
                                   "email": "member@gole.test",
                                   "password": "password1",
                                   "termsVersion": "2026-09-04",
-                                  "privacyVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-05",
                                   "termsAccepted": true,
                                   "privacyAcknowledged": true,
                                   "minimumAgeConfirmed": true,
@@ -89,6 +96,7 @@ class AccountControllerTest {
         verify(registerAccounts).register(command.capture());
         verify(publicRequestLimit).acquireRegistration("member@gole.test", "127.0.0.1");
         assertThat(command.getValue().policyAcceptance().termsVersion()).isEqualTo("2026-09-04");
+        assertThat(command.getValue().policyAcceptance().privacyVersion()).isEqualTo("2026-09-05");
         assertThat(command.getValue().policyAcceptance().privacyAcknowledged()).isTrue();
         assertThat(command.getValue().policyAcceptance().minimumAgeConfirmed()).isTrue();
         assertThat(command.getValue().policyAcceptance().thirdPartyProvisionVersion())
@@ -111,7 +119,7 @@ class AccountControllerTest {
                                   "email": "member@gole.test",
                                   "password": "password1",
                                   "termsVersion": "2026-09-04",
-                                  "privacyVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-05",
                                   "termsAccepted": true,
                                   "privacyAcknowledged": true,
                                   "minimumAgeConfirmed": true
@@ -132,7 +140,7 @@ class AccountControllerTest {
                                   "email": "member@gole.test",
                                   "password": "password1",
                                   "termsVersion": "2026-09-04",
-                                  "privacyVersion": "2026-09-04",
+                                  "privacyVersion": "2026-09-05",
                                   "termsAccepted": false,
                                   "privacyAcknowledged": true,
                                   "minimumAgeConfirmed": true
@@ -141,6 +149,38 @@ class AccountControllerTest {
                 .andExpect(status().isBadRequest());
 
         org.mockito.Mockito.verifyNoInteractions(registerAccounts);
+    }
+
+    @Test
+    void unavailableEmailRegistrationRejectsBeforeRateLimitMutation() {
+        var controller = new AccountController(
+                registerAccounts,
+                resendVerifications,
+                mock(VerifyEmailUseCase.class),
+                mock(SignInUseCase.class),
+                mock(GetCurrentSessionUseCase.class),
+                mock(LogoutUseCase.class),
+                refreshSessions,
+                new SessionCookie("false", Duration.ofDays(7)),
+                publicRequestLimit,
+                new ClientAddressResolver(),
+                new EmailAuthenticationAvailability("production", false));
+
+        assertThatThrownBy(() -> controller.register(
+                        new RegisterRequest(
+                                "member@gole.test",
+                                "password1",
+                                "2026-09-04",
+                                "2026-09-05",
+                                true,
+                                true,
+                                true,
+                                "2026-09-04",
+                                false),
+                        new MockHttpServletRequest()))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", EmailAuthenticationAvailability.UNAVAILABLE_CODE);
+        verifyNoInteractions(publicRequestLimit, registerAccounts);
     }
 
     @Test

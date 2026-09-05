@@ -33,12 +33,12 @@ chmod 0644 /etc/gole/nginx.conf
 printf 'root:root\n' > /etc/gole/deploy-user
 printf 'MINIO_ROOT_USER=test-user\nMINIO_ROOT_PASSWORD=test-password-value\n' \
   > /etc/gole/infra.env
-install -m 0600 -o root -g root /source/infra/gcp/tests/fixtures/production.env \
+install -m 0600 -o root -g root /source/infra/gcp/tests/fixtures/development.env \
   /etc/gole/gole.env
 install -m 0600 -o root -g root /source/infra/gcp/tests/fixtures/discord.env \
   /etc/gole/discord.env
 chmod 0600 /etc/gole/infra.env
-printf '6\n' > /etc/gole/gole.env.version
+printf '5\n' > /etc/gole/gole.env.version
 printf '%s\n' "$expected_sha" > /etc/gole/deployed.sha
 printf 'state=pending\nlegacy_sha=%s\n' "$expected_sha" \
   > /etc/gole/metadata-migration.pending
@@ -50,7 +50,8 @@ chown root:golecloud /run/gole-cloud-broker/policy-heartbeat
 chmod 0600 /run/gole-cloud-broker/policy-heartbeat
 
 install -m 0755 /source/infra/gcp/scripts/gole-hostctl.sh /usr/local/sbin/gole-hostctl
-printf '#!/bin/sh\nexit 0\n' > /usr/local/libexec/gole/validate-production-env.py
+printf '#!/bin/sh\ntouch /tmp/strict-env-validator-called\nexit 99\n' \
+  > /usr/local/libexec/gole/validate-production-env.py
 printf '#!/bin/sh\ncat >/dev/null\n' > /usr/local/libexec/gole/validate-production-compose.py
 chmod 0755 /usr/local/libexec/gole/*.py
 
@@ -148,6 +149,7 @@ export PATH="/test-bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 SUDO_USER=root /usr/local/sbin/gole-hostctl \
   deployment-verify-adopted-runtime "$expected_sha"
+[ ! -e /tmp/strict-env-validator-called ]
 
 cp /etc/gole/nginx.conf /tmp/nginx.conf.valid
 printf '# drift\n' >> /etc/gole/nginx.conf

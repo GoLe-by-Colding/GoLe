@@ -68,6 +68,7 @@ async function mockProfileApis(page: Page): Promise<void> {
         tradeMode: "MANUAL_SETTLEMENT",
         features: { payments: true, reviews: true, partnerPayout: false },
         sellerIdentityVerificationReady: true,
+        emailAuthenticationAvailable: true,
         updatedAt: "2026-09-03T00:00:00Z",
       },
     }),

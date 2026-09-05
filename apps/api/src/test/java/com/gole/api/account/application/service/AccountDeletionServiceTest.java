@@ -20,6 +20,7 @@ import com.gole.api.account.application.port.out.PasswordResetChallengeStorePort
 import com.gole.api.account.application.port.out.PhoneVerificationStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountDeletionBlocker;
 import com.gole.api.account.domain.model.AccountDeletionRequest;
@@ -28,6 +29,7 @@ import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -81,7 +83,8 @@ class AccountDeletionServiceTest {
                 sessions,
                 passwordResets,
                 phoneVerifications,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new EmailAuthenticationAvailability("test", false));
     }
 
     @Test
@@ -94,6 +97,30 @@ class AccountDeletionServiceTest {
         assertThat(result.status().name()).isEqualTo("BLOCKED");
         verify(verifications).consume("account-1", "code-hash");
         verify(sessions).revokeAllForAccount("account-1");
+    }
+
+    @Test
+    void publicEnvironmentWithoutMailRejectsDeletionBeforeReadingOrStoringAccountData() {
+        AccountDeletionService unavailable = new AccountDeletionService(
+                accounts,
+                requests,
+                verifications,
+                hasher,
+                () -> "123456",
+                sender,
+                sessions,
+                passwordResets,
+                phoneVerifications,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new EmailAuthenticationAvailability("production", false));
+
+        assertThatThrownBy(() -> unavailable.issueVerification("account-1"))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", EmailAuthenticationAvailability.UNAVAILABLE_CODE);
+        assertThatThrownBy(() -> unavailable.request(command("member@gole.test", "회원 탈퇴", "123456", IDEMPOTENCY_KEY)))
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(accounts, never()).findById("account-1");
+        verify(verifications, never()).store(eq("account-1"), any(), any());
     }
 
     @Test

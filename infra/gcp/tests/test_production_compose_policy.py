@@ -596,6 +596,8 @@ class ProductionComposePolicyTest(unittest.TestCase):
     def test_rejects_changed_launch_payment_and_settlement_policy(self) -> None:
         for key, value in (
             ("GOLE_ENVIRONMENT", "development"),
+            ("GOLE_TERMS_VERSION", "2026-09-03"),
+            ("GOLE_PRIVACY_VERSION", "2026-09-04"),
             ("PORTONE_ENABLED", "true"),
             ("GOLE_SETTLEMENT_MODE", "AUTOMATIC"),
             ("GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED", "true"),
@@ -604,6 +606,20 @@ class ProductionComposePolicyTest(unittest.TestCase):
                 model = copy.deepcopy(self.model)
                 model["services"]["backend"]["environment"][key] = value
                 with self.assertRaises(self.validator.ComposePolicyError):
+                    self.validator.validate(model)
+
+    def test_rejects_enabled_or_credentialed_stage_zero_mail(self) -> None:
+        for key, value in (
+            ("GOLE_VERIFICATION_EMAIL_ENABLED", "true"),
+            ("GOLE_MAIL_HEALTH_ENABLED", "true"),
+            ("SMTP_USERNAME", "private-mailbox@example.test"),
+            ("SMTP_PASSWORD", "do-not-print-this-app-password"),
+            ("GOLE_VERIFICATION_EMAIL_FROM", "private-sender@example.test"),
+        ):
+            with self.subTest(key=key):
+                model = copy.deepcopy(self.model)
+                model["services"]["backend"]["environment"][key] = value
+                with self.assertRaisesRegex(self.validator.ComposePolicyError, key):
                     self.validator.validate(model)
 
     def test_rejects_missing_or_unbounded_log_rotation(self) -> None:

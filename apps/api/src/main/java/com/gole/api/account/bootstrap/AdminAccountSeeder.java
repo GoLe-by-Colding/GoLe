@@ -55,6 +55,6 @@ public class AdminAccountSeeder implements CommandLineRunner {
         PasswordHash hash = passwordHasher.hash(adminPassword);
         Account admin = Account.operationalBootstrap(identifierGenerator.newAccountId(), email, hash, Role.ADMIN);
         accountRepository.save(admin);
-        log.info("[seed] admin 계정 생성: {}", adminEmail);
+        log.info("[seed] admin 계정 생성 완료");
     }
 }

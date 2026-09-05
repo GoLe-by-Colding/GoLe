@@ -690,6 +690,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             stage: 1,
             tradeMode: "DIRECT_CHAT",
             features: { payments: false, reviews: false, partnerPayout: false },
+            emailAuthenticationAvailable: false,
             updatedAt: "2026-09-03T01:00:00Z",
           },
           requestedStage: 1,
@@ -708,6 +709,9 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     );
 
     await page.goto("/admin/launch");
+
+    await expect(page.getByText("신규 사용자 · 이메일 인증")).toBeVisible();
+    await expect(page.getByText(/SMTP 준비 전/)).toBeVisible();
 
     await expect(page.getByRole("heading", { name: "출시 단계" })).toBeVisible();
     await expect(page.getByText("PortOne · 카카오페이")).toBeVisible();
@@ -733,6 +737,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
         stage: 1,
         tradeMode: "DIRECT_CHAT",
         features: { payments: false, reviews: false, partnerPayout: false },
+        emailAuthenticationAvailable: false,
         updatedAt: "2026-09-03T01:00:00Z",
       },
       requestedStage: 1,
@@ -827,6 +832,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             stage: 2,
             tradeMode: "MANUAL_SETTLEMENT",
             features: { payments: true, reviews: true, partnerPayout: false },
+            emailAuthenticationAvailable: false,
             updatedAt: "2026-09-03T01:00:00Z",
           },
           requestedStage: 2,
@@ -888,6 +894,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
             stage: 2,
             tradeMode: "MANUAL_SETTLEMENT",
             features: { payments: true, reviews: true, partnerPayout: false },
+            emailAuthenticationAvailable: false,
             updatedAt: "2026-08-09T00:00:00Z",
           },
           requestedStage: 2,

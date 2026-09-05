@@ -3,6 +3,7 @@
 .kiro
 .next
 node_modules
+**/node_modules
 apps/api/.gradle
 apps/api/build
 apps/web/.next
@@ -12,5 +13,7 @@ test-results
 *.log
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
 !**/.env.example

@@ -44,23 +44,28 @@ class ProductionEnvironmentPolicyTest(unittest.TestCase):
                 self.assertEqual(1, result.returncode)
                 self.assertIn(key, result.stderr)
 
-    def test_rejects_missing_and_placeholder_smtp_password(self) -> None:
+    def test_rejects_any_stage_zero_smtp_identity_without_echoing_values(self) -> None:
         original = self._read_fixture()
-        for password in (
-            "",
-            "replace-with-google-app-password",
-            " short-secret ",
-            "abcdefgh ijklmno",
-            "abcdefghijklmnopq",
-            "abcdefghijklmno한",
+        for key, value in (
+            ("SMTP_USERNAME", "private-mailbox@example.test"),
+            ("SMTP_PASSWORD", "do-not-print-this-app-password"),
+            ("GOLE_VERIFICATION_EMAIL_FROM", "private-sender@example.test"),
         ):
-            with self.subTest(password=password):
+            with self.subTest(key=key):
                 mutated = dict(original)
-                mutated["SMTP_PASSWORD"] = password
+                mutated[key] = value
                 result = self._validate_mapping(mutated)
                 self.assertEqual(1, result.returncode)
-                if password:
-                    self.assertNotIn(password, result.stderr)
+                self.assertIn(key, result.stderr)
+                self.assertNotIn(value, result.stderr)
+
+    def test_stage_zero_email_delivery_contract_is_exact(self) -> None:
+        namespace = runpy.run_path(str(VALIDATOR), run_name="gole_production_env_policy")
+        exact = namespace["EXACT_VALUES"]
+        self.assertEqual("false", exact["GOLE_VERIFICATION_EMAIL_ENABLED"])
+        self.assertEqual("false", exact["GOLE_MAIL_HEALTH_ENABLED"])
+        for key in ("SMTP_USERNAME", "SMTP_PASSWORD", "GOLE_VERIFICATION_EMAIL_FROM"):
+            self.assertEqual("", exact[key])
 
     def test_policy_validation_precedes_privileged_install(self) -> None:
         hostctl = (ROOT / "infra/gcp/scripts/gole-hostctl.sh").read_text()

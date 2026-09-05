@@ -311,7 +311,11 @@ GCP Compose에서는 외부 포트를 열지 않고 `support-agent:50051` 내부
 외부 모델은 개인정보처리방침에 처리업체·리전·보관정책을 먼저 고지하고 별도 기능 플래그와
 계약 테스트를 추가하기 전까지 연결하지 않는다.
 
-공개 서버를 `GOLE_ENVIRONMENT=production`으로 전환하려면 실제 SMTP 설정이 필요하다.
+초기 공개 서버는 `GOLE_ENVIRONMENT=production`과
+`GOLE_VERIFICATION_EMAIL_ENABLED=false`를 함께 사용한다. 이 상태에서는 기존 인증 완료
+계정 로그인·현재 비밀번호 변경·준비된 소셜 로그인은 유지하고, 신규 이메일 가입·인증·복구와
+탈퇴 이메일 확인은 저장소를 건드리기 전에 503으로 닫는다. SMTP를 열 때는 자격증명만 먼저
+넣지 않고 API·운영 validator·Compose·CD 정책을 함께 변경한 새 Secret version으로 전환한다.
 결제는 초기 이용자 모집 기간에 `PORTONE_ENABLED=false`로 유지할 수 있으며, 이때 프론트도
 `NEXT_PUBLIC_PAYMENT_MODE=disabled`, 정산도 `DISABLED`, Launch Stage도 0~1로 맞춘다.
 PortOne 비밀값은 결제를 실제로 열기 직전에만 등록하고 위 단계식 준비 확인을 거친다.

@@ -886,6 +886,8 @@ begin_deployment_transaction() {
   [[ "$previous_sha" =~ ^(0|[0-9a-f]{40})$ ]] || die "invalid previous deployment SHA"
   [ ! -e "$DEPLOYMENT_TRANSACTION_FILE" ] && [ ! -L "$DEPLOYMENT_TRANSACTION_FILE" ] ||
     die "a deployment transaction is already active"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "an environment transaction must be recovered before deployment"
   if [ "$target" != all ] && { [ -e "$METADATA_MIGRATION_MARKER" ] ||
     [ -L "$METADATA_MIGRATION_MARKER" ]; }; then
     die "metadata migration pending requires a full deployment"
@@ -1065,7 +1067,7 @@ read_adoption_transaction() {
     die "adoption transaction previous version is invalid"
   [[ "$ADOPT_REQUESTED_VERSION" =~ ^[1-9][0-9]{0,11}$ ]] ||
     die "adoption transaction requested version is invalid"
-  [ "$ADOPT_REQUESTED_VERSION" -gt "$ADOPT_PREVIOUS_VERSION" ] ||
+  [ "$ADOPT_REQUESTED_VERSION" -ge "$ADOPT_PREVIOUS_VERSION" ] ||
     die "adoption transaction version order is invalid"
   validate_request_id "$ADOPT_REQUEST_ID"
   validate_adoption_backup_path "$ADOPT_BACKUP_FILE"
@@ -1108,11 +1110,19 @@ begin_adoption_transaction() {
   select_release "$adoption_sha"
   validate_existing_deployment_runtime "$adoption_sha" false
   previous_version="$(read_env_version)"
-  [ "$requested_version" -gt "$previous_version" ] ||
-    die "adoption secret version must advance the marker"
-  if [ "$source_mode" = root ]; then
+  if [ "$source_mode" = preserve-current ]; then
+    [ "$requested_version" = "$previous_version" ] ||
+      die "preserved adoption must keep the environment version"
+    [ "$source" = "$APP_ENV_FILE" ] ||
+      die "preserved adoption must use the current environment"
+    validate_current_environment
+  elif [ "$source_mode" = root ]; then
+    [ "$requested_version" -gt "$previous_version" ] ||
+      die "adoption secret version must advance the marker"
     source="$(validate_root_secret_candidate "$source")"
   elif [ "$source_mode" = runner ]; then
+    [ "$requested_version" -gt "$previous_version" ] ||
+      die "adoption secret version must advance the marker"
     source="$(validate_candidate "$source")"
   else
     die "invalid environment candidate trust mode"
@@ -1121,7 +1131,9 @@ begin_adoption_transaction() {
   staged_candidate="$(mktemp /etc/gole/.adoption.candidate.XXXXXX)"
   register_temp_file "$staged_candidate"
   install -m 0600 -o root -g root "$source" "$staged_candidate"
-  validate_production_environment "$staged_candidate"
+  if [ "$source_mode" != preserve-current ]; then
+    validate_production_environment "$staged_candidate"
+  fi
   validate_production_compose "$staged_candidate" legacy-adoption
   # Recheck the old deployment immediately before the first root mutation.
   validate_existing_deployment_runtime "$adoption_sha" false
@@ -1150,22 +1162,28 @@ begin_adoption_transaction() {
 }
 
 mark_adoption_transaction_ready() {
-  local request_id="$1"
+  local enforce_policy=true request_id="$1"
   require_matching_adoption_transaction "$request_id"
   [ "$ADOPT_STATE" = "installed" ] || die "adoption transaction is not installed"
   validate_current_environment
   [ "$(sha256sum "$APP_ENV_FILE" | cut -d' ' -f1)" = "$ADOPT_CANDIDATE_SHA256" ] ||
     die "adoption environment changed during rollout"
-  validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" true
+  if [ "$ADOPT_REQUESTED_VERSION" = "$ADOPT_PREVIOUS_VERSION" ]; then
+    enforce_policy=false
+  fi
+  validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" "$enforce_policy"
   write_adoption_transaction ready "$ADOPT_PREVIOUS_VERSION" "$ADOPT_REQUESTED_VERSION" \
     "$ADOPT_REQUEST_ID" "$ADOPT_BACKUP_FILE" "$ADOPT_CANDIDATE_SHA256" "$ADOPT_DEPLOYMENT_SHA"
 }
 
 commit_adoption_transaction() {
-  local current_version request_id="$1"
+  local current_version enforce_policy=true request_id="$1"
   require_matching_adoption_transaction "$request_id"
   [ "$ADOPT_STATE" = "ready" ] || die "adoption transaction is not ready"
-  validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" true
+  if [ "$ADOPT_REQUESTED_VERSION" = "$ADOPT_PREVIOUS_VERSION" ]; then
+    enforce_policy=false
+  fi
+  validate_existing_deployment_runtime "$ADOPT_DEPLOYMENT_SHA" "$enforce_policy"
   [ "$(sha256sum "$APP_ENV_FILE" | cut -d' ' -f1)" = "$ADOPT_CANDIDATE_SHA256" ] ||
     die "adoption environment changed before commit"
   current_version="$(read_env_version)"
@@ -2247,6 +2265,8 @@ verify_pre_snapshot_lkg_runtime() {
 recover_pre_snapshot_deployment() {
   local marker
   [ "$DEPLOY_TX_STATE" = prepared ] || die "pre-snapshot recovery state changed"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "prepared deployment has an unexpected environment transaction"
   verify_pre_snapshot_lkg_runtime "$DEPLOY_TX_PREVIOUS_SHA"
   marker="$(deployment_image_marker "$DEPLOY_TX_REQUEST_ID")"
   if [ -e "$marker" ] || [ -L "$marker" ]; then
@@ -2742,7 +2762,10 @@ verify_adopted_deployment_runtime() {
     die "adopted deployment marker does not match"
   verify_metadata_pending_policy
   select_release "$expected_sha"
-  validate_existing_deployment_runtime "$expected_sha" true
+  # Adoption deliberately keeps the exact legacy environment so its old
+  # backend remains restartable. The reviewed strict policy starts only when
+  # the first new-main deployment atomically installs its target Secret.
+  validate_existing_deployment_runtime "$expected_sha" false
   verify_legacy_adopted_transport_runtime
   systemctl is-active --quiet gole-cloud-broker.service ||
     die "root cloud broker is not active"
@@ -3287,6 +3310,7 @@ record_deployment_sha() {
   elif [ "$(read_deployed_sha)" != "$DEPLOY_TX_PREVIOUS_SHA" ]; then
     die "last-known-good marker changed during deployment"
   fi
+  commit_linked_deployment_environment
   write_deployed_sha_exact "$requested_sha"
   if [ "$initial_deployment" = true ] && ! rm -f -- "$INITIAL_DEPLOY_FILE"; then
     rm -f -- "$DEPLOYED_SHA_FILE"
@@ -3530,6 +3554,7 @@ finalize_deployment_transaction() {
   verify_broker_policy_heartbeat_advanced
   verify_deployment_runtime_components "$DEPLOY_TX_NEW_SHA"
   require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+  finalize_linked_deployment_environment
   advance_deployment_transaction "$request_id" \
     runtime-verified,metadata-ratchet-verified cleanup-pending
   cleanup_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
@@ -3540,6 +3565,8 @@ finalize_partial_deployment_transaction() {
   local request_id="$1"
   require_deployment_transaction "$request_id" verified
   [ "$DEPLOY_TX_TARGET" != all ] || die "full deployment requires marker verification"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "partial deployment cannot own an environment transaction"
   [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
     die "partial deployment may only rebuild the current LKG SHA"
   [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
@@ -3557,6 +3584,8 @@ finalize_partial_deployment_transaction() {
 
 recover_completed_deployment_cleanup() {
   [ "$DEPLOY_TX_STATE" = cleanup-pending ] || die "deployment cleanup recovery state changed"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "cleanup-pending deployment has an environment transaction"
   [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
     die "cleanup-pending deployment is not the current LKG"
   [ ! -e "$METADATA_MIGRATION_MARKER" ] && [ ! -L "$METADATA_MIGRATION_MARKER" ] ||
@@ -3579,6 +3608,7 @@ verify_runtime_verified_commit_window() {
     die "deployment commit-window still has a metadata migration marker"
   [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
     die "deployment commit-window LKG marker does not match"
+  verify_linked_deployment_environment_committed
   verify_metadata_full_policy
   verify_metadata_denial_runtime
   verify_broker_native_budget_relay
@@ -3588,7 +3618,9 @@ verify_runtime_verified_commit_window() {
 
 recover_restored_deployment_cleanup() {
   [ "$DEPLOY_TX_STATE" = rollback-restored ] || die "rollback cleanup recovery state changed"
+  restore_linked_deployment_environment
   verify_pre_snapshot_lkg_runtime "$DEPLOY_TX_PREVIOUS_SHA"
+  finish_linked_deployment_environment_recovery
   cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
   remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
 }
@@ -3598,6 +3630,8 @@ recover_initial_deployment_commit_window() {
     die "initial deployment commit-window identity changed"
   [[ "$DEPLOY_TX_STATE" =~ ^(marker-recorded|initial-http-verified|runtime-verified)$ ]] ||
     die "initial deployment commit-window state is invalid"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "initial deployment has an unexpected environment transaction"
   [ ! -e "$INITIAL_DEPLOY_FILE" ] && [ ! -L "$INITIAL_DEPLOY_FILE" ] ||
     die "initial deployment authorization was not retired"
   [ "$(read_deployed_sha)" = "$DEPLOY_TX_NEW_SHA" ] ||
@@ -3836,6 +3870,7 @@ rollback_unmutated_deployment_transaction() {
   local model="" request_id="$1" validation_mode=strict
   require_deployment_transaction "$request_id" snapshotted,built,nginx-installed
   require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$request_id"
+  restore_linked_deployment_environment
 
   if [ "$DEPLOY_TX_PREVIOUS_SHA" != 0 ]; then
     select_release "$DEPLOY_TX_PREVIOUS_SHA"
@@ -3876,6 +3911,7 @@ rollback_unmutated_deployment_transaction() {
   if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
     finish_nginx_recovery "$request_id"
   fi
+  finish_linked_deployment_environment_recovery
   if [ -n "$model" ]; then
     rm -f -- "$model"
     forget_temp_file "$model"
@@ -3891,6 +3927,9 @@ recover_deployment_transaction() {
     if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
       die "orphaned Nginx transaction requires manual root recovery"
     fi
+    if [ -e "$ENV_TRANSACTION_FILE" ] || [ -L "$ENV_TRANSACTION_FILE" ]; then
+      die "orphaned environment transaction requires its owning workflow recovery"
+    fi
     if read_metadata_migration_marker && [ "$METADATA_MIGRATION_STATE" = ratcheting ]; then
       systemctl poweroff --no-block || true
       die "orphaned metadata ratchet requires manual recovery; VM powered off"
@@ -3899,6 +3938,9 @@ recover_deployment_transaction() {
     return
   fi
   read_deployment_transaction
+  if [ -e "$ENV_TRANSACTION_FILE" ] || [ -L "$ENV_TRANSACTION_FILE" ]; then
+    require_linked_deployment_environment_transaction
+  fi
   if [ "$DEPLOY_TX_STATE" = cleanup-pending ]; then
     recover_completed_deployment_cleanup
     echo RECOVERED
@@ -3936,6 +3978,7 @@ recover_deployment_transaction() {
     [ "$(read_deployed_sha 2>/dev/null || true)" = "$DEPLOY_TX_NEW_SHA" ] &&
     (verify_runtime_verified_commit_window); then
     require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    finalize_linked_deployment_environment
     advance_deployment_transaction "$DEPLOY_TX_REQUEST_ID" runtime-verified cleanup-pending
     cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
     remove_host_state "$DEPLOYMENT_TRANSACTION_FILE"
@@ -3964,6 +4007,7 @@ recover_deployment_transaction() {
       sync -f /etc/gole
     fi
     require_deployment_image_snapshot "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
+    finalize_linked_deployment_environment
     advance_deployment_transaction "$DEPLOY_TX_REQUEST_ID" \
       metadata-ratchet-verified cleanup-pending
     cleanup_deployment_images "$DEPLOY_TX_TARGET" "$DEPLOY_TX_REQUEST_ID"
@@ -4041,6 +4085,7 @@ rollback_deployment_transaction() {
       fi
     fi
   fi
+  restore_linked_deployment_environment
   restore_deployment_images "$DEPLOY_TX_TARGET" "$request_id"
   select_release "$DEPLOY_TX_PREVIOUS_SHA"
   validate_current_environment
@@ -4126,6 +4171,7 @@ rollback_deployment_transaction() {
   if [ -e "$NGINX_TRANSACTION_FILE" ] || [ -L "$NGINX_TRANSACTION_FILE" ]; then
     finish_nginx_recovery "$request_id"
   fi
+  finish_linked_deployment_environment_recovery
   rm -f -- "$model" "$override"
   forget_temp_file "$model"
   forget_temp_file "$override"
@@ -4452,6 +4498,129 @@ finish_environment_recovery() {
   remove_host_state "$ENV_TRANSACTION_FILE"
 }
 
+require_linked_deployment_environment_transaction() {
+  read_transaction || die "deployment environment transaction is missing"
+  [ "$DEPLOY_TX_TARGET" = all ] ||
+    die "only a full deployment may own an environment transaction"
+  [ "$TXN_REQUEST_ID" = "$DEPLOY_TX_REQUEST_ID" ] ||
+    die "environment transaction does not belong to the deployment"
+}
+
+restore_linked_deployment_environment() {
+  if [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ]; then
+    return 0
+  fi
+  require_linked_deployment_environment_transaction
+  case "$TXN_STATE" in
+    prepared | installed | ready | committed) restore_transaction_environment ;;
+    rollback-restored) ;;
+    *) die "deployment environment transaction cannot be rolled back" ;;
+  esac
+}
+
+finish_linked_deployment_environment_recovery() {
+  if [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ]; then
+    return 0
+  fi
+  require_linked_deployment_environment_transaction
+  [ "$TXN_STATE" = rollback-restored ] ||
+    die "deployment environment rollback was not restored"
+  finish_environment_recovery
+}
+
+verify_linked_deployment_environment_committed() {
+  if [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ]; then
+    return 0
+  fi
+  require_linked_deployment_environment_transaction
+  [ "$TXN_STATE" = committed ] ||
+    die "deployment environment transaction is not committed"
+  validate_current_environment
+  [ "$(sha256sum "$APP_ENV_FILE" | cut -d' ' -f1)" = "$TXN_CANDIDATE_SHA256" ] ||
+    die "deployment environment changed after commit"
+  [ "$(read_env_version)" = "$TXN_REQUESTED_VERSION" ] ||
+    die "deployment environment version is not committed"
+}
+
+commit_linked_deployment_environment() {
+  local request_id version
+  if [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ]; then
+    return 0
+  fi
+  require_linked_deployment_environment_transaction
+  version="$TXN_REQUESTED_VERSION"
+  request_id="$TXN_REQUEST_ID"
+  case "$TXN_STATE" in
+    installed)
+      mark_environment_transaction_ready "$version" "$request_id"
+      require_linked_deployment_environment_transaction
+      ;;
+    ready | committed) ;;
+    *) die "deployment environment transaction cannot be committed" ;;
+  esac
+  if [ "$TXN_STATE" = ready ]; then
+    commit_environment_transaction "$version" "$request_id"
+  fi
+  verify_linked_deployment_environment_committed
+}
+
+finalize_linked_deployment_environment() {
+  local request_id version
+  if [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ]; then
+    return 0
+  fi
+  verify_linked_deployment_environment_committed
+  version="$TXN_REQUESTED_VERSION"
+  request_id="$TXN_REQUEST_ID"
+  finalize_environment_transaction "$version" "$request_id"
+}
+
+prepare_deployment_environment() {
+  local requested_version="$1" requested_sha="$2" request_id="$3" current_version
+  [[ "$requested_version" =~ ^[1-9][0-9]{0,11}$ ]] || die "invalid secret version"
+  [[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid deployment SHA"
+  validate_request_id "$request_id"
+  require_deployment_transaction "$request_id" snapshotted
+  [ "$DEPLOY_TX_TARGET" = all ] && [ "$DEPLOY_TX_NEW_SHA" = "$requested_sha" ] ||
+    die "deployment environment preparation does not match the full deployment"
+  [ ! -e "$ENV_TRANSACTION_FILE" ] && [ ! -L "$ENV_TRANSACTION_FILE" ] ||
+    die "an environment transaction is already active"
+  [ ! -e "$ADOPTION_TRANSACTION_FILE" ] && [ ! -L "$ADOPTION_TRANSACTION_FILE" ] ||
+    die "an adoption transaction is active"
+  [ ! -e "$NGINX_TRANSACTION_FILE" ] && [ ! -L "$NGINX_TRANSACTION_FILE" ] ||
+    die "deployment environment must be prepared before Nginx staging"
+
+  validate_current_environment
+  current_version="$(read_env_version)"
+  [ "$requested_version" -ge "$current_version" ] ||
+    die "older Secret Manager versions are rejected"
+  if [ "$requested_version" -gt "$current_version" ]; then
+    [ "$DEPLOY_TX_PREVIOUS_SHA" != 0 ] &&
+      [ "$DEPLOY_TX_NEW_SHA" != "$DEPLOY_TX_PREVIOUS_SHA" ] ||
+      die "environment advancement requires an existing distinct LKG"
+    read_metadata_migration_marker ||
+      die "environment advancement is only allowed during the one-time metadata migration"
+    [ "$METADATA_MIGRATION_STATE" = pending ] &&
+      [ "$METADATA_MIGRATION_LEGACY_SHA" = "$DEPLOY_TX_PREVIOUS_SHA" ] ||
+      die "environment advancement does not match the pending legacy LKG"
+  fi
+
+  select_release "$requested_sha"
+  fetch_root_secret_candidate "$requested_version"
+  validate_production_environment "$ROOT_SECRET_CANDIDATE"
+  validate_production_compose "$ROOT_SECRET_CANDIDATE"
+  if [ "$requested_version" -eq "$current_version" ]; then
+    cmp -s -- "$ROOT_SECRET_CANDIDATE" "$APP_ENV_FILE" ||
+      die "the installed payload differs for the same secret version"
+  else
+    begin_environment_transaction "$ROOT_SECRET_CANDIDATE" \
+      "$requested_version" "$request_id" root
+  fi
+  rm -f -- "$ROOT_SECRET_CANDIDATE"
+  forget_temp_file "$ROOT_SECRET_CANDIDATE"
+  ROOT_SECRET_CANDIDATE=""
+}
+
 restart_strict_lkg_services() {
   local attempt backend_ready=0 expected_sha="$1" https_ready=0
   create_release "$expected_sha" false
@@ -4600,19 +4769,18 @@ bootstrap_secret_environment() {
   forget_temp_file "$ROOT_SECRET_CANDIDATE"
 }
 
-adoption_secret_exit_cleanup() {
+adoption_existing_exit_cleanup() {
   local failed=0 status=$?
   trap - EXIT INT TERM
   set +e
-  rm -f -- "${ROOT_SECRET_CANDIDATE:-}"
   cleanup_registered_temporaries
-  if [ "${ADOPTION_SECRET_TRANSACTION_ACTIVE:-0}" -eq 1 ] &&
+  if [ "${ADOPTION_EXISTING_TRANSACTION_ACTIVE:-0}" -eq 1 ] &&
     { [ -e "$ADOPTION_TRANSACTION_FILE" ] || [ -L "$ADOPTION_TRANSACTION_FILE" ]; }; then
-    abort_adoption_transaction "$ADOPTION_SECRET_REQUEST_ID" || failed=1
+    abort_adoption_transaction "$ADOPTION_EXISTING_REQUEST_ID" || failed=1
     if [ "$failed" -ne 0 ] ||
-      ! restart_adoption_services "$ADOPTION_SECRET_REQUEST_ID" ||
-      ! verify_adoption_services "$ADOPTION_SECRET_REQUEST_ID" ||
-      ! finish_adoption_recovery "$ADOPTION_SECRET_REQUEST_ID"; then
+      ! restart_adoption_services "$ADOPTION_EXISTING_REQUEST_ID" ||
+      ! verify_adoption_services "$ADOPTION_EXISTING_REQUEST_ID" ||
+      ! finish_adoption_recovery "$ADOPTION_EXISTING_REQUEST_ID"; then
       systemctl poweroff --no-block || true
       status=1
     fi
@@ -4620,13 +4788,11 @@ adoption_secret_exit_cleanup() {
   exit "$status"
 }
 
-migrate_and_adopt_secret() {
-  local adoption_sha="$1" requested_version="$2" request_id="$3"
+migrate_and_adopt_existing() {
+  local adoption_sha="$1" request_id="$2" requested_version
   local recovery_state
-  ROOT_SECRET_CANDIDATE=""
   [ "${SUDO_USER:-root}" = root ] || die "existing deployment adoption is root-only"
   [[ "$adoption_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid adoption SHA"
-  [[ "$requested_version" =~ ^[1-9][0-9]{0,11}$ ]] || die "invalid secret version"
   validate_request_id "$request_id"
   [ ! -e "$DEPLOYMENT_TRANSACTION_FILE" ] && [ ! -L "$DEPLOYMENT_TRANSACTION_FILE" ] ||
     die "a deployment transaction is active"
@@ -4640,7 +4806,9 @@ migrate_and_adopt_secret() {
     # Recovery is part of the original root operation, not a generic adoption
     # shortcut. Reject stale or mistyped workflow arguments before any release,
     # environment, image, service, or marker mutation occurs.
-    require_exact_adoption_invocation "$adoption_sha" "$requested_version" "$request_id"
+    [ "$ADOPT_REQUESTED_VERSION" = "$ADOPT_PREVIOUS_VERSION" ] ||
+      die "active adoption is not a preserved-environment transaction"
+    require_exact_adoption_invocation "$adoption_sha" "$ADOPT_REQUESTED_VERSION" "$request_id"
     validate_discord_environment
     create_release "$ADOPT_DEPLOYMENT_SHA" false
     select_release "$ADOPT_DEPLOYMENT_SHA"
@@ -4672,26 +4840,22 @@ migrate_and_adopt_secret() {
   # written to stdout or a runner-owned path.
   ensure_legacy_discord_environment
   verify_seller_identity_launch_preflight
-  [ "$requested_version" -gt "$(read_env_version)" ] ||
-    die "adoption secret version must advance the marker"
-  ADOPTION_SECRET_TRANSACTION_ACTIVE=0
-  ADOPTION_SECRET_REQUEST_ID="$request_id"
-  trap adoption_secret_exit_cleanup EXIT
+  requested_version="$(read_env_version)"
+  [ "$requested_version" -gt 0 ] || die "adoption requires an existing environment version"
+  ADOPTION_EXISTING_TRANSACTION_ACTIVE=0
+  ADOPTION_EXISTING_REQUEST_ID="$request_id"
+  trap adoption_existing_exit_cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  fetch_root_secret_candidate "$requested_version"
-  ADOPTION_SECRET_TRANSACTION_ACTIVE=1
-  begin_adoption_transaction "$ROOT_SECRET_CANDIDATE" "$requested_version" \
-    "$request_id" "$adoption_sha" root
-  rm -f -- "$ROOT_SECRET_CANDIDATE"
-  forget_temp_file "$ROOT_SECRET_CANDIDATE"
-  ROOT_SECRET_CANDIDATE=""
+  ADOPTION_EXISTING_TRANSACTION_ACTIVE=1
+  begin_adoption_transaction "$APP_ENV_FILE" "$requested_version" \
+    "$request_id" "$adoption_sha" preserve-current
   restart_adoption_services "$request_id"
   verify_adoption_services "$request_id"
   mark_adoption_transaction_ready "$request_id"
   commit_adoption_transaction "$request_id"
   finalize_adoption_transaction "$request_id"
-  ADOPTION_SECRET_TRANSACTION_ACTIVE=0
+  ADOPTION_EXISTING_TRANSACTION_ACTIVE=0
   trap - EXIT INT TERM
 }
 
@@ -4798,6 +4962,10 @@ case "$hostctl_command" in
     require_argument_count 2 "$@"
     snapshot_deployment_images "$1" "$2"
     ;;
+  deployment-environment-prepare)
+    require_argument_count 3 "$@"
+    prepare_deployment_environment "$1" "$2" "$3"
+    ;;
   deployment-images-restore)
     require_argument_count 2 "$@"
     restore_deployment_images "$1" "$2"
@@ -4826,9 +4994,9 @@ case "$hostctl_command" in
     require_argument_count 3 "$@"
     bootstrap_secret_environment "$1" "$2" "$3"
     ;;
-  deployment-migrate-adopt-secret)
-    require_argument_count 3 "$@"
-    migrate_and_adopt_secret "$1" "$2" "$3"
+  deployment-migrate-adopt-existing)
+    require_argument_count 2 "$@"
+    migrate_and_adopt_existing "$1" "$2"
     ;;
   deployment-verify-candidate-runtime)
     require_argument_count 2 "$@"

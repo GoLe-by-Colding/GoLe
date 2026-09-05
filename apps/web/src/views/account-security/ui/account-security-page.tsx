@@ -16,6 +16,7 @@ import {
   useSession,
   withdrawThirdPartyProvisionConsent,
 } from "@entities/user";
+import { fetchLaunchConfig } from "@entities/launch";
 import { ApiError } from "@shared/api";
 import {
   BackButton,
@@ -51,6 +52,19 @@ export function AccountSecurityPage() {
   const [deletionCodeSent, setDeletionCodeSent] = useState(false);
   const [deletionBusy, setDeletionBusy] = useState(false);
   const [deletionError, setDeletionError] = useState<string | null>(null);
+  const [emailAuthenticationAvailable, setEmailAuthenticationAvailable] = useState<boolean | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchLaunchConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) {
+        setEmailAuthenticationAvailable(config.emailAuthenticationAvailable);
+      }
+    });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (sessionAccountId === null) return;
@@ -191,7 +205,7 @@ export function AccountSecurityPage() {
   }
 
   async function sendDeletionCode(): Promise<void> {
-    if (deletionBusy) return;
+    if (deletionBusy || emailAuthenticationAvailable !== true) return;
     setDeletionBusy(true);
     setDeletionError(null);
     try {
@@ -208,7 +222,7 @@ export function AccountSecurityPage() {
 
   async function submitDeletion(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (deletionBusy) return;
+    if (deletionBusy || emailAuthenticationAvailable !== true) return;
     const confirmed = window.confirm(
       "탈퇴를 요청하면 즉시 모든 기기에서 로그아웃되고 다시 로그인할 수 없습니다. 진행할까요?",
     );
@@ -425,7 +439,21 @@ export function AccountSecurityPage() {
               {deletionError}
             </p>
           ) : null}
-          {!deletionCodeSent ? (
+          {emailAuthenticationAvailable === null ? (
+            <p role="status" className="text-sm text-neutral-500">
+              탈퇴 본인확인 가능 여부를 확인하는 중…
+            </p>
+          ) : !emailAuthenticationAvailable ? (
+            <div className="rounded-xl bg-brand-50 p-4 text-sm leading-relaxed text-brand-900">
+              <p>탈퇴 본인확인 이메일 발송을 준비하고 있어요.</p>
+              <a
+                href="mailto:coldingcontact@gmail.com?subject=GoLe%20회원%20탈퇴%20문의"
+                className="mt-2 inline-flex font-semibold underline underline-offset-4"
+              >
+                운영팀에 탈퇴 문의하기
+              </a>
+            </div>
+          ) : !deletionCodeSent ? (
             <Button
               size="sm"
               variant="secondary"

@@ -4,12 +4,22 @@ import { fetchLegoSetForPage, type LegoSet } from "@entities/lego-set";
 import { fetchListingsBySet, type Listing } from "@entities/listing";
 import { fetchPriceSnapshotForPage, type PriceSnapshot } from "@entities/pricing";
 import { SetDetailPage } from "@views/set-detail";
+import { isApiNotFoundError } from "@shared/api";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import { absoluteUrl, breadcrumbJsonLd, schemaItemCondition } from "@shared/lib";
 
 interface PageParams {
   readonly params: Promise<{ readonly setNumber: string }>;
+}
+
+async function loadSet(setNumber: string): Promise<LegoSet | null> {
+  try {
+    return await fetchLegoSetForPage(setNumber);
+  } catch (cause) {
+    if (isApiNotFoundError(cause)) return null;
+    throw cause;
+  }
 }
 
 /**
@@ -20,11 +30,8 @@ interface PageParams {
  */
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   const { setNumber } = await params;
-  const set = await fetchLegoSetForPage(setNumber).catch(() => null);
+  const set = await loadSet(setNumber);
   if (set === null) {
-    // 알려진 한계: 이 앱에서 notFound()는 404 UI를 렌더하지만 응답 상태는 200으로 나간다
-    // (soft 404). 기존 `views/listing-detail`도 동일하다. 상태코드를 고칠 때까지
-    // noindex로 색인만은 확실히 막는다. (SEO 스펙 R1.6 / 미해결 이슈)
     return { title: "세트를 찾을 수 없습니다", robots: { index: false, follow: false } };
   }
 
@@ -106,10 +113,9 @@ function setJsonLd(
 export default async function Page({ params }: PageParams) {
   const { setNumber } = await params;
 
-  // 카탈로그에 없는 세트는 404 — 빈 페이지가 색인되는 것을 막는다(R1.6).
-  // notFound()는 try/catch 밖에서 호출한다. catch 블록 안에서 던지면 Next의 404 신호가
-  // 렌더 스트림이 시작된 뒤에 전달돼 상태코드가 200으로 굳는다(soft 404).
-  const set = await fetchLegoSetForPage(setNumber).catch(() => null);
+  // Proxy가 렌더 전에 404를 처리하지만, HEAD 미지원 등을 대비해 렌더 경계도 닫는다.
+  // 명시적 404만 누락으로 보고 5xx·네트워크 장애는 전역 오류 경계로 전파한다.
+  const set = await loadSet(setNumber);
   if (set === null) {
     notFound();
   }

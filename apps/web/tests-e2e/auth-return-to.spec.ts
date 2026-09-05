@@ -300,11 +300,23 @@ test.describe("컬렉션 로그인 왕복", () => {
   });
 
   test("회원가입과 이메일 인증을 거쳐도 컬렉션 복귀 경로를 유지한다", async ({ page }) => {
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: false,
+          emailAuthenticationAvailable: true,
+          updatedAt: null,
+        },
+      }),
+    );
     await page.route("**/api/v1/policies/current", (route) =>
       route.fulfill({
         json: {
           termsVersion: "2026-09-04",
-          privacyVersion: "2026-09-04",
+          privacyVersion: "2026-09-05",
           thirdPartyProvisionVersion: "2026-09-04",
           minimumAge: 14,
         },
@@ -329,8 +341,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await page.getByRole("checkbox", { name: /만 14세 이상/ }).check();
     await page.getByLabel("이메일").fill("new@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "가입하기" }).click();
-    await expect(page).toHaveURL(/\/verify\?email=new%40gole\.test&returnTo=%2Fcollection$/);
+    await page.getByRole("button", { name: "이메일로 가입하기" }).click();
+    await expect(page).toHaveURL(/\/verify\?returnTo=%2Fcollection$/);
+    await expect(page.getByLabel("이메일")).toHaveValue("new@gole.test");
 
     await page.getByLabel("인증 코드").fill("123456");
     await page.getByRole("button", { name: "인증하기" }).click();

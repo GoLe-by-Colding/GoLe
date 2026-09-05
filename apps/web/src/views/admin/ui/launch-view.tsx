@@ -246,6 +246,15 @@ export function AdminLaunchView() {
                 }
               />
               <ReadinessCard
+                title="신규 사용자 · 이메일 인증"
+                ready={config.config.emailAuthenticationAvailable === true}
+                detail={
+                  config.config.emailAuthenticationAvailable === true
+                    ? "이메일 가입·인증·비밀번호 복구·탈퇴 확인 발송을 완료할 수 있음"
+                    : "SMTP 준비 전 · 기존 인증 계정 로그인은 유지하고 이메일 인증·복구·탈퇴 확인은 서버와 화면에서 차단"
+                }
+              />
+              <ReadinessCard
                 title="판매자 지급 계약"
                 ready={config.payoutContractVerified}
                 detail={

@@ -22,6 +22,7 @@ import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
 import com.gole.api.account.application.port.in.SignInUseCase.SignInResult;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase;
 import com.gole.api.account.application.port.in.VerifyEmailUseCase.VerifyEmailCommand;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.UnauthorizedException;
@@ -62,6 +63,7 @@ public class AccountController {
     private final SessionCookie sessionCookie;
     private final PublicAuthRequestLimitUseCase publicRequestLimit;
     private final ClientAddressResolver clientAddresses;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AccountController(
             RegisterAccountUseCase registerAccountUseCase,
@@ -73,7 +75,8 @@ public class AccountController {
             RefreshSessionUseCase refreshSessionUseCase,
             SessionCookie sessionCookie,
             PublicAuthRequestLimitUseCase publicRequestLimit,
-            ClientAddressResolver clientAddresses) {
+            ClientAddressResolver clientAddresses,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.registerAccountUseCase = registerAccountUseCase;
         this.resendVerificationUseCase = resendVerificationUseCase;
         this.verifyEmailUseCase = verifyEmailUseCase;
@@ -84,13 +87,18 @@ public class AccountController {
         this.sessionCookie = sessionCookie;
         this.publicRequestLimit = publicRequestLimit;
         this.clientAddresses = clientAddresses;
+        this.emailAuthentication = emailAuthentication;
     }
 
-    @Operation(summary = "회원가입", description = "가입 가능 여부와 무관하게 요청을 접수하며, 가입 가능하면 인증 코드가 발송됩니다.")
-    @ApiResponses({@ApiResponse(responseCode = "201", description = "가입 요청 접수 — 계정 존재 여부는 반환하지 않음")})
+    @Operation(summary = "회원가입", description = "이메일 발송이 준비된 때만 요청을 접수하며, 계정 존재 여부와 무관하게 같은 성공 응답을 반환합니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "가입 요청 접수 — 계정 존재 여부는 반환하지 않음"),
+        @ApiResponse(responseCode = "503", description = "이메일 가입 준비 중")
+    })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        emailAuthentication.requireAvailable();
         publicRequestLimit.acquireRegistration(request.email(), clientAddresses.resolve(http));
         try {
             registerAccountUseCase.register(new RegisterAccountCommand(
@@ -111,17 +119,19 @@ public class AccountController {
         return new RegisterResponse(PUBLIC_REGISTRATION_REFERENCE);
     }
 
-    @Operation(summary = "이메일 인증", description = "가입 시 발송된 인증 코드로 계정을 활성화합니다.")
+    @Operation(summary = "이메일 인증", description = "이메일 발송이 준비된 때 가입 시 받은 인증 코드로 계정을 활성화합니다.")
     @PostMapping("/verification")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void verify(@Valid @RequestBody VerifyEmailRequest request) {
+        emailAuthentication.requireAvailable();
         verifyEmailUseCase.verify(new VerifyEmailCommand(request.email(), request.code()));
     }
 
-    @Operation(summary = "이메일 인증 코드 재발급", description = "인증 대기 계정에 새 인증 코드를 발송합니다. 60초 재요청 제한이 적용됩니다.")
+    @Operation(summary = "이메일 인증 코드 재발급", description = "이메일 발송이 준비된 때 인증 대기 계정에 새 코드를 발송합니다. 60초 재요청 제한이 적용됩니다.")
     @PostMapping("/verification/resend")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void resendVerification(@Valid @RequestBody ResendVerificationRequest request, HttpServletRequest http) {
+        emailAuthentication.requireAvailable();
         if (!publicRequestLimit.acquireVerificationResend(request.email(), clientAddresses.resolve(http))) {
             return;
         }

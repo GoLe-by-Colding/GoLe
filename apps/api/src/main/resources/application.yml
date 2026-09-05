@@ -183,7 +183,7 @@ gole:
   # 문서의 시행일과 이 값을 함께 올려 오래된 가입 화면의 제출을 fail-closed 한다.
   policy:
     terms-version: ${GOLE_TERMS_VERSION:2026-09-04}
-    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-04}
+    privacy-version: ${GOLE_PRIVACY_VERSION:2026-09-05}
     third-party-provision-version: ${GOLE_THIRD_PARTY_PROVISION_VERSION:2026-09-04}
     minimum-age: ${GOLE_MINIMUM_SIGNUP_AGE:14}
   catalog:

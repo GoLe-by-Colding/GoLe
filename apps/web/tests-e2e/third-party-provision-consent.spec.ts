@@ -72,7 +72,7 @@ async function mockPageShell(page: Page, rooms: readonly unknown[] = []): Promis
     route.fulfill({
       json: {
         termsVersion: "2026-09-04",
-        privacyVersion: "2026-09-04",
+        privacyVersion: "2026-09-05",
         thirdPartyProvisionVersion: NOTICE_VERSION,
         minimumAge: 14,
       },
@@ -159,7 +159,7 @@ test.describe("제3자 제공 JIT 동의", () => {
       await route.fulfill({
         json: {
           termsVersion: "2026-09-04",
-          privacyVersion: "2026-09-04",
+          privacyVersion: "2026-09-05",
           thirdPartyProvisionVersion: policyLoads === 1 ? NOTICE_VERSION : `${NOTICE_VERSION}-2`,
           minimumAge: 14,
         },

@@ -14,6 +14,7 @@ import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionTokenPort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.exception.InvalidCredentialsException;
@@ -65,6 +66,7 @@ public class AccountService
     private final SessionPolicyProperties sessionPolicy;
     private final PolicyAcceptanceService policyAcceptances;
     private final OnboardingProperties onboardingProperties;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AccountService(
             AccountRepositoryPort accountRepository,
@@ -77,7 +79,8 @@ public class AccountService
             Clock clock,
             SessionPolicyProperties sessionPolicy,
             PolicyAcceptanceService policyAcceptances,
-            OnboardingProperties onboardingProperties) {
+            OnboardingProperties onboardingProperties,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.accountRepository = accountRepository;
         this.passwordHasher = passwordHasher;
         this.verificationCodeSender = verificationCodeSender;
@@ -89,6 +92,7 @@ public class AccountService
         this.sessionPolicy = sessionPolicy;
         this.policyAcceptances = policyAcceptances;
         this.onboardingProperties = onboardingProperties;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Override
@@ -99,6 +103,7 @@ public class AccountService
             includeResult = true)
     @Transactional
     public String register(RegisterAccountCommand command) {
+        emailAuthentication.requireAvailable();
         policyAcceptances.validate(command.policyAcceptance());
         Email email = new Email(command.email());
 
@@ -133,6 +138,7 @@ public class AccountService
     @Override
     @Transactional(noRollbackFor = VerificationException.class)
     public void verify(VerifyEmailCommand command) {
+        emailAuthentication.requireAvailable();
         Email email = new Email(command.email());
         Account account = accountRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
@@ -152,6 +158,7 @@ public class AccountService
     @Override
     @Transactional
     public void resend(ResendVerificationCommand command) {
+        emailAuthentication.requireAvailable();
         Email email = new Email(command.email());
         Optional<Account> found = accountRepository.findByEmail(email);
         // 계정 존재 여부를 노출하지 않는다. 미가입·인증완료·정지 계정 모두 동일하게 204로 응답한다.

@@ -15,6 +15,7 @@ import com.gole.api.account.application.port.out.IdentifierGeneratorPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort.SessionPrincipal;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.exception.AccountLockedException;
 import com.gole.api.account.domain.exception.AccountNotVerifiedException;
 import com.gole.api.account.domain.exception.AccountSuspendedException;
@@ -30,6 +31,7 @@ import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PolicyAcceptance;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -81,6 +83,18 @@ class AccountServiceTest {
         assertThatThrownBy(() -> service.signIn(new SignInCommand("s@b.com", "password1")))
                 .isInstanceOf(AccountSuspendedException.class)
                 .hasMessageContaining("사기 신고 다발");
+    }
+
+    @Test
+    void publicEnvironmentWithoutMailRejectsRegistrationBeforePersistence() {
+        AccountService unavailable =
+                serviceWithPolicy(new OnboardingProperties(), new EmailAuthenticationAvailability("production", false));
+
+        assertThatThrownBy(() -> unavailable.register(registerCommand("pending@gole.test", "password1")))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasFieldOrPropertyWithValue("code", EmailAuthenticationAvailability.UNAVAILABLE_CODE);
+        assertThat(repository.findByEmail(new Email("pending@gole.test"))).isEmpty();
+        assertThat(verificationSends).hasValue(0);
     }
 
     @Test
@@ -145,7 +159,7 @@ class AccountServiceTest {
         assertThat(policyAcceptances).singleElement().satisfies(acceptance -> {
             assertThat(acceptance.accountId()).isEqualTo(accountId);
             assertThat(acceptance.termsVersion()).isEqualTo("2026-09-04");
-            assertThat(acceptance.privacyVersion()).isEqualTo("2026-09-04");
+            assertThat(acceptance.privacyVersion()).isEqualTo("2026-09-05");
             assertThat(acceptance.minimumAgeConfirmed()).isTrue();
             assertThat(acceptance.channel()).isEqualTo(PolicyAcceptance.Channel.EMAIL);
         });
@@ -153,7 +167,7 @@ class AccountServiceTest {
 
     @Test
     void register_rejectsStaleOrIncompletePolicyBeforeCreatingAccount() {
-        var stale = new SignupPolicyAcceptance("old", "2026-09-04", true, true, true);
+        var stale = new SignupPolicyAcceptance("old", "2026-09-05", true, true, true);
 
         assertThatThrownBy(() -> service.register(new RegisterAccountCommand("stale@b.com", "password1", stale)))
                 .isInstanceOf(BadRequestException.class)
@@ -341,7 +355,8 @@ class AccountServiceTest {
                 clock,
                 new SessionPolicyProperties(),
                 policyService(clock),
-                new OnboardingProperties());
+                new OnboardingProperties(),
+                new EmailAuthenticationAvailability("test", false));
         rotatingService.register(registerCommand("rotate@b.com", "password1"));
         rotatingService.verify(new VerifyEmailCommand("rotate@b.com", "123456"));
         SignInResult signedIn = rotatingService.signIn(new SignInCommand("rotate@b.com", "password1"));
@@ -394,7 +409,8 @@ class AccountServiceTest {
                 clock,
                 new SessionPolicyProperties(),
                 policyService(clock),
-                new OnboardingProperties());
+                new OnboardingProperties(),
+                new EmailAuthenticationAvailability("test", false));
         repository.save(Account.provisioned(
                 "acc-legacy",
                 new Email("legacy@b.com"),
@@ -412,6 +428,11 @@ class AccountServiceTest {
     // --- 가짜 구현들 ---
 
     private AccountService serviceWithPolicy(OnboardingProperties onboardingProperties) {
+        return serviceWithPolicy(onboardingProperties, new EmailAuthenticationAvailability("test", false));
+    }
+
+    private AccountService serviceWithPolicy(
+            OnboardingProperties onboardingProperties, EmailAuthenticationAvailability emailAuthentication) {
         return new AccountService(
                 repository,
                 new PlainHasher(),
@@ -423,7 +444,8 @@ class AccountServiceTest {
                 clock,
                 new SessionPolicyProperties(),
                 policyService(clock),
-                onboardingProperties);
+                onboardingProperties,
+                emailAuthentication);
     }
 
     private static RegisterAccountCommand registerCommand(String email, String password) {
@@ -433,7 +455,7 @@ class AccountServiceTest {
     @Test
     void emailRegistrationRecordsCheckedThirdPartyChoiceThroughAppendOnlyService() {
         SignupPolicyAcceptance acceptance =
-                new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true, "2026-09-04", true);
+                new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true, "2026-09-04", true);
 
         String accountId = service.register(new RegisterAccountCommand("consented@gole.test", "password1", acceptance));
 
@@ -442,7 +464,7 @@ class AccountServiceTest {
     }
 
     private static SignupPolicyAcceptance acceptedPolicy() {
-        return new SignupPolicyAcceptance("2026-09-04", "2026-09-04", true, true, true);
+        return new SignupPolicyAcceptance("2026-09-04", "2026-09-05", true, true, true);
     }
 
     private PolicyAcceptanceService policyService(Clock policyClock) {

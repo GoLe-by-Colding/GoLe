@@ -40,9 +40,13 @@ chown -R root:root /var/lib/gole
 chmod -R go-w /var/lib/gole
 printf 'root:root\n' > /etc/gole/deploy-user
 printf 'MINIO_ROOT_USER=test\nMINIO_ROOT_PASSWORD=test-password\n' > /etc/gole/infra.env
-install -m 0600 /source/infra/gcp/tests/fixtures/production.env /etc/gole/gole.env
+printf 'PROJECT_ID=test-project-123\n' > /etc/gole/cloud-broker.conf
+install -m 0600 /source/infra/gcp/tests/fixtures/development.env /etc/gole/gole.env
 install -m 0600 /source/infra/gcp/tests/fixtures/discord.env /etc/gole/discord.env
-chmod 0600 /etc/gole/infra.env /etc/gole/gole.env /etc/gole/discord.env
+printf '5\n' > /etc/gole/gole.env.version
+chmod 0600 /etc/gole/infra.env /etc/gole/gole.env /etc/gole/discord.env \
+  /etc/gole/cloud-broker.conf
+chmod 0644 /etc/gole/gole.env.version
 install -m 0755 /source/infra/gcp/scripts/gole-hostctl.sh /usr/local/sbin/gole-hostctl
 printf '#!/bin/sh\nexit 0\n' > /usr/local/libexec/gole/validate-production-env.py
 cat > /usr/local/libexec/gole/validate-production-compose.py <<'EOF'
@@ -51,6 +55,24 @@ printf '%s\n' "$*" >> /tmp/validator.calls
 cat >/dev/null
 EOF
 chmod 0755 /usr/local/libexec/gole/*.py
+
+cat > /usr/bin/gcloud <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> /tmp/gcloud.calls
+[ "$1" = secrets ] && [ "$2" = versions ] && [ "$3" = access ] && [ "$4" = 6 ]
+shift 4
+for argument in "$@"; do
+  case "$argument" in
+    --secret=gole-production-env|--project=test-project-123|--quiet) ;;
+    --out-file=*) output="${argument#--out-file=}" ;;
+    *) exit 92 ;;
+  esac
+done
+[ -n "${output:-}" ]
+cp /source/infra/gcp/tests/fixtures/production.env "$output"
+EOF
+chmod 0755 /usr/bin/gcloud
 
 # The pinned Ubuntu fixture deliberately has no Python runtime. These hostctl
 # paths only ask Python to test service membership or return a service image,
@@ -413,8 +435,13 @@ setup_snapshot() {
   local mode="$1"
   rm -rf "$state_root"
   install -d -m 0755 "$state_root/refs" "$state_root/services"
-  rm -f /tmp/validator.calls /tmp/poweroff-requested \
-    /etc/gole/metadata-migration.pending /etc/gole/deployment.transaction
+  rm -f /tmp/validator.calls /tmp/poweroff-requested /tmp/gcloud.calls \
+    /etc/gole/metadata-migration.pending /etc/gole/deployment.transaction \
+    /etc/gole/gole.env.transaction
+  rm -f /var/backups/gole-env/gole.env.*
+  install -m 0600 /source/infra/gcp/tests/fixtures/development.env /etc/gole/gole.env
+  printf '5\n' > /etc/gole/gole.env.version
+  chmod 0644 /etc/gole/gole.env.version
   rm -f /var/backups/gole-data/MINIO_UNFREEZE_REQUIRED
   rm -f /var/backups/gole-images/images.* /var/backups/gole-images/data-upgrade.*
   printf '%s\n' "$previous_sha" > /etc/gole/deployed.sha
@@ -583,11 +610,22 @@ if grep -Fq 'action=ps service=support-agent ' "$state_root/compose.calls"; then
   echo 'legacy absent support-agent was resolved from a guessed container' >&2
   exit 1
 fi
+legacy_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+candidate_env_hash="$(sha256sum /source/infra/gcp/tests/fixtures/production.env | cut -d' ' -f1)"
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-environment-prepare \
+  6 "$new_sha" "$request_id"
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$candidate_env_hash" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+grep -qx 'state=installed' /etc/gole/gole.env.transaction
+grep -qx "request_id=$request_id" /etc/gole/gole.env.transaction
 mutate_runtime legacy
 : > "$state_root/compose.calls"
 : > "$state_root/docker.calls"
 SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$request_id"
 [ "$(cat /etc/gole/deployed.sha)" = "$previous_sha" ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$legacy_env_hash" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ ! -e /etc/gole/gole.env.transaction ]
 [ ! -e /tmp/poweroff-requested ]
 [ ! -e /etc/gole/deployment.transaction ]
 [ ! -e "$legacy_marker" ]
@@ -636,11 +674,30 @@ recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
 [ ! -e "$rollback_kill_marker" ]
 [ ! -e /tmp/poweroff-requested ]
 
+# A host restart after the candidate env is durable but before build must let
+# deployment-recover restore the legacy env/version and leave no orphan journal.
+setup_snapshot legacy
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id"
+legacy_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-environment-prepare \
+  6 "$new_sha" "$request_id"
+grep -qx 'state=installed' /etc/gole/gole.env.transaction
+recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
+[ "$recovery" = RECOVERED ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$legacy_env_hash" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(cat /etc/gole/deployed.sha)" = "$previous_sha" ]
+[ ! -e /etc/gole/gole.env.transaction ]
+[ ! -e /etc/gole/deployment.transaction ]
+
 # A failed build can move mutable tags before any container mutation. The
 # snapshotted/built journal path must restore only those tags and leave every
 # running service, especially the data plane, untouched.
 setup_snapshot legacy
 SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id"
+legacy_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-environment-prepare \
+  6 "$new_sha" "$request_id"
 sed -i 's/^state=snapshotted$/state=built/' /etc/gole/deployment.transaction
 while IFS='|' read -r _ reference; do
   set_ref "$reference" "$candidate_id"
@@ -648,6 +705,9 @@ done < "$state_root/model"
 : > "$state_root/compose.calls"
 SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$request_id"
 [ "$(cat /etc/gole/deployed.sha)" = "$previous_sha" ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$legacy_env_hash" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ ! -e /etc/gole/gole.env.transaction ]
 [ ! -e /tmp/poweroff-requested ]
 [ ! -e /etc/gole/deployment.transaction ]
 assert_legacy_canonical_refs
@@ -657,6 +717,19 @@ if grep -Eq 'action=(up|run) service=' "$state_root/compose.calls"; then
 fi
 [ "$(cat "$state_root/services/mongo/image")" = "$mongo_id" ]
 [ "$(cat "$state_root/services/backend/image")" = "$backend_id" ]
+
+# A later strict deployment cannot advance the Secret version outside the
+# one-time legacy migration marker, and rejects before fetching any payload.
+setup_snapshot strict
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id"
+if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-environment-prepare \
+  6 "$new_sha" "$request_id" >/tmp/strict-env-advance.out 2>&1; then
+  echo 'strict deployment advanced the environment outside migration' >&2
+  exit 1
+fi
+grep -q 'one-time metadata migration' /tmp/strict-env-advance.out
+[ ! -e /tmp/gcloud.calls ]
+[ ! -e /etc/gole/gole.env.transaction ]
 
 # Strict snapshots retain data-plane image provenance, but an ordinary strict
 # rollback must not recreate Mongo, Redis, MinIO or either initializer when no

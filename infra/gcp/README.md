@@ -28,10 +28,12 @@ Ubuntu boot image는 현재 운영과 같은 exact image
 - 인증서 timer도 `/app`을 실행하지 않고 `gole-hostctl certificate-renew`를 호출한다.
 
 운영 env validator는 `GOLE_ENVIRONMENT=production`, 모든 seed/demo/legacy false, secure
-cookie, verification-code logging false, 결제·정산 disabled, Gmail SMTP AUTH/STARTTLS/
-hostname 검증, CORS, OAuth callback, 약관·개인정보·제3자 제공 버전, support-agent target,
-공개 인증 rate limit을 exact 값으로 강제한다. SMTP 앱 비밀번호는 공백 없는 16자리 ASCII
-영숫자만 허용한다.
+cookie, verification-code logging false, 결제·정산 disabled, CORS, OAuth callback,
+약관·개인정보·제3자 제공 버전, support-agent target, 공개 인증 rate limit을 exact 값으로
+강제한다. 초기 Stage 0은 이메일 발송과 mail health를 false로 고정하고 SMTP 사용자명,
+비밀번호, 보낸사람 주소가 모두 빈 값이 아니면 배포를 거부한다. HOST/PORT/TLS 값은 Spring
+바인딩을 위해 유지하지만 비활성 래치와 빈 자격증명 때문에 송신 경로로 사용할 수 없다.
+인증 코드와 이메일 주소를 애플리케이션 로그로 대신 출력하는 운영 fallback도 허용하지 않는다.
 
 MongoDB, Redis, MinIO는 host port를 publish하지 않고 internal `data` network에만 붙는다.
 Nginx/frontend/budget-relay는 `edge`, support-agent는 전용 internal `agent`, backend만 세
@@ -453,6 +455,10 @@ printf '%s\n' "$GOLE_INITIAL_SECRET_VERSION" | \
       HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
       /usr/local/sbin/gole-bootstrap-production-env \
       --sha '$REVIEWED_MAIN_SHA' --version-stdin"
+gh variable set GOLE_PRODUCTION_ENV_SECRET_VERSION \
+  --body "$GOLE_INITIAL_SECRET_VERSION" --repo GoLe-by-Colding/GoLe
+test "$(gh variable get GOLE_PRODUCTION_ENV_SECRET_VERSION \
+  --repo GoLe-by-Colding/GoLe)" = "$GOLE_INITIAL_SECRET_VERSION"
 unset GOLE_INITIAL_SECRET_VERSION
 ```
 
@@ -525,8 +531,10 @@ reset이 실패하면 transaction을 유지한 채 다시 VM을 정지하므로 
 
 2026-09-04 read-only 확인 상태는 `/app` clean HEAD
 `8913e5718ac2026ba754083a30e2f4408b726941`, backend/frontend/budget healthy, env/version 5,
-hostctl/deployed marker 없음이다. version 5는 새 정책 키와 유효 SMTP_PASSWORD가 부족하므로
-그대로 채택하지 않는다. 아래는 코드 리뷰 뒤 한 번만 실행한다. `set -x`는 금지한다.
+hostctl/deployed marker 없음이다. version 5는 새 정책 키가 부족하고 과거 SMTP 값이 남을 수
+있으므로 새 SHA에는 사용할 수 없다. 다만 old backend를 재기동할 수 있는 유일한 LKG이므로
+adoption에서는 env/version/hash를 그대로 보존하고, 새 후보는 첫 reviewed-main CD가 SHA와 함께
+원자 전환한다. 아래는 코드 리뷰 뒤 한 번만 실행한다. `set -x`는 금지한다.
 
 새 host policy와 runner를 설치하기 전에는 구 runner가 새 workflow를 실행하지 않도록, 보호된
 main에 PR을 병합하기 **전에** 운영 host gate를 닫는다. false 또는 미설정이면 CD와 Secret Sync
@@ -828,7 +836,6 @@ secret_work_dir="$(mktemp -d)"
 cleanup_secret_candidate() {
   local cleanup_status=$?
   set +e
-  unset SMTP_APP_PASSWORD
   if [ -n "${secret_work_dir:-}" ] && [ -d "$secret_work_dir" ]; then
     find "$secret_work_dir" -xdev -type f -delete
     rmdir "$secret_work_dir"
@@ -841,14 +848,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 gcloud secrets versions access 5 --secret "$SECRET_NAME" --project "$PROJECT_ID" \
   --out-file "$secret_work_dir/version-5.env" --quiet
-printf 'Google 앱 비밀번호(공백 제거 16자): ' >&2
-IFS= read -r -s SMTP_APP_PASSWORD
-printf '\n' >&2
-candidate_path="$(printf '%s' "$SMTP_APP_PASSWORD" | \
-  python3 infra/gcp/scripts/prepare-production-env.py \
-    "$secret_work_dir/version-5.env" --smtp-password-stdin \
-    --output-directory "$secret_work_dir")"
-unset SMTP_APP_PASSWORD
+candidate_path="$(python3 infra/gcp/scripts/prepare-production-env.py \
+  "$secret_work_dir/version-5.env" \
+  --output-directory "$secret_work_dir")"
 python3 infra/gcp/scripts/validate-production-env.py "$candidate_path"
 NEW_SECRET_VERSION="$(gcloud secrets versions add "$SECRET_NAME" \
   --project "$PROJECT_ID" --data-file "$candidate_path" \
@@ -865,7 +867,12 @@ cleanup_secret_candidate
 trap - EXIT INT TERM
 ```
 
-위 삭제는 방금 `mktemp -d`로 만든 정확한 directory만 대상으로 한다. payload/SMTP를
+preparer는 version 5를 source하지 않고 SMTP 사용자명·비밀번호·보낸사람 주소를 빈 값으로
+덮어쓴다. 과거 절차의 `--smtp-password-stdin`은 Stage 0에서 명시적으로 실패한다. SMTP를
+나중에 열 때는 앱의 fail-closed 경계, public readiness, validator, Compose, CD를 같은 PR에서
+변경하고 새 immutable Secret version을 검증·적용한다. 자격증명만 먼저 저장하지 않는다.
+
+위 삭제는 방금 `mktemp -d`로 만든 정확한 directory만 대상으로 한다. Secret payload를
 stdout, Discord, git에 남기지 않는다. 다음 변수는 로컬 셸에 둔다.
 
 ```bash
@@ -1001,17 +1008,17 @@ gcloud compute ssh gole-production --project "$PROJECT_ID" --zone "$ZONE" \
     test -z \"\$(sudo -n -u goledeploy -H git -C /app status --porcelain=v1 --untracked-files=all)\""
 ```
 
-새 env를 backup→install하고 동일 old SHA 서비스를 재기동한다. health/readiness/watchdog
-성공 뒤 env version과 deployed SHA를 마지막에 commit한다. 실패/신호/marker 오류면 기존
+현재 env를 root-only backup한 뒤 byte-for-byte 같은 env/version으로 동일 old SHA 서비스를
+재기동한다. health/readiness/watchdog 성공 뒤 deployed SHA만 마지막에 commit한다. 이 단계는
+Secret Manager를 읽거나 새 SMTP-off payload를 설치하지 않는다. 실패/신호/marker 오류면 기존
 env를 복원하고 동일 SHA 서비스를 재기동하며, 복구 전 새 rollout을 거부한다.
 
 ```bash
-printf '%s\n' "$NEW_SECRET_VERSION" | \
-  gcloud compute ssh gole-production --project "$PROJECT_ID" --zone "$ZONE" \
-    --tunnel-through-iap --command="sudo -n env -i \
-      HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
-      /usr/local/sbin/gole-migrate-and-adopt-existing \
-      --sha '$OLD_SHA' --request-id '$ADOPTION_REQUEST_ID' --version-stdin"
+gcloud compute ssh gole-production --project "$PROJECT_ID" --zone "$ZONE" \
+  --tunnel-through-iap --command="sudo -n env -i \
+    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    /usr/local/sbin/gole-migrate-and-adopt-existing \
+    --sha '$OLD_SHA' --request-id '$ADOPTION_REQUEST_ID'"
 
 gcloud compute ssh gole-production --project "$PROJECT_ID" --zone "$ZONE" \
   --tunnel-through-iap --command="set -Eeuo pipefail
@@ -1159,8 +1166,8 @@ gcloud compute ssh gole-production --project "$PROJECT_ID" --zone "$ZONE" \
       --require-runner --require-deployment --allow-metadata-migration-pending"
 ```
 
-migration이 adoption 중에 중단되면 같은 reviewed SHA/request/version 명령을 다시 실행해
-adoption journal 복구부터 수행한다. 세 값 중 하나라도 다르면 root helper가 아무것도 변경하지
+migration이 adoption 중에 중단되면 같은 historical SHA/request 명령을 다시 실행해
+adoption journal 복구부터 수행한다. 두 값 중 하나라도 다르면 root helper가 아무것도 변경하지
 않고 거부한다. 임의로 env, marker, backup을 지우지 않는다. bootstrap 중간 실패면 old
 runner를 정지한 채 `/app` 소유자와 host journal부터 검토하고, old SHA 복원 전 Terraform
 apply/reboot를 하지 않는다.
@@ -1174,9 +1181,14 @@ retired file의 기록된 exact hash를 재검증한 operator 승인 절차로 d
 
 새 runner 검증까지 끝난 다음 GitHub Actions의 operations/account/payment webhook secrets가
 모두 설정됐는지 확인한다. deploy/support secret은 선택이며 비어 있으면 operations로
-fallback한다. 역할별 webhook이 같은 GoLe Discord room을 가리켜도 된다. 그 뒤에만 gate를 열고
-수동 CD를 한 번 실행한다. 첫 strict CD는 legacy overlay를 GitHub secrets의 현재 값으로 원자
-갱신한 뒤 배포한다. Secret Sync도 같은 overlay 설치를 rollout lock 전에 한 번만 수행하고,
+fallback한다. 역할별 webhook이 같은 GoLe Discord room을 가리켜도 된다. 새 SMTP-off Secret의
+exact version 번호도 repository variable로 고정한다. 이는 payload가 아니며 root helper만 해당
+version을 Secret Manager에서 읽는다. 그 뒤에만 gate를 열고 수동 CD를 한 번 실행한다. 첫 strict
+CD는 legacy overlay를 GitHub secrets의 현재 값으로 갱신하고, 이미지 snapshot 뒤 새 env를
+deployment journal에 묶어 설치한다. 새 SHA 확정 때 env version을 commit하고 모든 runtime 및
+metadata ratchet 검증 뒤 journal을 제거한다. 어느 단계든 ratchet 전 실패하면 old SHA+old env
+LKG를 함께 복구한다. 첫 CD 전에 standalone Secret Sync를 실행하면 old backend가 SMTP-off env로
+재기동되므로 금지한다. 이후 Secret Sync도 같은 overlay 설치를 rollout lock 전에 한 번만 수행하고,
 parent-held deploy 경로는 overlay를 재설치하지 않고 root 검증만 하므로 lock self-conflict가 없다.
 
 ```bash
@@ -1193,6 +1205,11 @@ test "$(printf '%s\n' "$matched_secret_names" | \
   awk 'NF { count++ } END { print count + 0 }')" -eq 3
 test "$matched_secret_names" = "$required_secret_names"
 unset repository_secret_names matched_secret_names required_secret_names
+case "$NEW_SECRET_VERSION" in ''|*[!0-9]*) exit 1 ;; esac
+gh variable set GOLE_PRODUCTION_ENV_SECRET_VERSION --body "$NEW_SECRET_VERSION" \
+  --repo GoLe-by-Colding/GoLe
+test "$(gh variable get GOLE_PRODUCTION_ENV_SECRET_VERSION \
+  --repo GoLe-by-Colding/GoLe)" = "$NEW_SECRET_VERSION"
 gh variable set GOLE_PRODUCTION_HOST_READY --body true \
   --repo GoLe-by-Colding/GoLe
 gh workflow run cd.yml --ref main --repo GoLe-by-Colding/GoLe

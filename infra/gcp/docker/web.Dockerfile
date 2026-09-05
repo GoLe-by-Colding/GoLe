@@ -5,8 +5,10 @@ RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --frozen-lockfile
+COPY packages/core/package.json packages/core/package.json
+RUN pnpm --filter web... install --frozen-lockfile
 COPY apps/web/ apps/web/
+COPY packages/core/ packages/core/
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_SITE_URL
 ARG NEXT_PUBLIC_PAYMENT_MODE
@@ -36,6 +38,7 @@ WORKDIR /app
 COPY --from=build --chown=gole:gole /src/package.json /src/pnpm-lock.yaml /src/pnpm-workspace.yaml ./
 COPY --from=build --chown=gole:gole /src/node_modules ./node_modules
 COPY --from=build --chown=gole:gole /src/apps/web ./apps/web
+COPY --from=build --chown=gole:gole /src/packages/core ./packages/core
 USER gole
 EXPOSE 3000
 CMD ["pnpm", "--filter", "web", "start", "--hostname", "0.0.0.0", "--port", "3000"]

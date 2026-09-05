@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const externalBaseUrl = process.env.E2E_BASE_URL;
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8090";
 const targetsRemoteHost =
   externalBaseUrl !== undefined &&
   !["localhost", "127.0.0.1"].includes(new URL(externalBaseUrl).hostname);
@@ -165,6 +166,12 @@ test.describe("Community topics", () => {
 
   test("내 좋아요 상태를 복원하고 같은 버튼에서 취소와 재등록을 이어간다", async ({ page }) => {
     test.skip(targetsRemoteHost, "응답 가로채기 기반 — 로컬 프론트 전용");
+    const feedResponse = await page.request.get(`${apiBaseUrl}/api/v1/community/posts?limit=1`);
+    expect(feedResponse.ok()).toBeTruthy();
+    const posts = (await feedResponse.json()) as Array<{ readonly id: string }>;
+    const postId = posts[0]?.id;
+    expect(postId, "E2E 커뮤니티 시드 게시글이 필요합니다").toBeDefined();
+
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",
@@ -177,10 +184,10 @@ test.describe("Community topics", () => {
     await page.route("**/api/v1/users/viewer-1/notifications/unread-count", (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
-    await page.route("**/api/v1/community/posts/liked-post-1", (route) =>
+    await page.route(`**/api/v1/community/posts/${postId}`, (route) =>
       route.fulfill({
         json: {
-          id: "liked-post-1",
+          id: postId,
           authorId: "builder-1",
           content: "좋아요 상태가 이어지는 피드",
           imageUrls: [],
@@ -191,19 +198,19 @@ test.describe("Community topics", () => {
         },
       }),
     );
-    await page.route("**/api/v1/community/posts/liked-post-1/comments", (route) =>
+    await page.route(`**/api/v1/community/posts/${postId}/comments`, (route) =>
       route.fulfill({ json: [] }),
     );
 
     const methods: string[] = [];
     const authorizations: Array<string | undefined> = [];
-    await page.route("**/api/v1/community/posts/liked-post-1/likes", (route) => {
+    await page.route(`**/api/v1/community/posts/${postId}/likes`, (route) => {
       methods.push(route.request().method());
       authorizations.push(route.request().headers().authorization);
       return route.fulfill({ status: 204 });
     });
 
-    await page.goto("/community/liked-post-1");
+    await page.goto(`/community/${postId}`);
     const liked = page.getByRole("button", { name: "좋아요 취소, 5개" });
     await expect(liked).toHaveAttribute("aria-pressed", "true");
 
@@ -222,6 +229,12 @@ test.describe("Community topics", () => {
 
   test("댓글은 부모 게시글이 검증되는 전용 경로로 신고한다", async ({ page }) => {
     test.skip(targetsRemoteHost, "응답 가로채기 기반 — 로컬 프론트 전용");
+    const feedResponse = await page.request.get(`${apiBaseUrl}/api/v1/community/posts?limit=1`);
+    expect(feedResponse.ok()).toBeTruthy();
+    const posts = (await feedResponse.json()) as Array<{ readonly id: string }>;
+    const postId = posts[0]?.id;
+    expect(postId, "E2E 커뮤니티 시드 게시글이 필요합니다").toBeDefined();
+
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",
@@ -234,10 +247,10 @@ test.describe("Community topics", () => {
     await page.route("**/api/v1/users/viewer-1/notifications/unread-count", (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
-    await page.route("**/api/v1/community/posts/post-1", (route) =>
+    await page.route(`**/api/v1/community/posts/${postId}`, (route) =>
       route.fulfill({
         json: {
-          id: "post-1",
+          id: postId,
           authorId: "author-1",
           content: "레고 보관 팁을 공유합니다.",
           imageUrls: [],
@@ -247,7 +260,7 @@ test.describe("Community topics", () => {
         },
       }),
     );
-    await page.route("**/api/v1/community/posts/post-1/comments", (route) =>
+    await page.route(`**/api/v1/community/posts/${postId}/comments`, (route) =>
       route.fulfill({
         json: [
           {
@@ -262,14 +275,14 @@ test.describe("Community topics", () => {
 
     let reportBody: unknown;
     await page.route(
-      "**/api/v1/community/posts/post-1/comments/comment-1/report",
+      `**/api/v1/community/posts/${postId}/comments/comment-1/report`,
       async (route) => {
         reportBody = route.request().postDataJSON();
         await route.fulfill({ status: 201, json: { id: "report-1" } });
       },
     );
 
-    await page.goto("/community/post-1");
+    await page.goto(`/community/${postId}`);
     await page.locator("#comment-comment-1").getByRole("button", { name: "신고하기" }).click();
 
     const dialog = page.getByRole("dialog", { name: "댓글 신고" });

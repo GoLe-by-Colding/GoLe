@@ -110,6 +110,7 @@ FAKE_DOCKER
 cat > /usr/bin/gcloud <<'FAKE_GCLOUD'
 #!/bin/sh
 set -eu
+touch /tmp/gcloud-called
 [ "$1" = secrets ] && [ "$2" = versions ] && [ "$3" = access ] && [ "$4" = 6 ] || exit 93
 shift 4
 for argument in "$@"; do
@@ -174,6 +175,7 @@ reset_legacy_deployment() {
     /etc/gole/nginx.conf.transaction /tmp/wrong-backend-image \
     /tmp/kill-after-adoption-env-sync /tmp/kill-after-adoption-restore-env-sync \
     /tmp/kill-after-adoption-committed-sync
+  rm -f /tmp/gcloud-called
   install -m 0600 -o root -g root \
     /source/infra/gcp/tests/fixtures/development.env /etc/gole/gole.env
   printf '5\n' > /etc/gole/gole.env.version
@@ -207,6 +209,7 @@ SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-mark-ready "$re
 SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-abort "$request_abort"
 [ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$old_hash" ]
 [ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ ! -e /tmp/gcloud-called ]
 [ ! -e /etc/gole/deployed.sha ]
 SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-finish-recovery "$request_abort"
 [ ! -e /etc/gole/gole.adoption.transaction ]
@@ -227,8 +230,12 @@ if SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-recover \
 fi
 grep -qx 'state=installed' /etc/gole/gole.adoption.transaction
 [ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$old_hash" ]
+[ ! -e /tmp/gcloud-called ]
 [ "$(cat /etc/gole/gole.env.version)" = 5 ]
-recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-recover)"
+if ! recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl adoption-transaction-recover 2>&1)"; then
+  printf 'recovery failed: %s\n' "$recovery" >&2
+  exit 1
+fi
 [ "$recovery" = "RECOVERY_REQUIRED:$request_kill_installed" ]
 [ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$old_hash" ]
 [ "$(cat /etc/gole/gole.env.version)" = 5 ]
@@ -335,10 +342,9 @@ all_output="$transaction_output $recovery"
 ! grep -Fq 'abcdefghijklmnop' <<<"$all_output"
 ! grep -Fq "$candidate_hash" <<<"$all_output"
 
-# A committed journal is still bound to the original reviewed SHA, Secret
-# version, and request ID. Wrong recovery arguments must fail before touching
-# root state. The exact retry rolls back the interrupted commit, removes its
-# request-scoped artifacts, and starts the same operation again successfully.
+# A candidate-env adoption journal left by the retired flow cannot be consumed
+# by the preserved-env command. It must first recover the old env/version, and
+# wrong recovery arguments must not touch root state.
 reset_legacy_deployment
 install -m 0600 -o root -g root \
   /source/infra/gcp/tests/fixtures/discord.env /etc/gole/discord.env
@@ -363,46 +369,55 @@ cleanup_count_before="$(wc -l < /tmp/adoption-cleanup-order)"
 wrong_sha='1123456789abcdef0123456789abcdef01234567'
 wrong_request='45000000-0000-0000-0000-000000000099'
 for wrong_invocation in \
-  "$wrong_sha 6 $request_retry" \
-  "$EXPECTED_SHA 7 $request_retry" \
-  "$EXPECTED_SHA 6 $wrong_request"; do
-  read -r invocation_sha invocation_version invocation_request <<<"$wrong_invocation"
-  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-migrate-adopt-secret \
-    "$invocation_sha" "$invocation_version" "$invocation_request" \
+  "$wrong_sha $request_retry" \
+  "$EXPECTED_SHA $wrong_request" \
+  "$EXPECTED_SHA $request_retry"; do
+  read -r invocation_sha invocation_request <<<"$wrong_invocation"
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-migrate-adopt-existing \
+    "$invocation_sha" "$invocation_request" \
     >/tmp/adoption-wrong-invocation.out 2>&1; then
-    echo 'active adoption accepted mismatched recovery arguments' >&2
+    echo 'preserved adoption accepted an incompatible active transaction' >&2
     exit 1
   fi
-  grep -q 'does not exactly match' /tmp/adoption-wrong-invocation.out
+  grep -Eq 'does not exactly match|not a preserved-environment transaction' \
+    /tmp/adoption-wrong-invocation.out
   [ "$(find /etc/gole /var/backups/gole-adoption -xdev -type f -print0 |
     sort -z | xargs -0 sha256sum)" = "$state_before" ]
   [ "$(wc -l < /tmp/adoption-cleanup-order)" = "$cleanup_count_before" ]
 done
 
+reset_legacy_deployment
+install -m 0600 -o root -g root \
+  /source/infra/gcp/tests/fixtures/discord.env /etc/gole/discord.env
+
 if ! retry_output="$(SUDO_USER=root /usr/local/sbin/gole-hostctl \
-  deployment-migrate-adopt-secret "$EXPECTED_SHA" 6 "$request_retry" 2>&1)"; then
+  deployment-migrate-adopt-existing "$EXPECTED_SHA" "$request_retry" 2>&1)"; then
   printf '%s\n' "$retry_output" >&2
   exit 1
 fi
 [ "$(cat /etc/gole/deployed.sha)" = "$EXPECTED_SHA" ]
-[ "$(cat /etc/gole/gole.env.version)" = 6 ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$old_hash" ]
+[ ! -e /tmp/gcloud-called ]
 [ ! -e /etc/gole/gole.adoption.transaction ]
 [ ! -e "/var/backups/gole-adoption/gole.env.$request_retry" ]
 [ ! -e "/var/backups/gole-adoption/backend-image.${request_retry//-/}" ]
 ! grep -Fq 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef' <<<"$retry_output"
 
-# The complete one-time migration proves the clean legacy SHA/containers,
-# preserves only existing same-purpose routes, and maps the missing legacy
-# support route to the trusted GoLe operations room without exposing values.
+# The complete one-time migration proves the clean legacy SHA/containers while
+# preserving the exact old env/version. The SMTP-off Secret is first installed
+# only by the reviewed-main deployment transaction.
 reset_legacy_deployment
 request_migrate='50000000-0000-0000-0000-000000000005'
 if ! migrate_output="$(SUDO_USER=root /usr/local/sbin/gole-hostctl \
-  deployment-migrate-adopt-secret "$EXPECTED_SHA" 6 "$request_migrate" 2>&1)"; then
+  deployment-migrate-adopt-existing "$EXPECTED_SHA" "$request_migrate" 2>&1)"; then
   printf '%s\n' "$migrate_output" >&2
   exit 1
 fi
 [ "$(cat /etc/gole/deployed.sha)" = "$EXPECTED_SHA" ]
-[ "$(cat /etc/gole/gole.env.version)" = 6 ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$old_hash" ]
+[ ! -e /tmp/gcloud-called ]
 [ "$(stat -c '%U:%G:%a' /etc/gole/discord.env)" = root:root:600 ]
 operations_route="$(sed -n 's/^DISCORD_OPERATIONS_WEBHOOK_URL=//p' /etc/gole/discord.env)"
 support_route="$(sed -n 's/^DISCORD_SUPPORT_WEBHOOK_URL=//p' /etc/gole/discord.env)"

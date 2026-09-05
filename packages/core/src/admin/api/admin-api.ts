@@ -81,6 +81,8 @@ export interface AdminLaunchConfig {
     };
     /** 구버전 API의 필드 누락은 false로 해석해 신규 판매를 열지 않는다. */
     readonly sellerIdentityVerificationReady?: boolean;
+    /** SMTP 등 이메일 challenge의 완결 수단이 실제로 준비됐을 때만 true다. */
+    readonly emailAuthenticationAvailable?: boolean;
     readonly updatedAt: string | null;
   };
   /** 운영자가 저장한 단계. config.stage는 현재 정산 모드로 낮춘 실제 실행 단계다. */

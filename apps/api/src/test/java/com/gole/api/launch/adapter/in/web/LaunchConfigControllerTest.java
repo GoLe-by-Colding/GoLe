@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchConfigResponse;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
@@ -22,8 +23,8 @@ class LaunchConfigControllerTest {
     private final GetLaunchConfigUseCase launchConfig = mock(GetLaunchConfigUseCase.class);
     private final SellerIdentityVerificationProperties sellerIdentityVerification =
             new SellerIdentityVerificationProperties();
-    private final LaunchConfigController controller =
-            new LaunchConfigController(launchConfig, sellerIdentityVerification);
+    private final LaunchConfigController controller = new LaunchConfigController(
+            launchConfig, sellerIdentityVerification, new EmailAuthenticationAvailability("test", false));
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -41,13 +42,15 @@ class LaunchConfigControllerTest {
         assertThat(response.features().reviews()).isTrue();
         assertThat(response.features().partnerPayout()).isFalse();
         assertThat(response.sellerIdentityVerificationReady()).isFalse();
+        assertThat(response.emailAuthenticationAvailable()).isTrue();
         assertThat(json)
                 .contains("\"stage\":2")
                 .contains("\"tradeMode\":\"MANUAL_SETTLEMENT\"")
                 .contains("\"payments\":true")
                 .contains("\"reviews\":true")
                 .contains("\"partnerPayout\":false")
-                .contains("\"sellerIdentityVerificationReady\":false");
+                .contains("\"sellerIdentityVerificationReady\":false")
+                .contains("\"emailAuthenticationAvailable\":true");
     }
 
     @Test

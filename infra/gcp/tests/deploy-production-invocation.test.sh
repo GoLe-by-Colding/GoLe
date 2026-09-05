@@ -29,6 +29,7 @@ set_valid_production_context() {
   export GITHUB_SHA="$VALID_SHA"
   export GITHUB_WORKFLOW_SHA="$VALID_SHA"
   export GITHUB_EVENT_NAME=workflow_run
+  export GOLE_PRODUCTION_ENV_SECRET_VERSION=6
 }
 
 run_validation() {
@@ -78,6 +79,8 @@ assert_rejects "DEPLOY_SHA 축약값 거부" all DEPLOY_SHA 2222222
 assert_rejects "DEPLOY_SHA 대문자값 거부" all DEPLOY_SHA AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 assert_rejects "부모 rollout lock 누락 거부" all GOLE_ROLLOUT_LOCK_HELD __UNSET__
 assert_rejects "허용되지 않은 push event 거부" all GITHUB_EVENT_NAME push
+assert_rejects "운영 Secret 버전 누락 거부" all GOLE_PRODUCTION_ENV_SECRET_VERSION __UNSET__
+assert_rejects "운영 Secret 버전 latest 거부" all GOLE_PRODUCTION_ENV_SECRET_VERSION latest
 
 identity_variables=(
   GITHUB_ACTIONS

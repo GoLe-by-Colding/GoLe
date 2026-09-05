@@ -76,6 +76,21 @@ check(
     and "vars.NEXT_PUBLIC_GTM" not in raw,
 )
 check(
+    "Stage 0 CD는 이메일 발송과 mail health를 명시적으로 비활성화한다",
+    re.search(r'GOLE_VERIFICATION_EMAIL_ENABLED:\s*["\']false["\']', raw) is not None
+    and re.search(r'GOLE_MAIL_HEALTH_ENABLED:\s*["\']false["\']', raw) is not None
+    and re.search(r'GOLE_VERIFICATION_EMAIL_ENABLED:\s*["\']true["\']', raw) is None
+    and re.search(r'GOLE_MAIL_HEALTH_ENABLED:\s*["\']true["\']', raw) is None,
+)
+check(
+    "CD는 비밀 payload 대신 exact Secret version만 root helper에 전달한다",
+    "GOLE_PRODUCTION_ENV_SECRET_VERSION: ${{ vars.GOLE_PRODUCTION_ENV_SECRET_VERSION }}" in raw
+    and "deployment-environment-prepare" in deploy
+    and deploy.index("deployment-images-snapshot")
+    < deploy.index("deployment-environment-prepare")
+    < deploy.index('log "Docker Compose build"'),
+)
+check(
     "첫 rollout이 root 소유 LKG SHA를 보존한다",
     re.search(
         r'previous_sha="\$\(sudo -n /usr/local/sbin/gole-hostctl '

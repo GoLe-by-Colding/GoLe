@@ -77,28 +77,31 @@ test.describe("로그인 필요 액션", () => {
 });
 
 test.describe("동적 콘텐츠 경로", () => {
-  test("삭제된 게시글에서 커뮤니티 목록으로 복구한다", async ({ page }) => {
-    await page.route("**/api/v1/community/posts/missing-post", (route) =>
-      route.fulfill({ status: 404, json: { code: "POST_NOT_FOUND", message: "not found" } }),
-    );
+  test("삭제된 게시글은 실제 404와 복구 경로를 제공한다", async ({ page }) => {
+    const response = await page.goto("/community/missing-post");
 
-    await page.goto("/community/missing-post");
-
-    await expect(page.getByText("게시글을 찾을 수 없어요", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "커뮤니티로 돌아가기" })).toHaveAttribute(
+    expect(response?.status()).toBe(404);
+    await expect(page.getByText("페이지를 찾을 수 없어요", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "상품 둘러보기" })).toHaveAttribute(
       "href",
-      "/community",
+      "/search",
     );
   });
 
   test("게시글과 댓글의 일시 오류를 같은 화면에서 다시 불러온다", async ({ page }) => {
+    const feedResponse = await page.request.get(`${apiBaseUrl}/api/v1/community/posts?limit=1`);
+    expect(feedResponse.ok()).toBeTruthy();
+    const posts = (await feedResponse.json()) as Array<{ readonly id: string }>;
+    const postId = posts[0]?.id;
+    expect(postId, "E2E 커뮤니티 시드 게시글이 필요합니다").toBeDefined();
+
     let postAvailable = false;
     let commentsAvailable = false;
-    await page.route("**/api/v1/community/posts/retry-post", (route) => {
+    await page.route(`**/api/v1/community/posts/${postId}`, (route) => {
       return postAvailable
         ? route.fulfill({
             json: {
-              id: "retry-post",
+              id: postId,
               authorId: "retry-builder",
               content: "다시 연결된 브릭 이야기",
               imageUrls: [],
@@ -110,7 +113,7 @@ test.describe("동적 콘텐츠 경로", () => {
           })
         : route.fulfill({ status: 503, json: { code: "TEMPORARY", message: "temporary" } });
     });
-    await page.route("**/api/v1/community/posts/retry-post/comments", (route) => {
+    await page.route(`**/api/v1/community/posts/${postId}/comments`, (route) => {
       return commentsAvailable
         ? route.fulfill({
             json: [
@@ -125,7 +128,7 @@ test.describe("동적 콘텐츠 경로", () => {
         : route.fulfill({ status: 503, json: { code: "TEMPORARY", message: "temporary" } });
     });
 
-    await page.goto("/community/retry-post");
+    await page.goto(`/community/${postId}`);
     await expect(page.getByText("게시글을 불러오지 못했어요", { exact: true })).toBeVisible();
     postAvailable = true;
     await page.getByRole("button", { name: "다시 시도", exact: true }).click();

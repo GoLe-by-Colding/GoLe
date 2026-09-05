@@ -23,3 +23,8 @@ export class ApiError extends Error {
     this.retryAfterMs = retryAfterMs;
   }
 }
+
+/** 공개 상세 화면에서 실제 누락과 일시적인 서비스 장애를 구분한다. */
+export function isApiNotFoundError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 404;
+}

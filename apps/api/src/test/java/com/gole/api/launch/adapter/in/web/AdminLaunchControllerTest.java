@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
@@ -34,7 +35,12 @@ class AdminLaunchControllerTest {
     private final SellerIdentityVerificationProperties sellerIdentityVerification =
             new SellerIdentityVerificationProperties();
     private final AdminLaunchController controller = new AdminLaunchController(
-            getLaunchConfig, manageLaunchConfig, audit, settlementMode, sellerIdentityVerification);
+            getLaunchConfig,
+            manageLaunchConfig,
+            audit,
+            settlementMode,
+            sellerIdentityVerification,
+            new EmailAuthenticationAvailability("test", false));
     private final LaunchConfig browseOnly = new LaunchConfig(LaunchStage.BROWSE_ONLY, Map.of(), null, "admin-1");
 
     @BeforeEach

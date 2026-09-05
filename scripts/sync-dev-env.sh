@@ -79,8 +79,9 @@ else
 fi
 chmod 0600 "$secret_file"
 
-# 운영 파일은 절대 source하지 않는다. 외부 연동 자격증명만 허용목록으로 복사하고,
-# 데이터 저장소 주소와 실제 발송·결제·정산 플래그는 로컬 안전값으로 강제한다.
+# 운영 파일은 절대 source하지 않는다. 로컬에서도 검증할 외부 연동 값만 허용목록으로
+# 복사하고, SMTP 자격증명·데이터 저장소 주소와 실제 발송·결제·정산 플래그는 제외하거나
+# 로컬 안전값으로 강제한다.
 imported_count="$(python3 - "$secret_file" "$TARGET_FILE" "$generated_file" "$PHONE_REQUIRED" <<'PY'
 import pathlib
 import secrets
@@ -156,8 +157,6 @@ external_credentials = (
     "NAVER_OAUTH_CLIENT_SECRET",
     "SMTP_HOST",
     "SMTP_PORT",
-    "SMTP_USERNAME",
-    "SMTP_PASSWORD",
     "SHIPPING_TRACKER_CLIENT_ID",
     "SHIPPING_TRACKER_CLIENT_SECRET",
     "SHIPPING_TRACKER_API_BASE",

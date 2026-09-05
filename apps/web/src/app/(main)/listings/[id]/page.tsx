@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import {
   conditionLabel,
   fetchListingById,
@@ -7,6 +8,7 @@ import {
   type Listing,
 } from "@entities/listing";
 import { ListingDetailPage } from "@views/listing-detail";
+import { isApiNotFoundError } from "@shared/api";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import {
@@ -19,6 +21,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
+async function loadListing(id: string): Promise<Listing | null> {
+  try {
+    return await fetchListingById(id);
+  } catch (cause) {
+    if (isApiNotFoundError(cause)) return null;
+    throw cause;
+  }
+}
+
 /** 매물별 동적 메타데이터 — 공유·SEO용 title/description/OG. */
 export async function generateMetadata({
   params,
@@ -26,30 +37,8 @@ export async function generateMetadata({
   readonly params: Promise<{ readonly id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  try {
-    const listing = await fetchListingById(id);
-    const title = `${listing.title} — ${formatPriceKrw(listing.price)}`;
-    const description = `${LISTING_CATEGORY_LABEL[listing.category]} · ${conditionLabel(
-      listing.condition,
-    )} · ${formatPriceKrw(listing.price)}. ${listing.description.slice(0, 80)}`;
-    const canonical = `/listings/${id}`;
-    // 판매자가 직접 올린 첫 사진을 OG 이미지로 쓴다(절대 URL이어야 크롤러가 해석한다).
-    const cover = listing.photoUrls[0];
-    return {
-      title,
-      description,
-      alternates: { canonical },
-      openGraph: {
-        title,
-        description,
-        url: canonical,
-        type: "website",
-        ...(cover === undefined
-          ? {}
-          : { images: [{ url: absoluteUrl(cover, env.siteUrl), alt: listing.title }] }),
-      },
-    };
-  } catch {
+  const listing = await loadListing(id);
+  if (listing === null) {
     return {
       title: "매물",
       description: "GoLe에서 브릭 중고 매물을 찾고 판매자와 대화해 거래하세요.",
@@ -57,6 +46,28 @@ export async function generateMetadata({
       robots: { index: false, follow: false },
     };
   }
+
+  const title = `${listing.title} — ${formatPriceKrw(listing.price)}`;
+  const description = `${LISTING_CATEGORY_LABEL[listing.category]} · ${conditionLabel(
+    listing.condition,
+  )} · ${formatPriceKrw(listing.price)}. ${listing.description.slice(0, 80)}`;
+  const canonical = `/listings/${id}`;
+  // 판매자가 직접 올린 첫 사진을 OG 이미지로 쓴다(절대 URL이어야 크롤러가 해석한다).
+  const cover = listing.photoUrls[0];
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "website",
+      ...(cover === undefined
+        ? {}
+        : { images: [{ url: absoluteUrl(cover, env.siteUrl), alt: listing.title }] }),
+    },
+  };
 }
 
 /** 매물 Product/Offer 구조화 데이터. 가격·재고는 실제 매물 값만 쓴다(R5.2). */
@@ -95,37 +106,28 @@ export default async function Page({
   const openChat =
     requestedChat === "1" || (Array.isArray(requestedChat) && requestedChat[0] === "1");
 
-  // 구조화 데이터용으로만 조회한다. 실패하면 화면은 그대로 두고 JSON-LD만 생략한다.
-  let listing: Listing | null = null;
-  try {
-    listing = await fetchListingById(id);
-  } catch {
-    listing = null;
+  const listing = await loadListing(id);
+  if (listing === null) {
+    notFound();
   }
 
   const crumbs: readonly BreadcrumbItem[] =
-    listing === null
-      ? []
-      : listing.catalogSetNumber === null
-        ? [
-            { name: "홈", path: "/" },
-            { name: listing.title, path: `/listings/${listing.id}` },
-          ]
-        : [
-            { name: "홈", path: "/" },
-            { name: `브릭 ${listing.catalogSetNumber}`, path: `/sets/${listing.catalogSetNumber}` },
-            { name: listing.title, path: `/listings/${listing.id}` },
-          ];
+    listing.catalogSetNumber === null
+      ? [
+          { name: "홈", path: "/" },
+          { name: listing.title, path: `/listings/${listing.id}` },
+        ]
+      : [
+          { name: "홈", path: "/" },
+          { name: `브릭 ${listing.catalogSetNumber}`, path: `/sets/${listing.catalogSetNumber}` },
+          { name: listing.title, path: `/listings/${listing.id}` },
+        ];
 
   return (
     <>
       <ListingDetailPage listingId={id} openChat={openChat} />
-      {listing === null ? null : (
-        <>
-          <JsonLd data={listingJsonLd(listing)} />
-          <JsonLd data={breadcrumbJsonLd(crumbs, env.siteUrl)} />
-        </>
-      )}
+      <JsonLd data={listingJsonLd(listing)} />
+      <JsonLd data={breadcrumbJsonLd(crumbs, env.siteUrl)} />
     </>
   );
 }

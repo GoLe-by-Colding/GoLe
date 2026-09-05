@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, type FormEvent, useState } from "react";
+import { Suspense, type FormEvent, useEffect, useState } from "react";
+import { fetchLaunchConfig } from "@entities/launch";
 import { confirmPasswordReset, requestPasswordReset } from "@entities/user";
 import { resolveReturnTo } from "@views/auth/model/return-to";
 import { AuthCard } from "@widgets/auth-layout";
@@ -33,6 +34,19 @@ function PasswordResetContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [emailAuthenticationAvailable, setEmailAuthenticationAvailable] = useState<boolean | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchLaunchConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) {
+        setEmailAuthenticationAvailable(config.emailAuthenticationAvailable);
+      }
+    });
+    return () => controller.abort();
+  }, []);
 
   async function requestCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +89,37 @@ function PasswordResetContent() {
 
   const loginHref =
     returnTo === null ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`;
+
+  if (emailAuthenticationAvailable === null) {
+    return (
+      <p role="status" className="py-6 text-center text-sm text-neutral-500">
+        이메일 발송 상태를 확인하는 중…
+      </p>
+    );
+  }
+
+  if (!emailAuthenticationAvailable) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p
+          role="status"
+          className="rounded-xl bg-brand-50 p-4 text-sm leading-relaxed text-brand-900"
+        >
+          이메일 재설정 코드 발송을 준비하고 있어요. 기존 비밀번호로 로그인하거나 운영팀에 문의해
+          주세요.
+        </p>
+        <Link className="text-center text-sm font-semibold text-brand-700" href={loginHref}>
+          로그인으로 돌아가기
+        </Link>
+        <a
+          className="text-center text-sm font-semibold text-neutral-600 underline underline-offset-4"
+          href="mailto:coldingcontact@gmail.com?subject=GoLe%20비밀번호%20문의"
+        >
+          운영팀에 이메일 보내기
+        </a>
+      </div>
+    );
+  }
 
   if (!requested) {
     return (

@@ -10,6 +10,7 @@ expected_sha=2222222222222222222222222222222222222222
 request_id=10000000-0000-4000-8000-000000000001
 compact_request_id="${request_id//-/}"
 release="/var/lib/gole/releases/$expected_sha"
+environment_backup="/var/backups/gole-env/gole.env.20260905T000000Z.v6.$request_id"
 
 groupadd --system --gid 10001 golecloud
 groupadd goledeploy
@@ -17,6 +18,7 @@ useradd --system --create-home --home-dir /home/goledeploy \
   --shell /bin/bash --gid goledeploy goledeploy
 install -d -m 0755 /etc/gole /usr/local/libexec/gole /usr/local/sbin /test-bin \
   /run/gole-cloud-broker /var/backups/gole-images "$release/infra/gcp"
+install -d -m 0700 /var/backups/gole-env
 chown root:golecloud /run/gole-cloud-broker
 chmod 0710 /run/gole-cloud-broker
 touch /run/gole-cloud-broker/policy-heartbeat
@@ -243,6 +245,22 @@ export PATH="/test-bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 reset_transaction() {
   rm -f /tmp/metadata-full /tmp/poweroff-requested /tmp/firewall-failure \
     /tmp/wrong-budget-image /tmp/container-heartbeat /tmp/kill-on-image-cleanup
+  install -m 0600 -o root -g root \
+    /source/infra/gcp/tests/fixtures/production.env /etc/gole/gole.env
+  install -m 0600 -o root -g root \
+    /source/infra/gcp/tests/fixtures/development.env "$environment_backup"
+  printf '6\n' > /etc/gole/gole.env.version
+  chmod 0644 /etc/gole/gole.env.version
+  candidate_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+  cat > /etc/gole/gole.env.transaction <<EOF
+state=committed
+previous_version=5
+requested_version=6
+request_id=$request_id
+backup_file=$environment_backup
+candidate_sha256=$candidate_hash
+EOF
+  chmod 0600 /etc/gole/gole.env.transaction
   printf 'state=pending\nlegacy_sha=%s\n' "$legacy_sha" > /etc/gole/metadata-migration.pending
   chmod 0644 /etc/gole/metadata-migration.pending
   cat > /etc/gole/deployment.transaction <<EOF
@@ -285,6 +303,7 @@ grep -qx 'state=runtime-verified' /etc/gole/deployment.transaction
 grep -qx 'state=pending' /etc/gole/metadata-migration.pending
 [ ! -e /tmp/metadata-full ]
 [ ! -e /tmp/poweroff-requested ]
+grep -qx 'state=committed' /etc/gole/gole.env.transaction
 
 # Simulate power loss after the ratcheting marker fsync but before the
 # deployment journal advances. Rollback must be rejected, and recovery must
@@ -305,6 +324,8 @@ recovery="$(SUDO_USER=goledeploy /usr/local/sbin/gole-hostctl deployment-recover
 [ "$recovery" = RECOVERED ]
 [ ! -e /etc/gole/metadata-migration.pending ]
 [ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /etc/gole/gole.env.transaction ]
+[ "$(cat /etc/gole/gole.env.version)" = 6 ]
 [ ! -e /tmp/poweroff-requested ]
 
 # A failure after the durable ratchet marker never reopens metadata or invokes
@@ -320,6 +341,7 @@ grep -qx 'state=metadata-ratchet-armed' /etc/gole/deployment.transaction
 grep -qx 'state=ratcheting' /etc/gole/metadata-migration.pending
 [ -e /tmp/metadata-full ]
 [ -e /tmp/poweroff-requested ]
+grep -qx 'state=committed' /etc/gole/gole.env.transaction
 
 # Reboot recovery completes forward from the armed state. It removes both the
 # pending marker and transaction only after full rules and both heartbeats pass.
@@ -333,6 +355,7 @@ fi
 [ "$recovery" = RECOVERED ]
 [ ! -e /etc/gole/metadata-migration.pending ]
 [ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /etc/gole/gole.env.transaction ]
 [ ! -e "/var/backups/gole-images/images.$compact_request_id" ]
 [ ! -e /tmp/poweroff-requested ]
 
@@ -347,6 +370,7 @@ recovery="$(SUDO_USER=goledeploy /usr/local/sbin/gole-hostctl deployment-recover
 [ "$recovery" = RECOVERED ]
 [ ! -e /etc/gole/metadata-migration.pending ]
 [ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /etc/gole/gole.env.transaction ]
 [ ! -e "/var/backups/gole-images/images.$compact_request_id" ]
 [ ! -e /tmp/poweroff-requested ]
 
@@ -362,6 +386,7 @@ if SUDO_USER=goledeploy /usr/local/sbin/gole-hostctl deployment-finalize "$reque
 fi
 grep -qx 'state=cleanup-pending' /etc/gole/deployment.transaction
 [ ! -e /etc/gole/metadata-migration.pending ]
+[ ! -e /etc/gole/gole.env.transaction ]
 [ -e "/var/backups/gole-images/images.$compact_request_id" ]
 recovery="$(SUDO_USER=goledeploy /usr/local/sbin/gole-hostctl deployment-recover)"
 [ "$recovery" = RECOVERED ]

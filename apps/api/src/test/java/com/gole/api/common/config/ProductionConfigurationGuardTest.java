@@ -14,42 +14,34 @@ class ProductionConfigurationGuardTest {
     private static final DefaultApplicationArguments NO_ARGS = new DefaultApplicationArguments();
 
     @Test
-    void productionRejectsLoggingVerificationCodeAdapter() {
-        ProductionConfigurationGuard guard = guard("production", false, false);
-
-        assertThatThrownBy(() -> guard.run(NO_ARGS))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("verification email");
+    void productionAllowsHardenedConfigurationWhenSeedsAreClosed() {
+        assertThatCode(() -> guard("production", false).run(NO_ARGS)).doesNotThrowAnyException();
     }
 
     @Test
-    void stagingRejectsLoggingVerificationCodeAdapter() {
-        ProductionConfigurationGuard guard = guard("staging", false, false);
-
-        assertThatThrownBy(() -> guard.run(NO_ARGS))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("verification email");
+    void stagingAllowsHardenedConfigurationWhenSeedsAreClosed() {
+        assertThatCode(() -> guard("staging", false).run(NO_ARGS)).doesNotThrowAnyException();
     }
 
     @Test
     void unknownOrBlankEnvironmentFailsClosedInsteadOfEnablingDevelopmentSeeds() {
         for (String environment : new String[] {"production-typo", "", "preview"}) {
-            assertThatThrownBy(() -> guard(environment, false, true).run(NO_ARGS))
+            assertThatThrownBy(() -> guard(environment, true).run(NO_ARGS))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("verification email");
+                    .hasMessageContaining("sample data seeds");
         }
     }
 
     @Test
     void publicEnvironmentNormalizationCannotBeBypassedWithWhitespaceOrCase() {
-        assertThatThrownBy(() -> guard(" Production ", false, true).run(NO_ARGS))
+        assertThatThrownBy(() -> guard(" Production ", true).run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("verification email");
+                .hasMessageContaining("sample data seeds");
     }
 
     @Test
     void productionRejectsAnySampleSeed() {
-        ProductionConfigurationGuard guard = guard("prod", true, true);
+        ProductionConfigurationGuard guard = guard("prod", true);
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -59,7 +51,7 @@ class ProductionConfigurationGuardTest {
 
     @Test
     void stagingAlsoRejectsAnySampleSeed() {
-        ProductionConfigurationGuard guard = guard("staging", true, true);
+        ProductionConfigurationGuard guard = guard("staging", true);
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -75,7 +67,7 @@ class ProductionConfigurationGuardTest {
     @Test
     void stagingRejectsDemoOrUnverifiedPricingEvidence() {
         ProductionConfigurationGuard guard = new ProductionConfigurationGuard(
-                "staging", true, false, false, false, false, false, false, false, true, false);
+                "staging", false, false, false, false, false, false, false, true, false);
 
         assertThatThrownBy(() -> guard.run(NO_ARGS))
                 .isInstanceOf(IllegalStateException.class)
@@ -84,12 +76,12 @@ class ProductionConfigurationGuardTest {
 
     @Test
     void localDefaultsAndHardenedProductionAreAllowed() {
-        assertThatCode(() -> guard("local", false, true).run(NO_ARGS)).doesNotThrowAnyException();
-        assertThatCode(() -> guard("production", true, false).run(NO_ARGS)).doesNotThrowAnyException();
+        assertThatCode(() -> guard("local", true).run(NO_ARGS)).doesNotThrowAnyException();
+        assertThatCode(() -> guard("production", false).run(NO_ARGS)).doesNotThrowAnyException();
     }
 
-    private static ProductionConfigurationGuard guard(String environment, boolean email, boolean seeds) {
+    private static ProductionConfigurationGuard guard(String environment, boolean seeds) {
         return new ProductionConfigurationGuard(
-                environment, email, seeds, seeds, seeds, seeds, seeds, seeds, seeds, false, false);
+                environment, seeds, seeds, seeds, seeds, seeds, seeds, seeds, false, false);
     }
 }

@@ -16,7 +16,7 @@ public class SignupPolicyProperties {
     private String termsVersion = "2026-09-04";
 
     @NotBlank
-    private String privacyVersion = "2026-09-04";
+    private String privacyVersion = "2026-09-05";
 
     @NotBlank
     private String thirdPartyProvisionVersion = "2026-09-04";

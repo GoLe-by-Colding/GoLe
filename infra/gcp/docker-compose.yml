@@ -156,13 +156,18 @@ services:
       # 초기 공개는 CoolSMS 템플릿 승인 전이므로 전화 단계를 온보딩 완료 조건에서 뺀다.
       GOLE_ONBOARDING_PHONE_REQUIRED: "false"
       GOLE_ONBOARDING_LOG_VERIFICATION_CODES: "false"
-      GOLE_VERIFICATION_EMAIL_ENABLED: "true"
-      GOLE_MAIL_HEALTH_ENABLED: "true"
+      # Stage 0는 SMTP를 보류한다. 인증코드가 필요한 기능은 API에서 503으로 닫고,
+      # 기존 검증 계정 로그인과 별도 readiness를 통과한 OAuth만 유지한다.
+      GOLE_VERIFICATION_EMAIL_ENABLED: "false"
+      GOLE_MAIL_HEALTH_ENABLED: "false"
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      GOLE_VERIFICATION_EMAIL_FROM: ""
       GOLE_SESSION_COOKIE_SECURE: "true"
       GOLE_WEB_ALLOWED_ORIGINS: https://gole.co.kr,https://www.gole.co.kr
       GOLE_OAUTH_ALLOWED_REDIRECT_URIS: https://gole.co.kr/auth/callback/google,https://gole.co.kr/auth/callback/kakao,https://gole.co.kr/auth/callback/naver
       GOLE_TERMS_VERSION: "2026-09-04"
-      GOLE_PRIVACY_VERSION: "2026-09-04"
+      GOLE_PRIVACY_VERSION: "2026-09-05"
       GOLE_THIRD_PARTY_PROVISION_VERSION: "2026-09-04"
       GOLE_SELLER_IDENTITY_VERIFICATION_READY: "false"
       # 공개 인증 레이트리밋은 Secret 값으로 완화할 수 없도록 운영 Compose에 고정한다.

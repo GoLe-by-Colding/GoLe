@@ -2,6 +2,21 @@ import { test, expect } from "@playwright/test";
 
 // 백엔드 없이 검증 가능한 통합 인증 화면 구성/내비게이션 테스트.
 test.describe("Auth navigation", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: false,
+          emailAuthenticationAvailable: true,
+          updatedAt: null,
+        },
+      }),
+    );
+  });
+
   test("로그인 화면에 로컬 폼 + 소셜 4종 진입이 보인다", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
@@ -17,7 +32,7 @@ test.describe("Auth navigation", () => {
     await page.goto("/login");
     await page.getByRole("tab", { name: "회원가입" }).click();
     await expect(page).toHaveURL(/\/signup$/);
-    await expect(page.getByRole("button", { name: "가입하기" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "이메일로 가입하기" })).toBeVisible();
 
     await page.getByRole("tab", { name: "로그인" }).click();
     await expect(page).toHaveURL(/\/login$/);
@@ -31,7 +46,7 @@ test.describe("Auth navigation", () => {
         contentType: "application/json",
         body: JSON.stringify({
           termsVersion: "2026-09-04",
-          privacyVersion: "2026-09-04",
+          privacyVersion: "2026-09-05",
           thirdPartyProvisionVersion: "2026-09-04",
           minimumAge: 14,
         }),
@@ -47,7 +62,7 @@ test.describe("Auth navigation", () => {
     });
 
     await page.goto("/signup?returnTo=%2Fcollection");
-    const submit = page.getByRole("button", { name: "가입하기" });
+    const submit = page.getByRole("button", { name: "이메일로 가입하기" });
     await expect(submit).toBeDisabled();
     await expect(page.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms");
     await expect(page.getByRole("link", { name: "개인정보처리방침", exact: true })).toHaveAttribute(
@@ -76,14 +91,19 @@ test.describe("Auth navigation", () => {
       email: "policy@gole.test",
       password: "password1",
       termsVersion: "2026-09-04",
-      privacyVersion: "2026-09-04",
+      privacyVersion: "2026-09-05",
       thirdPartyProvisionVersion: "2026-09-04",
       termsAccepted: true,
       privacyAcknowledged: true,
       thirdPartyProvisionAccepted: false,
       minimumAgeConfirmed: true,
     });
-    await expect(page).toHaveURL(/\/verify\?email=policy%40gole\.test&returnTo=%2Fcollection/);
+    await expect(page).toHaveURL(/\/verify\?returnTo=%2Fcollection/);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.sessionStorage.getItem("gole.pending-verification-email")),
+      )
+      .toBe("policy@gole.test");
   });
 
   test("소셜 가입도 선택한 제3자 제공 동의와 공지 버전을 OAuth 요청에 보낸다", async ({ page }) => {
@@ -92,7 +112,7 @@ test.describe("Auth navigation", () => {
       route.fulfill({
         json: {
           termsVersion: "2026-09-04",
-          privacyVersion: "2026-09-04",
+          privacyVersion: "2026-09-05",
           thirdPartyProvisionVersion: "third-party-2026-09-04",
           minimumAge: 14,
         },
@@ -129,10 +149,28 @@ test.describe("Auth navigation", () => {
   });
 
   test("이메일 인증 화면이 렌더된다", async ({ page }) => {
-    await page.goto("/verify?email=tester@gole.com");
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem("gole.pending-verification-email", "tester@gole.com");
+    });
+    await page.goto("/verify");
     await expect(page.getByRole("heading", { name: "이메일 인증" })).toBeVisible();
     await expect(page.getByRole("button", { name: "인증하기" })).toBeVisible();
     await expect(page.getByRole("button", { name: /인증 코드 다시 받기/ })).toBeDisabled();
+    await expect(page).toHaveURL("/verify");
+  });
+
+  test("과거 인증 이메일 query는 저장하거나 폼에 복원하지 않고 URL에서 제거한다", async ({
+    page,
+  }) => {
+    await page.goto("/verify?email=legacy%40gole.test");
+
+    await expect(page).toHaveURL("/verify");
+    await expect(page.getByLabel("이메일")).toHaveValue("");
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.sessionStorage.getItem("gole.pending-verification-email")),
+      )
+      .toBeNull();
   });
 
   test("미인증 로그인은 이메일 인증 화면으로 복구할 수 있다", async ({ page }) => {
@@ -153,7 +191,45 @@ test.describe("Auth navigation", () => {
 
     const recovery = page.getByRole("link", { name: "이메일 인증하러 가기" });
     await expect(recovery).toBeVisible();
-    await expect(recovery).toHaveAttribute("href", "/verify?email=pending%40gole.com");
+    await expect(recovery).toHaveAttribute("href", "/verify");
+    await recovery.click();
+    await expect(page.getByLabel("이메일")).toHaveValue("pending@gole.com");
+  });
+
+  test("메일 발송이 준비 전이면 이메일 challenge만 닫고 기존 로그인을 유지한다", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/policies/current", (route) =>
+      route.fulfill({
+        json: {
+          termsVersion: "2026-09-04",
+          privacyVersion: "2026-09-05",
+          thirdPartyProvisionVersion: "2026-09-04",
+          minimumAge: 14,
+        },
+      }),
+    );
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: false,
+          emailAuthenticationAvailable: false,
+          updatedAt: null,
+        },
+      }),
+    );
+
+    await page.goto("/login");
+    await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "비밀번호를 잊으셨나요?" })).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "회원가입" }).click();
+    await expect(page.getByText("이메일 회원가입을 준비하고 있어요.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "이메일로 가입하기" })).toHaveCount(0);
+    await expect(page.getByRole("checkbox", { name: /이용약관/ })).toBeVisible();
   });
 
   test("잘못된 로그인 자격증명은 이미 저장된 세션 메타데이터를 지우지 않는다", async ({ page }) => {

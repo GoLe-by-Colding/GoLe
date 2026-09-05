@@ -11,6 +11,7 @@ import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.PublicAuthRequestLimitUseCase;
 import com.gole.api.account.application.port.in.RequestPasswordResetUseCase;
 import com.gole.api.account.application.port.in.RequestPasswordResetUseCase.RequestPasswordResetCommand;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.web.ClientAddressResolver;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,7 @@ public class AccountPasswordController {
     private final SessionCookie sessionCookie;
     private final PublicAuthRequestLimitUseCase publicRequestLimit;
     private final ClientAddressResolver clientAddresses;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AccountPasswordController(
             ChangePasswordUseCase changePasswordUseCase,
@@ -47,7 +49,8 @@ public class AccountPasswordController {
             GetCurrentSessionUseCase getCurrentSessionUseCase,
             SessionCookie sessionCookie,
             PublicAuthRequestLimitUseCase publicRequestLimit,
-            ClientAddressResolver clientAddresses) {
+            ClientAddressResolver clientAddresses,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.changePasswordUseCase = changePasswordUseCase;
         this.requestPasswordResetUseCase = requestPasswordResetUseCase;
         this.confirmPasswordResetUseCase = confirmPasswordResetUseCase;
@@ -55,6 +58,7 @@ public class AccountPasswordController {
         this.sessionCookie = sessionCookie;
         this.publicRequestLimit = publicRequestLimit;
         this.clientAddresses = clientAddresses;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Operation(summary = "비밀번호 변경", description = "현재 비밀번호를 확인하고 변경한 뒤 모든 기기의 세션을 폐기합니다.")
@@ -71,20 +75,22 @@ public class AccountPasswordController {
         sessionCookie.clear(request, response);
     }
 
-    @Operation(summary = "비밀번호 재설정 코드 요청", description = "가입 여부와 무관하게 같은 응답을 반환합니다.")
+    @Operation(summary = "비밀번호 재설정 코드 요청", description = "이메일 발송이 준비된 때 가입 여부와 무관하게 같은 응답을 반환합니다.")
     @PostMapping("/password-reset")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void requestReset(@Valid @RequestBody RequestPasswordResetRequest body, HttpServletRequest request) {
+        emailAuthentication.requireAvailable();
         if (!publicRequestLimit.acquirePasswordReset(body.email(), clientAddresses.resolve(request))) {
             return;
         }
         requestPasswordResetUseCase.request(new RequestPasswordResetCommand(body.email()));
     }
 
-    @Operation(summary = "비밀번호 재설정 확정", description = "10분짜리 일회용 코드로 비밀번호를 바꾸고 모든 세션을 폐기합니다.")
+    @Operation(summary = "비밀번호 재설정 확정", description = "이메일 발송이 준비된 때 10분짜리 일회용 코드로 비밀번호를 바꾸고 모든 세션을 폐기합니다.")
     @PostMapping("/password-reset/confirmation")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void confirmReset(@Valid @RequestBody ConfirmPasswordResetRequest body) {
+        emailAuthentication.requireAvailable();
         confirmPasswordResetUseCase.confirm(
                 new ConfirmPasswordResetCommand(body.email(), body.code(), body.newPassword()));
     }

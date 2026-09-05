@@ -12,6 +12,7 @@ import com.gole.api.account.application.port.out.PhoneVerificationStorePort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
 import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AccountDeletionBlocker;
 import com.gole.api.account.domain.model.AccountDeletionHoldReason;
@@ -58,6 +59,7 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ma
     private final PasswordResetChallengeStorePort passwordResets;
     private final PhoneVerificationStorePort phoneVerifications;
     private final Clock clock;
+    private final EmailAuthenticationAvailability emailAuthentication;
 
     public AccountDeletionService(
             AccountRepositoryPort accounts,
@@ -69,7 +71,8 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ma
             SessionStorePort sessions,
             PasswordResetChallengeStorePort passwordResets,
             PhoneVerificationStorePort phoneVerifications,
-            Clock clock) {
+            Clock clock,
+            EmailAuthenticationAvailability emailAuthentication) {
         this.accounts = accounts;
         this.requests = requests;
         this.verifications = verifications;
@@ -80,10 +83,12 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ma
         this.passwordResets = passwordResets;
         this.phoneVerifications = phoneVerifications;
         this.clock = clock;
+        this.emailAuthentication = emailAuthentication;
     }
 
     @Override
     public void issueVerification(String accountId) {
+        emailAuthentication.requireAvailable();
         Account account = activeUser(accountId);
         Instant now = Instant.now(clock);
         var existing = verifications.find(accountId);
@@ -99,6 +104,7 @@ public class AccountDeletionService implements RequestAccountDeletionUseCase, Ma
     @Override
     @Transactional
     public RequestAccountDeletionUseCase.Result request(RequestAccountDeletionUseCase.Command command) {
+        emailAuthentication.requireAvailable();
         UUID idempotencyKey = parseKey(command.idempotencyKey());
         Account account = accounts.findById(command.accountId())
                 .orElseThrow(() -> new NotFoundException("ACCOUNT_NOT_FOUND", "계정을 찾을 수 없습니다"));

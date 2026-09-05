@@ -18,6 +18,7 @@ export interface SignUpFormProps {
   readonly policyError: string | undefined;
   readonly policyAcceptance: SignupPolicyAcceptance;
   readonly onPolicyAcceptanceChange: (next: SignupPolicyAcceptance) => void;
+  readonly emailRegistrationAvailable?: boolean | null;
 }
 
 export function SignUpForm({
@@ -26,6 +27,7 @@ export function SignUpForm({
   policyError,
   policyAcceptance,
   onPolicyAcceptanceChange,
+  emailRegistrationAvailable = true,
 }: SignUpFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,34 +65,55 @@ export function SignUpForm({
           {error}
         </p>
       ) : null}
-      <Field label="이메일">
-        {({ inputId, describedBy }) => (
-          <Input
-            id={inputId}
-            type="email"
-            autoComplete="email"
-            value={email}
-            placeholder="you@example.com"
-            aria-describedby={describedBy}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        )}
-      </Field>
-      <Field label="비밀번호" hint="8자 이상 입력하세요.">
-        {({ inputId, describedBy }) => (
-          <Input
-            id={inputId}
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            placeholder="••••••••"
-            aria-describedby={describedBy}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        )}
-      </Field>
+      {emailRegistrationAvailable === true ? (
+        <>
+          <Field label="이메일">
+            {({ inputId, describedBy }) => (
+              <Input
+                id={inputId}
+                type="email"
+                autoComplete="email"
+                value={email}
+                placeholder="you@example.com"
+                aria-describedby={describedBy}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            )}
+          </Field>
+          <Field label="비밀번호" hint="8자 이상 입력하세요.">
+            {({ inputId, describedBy }) => (
+              <Input
+                id={inputId}
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                placeholder="••••••••"
+                aria-describedby={describedBy}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            )}
+          </Field>
+        </>
+      ) : emailRegistrationAvailable === false ? (
+        <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-relaxed text-brand-900">
+          <p className="font-bold">이메일 회원가입을 준비하고 있어요.</p>
+          <p className="mt-1">
+            아래 약관을 확인한 뒤 활성화된 소셜 계정으로 가입하거나 운영팀에 문의해 주세요.
+          </p>
+          <a
+            href="mailto:coldingcontact@gmail.com?subject=GoLe%20회원가입%20문의"
+            className="mt-3 inline-flex font-semibold underline underline-offset-4"
+          >
+            운영팀에 이메일 보내기
+          </a>
+        </div>
+      ) : (
+        <p role="status" className="py-4 text-center text-sm text-neutral-500">
+          이메일 가입 가능 여부를 확인하는 중…
+        </p>
+      )}
       <fieldset className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <legend className="px-1 text-sm font-bold text-neutral-800">가입 전 확인</legend>
         {policyError ? (
@@ -157,9 +180,11 @@ export function SignUpForm({
           </>
         )}
       </fieldset>
-      <Button type="submit" size="lg" fullWidth disabled={submitting || !policyReady}>
-        {submitting ? "처리 중..." : "가입하기"}
-      </Button>
+      {emailRegistrationAvailable === true ? (
+        <Button type="submit" size="lg" fullWidth disabled={submitting || !policyReady}>
+          {submitting ? "처리 중..." : "이메일로 가입하기"}
+        </Button>
+      ) : null}
     </form>
   );
 }
