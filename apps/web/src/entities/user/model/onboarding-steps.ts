@@ -1,4 +1,4 @@
-import type { OnboardingStatus } from "./types";
+import type { OnboardingStatus } from "@gole/core/user";
 
 /**
  * 온보딩 단계 판정. 배열 순서가 곧 위저드 진행 순서다.

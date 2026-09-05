@@ -32,6 +32,9 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // @gole/core는 빌드 산출물이 아니라 TS 소스를 내보낸다(웹·앱이 각자 번들러로 컴파일).
+  // 이 선언이 없으면 node_modules 안의 .ts를 Next가 그대로 파싱하려다 실패한다.
+  transpilePackages: ["@gole/core"],
   // 공개 응답에서 프레임워크 버전 식별 단서를 노출하지 않는다.
   poweredByHeader: false,
   // Playwright는 이미 실행 중인 개발 서버를 건드리지 않고 별도 빌드 캐시를 쓸 수 있다.

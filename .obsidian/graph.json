@@ -1,0 +1,25 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    { "query": "path:.kiro/steering", "color": { "a": 1, "rgb": 1932503 } },
+    { "query": "path:.kiro/specs", "color": { "a": 1, "rgb": 15393048 } },
+    { "query": "path:docs/operations", "color": { "a": 1, "rgb": 1458762 } }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1.2,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.5,
+  "repelStrength": 12,
+  "linkStrength": 1,
+  "linkDistance": 260,
+  "scale": 1
+}

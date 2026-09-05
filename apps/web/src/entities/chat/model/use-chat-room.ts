@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@shared/api";
-import type { ChatMessage, ChatRoom } from "../model/types";
+import type { ChatMessage, ChatRoom } from "@gole/core/chat";
 import {
   cancelDirectTradeConfirmation,
   confirmDirectTrade,
   createOrGetRoom,
   fetchMessages,
   sendMessage,
-} from "../api/chat-api";
-import { chatStreamUrl, mergeChatMessages } from "./chat-message-state";
+} from "@gole/core/chat";
+import { chatStreamUrl, mergeChatMessages } from "@gole/core/chat";
 
 export interface UseChatRoomOptions {
   readonly listingId: string;

@@ -8,3 +8,4 @@ export {
   validateOptionalAnalyticsId,
 } from "./analytics";
 export type { AnalyticsProvider, AnalyticsRuntimeConfig } from "./analytics";
+export { bootstrapCore } from "./bootstrap";

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { filterPricePointsByPeriod } from "../src/entities/pricing/model/period";
-import type { PricePoint } from "../src/entities/pricing/model/types";
+// 시세 기간 필터는 웹·앱 공유 코어에 있다(@gole/core). 파사드가 아니라 원본을 직접 가져와
+// 이 단위 검증이 재수출 계층을 거치지 않게 한다.
+import { filterPricePointsByPeriod, type PricePoint } from "@gole/core/pricing";
 
 test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않는다", () => {
   const now = Date.parse("2026-08-30T00:00:00Z");

@@ -334,6 +334,15 @@ shipping:
     cache-ttl-delivered: ${SHIPPING_TRACKER_CACHE_TTL_DELIVERED:PT24H}
 
 # CoolSMS(SOLAPI) 카카오 알림톡. 활성화 시 키·시크릿·채널 연동 ID가 모두 필요하다.
+# 단말 푸시(FCM HTTP v1). 미설정이면 no-op 어댑터가 뜨고 서비스는 정상 동작한다 —
+# 결제 설정과 달리 기동을 막지 않는다(푸시가 닫혀도 인앱 알림은 그대로 남는다).
+# 자격증명은 파일 경로가 우선이고, 환경변수만 다루는 배포 볼트를 위해 base64 인라인도 받는다.
+fcm:
+  enabled: ${FCM_ENABLED:false}
+  project-id: ${FCM_PROJECT_ID:}
+  credentials-path: ${FCM_CREDENTIALS_PATH:}
+  credentials-base64: ${FCM_CREDENTIALS_BASE64:}
+
 coolsms:
   enabled: ${COOLSMS_ENABLED:false}
   api-key: ${COOLSMS_API_KEY:}

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
-import type { LegoSet } from "../model/types";
-import { isRetired } from "../model/types";
+import type { LegoSet } from "@gole/core/lego-set";
+import { isRetired } from "@gole/core/lego-set";
 import { OfficialLegoLink } from "./official-lego-link";
 
 export interface LegoSetCardProps {

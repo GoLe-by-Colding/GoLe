@@ -1,4 +1,4 @@
-import type { Session } from "./types";
+import type { Session } from "@gole/core/user";
 import { clearStoredSession, SESSION_CHANGE_EVENT, SESSION_STORAGE_KEY } from "@shared/api";
 
 export const SESSION_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1_000;

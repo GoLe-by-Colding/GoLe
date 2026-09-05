@@ -19,4 +19,14 @@ export default defineConfig([
       "fsd/no-public-api-sidestep": "off",
     },
   },
+  {
+    // 엔티티는 @gole/core 위의 파사드다. 모델·API가 웹·앱 공유 패키지로 옮겨가면서
+    // 대부분의 슬라이스에 index.ts만 남았다 — 세그먼트가 없는 것이 아니라 다른 패키지에 있다.
+    // 상위 75개 파일의 import를 그대로 두기 위해 파사드를 택했고, 그 대가로 이 규칙을 끈다.
+    // 구조 규칙(forbidden-imports, public-api 등)은 그대로 유지된다.
+    files: ["./src/entities/**"],
+    rules: {
+      "fsd/no-segmentless-slices": "off",
+    },
+  },
 ]);

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchMessages, sendMessage } from "../api/chat-api";
-import { chatStreamUrl, mergeChatMessages } from "./chat-message-state";
-import type { ChatMessage } from "./types";
+import { fetchMessages, sendMessage } from "@gole/core/chat";
+import { chatStreamUrl, mergeChatMessages } from "@gole/core/chat";
+import type { ChatMessage } from "@gole/core/chat";
 
 export interface UseConversationResult {
   readonly messages: readonly ChatMessage[];

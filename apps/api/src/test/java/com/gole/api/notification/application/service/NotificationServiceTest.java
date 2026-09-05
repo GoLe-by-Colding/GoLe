@@ -23,13 +23,19 @@ import org.junit.jupiter.api.Test;
 class NotificationServiceTest {
 
     private InMemoryRepo repo;
+    private RecordingPushSender pushSender;
+    private InMemoryDeviceTokens deviceTokens;
     private NotificationService service;
 
     @BeforeEach
     void setUp() {
         repo = new InMemoryRepo();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new NotificationService(repo, new SequentialIds(), clock);
+        pushSender = new RecordingPushSender();
+        deviceTokens = new InMemoryDeviceTokens();
+        // 실행기를 동기로 준다. 발송이 다른 스레드에서 일어나면 단정이 경합에 흔들린다.
+        PushDispatcher dispatcher = new PushDispatcher(deviceTokens, pushSender, Runnable::run);
+        service = new NotificationService(repo, new SequentialIds(), dispatcher, clock);
     }
 
     @Test

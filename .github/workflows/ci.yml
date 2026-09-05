@@ -240,6 +240,48 @@ jobs:
         if: failure()
         run: tail -200 "$RUNNER_TEMP/api.log"
 
+  mobile:
+    name: Mobile (core · format · lint · typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # 코어는 웹·앱이 함께 쓰므로 어느 한쪽 잡에만 두면 다른 쪽 회귀를 놓친다.
+      # web 잡은 build로 코어를 간접 검증하고, 여기서 직접 검사한다.
+      - name: Core (format · typecheck · platform)
+        run: |
+          pnpm --filter @gole/core format:check
+          pnpm --filter @gole/core typecheck
+          pnpm --filter @gole/core check:platform
+
+      - name: Prettier (format check)
+        run: pnpm --filter mobile format:check
+
+      - name: ESLint
+        run: pnpm --filter mobile lint
+
+      - name: Typecheck
+        run: pnpm --filter mobile typecheck
+
+      # 네이티브 빌드는 여기서 하지 않는다 — macOS 러너가 필요하고 몇 분이 걸린다.
+      # 번들이 되는지는 export로 확인한다. 워크스페이스 심링크 해석 회귀를 여기서 잡는다.
+      - name: Metro bundle (iOS)
+        run: pnpm --filter mobile exec expo export --platform ios --output-dir "$RUNNER_TEMP/expo-export"
+
   infra:
     name: Infra (budget relay · Compose · Terraform)
     runs-on: ubuntu-latest
@@ -332,7 +374,7 @@ jobs:
   notify:
     name: Discord CI result
     if: ${{ always() && github.event_name == 'push' }}
-    needs: [web, api, support_agent, e2e, infra]
+    needs: [web, mobile, api, support_agent, e2e, infra]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -341,6 +383,7 @@ jobs:
       DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
       DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'true' }}
       WEB_RESULT: ${{ needs.web.result }}
+      MOBILE_RESULT: ${{ needs.mobile.result }}
       API_RESULT: ${{ needs.api.result }}
       SUPPORT_AGENT_RESULT: ${{ needs.support_agent.result }}
       E2E_RESULT: ${{ needs.e2e.result }}
@@ -350,7 +393,7 @@ jobs:
         if: ${{ env.DISCORD_CI_WEBHOOK_URL != '' }}
         continue-on-error: true
         run: |
-          if [ "$WEB_RESULT" = success ] && [ "$API_RESULT" = success ] && [ "$SUPPORT_AGENT_RESULT" = success ] && [ "$E2E_RESULT" = success ] && [ "$INFRA_RESULT" = success ]; then
+          if [ "$WEB_RESULT" = success ] && [ "$MOBILE_RESULT" = success ] && [ "$API_RESULT" = success ] && [ "$SUPPORT_AGENT_RESULT" = success ] && [ "$E2E_RESULT" = success ] && [ "$INFRA_RESULT" = success ]; then
             status="✅ CI 통과"
           else
             status="❌ CI 실패"
@@ -361,7 +404,7 @@ jobs:
             flags=null
           fi
           payload=$(jq -n \
-            --arg content "$status · web=$WEB_RESULT · api=$API_RESULT · support-agent=$SUPPORT_AGENT_RESULT · e2e=$E2E_RESULT · infra=$INFRA_RESULT · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg content "$status · web=$WEB_RESULT · mobile=$MOBILE_RESULT · api=$API_RESULT · support-agent=$SUPPORT_AGENT_RESULT · e2e=$E2E_RESULT · infra=$INFRA_RESULT · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --arg avatar_url "$DISCORD_AVATAR_URL" \
             --argjson flags "$flags" \
             '{content: $content, avatar_url: $avatar_url, allowed_mentions: {parse: []}}

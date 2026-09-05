@@ -50,6 +50,10 @@ dependencies {
     // CoolSMS(SOLAPI) 카카오 알림톡 발송 공식 SDK.
     implementation("com.solapi:sdk:1.1.0")
 
+    // FCM HTTP v1 인증. Firebase Admin SDK 전체(Firestore·Auth·Storage 포함) 대신
+    // 액세스 토큰 발급·갱신만 담당하는 인증 라이브러리만 쓴다. 발송은 JDK HttpClient로 직접 한다.
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.30.0")
+
     // PortOne Standard Webhooks signature verification (HMAC-SHA256 + replay-window validation).
     implementation("io.portone:server-sdk:0.24.0")
 

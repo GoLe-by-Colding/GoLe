@@ -1,0 +1,21 @@
+{
+  "name": "@gole/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GoLe \uc6f9\u00b7\uc571 \uacf5\uc720 \ucf54\uc5b4 \u2014 \uc5d4\ud2f0\ud2f0 \ubaa8\ub378\uacfc API \ud638\ucd9c. \ud50c\ub7ab\ud3fc \uc911\ub9bd.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*/index.ts"
+  },
+  "scripts": {
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.mjs\"",
+    "typecheck": "tsc --noEmit",
+    "check:platform": "node scripts/check-platform.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5"
+  }
+}

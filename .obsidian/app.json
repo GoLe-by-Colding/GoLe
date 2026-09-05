@@ -1,0 +1,22 @@
+{
+  "alwaysUpdateLinks": true,
+  "newLinkFormat": "relative",
+  "useMarkdownLinks": false,
+  "attachmentFolderPath": "docs/assets",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "docs",
+  "showUnsupportedFiles": false,
+  "userIgnoreFilters": [
+    "node_modules/",
+    "apps/web/node_modules/",
+    "apps/mobile/node_modules/",
+    "packages/core/node_modules/",
+    "apps/web/.next/",
+    "apps/web/playwright-report/",
+    "apps/web/test-results/",
+    "apps/mobile/.expo/",
+    "apps/api/build/",
+    "apps/api/.gradle/",
+    "/^\\.git\\//"
+  ]
+}

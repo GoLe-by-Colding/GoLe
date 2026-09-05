@@ -68,3 +68,24 @@ CLAUDE.md
 # Claude Code 프로젝트 설정 — 위와 같은 이유로 로컬 전용이다.
 # .claude/settings.local.json 에 검증 명령 허용목록이 들어 있다(승인 클릭 줄이기용).
 .claude/
+
+# FCM 발송용 서비스 계정 키. 이것만 있으면 누구나 이 앱 사용자 전원에게 푸시를 보낼 수 있다.
+# .env 와 달리 확장자가 .json 이라 일반 패턴에 걸리지 않으므로 명시적으로 막는다.
+gole-fcm-service-account.json
+*-service-account.json
+
+# APNs 인증키. 팀 전체의 푸시를 보낼 수 있고 발급 시 한 번만 내려받을 수 있다.
+# apps/mobile/.gitignore 에도 있지만 루트에 받아둘 수 있으므로 여기서도 막는다.
+*.p8
+*.p12
+*.mobileprovision
+
+# 옵시디언 — 저장소 루트가 볼트다(docs/index.md 참고).
+# 설정과 그래프 색상은 공유하고, 개인 UI 상태·캐시·설치한 플러그인은 각자 것으로 둔다.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.obsidian/plugins/
+.obsidian/themes/
+.obsidian/hotkeys.json
+.obsidian/snippets/

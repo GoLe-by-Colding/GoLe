@@ -1,19 +1,7 @@
-export type { Order, OrderStatus, OrderStatusChange, DisputeReason } from "./model/types";
-export type { SellerFeePolicy, SellerPayoutEstimate } from "./model/fee-policy";
-export { calculateSellerPayout, parseSellerFeePolicy } from "./model/fee-policy";
-export { orderStatusLabel, DISPUTE_REASON_LABEL } from "./model/types";
-export type { MyOrderContact, OrderContacts, SellerSettlement } from "./api/order-api";
-export {
-  placeOrder,
-  payOrder,
-  completeOrder,
-  refundOrder,
-  openDispute,
-  fetchOrder,
-  fetchOrderContacts,
-  fetchMyOrderContact,
-  fetchMyOrders,
-  fetchMySales,
-  fetchMySettlements,
-  fetchSellerFeePolicy,
-} from "./api/order-api";
+/**
+ * `order` 엔티티 파사드.
+ *
+ * 모델·API는 `@gole/core/order`에 있다(웹·앱 공유). 여기서는 그것을 그대로 다시 내보내고,
+ * 이 슬라이스의 웹 전용 부분만 덧붙인다. 상위 레이어는 이 경로를 계속 그대로 쓴다.
+ */
+export * from "@gole/core/order";

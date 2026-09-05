@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@shared/api";
-import { acceptThirdPartyProvisionConsent, fetchCurrentSignupPolicy } from "../api/user-api";
-import type { CurrentSignupPolicy, ThirdPartyProvisionPath } from "./types";
+import { acceptThirdPartyProvisionConsent, fetchCurrentSignupPolicy } from "@gole/core/user";
+import type { CurrentSignupPolicy, ThirdPartyProvisionPath } from "@gole/core/user";
 
 export const THIRD_PARTY_PROVISION_CONSENT_REQUIRED_CODE = "THIRD_PARTY_PROVISION_CONSENT_REQUIRED";
 export const THIRD_PARTY_PROVISION_VERSION_STALE_CODE = "THIRD_PARTY_PROVISION_VERSION_STALE";
