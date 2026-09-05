@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 # GCE does not distinguish Linux UIDs when minting an attached service-account
 # token. Deny metadata to every non-root host process and to every container;
+# preserve TCP/UDP DNS on the same GCE address for systemd-resolved and Docker.
 # only the root-owned cloud broker can obtain a token.
 METADATA_V4="169.254.169.254/32"
 METADATA_V6="fd20:ce::254/128"
@@ -80,6 +81,8 @@ replace_output_chain() {
   # the old chain, then retire the old chain. At every command boundary at
   # least one rejecting path remains active, including on interruption.
   "$tool" -w -N "$candidate"
+  "$tool" -w -A "$candidate" -p udp --dport 53 -j RETURN
+  "$tool" -w -A "$candidate" -p tcp --dport 53 -j RETURN
   "$tool" -w -A "$candidate" -m owner --uid-owner 0 -j RETURN
   "$tool" -w -A "$candidate" -j REJECT
   "$tool" -w -I OUTPUT 1 -d "$address" -j "$candidate"
@@ -96,6 +99,8 @@ replace_input_chain_full() {
   candidate="GOLE_MI_$$_${RANDOM}"
 
   "$tool" -w -t raw -N "$candidate"
+  "$tool" -w -t raw -A "$candidate" -d "$address" -p udp --dport 53 -j RETURN
+  "$tool" -w -t raw -A "$candidate" -d "$address" -p tcp --dport 53 -j RETURN
   "$tool" -w -t raw -A "$candidate" -d "$address" -j DROP
   "$tool" -w -t raw -I PREROUTING 1 -j "$candidate"
   while "$tool" -w -t raw -C PREROUTING -j GOLE_METADATA_INPUT 2>/dev/null; do

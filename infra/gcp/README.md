@@ -13,6 +13,10 @@ Ubuntu boot image는 현재 운영과 같은 exact image
 
 ## 보안 경계
 
+GCE DNS와 메타데이터 API는 같은 주소를 공유한다. 메타데이터 격리는 호스트·컨테이너의
+TCP/UDP 53번 DNS 요청을 보존하고 나머지 비-root 메타데이터 접근을 차단한다.
+DNS 예외 없이 주소 전체를 차단하면 systemd-resolved와 Docker의 이름 해석도 중단된다.
+
 - GitHub Actions runner는 사람 OS Login 계정과 분리된 로컬 `goledeploy`다.
 - `goledeploy`는 `docker`, `lxd`, `google-sudoers` 등 supplemental group이 없다.
 - `/etc/gole/infra.env`, `/etc/gole/gole.env`, `/etc/gole/discord.env`는 `root:root 0600`이다. runner도 읽지 못한다.
