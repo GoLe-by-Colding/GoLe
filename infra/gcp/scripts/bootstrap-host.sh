@@ -584,6 +584,7 @@ if [ -e "$APP_ROOT" ]; then
   chown -R root:root "$app_checkout_backup"
   chmod -R go-rwx "$app_checkout_backup"
 fi
+install -d -m 0755 -o "$DEPLOY_USER" -g "$DEPLOY_GROUP" "$APP_ROOT"
 runuser -u "$DEPLOY_USER" -- env -i HOME="$DEPLOY_HOME" PATH=/usr/bin:/bin \
   GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
   git clone --no-tags "$REPOSITORY_URL" "$APP_ROOT" >/dev/null 2>&1

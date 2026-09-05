@@ -25,6 +25,35 @@ export FIREWALL_LOG="$TEST_ROOT/firewall.log"
 
 PATH="$TEST_ROOT/bin:$PATH" bash "$ROOT/infra/gcp/scripts/metadata-firewall.sh"
 
+# GCE DNS shares the metadata address. Evaluate the generated first-match rules
+# for a non-root resolver/container, and prove HTTP(S) token access stays closed.
+python3 - "$FIREWALL_LOG" <<'PY'
+import shlex
+import sys
+
+lines = [shlex.split(line) for line in open(sys.argv[1], encoding="utf-8")]
+for family in ("v4", "v6"):
+    for prefix, blocked in (("GOLE_MO_", "REJECT"), ("GOLE_MI_", "DROP")):
+        rules = [line[line.index("-A") + 2:] for line in lines
+                 if line[0] == family and "-A" in line
+                 and line[line.index("-A") + 1].startswith(prefix)]
+        def verdict(protocol, port, uid):
+            for rule in rules:
+                if "-p" in rule and rule[rule.index("-p") + 1] != protocol:
+                    continue
+                if "--dport" in rule and int(rule[rule.index("--dport") + 1]) != port:
+                    continue
+                if "--uid-owner" in rule and int(rule[rule.index("--uid-owner") + 1]) != uid:
+                    continue
+                return rule[rule.index("-j") + 1]
+            raise AssertionError("missing terminal metadata rule")
+        for protocol in ("udp", "tcp"):
+            assert verdict(protocol, 53, 1001) == "RETURN", (family, prefix, protocol)
+        for port in (80, 443, 5353):
+            assert verdict("tcp", port, 1001) == blocked, (family, prefix, port)
+        assert verdict("udp", 5353, 1001) == blocked
+PY
+
 grep -Eq 'v4 -w -t raw -A GOLE_MI_[0-9]+_[0-9]+ -d 169\.254\.169\.254/32 -j DROP' "$FIREWALL_LOG"
 grep -Eq 'v4 -w -t raw -I PREROUTING 1 -j GOLE_MI_[0-9]+_[0-9]+' "$FIREWALL_LOG"
 grep -Eq 'v4 -w -A GOLE_MO_[0-9]+_[0-9]+ -m owner --uid-owner 0 -j RETURN' "$FIREWALL_LOG"

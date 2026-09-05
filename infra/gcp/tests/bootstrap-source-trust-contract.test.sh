@@ -81,6 +81,17 @@ grep -q '/usr/local/sbin/gole-bootstrap-production-env' "$bootstrap" ||
 grep -q '/etc/gole/host-bootstrap.complete' "$bootstrap" ||
   fail "bootstrap must write its completion marker last"
 
+# The unprivileged clone cannot create /app under root-owned /. Provision its
+# empty destination after preserving the old checkout and before invoking Git.
+python3 - "$bootstrap" <<'PY'
+import pathlib
+import sys
+source = pathlib.Path(sys.argv[1]).read_text()
+prepare = 'install -d -m 0755 -o "$DEPLOY_USER" -g "$DEPLOY_GROUP" "$APP_ROOT"'
+assert source.index('mv -- "$APP_ROOT" "$app_checkout_backup"') < source.index(prepare)
+assert source.index(prepare) < source.index('git clone --no-tags "$REPOSITORY_URL" "$APP_ROOT"')
+PY
+
 # Runtime regression: hostile caller Git environment, a global insteadOf rule,
 # alternates and a replace ref must not change the archive obtained by the
 # exact env -i command used by bootstrap/hostctl.
