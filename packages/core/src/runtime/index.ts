@@ -2,7 +2,7 @@ export { configureCore, isCoreConfigured, requireConfig, resetCoreConfigForTest 
 export type { CoreConfig } from "./config";
 export { getSessionStore, resetSessionStoreForTest, setSessionStore } from "./session-store";
 export type { SessionStore } from "./session-store";
-export { ApiError } from "./api-error";
+export { ApiError, isApiNotFoundError } from "./api-error";
 export type { ApiErrorBody } from "./api-error";
 export { apiRequest } from "./http-client";
 export {
