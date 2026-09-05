@@ -746,7 +746,7 @@ for hostctl_operation in \
   grep -q "$hostctl_operation" infra/gcp/scripts/gole-hostctl.sh ||
     fail "host helper is missing $hostctl_operation"
 done
-grep -q '/usr/local/sbin/gole-hostctl discord-overlay-install ""' \
+grep -Fq '/usr/local/sbin/gole-hostctl ^discord-overlay-install$' \
   infra/gcp/sudoers/gole-deploy ||
   fail "Discord secret overlay must use an exact no-argument sudo command"
 grep -q -- '--env-file "$DISCORD_ENV_FILE"' infra/gcp/scripts/gole-hostctl.sh ||

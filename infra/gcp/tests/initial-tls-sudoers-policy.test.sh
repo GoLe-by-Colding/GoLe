@@ -17,9 +17,9 @@ uuid_pattern = (
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
     r"[0-9a-f]{4}-[0-9a-f]{12}"
 )
-verify_arguments = rf"^[0-9a-f]{{40}} {uuid_pattern}$"
+verify_arguments = rf"^deployment-verify-initial-http-commit [0-9a-f]{{40}} {uuid_pattern}$"
 verify_rule = (
-    "/usr/local/sbin/gole-hostctl deployment-verify-initial-http-commit "
+    "/usr/local/sbin/gole-hostctl "
     + verify_arguments
     + ", \\\n"
 )
@@ -30,7 +30,7 @@ if sudoers.count(verify_rule) != 1:
 compiled = re.compile(verify_arguments)
 valid_sha = "2" * 40
 valid_uuid = "12345678-1234-1234-1234-123456789abc"
-accepted = f"{valid_sha} {valid_uuid}"
+accepted = f"deployment-verify-initial-http-commit {valid_sha} {valid_uuid}"
 if compiled.fullmatch(accepted) is None:
     raise SystemExit("valid initial HTTP commit arguments are not accepted")
 for rejected in (
@@ -49,11 +49,11 @@ no_argument_commands = (
     "deployment-fail-closed-initial-tls",
 )
 for command in no_argument_commands:
-    exact_rule = f'/usr/local/sbin/gole-hostctl {command} "",'
+    exact_rule = f'/usr/local/sbin/gole-hostctl ^{command}$,'
     matching_lines = [
         line.strip().removesuffix("\\").rstrip()
         for line in sudoers.splitlines()
-        if f"/usr/local/sbin/gole-hostctl {command}" in line
+        if f"/usr/local/sbin/gole-hostctl ^{command}" in line
     ]
     if matching_lines != [exact_rule]:
         raise SystemExit(f"{command} must have one exact no-argument sudoers rule")
@@ -67,12 +67,6 @@ expected_verify_call = (
 if expected_verify_call not in deploy:
     raise SystemExit("deploy.sh initial HTTP verification argv changed")
 
-if re.search(
-    r"gole-hostctl (?:certificate-issue|deployment-complete-initial-tls|"
-    r"deployment-fail-closed-initial-tls) (?!\"\")",
-    sudoers,
-):
-    raise SystemExit("an initial TLS no-argument command has a broader sudoers rule")
 PY
 
 if command -v visudo >/dev/null 2>&1; then
