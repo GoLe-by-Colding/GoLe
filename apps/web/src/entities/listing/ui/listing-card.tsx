@@ -1,12 +1,12 @@
 import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
-import type { Listing } from "../model/types";
+import type { Listing } from "@gole/core/listing";
 import {
   completenessLabel,
   conditionLabel,
   formatPriceKrw,
   LISTING_CATEGORY_LABEL,
-} from "../model/types";
+} from "@gole/core/listing";
 
 export interface ListingCardProps {
   readonly listing: Listing;

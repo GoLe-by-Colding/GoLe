@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { markRoomRead } from "../api/chat-api";
-import type { ChatMessage } from "./types";
+import { markRoomRead } from "@gole/core/chat";
+import type { ChatMessage } from "@gole/core/chat";
 
 export interface UseRoomReadReceiptOptions {
   readonly roomId: string | null;

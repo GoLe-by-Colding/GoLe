@@ -1,35 +1,10 @@
-export type {
-  ChatRoom,
-  ChatMessage,
-  ChatUnreadCounts,
-  ResolvedChatRoom,
-  ChatRoomType,
-  SocialChatRoom,
-  SupportStatus,
-  SupportCategory,
-  ChatReportReason,
-} from "./model/types";
-export {
-  createOrGetRoom,
-  fetchMyRooms,
-  fetchChatRoom,
-  fetchMySocialRooms,
-  fetchUnreadCounts,
-  markRoomRead,
-  fetchMessages,
-  sendMessage,
-  createDirectRoom,
-  createGroupRoom,
-  createSupportRoom,
-  inviteGroupMember,
-  leaveGroupRoom,
-  blockChatUser,
-  fetchBlockedChatUserIds,
-  unblockChatUser,
-  reportChatMessage,
-  confirmDirectTrade,
-  cancelDirectTradeConfirmation,
-} from "./api/chat-api";
+/**
+ * `chat` 엔티티 파사드.
+ *
+ * 모델·API는 `@gole/core/chat`에 있다(웹·앱 공유). 여기서는 그것을 그대로 다시 내보내고,
+ * 이 슬라이스의 웹 전용 부분만 덧붙인다. 상위 레이어는 이 경로를 계속 그대로 쓴다.
+ */
+export * from "@gole/core/chat";
 export { useChatRoom } from "./model/use-chat-room";
 export type { UseChatRoomOptions, UseChatRoomResult } from "./model/use-chat-room";
 export { useConversation } from "./model/use-conversation";

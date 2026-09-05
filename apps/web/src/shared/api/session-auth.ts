@@ -1,5 +1,17 @@
+import type { SessionStore } from "@gole/core";
+
 export const SESSION_STORAGE_KEY = "gole.session";
 export const SESSION_CHANGE_EVENT = "gole:session-change";
+
+/**
+ * 브라우저 세션 저장소. 코어의 {@link SessionStore}를 localStorage로 구현한다.
+ *
+ * 코어는 `window`를 모르고, 이 파일은 코어의 요청 경로를 모른다 — 둘을 잇는 것은 부트스트랩이다.
+ */
+export const browserSessionStore: SessionStore = {
+  readAuthorizationHeader: readSessionAuthorization,
+  clear: clearStoredSession,
+};
 
 export function readSessionAuthorization(): Readonly<Record<string, string>> {
   if (typeof window === "undefined") return {};

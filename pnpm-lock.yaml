@@ -80,6 +80,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@gole/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@portone/browser-sdk':
         specifier: ^0.1.9
         version: 0.1.9
@@ -135,6 +138,9 @@ importers:
 
   packages/core:
     devDependencies:
+      prettier:
+        specifier: ^3.4.2
+        version: 3.8.4
       typescript:
         specifier: ^5
         version: 5.9.3

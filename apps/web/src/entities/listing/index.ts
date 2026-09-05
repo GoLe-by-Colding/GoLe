@@ -1,35 +1,11 @@
+/**
+ * `listing` 엔티티 파사드.
+ *
+ * 모델·API는 `@gole/core/listing`에 있다(웹·앱 공유). 여기서는 그것을 그대로 다시 내보내고,
+ * 이 슬라이스의 웹 전용 부분만 덧붙인다. 상위 레이어는 이 경로를 계속 그대로 쓴다.
+ */
+export * from "@gole/core/listing";
 export { ListingCard } from "./ui/listing-card";
 export type { ListingCardProps } from "./ui/listing-card";
 export { ListingGallery } from "./ui/listing-gallery";
 export type { ListingGalleryProps } from "./ui/listing-gallery";
-export {
-  fetchActiveListings,
-  fetchMyListings,
-  deleteListing,
-  fetchListingsBySet,
-  searchListings,
-  fetchListingById,
-  createListing,
-  fetchListingComments,
-  postListingComment,
-} from "./api/listing-api";
-export type {
-  CreateListingInput,
-  SearchListingsParams,
-  ListingSort,
-  ListingCommentItem,
-} from "./api/listing-api";
-export type {
-  Listing,
-  ItemCondition,
-  Completeness,
-  ListingStatus,
-  ListingCategory,
-} from "./model/types";
-export {
-  conditionLabel,
-  completenessLabel,
-  formatPriceKrw,
-  parseItemCondition,
-} from "./model/types";
-export { ITEM_CONDITIONS, LISTING_CATEGORIES, LISTING_CATEGORY_LABEL } from "./model/types";

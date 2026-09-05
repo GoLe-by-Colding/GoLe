@@ -9,8 +9,8 @@ import {
   SESSION_REFRESH_INTERVAL_MS,
   subscribeSession,
 } from "./session-store";
-import { logout, refreshSession } from "../api/user-api";
-import type { Session } from "./types";
+import { logout, refreshSession } from "@gole/core/user";
+import type { Session } from "@gole/core/user";
 
 export interface UseSessionResult {
   readonly session: Session | null;

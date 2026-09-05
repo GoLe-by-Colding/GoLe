@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+// 서버 모듈 그래프의 코어 부트스트랩. 클라이언트 그래프는 아래 <CoreBootstrap />가 맡는다.
+import "@shared/config/bootstrap";
+import { CoreBootstrap } from "@shared/config/core-bootstrap";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import "./globals.css";
@@ -89,6 +92,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="ko" data-scroll-behavior="smooth">
       <body>
+        <CoreBootstrap />
         {children}
         <StructuredData />
       </body>

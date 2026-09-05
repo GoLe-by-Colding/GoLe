@@ -17,6 +17,7 @@
     "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@gole/core": "workspace:*",
     "@portone/browser-sdk": "^0.1.9",
     "next": "16.3.3",
     "react": "19.2.4",
