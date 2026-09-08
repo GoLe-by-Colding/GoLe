@@ -90,7 +90,8 @@ for (const v of VARIANTS) {
   const args = ["-background", "none", "-density", String(density), svgPath, "-resize", `${v.png}x${v.png}`];
   // iOS 아이콘은 알파가 있으면 App Store Connect가 업로드를 거부한다.
   if (v.flatten) args.push("-background", BRAND, "-alpha", "remove", "-alpha", "off");
-  args.push(pngPath);
+  // 타임스탬프를 빼야 재실행 결과가 바이트까지 같다 — 안 그러면 재생성마다 헛 diff가 난다.
+  args.push("-strip", "-define", "png:exclude-chunk=date,time", pngPath);
   execFileSync("magick", args, { stdio: "inherit" });
   console.log(`  ${v.name}.svg → ${v.name}.png (${v.png}px)`);
 }
