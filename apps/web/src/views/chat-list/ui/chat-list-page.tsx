@@ -1304,7 +1304,8 @@ function roomInitial(conversation: Conversation, myId: string): string {
 function roomAvatarTone(conversation: Conversation): string {
   if (conversation.kind === "LISTING") return "bg-accent-100 text-accent-800";
   if (conversation.room.type === "SUPPORT") return "bg-brand-600 text-white";
-  if (conversation.room.type === "GROUP") return "bg-violet-100 text-violet-700";
+  // 그룹은 브랜드 팔레트 밖(violet)이었다. 색이 의미를 갖는 자리라 중립으로 되돌린다.
+  if (conversation.room.type === "GROUP") return "bg-neutral-200 text-neutral-700";
   return "bg-brand-50 text-brand-700";
 }
 
