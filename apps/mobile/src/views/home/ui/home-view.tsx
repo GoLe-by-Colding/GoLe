@@ -3,8 +3,11 @@ import { FlatList, StyleSheet, View } from "react-native";
 import { formatKrw, thumbnailUrl } from "@gole/core";
 import { fetchTrendingSets, type TrendingSet } from "@gole/core/pricing";
 import { radius, space, useTheme } from "@/shared/theme";
-import { EmptyState, ErrorState, LoadingState, Screen, Text } from "@/shared/ui";
+import { Badge, EmptyState, ErrorState, LoadingState, Screen, Text } from "@/shared/ui";
 import { useAsync } from "@/shared/lib";
+
+/** 골드 순위 뱃지를 붙일 상위 구간. 브랜드상 포인트 색은 아껴야 하므로 좁게 잡는다. */
+const HIGHLIGHT_RANK = 3;
 
 /**
  * 홈 — 지금 거래가 많은 세트. 웹 `views/home`의 트렌딩 블록에 대응한다.
@@ -46,21 +49,23 @@ export function HomeView() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text variant="title">지금 거래 중</Text>
+            {/* 웹 히어로와 같은 목소리. 순위의 근거를 밝혀 "인기"가 광고로 읽히지 않게 한다. */}
             <Text variant="caption" muted>
-              최근 체결이 많은 세트
+              체결이 많은 순서입니다. 가격은 감이 아니라 체결 기록에서 나옵니다.
             </Text>
           </View>
         }
-        renderItem={({ item }) => <TrendingRow set={item} />}
+        renderItem={({ item, index }) => <TrendingRow set={item} rank={index + 1} />}
       />
     </Screen>
   );
 }
 
-function TrendingRow({ set }: { readonly set: TrendingSet }) {
+function TrendingRow({ set, rank }: { readonly set: TrendingSet; readonly rank: number }) {
   const colors = useTheme();
   return (
     <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Badge label={String(rank)} tone={rank <= HIGHLIGHT_RANK ? "accent" : "neutral"} />
       {set.imageUrl === null ? (
         <View style={[styles.thumb, { backgroundColor: colors.border }]} />
       ) : (
@@ -77,9 +82,13 @@ function TrendingRow({ set }: { readonly set: TrendingSet }) {
         <Text variant="body" numberOfLines={2}>
           {set.name}
         </Text>
-        <Text variant="caption" muted>
-          {formatKrw(set.averagePrice)} · 거래 {set.tradeCount}건
-        </Text>
+        {/* 시세가 이 앱의 값어치다. 거래 건수와 같은 무게로 두면 그게 안 보인다. */}
+        <View style={styles.priceLine}>
+          <Text variant="heading">{formatKrw(set.averagePrice)}</Text>
+          <Text variant="caption" muted>
+            거래 {set.tradeCount}건
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -98,4 +107,5 @@ const styles = StyleSheet.create({
   },
   thumb: { width: 64, height: 64, borderRadius: radius.md },
   rowText: { flex: 1, gap: space[1] },
+  priceLine: { flexDirection: "row", alignItems: "baseline", gap: space[2], flexWrap: "wrap" },
 });

@@ -19,7 +19,8 @@
     "infra:agent:up": "docker compose --profile support-agent up -d --wait support-agent",
     "infra:agent:down": "docker compose --profile support-agent stop support-agent",
     "infra:down": "docker compose down",
-    "infra:reset": "docker compose down -v && docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps minio-init && docker compose run --rm --no-deps mongo-init"
+    "infra:reset": "docker compose down -v && docker compose up -d --wait mongo redis minio && docker compose run --rm --no-deps minio-init && docker compose run --rm --no-deps mongo-init",
+    "brand:icons": "node scripts/build-brand-icons.mjs"
   },
   "engines": {
     "node": ">=22"
