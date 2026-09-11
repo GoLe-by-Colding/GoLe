@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 20
     env:
       PROMOTION_AGENT_BASE_URL: https://gole.co.kr
-      PROMOTION_AGENT_OUTPUT_DIR: ${{ runner.temp }}/promotion-agent
       PROMOTION_AGENT_ADMIN_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
       PROMOTION_AGENT_ADMIN_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -41,6 +40,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - name: Create and submit promotion drafts
+        env:
+          PROMOTION_AGENT_OUTPUT_DIR: ${{ runner.temp }}/promotion-agent
         run: pnpm --filter web exec tsx scripts/promotion-agent/scan.ts
 
       - name: Upload failed promotion agent captures
