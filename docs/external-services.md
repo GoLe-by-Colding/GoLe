@@ -94,7 +94,8 @@ Firebase Auth·Firestore·Storage 는 쓰지 않으므로 허용 목록에서 �
 
 | 항목 | 위치 |
 |---|---|
-| 배포 대상 | `gole.kscold.com` (`GOLE_ENVIRONMENT: staging`) |
+| 배포 대상 | https://gole.co.kr (`GOLE_ENVIRONMENT: production`, `www`는 apex로 영구 이동) |
+| 은퇴한 호스트 | `gole.kscold.com` — 배포·DNS·CD 대상 아님. `410 Gone`은 의도된 응답 |
 | 운영 키 볼트 | https://control.kscold.com |
 | 러너 | self-hosted (`gole-gcp-production`) |
 
