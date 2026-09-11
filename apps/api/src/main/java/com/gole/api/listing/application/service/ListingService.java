@@ -75,6 +75,7 @@ public class ListingService
                 command.photoKeys(),
                 command.catalogSetNumber(),
                 command.category(),
+                command.interestTag(),
                 Instant.now(clock));
         mediaAssets.replaceReferences(
                 command.sellerId(), MediaTargetType.LISTING, listingId, command.photoKeys(), true);
