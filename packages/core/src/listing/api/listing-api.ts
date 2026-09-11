@@ -1,5 +1,11 @@
 import { apiRequest } from "../../runtime";
-import type { Completeness, ItemCondition, Listing, ListingCategory } from "../model/types";
+import type {
+  Completeness,
+  ItemCondition,
+  Listing,
+  ListingCategory,
+  ListingInterestTag,
+} from "../model/types";
 
 export interface CreateListingInput {
   readonly sellerId: string;
@@ -16,6 +22,7 @@ export interface CreateListingInput {
   readonly photoKeys: readonly string[];
   readonly catalogSetNumber: string | null;
   readonly category: ListingCategory;
+  readonly interestTag: ListingInterestTag | null;
 }
 
 /** 리스팅 생성. 백엔드는 condition/completeness를 대문자 enum으로 받는다. */
@@ -37,6 +44,7 @@ export function createListing(input: CreateListingInput): Promise<Listing> {
       photoKeys: input.photoKeys,
       catalogSetNumber: input.catalogSetNumber,
       category: input.category,
+      interestTag: input.interestTag,
     },
   });
 }
