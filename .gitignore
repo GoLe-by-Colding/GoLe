@@ -80,12 +80,6 @@ gole-fcm-service-account.json
 *.p12
 *.mobileprovision
 
-# 옵시디언 — 저장소 루트가 볼트다(docs/index.md 참고).
-# 설정과 그래프 색상은 공유하고, 개인 UI 상태·캐시·설치한 플러그인은 각자 것으로 둔다.
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/cache
-.obsidian/plugins/
-.obsidian/themes/
-.obsidian/hotkeys.json
-.obsidian/snippets/
+# 옵시디언 — 팀 문서 볼트는 별도 저장소 GoLe-obsidian 으로 분리했다.
+# 이 저장소를 볼트로 여는 것은 개인 선택이므로 설정 전체를 각자 것으로 둔다.
+.obsidian/
