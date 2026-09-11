@@ -30,6 +30,9 @@ class ListingTest {
         assertThatThrownBy(() -> InterestTag.fromKey("unknown-theme"))
                 .isInstanceOfSatisfying(BadRequestException.class, error -> assertThat(error.getCode())
                         .isEqualTo("INVALID_INTEREST_TAG"));
+        assertThatThrownBy(() -> InterestTag.fromKey("STAR_WARS"))
+                .isInstanceOfSatisfying(BadRequestException.class, error -> assertThat(error.getCode())
+                        .isEqualTo("INVALID_INTEREST_TAG"));
     }
 
     private static Listing listing(InterestTag interestTag) {

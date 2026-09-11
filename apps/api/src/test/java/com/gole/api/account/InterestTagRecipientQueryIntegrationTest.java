@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class InterestTagRecipientQueryIntegrationTest {
 
     private static final Instant NOW = Instant.parse("2026-09-11T00:00:00Z");
+    private static final String NON_ROUTABLE_TEST_PHONE = "01000000000";
 
     @Container
     static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7");
@@ -76,7 +77,7 @@ class InterestTagRecipientQueryIntegrationTest {
     void resolveEligibleReadsPhoneOnlyWhileEligibilityStillHolds() {
         assertThat(recipients.resolveEligible("account-001", "technic")).hasValueSatisfying(recipient -> {
             assertThat(recipient.accountId()).isEqualTo("account-001");
-            assertThat(recipient.phoneNumber().masked()).isEqualTo("010-****-5678");
+            assertThat(recipient.phoneNumber().masked()).isEqualTo("010-****-0000");
         });
         assertThat(recipients.resolveEligible("account-no-consent", "technic")).isEmpty();
         assertThat(recipients.resolveEligible("account-001", "city")).isEmpty();
@@ -107,7 +108,7 @@ class InterestTagRecipientQueryIntegrationTest {
                 .append("email", id + "@example.invalid")
                 .append("status", status.name())
                 .append("interestTags", List.of(tag))
-                .append("phoneNumber", "01012345678");
+                .append("phoneNumber", NON_ROUTABLE_TEST_PHONE);
         if (phoneVerified) {
             account.append("phoneVerifiedAt", java.util.Date.from(NOW));
         }

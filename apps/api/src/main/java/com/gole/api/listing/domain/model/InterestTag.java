@@ -42,7 +42,7 @@ public enum InterestTag {
         }
         String normalized = key.trim();
         for (InterestTag tag : values()) {
-            if (tag.key.equalsIgnoreCase(normalized) || tag.name().equalsIgnoreCase(normalized)) {
+            if (tag.key.equalsIgnoreCase(normalized)) {
                 return tag;
             }
         }
