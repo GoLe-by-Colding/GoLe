@@ -30,6 +30,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -66,9 +68,33 @@ class InterestTagAlimtalkOutboxIntegrationTest {
     @Autowired
     MongoTemplate mongo;
 
+    @Autowired
+    PlatformTransactionManager transactions;
+
     @BeforeEach
     void clean() {
         mongo.getDb().getCollection(COLLECTION).deleteMany(new Document());
+        mongo.getDb().getCollection("listings").deleteMany(new Document());
+    }
+
+    @Test
+    void fanoutAndListingWriteCommitOrRollbackTogether() {
+        TransactionTemplate transaction = new TransactionTemplate(transactions);
+        transaction.executeWithoutResult(ignored -> {
+            mongo.insert(new Document("_id", "listing-commit"), "listings");
+            outbox.enqueue(fanout("listing-commit"));
+        });
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> transaction.executeWithoutResult(ignored -> {
+                    mongo.insert(new Document("_id", "listing-rollback"), "listings");
+                    outbox.enqueue(fanout("listing-rollback"));
+                    throw new IllegalStateException("force rollback");
+                }))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(mongo.getCollection("listings").countDocuments()).isEqualTo(1);
+        assertThat(mongo.getCollection(COLLECTION).countDocuments()).isEqualTo(1);
+        assertThat(stored("fanout:listing-commit")).doesNotContainKey("phoneNumber");
     }
 
     @Test
