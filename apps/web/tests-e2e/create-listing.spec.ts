@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { E2E_SELLER, signInAs } from "./support/e2e-session";
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+
 test.describe("Seller fee disclosure", () => {
   test.beforeEach(async ({ page }) => {
     await signInAs(page, E2E_SELLER);
@@ -209,7 +211,7 @@ test.describe("Create listing", () => {
 
     const listingId = new URL(page.url()).pathname.split("/").at(-1);
     expect(listingId).toBeTruthy();
-    const detailResponse = await page.request.get(`/api/v1/listings/${listingId}`);
+    const detailResponse = await page.request.get(`${apiBaseUrl}/api/v1/listings/${listingId}`);
     expect(detailResponse.ok()).toBe(true);
     await expect(detailResponse.json()).resolves.toMatchObject({ interestTag: "technic" });
   });
