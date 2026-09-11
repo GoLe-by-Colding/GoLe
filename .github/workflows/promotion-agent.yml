@@ -1,0 +1,69 @@
+name: Promotion draft agent
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *" # 매일 21:00 KST
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-agent
+  cancel-in-progress: true
+
+jobs:
+  promotion-agent:
+    name: Capture production and submit promotion drafts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROMOTION_AGENT_BASE_URL: https://gole.co.kr
+      PROMOTION_AGENT_OUTPUT_DIR: ${{ runner.temp }}/promotion-agent
+      PROMOTION_AGENT_ADMIN_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
+      PROMOTION_AGENT_ADMIN_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ vars.PROMOTION_AGENT_ANTHROPIC_MODEL || 'claude-sonnet-4-6' }}
+      DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+      DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
+      DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_HEALTH_SUPPRESS_NOTIFICATIONS || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Create and submit promotion drafts
+        run: pnpm --filter web exec tsx scripts/promotion-agent/scan.ts
+
+      - name: Upload failed promotion agent captures
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-agent-output-${{ github.run_id }}
+          path: ${{ runner.temp }}/promotion-agent
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Notify promotion agent failure
+        if: ${{ failure() && !cancelled() && env.DISCORD_OPERATIONS_WEBHOOK_URL != '' }}
+        run: |
+          if [ "$DISCORD_SUPPRESS_NOTIFICATIONS" = "true" ]; then
+            flags=4096
+          else
+            flags=null
+          fi
+          payload=$(jq -n \
+            --arg content "🚨 GoLe 홍보 초안 에이전트 실패 · $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg avatar_url "$DISCORD_AVATAR_URL" \
+            --argjson flags "$flags" \
+            '{content: $content, avatar_url: $avatar_url, allowed_mentions: {parse: []}}
+             + (if $flags == null then {} else {flags: $flags} end)')
+          curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_OPERATIONS_WEBHOOK_URL"
