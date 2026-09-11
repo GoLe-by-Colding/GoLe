@@ -74,11 +74,12 @@ class PromotionPostServiceTest {
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         String key = "images/11111111-1111-4111-8111-111111111111.png";
 
-        String id = service.create(new CreatePromotionPostCommand(
-                "author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(key)));
+        String id = service.create(
+                new CreatePromotionPostCommand("author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(key)));
 
         assertThat(id).isEqualTo("promo-1");
-        verify(mediaAssets).replaceReferences("author-1", MediaTargetType.PROMOTION_POST, "promo-1", List.of(key), true);
+        verify(mediaAssets)
+                .replaceReferences("author-1", MediaTargetType.PROMOTION_POST, "promo-1", List.of(key), true);
         ArgumentCaptor<PromotionPost> captor = ArgumentCaptor.forClass(PromotionPost.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getMediaUrls()).containsExactly("/api/v1/media/" + key);
