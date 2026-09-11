@@ -53,7 +53,8 @@ public class PromotionPostService
         // 하루 뒤 원본이 삭제된다(promotion-review D8).
         mediaAssets.replaceReferences(
                 command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);
-        List<String> mediaUrls = command.mediaKeys().stream().map(MediaKey::publicPath).toList();
+        List<String> mediaUrls =
+                command.mediaKeys().stream().map(MediaKey::publicPath).toList();
         PromotionPost draft = PromotionPost.draft(
                 id, command.channel(), command.caption(), mediaUrls, command.authorId(), Instant.now(clock));
         return repository.save(draft).getId();
