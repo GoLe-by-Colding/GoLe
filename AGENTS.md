@@ -177,10 +177,39 @@ pnpm --filter web e2e:ui
 `tests-e2e/`(Playwright). web dev 서버는 Playwright가 자동 기동하지만 **인프라와 API 서버는
 직접 띄워야** 한다.
 
-- `pnpm infra:up` + `pnpm dev:api`가 떠 있어야 한다.
+**`pnpm dev:api`로 띄우면 안 된다.** 그건 `local` 프로필이라 `gole` DB를 보는데, 시더는
+`gole_e2e`에 심는다. 그 상태로 돌리면 **15건이 실패하는데 원인이 코드가 아니라 환경이다.**
+`ci.yml`의 E2E 잡과 같은 환경을 맞춰야 한다:
+
+```bash
+pnpm infra:up
+
+# API — e2e 프로필 + CI 와 같은 저장소·스토리지 설정 (Orca 터미널에 띄운다)
+MONGODB_URI='mongodb://localhost:27017/gole_e2e?replicaSet=rs0' MONGODB_DATABASE=gole_e2e \
+STORAGE_S3_ENDPOINT=http://localhost:9000 STORAGE_S3_BUCKET=gole-e2e \
+STORAGE_PUBLIC_BASE_URL=http://localhost:8080 MANAGEMENT_HEALTH_MAIL_ENABLED=false \
+pnpm dev:api:e2e
+
+MONGO_DB=gole_e2e REDIS_DATABASE=15 pnpm e2e:seed   # 멱등
+
+# 테스트 — NEXT_PUBLIC_* 는 Playwright 가 띄우는 web dev 서버가 읽는다
+E2E_WITH_BACKEND=1 \
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 \
+NEXT_PUBLIC_PAYMENT_MODE=portone-test \
+NEXT_PUBLIC_PORTONE_STORE_ID=store-test \
+NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-kakaopay-test \
+NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY=channel-card-test \
+pnpm --filter web e2e
+```
+
+기대치는 **205 passed / 13 skipped** 근처다(2026-09-12 확인). 숫자가 크게 다르면 코드가 아니라
+환경을 먼저 의심한다.
+
 - 쓰기 플로우(`create-listing`, `purchase`)는 서버가 검증하는 실제 세션이 필요하므로
   `pnpm e2e:seed`를 한 번 돌린다(멱등).
 - `E2E_WITH_BACKEND=1`이 없으면 관리자 API 가드 테스트가 **조용히 skip**된다.
+- `NEXT_PUBLIC_PORTONE_*`·`NEXT_PUBLIC_PAYMENT_MODE`가 없으면 `portone-request.spec.ts` 4건이
+  실패한다. 결제 계약 테스트가 그 값을 읽기 때문이다(실제 키가 아니라 테스트 채널 값이다).
 - `E2E_BASE_URL`을 주면 배포 대상 읽기전용 검증이 되고 쓰기 플로우는 자동 skip.
 - 브라우저 테스트는 항상 `NEXT_PUBLIC_PAYMENT_MODE=stub`으로 강제된다(실제 결제창은 자동화 불가).
   `portone-request.spec.ts`만 Node 프로세스에서 돌아 실제 모드 값을 읽는다.
