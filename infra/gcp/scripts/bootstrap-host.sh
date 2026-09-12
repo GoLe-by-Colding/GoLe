@@ -774,6 +774,8 @@ install -m 0755 "$TRUST_ROOT/infra/gcp/scripts/notify-backup-failure.py" /usr/lo
 for backup_unit in gole-data-backup.service gole-data-backup.timer gole-data-backup-failure.service; do
   install -m 0644 "$TRUST_ROOT/infra/gcp/systemd/$backup_unit" "/etc/systemd/system/$backup_unit"
 done
+install -m 0755 "$TRUST_ROOT/infra/gcp/scripts/stack-start.sh" /usr/local/sbin/gole-stack-start
+install -m 0644 "$TRUST_ROOT/infra/gcp/systemd/gole-stack.service" /etc/systemd/system/gole-stack.service
 
 broker_config="$(mktemp /etc/gole/.cloud-broker.conf.XXXXXX)"
 cleanup_files+=("$broker_config")
@@ -819,6 +821,9 @@ if ! systemctl enable --now gole-metadata-firewall.service ||
 fi
 systemctl enable --now docker
 systemctl enable --now gole-data-backup.timer
+# 부팅 시 운영 컨테이너를 다시 켠다. --now 를 쓰지 않는다 — 부트스트랩 시점에는
+# CD 가 아직 컨테이너를 만들지 않았을 수 있고, 그때 start 는 할 일이 없다.
+systemctl enable gole-stack.service
 
 bootstrap_marker="$(mktemp /etc/gole/.host-bootstrap.complete.XXXXXX)"
 cleanup_files+=("$bootstrap_marker")
