@@ -70,15 +70,35 @@ jobs:
       - name: 릴리스 노트
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
           TAG: ${{ steps.tag.outputs.tag }}
           PREV: ${{ steps.tag.outputs.prev }}
           RANGE: ${{ steps.tag.outputs.range }}
         run: |
           set -euo pipefail
+          # main 은 squash 로만 움직인다. 그래서 git log 범위에는 릴리스 커밋 하나밖에 없고,
+          # 그 안에 무엇이 들었는지 보이지 않는다. 대신 이 커밋을 만든 dev -> main 릴리스 PR 을
+          # 찾아 거기 담긴 커밋(= 각 작업 PR 의 squash 커밋)을 목록으로 뽑는다.
+          pr="$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty' 2>/dev/null || true)"
+
           {
             echo "## 이 릴리스에 들어간 것"
             echo
-            git log --no-merges --format='- %s' "$RANGE" | head -100
+            if [ -n "$pr" ]; then
+              echo "릴리스 PR: #${pr}"
+              echo
+              gh pr view "$pr" --repo "$REPO" --json commits \
+                --jq '.commits[].messageHeadline' \
+                | grep -vE '^(Merge |chore\(sync\))' \
+                | sed 's/^/- /' \
+                | head -200
+            else
+              # 릴리스 PR 을 못 찾으면(직접 push 등) 커밋 범위로 대체한다.
+              echo "> 연결된 PR 을 찾지 못해 커밋 범위로 적는다."
+              echo
+              git log --no-merges --format='- %s' "$RANGE" | head -200
+            fi
             echo
             if [ -n "$PREV" ]; then
               echo "이전 릴리스: \`$PREV\`"
@@ -88,4 +108,6 @@ jobs:
             echo
             echo "> 배포 여부는 별개다. CD 는 \`vars.GOLE_PRODUCTION_HOST_READY\` 가 \`true\` 일 때만 돈다."
           } > notes.md
+
+          cat notes.md
           gh release create "$TAG" --title "$TAG" --notes-file notes.md
