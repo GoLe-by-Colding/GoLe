@@ -105,85 +105,120 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
 경로는 없다.
 
 내부 표현 노출 문제는 소스를 바꿔서 해결한다. 에이전트는 커밋 메시지를 캡션에 복사하지
-않는다 — 실제로 동작하는 화면을 스크린샷으로 찍고, 그 스크린샷과 변경 요약만 LLM에 건네
-캡션을 새로 쓰게 한다(D12·D13). 커밋 메시지는 "무엇이 바뀌었는지" 찾는 신호로만 쓰이고
-캡션에 그대로 들어가지 않는다.
+않는다 — 모델이 diff와 공개 라우트 목록을 보고 실제 화면을 탐색·캡처한 뒤, 그 결과를 바탕으로
+캡션을 새로 쓴다(D12·D13). 커밋 메시지는 "무엇이 바뀌었는지" 찾는 신호로만 쓰이고 캡션에
+그대로 들어가지 않는다.
 
-### D10. 실행 위치: GitHub Actions 스케줄 잡 — 기존 스케줄 워크플로우와 동일한 러너
+### D10. 실행 위치: 운영 VM의 systemd oneshot + timer — GitHub Actions 스케줄을 정정한다
 
-`.github/workflows/promotion-agent.yml`을 새로 둔다. `e2e.yml`(`schedule: cron: "0 18 * * *"`,
-`runs-on: ubuntu-latest`)과 `production-health.yml`(실패 시 `secrets.DISCORD_OPERATIONS_WEBHOOK_URL`
-알림)의 패턴을 그대로 따른다 — CD 전용 self-hosted 러너(`ubuntu-gole`)는 쓰지 않는다. 매일
-저녁(KST) 1회 `schedule:`과 수동 실행용 `workflow_dispatch:`를 함께 둔다.
-`concurrency: { group: promotion-agent, cancel-in-progress: true }`로 전날 실행과 겹치지 않게
-한다.
+에이전트 자격증명은 운영 VM의 `/etc/gole/gole.env`에 두며 GitHub Actions 러너에서는 이 파일을
+읽을 수 없다. 따라서 `.github/workflows/promotion-agent.yml`의 `schedule`은 제거하고 수동 실행용
+`workflow_dispatch`만 남긴다. 정기 실행은 운영 VM의 `gole-promotion-agent.service`와
+`gole-promotion-agent.timer`가 매일 `12:00 UTC`(21:00 KST)에 담당한다. 서비스는
+`EnvironmentFile=/etc/gole/gole.env`에서 환경변수를 주입받고, 실패 진단은 journal과 세션 로그를
+사용한다.
 
-### D11. 대상 선정: `apps/web` 변경분이 있는 `feat` 커밋만 스캔한다
+### D11. 대상 선정과 중복 판정: `sourceCommitSha`를 도메인 필드로 저장한다
 
 전체 저장소가 아니라 프론트엔드(`apps/web/src/**`)에 변경이 있는 `feat(...)` 커밋만 후보로
 본다 — 사용자가 화면으로 확인할 수 있는 변경만 캡처 대상이 될 수 있고, 백엔드 전용 변경은
 보여줄 UI가 없기 때문이다. 스캔 범위는 직전 실행 이후가 아니라 **최근 24~27시간**의 `git log`로
-고정한다(러너 간 상태를 따로 저장하지 않기 위해 — 실행이 하루 밀려도 다음 날 다시 스캔 범위에
-걸리므로 유실보다 중복이 안전한 실패 모드다). 중복 후보는 캡션 텍스트 유사도가 아니라 **이미
-그 커밋 SHA로 만들어진 초안이 있는지**로 걸러 스킵한다.
+고정한다(실행 간 상태를 따로 저장하지 않기 위해 — 실행이 하루 밀려도 다음 날 다시 스캔 범위에
+걸리므로 유실보다 중복이 안전한 실패 모드다). `PromotionPost`에는 nullable
+`sourceCommitSha`를 저장하고, 같은 SHA가 이미 있으면 새 초안을 거부한다. 값이 있을 때는 소문자
+40자 16진수여야 한다. 기존 문서에는 이 필드가 없으므로 마이그레이션은 필요하지 않다.
 
-### D12. 캡처: Playwright로 배포된 앱을 직접 조작한다 — 매칭되는 E2E 테스트의 상호작용 재생이 1순위
+중복 판정을 위해 캡션에 보이지 않는 유니코드 지문을 숨기던 `encodeCommitMarker` 방식은
+폐기한다. 중복 여부는 캡션 문자열이 아니라 `sourceCommitSha` 조회로만 판정한다.
+
+### D12. 캡처: 모델이 diff와 공개 라우트 목록을 보고 대상을 선택한다
 
 이미지 업로드 파이프라인(`ImageIoImageProcessorAdapter`)이 GIF·APNG를 업로드 단계에서
 거부하므로(정지 이미지만 안전하게 재인코딩 가능) 움직이는 캡처는 애초에 불가능하다. 대신
-**정지 이미지 2~4장의 시퀀스**로 상호작용을 보여준다.
+**정지 이미지 시퀀스**로 상호작용을 보여준다. 코드에 `SCENARIOS`나 라우트·영역 매핑 테이블을
+두지 않는다. 모델이 커밋 diff와 `apps/web/src/app/**/page.tsx`에서 동적 세그먼트를 제외해
+열거한 공개 라우트 목록을 읽고 캡처할 라우트, 상호작용, 스크린샷 수를 판단한다.
 
-- 1순위: 변경된 라우트에 대응하는 `apps/web/tests-e2e/*.spec.ts`(또는 컴포넌트 테스트)가
-  있으면, 그 테스트의 클릭·입력 스텝을 그대로 재생하면서 상태가 바뀔 때마다 스크린샷을 찍는다.
-  사람이 이미 짜둔 상호작용 시나리오를 재사용하는 것이므로 LLM이 매번 화면을 자유 탐색하다
-  엉뚱한 곳을 클릭하는 위험이 없다.
-- 2순위(폴백): 매칭되는 테스트가 없으면 변경된 라우트를 정적 스크린샷 1장만 찍는다. 상호작용을
-  못 보여주는 초안은 검토자가 반려하면 그만이므로 안전하다.
+브라우저 툴은 열거된 공개 라우트만 허용하며 로그인·결제·`/admin` 라우트를 거부한다. 모든
+브라우저 조작에서 `GET`/`HEAD`/`OPTIONS` 외 네트워크 요청을 코드로 차단하고 클릭·선택은 5초
+안에 끝나야 한다. 스크린샷은 현재 후보의 세션 디렉터리에만 기록한다.
 
 캡처 대상은 프로덕션(`https://gole.co.kr`, `e2e.yml`의 `live-smoke` 대상과 동일)이다 — 별도
 스테이징 환경이 없으므로 CD가 끝난 뒤의 실제 배포본을 찍는다.
 
-### D13. 캡션 생성: LLM 호출 + 고정 톤 가이드
+### D13. 캡션 생성: `caption-tone.md`를 Tool Runner의 시스템 프롬프트로 승계한다
 
 `apps/support-agent`와 달리 이 에이전트는 처음부터 외부 LLM 사용을 전제로 한다(캡션
-재작성이 목적이라 규칙 기반으로 대체할 수 없다). 시스템 프롬프트에 아래 톤 가이드를 고정으로
-박아 넣는다:
+재작성이 목적이라 규칙 기반으로 대체할 수 없다). 기존
+`apps/web/scripts/promotion-agent/prompts/caption-tone.md`를 Tool Runner 세션의 시스템
+프롬프트로 읽어 아래 톤 가이드를 유지한다. 별도 `caption.ts`에서 LLM을 한 번 호출하는 단계는
+없앤다.
 
 - 반말, 구어체 종결어미 사용(-어/-했어/-거든/-더라/-잖아). **음슴체(-함/-임/-됨) 금지** —
   간결해도 완결된 대화체 문장으로 끝낼 것.
 - 이모지는 글당 최대 1개, 감정이 실리는 지점에만. 이모지 없는 글도 섞을 것 — 매번 붙이지 않기.
 - "그동안 왜 안 고쳤나 싶다"류 반성형 클리셰 마무리 금지. 고정된 3단 구조(상황→감탄→교훈)
   반복 금지 — 문장 길이·구조를 글마다 다르게 가져갈 것.
-- 내부 용어·상태값·스펙 결정 번호·커밋 메시지 원문 노출 금지. 500자 이내
-  (`PromotionPost` 캡션 상한과 동일).
+- 내부 용어·상태값·스펙 결정 번호·커밋 메시지 원문 노출 금지. 에이전트가 제출하는 캡션은
+  1~450자로 제한한다(`PromotionPost` 자체의 500자 상한보다 여유를 둔다).
 
 상세 예시는 `apps/web/scripts/promotion-agent/prompts/caption-tone.md`에 둔다.
 
-### D14. 인증: 기존 관리자 계정을 재사용한다 — 봇 전용 계정을 따로 만들지 않는다
+### D14. 인증: 봇 전용 ADMIN 계정을 사용한다 — 기존 결정을 정정한다
 
-새 계정을 발급하지 않는다. `AdminAuthInterceptor`가 세션 토큰 외의 인증 수단(서비스 계정·API
-키)을 지원하지 않으므로, 에이전트는 실행마다 **이미 존재하는 관리자 중 한 명의 계정**으로
-일반 로그인 흐름을 그대로 타 세션 토큰을 받는다. 계정 자격증명은 GitHub Actions secrets
-(`PROMOTION_AGENT_ADMIN_EMAIL`/`PROMOTION_AGENT_ADMIN_PASSWORD`)로 관리한다.
+`AdminAuthInterceptor`가 세션 토큰만 지원한다는 제약은 인증 방식에 관한 것이지 계정 주인에
+관한 것이 아니다. 봇 전용 ADMIN 계정도 일반 로그인 흐름으로 세션 토큰을 얻을 수 있으므로,
+사람 관리자의 계정을 재사용하지 않는다. 전용 계정의 `authorId`로 자동 생성 초안을 구분할 수
+있고, 자격증명 유출 시 해당 계정만 정지·회전할 수 있다.
 
-별도 봇 계정을 두지 않으므로 감사 로그의 `authorId`는 그 관리자 본인의 것으로 남는다 —
-"이 초안이 자동 생성됐는지"는 `authorId`만으로 구분되지 않는다. 구분이 필요하면 D9·D13이
-캡션 끝에 심는 보이지 않는 커밋 SHA 지문(`publish-draft.ts`의 `encodeCommitMarker`)을 본다.
-
-> 이 결정 때문에 생기는 제약: D4(메이커-체커)에 따라 에이전트 로그인에 쓰인 그 관리자 계정은
-> 자신이(=에이전트가) 만든 초안을 승인·반려할 수 없다(D15). 관리자가 한 명뿐이면 에이전트가
-> 만든 초안은 아무도 승인할 수 없는 채로 막히므로, 에이전트 계정으로 쓸 관리자와 실제로 검토를
-> 맡을 다른 관리자가 최소 한 명씩은 있어야 한다 — 이 전제는 팀에 이미 성립한다(승인 게이트
-> 자체가 애초에 다른 시선을 요구하므로 관리자가 1명뿐이면 사람이 작성한 초안도 검토할 수 없다).
+계정 이메일·비밀번호와 `ANTHROPIC_API_KEY`의 실제 값은 사람이 운영 서버
+`/etc/gole/gole.env`에 직접 넣는다. 에이전트 프로세스에서는 세션 토큰을
+`submit_promotion_draft` 툴의 클로저 안에만 두어 모델 컨텍스트에 노출하지 않는다. D4는 그대로
+적용되므로 봇 계정은 자신이 만든 초안을 승인·반려할 수 없고, 검토용 사람 ADMIN이 최소 한 명
+필요하다.
 
 ### D15. 초안 생성 후 검토 요청까지는 자동, 발행은 여전히 사람이 한다
 
 에이전트는 `POST /api/admin/promotion-posts`로 `DRAFT`를 만든 직후 `POST /{id}/submit`까지
 자동으로 이어서 호출해 `PENDING_REVIEW`로 올린다(P2). `PUBLISHED`로의 전이(D3)는 건드리지
 않는다 — 사람이 검토 큐에서 승인한 뒤 별도로 "발행" 버튼을 눌러야 한다. 에이전트가 로그인에
-쓴 그 관리자 계정이 초안의 작성자이므로 D4(메이커-체커)에 따라 **그 계정은 자기 초안을 승인할
-수 없다** — 새 규칙이 아니라 기존 `SelfReviewNotAllowedException` 검사가 그대로 적용되는
-것뿐이다.
+쓴 봇 전용 관리자 계정이 초안의 작성자이므로 D4(메이커-체커)에 따라 **그 계정은 자기 초안을
+승인·반려할 수 없다** — 새 규칙이 아니라 기존 `SelfReviewNotAllowedException` 검사가 그대로
+적용되는 것뿐이다.
+
+### D16. 에이전트 실행기는 Anthropic SDK Tool Runner를 사용한다
+
+에이전트의 Brain은 `@anthropic-ai/sdk`의 `client.beta.messages.toolRunner`와 `betaZodTool`로
+구현하고 기본 모델은 `claude-opus-5`로 둔다. Opus 5는 thinking이 기본으로 켜지며
+`max_tokens`가 thinking과 응답을 함께 제한하므로 충분한 토큰 한도를 설정한다.
+`stop_reason: "refusal"`은 응답 `content`를 읽기 전에 처리한다.
+
+Managed Agents(CMA)는 scheduled deployment와 vault를 제공하지만 클라우드 샌드박스에서 필요한
+Playwright 브라우저 자동화를 실행할 수 없다. `self_hosted`로 전환하면
+`environment_variable` vault 주입을 지원하지 않아 자격증명 격리 이점이 사라지고 베타 의존성과
+워커만 늘어난다. 따라서 CMA 대신 우리 프로세스에서 툴을 실행하는 Tool Runner를 사용한다.
+
+모델에 노출하는 툴은 최근 프런트엔드 커밋 열거, 제한된 커밋 diff 조회, 공개 라우트 열거,
+브라우저 이동·클릭·선택·스크린샷, 초안 제출로 한정한다. 임의 셸 실행은 허용하지 않는다.
+`submit_promotion_draft` 구현은 프롬프트에 의존하지 않고 실행당 초안 수(기본 3), 중복
+`sourceCommitSha`, 캡션 1~450자와 빈 문자열을 코드로 검증한다.
+
+### D17. 후보별 세션을 격리하고 운영 VM 자원을 제한한다
+
+후보 커밋 하나마다 Tool Runner 세션 하나와 브라우저 하나를 순차 실행하며, 후보 단위
+`try/catch`로 한 건의 실패가 다른 후보를 중단시키지 않게 한다. 브라우저는 후보 처리가 끝나면
+즉시 닫고 동시에 여러 개를 실행하지 않는다.
+
+전체 이벤트 로그(Session)는 `PROMOTION_AGENT_OUTPUT_DIR`에 append-only로 기록하되 base64
+이미지 대신 파일 경로만 남기고 7일이 지난 결과를 삭제한다. 모델 입력(Context)에는 최근 4장
+이미지만 유지하고 이전 이미지는 텍스트 요약으로 바꾼다. 기본 출력 경로는
+`/var/lib/gole/promotion-agent`다.
+
+운영 VM은 8 GiB 중 컨테이너 `mem_limit` 합계가 6,784 MiB라 여유가 약 900 MB이고 Chromium은
+400 MB~1 GB를 사용할 수 있다. 운영 컨테이너를 보호하기 위해 systemd 서비스에
+`MemoryMax=1G`, `OOMPolicy=stop`, `Nice=10`, `IOSchedulingClass=best-effort`,
+`IOSchedulingPriority=7`, `TimeoutStartSec=20min`을 적용하고 Chromium에는
+`--disable-dev-shm-usage`를 사용한다.
 
 ## 요구사항 (EARS)
 
@@ -206,29 +241,33 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
 - P10 WHEN 초안에 `mediaKeys`를 담아 등록하면, 시스템은 10개 초과이거나 빈 문자열이 섞인 경우
   거부해야 하고, 그 외에는 각 키를 `PUBLIC`으로 전이·연결한 뒤 공개 경로를 `mediaUrls`에
   저장해야 한다. 검토 큐·상세에서는 첨부한 이미지를 그대로 노출해야 한다(D8).
-- P11 WHEN 스케줄된 실행에서 `apps/web` 변경분이 있는 `feat` 커밋을 찾으면, 시스템은 그
-  커밋 SHA로 이미 만들어진 초안이 있는지 먼저 확인하고, 없을 때만 새 초안을 생성해야 한다
-  (D11, 중복 방지).
-- P12 WHEN 변경된 라우트에 매칭되는 E2E/컴포넌트 테스트가 없으면, 시스템은 캡처를 정적
-  스크린샷 1장으로 대체해야 한다 — 상호작용 재생을 강제하지 않는다(D12).
-- P13 WHEN 에이전트가 초안 생성에 성공하면, 시스템은 같은 실행 안에서 검토 요청(`submit`)까지
-  이어서 호출해 `PENDING_REVIEW`로 올려야 한다(D15).
-- P14 WHEN 에이전트 로그인에 쓰인 관리자 계정이 자신이 만든 초안을 승인·반려하려 하면, 시스템은
-  다른 관리자와 동일하게 403으로 거부해야 한다(D4·D15 재확인 — 새 예외가 아니다).
+- P11 WHEN 정기 실행이 `apps/web/src` 변경분이 있는 최근 `feat` 커밋을 찾으면, 시스템은 해당
+  커밋마다 격리된 Tool Runner 세션을 순차로 시작해야 하며, 동일한 `sourceCommitSha`의 게시물이
+  이미 있으면 초안 제출을 거부해야 한다(D11·D17).
+- P12 WHEN 후보 세션이 커밋 diff와 공개 라우트 목록을 조회하면, 시스템은 모델이 캡처 라우트와
+  상호작용을 선택하게 해야 하며, 브라우저 툴은 허용목록 밖·로그인·결제·`/admin` 라우트와
+  `GET`/`HEAD`/`OPTIONS` 외 네트워크 요청을 거부해야 한다(D12).
+- P13 WHEN 모델이 `submit_promotion_draft`를 호출하면, 시스템은 실행당 초안 수 한도,
+  `sourceCommitSha` 중복, 1~450자 비어 있지 않은 캡션을 툴 구현에서 검증하고, 통과한 초안을
+  생성한 뒤 같은 실행에서 `PENDING_REVIEW`로 제출해야 한다(D13·D15·D16).
+- P14 WHEN 에이전트가 초안 제출 권한을 얻기 위해 로그인하면, 시스템은 봇 전용 ADMIN 계정의
+  일반 로그인 흐름을 사용하고 발급된 세션 토큰을 초안 제출 툴의 클로저 안에만 보관해야 한다.
+  해당 계정이 자신이 만든 초안을 승인·반려하려 하면 P5와 동일하게 403으로 거부해야 한다
+  (D4·D14).
 
 ## 설계
 
 - 백엔드 `com.gole.api.promotion` (헥사고날):
-  - `domain.model`: `PromotionPost`(id, channel, caption, mediaUrls, status, authorId, createdAt,
-    submittedAt, reviewerId?, reviewedAt?, rejectionReason?, publishedAt?, externalPostId?),
+  - `domain.model`: `PromotionPost`(id, channel, caption, mediaUrls, sourceCommitSha?, status, authorId,
+    createdAt, submittedAt, reviewerId?, reviewedAt?, rejectionReason?, publishedAt?, externalPostId?),
     `PromotionPostStatus`, `PromotionChannel`(`THREADS`만 우선 정의 — 확장 가능하게 enum으로).
   - `domain.exception`: `PromotionPostNotFoundException`(404),
     `InvalidPromotionPostStateException`(409), `SelfReviewNotAllowedException`(403).
   - `application.port.in`: `CreatePromotionPostUseCase`, `SubmitPromotionPostForReviewUseCase`,
     `ManagePromotionPostsUseCase`(list/get/approve/reject/publish) — `report` 컨텍스트의
     `SubmitReportUseCase`/`ManageReportsUseCase` 분리를 그대로 따른다.
-  - `application.port.out`: `PromotionPostRepositoryPort`, `PromotionPostIdGeneratorPort`,
-    `SocialPublishPort`.
+  - `application.port.out`: `PromotionPostRepositoryPort`(`existsBySourceCommitSha` 포함),
+    `PromotionPostIdGeneratorPort`, `SocialPublishPort`.
   - `application.service.PromotionPostService`가 위 in-port 3개를 모두 구현. `create()`는
     `media` 컨텍스트의 인바운드 포트 `ManageMediaAssetsUseCase`도 의존해 `mediaKeys`를
     `PROMOTION_POST` 타깃으로 붙인다(D8).
@@ -241,6 +280,7 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
     - `POST ""` 초안 등록
     - `POST "/{id}/submit"` 검토 요청
     - `GET "?status=&limit="` 목록
+    - `GET "/exists?sourceCommitSha="` 커밋 SHA 중복 조회
     - `GET "/{id}"` 단건
     - `POST "/{id}/approve"` 승인
     - `POST "/{id}/reject"` 반려(`{reason}`)
@@ -251,20 +291,21 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
     함께 둔다(이미 report/settlement/support 등이 한 파일에 있는 기존 관례를 따름).
   - `views/admin/ui/promotion-posts-view.tsx` + `/admin/promotion` 라우트.
   - `widgets/admin-shell`의 좌측 내비에 "홍보 게시" 항목 추가.
-- 초안 자동 생성 에이전트(D9~D15):
-  - `.github/workflows/promotion-agent.yml` — `schedule:`(매일 저녁 KST) + `workflow_dispatch:`,
-    `runs-on: ubuntu-latest`, `concurrency: { group: promotion-agent, cancel-in-progress: true }`.
-    실패 시 `production-health.yml`과 동일하게 `secrets.DISCORD_OPERATIONS_WEBHOOK_URL`로 알림.
+- 초안 자동 생성 에이전트(D9~D17):
+  - `.github/workflows/promotion-agent.yml` — 정기 `schedule` 없이 수동 `workflow_dispatch`만 유지.
+  - `infra/gcp/systemd/gole-promotion-agent.service`/`.timer` — 운영 서버에서 매일
+    `12:00 UTC`에 oneshot 실행하고 `/etc/gole/gole.env`를 주입. D17의 메모리·CPU·I/O 제한 적용.
   - `apps/web/scripts/promotion-agent/`(Node/TS, `pnpm --filter web exec tsx` 로 실행):
-    - `scan.ts` — 최근 24~27h `git log` 중 `apps/web/src/**` 변경분이 있는 `feat` 커밋 후보 추출.
-    - `capture.ts` — Playwright로 `https://gole.co.kr` 조작. 매칭되는
-      `apps/web/tests-e2e/*.spec.ts` 스텝 재생 → 다중 스크린샷, 없으면 라우트 단일 스크린샷.
-    - `caption.ts` — LLM 호출, `prompts/caption-tone.md`(D13 톤 가이드)를 시스템 프롬프트로 사용.
-    - `publish-draft.ts` — 기존 관리자 계정 로그인(D14) → `@gole/core`의 `uploadImages`/
-      `createAdminPromotionPost`/`submitAdminPromotionPost`(`packages/core/src/admin/api/admin-api.ts`)를
-      그대로 호출. 웹 admin 화면과 동일한 계약을 타므로 별도 HTTP 클라이언트를 새로 만들지 않는다.
-  - 새 백엔드 변경 없음 — 기존 `POST /api/admin/promotion-posts`·`/submit` 엔드포인트의 새
-    호출자가 하나 늘어나는 것뿐이다.
+    - `agent.ts` — 후보를 열거하고 후보당 Tool Runner 세션 하나를 순차 실행하며 세션 로그 기록.
+    - `tools/` — `betaZodTool`과 Zod 스키마로 git·라우트·브라우저·제출 툴과 코드 가드를 구현.
+    - `scan.ts` — 최근 lookback 시간의 `apps/web/src/**` 변경 `feat` 커밋을 조회하는 함수만 유지.
+    - `capture.ts` — Playwright 브라우저 생명주기와 변경 요청 차단을 툴에 제공하며 하드코딩
+      `SCENARIOS`는 두지 않음.
+    - `prompts/caption-tone.md` — 각 Tool Runner 세션의 시스템 프롬프트로 사용.
+    - 제출 툴 — 봇 전용 관리자 로그인 후 `@gole/core`의 `uploadImages`/
+      `createAdminPromotionPost`/`submitAdminPromotionPost`를 호출. 세션 토큰은 클로저에만 보관.
+  - `PROMOTION_AGENT_ENV_FILE`이 지정되면 로컬 스모크 테스트용 dotenv 파일을 먼저 읽고,
+    지정되지 않으면 systemd가 주입한 `process.env`를 사용한다.
 
 ## 수용 기준 (테스트로 고정할 것)
 
@@ -277,12 +318,14 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
   된다.
 - 승인·반려·발행 각각 감사 로그가 1건씩 남는다.
 - `mediaUrls` 11개 이상 또는 빈 문자열 포함 시 `IllegalArgumentException`(400).
-- 동일 커밋 SHA로는 초안이 중복 생성되지 않는다(D11/P11).
-- 매칭되는 E2E 테스트가 없는 후보는 정적 스크린샷 1장짜리 초안으로 대체되고, 실행 자체가
-  실패하지 않는다(D12/P12).
+- `sourceCommitSha`는 null 또는 소문자 40자 16진수만 허용되고, 동일 SHA로는 초안이 중복
+  생성되지 않는다(D11/P11).
+- 허용목록 밖 라우트와 로그인·결제·`/admin` 이동, 변경 네트워크 요청은 브라우저 툴이
+  거부한다(D12/P12).
+- 실행당 초안 수 한도를 넘거나 캡션이 비어 있거나 450자를 넘으면 제출 툴이 거부한다(D16/P13).
 - 에이전트가 만든 초안은 생성 직후 `PENDING_REVIEW`까지 자동 전이한다(D15/P13).
-- 에이전트 로그인에 쓰인 관리자 계정은 자신이 만든 초안을 승인·반려할 수 없다(D15/P14, 기존
-  D4 검사 재확인).
+- 봇 전용 관리자 계정은 자신이 만든 초안을 승인·반려할 수 없다(D14·D15/P14, 기존 D4 검사
+  재확인).
 
 ## 범위 밖 / 후속
 
@@ -298,11 +341,11 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
 - **T6. 모바일 관리자 화면.** `apps/mobile`에는 admin 화면 자체가 없고 이미지 선택 라이브러리도
   없다(`uploadImage`/`uploadImages`는 플랫폼 중립으로 설계돼 있으나 연결된 화면이 없음). 홍보
   게시 검토를 모바일에서도 하려면 별도 스펙이 필요하다.
-- **T7. 캡처 폴백 품질.** D12의 2순위 폴백(테스트 없을 때 라우트 단일 스크린샷)은 어떤 상태의
-  화면이 찍힐지 보장하지 않는다(로딩 중·빈 상태일 수 있음). 초기 운영 데이터를 보고 필요하면
-  더 나은 폴백을 후속으로 설계한다.
+- **T7. 캡처 선택의 비결정성.** 모델이 diff와 라우트 목록을 보고 탐색하므로 같은 커밋에서도
+  선택한 화면과 캡션이 달라질 수 있다. 초기 운영 결과를 보고 툴 가드나 프롬프트를 좁힐지는
+  후속으로 판단한다.
 
-> T2(배포/CI 이벤트 기반 초안 자동 생성)는 D9~D15로 반영해 구현한다. D6이 원래 우려했던
+> T2(배포/CI 이벤트 기반 초안 자동 생성)는 D9~D17로 반영해 구현한다. D6이 원래 우려했던
 > "사람 판단 없이 나간다"는 위험은 승인 게이트(D4)로, "내부 표현 노출"은 캡션을 커밋 메시지가
 > 아니라 스크린샷 기반으로 새로 쓰게 하는 것(D9·D13)으로 해소한다.
 >
@@ -315,8 +358,8 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
 - `report` — `SubmitReportUseCase`/`ManageReportsUseCase` 분리 패턴을 그대로 차용.
 - `media` — 업로드·`STAGED`→`PUBLIC` 전이(`ManageMediaAssetsUseCase.replaceReferences`)를
   `listing`/`community`와 동일한 방식으로 재사용(D8).
-- `.github/workflows/e2e.yml`·`production-health.yml` — 초안 자동 생성 에이전트의 스케줄·러너·
-  실패 알림 패턴을 그대로 차용(D10).
+- `infra/gcp/systemd/gole-data-backup.service`·`gole-cert-renew.timer` — oneshot 서비스의
+  리소스 우선순위와 정기 실행 패턴을 차용(D10·D17).
 - `apps/support-agent` — "별도 자동화 에이전트" 전례이지만 패턴은 다르다: support-agent는
   상시 기동 gRPC 서비스로 요청마다 실시간 반응하고 외부 LLM을 안 쓴다. 이 에이전트는 스케줄
-  잡으로 하루 한 번 돌고 처음부터 LLM을 쓴다(D9·D13) — 혼동하지 않도록 관련 문서에 남겨둔다.
+  oneshot으로 하루 한 번 돌고 처음부터 LLM을 쓴다(D9·D13) — 혼동하지 않도록 관련 문서에 남겨둔다.
