@@ -1,0 +1,86 @@
+name: PR 자동 분류
+
+# 이 저장소의 PR 은 대부분 에이전트가 연다. 사람이 라벨·담당자를 손으로 붙이는 일은
+# 반드시 빠지므로 자동으로 채운다. 판단 근거는 셋뿐이다 — 제목의 conventional type,
+# 브랜치 접두사, 바뀐 경로.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-automation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: 라벨·담당자 지정
+    runs-on: ubuntu-latest
+    # dependabot PR 은 GITHUB_TOKEN 이 읽기 전용이라 여기서 라벨을 붙일 수 없다.
+    # 대신 .github/dependabot.yml 의 labels 가 봇 쪽에서 직접 붙인다.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: 라벨과 담당자 지정
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          ASSIGNEES: ${{ toJSON(github.event.pull_request.assignees) }}
+        run: |
+          set -euo pipefail
+          labels=()
+
+          # ── 종류 ────────────────────────────────────────────────────────────
+          # 제목의 conventional type 을 먼저 본다. 제목이 규칙을 안 지켰으면
+          # 브랜치 접두사로 넘어간다. 둘 다 아니면 종류 라벨을 붙이지 않는다.
+          kind="${TITLE%%:*}"      # "feat(web)" 또는 "feat"
+          kind="${kind%%(*}"       # "feat"
+          kind="$(printf '%s' "$kind" | tr -d '[:space:]')"
+          case "$kind" in
+            feat|fix|refactor|chore|docs|test|perf|ci) ;;
+            *) kind="${BRANCH%%/*}" ;;
+          esac
+          case "$kind" in
+            feat)     labels+=("기능") ;;
+            fix)      labels+=("버그수정") ;;
+            refactor) labels+=("리팩터링") ;;
+            chore)    labels+=("설정") ;;
+            docs)     labels+=("문서") ;;
+            test)     labels+=("테스트") ;;
+            perf)     labels+=("성능") ;;
+            ci)       labels+=("CI") ;;
+            *)        echo "::warning::제목·브랜치 어느 쪽에서도 종류를 읽지 못했다 (제목=$TITLE, 브랜치=$BRANCH)" ;;
+          esac
+
+          # ── 영역 ────────────────────────────────────────────────────────────
+          files="$(gh pr diff "$PR" --repo "$REPO" --name-only)"
+          grep -q '^apps/api/'        <<<"$files" && labels+=("백엔드")   || true
+          grep -q '^apps/web/'        <<<"$files" && labels+=("프론트")   || true
+          grep -q '^apps/mobile/'     <<<"$files" && labels+=("모바일")   || true
+          grep -q '^packages/core/'   <<<"$files" && labels+=("공유코어") || true
+          grep -qE '^(infra/|docker-compose|scripts/|\.github/workflows/)' <<<"$files" && labels+=("인프라") || true
+
+          # ── 배포영향 ────────────────────────────────────────────────────────
+          # main 푸시는 CI 통과 시 CD 를 돌린다. 문서만 고친 PR 도 마찬가지다.
+          [ "$BASE" = "main" ] && labels+=("배포영향") || true
+
+          if [ ${#labels[@]} -gt 0 ]; then
+            printf '붙일 라벨: %s\n' "${labels[*]}"
+            gh pr edit "$PR" --repo "$REPO" $(printf -- '--add-label %q ' "${labels[@]}")
+          fi
+
+          # ── 담당자 ──────────────────────────────────────────────────────────
+          # 이미 누가 지정돼 있으면 건드리지 않는다. 사람이 옮겨 둔 것일 수 있다.
+          if [ "$(jq 'length' <<<"$ASSIGNEES")" -eq 0 ]; then
+            echo "담당자 지정: $AUTHOR"
+            gh pr edit "$PR" --repo "$REPO" --add-assignee "$AUTHOR"
+          else
+            echo "담당자가 이미 있다 — 건드리지 않는다"
+          fi

@@ -293,6 +293,9 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 | `cd.yml` | `ci.yml` **성공** + `main` **푸시**일 때만 | self-hosted 러너에서 `deploy.sh all` |
 | `e2e.yml` | 매일 03:00 KST | 배포 사이트 읽기전용 스모크(`E2E_BASE_URL`) |
 | `production-health.yml` | 수동 실행만 | 운영 헬스체크 |
+| `release-tag.yml` | `ci.yml` **성공** + `main` **푸시** | CalVer 태그 + 릴리스 노트 |
+| `pr-automation.yml` | PR 열림·갱신 | 라벨·담당자 자동 지정 |
+| `pr-convention.yml` | PR 열림·제목 수정 | 제목·브랜치·대상 규약 검사 |
 
 - **CI가 깨지면 CD는 아예 안 돈다.** PR에서 초록이어도 배포되지 않는다 — `main` 푸시여야 한다.
   반대로 문서만 고친 커밋도 `main`에 올리면 배포가 한 번 돈다.
@@ -332,8 +335,40 @@ conventional 형식 하나만 쓴다. `.kiro/steering/dev-conventions.md`의 옛
 브랜치는 `<type>/<kebab-case>` — `feat/card-payment`, `fix/profile-stuck-loading`.
 `temp`·`tmp`·도구가 자동 생성한 이름(`<계정>/...`)을 쓰지 않는다. 머지되면 원격 브랜치도 지운다.
 
-흐름은 **작업 브랜치 → `dev` → `main`** 이다. `main`으로 바로 PR을 열지 않는다
-(dependabot은 예외다 — 기본 브랜치가 `main`이라 그쪽으로 열린다).
+### 흐름은 하나뿐이다
+
+```
+<type>/<이름>  ──PR──>  dev  ──릴리스 PR──>  main  ──> 태그 + CD
+   작업 브랜치            통합             운영 기준선
+```
+
+- **작업 브랜치는 `dev`로 보낸다.** `main`으로 바로 PR을 열지 않는다.
+- **`main`은 `dev → main` 릴리스 PR로만 연다.** dependabot도 예외가 아니다 —
+  `dependabot.yml`의 `target-branch: dev`로 봇 PR도 `dev`로 온다(2026-09-12 변경).
+- 머지는 **squash**다. `main`의 커밋 하나 = PR 하나. `dev`는 그 squash들과
+  `chore(sync)` 역병합이 섞인다.
+- **`main` 푸시가 릴리스다.** CI 성공 시 `release-tag.yml`이 CalVer 태그(`v2026.09.12-1`)와
+  릴리스 노트를 만들고, `cd.yml`이 운영 배포를 시도한다.
+- 릴리스 후에는 **`main`을 `dev`로 역병합**한다(`chore(sync): …`). squash 때문에
+  두 브랜치의 이력이 갈라지므로, 이걸 빼먹으면 다음 릴리스 PR에 충돌이 쌓인다.
+
+### PR을 열면 자동으로 붙는 것
+
+`pr-automation.yml`이 라벨과 담당자를 채운다. **손으로 붙이지 않아도 된다.**
+
+| 무엇 | 어디서 읽나 |
+|---|---|
+| 종류 (`기능`·`버그수정`·`리팩터링`·`설정`·`문서`·`테스트`·`성능`·`CI`) | 제목의 type, 없으면 브랜치 접두사 |
+| 영역 (`백엔드`·`프론트`·`모바일`·`공유코어`·`인프라`) | 바뀐 경로 |
+| `배포영향` | base가 `main`일 때 |
+| 담당자 | PR 작성자 (이미 지정돼 있으면 건드리지 않는다) |
+
+`pr-convention.yml`이 제목·브랜치 이름·PR 대상을 검사한다. **필수 체크가 아니라 머지를
+막지는 않지만**, 어긋나면 이유를 남긴다. 라벨은 전부 한국어다 — 영어 라벨은 2026-09-12에
+이름을 바꿨다(기존 PR 연결은 유지).
+
+dependabot PR은 `GITHUB_TOKEN`이 읽기 전용이라 이 워크플로가 라벨을 못 붙인다.
+대신 `dependabot.yml`의 `labels:`가 봇 쪽에서 직접 붙인다.
 
 - **`Co-Authored-By: Claude` 등 AI 작성 표기를 붙이지 않는다.**
 - 백엔드/프론트는 레이어별로 커밋을 분리한다.
