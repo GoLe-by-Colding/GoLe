@@ -358,6 +358,8 @@ conventional 형식 하나만 쓴다. `.kiro/steering/dev-conventions.md`의 옛
   `chore(sync)` 역병합이 섞인다.
 - **`main` 푸시가 릴리스다.** CI 성공 시 `release-tag.yml`이 CalVer 태그(`v2026.09.12-1`)와
   릴리스 노트를 만들고, `cd.yml`이 운영 배포를 시도한다.
+  릴리스 노트는 `git log`가 아니라 **릴리스 PR에 담긴 커밋 목록**에서 뽑는다 — `main`은
+  squash로만 움직여서 커밋 범위에 릴리스 커밋 하나밖에 없기 때문이다.
 - 릴리스 후에는 **`main`을 `dev`로 역병합**한다(`chore(sync): …`). squash 때문에
   두 브랜치의 이력이 갈라지므로, 이걸 빼먹으면 다음 릴리스 PR에 충돌이 쌓인다.
 
