@@ -311,6 +311,9 @@ jobs:
             infra/gcp/scripts/apply-secret-env.sh \
             scripts/deploy.sh
           failure_file="$RUNNER_TEMP/gole-cost-guard-watchdog.failures"
+          # 계약은 "연속 실패가 임계값에 닿으면 fail-closed" 다. 임계값 자체는 여기서
+          # 명시적으로 고정해, 기본값을 조정해도 이 테스트가 깨지지 않게 한다.
+          export GOLE_COST_GUARD_MAX_FAILURES=2
           GOLE_COST_GUARD_CONTAINER_NAME=gole-nonexistent-ci \
           GOLE_COST_GUARD_FAILURE_FILE="$failure_file" \
           GOLE_COST_GUARD_WATCHDOG_DRY_RUN=true \
@@ -322,6 +325,16 @@ jobs:
             echo "두 번째 연속 장애에서 watchdog이 실패해야 합니다." >&2
             exit 1
           fi
+          # 회귀 가드: 기본 임계값이 다시 짧아지면 2026-09-11 중단이 재발한다.
+          # 검사 간격이 30초이므로 4회 미만은 2분도 못 버틴다 — docker 재시작에 부족하다.
+          default_max="$(grep -oE 'GOLE_COST_GUARD_MAX_FAILURES:-[0-9]+' \
+            infra/gcp/scripts/cost-guard-watchdog.sh | grep -oE '[0-9]+$')"
+          if [ "${default_max:-0}" -lt 4 ]; then
+            echo "MAX_FAILURES 기본값이 ${default_max:-미검출} 이다. 30초 간격이므로 4회(2분) 미만이면" >&2
+            echo "docker 재시작 중 컨테이너 복귀를 기다리지 못하고 호스트 전원을 내린다 (2026-09-11 중단)." >&2
+            exit 1
+          fi
+          echo "MAX_FAILURES 기본값 ${default_max} 회 (= $((default_max * 30))초 유예) 확인."
 
       - name: Secret Sync log security contract
         run: |
