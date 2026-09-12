@@ -96,10 +96,7 @@ export interface AdminLaunchConfig {
 }
 
 export type AdminLaunchReadinessKey =
-  | "businessDisclosure"
-  | "termsPrivacy"
-  | "paymentFlow"
-  | "payoutFlow";
+  "businessDisclosure" | "termsPrivacy" | "paymentFlow" | "payoutFlow";
 
 export interface AdminLaunchChange {
   readonly id: string;
@@ -155,9 +152,7 @@ export type AdminAccountDeletionBlocker =
   | "OWNED_GROUP_REQUIRES_TRANSFER"
   | "EXPLICIT_RETENTION_HOLD";
 export type AdminAccountDeletionHoldReason =
-  | "LEGAL_OBLIGATION"
-  | "DISPUTE_OR_CLAIM"
-  | "FRAUD_OR_SECURITY_INVESTIGATION";
+  "LEGAL_OBLIGATION" | "DISPUTE_OR_CLAIM" | "FRAUD_OR_SECURITY_INVESTIGATION";
 
 /** 탈퇴 대상 이메일/accountId를 의도적으로 포함하지 않는 운영 행. */
 export interface AdminAccountDeletionRequest {
