@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -129,7 +129,7 @@ jobs:
           cache: pnpm
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -229,7 +229,7 @@ jobs:
       # 있는 건 trace(on-first-retry)가 쌓이는 test-results/ 쪽이다.
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: apps/web/test-results
@@ -294,7 +294,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -358,7 +358,7 @@ jobs:
         run: docker compose -f infra/gcp/docker-compose.yml config --quiet
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.14.5
 

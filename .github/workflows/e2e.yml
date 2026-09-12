@@ -36,7 +36,7 @@ jobs:
       # 실패 시 HTML과 trace를 같은 artifact에 보존한다. SSH로 별도 서버에 복사하지 않는다.
       - name: Upload failed live smoke report
         if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: live-smoke-report-${{ github.run_id }}
           path: |
