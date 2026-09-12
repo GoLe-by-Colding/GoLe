@@ -140,41 +140,30 @@ cd /app && pnpm --filter web build
 
 ## 커밋 컨벤션
 
-### 형식
+**형식은 `AGENTS.md`의 "커밋 / PR" 절이 정본이다.** 여기에 옮겨 적지 않는다 — 두 곳에 두면
+갈라진다. 실제로 갈라졌었다(아래 참고).
+
+요약만 남긴다:
 
 ```
-<한국어 제목>
+<type>(<scope>): <한국어 개조식 제목 — …함/…음>
 
-- <변경한 일>함
-- <검증한 일>함
+- 무엇을 바꿨는지 한 줄
+- 검증: 무엇을 어떻게 확인했는지
 ```
 
-제목과 본문을 모두 한국어로 쓰고, 본문은 `- ...함` 형태의 한 줄 항목으로 실제 변경과
-검증을 기록한다. Conventional Commit 영문 type은 필수로 사용하지 않는다.
+`<type>`은 `feat` `fix` `refactor` `chore` `docs` `test` `perf` `ci`.
 
-### 제목 분류
-
-| 분류 | 용도 |
-|---|---|
-| `기능` | 새 기능 |
-| `수정` | 버그·보안 수정 |
-| `개선` | 리팩터링·운영 개선 |
-| `문서` | 문서 변경 |
-| `관리` | 빌드·설정 변경 |
-
-### 예시
-
-```text
-기능: 브릭 세트 즐겨찾기를 추가함
-
-- 즐겨찾기 저장과 해제를 연결함
-- 사용자 흐름과 회귀 테스트를 검증함
-```
+> **폐기된 규칙 (2026-09-12)**
+> 이 문서는 예전에 `기능:` `수정:` `개선:` `문서:` `관리:` 라는 한국어 분류표를 두고
+> "Conventional Commit 영문 type은 필수로 사용하지 않는다", "영문 커밋 메시지 금지"라고
+> 적어 두었다. `AGENTS.md`와 정면으로 어긋났고, **AGENTS.md가 gitignore 대상이라 저장소만
+> 본 에이전트는 이쪽을 따랐다.** 그 결과 `main` 최근 60커밋에 형식이 셋 섞였다
+> (conventional 30 · 한국어 분류 18 · 어느 쪽도 아닌 것 12). 그래서 걷어낸다.
 
 ### 절대 금지
 
 - `Co-Authored-By: Claude` 또는 AI 작성 명시 금지
-- 영문 커밋 메시지 (특별한 이유 없는 한)
 - `main` 브랜치 force push
 - 피처 브랜치에서 `--force` 사용 (`--force-with-lease`만 허용)
 
@@ -182,23 +171,25 @@ cd /app && pnpm --filter web build
 
 ## PR 워크플로우
 
-```bash
-# feature 브랜치 생성
-git checkout -b feat/lego-set-wishlist
+흐름은 **작업 브랜치 → `dev` → `main`** 이다. `main`으로 바로 PR을 열지 않는다.
 
-# 작업 후 PR 생성
-gh pr create --title "기능: 브릭 세트 위시리스트를 추가함" --body "$(cat <<'EOF'
+```bash
+# 작업 브랜치 — 워크트리를 새로 만들지 않는다 (AGENTS.md "워크트리를 만들지 않는다")
+git switch dev && git pull
+git switch -c feat/lego-set-wishlist
+
+# 작업 후 PR — base 는 dev
+gh pr create --base dev --title "feat(web): 브릭 세트 위시리스트를 추가함" --body "$(cat <<'EOF'
 - 즐겨찾기 저장과 해제를 연결함
-- 전체 검증을 통과함
+- 검증: typecheck·build 통과, wishlist.spec.ts 3/3 통과
 EOF
 )"
 
-# main 머지 후 배포
-git checkout main && git pull
+# dev 가 쌓이면 dev -> main PR 을 따로 연다. main 푸시가 CD 를 돈다.
 # → 배포 절차 (deploy.md 참고)
 ```
 
-PR 제목과 본문도 커밋과 같은 한국어 `- ...함` 형식으로 작성한다.
+PR 제목은 커밋과 같은 형식이다. 머지된 브랜치는 원격에서도 지운다.
 
 ### PR 템플릿은 반드시 채운다
 
