@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { E2E_SELLER, signInAs } from "./support/e2e-session";
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+
 test.describe("Seller fee disclosure", () => {
   test.beforeEach(async ({ page }) => {
     await signInAs(page, E2E_SELLER);
@@ -185,6 +187,7 @@ test.describe("Create listing", () => {
     // "설명서 포함" 체크박스와 부분 일치하므로 정확 일치로 집는다.
     await page.getByLabel("설명", { exact: true }).fill("E2E 자동 등록 상품");
     await page.getByLabel("가격 (원)").fill("12345");
+    await page.getByLabel("관심 테마").selectOption("technic");
 
     // 파일 업로드(1x1 PNG) — MinIO 업로드 후 미리보기 표시까지 대기
     await page.getByLabel("상품 이미지").setInputFiles({
@@ -205,5 +208,11 @@ test.describe("Create listing", () => {
     // 제목에 가격이 들어 있어 부분 일치로는 가격 노드와 함께 2개가 잡힌다(strict mode 위반).
     // 알림 텍스트는 "<제목> — ₩12,345 · GoLe"라 정확 일치에는 걸리지 않는다.
     await expect(page.getByText("₩12,345", { exact: true })).toBeVisible();
+
+    const listingId = new URL(page.url()).pathname.split("/").at(-1);
+    expect(listingId).toBeTruthy();
+    const detailResponse = await page.request.get(`${apiBaseUrl}/api/v1/listings/${listingId}`);
+    expect(detailResponse.ok()).toBe(true);
+    await expect(detailResponse.json()).resolves.toMatchObject({ interestTag: "technic" });
   });
 });

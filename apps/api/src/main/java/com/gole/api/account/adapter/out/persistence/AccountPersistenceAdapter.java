@@ -1,5 +1,6 @@
 package com.gole.api.account.adapter.out.persistence;
 
+import com.gole.api.account.application.port.in.ListInterestTagRecipientsUseCase.MarketingRecipient;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Account;
@@ -100,11 +101,44 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     }
 
     @Override
+    public List<String> findMarketingReachableIdsByInterestTag(String tagKey, String afterAccountId, int limit) {
+        Criteria criteria = eligibleMarketingRecipient(tagKey);
+        if (afterAccountId != null && !afterAccountId.isBlank()) {
+            criteria =
+                    new Criteria().andOperator(criteria, Criteria.where("_id").gt(afterAccountId));
+        }
+        Query query =
+                new Query(criteria).with(Sort.by(Sort.Direction.ASC, "_id")).limit(Math.max(1, limit));
+        query.fields().include("_id");
+        return mongoTemplate.find(query, AccountDocument.class).stream()
+                .map(AccountDocument::getId)
+                .toList();
+    }
+
+    @Override
+    public Optional<MarketingRecipient> findMarketingRecipient(String accountId, String tagKey) {
+        Query query = new Query(
+                new Criteria().andOperator(Criteria.where("_id").is(accountId), eligibleMarketingRecipient(tagKey)));
+        return Optional.ofNullable(mongoTemplate.findOne(query, AccountDocument.class))
+                .flatMap(document -> Optional.ofNullable(PhoneNumber.ofNullable(document.getPhoneNumber()))
+                        .map(phoneNumber -> new MarketingRecipient(document.getId(), phoneNumber)));
+    }
+
+    @Override
     public void fenceAdminMutation() {
         mongoTemplate.upsert(
                 Query.query(Criteria.where("_id").is("admin-role-fence")),
                 new Update().inc("version", 1),
                 "account_admin_fences");
+    }
+
+    private Criteria eligibleMarketingRecipient(String tagKey) {
+        return new Criteria()
+                .andOperator(
+                        Criteria.where("interestTags").is(tagKey),
+                        Criteria.where("phoneVerifiedAt").ne(null),
+                        Criteria.where("marketingConsentedAt").ne(null),
+                        Criteria.where("status").is(AccountStatus.VERIFIED.name()));
     }
 
     private AccountDocument toDocument(Account account) {
