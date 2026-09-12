@@ -800,6 +800,7 @@ export interface AdminPromotionPost {
   readonly caption: string;
   readonly mediaUrls: readonly string[];
   readonly authorId: string;
+  readonly sourceCommitSha: string | null;
   readonly status: PromotionPostStatus;
   readonly createdAt: string | null;
   readonly submittedAt: string | null;
@@ -816,6 +817,11 @@ export interface CreatePromotionPostInput {
   /** 업로드 스테이지 키 목록(예: `images/<uuid>.png`) — `POST /api/v1/media/images`의 응답 `key`를
    *  그대로 담는다. 공개 URL이 아니다(promotion-review D8). */
   readonly mediaKeys: readonly string[];
+  readonly sourceCommitSha?: string | null;
+}
+
+export interface PromotionPostExistsResponse {
+  readonly exists: boolean;
 }
 
 export function fetchAdminPromotionPosts(
@@ -833,6 +839,14 @@ export function createAdminPromotionPost(
   input: CreatePromotionPostInput,
 ): Promise<{ readonly id: string }> {
   return post<{ readonly id: string }>(token, "/api/admin/promotion-posts", input);
+}
+
+export function promotionPostExistsForCommit(
+  token: string,
+  sourceCommitSha: string,
+): Promise<PromotionPostExistsResponse> {
+  const params = new URLSearchParams({ sourceCommitSha });
+  return get<PromotionPostExistsResponse>(token, `/api/admin/promotion-posts/exists?${params}`);
 }
 
 export function submitAdminPromotionPost(

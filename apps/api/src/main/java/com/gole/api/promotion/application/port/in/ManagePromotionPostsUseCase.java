@@ -13,6 +13,8 @@ public interface ManagePromotionPostsUseCase {
 
     PromotionPost get(String promotionPostId);
 
+    boolean existsBySourceCommitSha(String sourceCommitSha);
+
     /** 작성자 본인이면 {@code SelfReviewNotAllowedException}. */
     PromotionPost approve(String promotionPostId, String reviewerId);
 

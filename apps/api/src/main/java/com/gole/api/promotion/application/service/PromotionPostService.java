@@ -55,7 +55,13 @@ public class PromotionPostService
                 command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);
         List<String> mediaUrls = command.mediaKeys().stream().map(MediaKey::publicPath).toList();
         PromotionPost draft = PromotionPost.draft(
-                id, command.channel(), command.caption(), mediaUrls, command.authorId(), Instant.now(clock));
+                id,
+                command.channel(),
+                command.caption(),
+                mediaUrls,
+                command.authorId(),
+                command.sourceCommitSha(),
+                Instant.now(clock));
         return repository.save(draft).getId();
     }
 
@@ -74,6 +80,11 @@ public class PromotionPostService
     @Override
     public PromotionPost get(String promotionPostId) {
         return getOrThrow(promotionPostId);
+    }
+
+    @Override
+    public boolean existsBySourceCommitSha(String sourceCommitSha) {
+        return repository.existsBySourceCommitSha(sourceCommitSha);
     }
 
     @Override

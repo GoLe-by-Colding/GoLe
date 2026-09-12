@@ -5,6 +5,7 @@ import com.gole.api.promotion.domain.exception.SelfReviewNotAllowedException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * 홍보 게시물 애그리거트 — Threads 등 외부 채널에 올릴 초안의 작성·검토·발행 상태 전이를
@@ -14,12 +15,14 @@ public final class PromotionPost {
 
     private static final int MAX_CAPTION_LENGTH = 500;
     private static final int MAX_MEDIA_COUNT = 10;
+    private static final Pattern COMMIT_SHA_PATTERN = Pattern.compile("[0-9a-f]{40}");
 
     private final String id;
     private final PromotionChannel channel;
     private final String caption;
     private final List<String> mediaUrls;
     private final String authorId;
+    private final String sourceCommitSha;
     private PromotionPostStatus status;
     private final Instant createdAt;
     private Instant submittedAt;
@@ -35,6 +38,7 @@ public final class PromotionPost {
             String caption,
             List<String> mediaUrls,
             String authorId,
+            String sourceCommitSha,
             PromotionPostStatus status,
             Instant createdAt,
             Instant submittedAt,
@@ -48,6 +52,7 @@ public final class PromotionPost {
         this.caption = requireCaption(caption);
         this.mediaUrls = requireMediaUrls(mediaUrls);
         this.authorId = requireText(authorId, "authorId");
+        this.sourceCommitSha = requireSourceCommitSha(sourceCommitSha);
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.submittedAt = submittedAt;
@@ -60,13 +65,20 @@ public final class PromotionPost {
 
     /** 신규 초안: DRAFT 상태로 생성. */
     public static PromotionPost draft(
-            String id, PromotionChannel channel, String caption, List<String> mediaUrls, String authorId, Instant now) {
+            String id,
+            PromotionChannel channel,
+            String caption,
+            List<String> mediaUrls,
+            String authorId,
+            String sourceCommitSha,
+            Instant now) {
         return new PromotionPost(
                 id,
                 channel,
                 caption,
                 mediaUrls,
                 authorId,
+                sourceCommitSha,
                 PromotionPostStatus.DRAFT,
                 now,
                 null,
@@ -131,6 +143,16 @@ public final class PromotionPost {
         return text;
     }
 
+    private static String requireSourceCommitSha(String value) {
+        if (value == null) {
+            return null;
+        }
+        if (!COMMIT_SHA_PATTERN.matcher(value).matches()) {
+            throw new IllegalArgumentException("sourceCommitSha must be a lowercase 40-character hex string");
+        }
+        return value;
+    }
+
     /** 미디어 URL은 선택이지만, 넣었다면 빈 문자열이 섞이지 않아야 하고 개수 상한을 지켜야 한다.
      *  (T3 — 이미지 첨부. 발행 미리보기용이며 개수 제한은 {@code MediaController}의 배치 업로드
      *  상한과 맞춘다.) */
@@ -174,6 +196,10 @@ public final class PromotionPost {
 
     public String getAuthorId() {
         return authorId;
+    }
+
+    public String getSourceCommitSha() {
+        return sourceCommitSha;
     }
 
     public PromotionPostStatus getStatus() {

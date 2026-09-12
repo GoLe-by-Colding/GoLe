@@ -14,5 +14,7 @@ public interface PromotionPostRepositoryPort {
 
     Optional<PromotionPost> findById(String promotionPostId);
 
+    boolean existsBySourceCommitSha(String sourceCommitSha);
+
     List<PromotionPost> findRecentFirst(PromotionPostStatus status, int limit);
 }
