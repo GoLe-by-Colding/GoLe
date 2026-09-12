@@ -74,30 +74,35 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
           TAG: ${{ steps.tag.outputs.tag }}
           PREV: ${{ steps.tag.outputs.prev }}
-          RANGE: ${{ steps.tag.outputs.range }}
         run: |
           set -euo pipefail
-          # main 은 squash 로만 움직인다. 그래서 git log 범위에는 릴리스 커밋 하나밖에 없고,
-          # 그 안에 무엇이 들었는지 보이지 않는다. 대신 이 커밋을 만든 dev -> main 릴리스 PR 을
-          # 찾아 거기 담긴 커밋(= 각 작업 PR 의 squash 커밋)을 목록으로 뽑는다.
-          pr="$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty' 2>/dev/null || true)"
+          # "이번 릴리스에 무엇이 나갔나" 를 커밋으로 알아낼 수 없다.
+          # main 은 squash 로만 움직여서 dev 의 원본 커밋이 main 에 그대로 남지 않고,
+          # 그래서 `main..dev` 에는 이미 릴리스된 작업의 원본 커밋까지 계속 남아 있다.
+          # (실제로 #80·#88 은 내용이 main 에 있는데 커밋은 dev 에만 있다.)
+          #
+          # 믿을 수 있는 기준은 시각이다 — 직전 릴리스 시점 이후에 dev 로 머지된 PR 이
+          # 이번에 나가는 것이다.
+          if [ -n "$PREV" ]; then
+            since="$(git log -1 --format=%cI "$PREV")"
+            anchor="이전 릴리스 \`$PREV\`"
+          else
+            # 첫 태그라 이전 태그가 없다. main 의 마지막 릴리스 커밋을 기준으로 삼는다.
+            since="$(git log --format='%cI %s' "${SHA}^" | grep -m1 'chore(release)' | cut -d' ' -f1 || true)"
+            anchor="직전 릴리스 커밋"
+          fi
 
           {
             echo "## 이 릴리스에 들어간 것"
             echo
-            if [ -n "$pr" ]; then
-              echo "릴리스 PR: #${pr}"
+            if [ -n "${since:-}" ]; then
+              gh pr list --repo "$REPO" --base dev --state merged --limit 100 \
+                --search "merged:>=${since}" --json number,title \
+                --jq '.[] | "- \(.title) (#\(.number))"' || true
               echo
-              gh pr view "$pr" --repo "$REPO" --json commits \
-                --jq '.commits[].messageHeadline' \
-                | grep -vE '^(Merge |chore\(sync\))' \
-                | sed 's/^/- /' \
-                | head -200
+              echo "<sub>기준: ${anchor} (\`${since}\`) 이후 \`dev\` 로 머지된 PR</sub>"
             else
-              # 릴리스 PR 을 못 찾으면(직접 push 등) 커밋 범위로 대체한다.
-              echo "> 연결된 PR 을 찾지 못해 커밋 범위로 적는다."
-              echo
-              git log --no-merges --format='- %s' "$RANGE" | head -200
+              echo "> 기준 시점을 찾지 못해 목록을 비운다. 릴리스 PR 을 직접 확인한다."
             fi
             echo
             if [ -n "$PREV" ]; then
