@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MINIO_CONTAINER="gole-backup-test-$(date +%s)-$$"
-MC_IMAGE="minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
+MC_IMAGE="quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
 MINIO_ADMIN_TIMEOUT=30s
 MINIO_ADMIN_KILL_AFTER=5s
 export MINIO_ROOT_USER=gole-backup-test
@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 command docker run -d --name "$MINIO_CONTAINER" \
   --env MINIO_ROOT_USER --env MINIO_ROOT_PASSWORD \
-  minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e \
+  quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e \
   server /data >/dev/null
 for attempt in $(seq 1 30); do
   if run_minio_unfreeze_and_prove >/dev/null 2>&1; then break; fi
