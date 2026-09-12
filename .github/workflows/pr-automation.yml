@@ -65,7 +65,9 @@ jobs:
           grep -q '^apps/web/'        <<<"$files" && labels+=("프론트")   || true
           grep -q '^apps/mobile/'     <<<"$files" && labels+=("모바일")   || true
           grep -q '^packages/core/'   <<<"$files" && labels+=("공유코어") || true
-          grep -qE '^(infra/|docker-compose|scripts/|\.github/workflows/)' <<<"$files" && labels+=("인프라") || true
+          grep -qE '^(infra/|docker-compose|scripts/)'  <<<"$files" && labels+=("인프라") || true
+          # 워크플로·dependabot 설정은 인프라가 아니라 파이프라인이다.
+          grep -q  '^\.github/'                          <<<"$files" && labels+=("CI")     || true
 
           # ── 배포영향 ────────────────────────────────────────────────────────
           # main 푸시는 CI 통과 시 CD 를 돌린다. 문서만 고친 PR 도 마찬가지다.
