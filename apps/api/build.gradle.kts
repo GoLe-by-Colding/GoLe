@@ -74,7 +74,7 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
 
     // Swagger / OpenAPI 문서. /swagger-ui.html, /v3/api-docs
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")
