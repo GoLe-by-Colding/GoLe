@@ -99,7 +99,10 @@ protobuf {
     generateProtoTasks {
         all().forEach {
             it.plugins {
-                create("grpc")
+                // protobuf-gradle-plugin 0.10.0 부터 태스크의 plugins 컨테이너가 위 plugins 블록의
+                // 정의를 이미 담고 있어 create("grpc") 가 이름 충돌로 실패한다. 있으면 그대로 쓰고
+                // 없을 때만 만들도록 maybeCreate 로 바꾼다.
+                maybeCreate("grpc")
             }
         }
     }
