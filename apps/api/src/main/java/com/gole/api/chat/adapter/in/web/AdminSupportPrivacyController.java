@@ -129,13 +129,17 @@ public class AdminSupportPrivacyController {
     public record PurgeRequest(
             @NotBlank @Size(max = 200) String confirmation,
             @NotNull PurgeReasonCode reasonCode,
-            @AssertTrue(message = "거래·분쟁·법정 보존 필요성을 검토해야 합니다") boolean preservationReviewed) {}
+
+            @AssertTrue(message = "거래·분쟁·법정 보존 필요성을 검토해야 합니다")
+            boolean preservationReviewed) {}
 
     public record RetentionHoldRequest(
-            @NotBlank @Size(max = 200) String confirmation, @NotNull RetentionHoldReasonCode reasonCode) {}
+            @NotBlank @Size(max = 200) String confirmation,
+            @NotNull RetentionHoldReasonCode reasonCode) {}
 
     public record RetentionReleaseRequest(
-            @NotBlank @Size(max = 200) String confirmation, @NotNull RetentionReleaseReasonCode reasonCode) {}
+            @NotBlank @Size(max = 200) String confirmation,
+            @NotNull RetentionReleaseReasonCode reasonCode) {}
 
     public record PurgeResponse(
             String receiptId,

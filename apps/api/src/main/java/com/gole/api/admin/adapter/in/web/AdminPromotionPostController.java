@@ -127,5 +127,6 @@ public class AdminPromotionPostController {
             @NotBlank @Size(max = 500) String caption,
             @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys) {}
 
-    public record RejectPromotionPostRequest(@NotBlank @Size(max = 1000) String reason) {}
+    public record RejectPromotionPostRequest(
+            @NotBlank @Size(max = 1000) String reason) {}
 }

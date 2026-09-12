@@ -21,19 +21,10 @@ export interface PricePoint {
 export type MarketDataState = "EMPTY" | "OBSERVATIONS_ONLY" | "ESTABLISHED";
 
 export type PriceTransactionSource =
-  | "platform_payment"
-  | "platform_test"
-  | "direct_trade"
-  | "demo_seed"
-  | "legacy_unverified";
+  "platform_payment" | "platform_test" | "direct_trade" | "demo_seed" | "legacy_unverified";
 
 export type PriceProvenanceMode =
-  | "NONE"
-  | "FIRST_PARTY"
-  | "DIRECT_TRADE"
-  | "DEMO"
-  | "LEGACY_UNVERIFIED"
-  | "MIXED";
+  "NONE" | "FIRST_PARTY" | "DIRECT_TRADE" | "DEMO" | "LEGACY_UNVERIFIED" | "MIXED";
 
 export interface PriceProvenance {
   readonly mode: PriceProvenanceMode;

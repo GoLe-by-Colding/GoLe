@@ -15,7 +15,9 @@ public final class DiscoveryDtos {
 
     public record FollowRequest(@NotBlank String sellerId) {}
 
-    public record WishlistRequest(@NotNull WishlistTargetType targetType, @NotBlank String targetId) {}
+    public record WishlistRequest(
+            @NotNull WishlistTargetType targetType,
+            @NotBlank String targetId) {}
 
     public record ListingSummaryResponse(
             String id,

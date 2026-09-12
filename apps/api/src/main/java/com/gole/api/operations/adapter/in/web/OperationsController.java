@@ -33,7 +33,9 @@ public class OperationsController {
     }
 
     public record ExecuteRequest(
-            @NotBlank @Pattern(regexp = "MANUAL_CHECK|INCIDENT_REVIEW|RETRY_FAILED") String reasonCode,
+            @NotBlank @Pattern(regexp = "MANUAL_CHECK|INCIDENT_REVIEW|RETRY_FAILED")
+            String reasonCode,
+
             @Size(max = 36) String retryOf) {}
 
     public record Snapshot(List<OperationsService.Job> jobs, List<OperationRun> history) {}
