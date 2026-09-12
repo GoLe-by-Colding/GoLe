@@ -48,11 +48,11 @@ EXPECTED_IMAGES = {
     ),
     "frontend": "gole/frontend:local",
     "minio": (
-        "minio/minio@sha256:"
+        "quay.io/minio/minio@sha256:"
         "14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
     ),
     "minio-init": (
-        "minio/mc:latest@sha256:"
+        "quay.io/minio/mc:latest@sha256:"
         "a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
     ),
     "mongo": (
@@ -76,17 +76,24 @@ EXPECTED_IMAGES = {
 
 LKG_PINNED_IMAGE_PATTERNS = {
     "certbot": r"certbot/certbot:latest@sha256:[0-9a-f]{64}",
-    "minio": r"minio/minio@sha256:[0-9a-f]{64}",
-    "minio-init": r"minio/mc:latest@sha256:[0-9a-f]{64}",
+    "minio": r"quay\.io/minio/minio@sha256:[0-9a-f]{64}",
+    "minio-init": r"quay\.io/minio/mc:latest@sha256:[0-9a-f]{64}",
     "mongo": r"mongo:7@sha256:[0-9a-f]{64}",
     "mongo-init": r"mongo:7@sha256:[0-9a-f]{64}",
     "nginx": r"nginx:1\.29-alpine@sha256:[0-9a-f]{64}",
     "redis": r"redis:7-alpine@sha256:[0-9a-f]{64}",
 }
 
+# 이미 돌고 있는 레거시 호스트를 채택할 때 기대하는 이미지. 그 호스트는 Docker Hub 에서
+# 받은 minio 이미지를 그대로 돌리고 있으므로(LEGACY_ADOPTION_SHA 시점의 compose),
+# 레지스트리를 quay.io 로 옮긴 뒤에도 이 경로만은 옛 참조를 그대로 받아야 한다.
 LEGACY_ADOPTION_IMAGES = {
     **EXPECTED_IMAGES,
     "certbot": "certbot/certbot:latest",
+    "minio": (
+        "minio/minio@sha256:"
+        "14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+    ),
     "minio-init": "minio/mc:latest",
     "mongo": "mongo:7",
     "mongo-init": "mongo:7",
