@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # 흐름이 작업 브랜치 -> dev -> main 이므로 dev 대상 PR 에서도 돌린다.
+  # (여기가 [main] 뿐이면 dev 로 들어가는 변경은 dev->main PR 까지 아무도 검증하지 않는다)
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 # 동일 ref의 이전 실행은 취소(최신만 유지)
 concurrency:

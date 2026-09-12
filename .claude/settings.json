@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm format:check)",
+      "Bash(pnpm format:check *)",
+      "Bash(pnpm fsd:lint)",
+      "Bash(pnpm fsd:lint *)",
+      "Bash(pnpm build)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm test)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm --filter web lint*)",
+      "Bash(pnpm --filter web typecheck*)",
+      "Bash(pnpm --filter web format:check*)",
+      "Bash(pnpm --filter web fsd:lint*)",
+      "Bash(pnpm --filter web build*)",
+      "Bash(pnpm --filter web e2e*)",
+      "Bash(pnpm exec playwright test*)",
+      "Bash(pnpm exec prettier --check*)",
+      "Bash(node scripts/gradle.mjs test*)",
+      "Bash(node scripts/gradle.mjs spotlessCheck*)",
+      "Bash(node scripts/gradle.mjs :compileJava*)",
+      "Bash(node scripts/gradle.mjs :compileTestJava*)",
+      "Bash(./gradlew test*)",
+      "Bash(./gradlew spotlessCheck*)",
+      "Bash(./gradlew integrationTest*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(curl -s http://localhost:8080/actuator/health*)",
+      "Bash(orca status)",
+      "Bash(orca status *)",
+      "Bash(orca skills get *)",
+      "Bash(orca repo list)",
+      "Bash(orca repo list *)",
+      "Bash(orca worktree list)",
+      "Bash(orca worktree list *)",
+      "Bash(orca worktree show *)",
+      "Bash(orca worktree ps *)",
+      "Bash(orca worktree current *)",
+      "Bash(orca worktree set *)",
+      "Bash(orca terminal *)",
+      "Bash(orca terminal list)",
+      "Bash(orca tab *)",
+      "Bash(orca tab list)",
+      "Bash(orca goto *)",
+      "Bash(orca snapshot)",
+      "Bash(orca snapshot *)",
+      "Bash(orca screenshot)",
+      "Bash(orca screenshot *)",
+      "Bash(orca full-screenshot *)",
+      "Bash(orca reload *)",
+      "Bash(orca back *)",
+      "Bash(orca wait *)",
+      "Bash(orca console *)",
+      "Bash(orca network *)",
+      "Bash(orca emulator *)"
+    ],
+    "deny": [
+      "Bash(orca worktree create *)",
+      "Bash(orca worktree rm *)",
+      "Bash(git push --force*)",
+      "Bash(git push origin main*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/dev-server-mark.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/dev-server-guard.sh\"",
+            "timeout": 15,
+            "statusMessage": "로컬 서버 정리 확인 중"
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  }
+}

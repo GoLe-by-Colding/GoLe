@@ -25,6 +25,7 @@ public record ListingResponse(
         List<String> photoUrls,
         String catalogSetNumber,
         String category,
+        String interestTag,
         String status,
         Instant createdAt) {
 
@@ -48,6 +49,9 @@ public record ListingResponse(
                         .toList(),
                 listing.getCatalogSetNumber(),
                 listing.getCategory().key(),
+                listing.getInterestTag() == null
+                        ? null
+                        : listing.getInterestTag().key(),
                 listing.getStatus().name().toLowerCase(),
                 listing.getCreatedAt());
     }

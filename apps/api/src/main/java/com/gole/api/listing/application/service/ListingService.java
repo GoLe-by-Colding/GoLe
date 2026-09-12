@@ -9,6 +9,7 @@ import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
 import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
+import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
@@ -44,6 +45,7 @@ public class ListingService
     private final ListingRepositoryPort listingRepository;
     private final ListingIdGeneratorPort idGenerator;
     private final NewListingNotifierPort newListingNotifier;
+    private final InterestTagListingNotifierPort interestTagListingNotifier;
     private final ManageMediaAssetsUseCase mediaAssets;
     private final Clock clock;
 
@@ -51,11 +53,13 @@ public class ListingService
             ListingRepositoryPort listingRepository,
             ListingIdGeneratorPort idGenerator,
             NewListingNotifierPort newListingNotifier,
+            InterestTagListingNotifierPort interestTagListingNotifier,
             ManageMediaAssetsUseCase mediaAssets,
             Clock clock) {
         this.listingRepository = listingRepository;
         this.idGenerator = idGenerator;
         this.newListingNotifier = newListingNotifier;
+        this.interestTagListingNotifier = interestTagListingNotifier;
         this.mediaAssets = mediaAssets;
         this.clock = clock;
     }
@@ -75,12 +79,25 @@ public class ListingService
                 command.photoKeys(),
                 command.catalogSetNumber(),
                 command.category(),
+                command.interestTag(),
                 Instant.now(clock));
         mediaAssets.replaceReferences(
                 command.sellerId(), MediaTargetType.LISTING, listingId, command.photoKeys(), true);
         Listing saved = listingRepository.save(listing);
         newListingNotifier.notifyFollowers(saved.getSellerId(), saved.getId(), saved.getTitle());
+        if (saved.getInterestTag() != null) {
+            notifyInterestTagSubscribers(saved);
+        }
         return saved.getId();
+    }
+
+    private void notifyInterestTagSubscribers(Listing listing) {
+        try {
+            interestTagListingNotifier.notifyInterestTagSubscribers(
+                    listing.getSellerId(), listing.getId(), listing.getTitle(), listing.getInterestTag());
+        } catch (RuntimeException ignored) {
+            // 알림 연계 장애가 매물 등록을 되돌리지 않게 출력 포트 경계에서 한 번 더 격리한다.
+        }
     }
 
     @Override

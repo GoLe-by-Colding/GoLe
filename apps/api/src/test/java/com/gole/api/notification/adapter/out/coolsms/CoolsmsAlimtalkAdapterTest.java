@@ -97,7 +97,7 @@ class CoolsmsAlimtalkAdapterTest {
 
         assertThatThrownBy(() -> adapter.send(new SendAlimtalkCommand("01012345678", "TEMPLATE-1", Map.of())))
                 .isInstanceOfSatisfying(AlimtalkSendException.class, exception -> assertThat(exception.getFailureType())
-                        .isEqualTo(FailureType.PROVIDER_FAILURE));
+                        .isEqualTo(FailureType.ACCEPTANCE_UNKNOWN));
     }
 
     @Test

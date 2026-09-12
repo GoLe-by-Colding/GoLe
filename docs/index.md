@@ -33,6 +33,7 @@
 - [러닝북 — 증상별 대응](operations/runbook.md)
 - [분석 동의](operations/analytics-consent.md)
 - [디스코드 알림 라우팅](operations/discord-routing.md)
+- [관심태그 매물 알림톡](operations/interest-tag-alimtalk.md)
 - [미디어 생명주기](operations/media-lifecycle.md)
 - [포트원 카카오페이](operations/portone-kakaopay.md)
 - [제3자 제공 동의](operations/third-party-provision-consent.md)
