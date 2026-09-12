@@ -323,6 +323,35 @@ jobs:
             exit 1
           fi
 
+      - name: Boot stack unit contract
+        run: |
+          bash -n infra/gcp/scripts/stack-start.sh
+          # 이 유닛이 실패해도 호스트가 꺼지면 안 된다. 사람이 고칠 수 있어야 한다.
+          if grep -qE '^\s*OnFailure' infra/gcp/systemd/gole-stack.service; then
+            echo "gole-stack.service 에 OnFailure 가 있다. 이 유닛의 실패는 전원 차단으로 이어지면 안 된다." >&2
+            exit 1
+          fi
+          # up 은 배포되지 않은 서비스를 새로 만들고 build: 가 있는 서비스를 부팅 중에 빌드한다.
+          if grep -vE '^\s*#' infra/gcp/scripts/stack-start.sh \
+            | grep -qE 'compose[^|]*\bup\b'; then
+            echo "stack-start.sh 가 docker compose up 을 쓴다. start 만 써야 한다." >&2
+            exit 1
+          fi
+          grep -q 'compose\[@\]}" start' infra/gcp/scripts/stack-start.sh || {
+            echo "stack-start.sh 에서 docker compose start 호출을 찾지 못했다." >&2
+            exit 1
+          }
+          # 부트스트랩이 실제로 설치·활성화하는지 (유닛 파일만 추가하면 죽은 코드가 된다)
+          grep -q 'gole-stack.service' infra/gcp/scripts/bootstrap-host.sh || {
+            echo "bootstrap-host.sh 가 gole-stack.service 를 설치하지 않는다." >&2
+            exit 1
+          }
+          grep -q 'systemctl enable gole-stack.service' infra/gcp/scripts/bootstrap-host.sh || {
+            echo "bootstrap-host.sh 가 gole-stack.service 를 enable 하지 않는다." >&2
+            exit 1
+          }
+          echo "부팅 스택 유닛 계약 통과."
+
       - name: Secret Sync log security contract
         run: |
           GOLE_BOOTSTRAP_CONTRACT_STATIC_ONLY=true \

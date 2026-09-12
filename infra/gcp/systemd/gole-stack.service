@@ -1,0 +1,29 @@
+[Unit]
+# 부팅 시 운영 컨테이너를 다시 켠다.
+#
+# 왜 필요한가: 컨테이너는 restart: unless-stopped 이지만, docker 가 "명시적으로 stop 됨"
+# 으로 기록한 컨테이너는 되살리지 않는다. 2026-09-11 에 unattended-upgrades 가 libc6 를
+# 교체하며 docker.service 를 재시작했고, 그 과정에서 컨테이너가 그 상태로 남아 이후
+# 어떤 부팅에서도 자동 기동되지 않았다. 사람이 docker start 를 칠 때까지 8일이 걸렸다.
+Description=GoLe production container stack
+Documentation=https://github.com/GoLe-by-Colding/GoLe/pull/121
+After=docker.service gole-metadata-firewall.service gole-cloud-broker.service
+Wants=docker.service
+ConditionPathExists=/etc/gole/deployed.sha
+ConditionPathExists=/etc/gole/gole.env
+ConditionPathExists=/etc/gole/infra.env
+
+# OnFailure 를 두지 않는다. 이 유닛이 실패해도 호스트는 살아 있어야 사람이 고칠 수 있다.
+# (gole-cloud-broker · gole-cost-guard-watchdog · gole-metadata-firewall 은
+#  OnFailure=poweroff.target 이다. 이 유닛은 그 부류가 아니다.)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# 컨테이너 이미지 pull·build 가 끼어들 수 있는 경로가 아니므로 오래 걸리지 않지만,
+# mongo 헬스체크 대기 등을 고려해 넉넉히 잡는다.
+TimeoutStartSec=300
+ExecStart=/usr/local/sbin/gole-stack-start
+
+[Install]
+WantedBy=multi-user.target
