@@ -75,7 +75,9 @@ jobs:
 
           if [ ${#labels[@]} -gt 0 ]; then
             printf '붙일 라벨: %s\n' "${labels[*]}"
-            gh pr edit "$PR" --repo "$REPO" $(printf -- '--add-label %q ' "${labels[@]}")
+            args=()
+            for l in "${labels[@]}"; do args+=(--add-label "$l"); done
+            gh pr edit "$PR" --repo "$REPO" "${args[@]}"
           fi
 
           # ── 담당자 ──────────────────────────────────────────────────────────

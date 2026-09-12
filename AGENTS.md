@@ -146,6 +146,10 @@ pnpm --filter web typecheck      # tsc --noEmit
 pnpm --filter web fsd:lint       # steiger (FSD 구조)
 pnpm --filter web build
 
+# 워크플로 — CI 의 Infra 잡이 같은 이미지로 돌린다. 고치기 전에 여기서 먼저 본다.
+docker run --rm -v "$PWD:/repo" -w /repo \
+  rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
 # 백엔드
 cd apps/api && ./gradlew spotlessCheck   # palantir-java-format. 실패 시 spotlessApply
 cd apps/api && ./gradlew test            # 단위 테스트 (*IntegrationTest 제외)
@@ -168,6 +172,11 @@ pnpm --filter web e2e:ui
 **메서드명은 영문(`place_rejectsSelfPurchase`), 설명은 한국어 `@DisplayName`이다.** `--tests`가
 받는 건 메서드명이므로 한국어를 넣으면 `No tests found for given includes`로 **빌드가 실패한다**
 (조용히 넘어가지는 않는다). E2E의 `-g`는 반대로 제목을 보므로 한국어가 맞다.
+
+⚠️ **`.github/workflows/*.yml`을 고쳤으면 actionlint를 돌린다.** CI 의 `Infra` 잡이
+`GitHub Actions contract` 단계에서 같은 다이제스트의 이미지로 검사하고, **shellcheck 까지
+돌린다** — `run:` 블록의 따옴표 누락(SC2046) 같은 것이 여기서 걸린다. YAML 파싱만 통과했다고
+초록이 아니다.
 
 ⚠️ **Gradle 테스트는 입력이 안 바뀌면 UP-TO-DATE로 스킵된다.** 통과했다고 판단하기 전에
 `--rerun-tasks`를 붙이거나 `cleanTest test`로 실제 실행 여부를 확인한다.
