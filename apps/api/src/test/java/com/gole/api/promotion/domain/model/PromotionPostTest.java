@@ -14,8 +14,7 @@ class PromotionPostTest {
     private static final Instant NOW = Instant.EPOCH;
 
     private PromotionPost draft() {
-        return PromotionPost.draft(
-                "promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", null, NOW);
+        return PromotionPost.draft("promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", null, NOW);
     }
 
     @Test
@@ -28,9 +27,8 @@ class PromotionPostTest {
     @Test
     void rejectsCaptionOver500Chars() {
         String tooLong = "a".repeat(501);
-        assertThatThrownBy(() ->
-                        PromotionPost.draft(
-                                "promo-1", PromotionChannel.THREADS, tooLong, List.of(), "author-1", null, NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, tooLong, List.of(), "author-1", null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -47,17 +45,15 @@ class PromotionPostTest {
     void rejectsMoreThanTenMediaUrls() {
         List<String> elevenUrls = List.of("u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11");
 
-        assertThatThrownBy(() ->
-                        PromotionPost.draft(
-                                "promo-1", PromotionChannel.THREADS, "캡션", elevenUrls, "author-1", null, NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", elevenUrls, "author-1", null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsBlankMediaUrlEntries() {
-        assertThatThrownBy(() ->
-                        PromotionPost.draft(
-                                "promo-1", PromotionChannel.THREADS, "캡션", List.of(" "), "author-1", null, NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(" "), "author-1", null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
