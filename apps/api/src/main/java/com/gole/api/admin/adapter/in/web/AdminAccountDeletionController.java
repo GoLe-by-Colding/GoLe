@@ -121,11 +121,14 @@ public class AdminAccountDeletionController {
     }
 
     public record HoldRequest(
-            @NotBlank @Size(max = 64) String confirmation, @NotNull AccountDeletionHoldReason reasonCode) {}
+            @NotBlank @Size(max = 64) String confirmation,
+            @NotNull AccountDeletionHoldReason reasonCode) {}
 
-    public record ConfirmationRequest(@NotBlank @Size(max = 64) String confirmation) {}
+    public record ConfirmationRequest(
+            @NotBlank @Size(max = 64) String confirmation) {}
 
-    public record CompletionRequest(@NotBlank @Size(max = 64) String confirmation, boolean preservationReviewed) {}
+    public record CompletionRequest(
+            @NotBlank @Size(max = 64) String confirmation, boolean preservationReviewed) {}
 
     public record DeletionRow(
             String requestId,

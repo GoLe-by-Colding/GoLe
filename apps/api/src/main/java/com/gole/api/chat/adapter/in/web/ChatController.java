@@ -311,7 +311,10 @@ public class ChatController {
     public record CreateRoomRequest(@NotBlank String listingId, String buyerId, String sellerId) {}
 
     public record SendMessageRequest(
-            String senderId, @NotBlank @jakarta.validation.constraints.Size(max = 2000) String content) {}
+            String senderId,
+
+            @NotBlank @jakarta.validation.constraints.Size(max = 2000)
+            String content) {}
 
     public record MarkReadRequest(@NotBlank String lastMessageId) {}
 
