@@ -155,7 +155,7 @@
 
 - **T1. 실제 Threads Graph API 연동.** 자격증명(앱 ID·시크릿·장기 액세스 토큰)이 준비되면
   `SocialPublishPort` 구현체를 `StubThreadsPublishAdapter`에서 실제 어댑터로 교체한다. 도메인·
-  컨트롤러·프론트는 변경 불필요. `GoLe-obsidian/08_Improvements/알려진 개선 과제.md`에 P1로
+  컨트롤러·프론트는 변경 불필요. `GoLe-obsidian/08_개선과제/알려진 개선 과제.md`에 P1로
   기록.
 - **T2. 배포/CI 이벤트 기반 초안 자동 생성(D6).** 릴리즈 노트나 PR 병합을 트리거로 초안을
   미리 채워주는 것은 사람이 검토하는 초안의 출발점을 앞당길 뿐, 이 스펙의 승인 게이트 자체를

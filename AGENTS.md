@@ -146,6 +146,10 @@ pnpm --filter web typecheck      # tsc --noEmit
 pnpm --filter web fsd:lint       # steiger (FSD 구조)
 pnpm --filter web build
 
+# 워크플로 — CI 의 Infra 잡이 같은 이미지로 돌린다. 고치기 전에 여기서 먼저 본다.
+docker run --rm -v "$PWD:/repo" -w /repo \
+  rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
 # 백엔드
 cd apps/api && ./gradlew spotlessCheck   # palantir-java-format. 실패 시 spotlessApply
 cd apps/api && ./gradlew test            # 단위 테스트 (*IntegrationTest 제외)
@@ -168,6 +172,11 @@ pnpm --filter web e2e:ui
 **메서드명은 영문(`place_rejectsSelfPurchase`), 설명은 한국어 `@DisplayName`이다.** `--tests`가
 받는 건 메서드명이므로 한국어를 넣으면 `No tests found for given includes`로 **빌드가 실패한다**
 (조용히 넘어가지는 않는다). E2E의 `-g`는 반대로 제목을 보므로 한국어가 맞다.
+
+⚠️ **`.github/workflows/*.yml`을 고쳤으면 actionlint를 돌린다.** CI 의 `Infra` 잡이
+`GitHub Actions contract` 단계에서 같은 다이제스트의 이미지로 검사하고, **shellcheck 까지
+돌린다** — `run:` 블록의 따옴표 누락(SC2046) 같은 것이 여기서 걸린다. YAML 파싱만 통과했다고
+초록이 아니다.
 
 ⚠️ **Gradle 테스트는 입력이 안 바뀌면 UP-TO-DATE로 스킵된다.** 통과했다고 판단하기 전에
 `--rerun-tasks`를 붙이거나 `cleanTest test`로 실제 실행 여부를 확인한다.
@@ -273,11 +282,11 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 
 | 무엇을 했나 | 어디에 쓴다 |
 |---|---|
-| 기능·수정을 하나 끝냈다 | `06_Development_Log/YYYY-MM-DD_제목.md` (새 파일) |
-| 아키텍처·도메인 구조가 바뀌었다 | `02_Architecture/` · `03_Backend/02_Domains/` 해당 문서 갱신 |
-| 화면·디자인 시스템이 바뀌었다 | `04_Frontend/` 해당 문서 갱신 |
-| 결정이 미뤄졌거나 뒤집혔다 | `01_Project_Overview/기획 갭 목록.md` |
-| 운영에서 문제가 났다 | `07_VOC_Issues/` |
+| 기능·수정을 하나 끝냈다 | `06_개발로그/YYYY-MM-DD_제목.md` (새 파일) |
+| 아키텍처·도메인 구조가 바뀌었다 | `02_아키텍처/` · `03_백엔드/02_도메인/` 해당 문서 갱신 |
+| 화면·디자인 시스템이 바뀌었다 | `04_프론트엔드/` 해당 문서 갱신 |
+| 결정이 미뤄졌거나 뒤집혔다 | `01_기획/기획 갭 목록.md` |
+| 운영에서 문제가 났다 | `07_이슈기록/` |
 
 - 파일 앞에 `tags` · `created` · `updated` 프런트매터를 넣는다. 기존 문서를 열어 형식을 맞춘다.
 - 문서끼리는 `[[위키링크]]`로 잇는다. 고아 문서를 만들지 않는다.
@@ -293,6 +302,10 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 | `cd.yml` | `ci.yml` **성공** + `main` **푸시**일 때만 | self-hosted 러너에서 `deploy.sh all` |
 | `e2e.yml` | 매일 03:00 KST | 배포 사이트 읽기전용 스모크(`E2E_BASE_URL`) |
 | `production-health.yml` | 수동 실행만 | 운영 헬스체크 |
+| `release-tag.yml` | `ci.yml` **성공** + `main` **푸시** | CalVer 태그 + 릴리스 노트 |
+| `pr-automation.yml` | PR 열림·갱신 | 라벨·담당자 자동 지정 |
+| `pr-convention.yml` | PR 열림·제목 수정 | 제목·브랜치·대상 규약 검사 |
+| `sync-dev.yml` | `ci.yml` **성공** + `main` **푸시** · 수동 | `main` → `dev` 자동 역병합 |
 
 - **CI가 깨지면 CD는 아예 안 돈다.** PR에서 초록이어도 배포되지 않는다 — `main` 푸시여야 한다.
   반대로 문서만 고친 커밋도 `main`에 올리면 배포가 한 번 돈다.
@@ -332,8 +345,45 @@ conventional 형식 하나만 쓴다. `.kiro/steering/dev-conventions.md`의 옛
 브랜치는 `<type>/<kebab-case>` — `feat/card-payment`, `fix/profile-stuck-loading`.
 `temp`·`tmp`·도구가 자동 생성한 이름(`<계정>/...`)을 쓰지 않는다. 머지되면 원격 브랜치도 지운다.
 
-흐름은 **작업 브랜치 → `dev` → `main`** 이다. `main`으로 바로 PR을 열지 않는다
-(dependabot은 예외다 — 기본 브랜치가 `main`이라 그쪽으로 열린다).
+### 흐름은 하나뿐이다
+
+```
+<type>/<이름>  ──PR──>  dev  ──릴리스 PR──>  main  ──> 태그 + CD
+   작업 브랜치            통합             운영 기준선
+```
+
+- **작업 브랜치는 `dev`로 보낸다.** `main`으로 바로 PR을 열지 않는다.
+- **`main`은 `dev → main` 릴리스 PR로만 연다.** dependabot도 예외가 아니다 —
+  `dependabot.yml`의 `target-branch: dev`로 봇 PR도 `dev`로 온다(2026-09-12 변경).
+- 머지는 **squash**다. `main`의 커밋 하나 = PR 하나. `dev`는 그 squash들과
+  `chore(sync)` 역병합이 섞인다.
+- **`main` 푸시가 릴리스다.** CI 성공 시 `release-tag.yml`이 CalVer 태그(`v2026.09.12-1`)와
+  릴리스 노트를 만들고, `cd.yml`이 운영 배포를 시도한다.
+  릴리스 노트는 `git log`가 아니라 **릴리스 PR에 담긴 커밋 목록**에서 뽑는다 — `main`은
+  squash로만 움직여서 커밋 범위에 릴리스 커밋 하나밖에 없기 때문이다.
+- 릴리스 후 **`main` → `dev` 역병합은 `sync-dev.yml`이 자동으로 한다.** squash 때문에 두
+  브랜치의 이력이 갈라지므로 빼먹으면 다음 릴리스 PR에 충돌이 쌓이는데, 사람이 기억할 일이
+  아니라 판단했다. **충돌이 나면 자동으로 풀지 않고 이슈를 열고 멈춘다** — 잘못 푼 역병합은
+  CI를 통과하면서 코드를 조용히 되돌리기 때문이다.
+  충돌이 **두 번 연속** 나면 설계 문제로 보고 `required_linear_history`를 끄는 쪽을 검토한다.
+
+### PR을 열면 자동으로 붙는 것
+
+`pr-automation.yml`이 라벨과 담당자를 채운다. **손으로 붙이지 않아도 된다.**
+
+| 무엇 | 어디서 읽나 |
+|---|---|
+| 종류 (`기능`·`버그수정`·`리팩터링`·`설정`·`문서`·`테스트`·`성능`·`CI`) | 제목의 type, 없으면 브랜치 접두사 |
+| 영역 (`백엔드`·`프론트`·`모바일`·`공유코어`·`인프라`) | 바뀐 경로 |
+| `배포영향` | base가 `main`일 때 |
+| 담당자 | PR 작성자 (이미 지정돼 있으면 건드리지 않는다) |
+
+`pr-convention.yml`이 제목·브랜치 이름·PR 대상을 검사한다. **필수 체크가 아니라 머지를
+막지는 않지만**, 어긋나면 이유를 남긴다. 라벨은 전부 한국어다 — 영어 라벨은 2026-09-12에
+이름을 바꿨다(기존 PR 연결은 유지).
+
+dependabot PR은 `GITHUB_TOKEN`이 읽기 전용이라 이 워크플로가 라벨을 못 붙인다.
+대신 `dependabot.yml`의 `labels:`가 봇 쪽에서 직접 붙인다.
 
 - **`Co-Authored-By: Claude` 등 AI 작성 표기를 붙이지 않는다.**
 - 백엔드/프론트는 레이어별로 커밋을 분리한다.
