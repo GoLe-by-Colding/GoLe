@@ -3,51 +3,109 @@ import path from "node:path";
 import { configureCore, setSessionStore, uploadImages, type UploadableImage } from "@gole/core";
 import {
   createAdminPromotionPost,
-  fetchAdminPromotionPosts,
+  promotionPostExistsForCommit,
   submitAdminPromotionPost,
   type AdminPromotionPost,
 } from "@gole/core/admin";
 import { signIn } from "@gole/core/user";
-import { MAX_VISIBLE_CAPTION_LENGTH } from "./caption";
+import { assertGitSha } from "./scan";
 
 const DEFAULT_BASE_URL = "https://gole.co.kr";
-const MARKER_PREFIX = "\u2060\u2063\u2060";
-const MARKER_SUFFIX = "\u2060\u2063\u2063";
-const HEX = /^[0-9a-f]{40}$/;
+const DEFAULT_MAX_DRAFTS = 3;
+export const MAX_CAPTION_LENGTH = 450;
 
-let sessionToken = "";
-
-export function encodeCommitMarker(sha: string): string {
-  const normalized = sha.toLowerCase();
-  if (!HEX.test(normalized)) throw new Error(`올바르지 않은 git SHA: ${sha}`);
-  const encoded = [...normalized]
-    .map((digit) => String.fromCharCode(0xfe00 + Number.parseInt(digit, 16)))
-    .join("");
-  return `${MARKER_PREFIX}${encoded}${MARKER_SUFFIX}`;
+export interface PromotionDraftInput {
+  readonly sha: string;
+  readonly caption: string;
+  readonly screenshotPaths: readonly string[];
 }
 
-export function extractCommitMarker(caption: string): string | null {
-  const start = caption.lastIndexOf(MARKER_PREFIX);
-  if (start < 0 || !caption.endsWith(MARKER_SUFFIX)) return null;
-  const encoded = caption.slice(start + MARKER_PREFIX.length, -MARKER_SUFFIX.length);
-  if (encoded.length !== 40) return null;
-  const digits = [...encoded].map((character) => character.charCodeAt(0) - 0xfe00);
-  if (digits.some((digit) => digit < 0 || digit > 15)) return null;
-  return digits.map((digit) => digit.toString(16)).join("");
+export interface PublishDependencies {
+  readonly exists: typeof promotionPostExistsForCommit;
+  readonly upload: typeof uploadImages;
+  readonly create: typeof createAdminPromotionPost;
+  readonly submit: typeof submitAdminPromotionPost;
 }
 
-export function captionWithCommitMarker(caption: string, sha: string): string {
-  const visible = caption.trim();
-  if (visible.length === 0 || visible.length > MAX_VISIBLE_CAPTION_LENGTH) {
-    throw new Error(`캡션 본문은 1~${MAX_VISIBLE_CAPTION_LENGTH}자여야 함`);
+const DEFAULT_DEPENDENCIES: PublishDependencies = {
+  exists: promotionPostExistsForCommit,
+  upload: uploadImages,
+  create: createAdminPromotionPost,
+  submit: submitAdminPromotionPost,
+};
+
+function maximumDrafts(): number {
+  const value = Number(process.env.PROMOTION_AGENT_MAX_DRAFTS?.trim() || DEFAULT_MAX_DRAFTS);
+  if (!Number.isInteger(value) || value < 1 || value > 10) {
+    throw new Error("PROMOTION_AGENT_MAX_DRAFTS는 1~10 사이의 정수여야 함");
   }
-  const result = `${visible}${encodeCommitMarker(sha)}`;
-  if (result.length > 500) throw new Error("커밋 지문을 포함한 캡션이 500자를 초과함");
-  return result;
+  return value;
 }
 
-export async function authenticatePromotionAgent(): Promise<string> {
-  configureCore({ apiBaseUrl: process.env.PROMOTION_AGENT_BASE_URL ?? DEFAULT_BASE_URL });
+export function normalizeCaption(value: string): string {
+  const caption = value.trim();
+  if (caption.length === 0 || caption.length > MAX_CAPTION_LENGTH) {
+    throw new Error(`캡션 본문은 1~${MAX_CAPTION_LENGTH}자여야 함`);
+  }
+  return caption;
+}
+
+export function createPromotionDraftSubmitter(
+  token: string,
+  maxDrafts = maximumDrafts(),
+  dependencies: PublishDependencies = DEFAULT_DEPENDENCIES,
+): (input: PromotionDraftInput) => Promise<AdminPromotionPost> {
+  let submittedDrafts = 0;
+  const submittedShas = new Set<string>();
+  let submissionQueue = Promise.resolve();
+
+  const submit = async ({ sha, caption, screenshotPaths }: PromotionDraftInput) => {
+    assertGitSha(sha);
+    const normalizedCaption = normalizeCaption(caption);
+    if (screenshotPaths.length === 0 || screenshotPaths.length > 10) {
+      throw new Error("초안에는 스크린샷이 1~10장 필요함");
+    }
+    if (submittedDrafts >= maxDrafts) {
+      throw new Error(`이번 실행의 초안 생성 한도(${maxDrafts}건)를 초과함`);
+    }
+    if (submittedShas.has(sha) || (await dependencies.exists(token, sha)).exists) {
+      throw new Error(`이미 홍보 초안이 존재하는 커밋: ${sha}`);
+    }
+
+    const files: UploadableImage[] = await Promise.all(
+      screenshotPaths.map(async (screenshotPath) => {
+        const bytes = await readFile(screenshotPath);
+        return new File([new Uint8Array(bytes)], path.basename(screenshotPath), {
+          type: "image/png",
+        });
+      }),
+    );
+    const uploaded = await dependencies.upload(files);
+    const created = await dependencies.create(token, {
+      channel: "THREADS",
+      caption: normalizedCaption,
+      mediaKeys: uploaded.map(({ key }) => key),
+      sourceCommitSha: sha,
+    });
+    const submitted = await dependencies.submit(token, created.id);
+    submittedDrafts += 1;
+    submittedShas.add(sha);
+    return submitted;
+  };
+
+  return (input) => {
+    const result = submissionQueue.then(() => submit(input));
+    submissionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+}
+
+async function authenticatePromotionAgent(): Promise<string> {
+  configureCore({ apiBaseUrl: process.env.PROMOTION_AGENT_BASE_URL?.trim() || DEFAULT_BASE_URL });
+  let sessionToken = "";
   setSessionStore({
     readAuthorizationHeader: () =>
       sessionToken.length > 0 ? { Authorization: `Bearer ${sessionToken}` } : {},
@@ -64,47 +122,14 @@ export async function authenticatePromotionAgent(): Promise<string> {
   return sessionToken;
 }
 
-export async function fetchExistingCommitShas(token: string): Promise<ReadonlySet<string>> {
-  const posts = await fetchAdminPromotionPosts(token, 500);
-  return new Set(
-    posts
-      .map((post) => extractCommitMarker(post.caption))
-      .filter((sha): sha is string => sha !== null),
-  );
-}
-
-export interface PublishDependencies {
-  readonly upload: typeof uploadImages;
-  readonly create: typeof createAdminPromotionPost;
-  readonly submit: typeof submitAdminPromotionPost;
-}
-
-const DEFAULT_DEPENDENCIES: PublishDependencies = {
-  upload: uploadImages,
-  create: createAdminPromotionPost,
-  submit: submitAdminPromotionPost,
-};
-
-export async function publishDraft(
-  token: string,
-  sha: string,
-  caption: string,
-  screenshotPaths: readonly string[],
-  dependencies: PublishDependencies = DEFAULT_DEPENDENCIES,
-): Promise<AdminPromotionPost> {
-  const files: UploadableImage[] = await Promise.all(
-    screenshotPaths.map(async (screenshotPath) => {
-      const bytes = await readFile(screenshotPath);
-      return new File([new Uint8Array(bytes)], path.basename(screenshotPath), {
-        type: "image/png",
-      });
-    }),
-  );
-  const uploaded = await dependencies.upload(files);
-  const created = await dependencies.create(token, {
-    channel: "THREADS",
-    caption: captionWithCommitMarker(caption, sha),
-    mediaKeys: uploaded.map(({ key }) => key),
-  });
-  return dependencies.submit(token, created.id);
+export function createAuthenticatedPromotionDraftSubmitter(): (
+  input: PromotionDraftInput,
+) => Promise<AdminPromotionPost> {
+  let submitter: Promise<ReturnType<typeof createPromotionDraftSubmitter>> | undefined;
+  return async (input) => {
+    submitter ??= authenticatePromotionAgent().then((token) =>
+      createPromotionDraftSubmitter(token),
+    );
+    return (await submitter)(input);
+  };
 }

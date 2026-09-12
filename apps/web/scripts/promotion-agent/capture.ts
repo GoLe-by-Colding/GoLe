@@ -1,55 +1,27 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type BrowserContext, type Page } from "@playwright/test";
-import type { CaptureResult, PromotionCandidate } from "./types";
+import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-const BASE_URL = process.env.PROMOTION_AGENT_BASE_URL ?? "https://gole.co.kr";
+const DEFAULT_BASE_URL = "https://gole.co.kr";
+const INTERACTION_TIMEOUT_MS = 5_000;
 
-type Interaction =
-  | { readonly kind: "clickRole"; readonly role: "button"; readonly name: string }
-  | { readonly kind: "selectLabel"; readonly label: string; readonly value: string };
-
-interface CaptureScenario {
-  readonly route: string;
-  readonly sourceSpec: string;
-  readonly interactions: readonly Interaction[];
+export interface CapturedScreenshot {
+  readonly label: string;
+  readonly path: string;
+  readonly base64: string;
 }
 
-// 운영에서 안전한 읽기 전용 상호작용만 기존 E2E의 selector와 순서 그대로 옮긴다.
-const SCENARIOS: readonly CaptureScenario[] = [
-  {
-    route: "/prices",
-    sourceSpec: "tests-e2e/prices.spec.ts",
-    interactions: [
-      { kind: "clickRole", role: "button", name: "1개월" },
-      { kind: "selectLabel", label: "정렬", value: "recent" },
-    ],
-  },
-  {
-    route: "/search",
-    sourceSpec: "tests-e2e/search-and-listing.spec.ts",
-    interactions: [
-      { kind: "selectLabel", label: "카테고리", value: "parts" },
-      { kind: "clickRole", role: "button", name: "검색" },
-    ],
-  },
-  {
-    route: "/community",
-    sourceSpec: "tests-e2e/community.spec.ts",
-    interactions: [
-      { kind: "clickRole", role: "button", name: "질문" },
-      { kind: "clickRole", role: "button", name: "이스터에그" },
-    ],
-  },
-];
-
-export function findCaptureScenario(route: string): CaptureScenario | undefined {
-  return SCENARIOS.find((scenario) => scenario.route === route);
-}
-
-async function blockMutatingRequests(context: BrowserContext): Promise<void> {
+export async function blockMutatingRequests(
+  context: BrowserContext,
+  isNavigationAllowed: (url: string) => boolean = () => true,
+): Promise<void> {
   await context.route("**/*", async (route) => {
-    const method = route.request().method().toUpperCase();
+    const request = route.request();
+    const method = request.method().toUpperCase();
+    if (request.isNavigationRequest() && !isNavigationAllowed(request.url())) {
+      await route.abort("blockedbyclient");
+      return;
+    }
     if (["GET", "HEAD", "OPTIONS"].includes(method)) {
       await route.continue();
       return;
@@ -58,81 +30,109 @@ async function blockMutatingRequests(context: BrowserContext): Promise<void> {
   });
 }
 
-async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("domcontentloaded");
-  await page.waitForTimeout(1_000);
+function safeScreenshotName(label: string, index: number): string {
+  const slug = label
+    .normalize("NFKC")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+    .replace(/^-|-$/gu, "")
+    .slice(0, 48);
+  return `${String(index).padStart(2, "0")}-${slug || "screenshot"}.png`;
 }
 
-async function screenshot(page: Page, outputDir: string, index: number): Promise<string> {
-  const outputPath = path.join(outputDir, `${String(index).padStart(2, "0")}.png`);
-  await page.screenshot({ path: outputPath, animations: "disabled" });
-  return outputPath;
-}
+export class PromotionBrowserSession {
+  readonly #allowedRoutes: ReadonlySet<string>;
+  readonly #baseUrl: URL;
+  readonly #outputDir: string;
+  #browser: Browser | undefined;
+  #page: Page | undefined;
+  #screenshots: CapturedScreenshot[] = [];
 
-async function replay(page: Page, interaction: Interaction): Promise<void> {
-  if (interaction.kind === "clickRole") {
-    await page.getByRole(interaction.role, { name: interaction.name, exact: true }).click({
-      timeout: 5_000,
-    });
-    return;
+  constructor(allowedRoutes: ReadonlySet<string>, outputDir: string) {
+    this.#allowedRoutes = allowedRoutes;
+    this.#baseUrl = new URL(process.env.PROMOTION_AGENT_BASE_URL?.trim() || DEFAULT_BASE_URL);
+    this.#outputDir = path.resolve(outputDir);
   }
-  await page.getByLabel(interaction.label, { exact: true }).selectOption(interaction.value, {
-    timeout: 5_000,
-  });
-}
 
-export async function captureCandidate(
-  candidate: PromotionCandidate,
-  outputRoot: string,
-): Promise<CaptureResult> {
-  const outputDir = path.join(outputRoot, candidate.sha);
-  await rm(outputDir, { recursive: true, force: true });
-  await mkdir(outputDir, { recursive: true });
+  get screenshots(): readonly CapturedScreenshot[] {
+    return this.#screenshots;
+  }
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1024 } });
-  await blockMutatingRequests(context);
-  const page = await context.newPage();
-  const scenario = findCaptureScenario(candidate.route);
-
-  try {
-    await page.goto(new URL(candidate.route, BASE_URL).toString(), {
+  async goto(route: string): Promise<string> {
+    if (!this.#allowedRoutes.has(route)) throw new Error(`허용되지 않은 공개 라우트: ${route}`);
+    const page = await this.#ensurePage();
+    await page.goto(new URL(route, this.#baseUrl).toString(), {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await settle(page);
+    await this.#settle(page);
+    return `이동 완료: ${route}`;
+  }
 
-    if (scenario === undefined || scenario.interactions.length === 0) {
-      return {
-        paths: [await screenshot(page, outputDir, 1)],
-        route: candidate.route,
-        sourceSpec: null,
-        fallback: true,
-      };
+  async click(role: string, name: string): Promise<string> {
+    const page = this.#requirePage();
+    await page.getByRole(role as Parameters<Page["getByRole"]>[0], { name, exact: true }).click({
+      timeout: INTERACTION_TIMEOUT_MS,
+    });
+    await this.#settle(page);
+    return `클릭 완료: ${role} "${name}"`;
+  }
+
+  async select(label: string, value: string): Promise<string> {
+    const page = this.#requirePage();
+    await page.getByLabel(label, { exact: true }).selectOption(value, {
+      timeout: INTERACTION_TIMEOUT_MS,
+    });
+    await this.#settle(page);
+    return `선택 완료: ${label}=${value}`;
+  }
+
+  async screenshot(label: string): Promise<CapturedScreenshot> {
+    const page = this.#requirePage();
+    await mkdir(this.#outputDir, { recursive: true });
+    const outputPath = path.resolve(
+      this.#outputDir,
+      safeScreenshotName(label, this.#screenshots.length + 1),
+    );
+    if (path.dirname(outputPath) !== this.#outputDir) {
+      throw new Error("스크린샷은 현재 세션 디렉터리에만 저장할 수 있음");
     }
+    await page.screenshot({ path: outputPath, animations: "disabled" });
+    const captured = {
+      label,
+      path: outputPath,
+      base64: (await readFile(outputPath)).toString("base64"),
+    };
+    this.#screenshots.push(captured);
+    return captured;
+  }
 
-    const paths = [await screenshot(page, outputDir, 1)];
-    try {
-      for (const interaction of scenario.interactions.slice(0, 3)) {
-        await replay(page, interaction);
-        await settle(page);
-        paths.push(await screenshot(page, outputDir, paths.length + 1));
-      }
-      return { paths, route: candidate.route, sourceSpec: scenario.sourceSpec, fallback: false };
-    } catch (cause) {
-      console.warn(
-        `[capture] ${scenario.sourceSpec} 재생 실패, 정적 캡처로 대체함: ${cause instanceof Error ? cause.message : String(cause)}`,
+  async close(): Promise<void> {
+    await this.#browser?.close();
+    this.#browser = undefined;
+    this.#page = undefined;
+  }
+
+  async #ensurePage(): Promise<Page> {
+    if (this.#page !== undefined) return this.#page;
+    this.#browser = await chromium.launch({ args: ["--disable-dev-shm-usage"] });
+    const context = await this.#browser.newContext({ viewport: { width: 1440, height: 1024 } });
+    await blockMutatingRequests(context, (url) => {
+      const destination = new URL(url);
+      return (
+        destination.origin === this.#baseUrl.origin && this.#allowedRoutes.has(destination.pathname)
       );
-      await rm(outputDir, { recursive: true, force: true });
-      await mkdir(outputDir, { recursive: true });
-      return {
-        paths: [await screenshot(page, outputDir, 1)],
-        route: candidate.route,
-        sourceSpec: scenario.sourceSpec,
-        fallback: true,
-      };
-    }
-  } finally {
-    await browser.close();
+    });
+    this.#page = await context.newPage();
+    return this.#page;
+  }
+
+  #requirePage(): Page {
+    if (this.#page === undefined) throw new Error("browser_goto를 먼저 호출해야 함");
+    return this.#page;
+  }
+
+  async #settle(page: Page): Promise<void> {
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(1_000);
   }
 }

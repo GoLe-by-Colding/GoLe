@@ -1,0 +1,22 @@
+[Unit]
+Description=Create GoLe promotion drafts with the Tool Runner agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=goledeploy
+Group=goledeploy
+WorkingDirectory=/app
+EnvironmentFile=/etc/gole/gole.env
+StateDirectory=gole/promotion-agent
+ExecStart=/usr/bin/env pnpm --filter web promotion-agent
+TimeoutStartSec=20min
+MemoryMax=1G
+OOMPolicy=stop
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

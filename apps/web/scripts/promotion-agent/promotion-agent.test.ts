@@ -3,80 +3,103 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { findCaptureScenario } from "./capture";
-import {
-  captionWithCommitMarker,
-  encodeCommitMarker,
-  extractCommitMarker,
-  publishDraft,
-  type PublishDependencies,
-} from "./publish-draft";
-import { buildReadableSummary, inferRoute } from "./scan";
+import { PromotionBrowserSession } from "./capture";
+import { createPromotionDraftSubmitter, type PublishDependencies } from "./publish-draft";
+import { isPublicCaptureRoute, listPublicRoutes } from "./tools/routes";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
+const SECOND_SHA = "89abcdef0123456789abcdef0123456789abcdef";
 
-test("커밋 SHA는 보이지 않는 지문으로 캡션에 저장하고 복원한다", () => {
-  const marker = encodeCommitMarker(SHA);
-  assert.equal(marker.includes(SHA), false);
-  assert.equal(extractCommitMarker(`새 기능을 붙였어.${marker}`), SHA);
-  assert.equal(captionWithCommitMarker("새 기능을 붙였어.", SHA).length <= 500, true);
-});
+function submittedPost(sha: string) {
+  return {
+    id: "draft-1",
+    channel: "THREADS" as const,
+    caption: "새 기능을 붙였어.",
+    mediaUrls: [] as const,
+    authorId: "bot",
+    sourceCommitSha: sha,
+    status: "PENDING_REVIEW" as const,
+    createdAt: null,
+    submittedAt: "2026-09-10T00:00:00Z",
+    reviewerId: null,
+    reviewedAt: null,
+    rejectionReason: null,
+    publishedAt: null,
+    externalPostId: null,
+  };
+}
 
-test("변경 파일에서 직접 라우트와 FSD 힌트 라우트를 고른다", () => {
-  assert.equal(inferRoute(["apps/web/src/app/(main)/prices/page.tsx"]), "/prices");
-  assert.equal(inferRoute(["apps/web/src/views/community/ui/community-page.tsx"]), "/community");
-  assert.match(
-    buildReadableSummary(["apps/web/src/features/create-listing/ui/form.tsx"], "/search"),
-    /상품 등록/u,
-  );
-});
-
-test("기존 E2E 기반 안전 시나리오가 없으면 정적 폴백 대상으로 남긴다", () => {
-  assert.equal(findCaptureScenario("/prices")?.sourceSpec, "tests-e2e/prices.spec.ts");
-  assert.equal(findCaptureScenario("/profile"), undefined);
-});
-
-test("초안 생성 직후 같은 호출에서 제출하고 발행은 호출하지 않는다", async () => {
+async function screenshotFixture(): Promise<string> {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "promotion-agent-"));
   const screenshotPath = path.join(outputDir, "capture.png");
   await writeFile(screenshotPath, new Uint8Array([137, 80, 78, 71]));
-  const calls: string[] = [];
-  const dependencies: PublishDependencies = {
+  return screenshotPath;
+}
+
+function dependencies(options: {
+  readonly exists?: boolean;
+  readonly calls: string[];
+}): PublishDependencies {
+  return {
+    exists: async (_token, sha) => {
+      options.calls.push(`exists:${sha}`);
+      return { exists: options.exists ?? false };
+    },
     upload: async () => {
-      calls.push("upload");
+      options.calls.push("upload");
       return [{ key: "images/capture.png", url: "/media/capture.png" }];
     },
     create: async (_token, input) => {
-      calls.push(`create:${extractCommitMarker(input.caption)}`);
+      options.calls.push(`create:${input.sourceCommitSha}`);
       return { id: "draft-1" };
     },
     submit: async (_token, id) => {
-      calls.push(`submit:${id}`);
-      return {
-        id,
-        channel: "THREADS",
-        caption: "caption",
-        mediaUrls: [],
-        authorId: "bot",
-        status: "PENDING_REVIEW",
-        createdAt: null,
-        submittedAt: "2026-09-10T00:00:00Z",
-        reviewerId: null,
-        reviewedAt: null,
-        rejectionReason: null,
-        publishedAt: null,
-        externalPostId: null,
-      };
+      options.calls.push(`submit:${id}`);
+      return submittedPost(SHA);
     },
   };
+}
 
-  const result = await publishDraft(
-    "token",
-    SHA,
-    "새 기능을 붙였어.",
-    [screenshotPath],
-    dependencies,
+test("브라우저는 허용목록 밖과 로그인·결제·관리자 라우트를 거부한다", async () => {
+  assert.equal(isPublicCaptureRoute("/prices"), true);
+  assert.equal(isPublicCaptureRoute("/login"), false);
+  assert.equal(isPublicCaptureRoute("/payments/portone/return"), false);
+  assert.equal(isPublicCaptureRoute("/admin/promotion"), false);
+  const routes = await listPublicRoutes();
+  assert.equal(routes.includes("/prices"), true);
+  assert.equal(
+    routes.some((route) => route.includes("[")),
+    false,
   );
-  assert.equal(result.status, "PENDING_REVIEW");
-  assert.deepEqual(calls, ["upload", `create:${SHA}`, "submit:draft-1"]);
+
+  const browser = new PromotionBrowserSession(new Set(["/prices"]), os.tmpdir());
+  await assert.rejects(browser.goto("/profile"), /허용되지 않은 공개 라우트/u);
+});
+
+test("제출 툴은 실행당 초안 수 한도를 넘으면 원격 호출 전에 거부한다", async () => {
+  const calls: string[] = [];
+  const submit = createPromotionDraftSubmitter("secret-token", 1, dependencies({ calls }));
+  const screenshotPath = await screenshotFixture();
+
+  await submit({ sha: SHA, caption: "첫 초안이야.", screenshotPaths: [screenshotPath] });
+  await assert.rejects(
+    submit({ sha: SECOND_SHA, caption: "두 번째 초안이야.", screenshotPaths: [screenshotPath] }),
+    /한도\(1건\)를 초과/u,
+  );
+  assert.deepEqual(calls, [`exists:${SHA}`, "upload", `create:${SHA}`, "submit:draft-1"]);
+});
+
+test("제출 툴은 기존 sourceCommitSha 중복을 업로드 전에 거부한다", async () => {
+  const calls: string[] = [];
+  const submit = createPromotionDraftSubmitter(
+    "secret-token",
+    3,
+    dependencies({ calls, exists: true }),
+  );
+
+  await assert.rejects(
+    submit({ sha: SHA, caption: "중복 초안이야.", screenshotPaths: [await screenshotFixture()] }),
+    /이미 홍보 초안이 존재/u,
+  );
+  assert.deepEqual(calls, [`exists:${SHA}`]);
 });

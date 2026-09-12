@@ -1,0 +1,11 @@
+[Unit]
+Description=Create GoLe promotion drafts every evening in Korea
+
+[Timer]
+OnCalendar=*-*-* 12:00:00 UTC
+Persistent=true
+RandomizedDelaySec=0
+Unit=gole-promotion-agent.service
+
+[Install]
+WantedBy=timers.target
