@@ -25,10 +25,12 @@ public final class CommunityDtos {
         }
     }
 
-    public record CommentRequest(String authorId, @NotBlank @Size(max = 1000) String content) {}
+    public record CommentRequest(
+            String authorId, @NotBlank @Size(max = 1000) String content) {}
 
     public record ReportCommentRequest(
-            @jakarta.validation.constraints.NotNull ReportReason reason, @Size(max = 1000) String detail) {}
+            @jakarta.validation.constraints.NotNull ReportReason reason,
+            @Size(max = 1000) String detail) {}
 
     public record EditPostRequest(
             String requesterId,

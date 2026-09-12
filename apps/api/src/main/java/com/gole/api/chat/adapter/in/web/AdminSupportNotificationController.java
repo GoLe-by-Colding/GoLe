@@ -66,7 +66,8 @@ public class AdminSupportNotificationController {
     }
 
     public record RequeueRequest(
-            @NotBlank @Size(max = 80) String confirmation, @NotNull RequeueReasonCode reasonCode) {}
+            @NotBlank @Size(max = 80) String confirmation,
+            @NotNull RequeueReasonCode reasonCode) {}
 
     public record RequeueResponse(String eventId, String state, int attempts, String nextAttemptAt, boolean changed) {
 

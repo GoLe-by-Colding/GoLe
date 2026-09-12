@@ -153,14 +153,16 @@ public class ListingSeeder implements CommandLineRunner {
     private static ConditionDisclosure disclosureFor(ItemCondition condition) {
         return switch (condition) {
             case NEW_SEALED -> new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "");
-            case LIKE_NEW -> new ConditionDisclosure(
-                    Completeness.FULL_BOX, true, true, false, "", "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
-            case USED_GOOD -> new ConditionDisclosure(
-                    Completeness.NO_BOX, false, true, false, "", "박스는 없지만 부품과 설명서는 온전합니다.");
-            case USED_FAIR -> new ConditionDisclosure(
-                    Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 사용감이 있습니다.");
-            case DAMAGED -> new ConditionDisclosure(
-                    Completeness.NO_BOX, false, false, true, "운반 중 파손된 조각 3개 누락.", "일부 피스에 변색과 파손이 있습니다.");
+            case LIKE_NEW ->
+                new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
+            case USED_GOOD ->
+                new ConditionDisclosure(Completeness.NO_BOX, false, true, false, "", "박스는 없지만 부품과 설명서는 온전합니다.");
+            case USED_FAIR ->
+                new ConditionDisclosure(
+                        Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 사용감이 있습니다.");
+            case DAMAGED ->
+                new ConditionDisclosure(
+                        Completeness.NO_BOX, false, false, true, "운반 중 파손된 조각 3개 누락.", "일부 피스에 변색과 파손이 있습니다.");
         };
     }
 }

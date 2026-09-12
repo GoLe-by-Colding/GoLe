@@ -92,8 +92,11 @@ public final class LaunchDtos {
 
     /** 단계 변경 요청. 사유는 필수다. */
     public record ChangeStageRequest(
-            @NotNull(message = "공개 단계를 지정해야 합니다") @Min(0) @Max(3) Integer stage,
-            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
+            @NotNull(message = "공개 단계를 지정해야 합니다") @Min(0) @Max(3)
+            Integer stage,
+
+            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500)
+            String reason) {}
 
     /**
      * 기능 override 요청.
@@ -101,12 +104,17 @@ public final class LaunchDtos {
      * @param enabled {@code null} 이면 override 를 해제하고 단계 기본값으로 되돌린다.
      */
     public record FeatureOverrideRequest(
-            Boolean enabled, @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
+            Boolean enabled,
+
+            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500)
+            String reason) {}
 
     /** 서버가 자동 판정할 수 없는 운영 준비 항목 확인 또는 확인 취소 요청. */
     public record ReadinessCheckRequest(
             @NotNull(message = "확인 여부를 지정해야 합니다") Boolean confirmed,
-            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
+
+            @NotBlank(message = "변경 사유를 입력해야 합니다") @Size(max = 500)
+            String reason) {}
 
     /** 변경 이력 1행. */
     public record LaunchChangeRow(
