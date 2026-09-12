@@ -3,7 +3,11 @@ set -Eeuo pipefail
 
 CONTAINER_NAME="${GOLE_COST_GUARD_CONTAINER_NAME:-gole-budget-relay}"
 FAILURE_FILE="${GOLE_COST_GUARD_FAILURE_FILE:-/run/gole-cost-guard-watchdog.failures}"
-MAX_FAILURES="${GOLE_COST_GUARD_MAX_FAILURES:-2}"
+# 30초 간격 × 6회 = 약 3분. 2회(=60초)는 docker 재시작을 버티지 못한다.
+# 2026-09-11 에 unattended-upgrades 가 libc6 를 교체하면서 docker.service 를 재시작했고,
+# 컨테이너가 돌아오는 데 60~90초가 걸리는 사이 이 가드가 호스트 전원을 내렸다.
+# 지출 상한이 목적이므로 판정을 3분 미루는 비용(VM 약 2원)은 무시할 수 있다.
+MAX_FAILURES="${GOLE_COST_GUARD_MAX_FAILURES:-6}"
 DRY_RUN="${GOLE_COST_GUARD_WATCHDOG_DRY_RUN:-false}"
 BROKER_SERVICE="${GOLE_CLOUD_BROKER_SERVICE:-gole-cloud-broker.service}"
 BROKER_HEARTBEAT="${GOLE_CLOUD_BROKER_HEARTBEAT:-/run/gole-cloud-broker/policy-heartbeat}"
