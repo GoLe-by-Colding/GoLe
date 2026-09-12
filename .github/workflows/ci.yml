@@ -229,7 +229,7 @@ jobs:
       # 있는 건 trace(on-first-retry)가 쌓이는 test-results/ 쪽이다.
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: apps/web/test-results
