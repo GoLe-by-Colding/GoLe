@@ -18,7 +18,8 @@ public final class ReviewDtos {
             @Min(1) @Max(5) int rating,
             @NotBlank @Size(max = 1000) String content) {}
 
-    public record ReplyReviewRequest(@NotBlank @Size(max = 1000) String content) {}
+    public record ReplyReviewRequest(
+            @NotBlank @Size(max = 1000) String content) {}
 
     public record ReviewResponse(
             String id,

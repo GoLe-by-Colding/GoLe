@@ -201,7 +201,9 @@ public class AdminSupportController {
 
     public record TransferRequest(@NotBlank String assigneeId) {}
 
-    public record TakeoverRequest(@NotBlank(message = "문의 인수 사유를 입력해야 합니다") @Size(max = 500) String reason) {}
+    public record TakeoverRequest(
+            @NotBlank(message = "문의 인수 사유를 입력해야 합니다") @Size(max = 500)
+            String reason) {}
 
     public record MessageRequest(@NotBlank @Size(max = 2000) String content) {}
 

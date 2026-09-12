@@ -10,10 +10,7 @@ public final class CommunityV2Dtos {
 
     private CommunityV2Dtos() {}
 
-    @Schema(
-            description = "게시글 부분 수정. 누락한 필드는 기존 값을 유지합니다.",
-            example =
-                    """
+    @Schema(description = "게시글 부분 수정. 누락한 필드는 기존 값을 유지합니다.", example = """
                     {
                       "body": "",
                       "mediaKeys": ["images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg"],

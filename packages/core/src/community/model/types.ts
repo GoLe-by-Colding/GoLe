@@ -2,13 +2,7 @@
  * 커뮤니티 도메인 타입. 백엔드 CommunityDtos와 대응.
  */
 export type PostType =
-  | "general"
-  | "showcase"
-  | "moc"
-  | "review"
-  | "question"
-  | "tip"
-  | "easter_egg";
+  "general" | "showcase" | "moc" | "review" | "question" | "tip" | "easter_egg";
 
 /** 토픽 메타(노출 순서·라벨). 작성 셀렉트/피드 탭/배지에서 공통 사용. */
 export const POST_TOPICS: ReadonlyArray<{ readonly key: PostType; readonly label: string }> = [
