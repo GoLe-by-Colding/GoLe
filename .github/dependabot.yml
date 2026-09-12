@@ -3,6 +3,9 @@ updates:
   # 프론트엔드(pnpm workspace)
   - package-ecosystem: npm
     directory: "/"
+    # 모든 PR 은 dev 로 간다. main 으로 가는 길은 dev -> main 릴리스 하나뿐이다.
+    target-branch: dev
+    labels: ["의존성", "프론트"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -36,6 +39,8 @@ updates:
   # 백엔드(Gradle)
   - package-ecosystem: gradle
     directory: "/apps/api"
+    target-branch: dev
+    labels: ["의존성", "백엔드"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -48,6 +53,8 @@ updates:
   # GitHub Actions
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: dev
+    labels: ["의존성", "CI"]
     schedule:
       interval: weekly
     commit-message:

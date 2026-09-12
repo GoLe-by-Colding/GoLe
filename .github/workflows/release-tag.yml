@@ -1,0 +1,91 @@
+name: 릴리스 태그
+
+# main 이 움직이는 순간은 dev -> main 릴리스 하나뿐이다. 그때마다 태그를 남겨
+# "운영에 올라간 것"이 어느 커밋인지 이름으로 가리킬 수 있게 한다.
+#
+# CD 와 분리한 이유: CD 는 vars.GOLE_PRODUCTION_HOST_READY 로 닫혀 있어 지금은 돌지 않는다.
+# 태그까지 같이 멈추면 릴리스 이력이 통째로 비어버린다. 태그는 "무엇을 릴리스했나"의
+# 기록이고, CD 는 "그것을 어디에 올렸나"다.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: CalVer 태그와 릴리스 노트
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: 태그 생성
+        id: tag
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          # CalVer 로 간다. 아직 공개 API 계약이 없어 semver 의 major/minor 가
+          # 가리킬 대상이 없다. 같은 날 두 번 이상 릴리스하면 뒤에 순번이 붙는다.
+          day="$(TZ=Asia/Seoul date +%Y.%m.%d)"
+          n=1
+          while git rev-parse -q --verify "refs/tags/v${day}-${n}" >/dev/null 2>&1; do
+            n=$((n + 1))
+          done
+          tag="v${day}-${n}"
+
+          prev="$(git describe --tags --abbrev=0 "${SHA}^" 2>/dev/null || true)"
+          if [ -n "$prev" ]; then
+            range="${prev}..${SHA}"
+          else
+            range="${SHA}"
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$SHA" -m "GoLe 릴리스 $tag" -m "커밋: $SHA" -m "CI: $RUN_URL"
+          git push origin "$tag"
+
+          {
+            echo "tag=$tag"
+            echo "prev=$prev"
+            echo "range=$range"
+          } >> "$GITHUB_OUTPUT"
+          echo "생성: $tag (이전 태그: ${prev:-없음})"
+
+      - name: 릴리스 노트
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PREV: ${{ steps.tag.outputs.prev }}
+          RANGE: ${{ steps.tag.outputs.range }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## 이 릴리스에 들어간 것"
+            echo
+            git log --no-merges --format='- %s' "$RANGE" | head -100
+            echo
+            if [ -n "$PREV" ]; then
+              echo "이전 릴리스: \`$PREV\`"
+            else
+              echo "첫 릴리스다."
+            fi
+            echo
+            echo "> 배포 여부는 별개다. CD 는 \`vars.GOLE_PRODUCTION_HOST_READY\` 가 \`true\` 일 때만 돈다."
+          } > notes.md
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md
