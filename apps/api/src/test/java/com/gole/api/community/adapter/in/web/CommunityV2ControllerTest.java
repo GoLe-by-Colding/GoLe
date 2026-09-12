@@ -58,16 +58,14 @@ class CommunityV2ControllerTest {
                 Instant.parse("2026-08-09T00:00:00Z"));
         when(useCase.patch(any())).thenReturn(saved);
         CommunityV2Controller controller = new CommunityV2Controller(useCase);
-        PatchPostRequest request = objectMapper.readValue(
-                """
+        PatchPostRequest request = objectMapper.readValue("""
                 {
                   "body": "",
                   "mediaKeys": ["images/0194f1c0-15ab-4f33-9b1d-34073d9d7738.jpg"],
                   "visibility": "public",
                   "status": "draft"
                 }
-                """,
-                PatchPostRequest.class);
+                """, PatchPostRequest.class);
         MockHttpServletRequest http = new MockHttpServletRequest();
         http.setAttribute(UserAuthInterceptor.ATTR_ACCOUNT_ID, "author-1");
 

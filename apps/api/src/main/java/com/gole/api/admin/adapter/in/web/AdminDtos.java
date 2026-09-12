@@ -161,19 +161,23 @@ public final class AdminDtos {
     // ── 조치 요청 ──────────────────────────────────────────────
 
     /** 사유가 필수인 모더레이션 조치(매물 내림·게시글 삭제·계정 정지). */
-    public record ReasonRequest(@NotBlank(message = "조치 사유를 입력해야 합니다") String reason) {}
+    public record ReasonRequest(
+            @NotBlank(message = "조치 사유를 입력해야 합니다") String reason) {}
 
     public record ChangeRoleRequest(@NotNull Role role) {}
 
     public record FeaturedRequest(boolean featured) {}
 
     public record MarkSettlementPaidRequest(
-            @NotBlank(message = "지급 증빙 번호를 입력해야 합니다") @Size(max = 120) String paymentReference) {}
+            @NotBlank(message = "지급 증빙 번호를 입력해야 합니다") @Size(max = 120)
+            String paymentReference) {}
 
     public record RecoverSettlementRequest(
             boolean alreadyPaid,
             @Size(max = 120) String paymentReference,
-            @NotBlank(message = "외부 지급 확인 근거를 입력해야 합니다") @Size(max = 500) String reason) {}
+
+            @NotBlank(message = "외부 지급 확인 근거를 입력해야 합니다") @Size(max = 500)
+            String reason) {}
 
     public record SettlementRow(
             String orderId,
@@ -225,7 +229,10 @@ public final class AdminDtos {
             @Min(0) int pieceCount,
             int releaseYear,
             @NotNull RetirementStatus retirementStatus,
-            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP) String imageUrl,
+
+            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP)
+            String imageUrl,
+
             boolean featured) {}
 
     public record UpdateSetRequest(
@@ -234,7 +241,10 @@ public final class AdminDtos {
             @Min(0) int pieceCount,
             int releaseYear,
             @NotNull RetirementStatus retirementStatus,
-            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP) String imageUrl,
+
+            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP)
+            String imageUrl,
+
             boolean featured) {}
 
     public record LegoSetResponse(

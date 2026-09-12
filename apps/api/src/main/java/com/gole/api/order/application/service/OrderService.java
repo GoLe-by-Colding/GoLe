@@ -277,12 +277,14 @@ public class OrderService
         }
         Instant now = Instant.now(clock);
         switch (status) {
-            case FUNDS_HELD -> publishPaymentEvent(
-                    Level.SUCCESS, "결제 승인 완료", "PG 원장 검증 후 결제 금액이 안전하게 보유되었습니다.", orderId, status, now);
-            case PAYMENT_REVIEW -> publishPaymentEvent(
-                    Level.WARNING, "결제 수동 확인 대기", "결제를 자동 확정하지 않고 관리자 검토 상태로 보존했습니다.", orderId, status, now);
-            case PAYMENT_FAILED -> publishPaymentEvent(
-                    Level.ERROR, "결제 실패 확정", "PG 원장에서 결제 실패 상태가 확인되어 매물 선점을 해제했습니다.", orderId, status, now);
+            case FUNDS_HELD ->
+                publishPaymentEvent(Level.SUCCESS, "결제 승인 완료", "PG 원장 검증 후 결제 금액이 안전하게 보유되었습니다.", orderId, status, now);
+            case PAYMENT_REVIEW ->
+                publishPaymentEvent(
+                        Level.WARNING, "결제 수동 확인 대기", "결제를 자동 확정하지 않고 관리자 검토 상태로 보존했습니다.", orderId, status, now);
+            case PAYMENT_FAILED ->
+                publishPaymentEvent(
+                        Level.ERROR, "결제 실패 확정", "PG 원장에서 결제 실패 상태가 확인되어 매물 선점을 해제했습니다.", orderId, status, now);
             default -> {
                 // 결제 대기나 이미 처리된 상태는 운영 채널의 불필요한 사용자 취소 알림을 만들지 않는다.
             }

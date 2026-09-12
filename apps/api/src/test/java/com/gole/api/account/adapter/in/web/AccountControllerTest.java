@@ -102,11 +102,9 @@ class AccountControllerTest {
     void registerMapsExplicitPolicyAcceptanceToUseCase() throws Exception {
         when(registerAccounts.register(org.mockito.ArgumentMatchers.any())).thenReturn("account-1");
 
-        mvc.perform(
-                        post("/api/v1/accounts")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "email": "member@gole.test",
                                   "password": "password1",
@@ -140,11 +138,9 @@ class AccountControllerTest {
         when(registerAccounts.register(org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new EmailAlreadyRegisteredException("member@gole.test"));
 
-        mvc.perform(
-                        post("/api/v1/accounts")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "email": "member@gole.test",
                                   "password": "password1",
@@ -161,11 +157,9 @@ class AccountControllerTest {
 
     @Test
     void registerRejectsUncheckedRequiredPolicyBeforeUseCase() throws Exception {
-        mvc.perform(
-                        post("/api/v1/accounts")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "email": "member@gole.test",
                                   "password": "password1",
@@ -218,11 +212,9 @@ class AccountControllerTest {
         when(publicRequestLimit.acquireVerificationResend("member@gole.test", "127.0.0.1"))
                 .thenReturn(false);
 
-        mvc.perform(
-                        post("/api/v1/accounts/verification/resend")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts/verification/resend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {"email":"member@gole.test"}
                                 """))
                 .andExpect(status().isNoContent());
