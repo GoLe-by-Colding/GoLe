@@ -25,13 +25,26 @@ if [ ! -d "$VAULT/10_개발일지" ]; then
   clear_mark; exit 0        # 볼트를 안 받아둔 사람은 막지 않는다
 fi
 
-# 커밋 이메일로 팀원을 고른다. 모르는 사람이면 막지 않는다.
+# 커밋 이메일로 팀원을 고른다. 모르는 사람이면 막지 않는다 — 다만 조용히 넘어가지도 않는다.
+#
+# 여기서 그냥 exit 0 하면 아무 일도 안 일어나므로 당사자가 알아챌 단서가 없다.
+# "실패가 아니라 skip 이라 초록으로 보인다"와 같은 종류의 구멍이라, 막지는 않되
+# 무슨 일이 있었는지는 알린다. GOLE_MEMBER 로 덮으면 한 번에 끝난다.
 EMAIL=$(git -C "$DIR" config user.email 2>/dev/null || echo "")
 case "${GOLE_MEMBER:-$EMAIL}" in
   가원|kgw1999zz@naver.com|202021000@sangmyung.kr|*wongakim-99*) WHO=가원 ;;
   승찬|chan6502@gmail.com|developerkscold@gmail.com|201921339@sangmyung.kr|*kscold*) WHO=승찬 ;;
   수민|tnals72441@daum.net|*codemaker-kim*) WHO=수민 ;;
-  *) clear_mark; exit 0 ;;
+  *)
+    clear_mark
+    jq -n --arg who "${GOLE_MEMBER:-$EMAIL}" '{
+      systemMessage: ("[devlog-guard] 커밋 이메일(" + (if $who == "" then "설정 없음" else $who end)
+        + ")이 팀원 목록에 없어 개발일지 확인을 건너뛰었습니다. 막지는 않았습니다.\n"
+        + "이 사람이 가원·승찬·수민 중 하나라면 GOLE_MEMBER 를 .claude/settings.local.json 의 env 에 두거나,\n"
+        + ".claude/hooks/devlog-guard.sh 의 이메일 목록에 추가하세요.")
+    }'
+    exit 0
+    ;;
 esac
 
 DAY=$(date +%Y-%m-%d)
