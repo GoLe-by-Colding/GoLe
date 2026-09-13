@@ -173,3 +173,17 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 `gole_agent_runtime.privacy`는 문의 분석·영속 Runner·사진 Harness의 진입점에서 LangSmith tracing을 끄고 상위 Runnable의 callback/tags/metadata/configurable을 격리한다. 단순히 graph에 `callbacks=[]`를 넘기는 것만으로는 상위 callback이 병합될 수 있어 별도 실행 context가 필요하다. 호출이 끝나거나 예외가 나면 상위 context는 복원된다. 외부 exporter mock과 상위 callback 회귀 테스트는 실제 모델 호출 없이 원문·사진이 내부 graph의 trace로 전파되지 않는지 검사한다.
 
 이는 비신뢰 코드를 격리하는 sandbox가 아니다. 호출자가 경계에 넘기기 전에 이미 원문을 기록했거나 제공자 구현이 직접 전송하는 것까지 막지는 않는다. LangChain/LangGraph 변경 시 이 회귀 테스트를 반드시 실행한다.
+
+## 배포 이미지의 오프라인 smoke 검사
+
+관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다. 컨테이너에서도 proto 세 종류, rules-v1, SQLite 영속 fake 작업, 사진 두 모드와 상위 callback 격리를 실행한다. 운영 키·네트워크·호스트 데이터 쓰기 없이 실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+
+```sh
+docker build -f apps/support-agent/Dockerfile -t gole-agent-hour:test .
+docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 512m --cpus 1 \
+  --mount type=bind,src="$PWD/apps/support-agent/tests/verify_container_runtime.py",dst=/probe.py,readonly \
+  --entrypoint python gole-agent-hour:test /probe.py
+```
+
+2026-09-13 Linux arm64 이미지 빌드와 이 smoke 검사 통과. 원격 gRPC 배포, 실제 OpenAI 호출 및 이미지 품질 검증과는 구분한다.
