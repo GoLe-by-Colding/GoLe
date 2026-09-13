@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ChangeEvent, useState } from "react";
+import { type FormEvent, type ChangeEvent, useRef, useState } from "react";
 import { POST_TOPICS, publishPost, type PostType } from "@entities/community";
 import { ApiError, uploadImages, type UploadedImage } from "@shared/api";
 import { Button, Field, Select, Textarea } from "@shared/ui";
@@ -19,8 +19,11 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const uploadLock = useRef(false);
+  const submitLock = useRef(false);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    if (uploadLock.current || submitLock.current) return;
     const selected = Array.from(event.target.files ?? []);
     if (selected.length === 0) {
       return;
@@ -31,6 +34,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       setError(`이미지는 최대 ${MAX_IMAGES}장까지 올릴 수 있어요.`);
       return;
     }
+    uploadLock.current = true;
     setUploading(true);
     try {
       const uploaded = await uploadImages(selected.slice(0, remaining));
@@ -38,6 +42,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
+      uploadLock.current = false;
       setUploading(false);
       event.target.value = "";
     }
@@ -49,7 +54,9 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (uploadLock.current || submitLock.current) return;
     setError(undefined);
+    submitLock.current = true;
     setSubmitting(true);
     try {
       const post = await publishPost({
@@ -61,6 +68,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       onCreated(post.id);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "게시 중 오류가 발생했습니다.");
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
@@ -97,21 +105,25 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       </Field>
       <Field
         label="이미지 (선택)"
-        hint={`최대 ${MAX_IMAGES}장 · JPEG/PNG 정지 이미지만 가능하며 위치정보 등 메타데이터는 제거됩니다. 직접 촬영하거나 제작한 이미지만 올려주세요.`}
+        hint={`최대 ${MAX_IMAGES}장 · JPEG/PNG/HEIC/HEIF 정지 사진을 지원하며 HEIC/HEIF는 자동 변환됩니다. 위치정보 등 메타데이터는 제거됩니다. 직접 촬영하거나 제작한 이미지만 올려주세요.`}
       >
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input
               id={inputId}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif"
               multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
               disabled={uploading || submitting || images.length >= MAX_IMAGES}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
-            {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
+            {uploading ? (
+              <p role="status" className="text-sm text-neutral-500">
+                업로드 중...
+              </p>
+            ) : null}
             {images.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
                 {images.map((image, index) => (

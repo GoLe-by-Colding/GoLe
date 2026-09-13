@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ChangeEvent, useEffect, useState } from "react";
+import { type FormEvent, type ChangeEvent, useEffect, useRef, useState } from "react";
 import {
   createListing,
   type ItemCondition,
@@ -56,6 +56,8 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
   const [error, setError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const uploadLock = useRef(false);
+  const submitLock = useRef(false);
   const [feePolicyState, setFeePolicyState] = useState<FeePolicyState>({ status: "loading" });
   const [feePolicyRequestKey, setFeePolicyRequestKey] = useState(0);
 
@@ -92,6 +94,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    if (uploadLock.current || submitLock.current) return;
     const selected = Array.from(event.target.files ?? []);
     if (selected.length === 0) {
       return;
@@ -103,6 +106,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
       return;
     }
     const toUpload = selected.slice(0, remaining);
+    uploadLock.current = true;
     setUploading(true);
     try {
       const uploaded = await uploadImages(toUpload);
@@ -110,6 +114,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
+      uploadLock.current = false;
       setUploading(false);
       event.target.value = ""; // 같은 파일 재선택 허용
     }
@@ -121,6 +126,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (uploadLock.current || submitLock.current) return;
     setError(undefined);
     if (photos.length === 0) {
       setError("상품 이미지를 한 장 이상 업로드해 주세요.");
@@ -130,6 +136,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
       setError("누락 부품이 있으면 누락 내용을 입력해 주세요.");
       return;
     }
+    submitLock.current = true;
     setSubmitting(true);
     try {
       const listing = await createListing({
@@ -152,7 +159,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
       onCreated(listing.id);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "등록 중 오류가 발생했습니다.");
-    } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
@@ -382,21 +389,25 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
       </Field>
       <Field
         label="상품 이미지"
-        hint={`직접 촬영한 JPEG/PNG 정지 사진을 올려주세요(최대 ${MAX_PHOTOS}장). 위치정보 등 메타데이터는 제거되며 제조사 공식 제품 이미지 도용은 금지됩니다.`}
+        hint={`직접 촬영한 JPEG/PNG/HEIC/HEIF 정지 사진을 올려주세요(최대 ${MAX_PHOTOS}장). HEIC/HEIF는 자동 변환하고 위치정보 등 메타데이터는 제거하며 제조사 공식 제품 이미지 도용은 금지됩니다.`}
       >
         {({ inputId, describedBy }) => (
           <div className="flex flex-col gap-3">
             <input
               id={inputId}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif"
               multiple
               aria-describedby={describedBy}
               onChange={handleFileChange}
               disabled={uploading || submitting || photos.length >= MAX_PHOTOS}
               className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
             />
-            {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
+            {uploading ? (
+              <p role="status" className="text-sm text-neutral-500">
+                업로드 중...
+              </p>
+            ) : null}
             {photos.length > 0 ? (
               <ul className="flex flex-wrap gap-3">
                 {photos.map((photo, index) => (
