@@ -339,21 +339,47 @@ jobs:
       - name: Boot stack unit contract
         run: |
           bash -n infra/gcp/scripts/stack-start.sh
-          # 이 유닛이 실패해도 호스트가 꺼지면 안 된다. 사람이 고칠 수 있어야 한다.
-          if grep -qE '^\s*OnFailure' infra/gcp/systemd/gole-stack.service; then
+          unit=infra/gcp/systemd/gole-stack.service
+          script=infra/gcp/scripts/stack-start.sh
+          code() { grep -vE '^[[:space:]]*#' "$1"; }
+
+          # 이 유닛이 실패해도 호스트가 꺼지면 안 된다. 꺼지면 2026-09-11 중단을
+          # 그 수정본이 그대로 재생산한다.
+          if grep -qE '^[[:space:]]*OnFailure' "$unit"; then
             echo "gole-stack.service 에 OnFailure 가 있다. 이 유닛의 실패는 전원 차단으로 이어지면 안 된다." >&2
             exit 1
           fi
-          # up 은 배포되지 않은 서비스를 새로 만들고 build: 가 있는 서비스를 부팅 중에 빌드한다.
-          if grep -vE '^\s*#' infra/gcp/scripts/stack-start.sh \
-            | grep -qE 'compose[^|]*\bup\b'; then
-            echo "stack-start.sh 가 docker compose up 을 쓴다. start 만 써야 한다." >&2
+
+          # docker compose 는 쓰지 않는다.
+          #  - `compose start` 는 depends_on 을 해석해 mongo-init·minio-init 을 부팅마다
+          #    재실행한다. 그 컨테이너의 exited:0 은 배포 검증기가 읽는 증거다
+          #    (gole-hostctl.sh: "historical initializer did not complete successfully").
+          #  - `compose up` 은 컨테이너를 재생성하며, 검증 전에 중단된 배포가 남긴
+          #    미검증 :local 이미지를 공개 서비스에 올릴 수 있다.
+          if code "$script" | grep -qE 'docker[[:space:]]+compose'; then
+            echo "stack-start.sh 가 docker compose 를 쓴다. docker start <컨테이너 이름> 만 써야 한다." >&2
             exit 1
           fi
-          grep -q 'compose\[@\]}" start' infra/gcp/scripts/stack-start.sh || {
-            echo "stack-start.sh 에서 docker compose start 호출을 찾지 못했다." >&2
+          code "$script" | grep -qE 'docker[[:space:]]+start[[:space:]]' || {
+            echo "stack-start.sh 에서 docker start 호출을 찾지 못했다." >&2
             exit 1
           }
+
+          # init 컨테이너를 직접 켜서도 안 된다. hostctl 도 deployment_container_name() 에서
+          # 그 둘만 제외한다.
+          if code "$script" | grep -qE 'gole-(mongo|minio)-init'; then
+            echo "stack-start.sh 가 init 컨테이너를 직접 다룬다. 배포 증거를 덮어쓴다." >&2
+            exit 1
+          fi
+
+          # 일부러 멈춰 있는 상태에서는 끼어들지 않아야 한다.
+          for marker in deployment.transaction gole.env.transaction initial-deploy.pending; do
+            grep -q "ConditionPathExists=!/etc/gole/$marker" "$unit" || {
+              echo "gole-stack.service 에 $marker 가드가 없다. 배포 중에 끼어들 수 있다." >&2
+              exit 1
+            }
+          done
+
           # 부트스트랩이 실제로 설치·활성화하는지 (유닛 파일만 추가하면 죽은 코드가 된다)
           grep -q 'gole-stack.service' infra/gcp/scripts/bootstrap-host.sh || {
             echo "bootstrap-host.sh 가 gole-stack.service 를 설치하지 않는다." >&2
