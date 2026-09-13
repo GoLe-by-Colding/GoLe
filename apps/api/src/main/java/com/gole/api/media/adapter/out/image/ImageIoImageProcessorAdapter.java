@@ -30,7 +30,7 @@ import org.springframework.stereotype.Component;
 /**
  * JDK {@link ImageIO} 기반 이미지 정규화/리사이즈 어댑터.
  *
- * <p>사용자 업로드는 JPEG/PNG 정지 이미지만 허용한다. 헤더 치수를 확인한 뒤 픽셀을 표준 RGB/ARGB
+ * <p>사용자 업로드는 JPEG/PNG와 HEVC HEIC/HEIF 정지 이미지만 허용한다. HEIF는 제한된 별도 프로세스에서 JPEG로 변환한다. 헤더 치수를 확인한 뒤 픽셀을 표준 RGB/ARGB
  * 버퍼로 디코딩하고 메타데이터 없이 재인코딩하므로 EXIF/GPS/ICC/코멘트가 저장되지 않는다. JDK가
  * 안전하게 완전 디코딩/재인코딩할 수 없는 GIF/WebP와 APNG는 업로드 단계에서 거부한다.
  */
@@ -43,16 +43,31 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
     private static final String PNG = "image/png";
     private static final byte[] PNG_SIGNATURE = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
 
+    private final long maxBytes;
+    private final HeifProcessDecoder heif;
     private final int maxWidth;
     private final int maxHeight;
     private final long maxPixels;
 
     @Autowired
     public ImageIoImageProcessorAdapter(StorageProperties properties) {
-        this(properties.maxImageWidth(), properties.maxImageHeight(), properties.maxImagePixels());
+        this(
+                properties.maxImageWidth(),
+                properties.maxImageHeight(),
+                properties.maxImagePixels(),
+                properties.maxImageBytes(),
+                properties.heifPython(),
+                properties.heifTimeout());
     }
 
     ImageIoImageProcessorAdapter(int maxWidth, int maxHeight, long maxPixels) {
+        this(maxWidth, maxHeight, maxPixels, 5_242_880L, "/opt/heif/bin/python", java.time.Duration.ofSeconds(10));
+    }
+
+    ImageIoImageProcessorAdapter(
+            int maxWidth, int maxHeight, long maxPixels, long maxBytes, String python, java.time.Duration timeout) {
+        this.maxBytes = maxBytes;
+        this.heif = new HeifProcessDecoder(python, timeout);
         if (maxWidth <= 0 || maxHeight <= 0 || maxPixels <= 0) {
             throw new IllegalArgumentException("image safety limits must be positive");
         }
@@ -63,6 +78,12 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
 
     @Override
     public SanitizedImage sanitizeForStorage(byte[] source, String contentType) {
+        if (source != null && source.length > maxBytes)
+            throw new InvalidImageException("Image bytes exceed the allowed limit");
+        if (source != null && ("image/heic".equals(contentType) || "image/heif".equals(contentType))) {
+            if (!com.gole.api.media.domain.model.HeifSignature.matches(source)) throw invalidImage();
+            return sanitizeForStorage(heif.decode(source, maxWidth, maxHeight, maxPixels, maxBytes), JPEG);
+        }
         if (source == null || source.length == 0 || (!JPEG.equals(contentType) && !PNG.equals(contentType))) {
             throw invalidImage();
         }
@@ -102,6 +123,14 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
                     decoded.flush();
                 }
 
+                if (JPEG.equals(contentType)) {
+                    BufferedImage oriented = orient(clean, ExifOrientation.jpeg(source));
+                    if (oriented != clean) clean.flush();
+                    clean = oriented;
+                }
+                width = clean.getWidth();
+                height = clean.getHeight();
+                requireSafeDimensions(width, height);
                 byte[] encoded = encodeWithoutMetadata(clean, contentType);
                 clean.flush();
                 return new SanitizedImage(encoded, contentType, width, height);
@@ -155,6 +184,32 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
             log.warn("Image resize failed; serving original: {}", e.getClass().getSimpleName());
             return Optional.empty();
         }
+    }
+
+    private static BufferedImage orient(BufferedImage source, int orientation) {
+        if (orientation == 1) return source;
+        int w = source.getWidth(), h = source.getHeight();
+        BufferedImage result =
+                new BufferedImage(orientation >= 5 ? h : w, orientation >= 5 ? w : h, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                int dx =
+                        switch (orientation) {
+                            case 2, 3 -> w - 1 - x;
+                            case 5, 8 -> y;
+                            case 6, 7 -> h - 1 - y;
+                            default -> x;
+                        };
+                int dy =
+                        switch (orientation) {
+                            case 3, 4 -> h - 1 - y;
+                            case 5, 6 -> x;
+                            case 7, 8 -> w - 1 - x;
+                            default -> y;
+                        };
+                result.setRGB(dx, dy, source.getRGB(x, y));
+            }
+        return result;
     }
 
     private void requireSafeDimensions(int width, int height) {

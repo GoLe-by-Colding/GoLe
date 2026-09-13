@@ -23,6 +23,29 @@ class ImageIoImageProcessorAdapterTest {
     private final ImageIoImageProcessorAdapter processor = new ImageIoImageProcessorAdapter(8_192, 8_192, 16_000_000);
 
     @Test
+    void jpegOrientationIsAppliedBeforeMetadataRemoval() throws IOException {
+        byte[] exif = java.nio.ByteBuffer.allocate(32)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                .put(new byte[] {'E', 'x', 'i', 'f', 0, 0, 'I', 'I'})
+                .putShort((short) 42)
+                .putInt(8)
+                .putShort((short) 1)
+                .putShort((short) 0x112)
+                .putShort((short) 3)
+                .putInt(1)
+                .putShort((short) 6)
+                .putShort((short) 0)
+                .putInt(0)
+                .array();
+        byte[] source = insertAfterJpegSoi(image("jpeg", 16, 12, false), jpegSegment(0xe1, exif));
+        SanitizedImage result = processor.sanitizeForStorage(source, "image/jpeg");
+        assertThat(result.width()).isEqualTo(12);
+        assertThat(result.height()).isEqualTo(16);
+        assertThat(contains(result.content(), "Exif".getBytes(StandardCharsets.US_ASCII)))
+                .isFalse();
+    }
+
+    @Test
     void jpeg_isDecodedToPixelsAndReencodedWithoutExifGpsIccOrComment() throws IOException {
         byte[] jpeg = image("jpeg", 16, 12, false);
         byte[] exif = "Exif\0\0GPSLatitude=37.123;GPSLongitude=127.123".getBytes(StandardCharsets.ISO_8859_1);
