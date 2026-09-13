@@ -204,6 +204,8 @@ MONGO_DB=gole_e2e REDIS_DATABASE=15 pnpm e2e:seed   # 멱등
 
 # 테스트 — NEXT_PUBLIC_* 는 Playwright 가 띄우는 web dev 서버가 읽는다
 E2E_WITH_BACKEND=1 \
+GOLE_ADMIN_EMAIL=e2e-admin@gole.test \
+GOLE_ADMIN_PASSWORD=e2e-admin-not-a-real-secret \
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 \
 NEXT_PUBLIC_PAYMENT_MODE=portone-test \
 NEXT_PUBLIC_PORTONE_STORE_ID=store-test \
@@ -212,12 +214,16 @@ NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY=channel-card-test \
 pnpm --filter web e2e
 ```
 
-기대치는 **205 passed / 13 skipped** 근처다(2026-09-12 확인). 숫자가 크게 다르면 코드가 아니라
-환경을 먼저 의심한다.
+기대치는 **209 passed / 10 skipped**다(2026-09-13 CI 확인, PR #127). 숫자가 크게 다르면
+코드가 아니라 환경을 먼저 의심한다.
+
+> 2026-09-13 이전 기준선은 206 passed / 13 skipped 였다. 관리자 권한 경계 3건이
+> `GOLE_ADMIN_*` 부재로 skip 되던 것을 PR #127 이 실제로 돌게 만들어 그만큼 옮겨갔다.
 
 - 쓰기 플로우(`create-listing`, `purchase`)는 서버가 검증하는 실제 세션이 필요하므로
-  `pnpm e2e:seed`를 한 번 돌린다(멱등).
+  `pnpm e2e:seed`를 한 번 돌린다(멱등). 시더는 셀러·바이어·**관리자** 3계정을 심는다.
 - `E2E_WITH_BACKEND=1`이 없으면 관리자 API 가드 테스트가 **조용히 skip**된다.
+  `GOLE_ADMIN_EMAIL`/`GOLE_ADMIN_PASSWORD`도 마찬가지다 — 위 실행 예시에 넣어 뒀다.
 - `NEXT_PUBLIC_PORTONE_*`·`NEXT_PUBLIC_PAYMENT_MODE`가 없으면 `portone-request.spec.ts` 4건이
   실패한다. 결제 계약 테스트가 그 값을 읽기 때문이다(실제 키가 아니라 테스트 채널 값이다).
 - `E2E_BASE_URL`을 주면 배포 대상 읽기전용 검증이 되고 쓰기 플로우는 자동 skip.
@@ -348,9 +354,9 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
   `410 Gone`은 장애 신호가 아니라 의도적으로 닫아둔 응답이므로 운영 상태 판단에 쓰지 않는다.
   **"배포됐다"와 "기능이 열렸다"는 다르다** — 프론트가 `NEXT_PUBLIC_PORTONE_*` 없이 빌드돼
   결제 버튼은 disabled다(회귀가 아니라 의도된 구성).
-- **CI가 조용히 건너뛰는 것이 있다.** `GOLE_ADMIN_EMAIL`/`GOLE_ADMIN_PASSWORD`가 `ci.yml`에
-  없어서 관리자 권한 경계 E2E가 항상 skip된다. 실패가 아니라 skip이라 초록으로 보인다 —
-  "CI 통과 = 권한 검증됨"이 아니다.
+- **CI가 조용히 건너뛰던 관리자 권한 경계 E2E 3건은 2026-09-13(PR #127)에 닫혔다.**
+  시더가 ADMIN 계정을 실제 BCrypt 해시로 심고 `ci.yml`이 `GOLE_ADMIN_*`을 넘긴다.
+  여전히 10건이 skip되므로 **"CI 통과 = 전부 검증됨"은 아니다** — 스킵 수를 확인한다.
 
 ## 커밋 / PR
 
