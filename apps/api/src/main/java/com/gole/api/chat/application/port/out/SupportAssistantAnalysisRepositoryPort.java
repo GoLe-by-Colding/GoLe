@@ -20,6 +20,14 @@ public interface SupportAssistantAnalysisRepositoryPort {
     /** 일시 실패를 다음 실행 시각과 함께 돌려놓는다. */
     void retry(String roomId, String leaseToken, Instant failedAt, Instant nextAttemptAt);
 
+    /** 원격 접수 전에 기존 문서에 사본 가능성을 기록한다. 파기 설정 해제도 감지한다. */
+    boolean markRemoteCopyPossible(String roomId, String leaseToken, Instant now);
+
+    boolean hasRemoteCopyPossible(String roomId);
+
+    /** 정상 원격 실행의 조회 대기. 이번 claim만 시도 수에서 제외하고 기존 작업을 다시 예약한다. */
+    void defer(String roomId, String leaseToken, Instant deferredAt, Instant nextAttemptAt);
+
     /** 최대 횟수를 모두 쓴 작업만 최종 실패로 닫는다. */
     void fail(String roomId, String leaseToken, Instant completedAt);
 

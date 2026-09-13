@@ -169,6 +169,34 @@ class SupportAssistantAnalysisServiceTest {
         verifyNoInteractions(assistant, analyses, sources);
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("실행 중 원격 작업 조회는 최종 실패로 바꾸지 않고 defer함")
+    void pendingRemoteExecutionDefersEvenOnLastAttempt() {
+        when(analyses.tryClaim("room-1", NOW, LEASE_UNTIL, 5))
+                .thenReturn(Optional.of(new Claim("room-1", LEASE_TOKEN, 5)));
+        when(assistant.analyze(any())).thenThrow(new SupportAssistantPort.AnalysisPendingException());
+        service.analyzeOpeningAfterCommit(ticket(), "제목", "본문", "ko-KR");
+        verify(analyses).defer("room-1", LEASE_TOKEN, NOW, NOW.plusSeconds(5));
+        verify(analyses, never()).fail(any(), any(), any());
+        verify(analyses, never()).retry(any(), any(), any(), any());
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 사본 표식을 유효한 claim에 저장한 뒤에만 Submit함")
+    void durableDispatchRequiresPersistedCopyMarker() {
+        when(analyses.tryClaim("room-1", NOW, LEASE_UNTIL, 5))
+                .thenReturn(Optional.of(new Claim("room-1", LEASE_TOKEN, 1)));
+        when(assistant.usesDurableJobs()).thenReturn(true);
+        when(analyses.markRemoteCopyPossible("room-1", LEASE_TOKEN, NOW)).thenReturn(false);
+        service.analyzeOpeningAfterCommit(ticket(), "제목", "본문", "ko-KR");
+        verify(assistant, never()).analyze(any());
+        when(analyses.markRemoteCopyPossible("room-1", LEASE_TOKEN, NOW)).thenReturn(true);
+        when(assistant.analyze(any())).thenReturn(Optional.of(result()));
+        service.analyzeOpeningAfterCommit(ticket(), "제목", "본문", "ko-KR");
+        verify(assistant).analyze(any());
+        verify(analyses).complete("room-1", LEASE_TOKEN, result(), NOW);
+    }
+
     private SupportAssistantAnalysisService serviceWith(TaskExecutor executor) {
         return new SupportAssistantAnalysisService(
                 true, assistant, analyses, sources, executor, Clock.fixed(NOW, ZoneOffset.UTC));

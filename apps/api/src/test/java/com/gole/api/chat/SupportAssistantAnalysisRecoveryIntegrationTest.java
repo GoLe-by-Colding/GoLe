@@ -103,6 +103,42 @@ class SupportAssistantAnalysisRecoveryIntegrationTest {
         assertThat(recovered.leaseToken()).isNotEqualTo(abandoned.leaseToken());
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("pending 조회는 실패 시도를 소비하지 않고 stale defer와 만료 완료를 차단함")
+    void pendingDeferralPreservesAttemptsAndFencesLateWrites() {
+        analyses.enqueue("room-1", NOW);
+        var first = analyses.tryClaim("room-1", NOW, NOW.plusSeconds(30), 5).orElseThrow();
+        analyses.defer("room-1", first.leaseToken(), NOW.plusSeconds(1), NOW.plusSeconds(5));
+        assertThat(analyses.tryClaim("room-1", NOW.plusSeconds(4), NOW.plusSeconds(34), 5))
+                .isEmpty();
+        var second = analyses.tryClaim("room-1", NOW.plusSeconds(5), NOW.plusSeconds(35), 5)
+                .orElseThrow();
+        assertThat(second.attempt()).isEqualTo(1);
+        analyses.defer("room-1", first.leaseToken(), NOW.plusSeconds(6), NOW.plusSeconds(10));
+        assertThat(analyses.tryClaim("room-1", NOW.plusSeconds(10), NOW.plusSeconds(40), 5))
+                .isEmpty();
+        analyses.complete("room-1", second.leaseToken(), result("expired"), NOW.plusSeconds(36));
+        assertThat(analyses.findCompletedByRoomId("room-1")).isEmpty();
+        var third = analyses.tryClaim("room-1", NOW.plusSeconds(36), NOW.plusSeconds(66), 5)
+                .orElseThrow();
+        analyses.complete("room-1", third.leaseToken(), result("fresh"), NOW.plusSeconds(37));
+        assertThat(analyses.findCompletedByRoomId("room-1")).isPresent();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 사본 표식은 lease로 보호되고 완료 뒤에도 남음")
+    void remoteCopyMarkerSurvivesCompletionAndRejectsStaleWriter() {
+        analyses.enqueue("room-1", NOW);
+        var claim = analyses.tryClaim("room-1", NOW, NOW.plusSeconds(30), 5).orElseThrow();
+        assertThat(analyses.markRemoteCopyPossible("room-1", "wrong-token", NOW))
+                .isFalse();
+        assertThat(analyses.hasRemoteCopyPossible("room-1")).isFalse();
+        assertThat(analyses.markRemoteCopyPossible("room-1", claim.leaseToken(), NOW))
+                .isTrue();
+        analyses.complete("room-1", claim.leaseToken(), result("safe"), NOW.plusSeconds(1));
+        assertThat(analyses.hasRemoteCopyPossible("room-1")).isTrue();
+    }
+
     private static Analysis result(String draft) {
         return new Analysis(
                 SupportCategory.PRODUCT_FEEDBACK,

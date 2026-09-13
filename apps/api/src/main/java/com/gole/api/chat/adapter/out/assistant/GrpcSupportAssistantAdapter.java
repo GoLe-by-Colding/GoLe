@@ -16,12 +16,12 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /** 내부 LangGraph 서비스에 짧은 deadline으로 문의 분석을 요청하는 gRPC 어댑터. */
 @Component
-@ConditionalOnProperty(name = "gole.support-agent.enabled", havingValue = "true")
+@ConditionalOnExpression("${gole.support-agent.enabled:false} and !${gole.support-agent.durable.enabled:false}")
 public class GrpcSupportAssistantAdapter implements SupportAssistantPort {
 
     private static final Logger log = LoggerFactory.getLogger(GrpcSupportAssistantAdapter.class);

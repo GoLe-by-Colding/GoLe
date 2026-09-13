@@ -4,6 +4,8 @@ import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
@@ -60,6 +62,8 @@ public class SupportConversationPrivacyService {
     private final OrderRepositoryPort orders;
     private final SupportConversationPrivacyRepositoryPort privacy;
     private final Clock clock;
+    private final SupportAssistantPurgePort assistantPurge;
+    private final SupportAssistantAnalysisRepositoryPort analyses;
 
     public SupportConversationPrivacyService(
             AccountRepositoryPort accounts,
@@ -68,7 +72,9 @@ public class SupportConversationPrivacyService {
             ChatReportSnapshotPort reportSnapshots,
             OrderRepositoryPort orders,
             SupportConversationPrivacyRepositoryPort privacy,
-            Clock clock) {
+            Clock clock,
+            SupportAssistantPurgePort assistantPurge,
+            SupportAssistantAnalysisRepositoryPort analyses) {
         this.accounts = accounts;
         this.tickets = tickets;
         this.rooms = rooms;
@@ -76,6 +82,8 @@ public class SupportConversationPrivacyService {
         this.orders = orders;
         this.privacy = privacy;
         this.clock = clock;
+        this.assistantPurge = assistantPurge;
+        this.analyses = analyses;
     }
 
     @Transactional
@@ -127,6 +135,7 @@ public class SupportConversationPrivacyService {
         }
 
         Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
+        assistantPurge.requireAvailable(analyses.hasRemoteCopyPossible(roomId));
         PurgeReceipt receipt = privacy.purge(new PurgeWrite(
                 UUID.randomUUID().toString(),
                 roomId,
@@ -137,6 +146,9 @@ public class SupportConversationPrivacyService {
                 keyHash,
                 requestFingerprint,
                 now));
+        // Mongo 변경/영수증은 아직 미커밋이다. 원격 실패는 전체 rollback으로 성공 보고를 막는다.
+        // 원격 성공 뒤 Mongo commit 실패는 tombstone으로 복구한다. 재시도는 동일 원격 영수증을 받는다.
+        assistantPurge.purge(roomId, ticket.requesterId());
         return new PurgeOutcome(receipt, false);
     }
 

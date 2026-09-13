@@ -5,6 +5,7 @@ import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepository
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.StoredAnalysis;
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
+import com.gole.api.chat.application.port.out.SupportAssistantPort.AnalysisPendingException;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.Request;
 import com.gole.api.chat.application.port.out.SupportAssistantWorkSourcePort;
 import com.gole.api.chat.config.SupportAssistantAsyncConfiguration;
@@ -180,11 +181,22 @@ public class SupportAssistantAnalysisService {
                 markRetryWithoutEscaping(claim);
                 return;
             }
+            if (assistant.usesDurableJobs()
+                    && !analyses.markRemoteCopyPossible(roomId, claim.leaseToken(), Instant.now(clock))) {
+                return;
+            }
             Optional<Analysis> result = assistant.analyze(request.orElseThrow());
             if (result.isPresent()) {
                 analyses.complete(roomId, claim.leaseToken(), result.orElseThrow(), Instant.now(clock));
             } else {
                 markRetryWithoutEscaping(claim);
+            }
+        } catch (AnalysisPendingException pending) {
+            Instant deferredAt = Instant.now(clock);
+            try {
+                analyses.defer(roomId, claim.leaseToken(), deferredAt, deferredAt.plus(BASE_RETRY_DELAY));
+            } catch (RuntimeException storageFailure) {
+                log.warn("Support assistant poll deferral failed");
             }
         } catch (RuntimeException analysisFailure) {
             markRetryWithoutEscaping(claim);

@@ -80,7 +80,8 @@ public class MongoSupportAssistantAnalysisAdapter implements SupportAssistantAna
 
     @Override
     public void complete(String roomId, String leaseToken, Analysis analysis, Instant completedAt) {
-        Query ownedLease = ownedLease(roomId, leaseToken);
+        Query ownedLease = ownedLease(roomId, leaseToken)
+                .addCriteria(Criteria.where("leaseUntil").gt(completedAt));
         Update completed = new Update()
                 .set("state", SupportAssistantAnalysisDocument.COMPLETED)
                 .set("category", analysis.recommendedCategory().name())
@@ -108,6 +109,42 @@ public class MongoSupportAssistantAnalysisAdapter implements SupportAssistantAna
                 .unset("leaseToken")
                 .unset("completedAt");
         mongoTemplate.updateFirst(ownedLease(roomId, leaseToken), retry, SupportAssistantAnalysisDocument.class);
+    }
+
+    @Override
+    public boolean markRemoteCopyPossible(String roomId, String leaseToken, Instant now) {
+        return mongoTemplate
+                        .updateFirst(
+                                ownedLease(roomId, leaseToken)
+                                        .addCriteria(
+                                                Criteria.where("leaseUntil").gt(now)),
+                                new Update().set("remoteCopyPossible", true),
+                                SupportAssistantAnalysisDocument.class)
+                        .getMatchedCount()
+                == 1;
+    }
+
+    @Override
+    public boolean hasRemoteCopyPossible(String roomId) {
+        return mongoTemplate.exists(
+                Query.query(new Criteria()
+                        .andOperator(
+                                Criteria.where("_id").is(roomId),
+                                Criteria.where("remoteCopyPossible").is(true))),
+                SupportAssistantAnalysisDocument.class);
+    }
+
+    @Override
+    public void defer(String roomId, String leaseToken, Instant deferredAt, Instant nextAttemptAt) {
+        Query owned = ownedLease(roomId, leaseToken)
+                .addCriteria(Criteria.where("leaseUntil").gt(deferredAt));
+        Update pending = new Update()
+                .set("state", SupportAssistantAnalysisDocument.RETRY)
+                .set("nextAttemptAt", nextAttemptAt)
+                .inc("attempts", -1)
+                .unset("leaseUntil")
+                .unset("leaseToken");
+        mongoTemplate.updateFirst(owned, pending, SupportAssistantAnalysisDocument.class);
     }
 
     @Override
