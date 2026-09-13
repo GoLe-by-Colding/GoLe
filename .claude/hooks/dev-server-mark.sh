@@ -19,5 +19,9 @@ esac
 DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 SID=$(printf '%s' "$IN" | jq -r '.session_id // "unknown"')
 mkdir -p "$DIR/.claude" 2>/dev/null || exit 0
-printf '%s\t%s\n' "$SID" "$CMD" >> "$DIR/.claude/.agent-dev-servers"
+# 명령을 한 줄로 눌러 담는다. heredoc 같은 여러 줄 명령을 그대로 적으면 한 기록이
+# 여러 줄로 쪼개지고, 정리할 때 grep -v 가 첫 줄만 지워 나머지가 영구히 남는다.
+# (2026-09-13 확인: 이 누수로 마커 파일이 243·265줄까지 불어 있었다.)
+ONE_LINE=$(printf '%s' "$CMD" | tr '\n\t' '  ' | cut -c1-160)
+printf '%s\t%s\n' "$SID" "$ONE_LINE" >> "$DIR/.claude/.agent-dev-servers"
 exit 0
