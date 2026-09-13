@@ -211,6 +211,10 @@ jobs:
       # E2E_WITH_BACKEND: 관리자 API 가드 테스트는 이 값이 없으면 조용히 스킵된다.
       # 백엔드가 실제로 떠 있는 이 잡이 그 테스트를 돌릴 수 있는 유일한 곳이다.
       #
+      # GOLE_ADMIN_*: 권한 경계 3건은 실제로 로그인해 ADMIN 세션을 받는다. 예전에는 이 값이
+      # 없어 test.skip 으로 빠졌고, skip 은 실패가 아니라 초록으로 보여 "CI 통과 = 권한
+      # 검증됨"이 아니었다. 시더가 gole_e2e 에 심는 테스트 전용 계정이라 시크릿이 아니다.
+      #
       # 아래 NEXT_PUBLIC_* 는 Playwright가 띄우는 dev 서버(webServer)가 읽는다.
       # API_BASE_URL: next.config.ts가 이 원점을 CSP img-src에 넣는다. 없으면 API가 서빙하는
       #               매물 이미지가 차단돼 업로드 미리보기 단정이 실패한다.
@@ -220,6 +224,8 @@ jobs:
       - name: E2E
         env:
           E2E_WITH_BACKEND: "1"
+          GOLE_ADMIN_EMAIL: e2e-admin@gole.test
+          GOLE_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
           NEXT_PUBLIC_PAYMENT_MODE: portone-test
           NEXT_PUBLIC_PORTONE_STORE_ID: store-test
