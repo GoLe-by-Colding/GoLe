@@ -10,6 +10,7 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from gole.support.v1 import support_agent_pb2, support_agent_pb2_grpc
 from gole_support_agent.agent import analyze_support
+from gole_agent_runtime.privacy import reject_external_tracing
 
 LOGGER = logging.getLogger("gole.support-agent")
 MAX_TITLE_LENGTH = 100
@@ -74,6 +75,7 @@ class SupportAgentService(support_agent_pb2_grpc.SupportAgentServicer):
 
 
 def serve() -> None:
+    reject_external_tracing()
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     port = int(os.environ.get("SUPPORT_AGENT_GRPC_PORT", "50051"))
     server = grpc.server(

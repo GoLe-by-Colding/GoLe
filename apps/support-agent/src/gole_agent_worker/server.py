@@ -14,6 +14,7 @@ from gole.agent.v1 import agent_jobs_pb2 as pb, agent_jobs_pb2_grpc as rpc
 from gole_agent_worker.model import Conflict, NotFound, Purged, Submission, identifier, validate
 from gole_agent_worker.runner import Runner
 from gole_agent_worker.store import Store
+from gole_agent_runtime.privacy import reject_external_tracing
 
 
 class AgentJobsService(rpc.AgentJobsServicer):
@@ -105,9 +106,7 @@ def create_server(service, port=50052):
 
 def serve():
     # trace exporter가 문의 원문을 외부로 전송하는 우회 경로가 되지 않도록 차단한다.
-    if any(os.environ.get(key, "").lower() == "true"
-           for key in ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")):
-        raise ValueError("EXTERNAL_TRACING_FORBIDDEN")
+    reject_external_tracing()
     store = Store(os.environ.get("AGENT_DB_PATH",
                                 str(Path(__file__).resolve().parents[2] / "data/agent-jobs.sqlite3")))
     service = AgentJobsService(store, caller=os.environ.get("AGENT_INTERNAL_CALLER", ""),

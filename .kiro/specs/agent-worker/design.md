@@ -1,5 +1,28 @@
 # 영속 AI 작업자 설계
 
+## 2026-09-13 사진 실행 경계 정렬
+
+사진 기능은 `gole_brick_filter/` 안에서 동일한 책임 분리를 따른다.
+
+| 책임 | 파일 | 소유하지 않는 것 |
+|---|---|---|
+| Brain | `brain.py` | SDK·환경변수·전송·DB |
+| Port / Policy | `ports.py`, `policy.py` | 외부 호출·상태 저장 |
+| Hands | `hands.py` | graph·quota·RPC |
+| Harness | `runtime.py` | 사용자 인증·quota·영속 원장 |
+| Session | `session.py` | 이미지·프롬프트·예외 원문·시크릿 |
+| Transport / 조립 | `grpc_server.py`, `server.py` | 처리 순서·모델 프롬프트 |
+
+Brain은 포트로 주입된 이미지 정규화·Editor만 사용한다. Harness는 동시성·취소·최대 실행시간을
+관리하고 요청마다 graph와 Session을 새로 만든다. Session은 허용된 단계 이벤트만 가진 bounded
+메타데이터이며 전송이나 모델 context가 아니다. 성공 응답 뒤 별도 공유 메모리에 승격하지 않는다.
+기존 `agent.py`는 import 호환 facade로 남긴다. 실제 HTTP/gRPC 실행은 같은 ImageHarness로 조립한다.
+
+문의 AgentJobs의 SQLite 영속 Session과 사진의 EphemeralSession은 보존 정책이 달라 합치지 않는다.
+이는 공동 지능 저장소(Co-brain), 다중 agent supervisor, 원격 credential vault·sandbox 구현이 아니다.
+현재 외부 SDK client는 Hands로만 주입하고 graph에는 키를 넣지 않지만 프로세스 자체의 보안 격리를
+보장하지는 않는다. 사용자·quota 권한과 이미지 보관 원장은 여전히 Java가 소유한다.
+
 ## 계약과 보안
 
 `gole.agent.v1.AgentJobs`는 Submit/Get/Cancel/Purge를 제공한다. owner_id는 Java가 검증한 불투명 주체이고 authorization_ref는 Java의 기존 quota/권한 승인 참조다. Python은 사용자를 인증하거나 quota를 차감하지 않는다. 호출자는 `x-gole-caller`와 `authorization: Bearer ...` 메타데이터로 인증하며 서버 환경변수의 caller/token 한 쌍을 상수시간 비교한다. 저장소는 caller+owner로 격리한다. 존재하지 않는 작업과 다른 owner 작업은 동일 NOT_FOUND다.
@@ -82,3 +105,11 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 분석만 비활성화하면 원격 purge 연결을 유지하고, durable 설정까지 해제했는데 이 표식이 있으면
 문의 파기를 fail-closed로 거절한다. 따라서 설정 해제로 과거 원격 사본 파기가 조용히 누락되지 않는다.
 표식 없는 기존 동기 작업은 기존 파기 흐름을 유지한다. 이 표식은 새 원장이나 quota 차감이 아니다.
+# 전체 작업 예산
+
+- `Store`는 접수 시 `deadline_at=created_at+300초`를 저장한다. 재시도와 설정 변경은 이 값을 연장하지 않는다.
+- 기존 SQLite 원장은 쓰기 트랜잭션 안에서 컬럼을 추가하고 생성 시각 기준으로 backfill한다.
+- `Get`·동일 키 접수·`claim`이 만료를 `FAILED/JOB_DEADLINE_EXCEEDED`로 확정한다. 소유자 검사를 먼저 통과해야 조회에 따른 변경이 가능하다.
+- 만료는 fencing token을 증가시키고 원문 없는 실패 이벤트를 한 번만 남긴다. 완료/취소/실패된 작업은 덮어쓰지 않는다.
+- 실행 직전 남은 전체 예산과 회당 실행 제한 중 작은 값을 provider timeout으로 전달한다. 만료 후 heartbeat/checkpoint/완료는 거절한다.
+- 이미 시작된 외부 API를 강제 중단하거나 외부 비용을 환급하는 기능은 아니다. Python 프로세스가 모두 정지한 동안 DB 행 자체가 자동 갱신되는 것도 아니며 다음 조회/실행자가 만료를 확정한다.

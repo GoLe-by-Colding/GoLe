@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hmac
 import os
+from gole_agent_runtime.privacy import reject_external_tracing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import BoundedSemaphore
 
-from gole_brick_filter.agent import MAX_INPUT, OpenAIEditor, build_graph
+from gole_brick_filter.policy import MAX_INPUT
+from gole_brick_filter.hands import OpenAIEditor
+from gole_brick_filter.runtime import ImageHarness, InvalidImage, CapacityExceeded
 
 
 def make_handler(graph, token: str):
@@ -50,7 +53,9 @@ def make_handler(graph, token: str):
                 self.send_header("Content-Length", str(len(result)))
                 self.end_headers()
                 self.wfile.write(result)
-            except ValueError:
+            except CapacityExceeded:
+                self.send_error(429)
+            except (ValueError, InvalidImage):
                 self.send_error(422, "Image processing failed")
             except Exception:
                 self.send_error(503, "Image processing unavailable")
@@ -63,11 +68,10 @@ def serve():
     # A key alone never enables billable calls. Support-agent entrypoint is unchanged.
     if os.environ.get("BRICK_FILTER_PROVIDER_ENABLED") != "true":
         raise RuntimeError("Brick filter provider is disabled")
-    if os.environ.get("LANGSMITH_TRACING", "").lower() == "true" or os.environ.get("LANGCHAIN_TRACING_V2", "").lower() == "true":
-        raise RuntimeError("Image workflow tracing must remain disabled")
+    reject_external_tracing()
     from openai import OpenAI
     client = OpenAI(timeout=120.0, max_retries=0)
-    graph = build_graph(OpenAIEditor(client, os.environ.get("BRICK_FILTER_MODEL", "gpt-image-2")))
+    graph = ImageHarness(OpenAIEditor(client, os.environ.get("BRICK_FILTER_MODEL", "gpt-image-2")))
     server = ThreadingHTTPServer(
         (os.environ.get("BRICK_FILTER_BIND", "127.0.0.1"), int(os.environ.get("BRICK_FILTER_PORT", "50052"))),
         make_handler(graph, os.environ.get("BRICK_FILTER_INTERNAL_TOKEN", "")),
