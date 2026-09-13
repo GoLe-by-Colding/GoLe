@@ -1,0 +1,6 @@
+allprojects {
+    layout.buildDirectory.set(file('/tmp/gole-brick-filter-java'))
+    afterEvaluate {
+        spotless { java { target('src/main/java/com/gole/api/brickfilter/**/*.java', 'src/test/java/com/gole/api/brickfilter/**/*.java', 'src/main/java/com/gole/api/media/**/*.java', 'src/test/java/com/gole/api/media/**/*.java') } }
+    }
+}
