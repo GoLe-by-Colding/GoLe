@@ -70,6 +70,7 @@ crash.*.log
 !.claude/settings.json
 .claude/settings.local.json
 .claude/.agent-dev-servers
+.claude/.agent-devlog-pending
 
 # FCM 발송용 서비스 계정 키. 이것만 있으면 누구나 이 앱 사용자 전원에게 푸시를 보낼 수 있다.
 # .env 와 달리 확장자가 .json 이라 일반 패턴에 걸리지 않으므로 명시적으로 막는다.
