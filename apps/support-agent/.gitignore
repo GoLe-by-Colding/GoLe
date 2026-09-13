@@ -1,0 +1,2 @@
+# 문의 payload/checkpoint가 있는 기본 로컬 저장소는 커밋하지 않는다.
+/data/

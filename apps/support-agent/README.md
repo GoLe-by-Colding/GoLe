@@ -17,3 +17,120 @@ bash apps/support-agent/scripts/generate-proto.sh
 gRPC 계약은 `apps/api/src/main/proto/gole/support/v1/support_agent.proto` 한 곳을 Java와 Python이
 공유한다. 외부 LLM은 처리업체·리전·보관정책을 개인정보처리방침에 먼저 고지한 뒤 별도
 기능 플래그와 계약 테스트를 추가하기 전까지 연결하지 않는다.
+
+## 별도 영속 작업자
+
+기존 `gole_support_agent.server`와 Analyze RPC는 그대로다. 새
+`gole_agent_worker.server`는 `gole.agent.v1.AgentJobs`의 Submit/Get/Cancel/Purge를 제공하는
+별도 프로세스다. Python 사용자용 공개 API는 만들지 않았다.
+
+### 실행과 저장소
+
+위 proto 생성 명령을 먼저 실행한다. 실행 환경에 `AGENT_INTERNAL_CALLER`와
+`AGENT_INTERNAL_TOKEN`(최소 32자)을 안전하게 주입한 뒤 다음 명령을 Orca 터미널에서 실행한다.
+키와 토큰의 값은 명령 이력·로그·문서에 넣지 않는다.
+
+```bash
+PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
+  uv run --project apps/support-agent python -m gole_agent_worker.server
+```
+
+- `AGENT_GRPC_PORT`: 기본 50052, **127.0.0.1에만 bind**한다. 원격 Java 연결과 mTLS 프록시는 미구현이다.
+- `AGENT_DB_PATH`: 기본 패키지 루트의 `apps/support-agent/data/agent-jobs.sqlite3`(이미지 안에서는 `/app/data/agent-jobs.sqlite3`). 재시작 때 반드시 같은 파일을 쓴다.
+  컨테이너 재생성까지 보존하려면 영속 로컬 볼륨 경로를 명시해야 한다.
+- 기본 시도 3회, lease 15초, heartbeat 5초, 재시도 2초/4초(상한 60초), 실행 제한 60초다.
+  `Store`/`Runner` 생성자에서 테스트할 수 있으며 외부 요청은 이 제한을 변경할 수 없다.
+- SQLite WAL 단일 호스트용이다. 여러 프로세스의 동일 로컬 파일 claim은 직렬화하지만
+  다중 호스트/NFS 공유 또는 운영 고가용성 저장소를 제공하지 않는다.
+- DB는 0600으로 생성한다. payload/checkpoint에 문의 내용이 있으므로 디렉터리 접근권한,
+  볼륨 암호화·백업·보관기간·삭제 절차는 운영 연결 전에 정해야 한다. 내부 Purge는 논리 파기를 제공하며 WAL/백업 물리 삭제는 별도 정책이 필요하다.
+- `LANGCHAIN_TRACING_V2=true` / `LANGSMITH_TRACING=true` 환경에서는 기동을 거절한다.
+
+### 내부 호출 계약
+
+모든 RPC는 `x-gole-caller`와 `authorization: Bearer …`를 필요로 한다. Java는 사용자 인증,
+owner 확정, 권한과 quota 승인을 먼저 끝내고 `owner_id`, `authorization_ref`를 보낸다.
+Python은 승인 참조를 보존하고 provider adapter에 전달하지만 그 참조를 별도 원장으로 검증하거나
+일일 사용량을 차감하지 않는다. 기존 brickfilter 3회/일 ledger 연결은 Java 후속 작업이다.
+
+Submit의 `idempotency_key`는 caller/owner 범위이며 같은 정규화 payload/승인 참조/provider는
+같은 job을 반환한다. 하나라도 다르면 ALREADY_EXISTS다. 다른 owner나 caller의 job은
+Get/Cancel에서 NOT_FOUND로 취급한다. RPC result에는 요청 원문·내부 승인 참조를 넣지 않는다.
+
+| kind | provider | payload_json | 현재 동작 |
+|---|---|---|---|
+| support.rules | rules | ticket_id/title/message 및 선택 declared_category/locale | 기존 rules-v1 분석, 외부전송 금지 |
+| synthetic.demo | fake | `{"topic":"brick-colors"}` | 고정 비개인정보 테스트 결과 |
+| synthetic.demo | openai | `{"topic":"brick-colors"}` | 아래 이중 opt-in일 때만 고정 질문 호출 |
+
+OpenAI는 서버 `AGENT_OPENAI_ENABLED=true`와 Submit `allow_external=true`를 모두 요구한다.
+`OPENAI_API_KEY`는 환경변수에서만 읽고 `AGENT_OPENAI_MODEL` 기본값은 `gpt-4.1-mini`다.
+SDK 재시도는 끄고 runner의 제한을 적용하며 `store=False`, 최대 출력 128 token을 사용한다.
+문의 원문이나 자유 입력은 OpenAI 데모로 받을 수 없다. **support의 외부 모델 정책은 기존대로**다.
+이 변경을 검증할 때 실제 유료 API는 호출하지 않았다.
+
+### 실행 의미와 한계
+
+Brain은 prepare → execute → review, Hands는 typed Provider, Session은 FencedSaver와
+원문 없는 상태 이벤트다. 모든 결과에 `human_review_required=true`를 강제하며 자동 발송하지 않는다.
+LangGraph checkpoint와 pending writes, 작업 완료 쓰기는 유효 lease와 fencing token을 같은
+SQLite 트랜잭션에서 확인한다. 만료된 실행은 새 작업자의 checkpoint를 덮어쓰지 못한다.
+
+취소는 즉시 CANCELLED로 논리 종결하며 이후 완료/checkpoint를 차단한다. 진행 중 OpenAI HTTP
+요청은 물리적으로 취소하지 못하고 SDK timeout까지 남을 수 있다. Provider adapter는 전달한
+`timeout`과 `cancelled` 계약을 지켜야 한다. 이를 무시하는 임의 Python 코드를 강제 종료하는
+샌드박스는 아니며, 해당 코드가 영원히 block하면 실행 스레드도 돌아오지 않는다.
+
+재시작은 마지막 checkpoint에서 재개한다. 외부 응답과 checkpoint 사이 crash는 호출을
+반복할 수 있다. `operation_key`는 미래 adapter의 멱등 부수효과 연결점이며 OpenAI 비용의
+exactly-once를 보장하지 않는다. Java support 요청/조회 연결은 opt-in으로 구현했으며 brickfilter 어댑터 연결은 남아 있다.
+
+### 검증
+
+`uv run --project apps/support-agent pytest apps/support-agent/tests`로 기존 규칙과 이미지
+테스트를 포함해 검증한다. `tests/test_durable_worker.py`는 실제 localhost gRPC, 프로세스
+비정상 종료/재시작, provider 완료 뒤와 graph 완료 뒤 복구, 중복/충돌, 소유자 경계,
+lease/fencing/heartbeat, backoff/실패/취소와 fake OpenAI client를 검사한다.
+
+설계와 검증 기록: `.kiro/specs/agent-worker/`.
+LangGraph checkpoint 계약 참고: [공식 persistence 문서](https://docs.langchain.com/oss/python/langgraph/persistence).
+
+
+## Java support opt-in 연결
+
+기본 기존 `gole.support-agent.enabled`와 동기 Analyze 경로는 유지한다. 새 경로는 Java 환경에
+`GOLE_SUPPORT_AGENT_DURABLE_ENABLED=true`를 명시한 경우만 선택한다. 아래 속성은
+환경변수 또는 비밀 설정에서 주입한다(토큰 값은 로그/커밋/CLI 이력에 넣지 않는다).
+
+| Java 속성 | 환경변수 | 값/의미 |
+|---|---|---|
+| gole.support-agent.durable.enabled | GOLE_SUPPORT_AGENT_DURABLE_ENABLED | 기본 false |
+| gole.support-agent.durable.target | GOLE_SUPPORT_AGENT_DURABLE_TARGET | 기본 127.0.0.1:50052 |
+| gole.support-agent.durable.caller | GOLE_SUPPORT_AGENT_DURABLE_CALLER | Python AGENT_INTERNAL_CALLER와 일치 |
+| gole.support-agent.durable.token | GOLE_SUPPORT_AGENT_DURABLE_TOKEN | Python AGENT_INTERNAL_TOKEN과 일치 |
+| gole.support-agent.durable.timeout | GOLE_SUPPORT_AGENT_DURABLE_TIMEOUT | 기본 PT2S, 최대 PT10S |
+
+Java는 local/development/dev/test/e2e와 loopback 대상만 허용한다. 실행 중 API8090이나 운영 설정은
+바꾸지 않았다. 기존 `GOLE_SUPPORT_AGENT_ENABLED=false`로 분석을 꺼도 durable.enabled=true이면
+원격 파기 연결은 유지된다. 과거 원격 사본이 있는 동안 durable 설정/DB/인증을 제거하면 안 된다.
+
+기존 방별 최초 문의 원장을 재사용하고 Submit/Get 전체 예산은 Java lease보다 짧게 제한한다.
+정상 원격 pending은 기존 Mongo 작업을 defer하며 실패 시도 수를 소비하지 않는다. Python worker가
+없는 QUEUED 무한 대기를 위한 총 SLA/경보는 아직 없다. 실패/취소는 기존 Java 재시도로 처리한다.
+
+관리자의 기존 파기 승인·보존검토를 통과한 뒤 Mongo 삭제 트랜잭션 commit 전에 내부 Purge를
+호출한다. 원격 실패면 Mongo 삭제/영수증은 rollback한다. 원격 성공 뒤 Mongo rollback이 나면
+원문은 Mongo에 남고 원격 tombstone은 유지되며, 동일 요청 재시도가 같은 원격 영수증을 받는다.
+원격/로컬 파기가 분산 원자 트랜잭션인 것은 아니다.
+
+Purge는 job/payload/checkpoint/pending writes/events를 삭제하고 caller/owner/key/receipt/time만
+보존한다. 지연 완료와 재Submit을 차단하며 프로세스 재시작 뒤에도 유지한다. 키는 Java에서
+namespace+ID를 SHA-256으로 만든 불투명 값으로 원문·raw room/requester ID를 tombstone에 넣지 않는다.
+SQLite WAL/과거 백업에서 물리 바이트가 즉시 없어지는 것은 보장하지 않는다.
+
+
+원격 사본 보유 여부는 기존 Java 분석 문서의 `remoteCopyPossible` 표식으로 보존한다. 유효한
+lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, 완료·retry/defer 뒤에도 표식은 남는다.
+분석만 비활성화하면 원격 purge 연결을 유지하고, durable 설정까지 해제했는데 이 표식이 있으면
+문의 파기를 fail-closed로 거절한다. 따라서 설정 해제로 과거 원격 사본 파기가 조용히 누락되지 않는다.
+표식 없는 기존 동기 작업은 기존 파기 흐름을 유지한다. 이 표식은 새 원장이나 quota 차감이 아니다.
