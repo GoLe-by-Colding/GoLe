@@ -17,7 +17,7 @@
 | 이미지 업로드·버킷·공개 URL을 만질 때 | `.kiro/steering/minio.md` |
 | 기능 하나의 요구사항·설계 근거를 확인할 때 | `.kiro/specs/<기능>/` |
 | 작업 결과를 팀 문서에 남길 때 | `GoLe-obsidian` 볼트 (아래 "기록") |
-| 훅·권한 등 에이전트 하네스를 볼 때 | `.claude/settings.json` · `.claude/hooks/` |
+| 권한 등 에이전트 하네스를 볼 때 | `.claude/settings.json` |
 
 ## 프로젝트
 
@@ -98,9 +98,9 @@ orca terminal send   --terminal <handle> --text "<작업 브리핑>" --enter --j
   쓴다 — `infra:reset`은 볼륨을 지우므로 시드 데이터가 날아간다.
 - **보고에 상태를 한 줄 남긴다.** 무엇을 띄웠고 무엇이 남아 있는지 적는다.
 
-이 규칙은 문서만이 아니라 **훅으로 강제된다**: `.claude/hooks/dev-server-mark.sh`(PreToolUse)가
-에이전트가 띄운 서버를 표시하고, `dev-server-guard.sh`(Stop)가 안 끄고 끝내려 하면 턴을 막는다.
-Orca 터미널에 띄운 것은 표시하지 않으므로 오탐이 나지 않는다.
+서버 정리는 위 절차로 확인한다. 명령문과 포트만으로는 프로세스 소유 세션을 알 수 없으므로,
+이를 근거로 종료를 요구하던 PreToolUse·Stop 훅은 제거했다. 포트가 열려 있다는 이유만으로
+서버를 자기 세션의 것으로 판단하지 않는다.
 
 ### 서버 로그는 터미널 2개로 본다
 
