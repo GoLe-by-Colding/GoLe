@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple, WRITES_IDX_MAP
 
-from gole_agent_worker.model import LeaseLost
-from gole_agent_worker.store import Store
+from gole_agent_worker.contracts import LeaseLost
+from gole_agent_worker.runtime.store import Store
 
 
 class FencedSaver(BaseCheckpointSaver):
