@@ -8,6 +8,45 @@
 - 모든 답변은 관리자 초안이며 자동 발송·자동 해결하지 않음
 - 외부 모델 사용 여부를 응답에 명시하고 현재는 항상 `false`임
 
+## 영속 작업자의 코드 구조와 읽는 순서
+
+`src/gole_agent_worker/`는 여러 목적의 에이전트가 공유하는 실행 기반이다.
+기존 `gole_support_agent/` 동기 서버와 `gole_brick_filter/` 이미지 서비스는 별도 진입점을 유지한다.
+
+```text
+gole_agent_worker/
+├─ contracts.py          # 작업 입력·공통 오류, 외부 라이브러리 의존 없음
+├─ agents/               # support·synthetic Brain과 작업별 입력 정책
+├─ hands/                # Provider 계약과 fake/OpenAI 구현
+├─ runtime/              # 접수·registry·고정 순서 그래프·실행권·재시도·작업 저장
+├─ session/              # 작업별 체크포인트와 pending writes
+├─ entrypoints/grpc.py   # 내부 인증·요청 변환·gRPC 오류 매핑
+└─ bootstrap.py          # 환경 설정·서버와 실행기 조립
+```
+
+요청 하나를 따라 읽을 때는 다음 순서로 본다.
+
+1. `entrypoints/grpc.py`의 `AgentJobsService.Submit`: 인증하고 요청을 `Submission`으로 변환한다.
+2. `runtime/jobs.py`의 `JobService.submit`: 공통·작업별 입력 정책을 검증한다.
+3. `runtime/store.py`의 `Store.submit`: 중복을 확인하고 `QUEUED` 작업을 저장한다. 접수는 여기서 응답한다.
+4. 별도 실행 루프인 `runtime/runner.py`의 `Runner.run_once`: 작업 실행권을 얻고 `run_claimed`로 넘긴다.
+5. `runtime/graph.py`: `prepare → execute → review`를 실행하고 `agents/`의 작업별 Brain에 위임한다.
+6. `session/checkpoints.py`: 단계 사이 상태를 저장한다. 그래프 완료 후 Runner가 결과를 작업에 저장한다.
+
+Brain은 `ExecutionContext.check_active()`로 실행 가능 여부를 확인하는 흐름 안에서 동작한다.
+DB 트랜잭션과 lease 검사는 Runtime이, 체크포인트 쓰기의 fencing은 Session이 책임진다.
+Session은 한 작업의 복구를 위한 것으로 콘텐츠 발행 이력·장기 기억 저장소가 아니다.
+
+신규 작업은 `agents/`에 `Agent` 계약의 입력 검증과 실행을 구현한 뒤
+`runtime/registry.py`에 명시적으로 등록한다. 필요한 외부 기능은 Hands의 계약 뒤에 둔다.
+현재 공통 그래프는 v1 고정 순서이며 목표 기반 플래너와 홍보 기능은 아직 없다.
+다른 단계·상태가 필요해지면 흐름 버전과 이전 작업의 재개 정책부터 정한다.
+
+기존 `brain/model/runner/store/server` import는 얇은 호환 진입점으로 남긴다.
+`hands`와 `session`도 기존 공개 이름을 재노출한다. 실행 명령·기본 DB 경로·gRPC·DB 스키마와
+기존 체크포인트의 노드 이름·상태 형식은 바뀌지 않았다.
+설계·검증 근거는 [구조 개편 스펙](../../.kiro/specs/agent-worker-structure/design.md)을 참고한다.
+
 ```bash
 uv sync --project apps/support-agent
 bash apps/support-agent/scripts/generate-proto.sh
