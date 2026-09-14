@@ -24,4 +24,11 @@
 
 ## 원격 검증
 
-- 별도 dev 대상 PR의 결과를 확인한 후 기록한다. 아직 전체 CI 통과로 판단하지 않는다.
+- [PR #131](https://github.com/GoLe-by-Colding/GoLe/pull/131): `fix/ci-contract-validation` → `dev`, 사용자 머지 대기.
+- 구현 커밋 `e930c812`의 [실행 #34850976633](https://github.com/GoLe-by-Colding/GoLe/actions/runs/34850976633): Frontend·Backend·E2E·Infra·Mobile·Support agent 6개 잡 성공.
+- E2E: **209 passed / 0 failed / 10 skipped**, 4.0분. 기존 정상 기준선으로 복귀함. 10건 스킵이 있으므로 전 경로 검증으로 해석하지 않음.
+- Support agent: **97 passed**, 11.45초. #130의 구조 개편을 포함하지 않는 dev 기반이므로 #130 로컬 108건과 범위가 다름.
+- Infra: Dockerfile 12건·bootstrap Python 120건·budget relay 27건 통과. 이후 호스트·Secret Sync·앱 운영·ShellCheck·actionlint·Compose·Terraform 단계도 성공.
+- Backend: `:test`와 `:integrationTest`가 UP-TO-DATE 없이 실제 실행된 뒤 BUILD SUCCESSFUL. 공개 잡 로그에서 총 건수는 확인되지 않아 숫자를 추정하지 않음.
+- Discord CI result 잡은 PR 조건상 스킵됨. 테스트 스킵 10건과 별개임.
+- 이 기록 이후 문서 커밋의 최신 체크 상태는 PR에서 확인한다. 운영 배포·실결제·실제 Threads 게시·PR 머지는 실행하지 않음.
