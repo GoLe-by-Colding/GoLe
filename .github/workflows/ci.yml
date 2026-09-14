@@ -397,18 +397,32 @@ jobs:
           }
           echo "부팅 스택 유닛 계약 통과."
 
-      - name: Secret Sync log security contract
+      - name: Dockerfile digest policy tests
+        run: python -m unittest discover -s infra/gcp/tests -p 'test_dockerfile_pins.py'
+
+      - name: Bootstrap and policy contracts
         run: |
           GOLE_BOOTSTRAP_CONTRACT_STATIC_ONLY=true \
             bash infra/gcp/tests/bootstrap-contract.test.sh
+
+      - name: Production host contracts
+        run: |
           for infra_test in infra/gcp/tests/*.test.sh; do
             if [ "$infra_test" = infra/gcp/tests/bootstrap-contract.test.sh ]; then
               continue
             fi
+            echo "::group::$infra_test"
             bash "$infra_test"
+            echo "::endgroup::"
           done
+
+      - name: Secret Sync log security contract
+        run: |
           bash scripts/__tests__/secret-sync-security.test.sh
           bash scripts/__tests__/sync-dev-env-security.test.sh
+
+      - name: Application operational contracts
+        run: |
           bash scripts/__tests__/onboarding-phone-policy-contract.test.sh
           bash scripts/__tests__/media-storage-boundary.test.sh
           node --test scripts/__tests__/migrate-production-demo-content.test.mjs
