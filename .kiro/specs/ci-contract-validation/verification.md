@@ -32,3 +32,11 @@
 - Backend: `:test`와 `:integrationTest`가 UP-TO-DATE 없이 실제 실행된 뒤 BUILD SUCCESSFUL. 공개 잡 로그에서 총 건수는 확인되지 않아 숫자를 추정하지 않음.
 - Discord CI result 잡은 PR 조건상 스킵됨. 테스트 스킵 10건과 별개임.
 - 이 기록 이후 문서 커밋의 최신 체크 상태는 PR에서 확인한다. 운영 배포·실결제·실제 Threads 게시·PR 머지는 실행하지 않음.
+
+## 재실행에서 발견한 시간 의존 테스트
+
+- 문서 커밋 `78d04d01`의 [실행 #34851754786](https://github.com/GoLe-by-Colding/GoLe/actions/runs/34851754786)에서 Support agent가 96 passed / 1 failed로 실패함. 실제 프로세스 복구 테스트에서 자식의 0.2초 임대가 체크포인트 저장 중 만료되어 `LeaseLost`, 종료 코드 1이 발생함(기대 19).
+- 부모·자식 Store에 동일한 시각을 주입하고 강제 종료 후 부모 시각만 전진하도록 수정함. 실제 spawn·os._exit·SQLite 재개와 provider 중복 실행 방지 검증을 유지하고 만료 전 재claim 불가도 확인함.
+- 복구 테스트 2개 경우를 5회 반복해 10건 모두 통과함.
+- 로컬 파일 전체 검사 중 timeout 테스트에서도 임대 경합으로 RUNNING이 남는 실패가 관찰됨. 이 테스트는 임대 시각만 고정하고 실제 monotonic 실행 제한은 유지함. 수정 후 test_durable_worker.py 전체 통과, 스킵 없음.
+- 변경은 테스트와 스펙뿐이며 운영 Store·Runner 및 #130 브랜치는 수정하지 않음. 최종 원격 결과는 PR과 수민 일지에 기록함.

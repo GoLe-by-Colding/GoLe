@@ -6,4 +6,6 @@
 - bootstrap-contract의 기존 Dockerfile 목록은 유지하고 검사기에 전달한다. 별도 unittest로 정상 내부 참조와 외부 이미지 누락·잘못된 pin을 회귀 검증한다.
 - CI에서는 이 unittest, 정적 bootstrap 검사, 호스트 계약, Secret Sync 계약을 이름별 단계로 분리한다. 기존 검사를 제거하거나 continue-on-error로 우회하지 않는다.
 - E2E는 실제 존재하는 /brick-filter를 허용하고 화면 검사 대상으로 추가한다. 단일 테스트는 유지하며 화면별 step과 soft assertion으로 진단을 모은다.
+- 프로세스 복구 테스트는 부모·자식 Store에 동일한 고정 시각을 주입한다. 자식의 os._exit 이후 임대 만료 전 재claim 불가를 확인하고 부모 시각만 전진해 복구한다. 실제 시간 0.2초 안에 체크포인트를 저장해야 하던 경합과 sleep을 없애고 운영 임대 코드는 바꾸지 않는다.
+- 로컬에서 함께 드러난 실행 timeout 테스트도 Store 시각을 고정해 별개인 임대 만료와 격리한다. Runner의 monotonic 기반 실행 제한과 늦은 결과 차단 검증은 그대로 둔다.
 - actionlint 고정 이미지, bootstrap 정적 검사, 검사기 unittest, 관련 Playwright 테스트로 검증한다. 로컬 환경 제한은 원격 CI 결과와 구분한다.
