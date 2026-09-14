@@ -27,3 +27,10 @@ hands/session은 동일 import를 제공하는 패키지로 전환한다. server
 변경 전 전체 pytest 기준선을 확인한다. 이동 단위로 회귀 검증하고, DB 없이 Brain 실행,
 취소 경계, 기존 버전 그래프 체크포인트 재개, 기본 DB 경로와 import 호환을 추가 검사한다.
 최종 전체 pytest는 실제 gRPC·프로세스 재시작·중복·파기·lease 테스트를 포함한다.
+
+## 최신 dev와의 통합
+
+작업 중 dev에 반영된 전체 작업 기한과 privacy 경계도 보존한다.
+Store의 deadline_at 초기화·기한 검사, Runner의 남은 기한 전달·private_execution,
+기동 시 reject_external_tracing은 새 경로로 이동한다. 이 개편 자체는 dev 대비
+DB 마이그레이션이나 의존성을 추가하지 않는다.

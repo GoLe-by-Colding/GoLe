@@ -8,15 +8,14 @@ from pathlib import Path
 from gole_agent_worker.entrypoints.grpc import AgentJobsService, create_server
 from gole_agent_worker.runtime.runner import Runner
 from gole_agent_worker.runtime.store import Store
+from gole_agent_runtime.privacy import reject_external_tracing
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data/agent-jobs.sqlite3"
 
 
 def serve():
     # trace exporter가 문의 원문을 외부로 전송하는 우회 경로가 되지 않도록 차단한다.
-    if any(os.environ.get(key, "").lower() == "true"
-           for key in ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING")):
-        raise ValueError("EXTERNAL_TRACING_FORBIDDEN")
+    reject_external_tracing()
     store = Store(os.environ.get("AGENT_DB_PATH", str(DEFAULT_DB_PATH)))
     service = AgentJobsService(store, caller=os.environ.get("AGENT_INTERNAL_CALLER", ""),
                                token=os.environ.get("AGENT_INTERNAL_TOKEN", ""),

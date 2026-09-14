@@ -7,8 +7,11 @@
 - 상태와 checkpoint를 영속화한다. lease 획득마다 fencing token을 증가시키고 heartbeat·checkpoint·완료에 유효 lease/token을 요구한다.
 - 재시도 횟수·지수 backoff·실행시간을 제한하며 취소와 lease 만료 복구를 지원한다. 외부 부수효과 exactly-once는 보장하지 않는다.
 - Brain(graph), Hands(typed provider port), Session(checkpoint·원문 없는 최소 이벤트)를 분리한다.
+- LangSmith의 네 가지 tracing 환경변수 별칭을 모두 검사하고, 실제 실행 경계에서 tracing과 상속 callback을 끈다. 사진·문의 원문을 관측 exporter로 보내지 않는다.
 - 기본은 rules/fake이며 OpenAI는 서버 opt-in 및 요청 opt-in을 모두 요구한다. 키는 환경변수만 읽고 출력하지 않는다. support 원문은 opt-in과 무관하게 외부로 보내지 않는다.
 - fake provider만으로 실제 gRPC, 재시작, 중복/충돌, stale 완료/checkpoint, 취소, 실패를 검증한다.
+- 접수부터 완료까지 기본 300초의 전체 예산을 적용한다. 만료 시각은 DB에 저장해 재시작이나 설정 변경으로 연장하지 않으며, 실행 워커가 없어도 Get/재접수에서 만료를 확정한다.
+- 만료 작업은 JOB_DEADLINE_EXCEEDED로 실패하고 같은 키로 다시 실행하지 않는다. 만료 뒤 heartbeat·checkpoint·완료를 차단한다.
 - Java support 연결은 아래 후속 범위로 확장했다. 운영 배포, 공개 endpoint, 사용자 quota 구현은 범위 밖이다.
 
 ## Java support 연결 후속 요구사항

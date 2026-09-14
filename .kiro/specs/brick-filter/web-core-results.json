@@ -1,0 +1,14 @@
+{
+  "passed": 8,
+  "tests": [
+    "쿠키·멱등키·multipart 유지 및 POST deadline",
+    "모든 GET 인증·no-store·deadline 및 ID 인코딩",
+    "HTML·null·빈 오류 응답은 상태 보존한 actionable ApiError",
+    "늦은 401은 현재 세션을 지우지 않음",
+    "조회 15초·생성 180초 deadline을 실제 abort로 전달",
+    "정상 서버 오류 code/message 보존",
+    "결과는 인증 이미지 바이트만 허용",
+    "SVG·위조 PNG·빈 결과·선언 및 스트림 크기 초과를 거절"
+  ],
+  "network": "모든 fetch를 메모리 fake로 대체"
+}

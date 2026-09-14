@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import time
 import uuid
@@ -12,14 +13,17 @@ from gole_agent_worker.contracts import Conflict, LeaseLost, NotFound, Purged, S
 
 class Store:
     def __init__(self, path: str, *, clock=time.time, max_attempts=3,
-                 lease_seconds=15.0, backoff_seconds=2.0):
-        if path == ":memory:" or max_attempts < 1 or lease_seconds <= 0 or backoff_seconds < 0:
+                 lease_seconds=15.0, backoff_seconds=2.0, max_job_seconds=300.0):
+        if (path == ":memory:" or max_attempts < 1 or lease_seconds <= 0 or backoff_seconds < 0
+                or max_job_seconds <= 0 or not all(math.isfinite(value) for value in
+                    (lease_seconds, backoff_seconds, max_job_seconds))):
             raise ValueError("INVALID_STORE_CONFIGURATION")
         self.path = str(Path(path).absolute())
         self.clock = clock
         self.max_attempts = max_attempts
         self.lease_seconds = lease_seconds
         self.backoff_seconds = backoff_seconds
+        self.max_job_seconds = max_job_seconds
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.execute("PRAGMA journal_mode=WAL")
@@ -57,6 +61,15 @@ class Store:
                     PRIMARY KEY(job_id, ns, checkpoint_id, task_id, idx)
                 );
             """)
+        # 마이그레이션과 backfill을 하나의 쓰기 트랜잭션으로 보호한다.
+        # 기존 deadline은 재시작이나 새 설정으로 연장하지 않는다.
+        with self.transaction() as db:
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
+            if "deadline_at" not in columns:
+                db.execute("ALTER TABLE jobs ADD COLUMN deadline_at REAL")
+            db.execute("UPDATE jobs SET deadline_at=created_at+? WHERE deadline_at IS NULL",
+                       (self.max_job_seconds,))
+            db.execute("CREATE INDEX IF NOT EXISTS jobs_deadline ON jobs(state,deadline_at)")
         Path(self.path).chmod(0o600)
 
     @contextmanager
@@ -94,22 +107,32 @@ class Store:
             if old:
                 if old["submission"] != canonical:
                     raise Conflict()
-                return dict(old)
+                return dict(self.expire(db, old))
             now = self.clock()
             job_id = str(uuid.uuid4())
             db.execute("""INSERT INTO jobs(id,caller,owner,idempotency_key,submission,state,
-                       available_at,created_at,updated_at) VALUES(?,?,?,?,?,'QUEUED',?,?,?)""",
-                       (job_id, caller, submission.owner, submission.key, canonical, now, now, now))
+                       available_at,created_at,updated_at,deadline_at) VALUES(?,?,?,?,?,'QUEUED',?,?,?,?)""",
+                       (job_id, caller, submission.owner, submission.key, canonical,
+                        now, now, now, now + self.max_job_seconds))
             self.event(db, job_id, "QUEUED", 0)
             return dict(db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
 
     def get(self, caller, owner, job_id):
-        with self.connection() as db:
+        with self.transaction() as db:
             row = db.execute("SELECT * FROM jobs WHERE id=? AND caller=? AND owner=?",
                              (job_id, caller, owner)).fetchone()
             if row is None:
                 raise NotFound()
-            return dict(row)
+            return dict(self.expire(db, row))
+
+    def expire(self, db, row):
+        if row["state"] not in TERMINAL and row["deadline_at"] <= self.clock():
+            db.execute("""UPDATE jobs SET state='FAILED', error='JOB_DEADLINE_EXCEEDED',
+                       fence=fence+1, lease_until=0, updated_at=? WHERE id=?""",
+                       (self.clock(), row["id"]))
+            self.event(db, row["id"], "FAILED", row["attempts"], "JOB_DEADLINE_EXCEEDED")
+            return db.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone()
+        return row
 
     def cancel(self, caller, owner, job_id):
         with self.transaction() as db:
@@ -134,6 +157,9 @@ class Store:
     def claim(self):
         with self.transaction() as db:
             now = self.clock()
+            for row in db.execute("""SELECT * FROM jobs WHERE state IN ('QUEUED','RUNNING','RETRY_WAIT')
+                                  AND deadline_at<=?""", (now,)).fetchall():
+                self.expire(db, row)
             expired = db.execute("SELECT * FROM jobs WHERE state='RUNNING' AND lease_until<=?", (now,)).fetchall()
             for row in expired:
                 self._retry(db, row, "LEASE_EXPIRED", True)
@@ -151,7 +177,7 @@ class Store:
     def assert_lease(self, db, job_id, fence):
         row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         if (row is None or row["state"] != "RUNNING" or row["fence"] != fence
-                or row["lease_until"] <= self.clock()):
+                or row["lease_until"] <= self.clock() or row["deadline_at"] <= self.clock()):
             raise LeaseLost()
         return row
 

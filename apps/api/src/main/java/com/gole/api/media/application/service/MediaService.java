@@ -12,6 +12,7 @@ import com.gole.api.media.application.port.out.ObjectStoragePort.StoredObject;
 import com.gole.api.media.domain.exception.ImageNotFoundException;
 import com.gole.api.media.domain.exception.ImageTooLargeException;
 import com.gole.api.media.domain.exception.InvalidImageException;
+import com.gole.api.media.domain.model.HeifSignature;
 import com.gole.api.media.domain.model.MediaKey;
 import com.gole.api.media.domain.model.StoredImage;
 import java.util.Map;
@@ -83,12 +84,14 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         // 브라우저가 보낸 MIME 문자열은 위조할 수 있다. 공개 제공해도 안전한 래스터 형식만
         // 파일 시그니처로 판별하고, 선언 형식과 실제 형식이 다르면 거부한다.
         String detectedType = detectContentType(content)
-                .orElseThrow(() -> new InvalidImageException("Only JPEG and PNG images are allowed"));
+                .orElseThrow(() -> new InvalidImageException("JPEG/PNG 또는 HEIC/HEIF 정지 사진만 업로드할 수 있습니다"));
         String declaredType = normalizeDeclaredType(contentType);
-        if (!detectedType.equals(declaredType)) {
+        boolean heif = "image/heic".equals(detectedType);
+        boolean genericHeif = heif && (declaredType.isEmpty() || "application/octet-stream".equals(declaredType));
+        if (!detectedType.equals(declaredType) && !genericHeif) {
             throw new InvalidImageException("Declared image type does not match file content");
         }
-        if (!EXTENSION_BY_TYPE.containsKey(detectedType)) {
+        if (!heif && !EXTENSION_BY_TYPE.containsKey(detectedType)) {
             // JDK ImageIO가 안전하게 완전 재인코딩할 수 없는 GIF/WebP는 정지 이미지도 받지 않는다.
             throw new InvalidImageException("Only non-animated JPEG and PNG images are allowed");
         }
@@ -97,7 +100,7 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         if (sanitized == null
                 || sanitized.content() == null
                 || sanitized.content().length == 0
-                || !detectedType.equals(sanitized.contentType())) {
+                || !(heif ? "image/jpeg" : detectedType).equals(sanitized.contentType())) {
             throw new InvalidImageException("Image could not be safely normalized");
         }
         if (sanitized.content().length > maxImageBytes) {
@@ -200,11 +203,14 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         if (contentType == null) {
             return "";
         }
-        String normalized = contentType.toLowerCase().split(";", 2)[0].trim();
+        String normalized =
+                contentType.toLowerCase(java.util.Locale.ROOT).split(";", 2)[0].trim();
+        if ("image/heif".equals(normalized)) return "image/heic";
         return "image/jpg".equals(normalized) ? "image/jpeg" : normalized;
     }
 
     private static Optional<String> detectContentType(byte[] bytes) {
+        if (HeifSignature.matches(bytes)) return Optional.of("image/heic");
         if (startsWith(bytes, 0xFF, 0xD8, 0xFF)) {
             return Optional.of("image/jpeg");
         }

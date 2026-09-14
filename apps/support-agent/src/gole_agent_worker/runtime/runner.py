@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 
@@ -10,11 +11,12 @@ from gole_agent_worker.hands import FakeProvider, OpenAIProvider
 from gole_agent_worker.contracts import LeaseLost, TransientFailure
 from gole_agent_worker.session import FencedSaver
 from gole_agent_worker.runtime.store import Store
+from gole_agent_runtime.privacy import private_execution
 
 
 class Runner:
     def __init__(self, store: Store, *, provider_factory=None, execution_timeout=60.0):
-        if execution_timeout <= 0:
+        if execution_timeout <= 0 or not math.isfinite(execution_timeout):
             raise ValueError("INVALID_EXECUTION_TIMEOUT")
         self.store = store
         self.execution_timeout = execution_timeout
@@ -28,13 +30,19 @@ class Runner:
         self.run_claimed(job)
         return True
 
+    @private_execution
     def run_claimed(self, job):
+        remaining = job["deadline_at"] - self.store.clock()
+        if remaining <= 0:
+            self.store.get(job["caller"], job["owner"], job["id"])
+            return
+        execution_timeout = min(self.execution_timeout, remaining)
         cancelled = threading.Event()
         finished = threading.Event()
-        deadline = time.monotonic() + self.execution_timeout
+        deadline = time.monotonic() + execution_timeout
 
         def heartbeat():
-            while not finished.wait(min(self.store.lease_seconds / 3, self.execution_timeout / 3)):
+            while not finished.wait(min(self.store.lease_seconds / 3, execution_timeout / 3)):
                 try:
                     if time.monotonic() >= deadline:
                         self.store.fail(job["id"], job["fence"], retryable=True, code="EXECUTION_TIMEOUT")
@@ -51,9 +59,10 @@ class Runner:
             submission = json.loads(job["submission"])
             saver = FencedSaver(self.store, job["id"], job["fence"])
             context = JobExecutionContext(self.store, job["id"], job["fence"], cancelled,
-                                          self.execution_timeout)
+                                          execution_timeout)
             graph = build_graph(saver, self.provider_factory(submission["provider"]), context)
-            config = {"configurable": {"thread_id": job["id"]}, "recursion_limit": 8}
+            config = {"configurable": {"thread_id": job["id"]}, "recursion_limit": 8,
+                      "callbacks": []}
             existing = saver.get_tuple(config)
             result = graph.invoke(None if existing else {"submission": submission}, config,
                                   durability="sync")

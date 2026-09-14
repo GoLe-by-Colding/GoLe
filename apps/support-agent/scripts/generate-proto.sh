@@ -10,4 +10,5 @@ uv run --project "$ROOT/apps/support-agent" python -m grpc_tools.protoc \
   --python_out="$GENERATED_DIR" \
   --grpc_python_out="$GENERATED_DIR" \
   "$ROOT/apps/api/src/main/proto/gole/support/v1/support_agent.proto" \
-  "$ROOT/apps/api/src/main/proto/gole/agent/v1/agent_jobs.proto"
+  "$ROOT/apps/api/src/main/proto/gole/agent/v1/agent_jobs.proto" \
+  "$ROOT/apps/api/src/main/proto/gole/brick/v1/brick_images.proto"

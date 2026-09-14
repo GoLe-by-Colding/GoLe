@@ -83,14 +83,15 @@ PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
   다중 호스트/NFS 공유 또는 운영 고가용성 저장소를 제공하지 않는다.
 - DB는 0600으로 생성한다. payload/checkpoint에 문의 내용이 있으므로 디렉터리 접근권한,
   볼륨 암호화·백업·보관기간·삭제 절차는 운영 연결 전에 정해야 한다. 내부 Purge는 논리 파기를 제공하며 WAL/백업 물리 삭제는 별도 정책이 필요하다.
-- `LANGCHAIN_TRACING_V2=true` / `LANGSMITH_TRACING=true` 환경에서는 기동을 거절한다.
+- `LANGCHAIN_TRACING`, `LANGCHAIN_TRACING_V2`, `LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2` 중 하나라도 `true`면 기동을 거절한다.
 
 ### 내부 호출 계약
 
 모든 RPC는 `x-gole-caller`와 `authorization: Bearer …`를 필요로 한다. Java는 사용자 인증,
 owner 확정, 권한과 quota 승인을 먼저 끝내고 `owner_id`, `authorization_ref`를 보낸다.
 Python은 승인 참조를 보존하고 provider adapter에 전달하지만 그 참조를 별도 원장으로 검증하거나
-일일 사용량을 차감하지 않는다. 기존 brickfilter 3회/일 ledger 연결은 Java 후속 작업이다.
+일일 사용량을 차감하지 않는다. AgentJobs와 brickfilter 3회/일 ledger의 영속 작업 연결은 후속 작업이다.
+사진 필터에는 별도 비영속 `BrickImages.Generate` gRPC를 추가했다(아래 참고).
 
 Submit의 `idempotency_key`는 caller/owner 범위이며 같은 정규화 payload/승인 참조/provider는
 같은 job을 반환한다. 하나라도 다르면 ALREADY_EXISTS다. 다른 owner나 caller의 job은
@@ -122,7 +123,36 @@ SQLite 트랜잭션에서 확인한다. 만료된 실행은 새 작업자의 che
 
 재시작은 마지막 checkpoint에서 재개한다. 외부 응답과 checkpoint 사이 crash는 호출을
 반복할 수 있다. `operation_key`는 미래 adapter의 멱등 부수효과 연결점이며 OpenAI 비용의
-exactly-once를 보장하지 않는다. Java support 요청/조회 연결은 opt-in으로 구현했으며 brickfilter 어댑터 연결은 남아 있다.
+exactly-once를 보장하지 않는다. Java support 요청/조회 연결은 opt-in으로 구현했으며 이미지의 영속 재개는 연결하지 않았다.
+
+### 사진 필터 gRPC
+
+사진 구현도 Brain/Hands/Session으로 나눴다. `brain.py`는 graph와 포트만 사용하고,
+`hands.py`는 이미지 codec·OpenAI 호출, `runtime.py`는 동시성·취소·실행시간을 담당한다.
+`session.py`에는 요청 수명 동안의 단계 이벤트만 남기며 사진이나 프롬프트는 넣지 않는다.
+HTTP와 gRPC 모두 같은 Harness를 사용하고 `agent.py`는 기존 import 호환용으로만 남긴다.
+문의의 SQLite 영속 Session과 사진의 메모리 전용 Session은 보존 정책이 달라 구분한다.
+공유 Co-brain·원격 vault·프로세스 sandbox까지 구현한 상태는 아니다.
+
+`gole_brick_filter.grpc_server`는 기존 Java BrickFilterService의 quota·provider gate 뒤에서 호출하는
+별도 사진 실행 프로세스다. `gole.brick.v1.BrickImages.Generate` 계약과 :50053을 사용한다.
+`gole.brick-filter.transport=grpc`에서만 Java 어댑터가 바뀌며 기본 HTTP는 유지한다.
+사진은 LangGraph에서 validate→generate→result로 처리하지만 checkpoint·디스크에 저장하지 않는다.
+입력 4MiB·출력 8MiB·필수 deadline·동시 실행 2개·인증을 검사하며 자동 재시도는 하지 않는다.
+
+설정과 실행 전제는 `.kiro/specs/agent-worker/brick-grpc.md`를 따른다. 운영 원격 transport는
+허용하지 않으며 Java/Python의 명시적 활성화와 provider 키가 필요하다. 실제 유료 호출을 검증한 것은 아니다.
+기존 support Docker 기본 entrypoint나 실행 중인 사용자 서버는 바꾸지 않았다.
+
+외부 호출 없이 실제 Java/Python 연결을 확인하는 단발 명령(Java 21·Gradle·uv 필요):
+
+```bash
+bash apps/support-agent/scripts/generate-proto.sh
+uv run --project apps/support-agent python apps/support-agent/tests/verify_brick_grpc_interop.py
+```
+
+테스트는 임시 loopback 서버를 띄우고 종료하며 두 모드를 각각 한 번 호출한다. 이는 전체 웹 로그인/
+업로드나 이미지 생성 품질의 E2E 검증을 대신하지 않는다.
 
 ### 검증
 
@@ -155,7 +185,7 @@ Java는 local/development/dev/test/e2e와 loopback 대상만 허용한다. 실�
 
 기존 방별 최초 문의 원장을 재사용하고 Submit/Get 전체 예산은 Java lease보다 짧게 제한한다.
 정상 원격 pending은 기존 Mongo 작업을 defer하며 실패 시도 수를 소비하지 않는다. Python worker가
-없는 QUEUED 무한 대기를 위한 총 SLA/경보는 아직 없다. 실패/취소는 기존 Java 재시도로 처리한다.
+없는 동안에도 Python Get이 동작하면 접수 후 300초 기한을 검사한다. Python 서버까지 중단된 동안의 Java 원장 총 SLA/경보는 아직 없다. 실패/취소는 기존 Java 재시도로 처리한다.
 
 관리자의 기존 파기 승인·보존검토를 통과한 뒤 Mongo 삭제 트랜잭션 commit 전에 내부 Purge를
 호출한다. 원격 실패면 Mongo 삭제/영수증은 rollback한다. 원격 성공 뒤 Mongo rollback이 나면
@@ -173,3 +203,26 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 분석만 비활성화하면 원격 purge 연결을 유지하고, durable 설정까지 해제했는데 이 표식이 있으면
 문의 파기를 fail-closed로 거절한다. 따라서 설정 해제로 과거 원격 사본 파기가 조용히 누락되지 않는다.
 표식 없는 기존 동기 작업은 기존 파기 흐름을 유지한다. 이 표식은 새 원장이나 quota 차감이 아니다.
+## 전체 작업 기한
+
+영속 AgentJobs 작업은 접수 후 기본 300초 안에 끝나야 한다. SQLite에 만료 시각을 저장하므로 재시작·재시도·설정 변경으로 연장되지 않는다. 실행 루프가 멈춰 있어도 인증된 `Get` 또는 같은 키 재접수는 만료 작업을 `FAILED / JOB_DEADLINE_EXCEEDED`로 반환한다. 같은 키를 다시 보내도 생성하지 않으며, 만료 뒤 checkpoint와 완료 쓰기도 거절한다. 기존 성공 결과를 기한 경과만으로 실패로 바꾸지 않는다. 외부 제공자가 시작한 작업의 강제 종료나 비용 환급은 보장하지 않는다.
+
+## 외부 관측과 실행 컨텍스트 분리
+
+`gole_agent_runtime.privacy`는 문의 분석·영속 Runner·사진 Harness의 진입점에서 LangSmith tracing을 끄고 상위 Runnable의 callback/tags/metadata/configurable을 격리한다. 단순히 graph에 `callbacks=[]`를 넘기는 것만으로는 상위 callback이 병합될 수 있어 별도 실행 context가 필요하다. 호출이 끝나거나 예외가 나면 상위 context는 복원된다. 외부 exporter mock과 상위 callback 회귀 테스트는 실제 모델 호출 없이 원문·사진이 내부 graph의 trace로 전파되지 않는지 검사한다.
+
+이는 비신뢰 코드를 격리하는 sandbox가 아니다. 호출자가 경계에 넘기기 전에 이미 원문을 기록했거나 제공자 구현이 직접 전송하는 것까지 막지는 않는다. LangChain/LangGraph 변경 시 이 회귀 테스트를 반드시 실행한다.
+
+## 배포 이미지의 오프라인 smoke 검사
+
+관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다. 컨테이너에서도 proto 세 종류, rules-v1, SQLite 영속 fake 작업, 사진 두 모드와 상위 callback 격리를 실행한다. 운영 키·네트워크·호스트 데이터 쓰기 없이 실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+
+```sh
+docker build -f apps/support-agent/Dockerfile -t gole-agent-hour:test .
+docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 512m --cpus 1 \
+  --mount type=bind,src="$PWD/apps/support-agent/tests/verify_container_runtime.py",dst=/probe.py,readonly \
+  --entrypoint python gole-agent-hour:test /probe.py
+```
+
+2026-09-13 Linux arm64 이미지 빌드와 이 smoke 검사 통과. 원격 gRPC 배포, 실제 OpenAI 호출 및 이미지 품질 검증과는 구분한다.
