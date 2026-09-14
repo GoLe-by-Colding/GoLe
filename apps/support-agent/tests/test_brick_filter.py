@@ -28,7 +28,8 @@ def test_graph_validates_generates_and_clears_source(mode):
     assert editor.edit.call_args.args[1] == mode
 
 
-@pytest.mark.parametrize("data", [b"", b"<svg></svg>", b"x" * (MAX_INPUT + 1)])
+@pytest.mark.parametrize("data", [b"", b"<svg></svg>", b"x" * (MAX_INPUT + 1)],
+                         ids=["empty", "svg", "oversized"])
 def test_invalid_image_never_calls_provider(data):
     editor = Mock()
     with pytest.raises(Exception):

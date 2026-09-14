@@ -2,29 +2,8 @@ from __future__ import annotations
 
 import os
 import threading
-from dataclasses import dataclass
-from typing import Protocol
-
-from gole_agent_worker.model import LeaseLost, PermanentFailure, TransientFailure
-
-
-@dataclass(frozen=True)
-class ProviderInput:
-    topic: str
-    operation_key: str
-    authorization_ref: str
-
-
-@dataclass(frozen=True)
-class ProviderOutput:
-    text: str
-    external_model_used: bool
-
-
-class Provider(Protocol):
-    # adapter는 Java 승인 참조를 보존한다. 여기서 quota를 차감/재구현하지 않는다.
-    def generate(self, request: ProviderInput, *, timeout: float,
-                 cancelled: threading.Event) -> ProviderOutput: ...
+from gole_agent_worker.hands.contracts import ProviderInput, ProviderOutput
+from gole_agent_worker.contracts import LeaseLost, PermanentFailure, TransientFailure
 
 
 class FakeProvider:
