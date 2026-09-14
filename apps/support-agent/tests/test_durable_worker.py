@@ -4,7 +4,6 @@ import json
 import multiprocessing
 import os
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -39,7 +38,7 @@ def request(**changes):
 
 @pytest.fixture
 def store(tmp_path):
-    return Store(str(tmp_path / "jobs.sqlite3"), lease_seconds=0.3, backoff_seconds=0.01)
+    return Store(str(tmp_path / "jobs.sqlite3"), backoff_seconds=0.01)
 
 
 @pytest.fixture
@@ -188,8 +187,20 @@ def test_bounded_retry_resume_and_sanitized_failure(tmp_path, failures, permanen
     assert sum(m.get("step") == 1 for m in metadata) == 1
 
 
-def test_running_cancel_blocks_late_result_and_heartbeat(store):
+def test_running_cancel_blocks_late_result_and_heartbeat(tmp_path):
+    now = [100.0]
     entered, released = threading.Event(), threading.Event()
+    renewed = threading.Event()
+
+    class ObservedStore(Store):
+        def heartbeat(self, job_id, fence):
+            super().heartbeat(job_id, fence)
+            with self.connection() as db:
+                lease_until = db.execute("SELECT lease_until FROM jobs WHERE id=?", (job_id,)).fetchone()[0]
+            if lease_until > 100.3:
+                renewed.set()
+
+    store = ObservedStore(str(tmp_path / "heartbeat.sqlite3"), clock=lambda: now[0], lease_seconds=0.3)
 
     class Slow(FakeProvider):
         def generate(self, request, **kwargs):
@@ -202,8 +213,10 @@ def test_running_cancel_blocks_late_result_and_heartbeat(store):
     thread.start()
     try:
         assert entered.wait(2)
-        time.sleep(0.4)
-        # lease 원래 길이보다 오래 걸려도 heartbeat 덕에 재claim되지 않는다.
+        now[0] = 100.2
+        assert renewed.wait(2)
+        now[0] = 100.4
+        # 실제 heartbeat의 연장을 확인한 뒤 원래 만료 시각 100.3을 넘긴다.
         assert store.claim() is None
         store.cancel("java", "owner-1", job["id"])
     finally:

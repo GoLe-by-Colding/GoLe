@@ -8,4 +8,5 @@
 - E2E는 실제 존재하는 /brick-filter를 허용하고 화면 검사 대상으로 추가한다. 단일 테스트는 유지하며 화면별 step과 soft assertion으로 진단을 모은다.
 - 프로세스 복구 테스트는 부모·자식 Store에 동일한 고정 시각을 주입한다. 자식의 os._exit 이후 임대 만료 전 재claim 불가를 확인하고 부모 시각만 전진해 복구한다. 실제 시간 0.2초 안에 체크포인트를 저장해야 하던 경합과 sleep을 없애고 운영 임대 코드는 바꾸지 않는다.
 - 로컬에서 함께 드러난 실행 timeout 테스트도 Store 시각을 고정해 별개인 임대 만료와 격리한다. Runner의 monotonic 기반 실행 제한과 늦은 결과 차단 검증은 그대로 둔다.
+- 후속 CI의 heartbeat 테스트는 provider 진입 대기 실패가 관찰됐다. 일반 fixture에는 운영 기본 임대를 쓰고, heartbeat 검사는 별도 가상 시계에서 실제 갱신 이벤트를 기다린 뒤 기존 임대 만료 시각을 넘겨 재claim 차단을 확인한다. 고정 sleep만으로 갱신을 추정하지 않는다.
 - actionlint 고정 이미지, bootstrap 정적 검사, 검사기 unittest, 관련 Playwright 테스트로 검증한다. 로컬 환경 제한은 원격 CI 결과와 구분한다.
