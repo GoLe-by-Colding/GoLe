@@ -90,7 +90,8 @@ public class ThirdPartyProvisionConsentController {
             @NotBlank @Size(max = 160) String requestId) {}
 
     public record WithdrawalRequest(
-            @NotBlank @Size(max = 64) String noticeVersion, @NotBlank @Size(max = 160) String requestId) {}
+            @NotBlank @Size(max = 64) String noticeVersion,
+            @NotBlank @Size(max = 160) String requestId) {}
 
     public record ConsentStatusResponse(String noticeVersion, boolean consented, Instant lastDecisionAt) {
 

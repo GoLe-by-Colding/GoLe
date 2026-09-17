@@ -14,14 +14,18 @@ public final class OnboardingRequests {
 
     private OnboardingRequests() {}
 
-    public record SetNicknameRequest(@NotBlank @Size(min = 2, max = 12) String nickname) {}
+    public record SetNicknameRequest(
+            @NotBlank @Size(min = 2, max = 12) String nickname) {}
 
-    public record RequestPhoneVerificationRequest(@NotBlank @Size(max = 20) String phoneNumber) {}
+    public record RequestPhoneVerificationRequest(
+            @NotBlank @Size(max = 20) String phoneNumber) {}
 
-    public record ConfirmPhoneVerificationRequest(@NotBlank @Pattern(regexp = "\\d{6}") String code) {}
+    public record ConfirmPhoneVerificationRequest(
+            @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
     /** 태그는 표시 문구가 아니라 {@code GET /api/v1/account/interest-tags}가 준 {@code key}로 보낸다. */
-    public record SelectInterestTagsRequest(@NotEmpty @Size(max = 5) Set<@NotBlank @Size(max = 30) String> tags) {}
+    public record SelectInterestTagsRequest(
+            @NotEmpty @Size(max = 5) Set<@NotBlank @Size(max = 30) String> tags) {}
 
     /** {@code privacyConsented=false}는 400이 아니라 도메인에서 거부한다(R7). */
     public record SubmitConsentRequest(boolean privacyConsented, boolean marketingConsented) {}

@@ -155,7 +155,10 @@ public class SocialAuthController {
             Boolean thirdPartyProvisionAccepted,
             String returnTo) {}
 
-    public record CallbackRequest(@NotBlank String code, @NotBlank String redirectUri, @NotBlank String state) {}
+    public record CallbackRequest(
+            @NotBlank String code,
+            @NotBlank String redirectUri,
+            @NotBlank String state) {}
 
     public record SocialLoginResponse(
             String accountId,

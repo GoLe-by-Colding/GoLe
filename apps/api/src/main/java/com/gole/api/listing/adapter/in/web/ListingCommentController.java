@@ -89,7 +89,10 @@ public class ListingCommentController {
     }
 
     public record CreateCommentRequest(
-            String authorId, @NotBlank @jakarta.validation.constraints.Size(max = 1000) String content) {}
+            String authorId,
+
+            @NotBlank @jakarta.validation.constraints.Size(max = 1000)
+            String content) {}
 
     public record CommentResponse(String id, String authorId, String content, Instant createdAt) {
 

@@ -1,6 +1,7 @@
 package com.gole.api.listing.application.port.in;
 
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingCategory;
 import java.util.List;
@@ -21,7 +22,31 @@ public interface CreateListingUseCase {
             ConditionDisclosure disclosure,
             List<String> photoKeys,
             String catalogSetNumber,
-            ListingCategory category) {
+            ListingCategory category,
+            InterestTag interestTag) {
+
+        public CreateListingCommand(
+                String sellerId,
+                String title,
+                String description,
+                long price,
+                ItemCondition condition,
+                ConditionDisclosure disclosure,
+                List<String> photoKeys,
+                String catalogSetNumber,
+                ListingCategory category) {
+            this(
+                    sellerId,
+                    title,
+                    description,
+                    price,
+                    condition,
+                    disclosure,
+                    photoKeys,
+                    catalogSetNumber,
+                    category,
+                    null);
+        }
 
         /** 카테고리 미지정(레거시) — 세트로 간주. */
         public CreateListingCommand(
@@ -42,7 +67,8 @@ public interface CreateListingUseCase {
                     disclosure,
                     photoKeys,
                     catalogSetNumber,
-                    ListingCategory.SET);
+                    ListingCategory.SET,
+                    null);
         }
     }
 }

@@ -20,6 +20,7 @@ import com.gole.api.order.domain.model.PaymentMethodType;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
@@ -43,6 +44,11 @@ class PortOnePaymentGatewayAdapterTest {
     private final AtomicInteger cancelResponseStatus = new AtomicInteger(200);
     private final AtomicInteger cancelRequests = new AtomicInteger();
     private final AtomicInteger preRegisterRequests = new AtomicInteger();
+    private static final long READ_TIMEOUT_MS = 500;
+
+    /** 응답을 이 시간만큼 지연한다. 읽기 타임아웃 테스트용. */
+    private final AtomicInteger responseDelayMs = new AtomicInteger();
+
     private HttpServer server;
 
     @BeforeEach
@@ -54,6 +60,7 @@ class PortOnePaymentGatewayAdapterTest {
         cancelRequests.set(0);
         preRegisterRequests.set(0);
         requestBody.set(null);
+        responseDelayMs.set(0);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/payments", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
@@ -69,6 +76,13 @@ class PortOnePaymentGatewayAdapterTest {
                     preRegisterRequests.incrementAndGet();
                 }
                 requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            }
+            if (responseDelayMs.get() > 0) {
+                try {
+                    Thread.sleep(responseDelayMs.get());
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
             }
             byte[] body = (cancellation ? cancelResponseBody.get() : post ? "{}" : responseBody.get())
                     .getBytes(StandardCharsets.UTF_8);
@@ -137,8 +151,7 @@ class PortOnePaymentGatewayAdapterTest {
     @Test
     @DisplayName("포트원이 실제로 주는 PaymentMethodEasyPay 표기를 승인으로 인정한다")
     void acceptsRealPortOneEasyPayDiscriminator() {
-        responseBody.set(
-                """
+        responseBody.set("""
                 {"status":"PAID","id":"order-1","storeId":"store-1","version":"V2","currency":"KRW",
                 "amount":{"total":15000},
                 "channel":{"type":"TEST","key":"channel-key-1","pgProvider":"KAKAOPAY"},
@@ -336,6 +349,45 @@ class PortOnePaymentGatewayAdapterTest {
         assertThat(result.result()).isEqualTo(PaymentVerificationResult.NOT_FOUND);
     }
 
+    @Test
+    @DisplayName("PortOne이 응답하지 않으면 무한 대기하지 않고 읽기 타임아웃 안에 재시도 가능 장애로 끝난다")
+    void timesOutInsteadOfHangingWhenPortOneStalls() {
+        responseDelayMs.set((int) READ_TIMEOUT_MS * 6);
+        OperationalEventPublisher events = mock(OperationalEventPublisher.class);
+        PortOnePaymentGatewayAdapter adapter = adapter(events);
+
+        long started = System.nanoTime();
+        assertThatThrownBy(() -> adapter.verifyPayment("order-1", 15_000))
+                .isInstanceOf(PaymentGatewayUnavailableException.class);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        // 지연(3초)보다 훨씬 앞서 끝나야 타임아웃이 실제로 걸린 것이다.
+        assertThat(elapsedMs).isLessThan(READ_TIMEOUT_MS * 4);
+        // 조회 실패는 결제 거절이 아니므로 수동 검토 알림도 보내지 않는다.
+        verifyNoInteractions(events);
+
+        assertThatThrownBy(() -> adapter.refund("order-1", 15_000))
+                .isInstanceOf(PaymentGatewayUnavailableException.class);
+        assertThat(cancelRequests.get()).isZero(); // 조회에서 멈췄으니 취소 요청은 나가지 않는다
+    }
+
+    @Test
+    @DisplayName("타임아웃 설정이 0 이하이면 무한 대기를 허용하지 않고 기동을 거부한다")
+    void rejectsNonPositiveTimeouts() {
+        assertThatThrownBy(() -> new PortOnePaymentGatewayAdapter(
+                        "http://127.0.0.1:1",
+                        "api-secret",
+                        "store-1",
+                        "channel-key-1",
+                        "",
+                        "TEST",
+                        Duration.ZERO,
+                        Duration.ofSeconds(10),
+                        mock(OperationalEventPublisher.class)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("portone.connect-timeout");
+    }
+
     @ParameterizedTest
     @MethodSource("transientOrInvalidHttpStatuses")
     @DisplayName("404 이외의 PortOne 4xx/5xx는 매물 선점을 풀지 않는 재시도 가능 장애다")
@@ -493,6 +545,8 @@ class PortOnePaymentGatewayAdapterTest {
                 "channel-key-1",
                 cardChannelKey,
                 channelType,
+                Duration.ofSeconds(3),
+                Duration.ofMillis(READ_TIMEOUT_MS),
                 events);
     }
 
@@ -510,9 +564,7 @@ class PortOnePaymentGatewayAdapterTest {
                                 .replace("\"channel\":{\"key\":\"channel-key-1\",\"type\":\"TEST\"},", "")),
                 Arguments.of("채널 키 불일치", validPaidResponse("order-1").replace("channel-key-1", "channel-other")),
                 Arguments.of("채널 유형 불일치", validPaidResponse("order-1").replace("\"TEST\"", "\"LIVE\"")),
-                Arguments.of(
-                        "결제수단 누락",
-                        """
+                Arguments.of("결제수단 누락", """
                         {"status":"PAID","id":"order-1","storeId":"store-1","version":"V2",
                         "currency":"KRW","amount":{"total":15000},
                         "channel":{"key":"channel-key-1","type":"TEST"}}
@@ -549,8 +601,7 @@ class PortOnePaymentGatewayAdapterTest {
                 "amount":{"total":15000},"channel":{"key":"channel-key-1","type":"TEST"},
                 "method":{"type":"PaymentMethodEasyPay","provider":"KAKAOPAY",
                 "easyPayMethod":{"type":"PaymentMethodEasyPayMethodCharge"}}}
-                """
-                .formatted(paymentId);
+                """.formatted(paymentId);
     }
 
     /**
@@ -563,16 +614,14 @@ class PortOnePaymentGatewayAdapterTest {
                 "amount":{"total":15000},"channel":{"key":"card-channel-1","type":"TEST"},
                 "method":{"type":"PaymentMethodCard",
                 "card":{"publisher":"신한카드","issuer":"신한카드","brand":"LOCAL"}}}
-                """
-                .formatted(paymentId);
+                """.formatted(paymentId);
     }
 
     private static String basePaymentResponse(String status, String paymentId) {
         return """
                 {"status":"%s","id":"%s","storeId":"store-1","version":"V2","currency":"KRW",
                 "amount":{"total":15000}}
-                """
-                .formatted(status, paymentId);
+                """.formatted(status, paymentId);
     }
 
     private static String validCancelledResponse(String paymentId) {

@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, type ViewStyle } from "react-native";
-import { fontSize, radius, space, useTheme } from "@/shared/theme";
+import { fontSize, radius, semantic, space, useTheme } from "@/shared/theme";
 import { Text } from "./text";
 
 export interface ButtonProps {
@@ -24,7 +24,7 @@ export function Button({
   const blocked = disabled || loading;
 
   const background =
-    variant === "primary" ? colors.tint : variant === "danger" ? "#dc2626" : colors.surface;
+    variant === "primary" ? colors.tint : variant === "danger" ? semantic.danger : colors.surface;
   const foreground = variant === "secondary" ? colors.text : "#ffffff";
 
   return (

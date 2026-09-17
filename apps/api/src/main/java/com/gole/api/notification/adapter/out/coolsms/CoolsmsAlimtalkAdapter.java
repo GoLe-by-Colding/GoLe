@@ -99,7 +99,7 @@ public final class CoolsmsAlimtalkAdapter implements AlimtalkSenderPort {
                 response.getGroupInfo() == null ? null : response.getGroupInfo().getGroupId();
         List<MessageList> messages = response.getMessageList();
         if (!hasText(groupId) || messages == null || messages.size() != 1) {
-            throw failure(FailureType.PROVIDER_FAILURE, "CoolSMS response is missing acceptance details");
+            throw failure(FailureType.ACCEPTANCE_UNKNOWN, "CoolSMS response is missing acceptance details");
         }
 
         MessageList accepted = messages.getFirst();

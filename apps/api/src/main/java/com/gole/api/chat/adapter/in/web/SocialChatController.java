@@ -159,7 +159,8 @@ public class SocialChatController {
     public record CreateDirectRequest(@NotBlank String peerId) {}
 
     public record CreateGroupRequest(
-            @NotBlank @Size(max = 80) String title, @Size(min = 2, max = 49) List<@NotBlank String> memberIds) {}
+            @NotBlank @Size(max = 80) String title,
+            @Size(min = 2, max = 49) List<@NotBlank String> memberIds) {}
 
     public record CreateSupportRequest(
             @NotBlank @Size(max = 100) String title,

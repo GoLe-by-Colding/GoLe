@@ -1,0 +1,56 @@
+name: PR 규약 검사
+
+# AGENTS.md 의 "커밋 / PR" 규칙을 사람이 읽어주기를 기다리지 않고 여기서 확인한다.
+# 필수 체크가 아니라 머지를 막지는 않는다 — 대신 어디가 어긋났는지 이유를 남긴다.
+on:
+  pull_request:
+    types: [opened, reopened, edited, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  convention:
+    name: 제목·브랜치·대상 확인
+    runs-on: ubuntu-latest
+    steps:
+      - name: 규약 확인
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -uo pipefail
+          fail=0
+          TYPES='feat|fix|refactor|chore|docs|test|perf|ci'
+          note() { printf '::error title=%s::%s\n' "$1" "$2"; fail=1; }
+
+          # 1. 제목 — <type>(<scope>): 설명  또는  <type>: 설명
+          if ! grep -qE "^($TYPES)(\([a-z0-9,./ -]+\))?: .+" <<<"$TITLE"; then
+            note "PR 제목" "\"$TITLE\" 은 '<type>(<scope>): 설명' 형식이 아니다. 쓸 수 있는 type: feat fix refactor chore docs test perf ci. 예) feat(web): 관심 테마 선택 폼을 추가함. '기능:' '수정:' 같은 한국어 분류 제목은 2026-09-12 에 폐기했다 (AGENTS.md)."
+          fi
+
+          # 2. 브랜치 이름 — <type>/<kebab-case>
+          case "$BRANCH" in
+            dev|main|dependabot/*) ;;
+            *)
+              if ! grep -qE "^($TYPES)/[a-z0-9][a-z0-9._-]*$" <<<"$BRANCH"; then
+                note "브랜치 이름" "\"$BRANCH\" 는 '<type>/<kebab-case>' 형식이 아니다. 예) feat/card-payment, fix/profile-stuck-loading. temp·tmp·도구가 자동 생성한 이름(<계정>/...)은 쓰지 않는다."
+              fi
+              ;;
+          esac
+
+          # 3. 어디로 보내는가 — 작업 브랜치 -> dev -> main 하나뿐이다
+          if [ "$BASE" = "main" ] && [ "$BRANCH" != "dev" ]; then
+            note "PR 대상" "main 으로 바로 보낼 수 없다 (head=$BRANCH). 작업 브랜치는 dev 로 보내고, main 은 dev -> main 릴리스 PR 로만 연다. main 푸시는 CI 통과 시 릴리스 태그와 운영 배포(CD)를 돌린다."
+          fi
+          if [ "$BASE" != "main" ] && [ "$BASE" != "dev" ]; then
+            note "PR 대상" "base 가 dev 도 main 도 아니다 (base=$BASE). 스택 PR 이 의도된 것이면 무시해도 된다."
+          fi
+
+          if [ "$fail" -eq 0 ]; then
+            echo "규약 통과 — 제목·브랜치·대상 모두 형식에 맞는다."
+          else
+            echo "PR 제목은 웹에서 바로 고칠 수 있다. 브랜치 이름이 틀렸으면 새 이름으로 다시 열거나 그대로 두고 이 경고를 감수한다."
+            exit 1
+          fi

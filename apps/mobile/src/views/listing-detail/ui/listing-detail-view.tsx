@@ -40,8 +40,9 @@ function Detail({ listing }: { readonly listing: Listing }) {
   const router = useRouter();
   const unavailable = listing.status === "sold" || listing.status === "deleted";
 
+  // `listing/[id]`는 "매물" 헤더를 달고 있어 상단 인셋을 따로 주지 않는다.
   return (
-    <Screen padded={false} edges={["top"]}>
+    <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.content}>
         <ListingGallery photoUrls={listing.photoUrls} />
 

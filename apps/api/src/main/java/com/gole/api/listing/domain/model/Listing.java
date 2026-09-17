@@ -22,6 +22,7 @@ public final class Listing {
     private List<String> photoUrls;
     private final String catalogSetNumber; // nullable
     private final ListingCategory category;
+    private final InterestTag interestTag; // nullable
     private final Instant createdAt;
     private ListingStatus status;
 
@@ -38,6 +39,36 @@ public final class Listing {
             ListingCategory category,
             ListingStatus status,
             Instant createdAt) {
+        this(
+                id,
+                sellerId,
+                title,
+                description,
+                price,
+                condition,
+                disclosure,
+                photoUrls,
+                catalogSetNumber,
+                category,
+                null,
+                status,
+                createdAt);
+    }
+
+    public Listing(
+            String id,
+            String sellerId,
+            String title,
+            String description,
+            Money price,
+            ItemCondition condition,
+            ConditionDisclosure disclosure,
+            List<String> photoUrls,
+            String catalogSetNumber,
+            ListingCategory category,
+            InterestTag interestTag,
+            ListingStatus status,
+            Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.sellerId = requireText(sellerId, "sellerId");
         this.title = requireText(title, "title");
@@ -51,6 +82,7 @@ public final class Listing {
         this.photoUrls = photoUrls == null ? List.of() : List.copyOf(photoUrls);
         this.catalogSetNumber = catalogSetNumber;
         this.category = category == null ? ListingCategory.SET : category;
+        this.interestTag = interestTag;
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
     }
@@ -68,6 +100,34 @@ public final class Listing {
             String catalogSetNumber,
             ListingCategory category,
             Instant createdAt) {
+        return create(
+                id,
+                sellerId,
+                title,
+                description,
+                price,
+                condition,
+                disclosure,
+                photoUrls,
+                catalogSetNumber,
+                category,
+                null,
+                createdAt);
+    }
+
+    public static Listing create(
+            String id,
+            String sellerId,
+            String title,
+            String description,
+            Money price,
+            ItemCondition condition,
+            ConditionDisclosure disclosure,
+            List<String> photoUrls,
+            String catalogSetNumber,
+            ListingCategory category,
+            InterestTag interestTag,
+            Instant createdAt) {
         return new Listing(
                 id,
                 sellerId,
@@ -79,6 +139,7 @@ public final class Listing {
                 photoUrls,
                 catalogSetNumber,
                 category,
+                interestTag,
                 ListingStatus.ACTIVE,
                 createdAt);
     }
@@ -179,6 +240,10 @@ public final class Listing {
 
     public ListingCategory getCategory() {
         return category;
+    }
+
+    public InterestTag getInterestTag() {
+        return interestTag;
     }
 
     public ListingStatus getStatus() {

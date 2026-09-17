@@ -25,18 +25,22 @@ public final class AccountRequests {
             Boolean thirdPartyProvisionAccepted) {}
 
     public record VerifyEmailRequest(
-            @Email @NotBlank @Size(max = 254) String email, @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
+            @Email @NotBlank @Size(max = 254) String email,
+            @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
-    public record ResendVerificationRequest(@Email @NotBlank @Size(max = 254) String email) {}
+    public record ResendVerificationRequest(
+            @Email @NotBlank @Size(max = 254) String email) {}
 
     public record SignInRequest(
-            @Email @NotBlank @Size(max = 254) String email, @NotBlank @Size(max = 128) String password) {}
+            @Email @NotBlank @Size(max = 254) String email,
+            @NotBlank @Size(max = 128) String password) {}
 
     public record ChangePasswordRequest(
             @NotBlank @Size(max = 128) String currentPassword,
             @NotBlank @Size(min = 8, max = 128) String newPassword) {}
 
-    public record RequestPasswordResetRequest(@Email @NotBlank @Size(max = 254) String email) {}
+    public record RequestPasswordResetRequest(
+            @Email @NotBlank @Size(max = 254) String email) {}
 
     public record ConfirmPasswordResetRequest(
             @Email @NotBlank @Size(max = 254) String email,

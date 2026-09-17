@@ -6,10 +6,12 @@ import {
   type ItemCondition,
   type Completeness,
   type ListingCategory,
+  type ListingInterestTag,
   conditionLabel,
   completenessLabel,
   ITEM_CONDITIONS,
   LISTING_CATEGORIES,
+  LISTING_INTEREST_TAGS,
 } from "@entities/listing";
 import { calculateSellerPayout, fetchSellerFeePolicy, type SellerFeePolicy } from "@entities/order";
 import { ApiError, uploadImages, type UploadedImage } from "@shared/api";
@@ -39,6 +41,7 @@ export interface CreateListingFormProps {
 export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateListingFormProps) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ListingCategory>("set");
+  const [interestTag, setInterestTag] = useState<ListingInterestTag | "">("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [condition, setCondition] = useState<ItemCondition>("new_sealed");
@@ -144,6 +147,7 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
         photoKeys: photos.map((photo) => photo.key),
         catalogSetNumber: catalogSetNumber.trim().length > 0 ? catalogSetNumber.trim() : null,
         category,
+        interestTag: interestTag === "" ? null : interestTag,
       });
       onCreated(listing.id);
     } catch (cause) {
@@ -170,6 +174,26 @@ export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateL
             {LISTING_CATEGORIES.map((c) => (
               <option key={c.key} value={c.key}>
                 {c.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+      <Field
+        label="관심 테마"
+        hint="이 테마를 관심 태그로 고른 이용자에게 알림톡이 갈 수 있어요 (선택)"
+      >
+        {({ inputId, describedBy }) => (
+          <Select
+            id={inputId}
+            value={interestTag}
+            aria-describedby={describedBy}
+            onChange={(e) => setInterestTag(e.target.value as ListingInterestTag | "")}
+          >
+            <option value="">선택 안 함</option>
+            {LISTING_INTEREST_TAGS.map((tag) => (
+              <option key={tag.key} value={tag.key}>
+                {tag.label}
               </option>
             ))}
           </Select>

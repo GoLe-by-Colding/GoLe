@@ -48,11 +48,11 @@ EXPECTED_IMAGES = {
     ),
     "frontend": "gole/frontend:local",
     "minio": (
-        "minio/minio@sha256:"
+        "quay.io/minio/minio@sha256:"
         "14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
     ),
     "minio-init": (
-        "minio/mc:latest@sha256:"
+        "quay.io/minio/mc:latest@sha256:"
         "a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
     ),
     "mongo": (
@@ -76,17 +76,24 @@ EXPECTED_IMAGES = {
 
 LKG_PINNED_IMAGE_PATTERNS = {
     "certbot": r"certbot/certbot:latest@sha256:[0-9a-f]{64}",
-    "minio": r"minio/minio@sha256:[0-9a-f]{64}",
-    "minio-init": r"minio/mc:latest@sha256:[0-9a-f]{64}",
+    "minio": r"quay\.io/minio/minio@sha256:[0-9a-f]{64}",
+    "minio-init": r"quay\.io/minio/mc:latest@sha256:[0-9a-f]{64}",
     "mongo": r"mongo:7@sha256:[0-9a-f]{64}",
     "mongo-init": r"mongo:7@sha256:[0-9a-f]{64}",
     "nginx": r"nginx:1\.29-alpine@sha256:[0-9a-f]{64}",
     "redis": r"redis:7-alpine@sha256:[0-9a-f]{64}",
 }
 
+# 이미 돌고 있는 레거시 호스트를 채택할 때 기대하는 이미지. 그 호스트는 Docker Hub 에서
+# 받은 minio 이미지를 그대로 돌리고 있으므로(LEGACY_ADOPTION_SHA 시점의 compose),
+# 레지스트리를 quay.io 로 옮긴 뒤에도 이 경로만은 옛 참조를 그대로 받아야 한다.
 LEGACY_ADOPTION_IMAGES = {
     **EXPECTED_IMAGES,
     "certbot": "certbot/certbot:latest",
+    "minio": (
+        "minio/minio@sha256:"
+        "14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+    ),
     "minio-init": "minio/mc:latest",
     "mongo": "mongo:7",
     "mongo-init": "mongo:7",
@@ -279,11 +286,9 @@ EXPECTED_MEMORY_LIMITS = {
 EXPECTED_ENVIRONMENT_VALUES = {
     "backend": {
         "GOLE_ENVIRONMENT": "production",
-        "GOLE_VERIFICATION_EMAIL_ENABLED": "false",
+        # GOLE_VERIFICATION_EMAIL_ENABLED and the SMTP identity it gates are
+        # validated conditionally below, not as a fixed exact value.
         "GOLE_MAIL_HEALTH_ENABLED": "false",
-        "SMTP_USERNAME": "",
-        "SMTP_PASSWORD": "",
-        "GOLE_VERIFICATION_EMAIL_FROM": "",
         "PORTONE_ENABLED": "false",
         "GOLE_SETTLEMENT_MODE": "DISABLED",
         "GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED": "false",
@@ -735,6 +740,31 @@ def validate(
                         )
         else:
             reject(build is not None, f"service {name} unexpectedly builds a local image")
+
+    if not allow_legacy_adoption:
+        # GOLE_VERIFICATION_EMAIL_ENABLED must be exactly "true" or "false",
+        # and the SMTP identity it gates must be empty together with it
+        # (false) or fully present together with it (true). A partially
+        # filled identity is rejected either way — this stays fail-closed.
+        backend_environment = services["backend"].get("environment", {})
+        email_enabled = str(backend_environment.get("GOLE_VERIFICATION_EMAIL_ENABLED"))
+        reject(
+            email_enabled not in {"true", "false"},
+            "service backend protected environment value changed: GOLE_VERIFICATION_EMAIL_ENABLED",
+        )
+        email_identity_keys = ("SMTP_USERNAME", "SMTP_PASSWORD", "GOLE_VERIFICATION_EMAIL_FROM")
+        if email_enabled == "false":
+            for key in email_identity_keys:
+                reject(
+                    str(backend_environment.get(key, "")) != "",
+                    f"service backend protected environment value changed: {key}",
+                )
+        else:
+            for key in email_identity_keys:
+                reject(
+                    not backend_environment.get(key),
+                    f"service backend protected environment value changed: {key}",
+                )
 
     if not allow_legacy_adoption and not allow_missing_discord_overlay:
         backend_environment = services["backend"].get("environment", {})

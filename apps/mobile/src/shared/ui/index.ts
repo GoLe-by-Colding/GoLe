@@ -1,3 +1,5 @@
+export { Badge } from "./badge";
+export type { BadgeProps, BadgeTone } from "./badge";
 export { Button } from "./button";
 export type { ButtonProps } from "./button";
 export { MediaImage } from "./media-image";

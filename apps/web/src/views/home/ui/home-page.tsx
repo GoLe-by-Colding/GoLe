@@ -128,14 +128,19 @@ export async function HomePage() {
               <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
                 브릭을 <span className="inline-block text-accent-300">가장 합리적으로</span>
               </h1>
+              {/*
+                두 문장을 block으로 두어 넓은 화면에서만 줄을 나눈다. `<br>`를 숨기는 방식은
+                모바일에서 공백까지 함께 사라져 "컬렉션.흩어져"로 붙어버린다.
+              */}
               <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
-                {paymentsOpen
-                  ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
-                  : sellerTradingOpen
-                    ? "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."
-                    : "체결가 기반 시세 · 브릭 탐색 · 커뮤니티 · 컬렉션."}
-                <br className="max-sm:hidden" />
-                흩어져 있던 브릭 거래를 한곳에서.
+                <span className="block max-sm:inline">
+                  {paymentsOpen
+                    ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
+                    : sellerTradingOpen
+                      ? "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."
+                      : "체결가 기반 시세 · 브릭 탐색 · 커뮤니티 · 컬렉션."}
+                </span>{" "}
+                <span className="block max-sm:inline">흩어져 있던 브릭 거래를 한곳에서.</span>
               </p>
               <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
                 가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.

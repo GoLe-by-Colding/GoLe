@@ -63,12 +63,10 @@ class ThirdPartyProvisionConsentControllerTest {
         when(consents.consent("account-1", "2026-09-04", SourcePath.LISTING_CHAT, "request-0001"))
                 .thenReturn(new ConsentStatus("2026-09-04", true, Instant.parse("2026-09-04T01:02:03Z")));
 
-        mvc.perform(
-                        post("/api/v1/accounts/me/third-party-provision-consents")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts/me/third-party-provision-consents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "noticeVersion": "2026-09-04",
                                   "accepted": true,
@@ -84,12 +82,10 @@ class ThirdPartyProvisionConsentControllerTest {
 
     @Test
     void uncheckedOrServerOnlySignupPathCannotCreateConsentEvidence() throws Exception {
-        mvc.perform(
-                        post("/api/v1/accounts/me/third-party-provision-consents")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts/me/third-party-provision-consents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "noticeVersion": "2026-09-04",
                                   "accepted": false,
@@ -98,12 +94,10 @@ class ThirdPartyProvisionConsentControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
-        mvc.perform(
-                        post("/api/v1/accounts/me/third-party-provision-consents")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts/me/third-party-provision-consents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "noticeVersion": "2026-09-04",
                                   "accepted": true,
@@ -122,12 +116,10 @@ class ThirdPartyProvisionConsentControllerTest {
         when(consents.withdraw("account-1", "2026-09-04", "request-0002"))
                 .thenReturn(new ConsentStatus("2026-09-04", false, Instant.parse("2026-09-04T02:03:04Z")));
 
-        mvc.perform(
-                        post("/api/v1/accounts/me/third-party-provision-consent-withdrawals")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/v1/accounts/me/third-party-provision-consent-withdrawals")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer session-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {"noticeVersion":"2026-09-04","requestId":"request-0002"}
                                 """))
                 .andExpect(status().isOk())

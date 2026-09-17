@@ -10,7 +10,6 @@
     "ios": {
       "bundleIdentifier": "kr.gole.app",
       "supportsTablet": false,
-      "icon": "./assets/expo.icon",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {

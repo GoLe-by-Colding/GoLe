@@ -98,7 +98,9 @@ public class AdminExceptionQueueController {
     }
 
     public record ResolveDisputeRequest(
-            @NotBlank @Pattern(regexp = "(?i)refund|complete") String resolution,
+            @NotBlank @Pattern(regexp = "(?i)refund|complete")
+            String resolution,
+
             @NotBlank @Size(max = 500) String note) {}
 
     public record AdminContactsResponse(String buyerPhone, String sellerPhone, String notice) {}

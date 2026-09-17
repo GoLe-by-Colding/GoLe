@@ -30,8 +30,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("GoLe 브릭 중고거래 API")
                         .version("1.0.0")
-                        .description(
-                                """
+                        .description("""
                                 GoLe — 브릭 중고거래 플랫폼 백엔드 API.
 
                                 ## 인증

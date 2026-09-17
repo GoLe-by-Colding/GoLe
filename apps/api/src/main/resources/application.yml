@@ -169,8 +169,10 @@ gole:
     # 로컬은 기존 전화 인증 흐름을 계속 검증한다. 알림톡이 준비되지 않은 초기 공개 운영은
     # false로 내려 신규 사용자가 발송 불가능한 OTP 단계에서 막히지 않게 한다.
     phone-verification-required: ${GOLE_ONBOARDING_PHONE_REQUIRED:true}
-    # OTP 원문 로그는 로컬 계열 환경에서도 기본 차단한다. 수동 흐름 확인에 꼭 필요할 때만
-    # 명시적으로 켜며 staging/production에서는 true여도 로깅 어댑터가 요청을 거부한다.
+    # OTP 원문 노출 스위치. 켜면 로그에 코드를 남기는 동시에 Redis에도 해시 대신 평문으로
+    # 저장해, 실제 알림톡이 없는 개발 환경에서 코드를 꺼내 흐름을 밟아볼 수 있게 한다.
+    # 로컬 계열 환경에서도 기본 차단이며, staging/production에서는 true로 넣어도
+    # PhoneVerificationCodeExposurePolicy가 환경을 함께 보고 무시한다.
     log-verification-codes: ${GOLE_ONBOARDING_LOG_VERIFICATION_CODES:false}
     # 전화번호 인증코드 알림톡 템플릿. 카카오 승인은 코드 밖 운영 과제라 기본값이 비어 있다.
     # coolsms.enabled=false(로컬·승인 전)면 로깅 스텁이 이 값과 무관하게 인증 흐름을
@@ -179,6 +181,26 @@ gole:
     # 요청을 거부해 PHONE_VERIFICATION_UNAVAILABLE로 이어진다. (onboarding D3)
     phone-verification-template-id: ${GOLE_ONBOARDING_PHONE_TEMPLATE_ID:}
     phone-verification-code-variable: '${GOLE_ONBOARDING_PHONE_CODE_VARIABLE:#{인증번호}}'
+  interest-tag-alimtalk:
+    # 적재와 워커를 하나의 스위치로 함께 켜 미발송 backlog가 쌓이지 않게 한다.
+    enabled: ${GOLE_INTEREST_TAG_ALIMTALK_ENABLED:false}
+    template-id: ${GOLE_INTEREST_TAG_ALIMTALK_TEMPLATE_ID:}
+    theme-variable: '${GOLE_INTEREST_TAG_ALIMTALK_THEME_VARIABLE:#{테마}}'
+    title-variable: '${GOLE_INTEREST_TAG_ALIMTALK_TITLE_VARIABLE:#{매물명}}'
+    link-variable: '${GOLE_INTEREST_TAG_ALIMTALK_LINK_VARIABLE:#{링크}}'
+    listing-url-prefix: ${GOLE_INTEREST_TAG_ALIMTALK_LISTING_URL_PREFIX:https://gole.co.kr/listings/}
+    daily-limit-per-account: ${GOLE_INTEREST_TAG_ALIMTALK_DAILY_LIMIT:3}
+    quota-window: ${GOLE_INTEREST_TAG_ALIMTALK_QUOTA_WINDOW:P1D}
+    recipient-page-size: ${GOLE_INTEREST_TAG_ALIMTALK_RECIPIENT_PAGE_SIZE:200}
+    pages-per-lease: ${GOLE_INTEREST_TAG_ALIMTALK_PAGES_PER_LEASE:5}
+    max-recipients-per-listing: ${GOLE_INTEREST_TAG_ALIMTALK_MAX_RECIPIENTS_PER_LISTING:5000}
+    poll-interval: ${GOLE_INTEREST_TAG_ALIMTALK_POLL_INTERVAL:PT10S}
+    batch-size: ${GOLE_INTEREST_TAG_ALIMTALK_BATCH_SIZE:20}
+    maximum-attempts: ${GOLE_INTEREST_TAG_ALIMTALK_MAXIMUM_ATTEMPTS:8}
+    lease-duration: ${GOLE_INTEREST_TAG_ALIMTALK_LEASE_DURATION:PT60S}
+    initial-backoff: ${GOLE_INTEREST_TAG_ALIMTALK_INITIAL_BACKOFF:PT30S}
+    maximum-backoff: ${GOLE_INTEREST_TAG_ALIMTALK_MAXIMUM_BACKOFF:PT1H}
+    terminal-retention: ${GOLE_INTEREST_TAG_ALIMTALK_TERMINAL_RETENTION:P30D}
   # 가입 당시의 정책 버전을 별도 append-only 이력으로 남긴다. 약관/처리방침을 바꾸면
   # 문서의 시행일과 이 값을 함께 올려 오래된 가입 화면의 제출을 fail-closed 한다.
   policy:

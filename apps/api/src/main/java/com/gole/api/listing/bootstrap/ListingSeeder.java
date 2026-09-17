@@ -9,6 +9,7 @@ import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingCategory;
@@ -69,14 +70,16 @@ public class ListingSeeder implements CommandLineRunner {
                         "10307 에펠탑 풀박스 미개봉입니다. 보관 깔끔합니다.",
                         890_000,
                         ItemCondition.NEW_SEALED,
-                        "10307"),
+                        "10307",
+                        InterestTag.ICONS),
                 listing(
                         SELLER_AURORA,
                         "밀레니엄 팰컨 UCS 정품",
                         "75192 조립 후 전시만 했습니다. 부품 누락 없음.",
                         1_250_000,
                         ItemCondition.LIKE_NEW,
-                        "75192"),
+                        "75192",
+                        InterestTag.STAR_WARS),
                 listing(
                         SELLER_BRICKBANK,
                         "타이타닉 미개봉",
@@ -90,7 +93,8 @@ public class ListingSeeder implements CommandLineRunner {
                         "42143 조립완성품, 설명서/박스 보관.",
                         430_000,
                         ItemCondition.USED_GOOD,
-                        "42143"),
+                        "42143",
+                        InterestTag.TECHNIC),
                 listing(
                         SELLER_MINIFIG,
                         "호그와트 성 일부 부품",
@@ -135,6 +139,17 @@ public class ListingSeeder implements CommandLineRunner {
 
     private Listing listing(
             String sellerId, String title, String description, long price, ItemCondition condition, String setNumber) {
+        return listing(sellerId, title, description, price, condition, setNumber, null);
+    }
+
+    private Listing listing(
+            String sellerId,
+            String title,
+            String description,
+            long price,
+            ItemCondition condition,
+            String setNumber,
+            InterestTag interestTag) {
         return Listing.create(
                 ids.newListingId(),
                 sellerId,
@@ -146,6 +161,7 @@ public class ListingSeeder implements CommandLineRunner {
                 photos(setNumber),
                 setNumber,
                 ListingCategory.SET,
+                interestTag,
                 Instant.now(clock));
     }
 
@@ -153,14 +169,16 @@ public class ListingSeeder implements CommandLineRunner {
     private static ConditionDisclosure disclosureFor(ItemCondition condition) {
         return switch (condition) {
             case NEW_SEALED -> new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "");
-            case LIKE_NEW -> new ConditionDisclosure(
-                    Completeness.FULL_BOX, true, true, false, "", "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
-            case USED_GOOD -> new ConditionDisclosure(
-                    Completeness.NO_BOX, false, true, false, "", "박스는 없지만 부품과 설명서는 온전합니다.");
-            case USED_FAIR -> new ConditionDisclosure(
-                    Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 사용감이 있습니다.");
-            case DAMAGED -> new ConditionDisclosure(
-                    Completeness.NO_BOX, false, false, true, "운반 중 파손된 조각 3개 누락.", "일부 피스에 변색과 파손이 있습니다.");
+            case LIKE_NEW ->
+                new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "조립 후 전시만 한 상태로 미세한 사용감이 있습니다.");
+            case USED_GOOD ->
+                new ConditionDisclosure(Completeness.NO_BOX, false, true, false, "", "박스는 없지만 부품과 설명서는 온전합니다.");
+            case USED_FAIR ->
+                new ConditionDisclosure(
+                        Completeness.BULK, false, false, true, "미니피겨 액세서리 일부와 1x1 타일 약 5개 누락.", "일부 피스에 사용감이 있습니다.");
+            case DAMAGED ->
+                new ConditionDisclosure(
+                        Completeness.NO_BOX, false, false, true, "운반 중 파손된 조각 3개 누락.", "일부 피스에 변색과 파손이 있습니다.");
         };
     }
 }

@@ -1,43 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="img" aria-label="나 홀로 집에">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0f3d3a"/>
-      <stop offset="1" stop-color="#137a6e"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.8" cy="0.2" r="0.9">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect width="1200" height="900" fill="url(#bg)"/>
-  <rect width="1200" height="900" fill="url(#glow)"/>
-  <circle cx="50" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="150" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="250" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="350" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="450" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="550" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="650" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="750" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="850" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="950" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="1050" cy="56" r="14" fill="#ffffff" opacity="0.08"/><circle cx="1150" cy="56" r="14" fill="#ffffff" opacity="0.08"/>
-  <g transform="translate(560 470) scale(13)">
-    <path d="M28.5 18.6C31.5 17.6 34 17 36.2 16.8C37.3 16.7 37.8 17.3 37.5 18.2C37.2 19.2 36.4 19.7 35.4 20.1C36.4 20.5 37.2 21 37.5 22C37.8 22.9 37.3 23.5 36.2 23.4C34 23.2 31.5 22.6 28.5 21.6Z" fill="rgba(27,47,102,0.16)"/>
-    <path d="M10 12H24C28 12 30 14 30.5 18C30.8 20 30.8 21 30.5 23C30 26.5 28 28.5 24 28.5H10C6 28.5 4.5 26 4.5 22.5V17.5C4.5 14 6 12 10 12Z" fill="#ffffff"/>
-    <path d="M5.5 21H29.5" stroke="rgba(27,47,102,0.25)" stroke-width="0.9" stroke-linecap="round"/>
-    <path d="M4.8 22.6C6 24 8 24.2 9.6 23.2" stroke="rgba(27,47,102,0.25)" stroke-width="0.9" stroke-linecap="round" fill="none"/>
-    <g stroke="#ffd24d" stroke-width="1.3" stroke-linecap="round" fill="none">
-      <path d="M7.6 11.6C7.2 8.8 6.6 6.9 5.7 5.3"/>
-      <path d="M8.7 11.6C8.7 9 8.7 6.8 8.7 5"/>
-      <path d="M9.7 11.8C10.3 9 11.1 7 12 5.7"/>
-    </g>
-    <circle cx="5.5" cy="4.9" r="0.7" fill="#ffd24d"/>
-    <circle cx="8.7" cy="4.6" r="0.7" fill="#ffd24d"/>
-    <circle cx="12.2" cy="5.4" r="0.7" fill="#ffd24d"/>
-    <ellipse cx="10.5" cy="12.1" rx="2.1" ry="1" fill="#ffd24d"/>
-    <ellipse cx="10.5" cy="11.4" rx="2.1" ry="1" fill="#ffffff"/>
-    <ellipse cx="16" cy="12.1" rx="2.1" ry="1" fill="#ffd24d"/>
-    <ellipse cx="16" cy="11.4" rx="2.1" ry="1" fill="#ffffff"/>
-    <ellipse cx="21.5" cy="12.1" rx="2.1" ry="1" fill="#ffd24d"/>
-    <ellipse cx="21.5" cy="11.4" rx="2.1" ry="1" fill="#ffffff"/>
-    <circle cx="8.6" cy="19.6" r="1.45" fill="#ffffff"/>
-    <circle cx="8.3" cy="19.4" r="0.6" fill="#0f3d3a"/>
-  </g>
-  <g font-family="-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif">
-    <rect x="64" y="120" rx="22" ry="22" width="290" height="60" fill="#ffffff" opacity="0.16"/>
-    <text x="92" y="160" font-size="34" font-weight="700" fill="#ffffff">Ideas</text>
-    <text x="64" y="780" font-size="64" font-weight="800" fill="#ffffff" letter-spacing="-1">나 홀로 집에</text>
-    <text x="64" y="848" font-size="40" font-weight="700" fill="#ffffff" opacity="0.7" font-family="'SF Mono', ui-monospace, monospace">#21330</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200" role="img" aria-label="나 홀로 집에 대표 이미지 자리표시자">
+  <rect width="1200" height="1200" fill="#F3F6F7"/>
+  <g>
+    <rect x="488" y="367" width="224" height="130" rx="16" fill="#AFC3D0"/>
+    <rect x="488" y="367" width="224" height="112" rx="16" fill="#C6D3DC"/>
+    <circle cx="544" cy="387" r="24" fill="#DEE5EA"/>
+    <circle cx="656" cy="387" r="24" fill="#DEE5EA"/>
+    <rect x="376" y="479" width="224" height="130" rx="16" fill="#AFC3D0"/>
+    <rect x="376" y="479" width="224" height="112" rx="16" fill="#C6D3DC"/>
+    <circle cx="432" cy="499" r="24" fill="#DEE5EA"/>
+    <circle cx="544" cy="499" r="24" fill="#DEE5EA"/>
+    <rect x="264" y="591" width="448" height="130" rx="16" fill="#AFC3D0"/>
+    <rect x="264" y="591" width="448" height="112" rx="16" fill="#C6D3DC"/>
+    <circle cx="320" cy="611" r="24" fill="#DEE5EA"/>
+    <circle cx="432" cy="611" r="24" fill="#DEE5EA"/>
+    <circle cx="544" cy="611" r="24" fill="#DEE5EA"/>
+    <circle cx="656" cy="611" r="24" fill="#DEE5EA"/>
+    <rect x="264" y="703" width="672" height="130" rx="16" fill="#AFC3D0"/>
+    <rect x="264" y="703" width="672" height="112" rx="16" fill="#C6D3DC"/>
+    <circle cx="320" cy="723" r="24" fill="#DEE5EA"/>
+    <circle cx="432" cy="723" r="24" fill="#DEE5EA"/>
+    <circle cx="544" cy="723" r="24" fill="#DEE5EA"/>
+    <circle cx="656" cy="723" r="24" fill="#DEE5EA"/>
+    <circle cx="768" cy="723" r="24" fill="#DEE5EA"/>
+    <circle cx="880" cy="723" r="24" fill="#DEE5EA"/>
   </g>
 </svg>
