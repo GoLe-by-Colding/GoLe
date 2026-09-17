@@ -42,6 +42,21 @@ export function parseItemCondition(value: string | undefined): ItemCondition | u
 export type Completeness = "full_box" | "no_box" | "bulk";
 export type ListingStatus = "active" | "reserved" | "sold" | "deleted";
 export type ListingCategory = "set" | "parts" | "minifig" | "moc";
+export type ListingInterestTag =
+  | "star-wars"
+  | "technic"
+  | "creator"
+  | "architecture"
+  | "city"
+  | "ninjago"
+  | "harry-potter"
+  | "ideas"
+  | "super-heroes"
+  | "friends"
+  | "duplo"
+  | "icons"
+  | "speed-champions"
+  | "minecraft";
 
 export const LISTING_CATEGORIES: ReadonlyArray<{
   readonly key: ListingCategory;
@@ -51,6 +66,26 @@ export const LISTING_CATEGORIES: ReadonlyArray<{
   { key: "parts", label: "부품" },
   { key: "minifig", label: "미니피그" },
   { key: "moc", label: "창작품(MOC)" },
+];
+
+export const LISTING_INTEREST_TAGS: ReadonlyArray<{
+  readonly key: ListingInterestTag;
+  readonly label: string;
+}> = [
+  { key: "star-wars", label: "스타워즈" },
+  { key: "technic", label: "테크닉" },
+  { key: "creator", label: "크리에이터" },
+  { key: "architecture", label: "아키텍처" },
+  { key: "city", label: "시티" },
+  { key: "ninjago", label: "닌자고" },
+  { key: "harry-potter", label: "해리포터" },
+  { key: "ideas", label: "아이디어" },
+  { key: "super-heroes", label: "슈퍼히어로" },
+  { key: "friends", label: "프렌즈" },
+  { key: "duplo", label: "듀플로" },
+  { key: "icons", label: "아이콘" },
+  { key: "speed-champions", label: "스피드챔피언" },
+  { key: "minecraft", label: "마인크래프트" },
 ];
 
 export const LISTING_CATEGORY_LABEL: Record<ListingCategory, string> = {
@@ -76,6 +111,7 @@ export interface Listing {
   readonly photoUrls: readonly string[];
   readonly catalogSetNumber: string | null;
   readonly category: ListingCategory;
+  readonly interestTag: ListingInterestTag | null;
   readonly status: ListingStatus;
   readonly createdAt: string;
 }

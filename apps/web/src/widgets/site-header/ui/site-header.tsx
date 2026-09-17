@@ -16,6 +16,7 @@ const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }
   { href: "/prices", label: "시세" },
   { href: "/community", label: "커뮤니티" },
   { href: "/collection", label: "컬렉션" },
+  { href: "/brick-filter", label: "브릭 필터" },
   { href: "/chat", label: "채팅" },
 ];
 

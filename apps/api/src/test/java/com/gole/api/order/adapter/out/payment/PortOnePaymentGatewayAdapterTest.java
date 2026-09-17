@@ -151,8 +151,7 @@ class PortOnePaymentGatewayAdapterTest {
     @Test
     @DisplayName("포트원이 실제로 주는 PaymentMethodEasyPay 표기를 승인으로 인정한다")
     void acceptsRealPortOneEasyPayDiscriminator() {
-        responseBody.set(
-                """
+        responseBody.set("""
                 {"status":"PAID","id":"order-1","storeId":"store-1","version":"V2","currency":"KRW",
                 "amount":{"total":15000},
                 "channel":{"type":"TEST","key":"channel-key-1","pgProvider":"KAKAOPAY"},
@@ -565,9 +564,7 @@ class PortOnePaymentGatewayAdapterTest {
                                 .replace("\"channel\":{\"key\":\"channel-key-1\",\"type\":\"TEST\"},", "")),
                 Arguments.of("채널 키 불일치", validPaidResponse("order-1").replace("channel-key-1", "channel-other")),
                 Arguments.of("채널 유형 불일치", validPaidResponse("order-1").replace("\"TEST\"", "\"LIVE\"")),
-                Arguments.of(
-                        "결제수단 누락",
-                        """
+                Arguments.of("결제수단 누락", """
                         {"status":"PAID","id":"order-1","storeId":"store-1","version":"V2",
                         "currency":"KRW","amount":{"total":15000},
                         "channel":{"key":"channel-key-1","type":"TEST"}}
@@ -604,8 +601,7 @@ class PortOnePaymentGatewayAdapterTest {
                 "amount":{"total":15000},"channel":{"key":"channel-key-1","type":"TEST"},
                 "method":{"type":"PaymentMethodEasyPay","provider":"KAKAOPAY",
                 "easyPayMethod":{"type":"PaymentMethodEasyPayMethodCharge"}}}
-                """
-                .formatted(paymentId);
+                """.formatted(paymentId);
     }
 
     /**
@@ -618,16 +614,14 @@ class PortOnePaymentGatewayAdapterTest {
                 "amount":{"total":15000},"channel":{"key":"card-channel-1","type":"TEST"},
                 "method":{"type":"PaymentMethodCard",
                 "card":{"publisher":"신한카드","issuer":"신한카드","brand":"LOCAL"}}}
-                """
-                .formatted(paymentId);
+                """.formatted(paymentId);
     }
 
     private static String basePaymentResponse(String status, String paymentId) {
         return """
                 {"status":"%s","id":"%s","storeId":"store-1","version":"V2","currency":"KRW",
                 "amount":{"total":15000}}
-                """
-                .formatted(status, paymentId);
+                """.formatted(status, paymentId);
     }
 
     private static String validCancelledResponse(String paymentId) {

@@ -29,7 +29,9 @@ public class DesignController {
             @NotBlank @Size(max = 300) String reason) {}
 
     public record Restore(
-            @Min(0) long expectedRevision, @Min(0) long sourceRevision, @NotBlank @Size(max = 300) String reason) {}
+            @Min(0) long expectedRevision,
+            @Min(0) long sourceRevision,
+            @NotBlank @Size(max = 300) String reason) {}
 
     @GetMapping("/api/v1/config/design")
     public ResponseEntity<PublicTheme> published() {

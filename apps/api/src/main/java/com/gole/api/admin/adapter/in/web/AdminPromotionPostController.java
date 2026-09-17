@@ -140,5 +140,6 @@ public class AdminPromotionPostController {
             @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys,
             @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {}
 
-    public record RejectPromotionPostRequest(@NotBlank @Size(max = 1000) String reason) {}
+    public record RejectPromotionPostRequest(
+            @NotBlank @Size(max = 1000) String reason) {}
 }

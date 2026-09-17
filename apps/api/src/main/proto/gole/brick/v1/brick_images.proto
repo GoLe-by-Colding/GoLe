@@ -1,0 +1,17 @@
+syntax = "proto3";
+package gole.brick.v1;
+option java_multiple_files = true;
+option java_package = "com.gole.api.brick.grpc";
+
+// Java가 기존 사용자 quota 예약과 전역 provider gate를 확보한 뒤에만 호출한다.
+// 이미지 영속화·자동 재시도 없이 한 번 실행한다.
+service BrickImages {
+  rpc Generate(GenerateImageRequest) returns (GenerateImageResponse);
+}
+message GenerateImageRequest {
+  bytes source_png = 1;
+  string mode = 2;
+}
+message GenerateImageResponse {
+  bytes result_png = 1;
+}

@@ -18,6 +18,8 @@ import com.gole.api.chat.application.SupportConversationPrivacyService.Retention
 import com.gole.api.chat.application.SupportConversationPrivacyService.RetentionReleaseReasonCode;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeCounts;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
@@ -54,8 +56,17 @@ class SupportConversationPrivacyServiceTest {
     private final OrderRepositoryPort orders = mock(OrderRepositoryPort.class);
     private final SupportConversationPrivacyRepositoryPort privacy =
             mock(SupportConversationPrivacyRepositoryPort.class);
+    private final SupportAssistantPurgePort assistantPurge = mock(SupportAssistantPurgePort.class);
     private final SupportConversationPrivacyService service = new SupportConversationPrivacyService(
-            accounts, tickets, rooms, snapshots, orders, privacy, Clock.fixed(NOW, ZoneOffset.UTC));
+            accounts,
+            tickets,
+            rooms,
+            snapshots,
+            orders,
+            privacy,
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            assistantPurge,
+            mock(SupportAssistantAnalysisRepositoryPort.class));
 
     @BeforeEach
     void setUp() {
@@ -87,6 +98,7 @@ class SupportConversationPrivacyServiceTest {
         assertThat(replay.replayed()).isTrue();
         assertThat(replay.receipt()).isEqualTo(first.receipt());
         verify(privacy).purge(any());
+        verify(assistantPurge).purge(ROOM_ID, "user-1");
     }
 
     @Test
@@ -239,6 +251,18 @@ class SupportConversationPrivacyServiceTest {
         return SupportTicket.opened(ROOM_ID, "user-1", NOW.minusSeconds(60))
                 .assignTo("admin-1", NOW.minusSeconds(30))
                 .resolve(NOW.minusSeconds(10));
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 파기 실패를 성공으로 반환하지 않음")
+    void remotePurgeFailureEscapesForTransactionRollback() {
+        when(privacy.purge(any())).thenAnswer(invocation -> receipt(invocation.getArgument(0)));
+        org.mockito.Mockito.doThrow(new IllegalStateException("REMOTE_UNAVAILABLE"))
+                .when(assistantPurge)
+                .purge(ROOM_ID, "user-1");
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private static PurgeReceipt receipt(PurgeWrite write) {

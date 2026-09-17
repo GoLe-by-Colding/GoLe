@@ -49,5 +49,6 @@ public class DeviceTokenController {
         registerDeviceToken.unregister(token);
     }
 
-    public record RegisterRequest(@NotBlank String token, @NotBlank String platform) {}
+    public record RegisterRequest(
+            @NotBlank String token, @NotBlank String platform) {}
 }

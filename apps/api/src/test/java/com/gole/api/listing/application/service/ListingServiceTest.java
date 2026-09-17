@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
+import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
@@ -14,8 +15,10 @@ import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.exception.ListingStateException;
 import com.gole.api.listing.domain.exception.MissingPhotoException;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.listing.domain.model.ListingCategory;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import java.time.Clock;
@@ -31,15 +34,22 @@ class ListingServiceTest {
 
     private InMemoryListingRepository repository;
     private RecordingNewListingNotifier notifier;
+    private RecordingInterestTagListingNotifier interestTagNotifier;
     private ListingService service;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryListingRepository();
         notifier = new RecordingNewListingNotifier();
+        interestTagNotifier = new RecordingInterestTagListingNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new ListingService(
-                repository, new SequentialIdGenerator(), notifier, mock(ManageMediaAssetsUseCase.class), clock);
+                repository,
+                new SequentialIdGenerator(),
+                notifier,
+                interestTagNotifier,
+                mock(ManageMediaAssetsUseCase.class),
+                clock);
     }
 
     private CreateListingCommand validCommand() {
@@ -61,6 +71,47 @@ class ListingServiceTest {
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getPrice().amount()).isEqualTo(280_000);
         assertThat(notifier.notifications).containsExactly(new NewListingNotice("seller-1", id, "에펠탑 10307"));
+        assertThat(interestTagNotifier.notifications).isEmpty();
+    }
+
+    @Test
+    void create_notifiesInterestTagSubscribersWhenThemeIsSpecified() {
+        CreateListingCommand command = new CreateListingCommand(
+                "seller-1",
+                "테크닉 매물",
+                "설명",
+                280_000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "42143",
+                ListingCategory.SET,
+                InterestTag.TECHNIC);
+
+        String id = service.create(command);
+
+        assertThat(interestTagNotifier.notifications)
+                .containsExactly(new InterestTagListingNotice("seller-1", id, "테크닉 매물", InterestTag.TECHNIC));
+    }
+
+    @Test
+    void create_succeedsWhenInterestTagNotifierFails() {
+        interestTagNotifier.failure = new IllegalStateException("notification unavailable");
+        CreateListingCommand command = new CreateListingCommand(
+                "seller-1",
+                "테크닉 매물",
+                "설명",
+                280_000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "42143",
+                ListingCategory.SET,
+                InterestTag.TECHNIC);
+
+        String id = service.create(command);
+
+        assertThat(service.getById(id).getInterestTag()).isEqualTo(InterestTag.TECHNIC);
     }
 
     @Test
@@ -315,12 +366,27 @@ class ListingServiceTest {
 
     private record NewListingNotice(String sellerId, String listingId, String title) {}
 
+    private record InterestTagListingNotice(String sellerId, String listingId, String title, InterestTag interestTag) {}
+
     private static final class RecordingNewListingNotifier implements NewListingNotifierPort {
         private final List<NewListingNotice> notifications = new ArrayList<>();
 
         @Override
         public void notifyFollowers(String sellerId, String listingId, String title) {
             notifications.add(new NewListingNotice(sellerId, listingId, title));
+        }
+    }
+
+    private static final class RecordingInterestTagListingNotifier implements InterestTagListingNotifierPort {
+        private final List<InterestTagListingNotice> notifications = new ArrayList<>();
+        private RuntimeException failure;
+
+        @Override
+        public void notifyInterestTagSubscribers(String sellerId, String listingId, String title, InterestTag tag) {
+            if (failure != null) {
+                throw failure;
+            }
+            notifications.add(new InterestTagListingNotice(sellerId, listingId, title, tag));
         }
     }
 }

@@ -84,14 +84,12 @@ class AdminSupportNotificationControllerTest {
         mvc.perform(post("/api/admin/support-notifications/{eventId}/requeue", EVENT_ID)
                         .header("Authorization", "Bearer admin-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(
-                                """
+                        .content("""
                                 {
                                   "confirmation":"REQUEUE:%s",
                                   "reasonCode":"WEBHOOK_CONFIGURATION_RESTORED"
                                 }
-                                """
-                                        .formatted(EVENT_ID)))
+                                """.formatted(EVENT_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.eventId").value(EVENT_ID))
                 .andExpect(jsonPath("$.state").value("PENDING"))
@@ -110,14 +108,12 @@ class AdminSupportNotificationControllerTest {
         mvc.perform(post("/api/admin/support-notifications/{eventId}/requeue", EVENT_ID)
                         .header("Authorization", "Bearer user-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(
-                                """
+                        .content("""
                                 {
                                   "confirmation":"REQUEUE:%s",
                                   "reasonCode":"DISCORD_INCIDENT_RESOLVED"
                                 }
-                                """
-                                        .formatted(EVENT_ID)))
+                                """.formatted(EVENT_ID)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADMIN_ONLY"));
 

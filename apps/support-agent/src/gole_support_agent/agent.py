@@ -4,6 +4,7 @@ import re
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from gole_agent_runtime.privacy import private_execution
 
 ENGINE_VERSION = "rules-v1"
 
@@ -119,6 +120,7 @@ def build_graph():
 SUPPORT_GRAPH = build_graph()
 
 
+@private_execution
 def analyze_support(
     *, ticket_id: str, declared_category: str, title: str, message: str, locale: str = "ko-KR"
 ) -> SupportState:
@@ -129,5 +131,6 @@ def analyze_support(
             "title": title,
             "message": message,
             "locale": locale,
-        }
+        },
+        {"callbacks": []},
     )

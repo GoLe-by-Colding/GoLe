@@ -19,12 +19,7 @@ const MAX_CONTEXT_IMAGES = 4;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 type LogValue =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly LogValue[]
-  | { readonly [key: string]: LogValue };
+  null | boolean | number | string | readonly LogValue[] | { readonly [key: string]: LogValue };
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();

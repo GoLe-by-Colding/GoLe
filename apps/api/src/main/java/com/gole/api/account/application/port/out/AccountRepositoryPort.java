@@ -1,5 +1,6 @@
 package com.gole.api.account.application.port.out;
 
+import com.gole.api.account.application.port.in.ListInterestTagRecipientsUseCase.MarketingRecipient;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.Nickname;
@@ -46,6 +47,16 @@ public interface AccountRepositoryPort {
      * 입력해 두는 것만으로 그 번호를 영구히 막을 수 있다.
      */
     boolean existsByVerifiedPhoneNumber(PhoneNumber phoneNumber, String excludingAccountId);
+
+    /** 마케팅 알림톡 수신 자격 계정 ID를 _id 오름차순으로 한 페이지 조회한다. */
+    default List<String> findMarketingReachableIdsByInterestTag(String tagKey, String afterAccountId, int limit) {
+        return List.of();
+    }
+
+    /** 발송 직전 자격을 재검증하고 전화번호를 이 시점에만 읽는다. */
+    default Optional<MarketingRecipient> findMarketingRecipient(String accountId, String tagKey) {
+        return Optional.empty();
+    }
 
     /** 관리자 정지·강등 판단을 다중 인스턴스에서도 직렬화하는 영속성 fence. */
     default void fenceAdminMutation() {}

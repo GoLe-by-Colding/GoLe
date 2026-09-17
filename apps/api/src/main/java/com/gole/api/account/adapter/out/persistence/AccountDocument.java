@@ -3,6 +3,7 @@ package com.gole.api.account.adapter.out.persistence;
 import java.time.Instant;
 import java.util.Set;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -11,6 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 매핑은 {@link AccountPersistenceAdapter}가 담당한다.
  */
 @Document(collection = "accounts")
+@CompoundIndex(name = "account_interest_tag_idx", def = "{'interestTags':1,'status':1,'_id':1}")
 public class AccountDocument {
 
     @Id

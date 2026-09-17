@@ -43,7 +43,11 @@ public class TrackerAdminController {
 
     public record SampleRequest(
             @NotBlank @Size(max = 40) String carrier,
-            @NotBlank @Size(max = 40) @Pattern(regexp = "[0-9 -]+") String waybillNumber) {}
 
-    public record RequeryRequest(@NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]{1,100}") String orderId) {}
+            @NotBlank @Size(max = 40) @Pattern(regexp = "[0-9 -]+")
+            String waybillNumber) {}
+
+    public record RequeryRequest(
+            @NotBlank @Pattern(regexp = "[a-zA-Z0-9_-]{1,100}")
+            String orderId) {}
 }

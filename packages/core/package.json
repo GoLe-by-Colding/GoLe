@@ -15,7 +15,7 @@
     "check:platform": "node scripts/check-platform.mjs"
   },
   "devDependencies": {
-    "prettier": "^3.4.2",
+    "prettier": "^3.9.6",
     "typescript": "^5"
   }
 }

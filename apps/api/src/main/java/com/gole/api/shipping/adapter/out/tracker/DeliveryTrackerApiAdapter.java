@@ -45,8 +45,7 @@ public class DeliveryTrackerApiAdapter implements DeliveryTrackerPort {
             "AVAILABLE_FOR_PICKUP", DeliveryStatus.IN_TRANSIT,
             "DELIVERED", DeliveryStatus.DELIVERED);
 
-    private static final String TRACK_QUERY =
-            """
+    private static final String TRACK_QUERY = """
             query Track($carrierId: ID!, $trackingNumber: String!) {
               track(carrierId: $carrierId, trackingNumber: $trackingNumber) {
                 lastEvent { status { code name } }

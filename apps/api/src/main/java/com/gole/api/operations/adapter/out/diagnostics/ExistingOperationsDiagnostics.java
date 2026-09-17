@@ -22,11 +22,12 @@ public class ExistingOperationsDiagnostics implements OperationsDiagnostics {
     public String inspect(String jobId) {
         return switch (jobId) {
             case "exception-queue" -> "EXCEPTIONS_" + exceptions.list().size();
-            case "payment-readiness" -> "PAYMENT_"
-                    + payment.getPaymentReadiness().state().name();
-            case "alert-readiness" -> discord.isEnabled()
-                    ? "DISCORD_CONFIGURED_SENTRY_NOT_INSTRUMENTED"
-                    : "DISCORD_DISABLED_SENTRY_NOT_INSTRUMENTED";
+            case "payment-readiness" ->
+                "PAYMENT_" + payment.getPaymentReadiness().state().name();
+            case "alert-readiness" ->
+                discord.isEnabled()
+                        ? "DISCORD_CONFIGURED_SENTRY_NOT_INSTRUMENTED"
+                        : "DISCORD_DISABLED_SENTRY_NOT_INSTRUMENTED";
             default -> throw new IllegalArgumentException("UNKNOWN_OPERATION");
         };
     }

@@ -47,6 +47,10 @@ public class ListingDocument {
     @Indexed
     private String category;
 
+    /** 관심태그 카탈로그와 같은 케밥 키. */
+    @Indexed
+    private String interestTag;
+
     @Indexed
     private String status;
 
@@ -75,6 +79,48 @@ public class ListingDocument {
             String category,
             String status,
             Instant createdAt) {
+        this(
+                id,
+                sellerId,
+                title,
+                description,
+                priceAmount,
+                priceCurrency,
+                condition,
+                completeness,
+                hasBox,
+                hasManual,
+                hasMissingParts,
+                missingPartsNote,
+                defectsNote,
+                photoUrls,
+                catalogSetNumber,
+                category,
+                null,
+                status,
+                createdAt);
+    }
+
+    public ListingDocument(
+            String id,
+            String sellerId,
+            String title,
+            String description,
+            long priceAmount,
+            String priceCurrency,
+            String condition,
+            String completeness,
+            Boolean hasBox,
+            Boolean hasManual,
+            Boolean hasMissingParts,
+            String missingPartsNote,
+            String defectsNote,
+            List<String> photoUrls,
+            String catalogSetNumber,
+            String category,
+            String interestTag,
+            String status,
+            Instant createdAt) {
         this.id = id;
         this.sellerId = sellerId;
         this.title = title;
@@ -91,6 +137,7 @@ public class ListingDocument {
         this.photoUrls = photoUrls;
         this.catalogSetNumber = catalogSetNumber;
         this.category = category;
+        this.interestTag = interestTag;
         this.status = status;
         this.createdAt = createdAt;
     }
@@ -157,6 +204,10 @@ public class ListingDocument {
 
     public String getCategory() {
         return category;
+    }
+
+    public String getInterestTag() {
+        return interestTag;
     }
 
     public String getStatus() {

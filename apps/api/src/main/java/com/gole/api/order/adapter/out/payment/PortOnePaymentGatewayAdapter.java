@@ -171,8 +171,8 @@ public class PortOnePaymentGatewayAdapter implements PaymentGatewayPort {
                 return PaymentVerification.of(PaymentVerificationResult.FAILED);
             }
             return switch (status) {
-                    // 결제 단건 조회 응답의 discriminator는 PAY_PENDING이다. PENDING은
-                    // PaymentStatus 필터 값과 이전 응답에 대한 안전한 호환으로만 허용한다.
+                // 결제 단건 조회 응답의 discriminator는 PAY_PENDING이다. PENDING은
+                // PaymentStatus 필터 값과 이전 응답에 대한 안전한 호환으로만 허용한다.
                 case "READY", "PAY_PENDING", "PENDING" -> PaymentVerification.of(PaymentVerificationResult.PENDING);
                 default -> {
                     log.warn("[PortOne] 알 수 없는 결제 상태 orderId={} status={}", orderId, status);

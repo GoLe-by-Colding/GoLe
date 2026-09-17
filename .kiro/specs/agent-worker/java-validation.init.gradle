@@ -1,0 +1,19 @@
+// 공유 API 서버/다른 워커의 빌드 산출물을 덮어쓰지 않는 단발 검증 경로.
+allprojects {
+    layout.buildDirectory.set(file('/tmp/gole-agent-worker-java'))
+    afterEvaluate {
+        spotless { java { target(
+            'src/main/java/com/gole/api/chat/adapter/out/assistant/**/*.java',
+            'src/main/java/com/gole/api/chat/application/port/out/SupportAssistant*.java',
+            'src/main/java/com/gole/api/chat/application/SupportAssistantAnalysisService.java',
+            'src/main/java/com/gole/api/chat/application/SupportConversationPrivacyService.java',
+            'src/main/java/com/gole/api/chat/config/SupportAssistantConfigurationGuard.java',
+            'src/main/java/com/gole/api/chat/adapter/out/persistence/MongoSupportAssistantAnalysisAdapter.java',
+            'src/test/java/com/gole/api/chat/adapter/out/assistant/**/*.java',
+            'src/test/java/com/gole/api/chat/application/SupportConversationPrivacyServiceTest.java',
+            'src/test/java/com/gole/api/chat/application/SupportAssistantAnalysisServiceTest.java',
+            'src/test/java/com/gole/api/chat/SupportAssistantAnalysisRecoveryIntegrationTest.java',
+            'src/test/java/com/gole/api/chat/SupportConversationPurgeIntegrationTest.java'
+        ) } }
+    }
+}

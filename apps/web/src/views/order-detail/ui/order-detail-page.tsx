@@ -64,11 +64,7 @@ const AUTO_REFRESH_MAX_ATTEMPTS = 12;
 type ConfirmationAction = "complete" | "refund";
 
 type InitialLoadFailureKind =
-  | "unauthenticated"
-  | "forbidden"
-  | "not_found"
-  | "retryable"
-  | "unavailable";
+  "unauthenticated" | "forbidden" | "not_found" | "retryable" | "unavailable";
 
 interface InitialLoadFailure {
   readonly kind: InitialLoadFailureKind;

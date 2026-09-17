@@ -16,6 +16,7 @@ import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.application.query.ListingSortOrder;
 import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,7 +83,8 @@ public class ListingController {
                         request.defectsNote()),
                 request.photoKeys(),
                 request.catalogSetNumber(),
-                com.gole.api.listing.domain.model.ListingCategory.fromKey(request.category())));
+                com.gole.api.listing.domain.model.ListingCategory.fromKey(request.category()),
+                InterestTag.fromKey(request.interestTag())));
         return ListingResponse.from(getListingUseCase.getById(id));
     }
 

@@ -74,13 +74,11 @@ class AdminSupportPrivacyControllerTest {
                         "550e8400-e29b-41d4-a716-446655440001"))
                 .thenReturn(new PurgeOutcome(receipt, false));
 
-        mvc.perform(
-                        post("/api/admin/support-privacy/room-1/purge")
-                                .header("Authorization", "Bearer admin-token")
-                                .header("Idempotency-Key", "550e8400-e29b-41d4-a716-446655440001")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/admin/support-privacy/room-1/purge")
+                        .header("Authorization", "Bearer admin-token")
+                        .header("Idempotency-Key", "550e8400-e29b-41d4-a716-446655440001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "confirmation":"room-1",
                                   "reasonCode":"DATA_SUBJECT_REQUEST_FULFILLED",
@@ -105,13 +103,11 @@ class AdminSupportPrivacyControllerTest {
 
     @Test
     void nonAdminNeverReachesPurgeService() throws Exception {
-        mvc.perform(
-                        post("/api/admin/support-privacy/room-1/purge")
-                                .header("Authorization", "Bearer user-token")
-                                .header("Idempotency-Key", "550e8400-e29b-41d4-a716-446655440001")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
+        mvc.perform(post("/api/admin/support-privacy/room-1/purge")
+                        .header("Authorization", "Bearer user-token")
+                        .header("Idempotency-Key", "550e8400-e29b-41d4-a716-446655440001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
                                 {
                                   "confirmation":"room-1",
                                   "reasonCode":"DATA_SUBJECT_REQUEST_FULFILLED",

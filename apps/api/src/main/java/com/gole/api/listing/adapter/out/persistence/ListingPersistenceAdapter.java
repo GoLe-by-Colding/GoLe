@@ -5,6 +5,7 @@ import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.application.query.ListingSortOrder;
 import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingCategory;
@@ -180,6 +181,9 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 listing.getPhotoUrls(),
                 listing.getCatalogSetNumber(),
                 listing.getCategory().name(),
+                listing.getInterestTag() == null
+                        ? null
+                        : listing.getInterestTag().key(),
                 listing.getStatus().name(),
                 listing.getCreatedAt());
     }
@@ -197,8 +201,18 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 document.getPhotoUrls(),
                 document.getCatalogSetNumber(),
                 ListingCategory.fromKey(document.getCategory()),
+                toInterestTag(document.getInterestTag()),
                 ListingStatus.valueOf(document.getStatus()),
                 document.getCreatedAt());
+    }
+
+    /** 레거시/비정상 저장값 하나 때문에 매물 조회 전체가 실패하지 않도록 null로 흡수한다. */
+    private InterestTag toInterestTag(String key) {
+        try {
+            return InterestTag.fromKey(key);
+        } catch (com.gole.api.common.exception.BadRequestException ignored) {
+            return null;
+        }
     }
 
     /** 레거시 문서(고지 필드 없음)는 기본값으로 보정한다. */

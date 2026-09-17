@@ -109,8 +109,9 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
     /** provider별 응답 스키마에서 providerId/email을 추출한다. */
     static SocialProfile parseProfile(AuthProvider provider, Map<String, Object> info) {
         return switch (provider) {
-            case GOOGLE -> new SocialProfile(
-                    provider, str(info.get("sub")), str(info.get("email")), bool(info.get("email_verified")));
+            case GOOGLE ->
+                new SocialProfile(
+                        provider, str(info.get("sub")), str(info.get("email")), bool(info.get("email_verified")));
             case KAKAO -> {
                 Map<String, Object> account = asMap(info.get("kakao_account"));
                 yield new SocialProfile(

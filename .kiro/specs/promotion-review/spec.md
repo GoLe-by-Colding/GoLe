@@ -331,7 +331,7 @@ Playwright 브라우저 자동화를 실행할 수 없다. `self_hosted`로 전�
 
 - **T1. 실제 Threads Graph API 연동.** 자격증명(앱 ID·시크릿·장기 액세스 토큰)이 준비되면
   `SocialPublishPort` 구현체를 `StubThreadsPublishAdapter`에서 실제 어댑터로 교체한다. 도메인·
-  컨트롤러·프론트는 변경 불필요. `GoLe-obsidian/08_Improvements/알려진 개선 과제.md`에 P1로
+  컨트롤러·프론트는 변경 불필요. `GoLe-obsidian/08_개선과제/알려진 개선 과제.md`에 P1로
   기록.
 - **T4. 예약 발행.** 지금은 관리자가 명시적으로 "발행" 버튼을 눌러야 한다. 시각 예약은 범위
   밖.

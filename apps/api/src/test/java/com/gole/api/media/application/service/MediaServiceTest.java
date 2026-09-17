@@ -54,6 +54,33 @@ class MediaServiceTest {
     }
 
     @Test
+    void heifMimeAliasesAndUnknownMobileMimeUseSignatureAndJpegOutput() throws Exception {
+        byte[] heic;
+        try (var input = getClass().getResourceAsStream("/media/phone-oriented-gps.heic")) {
+            heic = input.readAllBytes();
+        }
+        processor.sanitized = new SanitizedImage(new byte[] {(byte) 255, (byte) 216, (byte) 255}, "image/jpeg", 48, 80);
+        for (String declared :
+                new String[] {"image/heic", "image/heif", "IMAGE/HEIC", "application/octet-stream", "", null}) {
+            StoredImage image = service.upload(new UploadImageCommand("owner", heic, declared, "phone.heif"));
+            assertThat(image.contentType()).isEqualTo("image/jpeg");
+            assertThat(image.key()).endsWith(".jpg");
+        }
+    }
+
+    @Test
+    void heicMasqueradingAsPngIsRejectedBeforeStorage() throws Exception {
+        byte[] heic;
+        try (var input = getClass().getResourceAsStream("/media/phone-oriented-gps.heic")) {
+            heic = input.readAllBytes();
+        }
+        assertThatThrownBy(() -> service.upload(new UploadImageCommand("owner", heic, "image/png", "photo.png")))
+                .isInstanceOf(InvalidImageException.class)
+                .hasMessageContaining("does not match");
+        assertThat(storage.objects).isEmpty();
+    }
+
+    @Test
     void upload_storesObject_andReturnsPublicUrl() {
         StoredImage stored = service.upload(new UploadImageCommand("owner-1", pngBytes(), "image/png", "photo.PNG"));
 

@@ -34,5 +34,6 @@ public class ChatReportController {
         return Map.of("id", reportId);
     }
 
-    public record ReportMessageRequest(@NotNull ReportReason reason, @Size(max = 1000) String detail) {}
+    public record ReportMessageRequest(
+            @NotNull ReportReason reason, @Size(max = 1000) String detail) {}
 }

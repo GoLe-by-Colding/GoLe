@@ -12,7 +12,8 @@ public interface ImageProcessorPort {
      * 업로드 이미지를 픽셀로 디코딩한 뒤 메타데이터 없는 허용 포맷으로 다시 인코딩한다.
      *
      * <p>구현체는 저장 전에 크기/총 픽셀 상한을 검사해야 하며 EXIF, GPS, ICC, 코멘트와 애니메이션을
-     * 결과에 전달해서는 안 된다.
+     * 결과에 전달해서는 안 된다. HEIC/HEIF 정지 사진은 JPEG로 변환되므로 호출자는 원본 MIME이
+     * 아니라 반환된 contentType을 저장 및 응답에 사용해야 한다.
      */
     SanitizedImage sanitizeForStorage(byte[] source, String contentType);
 

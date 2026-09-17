@@ -15,7 +15,9 @@ RUN mkdir -p /app/generated && \
       -I/contracts \
       --python_out=/app/generated \
       --grpc_python_out=/app/generated \
-      /contracts/gole/support/v1/support_agent.proto
+      /contracts/gole/support/v1/support_agent.proto \
+      /contracts/gole/agent/v1/agent_jobs.proto \
+      /contracts/gole/brick/v1/brick_images.proto
 
 COPY apps/support-agent/src ./src
 ENV PYTHONPATH="/app/src:/app/generated"

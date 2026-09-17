@@ -1,0 +1,47 @@
+syntax = "proto3";
+package gole.agent.v1;
+option java_multiple_files = true;
+option java_package = "com.gole.api.agent.grpc";
+
+// Java만 호출한다. 사용자 인증/권한/quota를 통과한 owner와 승인 참조를 전달한다.
+service AgentJobs {
+  rpc Submit(SubmitJobRequest) returns (Job);
+  rpc Get(JobRequest) returns (Job);
+  rpc Cancel(JobRequest) returns (Job);
+  // Java의 승인된 문의 파기 트랜잭션에서 호출한다. 재접수도 영구 차단한다.
+  rpc Purge(PurgeJobRequest) returns (PurgeJobReceipt);
+}
+message SubmitJobRequest {
+  string owner_id = 1;
+  string idempotency_key = 2;
+  string authorization_ref = 3;
+  // support.rules 또는 synthetic.demo. brickfilter는 아직 연결하지 않았다.
+  string kind = 4;
+  string payload_json = 5;
+  // rules, fake, openai. support.rules는 rules만 허용한다.
+  string provider = 6;
+  bool allow_external = 7;
+}
+message JobRequest { string owner_id = 1; string job_id = 2; }
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  QUEUED = 1;
+  RUNNING = 2;
+  RETRY_WAIT = 3;
+  SUCCEEDED = 4;
+  FAILED = 5;
+  CANCELLED = 6;
+}
+message Job {
+  string job_id = 1;
+  JobState state = 2;
+  uint32 attempts = 3;
+  string result_json = 4;
+  string error_code = 5;
+  int64 created_at_ms = 6;
+  int64 updated_at_ms = 7;
+  bool human_review_required = 8;
+}
+
+message PurgeJobRequest { string owner_id = 1; string idempotency_key = 2; }
+message PurgeJobReceipt { string receipt_id = 1; int64 purged_at_ms = 2; }

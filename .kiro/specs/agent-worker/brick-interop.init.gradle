@@ -1,0 +1,12 @@
+// 단발 cross-language 검증 전용. 기존 API 서버 빌드 디렉터리를 사용하지 않는다.
+allprojects {
+    layout.buildDirectory.set(file('/tmp/gole-brick-filter-java'))
+    afterEvaluate {
+        tasks.register('brickGrpcInterop', JavaExec) {
+            dependsOn tasks.named('testClasses')
+            classpath = sourceSets.test.runtimeClasspath
+            mainClass = 'com.gole.api.brickfilter.adapter.out.provider.BrickGrpcInteropProbe'
+            args providers.gradleProperty('brickInteropTarget').get()
+        }
+    }
+}
