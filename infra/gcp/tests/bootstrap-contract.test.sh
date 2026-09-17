@@ -142,16 +142,11 @@ while IFS= read -r image_reference; do
   [[ "$image_reference" =~ @sha256:[0-9a-f]{64}$ ]] ||
     fail "production Compose image is not digest-pinned: $image_reference"
 done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' infra/gcp/docker-compose.yml)
-for dockerfile in \
+python3 infra/gcp/tests/dockerfile_pins.py \
   infra/gcp/docker/api.Dockerfile \
   infra/gcp/docker/web.Dockerfile \
   infra/gcp/budget-relay/Dockerfile \
-  apps/support-agent/Dockerfile; do
-  while IFS= read -r base_image; do
-    [[ "$base_image" =~ @sha256:[0-9a-f]{64}$ ]] ||
-      fail "production Dockerfile base is not digest-pinned: $dockerfile ($base_image)"
-  done < <(awk '$1 == "FROM" {print $2}' "$dockerfile")
-done
+  apps/support-agent/Dockerfile
 grep -q 'google-cloud-cli' infra/gcp/scripts/bootstrap-host.sh ||
   fail "host bootstrap must install Google Cloud CLI"
 grep -q '/usr/local/libexec/gole/validate-production-env.py' infra/gcp/scripts/bootstrap-host.sh ||

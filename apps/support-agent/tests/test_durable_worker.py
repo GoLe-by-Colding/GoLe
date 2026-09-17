@@ -4,7 +4,6 @@ import json
 import multiprocessing
 import os
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -39,7 +38,7 @@ def request(**changes):
 
 @pytest.fixture
 def store(tmp_path):
-    return Store(str(tmp_path / "jobs.sqlite3"), lease_seconds=0.3, backoff_seconds=0.01)
+    return Store(str(tmp_path / "jobs.sqlite3"), backoff_seconds=0.01)
 
 
 @pytest.fixture
@@ -188,8 +187,20 @@ def test_bounded_retry_resume_and_sanitized_failure(tmp_path, failures, permanen
     assert sum(m.get("step") == 1 for m in metadata) == 1
 
 
-def test_running_cancel_blocks_late_result_and_heartbeat(store):
+def test_running_cancel_blocks_late_result_and_heartbeat(tmp_path):
+    now = [100.0]
     entered, released = threading.Event(), threading.Event()
+    renewed = threading.Event()
+
+    class ObservedStore(Store):
+        def heartbeat(self, job_id, fence):
+            super().heartbeat(job_id, fence)
+            with self.connection() as db:
+                lease_until = db.execute("SELECT lease_until FROM jobs WHERE id=?", (job_id,)).fetchone()[0]
+            if lease_until > 100.3:
+                renewed.set()
+
+    store = ObservedStore(str(tmp_path / "heartbeat.sqlite3"), clock=lambda: now[0], lease_seconds=0.3)
 
     class Slow(FakeProvider):
         def generate(self, request, **kwargs):
@@ -202,8 +213,10 @@ def test_running_cancel_blocks_late_result_and_heartbeat(store):
     thread.start()
     try:
         assert entered.wait(2)
-        time.sleep(0.4)
-        # lease 원래 길이보다 오래 걸려도 heartbeat 덕에 재claim되지 않는다.
+        now[0] = 100.2
+        assert renewed.wait(2)
+        now[0] = 100.4
+        # 실제 heartbeat의 연장을 확인한 뒤 원래 만료 시각 100.3을 넘긴다.
         assert store.claim() is None
         store.cancel("java", "owner-1", job["id"])
     finally:
@@ -215,8 +228,9 @@ def test_running_cancel_blocks_late_result_and_heartbeat(store):
     assert result["result"] == ""
 
 
-def _checkpoint_and_crash(path, job_id, completed):
-    store = Store(path, lease_seconds=0.2, backoff_seconds=0)
+def _checkpoint_and_crash(path, job_id, completed, now):
+    # 복구 계약은 실제 프로세스로 검증하되 저장 속도가 임대 만료를 결정하지 않게 한다.
+    store = Store(path, clock=lambda: now, lease_seconds=0.2, backoff_seconds=0)
     job = store.claim()
     saver = FencedSaver(store, job_id, job["fence"])
     graph = build_graph(saver, FakeProvider(), threading.Event(), 2)
@@ -226,16 +240,24 @@ def _checkpoint_and_crash(path, job_id, completed):
 
 
 @pytest.mark.parametrize("completed", [False, True])
-def test_real_process_crash_recovers_checkpoint_without_repeating_provider(store, completed):
+def test_real_process_crash_recovers_checkpoint_without_repeating_provider(tmp_path, completed):
+    now = [100.0]
+    store = Store(str(tmp_path / "crash.sqlite3"), clock=lambda: now[0], backoff_seconds=0)
     job = store.submit("java", submission())
     child = multiprocessing.get_context("spawn").Process(target=_checkpoint_and_crash,
-                                                          args=(store.path, job["id"], completed))
+                                                          args=(store.path, job["id"], completed, now[0]))
     child.start()
-    child.join(10)
-    assert child.exitcode == 19
+    try:
+        child.join(10)
+        assert child.exitcode == 19
+    finally:
+        if child.is_alive():
+            child.terminate()
+            child.join(3)
     assert store.get("java", "owner-1", job["id"])["state"] == "RUNNING"
-    time.sleep(0.3)
-    reopened = Store(store.path, backoff_seconds=0)
+    assert store.claim() is None
+    now[0] += 0.3
+    reopened = Store(store.path, clock=lambda: now[0], backoff_seconds=0)
 
     class MustNotCall:
         def generate(self, *args, **kwargs):
@@ -248,7 +270,9 @@ def test_real_process_crash_recovers_checkpoint_without_repeating_provider(store
     assert json.loads(result["result"])["human_review_required"] is True
 
 
-def test_timeout_is_bounded_and_fences_late_success(store):
+def test_timeout_is_bounded_and_fences_late_success(tmp_path):
+    # 실행 제한은 실제 monotonic 시계로 검사하고 별개인 임대 만료는 고정한다.
+    store = Store(str(tmp_path / "timeout.sqlite3"), clock=lambda: 100.0)
     class Slow:
         def generate(self, request, *, cancelled, timeout):
             cancelled.wait(2)
