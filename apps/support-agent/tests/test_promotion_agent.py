@@ -15,7 +15,7 @@ from gole_promotion_agent import policy
 from gole_promotion_agent.checkpoints import BinaryInCheckpoint, SessionSaver, reject_binary
 from gole_promotion_agent.dryrun import FakeCamera, RecordingPublisher, ScriptedConversation
 from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, _blocks_from_transcript
-from gole_promotion_agent.runtime import PromotionHarness
+from gole_promotion_agent.runtime import PromotionHarness, skipped_ledger
 from gole_promotion_agent.session import EphemeralSession, Stage
 
 
@@ -91,6 +91,52 @@ def test_release_scanner_returns_nothing_when_head_already_promoted(repo: Path):
     assert scanner.candidates() == ()
 
 
+def test_release_scanner_excludes_already_skipped_release(repo: Path):
+    """한 번 건너뛴 커밋을 다시 유료로 평가하지 않는다(스펙 D11).
+
+    건너뛴 결과는 백엔드에 남지 않아 `/exists` 가 계속 거짓이므로, 원장이 없으면 탐색 창에
+    있는 동안 매 실행마다 모델을 다시 부른다.
+    """
+    skipped = _commit(repo, "chore(release): 홍보 가치가 없어 건너뛴 것", web=True)
+    kept = _commit(repo, "chore(release): 아직 평가하지 않은 것", web=True)
+
+    scanner = GitReleaseScanner(repo, lambda _sha: False, lambda sha: sha == skipped)
+
+    assert [candidate.sha for candidate in scanner.candidates()] == [kept]
+
+
+def test_skipped_release_does_not_swallow_older_candidates(repo: Path):
+    """건너뛴 커밋은 경계가 아니라 개별 제외 대상이다 — break 면 아래가 통째로 사라진다."""
+    older = _commit(repo, "chore(release): 아직 평가하지 않은 옛 릴리스", web=True)
+    skipped = _commit(repo, "chore(release): 건너뛴 릴리스", web=True)
+    newer = _commit(repo, "chore(release): 아직 평가하지 않은 새 릴리스", web=True)
+
+    scanner = GitReleaseScanner(repo, lambda _sha: False, lambda sha: sha == skipped)
+    shas = [candidate.sha for candidate in scanner.candidates()]
+
+    assert shas == [older, newer], "건너뛴 커밋보다 오래된 후보가 살아남아야 한다"
+
+
+def test_skipped_ledger_reads_manifest_written_by_harness(tmp_path: Path):
+    """원장은 별도 저장소가 아니라 harness 가 이미 쓰는 manifest 다."""
+    sessions = tmp_path / "sessions"
+    done = "a" * 40
+    submitted = "b" * 40
+    for sha, outcome in ((done, "skipped"), (submitted, "submitted")):
+        directory = sessions / sha
+        directory.mkdir(parents=True)
+        (directory / "manifest.json").write_text(
+            json.dumps({"sha": sha, "subject": "x", "schema": 1, "done": outcome}),
+            encoding="utf-8",
+        )
+
+    is_skipped = skipped_ledger(sessions)
+
+    assert is_skipped(done) is True
+    assert is_skipped(submitted) is False
+    assert is_skipped("c" * 40) is False, "세션이 없으면 건너뛴 적이 없는 것이다"
+
+
 def test_release_scanner_skips_releases_without_web_changes(repo: Path):
     _commit(repo, "chore(release): 문서만 고침", web=False)
     web = _commit(repo, "chore(release): 화면을 고침", web=True)
@@ -140,6 +186,126 @@ def test_route_catalog_excludes_dynamic_and_private_routes(repo: Path):
     assert not [route for route in routes if "[" in route]
     assert "/admin/promotion" not in routes
     assert "/login" not in routes
+
+
+def test_private_routes_are_excluded_even_though_login_now_succeeds():
+    """로그인해서 찍기 때문에 새로 필요해진 제외다(스펙 D12·D19).
+
+    익명일 때 이 라우트들은 로그인 게이트만 보여 무해했지만, 인증 뒤에는 봇 계정의
+    개인 정보가 그대로 렌더링된다.
+    """
+    assert policy.is_public_capture_route("/profile") is False
+    assert policy.is_public_capture_route("/profile/security") is False
+    assert policy.is_public_capture_route("/notifications") is False
+    # 로그인이 필요하지만 개인 정보가 아닌 기능 화면은 이제 찍을 수 있어야 한다.
+    assert policy.is_public_capture_route("/sell") is True
+    assert policy.is_public_capture_route("/brick-filter") is True
+
+
+# ------------------------------------------------------------------- 인증된 캡처
+
+
+def test_session_init_script_survives_quotes_in_token():
+    script = policy.session_init_script(
+        {"accountId": "bot", "sessionToken": 'to"ken\\', "role": "ADMIN"}
+    )
+
+    # 스크립트가 문자열 리터럴 하나로 닫혀야 한다 — 토큰의 따옴표가 깨뜨리면 안 된다.
+    assert script.startswith("window.localStorage.setItem(")
+    assert script.endswith(");")
+    payload = json.loads(json.loads(script.split(", ", 1)[1].rstrip(");")))
+    assert payload["sessionToken"] == 'to"ken\\'
+
+
+def test_session_init_script_only_carries_allowed_fields():
+    """백엔드 응답을 통째로 브라우저에 심지 않는다."""
+    script = policy.session_init_script(
+        {"accountId": "bot", "sessionToken": "t", "role": "ADMIN", "secret": "leak-me"}
+    )
+
+    assert "leak-me" not in script
+
+
+def test_session_init_script_refuses_empty_token():
+    """토큰이 비면 익명으로 조용히 찍히는 대신 실패해야 한다."""
+    with pytest.raises(ValueError):
+        policy.session_init_script({"accountId": "bot", "sessionToken": "", "role": "ADMIN"})
+
+
+def test_capture_chrome_script_hides_operator_only_elements():
+    script = policy.capture_chrome_script()
+
+    assert policy.CAPTURE_HIDE_ATTRIBUTE in script
+    assert "display:none !important" in script
+
+
+class _FakePage:
+    def goto(self, url, **_kwargs):
+        self.url = url
+
+    def wait_for_timeout(self, _milliseconds):
+        return None
+
+    def screenshot(self, path, **_kwargs):
+        Path(path).write_bytes(b"\x89PNG\r\n")
+
+
+class _FakeContext:
+    def __init__(self):
+        self.init_scripts: list[str] = []
+
+    def set_default_timeout(self, _milliseconds):
+        return None
+
+    def route(self, _pattern, _handler):
+        return None
+
+    def add_init_script(self, script):
+        self.init_scripts.append(script)
+
+    def new_page(self):
+        return _FakePage()
+
+    def close(self):
+        return None
+
+
+class _FakeBrowser:
+    def __init__(self):
+        self.contexts: list[_FakeContext] = []
+
+    def new_context(self, **_kwargs):
+        context = _FakeContext()
+        self.contexts.append(context)
+        return context
+
+
+def _capture_with_fake_browser(tmp_path: Path, session_provider) -> list[str]:
+    from gole_promotion_agent.hands import PlaywrightCamera
+
+    camera = PlaywrightCamera("http://localhost:3000", ("/",), session_provider)
+    browser = _FakeBrowser()
+    camera._browser = browser  # 실제 Chromium 없이 조립만 검사한다
+    camera.capture("/", [], tmp_path / "shot.png")
+    return browser.contexts[0].init_scripts
+
+
+def test_camera_logs_in_when_session_provider_is_given(tmp_path: Path):
+    scripts = _capture_with_fake_browser(
+        tmp_path, lambda: {"accountId": "bot", "sessionToken": "tok", "role": "ADMIN"}
+    )
+
+    assert any(policy.SESSION_STORAGE_KEY in script for script in scripts)
+    assert any(policy.CAPTURE_HIDE_ATTRIBUTE in script for script in scripts)
+
+
+def test_camera_stays_anonymous_without_session_provider(tmp_path: Path):
+    """드라이런·단위 테스트가 백엔드 없이 살아야 하므로 기본값은 익명이다."""
+    scripts = _capture_with_fake_browser(tmp_path, None)
+
+    assert not any(policy.SESSION_STORAGE_KEY in script for script in scripts)
+    # 운영자 UI 숨김은 로그인 여부와 무관하게 항상 건다.
+    assert any(policy.CAPTURE_HIDE_ATTRIBUTE in script for script in scripts)
 
 
 # ----------------------------------------------------------------- 체크포인트
