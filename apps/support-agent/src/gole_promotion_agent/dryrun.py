@@ -122,6 +122,10 @@ class RecordingPublisher:
     def exists(self, sha: str) -> bool:
         return sha in self._promoted
 
+    def browser_session(self) -> Mapping[str, Any]:
+        """드라이런은 FakeCamera 를 쓰므로 실제로 심지 않는다 — 계약만 채운다."""
+        return {"accountId": "dry-run", "sessionToken": "dry-run", "role": "ADMIN"}
+
     def pending_count(self) -> int:
         return self._pending
 

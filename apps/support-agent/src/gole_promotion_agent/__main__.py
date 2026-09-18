@@ -10,7 +10,7 @@ from pathlib import Path
 from gole_agent_runtime.privacy import reject_external_tracing
 from gole_promotion_agent import policy
 from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner
-from gole_promotion_agent.runtime import PromotionHarness
+from gole_promotion_agent.runtime import PromotionHarness, skipped_ledger
 
 DEFAULT_SESSIONS = "/var/lib/gole/promotion-agent"
 DEFAULT_SITE = "https://gole.co.kr"
@@ -26,6 +26,8 @@ def _required(name: str) -> str:
 def build_harness(dry_run: bool, repo: Path, sessions: Path) -> PromotionHarness:
     site = (os.environ.get("PROMOTION_AGENT_SITE_URL") or DEFAULT_SITE).rstrip("/")
     routes = AppRouteCatalog(repo)
+    # 건너뛴 커밋을 다시 평가하지 않는다(스펙 D11). 드라이런도 같은 원장을 본다.
+    skipped = skipped_ledger(sessions)
 
     if dry_run:
         # 외부 SDK도 백엔드 클라이언트도 만들지 않는다 — 나가는 경로가 없다(스펙 D16).
@@ -38,7 +40,7 @@ def build_harness(dry_run: bool, repo: Path, sessions: Path) -> PromotionHarness
         publisher = RecordingPublisher(sessions)
         available = routes.routes()
         return PromotionHarness(
-            GitReleaseScanner(repo, publisher.exists),
+            GitReleaseScanner(repo, publisher.exists, skipped),
             routes,
             FakeCamera(available),
             publisher,
@@ -58,9 +60,10 @@ def build_harness(dry_run: bool, repo: Path, sessions: Path) -> PromotionHarness
         _required("PROMOTION_AGENT_ADMIN_PASSWORD"),
     )
     return PromotionHarness(
-        GitReleaseScanner(repo, publisher.exists),
+        GitReleaseScanner(repo, publisher.exists, skipped),
         routes,
-        PlaywrightCamera(site, routes.routes()),
+        # 봇 계정으로 로그인된 상태로 찍는다 — 로그인 뒤에만 보이는 기능도 홍보 대상이다(D12).
+        PlaywrightCamera(site, routes.routes(), publisher.browser_session),
         publisher,
         anthropic_conversation_factory(),
         sessions,

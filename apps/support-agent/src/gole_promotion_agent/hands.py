@@ -47,6 +47,7 @@ class GitReleaseScanner:
         self,
         repo: Path,
         is_promoted: Callable[[str], bool],
+        is_skipped: Callable[[str], bool] | None = None,
         ref: str = "HEAD",
         max_commits: int = policy.MAX_WALK_COMMITS,
         max_days: int = policy.MAX_WALK_DAYS,
@@ -54,6 +55,8 @@ class GitReleaseScanner:
     ):
         self._repo = Path(repo)
         self._is_promoted = is_promoted
+        # 건너뛴 커밋은 경계가 아니라 개별 제외 대상이다 — 아래 candidates() 참고.
+        self._is_skipped = is_skipped or (lambda _sha: False)
         self._ref = ref
         self._max_commits = max_commits
         self._max_days = max_days
@@ -94,6 +97,11 @@ class GitReleaseScanner:
             if self._is_promoted(sha):
                 # 여기서부터는 이미 홍보한 영역이다.
                 break
+            if self._is_skipped(sha):
+                # 이미 평가해서 홍보하지 않기로 한 커밋이다. **break 가 아니라 continue 다** —
+                # 건너뛴 커밋은 "여기까지 처리했다"는 경계가 아니라 개별 제외 대상이라,
+                # break 하면 그보다 오래된 후보가 통째로 조용히 사라진다.
+                continue
             if self._touches_web(sha):
                 found.append(Candidate(sha, subject))
         # 오래된 것부터 처리한다 — 이야기 순서가 시간 순서와 같아야 한다.
@@ -160,9 +168,16 @@ class AppRouteCatalog:
 class PlaywrightCamera:
     """선언적 캡처(스펙 D12). 호출마다 새 컨텍스트를 열어 상태를 남기지 않는다."""
 
-    def __init__(self, base_url: str, allowed_routes: Iterable[str]):
+    def __init__(
+        self,
+        base_url: str,
+        allowed_routes: Iterable[str],
+        session_provider: Callable[[], Mapping[str, Any]] | None = None,
+    ):
         self._base_url = base_url.rstrip("/")
         self._allowed = frozenset(allowed_routes)
+        # None 이면 익명으로 찍는다 — 드라이런과 단위 테스트가 백엔드 없이 살아야 한다.
+        self._session_provider = session_provider
         self._playwright: Any = None
         self._browser: Any = None
 
@@ -197,6 +212,11 @@ class PlaywrightCamera:
         try:
             context.set_default_timeout(policy.INTERACTION_TIMEOUT_SECONDS * 1000)
             context.route("**/*", self._guard)
+            # 네비게이션 전에 심어야 첫 페인트부터 로그인 상태다. 컨텍스트는 이 호출이
+            # 끝나면 버려지므로 토큰이 캡처 사이에 남지 않는다.
+            if self._session_provider is not None:
+                context.add_init_script(policy.session_init_script(self._session_provider()))
+            context.add_init_script(policy.capture_chrome_script())
             page = context.new_page()
             page.goto(
                 f"{self._base_url}{route}",
@@ -372,7 +392,7 @@ class BackendPublisher:
         self._email = email
         self._password = password
         self._client = client
-        self._token: str | None = None
+        self._session: dict[str, Any] | None = None
 
     def _http(self) -> Any:
         if self._client is None:
@@ -381,8 +401,8 @@ class BackendPublisher:
             self._client = httpx.Client(base_url=self._base_url, timeout=30.0)
         return self._client
 
-    def _headers(self) -> dict[str, str]:
-        if self._token is None:
+    def _sign_in(self) -> dict[str, Any]:
+        if self._session is None:
             response = self._http().post(
                 "/api/v1/accounts/sessions",
                 json={"email": self._email, "password": self._password},
@@ -391,8 +411,17 @@ class BackendPublisher:
             session = response.json()
             if session.get("role") != "ADMIN":
                 raise ValueError("BOT_ACCOUNT_NOT_ADMIN")
-            self._token = session["sessionToken"]
-        return {"Authorization": f"Bearer {self._token}"}
+            if not session.get("sessionToken"):
+                raise ValueError("SESSION_TOKEN_MISSING")
+            self._session = dict(session)
+        return self._session
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._sign_in()['sessionToken']}"}
+
+    def browser_session(self) -> Mapping[str, Any]:
+        """캡처 컨텍스트에 심을 세션. 제출과 같은 토큰을 재사용해 로그인을 두 번 하지 않는다."""
+        return self._sign_in()
 
     def exists(self, sha: str) -> bool:
         response = self._http().get(

@@ -7,7 +7,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from gole_agent_runtime.privacy import private_execution
 from gole_promotion_agent import policy
@@ -27,6 +27,29 @@ CANDIDATE_TIMEOUT_SECONDS = 15 * 60
 
 class InactiveRequest(Exception):
     pass
+
+
+def skipped_ledger(sessions_root: Path) -> Callable[[str], bool]:
+    """이미 평가해서 건너뛴 커밋인지 판정한다(스펙 D11).
+
+    건너뛴 결과는 백엔드에 남지 않는다 — 초안을 만들지 않았으므로 `/exists` 가 계속 거짓이다.
+    그래서 원장이 없으면 같은 커밋이 탐색 창에 남아 있는 동안 매 실행마다 유료로 재평가된다.
+    별도 저장소를 두지 않고 세션 디렉터리의 manifest 를 그대로 원장으로 쓴다.
+
+    보존(RETENTION_DAYS)과 탐색 창(MAX_WALK_DAYS)이 같은 7일이라, 원장이 지워질 무렵이면
+    그 커밋은 이미 창 밖이다.
+    """
+    root = Path(sessions_root)
+
+    def is_skipped(sha: str) -> bool:
+        manifest = root / sha / "manifest.json"
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return payload.get("done") == "skipped"
+
+    return is_skipped
 
 
 @dataclass(frozen=True)
