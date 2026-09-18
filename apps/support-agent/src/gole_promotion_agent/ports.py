@@ -83,6 +83,13 @@ class DraftPublisher(Protocol):
 
     def exists(self, sha: str) -> bool: ...
 
+    def browser_session(self) -> Mapping[str, Any]:
+        """캡처 컨텍스트를 로그인시킬 세션. 제출에 쓰는 것과 같은 봇 계정이다(스펙 D12).
+
+        로그인은 이 구현이 소유한다 — 카메라는 토큰의 출처를 모른다.
+        """
+        ...
+
     def pending_count(self) -> int: ...
 
     def history(self, limit: int) -> tuple[Mapping[str, Any], ...]: ...
