@@ -649,6 +649,8 @@ leasing이 아니며(D17), egress가 필요한 작업을 "문의 원문은 밖�
 
 ## 관련
 
+- [초안 품질 평가 v1](eval.md) — 첫 검토 채택률·결함·검토 부담, 페르소나 창작 기준,
+  릴리스/일일 홍보 분류별 평가. [건별 기록 양식](eval-record-template.md).
 
 - `admin-console` — 감사 로그(`RecordAdminActionUseCase`), 관리자 권한 경계, `AdminAuthInterceptor`.
 - `report` — `SubmitReportUseCase`/`ManageReportsUseCase` 분리 패턴을 그대로 차용.
