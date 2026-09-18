@@ -81,7 +81,15 @@ export function AdminBar() {
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-3 print:hidden">
+      {/*
+        data-promotion-hide: 홍보 에이전트가 봇 ADMIN 계정으로 로그인해 찍으므로 이 바가
+        모든 스크린샷 하단에 걸린다. 감추면 "이 매물 내리기" 같은 파괴적 버튼도 캡처가
+        누를 수 없게 되어 사고 경로가 하나 줄어든다.
+      */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-3 print:hidden"
+        data-promotion-hide
+      >
         <div className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white shadow-lg">
           <Badge tone="brand">ADMIN</Badge>
 

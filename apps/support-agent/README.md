@@ -1,5 +1,11 @@
 # GoLe Support Agent
 
+> **이 패키지는 이름보다 넓다.** 문의(`gole_support_agent`)·사진(`gole_brick_filter`)·
+> 홍보(`gole_promotion_agent`) 세 에이전트가 들어 있다. 공유하는 것은 구조 관용구
+> (Brain/Hands/Session)와 관측 격리(`gole_agent_runtime`)이지 프로세스·이미지·자원 한도가
+> 아니다. 디렉터리 이름을 아직 바꾸지 않은 것은 Dockerfile·compose·CI 경로가 여기에 묶여
+> 있어서다 — 바꾼다면 그 배선을 함께 옮겨야 한다.
+
 문의와 피드백을 gRPC로 받아 LangGraph에서 분류하고 관리자 답변 초안을 만드는 내부 서비스다.
 현재 그래프는 외부 모델을 호출하지 않는 결정론적 `rules-v1`이며 다음 원칙을 강제한다.
 
@@ -212,6 +218,60 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 `gole_agent_runtime.privacy`는 문의 분석·영속 Runner·사진 Harness의 진입점에서 LangSmith tracing을 끄고 상위 Runnable의 callback/tags/metadata/configurable을 격리한다. 단순히 graph에 `callbacks=[]`를 넘기는 것만으로는 상위 callback이 병합될 수 있어 별도 실행 context가 필요하다. 호출이 끝나거나 예외가 나면 상위 context는 복원된다. 외부 exporter mock과 상위 callback 회귀 테스트는 실제 모델 호출 없이 원문·사진이 내부 graph의 trace로 전파되지 않는지 검사한다.
 
 이는 비신뢰 코드를 격리하는 sandbox가 아니다. 호출자가 경계에 넘기기 전에 이미 원문을 기록했거나 제공자 구현이 직접 전송하는 것까지 막지는 않는다. LangChain/LangGraph 변경 시 이 회귀 테스트를 반드시 실행한다.
+
+## 홍보 초안 에이전트 (`gole_promotion_agent`)
+
+배포된 릴리스를 근거로 사이트를 캡처하고 Threads 홍보 게시 초안을 만드는 **일회성 배치**다.
+문의·사진과 달리 서버가 아니다 — 하루 한 번 떴다 진다. 설계 근거는
+`.kiro/specs/promotion-review/spec.md` D9~D19에 있다.
+
+```text
+gole_promotion_agent/
+├─ policy.py       # 상수·pydantic 툴 스키마·톤 가이드. 자유 프롬프트를 받지 않는다
+├─ ports.py        # Protocol만. SDK·환경변수·HTTP를 모른다
+├─ brain.py        # 순환 LangGraph (think ⇄ act) + 제출 3단 체인
+├─ hands.py        # git·Playwright·Anthropic·백엔드 HTTP. SDK import는 전부 지연
+├─ session.py      # 단계 기계. 내용물을 담지 않는다
+├─ checkpoints.py  # 세션 로컬 saver. lease·fencing 없음
+├─ runtime.py      # 후보 루프·데드라인·보존 정리
+└─ __main__.py     # 일회성 엔트리포인트
+```
+
+**영속 워커(`gole_agent_worker`)에 넣지 않은 이유**는 필요한 것이 영속성이지 분산 job
+leasing이 아니기 때문이다. 일회성 프로세스 하나뿐이라 `FencedSaver`의 lease·fencing이 풀
+문제가 없고, 그 워커는 운영에 배포된 적도 없다. 대신 `gole_brick_filter`처럼 같은 패키지
+안의 별도 모듈로 두고 관용구만 공유한다.
+
+**후보 선정은 시간창이 아니라 이력이다.** `main`을 `HEAD`부터 뒤로 걸으며 백엔드가 이미
+아는 `sourceCommitSha`를 만나면 멈춘다. 이전 구현은 `feat(` 커밋만 찾았는데 운영 checkout은
+squash 전용 `main`에 고정돼 있어 **영구히 0건**을 냈고, 0건이 정상 종료라 매일 초록으로
+실패했다. 그 실패를 `tests/test_promotion_agent.py`가 직접 겨냥한다.
+
+**체크포인트를 둔다.** 모델 루프가 최대 20턴이고 여유 메모리가 900 MB뿐이라 중단이 현실적
+시나리오인데, 전사를 잃으면 지불한 토큰을 다시 지불하게 된다. 제출은 업로드 → 생성 →
+검토요청 3단으로 쪼개 각 단계가 멱등하게 재개되므로 업로드 직후 죽어도 고아 이미지가 남지
+않는다. **이미지 바이트는 상태·체크포인트에 넣지 않는다** — saver가 직렬화 전에 거부한다.
+
+### 실행
+
+유료 호출 없이 전 과정을 돌리는 드라이런이 기본 검증 경로다. 외부 SDK와 백엔드 클라이언트를
+import조차 하지 않으므로 나가는 경로가 물리적으로 없다.
+
+```bash
+uv sync --project apps/support-agent --extra promotion
+uv run --project apps/support-agent playwright install chromium   # 실제 실행에만 필요
+
+PYTHONPATH=apps/support-agent/src \
+  uv run --project apps/support-agent python -m gole_promotion_agent \
+  --dry-run --repo . --sessions /tmp/promotion-sessions
+```
+
+실제 실행은 운영 VM의 `gole-promotion-agent.timer`가 `apps/support-agent/Dockerfile.promotion`
+으로 만든 별도 이미지를 oneshot으로 띄운다. 환경 변수는 `.env.example`을 본다. 브라우저를
+넣으면 이미지가 수백 MB 커지므로 **상주 50051 서비스 이미지와 일부러 분리했다.**
+
+`anthropic`·`playwright`·`httpx`는 `promotion` extra에만 있다. 기본 설치(`uv sync --locked`)로도
+테스트가 전부 돌아야 하며, 그래서 `hands.py`의 SDK import는 전부 함수 안에 있다.
 
 ## 배포 이미지의 오프라인 smoke 검사
 
