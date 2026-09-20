@@ -19,6 +19,11 @@ class PromotionPostTest {
         return PromotionPost.draft("promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", null, NOW);
     }
 
+    private PromotionPost draftFrom(String sourceCommitSha) {
+        return PromotionPost.draft(
+                "promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", sourceCommitSha, NOW);
+    }
+
     @Test
     void draftStartsInDraftStatus() {
         PromotionPost post = draft();
@@ -119,6 +124,29 @@ class PromotionPostTest {
         assertThat(post.getStatus()).isEqualTo(PromotionPostStatus.DRAFT);
         assertThat(post.getRejectionReason()).isEqualTo("오탈자 있음");
         assertThat(post.getReviewerId()).isEqualTo("reviewer-1");
+    }
+
+    @Test
+    @DisplayName("새 초안은 자기 출처 릴리스를 곧바로 점유한다")
+    void draftClaimsItsOwnSourceCommit() {
+        PromotionPost post = draftFrom(SHA);
+
+        assertThat(post.getSourceCommitSha()).isEqualTo(SHA);
+        assertThat(post.getClaimedSourceCommitSha()).isEqualTo(SHA);
+    }
+
+    @Test
+    @DisplayName("반려하면 릴리스 점유를 놓아주고 출처는 남는다")
+    void rejectReleasesClaimButKeepsSourceCommitSha() {
+        PromotionPost post = draftFrom(SHA);
+        post.submitForReview(NOW);
+
+        post.reject("reviewer-1", "오탈자 있음", NOW.plusSeconds(1));
+
+        // 점유를 놓아줘야 그 릴리스가 다시 후보가 된다(D2) — 안 그러면 영영 홍보되지 않는다.
+        assertThat(post.getClaimedSourceCommitSha()).isNull();
+        // 출처는 불변이다 — 목록 화면의 "원본 릴리스" 표시와 재시도 집계가 이것을 본다.
+        assertThat(post.getSourceCommitSha()).isEqualTo(SHA);
     }
 
     @Test
