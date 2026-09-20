@@ -16,13 +16,27 @@ const apiOrigin = (() => {
     return "";
   }
 })();
+// DSN 전체가 아니라 검증된 수집 원점만 CSP에 반영한다.
+const sentryOrigin = (() => {
+  if (
+    process.env.NEXT_PUBLIC_SENTRY_ENABLED !== "true" ||
+    process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT !== "production"
+  )
+    return "";
+  try {
+    const url = new URL(process.env.NEXT_PUBLIC_SENTRY_DSN ?? "");
+    return url.protocol === "https:" && url.hostname.endsWith(".sentry.io") ? ` ${url.origin}` : "";
+  } catch {
+    return "";
+  }
+})();
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}${isPortOneEnabled ? " https://cdn.portone.io" : ""}${isAnalyticsEnabled ? " https://www.googletagmanager.com" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' blob: data:${apiOrigin === "" ? "" : ` ${apiOrigin}`}${isAnalyticsEnabled ? " https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com" : ""}`,
   "font-src 'self' data:",
-  `connect-src 'self'${apiOrigin === "" ? "" : ` ${apiOrigin}`}${isDevelopment ? " http://localhost:* ws://localhost:*" : ""}${isPortOneEnabled ? " https:" : ""}${isAnalyticsEnabled ? " https://www.google-analytics.com https://*.google-analytics.com" : ""}`,
+  `connect-src 'self'${sentryOrigin}${apiOrigin === "" ? "" : ` ${apiOrigin}`}${isDevelopment ? " http://localhost:* ws://localhost:*" : ""}${isPortOneEnabled ? " https:" : ""}${isAnalyticsEnabled ? " https://www.google-analytics.com https://*.google-analytics.com" : ""}`,
   isPortOneEnabled ? "frame-src https:" : "frame-src 'none'",
   "object-src 'none'",
   "base-uri 'self'",
