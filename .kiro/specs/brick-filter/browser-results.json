@@ -1,0 +1,24 @@
+{
+  "successAndLostReceipt": {
+    "posts": 1,
+    "remaining": true,
+    "result": true
+  },
+  "failure": {
+    "mode": "BRICK_OBJECT",
+    "remaining": true,
+    "status": "FAILED"
+  },
+  "mobile": {
+    "height": 843,
+    "mainCount": 1,
+    "overflow": false,
+    "width": 390
+  },
+  "desktop": {
+    "height": 1000,
+    "mainCount": 1,
+    "overflow": false,
+    "width": 1441
+  }
+}
