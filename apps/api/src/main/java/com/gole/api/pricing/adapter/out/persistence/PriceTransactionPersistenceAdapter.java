@@ -19,11 +19,19 @@ import org.springframework.stereotype.Component;
  * 체결 거래 영속성 어댑터. 도메인 {@link PriceTransaction}과 {@link PriceTransactionDocument}를
  * 양방향 매핑한다.
  *
- * <p>전체 기간 조회는 {@link PriceTransactionMongoRepository} 파생 쿼리로, 기간(from/to)
- * 필터가 있는 조회는 {@link MongoTemplate}으로 처리한다.
+ * <p>시계열 조회는 전부 {@link MongoTemplate} 한 경로로 모은다. 예전에는 전체 기간만 파생 쿼리로
+ * 빠져 있었는데, 그러면 같은 질문에 정렬 계약이 둘이 되어 한쪽만 고치는 일이 생긴다.
  */
 @Component
 public class PriceTransactionPersistenceAdapter implements PriceTransactionRepositoryPort {
+
+    /**
+     * 시계열 조회의 정렬 계약. {@code executedAt} 만으로 정렬하면 **같은 시각 체결의 순서가
+     * 호출마다 달라진다** — MongoDB 는 동점의 순서를 보장하지 않는다. 시드 데이터처럼 같은 주차에
+     * 여러 건이 몰리거나 한 주문이 여러 건을 한꺼번에 남길 때 차트의 점 순서와 "최근 체결" 목록이
+     * 새로고침마다 바뀐다. {@code _id} 를 깨기값으로 두어 전 구간에서 같은 답이 나오게 한다.
+     */
+    private static final Sort ASCENDING_BY_EXECUTION = Sort.by(Sort.Order.asc("executedAt"), Sort.Order.asc("_id"));
 
     private final PriceTransactionMongoRepository repository;
     private final MongoTemplate mongoTemplate;
@@ -41,26 +49,16 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
 
     @Override
     public List<PriceTransaction> findInRangeAscending(String setNumber, Instant from, Instant to) {
-        // from/to가 모두 없으면 단순 파생 쿼리로 처리.
-        if (from == null && to == null) {
-            return repository.findBySetNumberOrderByExecutedAtAsc(setNumber).stream()
-                    .map(this::toDomain)
-                    .toList();
-        }
-
         Criteria criteria = Criteria.where("setNumber").is(setNumber);
         if (from != null && to != null) {
             criteria = criteria.and("executedAt").gte(from).lte(to);
         } else if (from != null) {
             criteria = criteria.and("executedAt").gte(from);
-        } else {
+        } else if (to != null) {
             criteria = criteria.and("executedAt").lte(to);
         }
 
-        Query query = new Query(criteria).with(Sort.by(Sort.Direction.ASC, "executedAt"));
-        return mongoTemplate.find(query, PriceTransactionDocument.class).stream()
-                .map(this::toDomain)
-                .toList();
+        return find(new Query(criteria));
     }
 
     @Override
@@ -89,10 +87,13 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
             conditionCriteria = new Criteria()
                     .orOperator(conditionCriteria, Criteria.where("condition").is(null));
         }
-        Query query = new Query(
-                        new Criteria().andOperator(Criteria.where("setNumber").is(setNumber), conditionCriteria))
-                .with(Sort.by(Sort.Direction.ASC, "executedAt"));
-        return mongoTemplate.find(query, PriceTransactionDocument.class).stream()
+        return find(
+                new Query(new Criteria().andOperator(Criteria.where("setNumber").is(setNumber), conditionCriteria)));
+    }
+
+    /** 시계열 조회의 단일 진입점. 정렬 계약을 여기 한 곳에서만 건다. */
+    private List<PriceTransaction> find(Query query) {
+        return mongoTemplate.find(query.with(ASCENDING_BY_EXECUTION), PriceTransactionDocument.class).stream()
                 .map(this::toDomain)
                 .toList();
     }
@@ -111,7 +112,9 @@ public class PriceTransactionPersistenceAdapter implements PriceTransactionRepos
                 .as("tradeCount")
                 .avg("price")
                 .as("averagePrice"));
-        ops.add(Aggregation.sort(Sort.Direction.DESC, "tradeCount"));
+        // 체결 수가 같은 세트끼리는 순서가 정해지지 않아 인기 목록이 호출마다 뒤바뀐다.
+        // 세트 번호(_id)를 깨기값으로 두어 같은 데이터면 같은 목록이 나오게 한다.
+        ops.add(Aggregation.sort(Sort.by(Sort.Order.desc("tradeCount"), Sort.Order.asc("_id"))));
         ops.add(Aggregation.limit(limit));
 
         AggregationResults<TradeAggregateRow> results =
