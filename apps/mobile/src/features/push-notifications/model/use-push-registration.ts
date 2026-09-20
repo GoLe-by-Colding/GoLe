@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { registerDeviceToken } from "@gole/core/notification";
 import { getDevicePushToken } from "../lib/device-push-token";
+import { notificationRoute } from "@/shared/lib";
 
 /**
  * 로그인 상태에서 단말 토큰을 등록하고, 푸시를 탭했을 때 해당 화면으로 보낸다. (R8.1, R8.4)
@@ -39,8 +40,8 @@ export function usePushRegistration(isSignedIn: boolean): void {
     // 백엔드가 link를 data 페이로드로 싣는다. notification이 아니라 data여야
     // 포그라운드·백그라운드 어느 상태에서 받아도 같은 값을 읽을 수 있다.
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const link = response.notification.request.content.data?.["link"];
-      if (typeof link === "string" && link.startsWith("/")) {
+      const link = notificationRoute(response.notification.request.content.data?.["link"]);
+      if (link !== null) {
         // 앱 내부 경로만 따른다. 외부 URL을 그대로 열면 푸시가 피싱 통로가 된다.
         router.push(link as Parameters<typeof router.push>[0]);
       }
