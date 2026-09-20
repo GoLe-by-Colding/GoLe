@@ -202,24 +202,30 @@ sudo -n /usr/local/sbin/gole-hostctl promotion-agent-overlay-verify
 ## DB 인덱스를 바꿀 때
 
 MongoDB는 `auto-index-creation: true`로 **기동할 때** 인덱스를 만든다. 같은 키에 옵션이 다른
-인덱스가 이미 있으면 `IndexOptionsConflict`(85)를 내고 Spring이 이를 다시 던져
-**애플리케이션 기동 자체가 실패한다.** 인덱스 이름을 바꿔도 키 패턴이 같으면 피할 수 없다.
+인덱스가 이미 있으면 `IndexKeySpecsConflict`(86)(이름이 같으면 `IndexOptionsConflict`(85))를 내고
+Spring이 이를 다시 던져 **애플리케이션 기동 자체가 실패한다.** 인덱스 이름을 바꿔도 키 패턴이
+같으면 피할 수 없다.
 
-### 2026-09-20 — `promotion_posts.sourceCommitSha`
+### 2026-09-20 — `promotion_posts.claimedSourceCommitSha` (드롭 작업 없음)
 
-비-unique `@Indexed` 였던 것을 `unique + sparse` 로 바꿨다(같은 릴리스로 초안이 두 건 생기는 것을
-DB가 마지막으로 막는다).
+**같은 날 앞서 적은 안내를 정정한다.** `sourceCommitSha`를 `unique + sparse`로 바꾸니 옛
+`sourceCommitSha_1`을 드롭하라고 적었는데, 그 설계 자체를 되돌렸다. 반려된 초안이 그 릴리스를
+영구히 잠그는 결함이 있어 **점유를 새 필드 `claimedSourceCommitSha`로 분리**했고(promotion-review
+D2), unique 인덱스도 그쪽으로 옮겼다. 결과적으로 **인덱스 드롭이 필요 없어졌다.**
 
-- **운영은 안전하다.** 이 필드는 `main`에 아직 없어서 운영 DB에 옛 인덱스가 없다. 릴리스가 나가면
-  처음부터 unique 인덱스로 만들어진다.
-- **로컬·개발 DB는 영향을 받는다.** `dev`를 받아 API를 한 번이라도 띄웠다면 옛 `sourceCommitSha_1`이
-  깔려 있다. 다음 기동 전에 한 번 돌린다:
-
-```bash
-docker exec -it gole-mongo mongosh gole --eval 'db.promotion_posts.dropIndex("sourceCommitSha_1")'
-```
-
-- 기존 데이터에 같은 SHA가 둘 이상이면 인덱스 생성이 `11000`으로 실패한다. 그때는 중복을 먼저 지운다.
+- **`sourceCommitSha`는 평범한 `@Indexed`(비-unique)로 되돌아갔다.** `dev`를 받아 API를 띄운
+  로컬·개발 DB에 이미 깔린 `sourceCommitSha_1`과 **스펙이 완전히 같으므로** 재생성이 무동작이다.
+  드롭할 것이 없다. (mongo:7에서 직접 확인 — 비-unique 재생성은 통과, 옛 설계처럼 같은 키에
+  `unique + sparse`를 얹으면 `IndexKeySpecsConflict`(86)로 실패한다.)
+- **`claimedSourceCommitSha_1`은 새 필드라 어느 DB에도 없다.** 기동할 때 처음부터
+  `unique + sparse`로 만들어진다 — 운영·개발·로컬 모두 사전 조율이 필요 없다.
+- **운영(`main`)에는 `sourceCommitSha` 자체가 아직 없다.** 릴리스가 나가면 두 인덱스가 한꺼번에
+  처음부터 만들어진다.
+- 이미 `dropIndex("sourceCommitSha_1")`을 돌렸어도 문제없다. 다음 기동에 비-unique로 다시 생긴다.
+- **다만 옛 초안은 점유가 비어 있다.** `dev`에서 이 변경 이전에 만든 문서에는
+  `claimedSourceCommitSha`가 없으므로 `/exists`가 거짓이고, 그 릴리스로 초안을 한 번 더 만들 수
+  있다. 운영 데이터가 없고 로컬 테스트 데이터뿐이라 백필하지 않는다 — 신경 쓰이면
+  `pnpm infra:reset`으로 비운다.
 - CI·E2E는 매번 새 컨테이너라 해당 없음.
 
 ## 운영 안전 규칙
