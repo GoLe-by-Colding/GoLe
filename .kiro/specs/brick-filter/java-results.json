@@ -1,0 +1,34 @@
+[
+  {
+    "name": "com.gole.api.brickfilter.BrickImageSanitizerTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-09-08T14:56:01.457Z"
+  },
+  {
+    "name": "com.gole.api.brickfilter.BrickFilterWebTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-09-08T14:56:00.343Z"
+  },
+  {
+    "name": "com.gole.api.brickfilter.adapter.provider.HttpBrickGeneratorTest",
+    "tests": "3",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-09-08T14:56:01.780Z"
+  },
+  {
+    "name": "com.gole.api.brickfilter.BrickFilterIntegrationTest",
+    "tests": "11",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-09-08T14:56:02.622Z"
+  }
+]
