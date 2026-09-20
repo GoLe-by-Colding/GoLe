@@ -1,5 +1,5 @@
-import { SignInView } from "@/views/auth";
+import { WebScreen } from "@/views/web";
 
-export default function SignInScreen() {
-  return <SignInView />;
+export default function Screen() {
+  return <WebScreen path="/login" />;
 }

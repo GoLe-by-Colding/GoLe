@@ -1,5 +1,5 @@
-import { NotificationsView } from "@/views/notifications";
+import { WebScreen } from "@/views/web";
 
-export default function NotificationsScreen() {
-  return <NotificationsView />;
+export default function Screen() {
+  return <WebScreen path="/notifications" />;
 }
