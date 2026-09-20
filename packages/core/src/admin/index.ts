@@ -37,6 +37,17 @@ export type {
   AdminPromotionPost,
   CreatePromotionPostInput,
   PromotionPostExistsResponse,
+  EvaluationCriterion,
+  FirstReviewVerdict,
+  HoldReasonKind,
+  EvaluationReasonTag,
+  AdminPromotionPostEvaluation,
+  RecordPromotionPostEvaluationInput,
+  PromotionDurationStats,
+  PromotionCriterionScoreDistribution,
+  PromotionOperationalMetrics,
+  PromotionQualityMetrics,
+  PromotionMetrics,
 } from "./api/admin-api";
 export {
   fetchAdminOverview,
@@ -96,5 +107,8 @@ export {
   approveAdminPromotionPost,
   rejectAdminPromotionPost,
   publishAdminPromotionPost,
+  fetchAdminPromotionMetrics,
+  fetchAdminPromotionPostEvaluation,
+  saveAdminPromotionPostEvaluation,
 } from "./api/admin-api";
 export type { AdminExceptionEntry, AdminShipmentFacts, AdminOrderContacts } from "./api/admin-api";
