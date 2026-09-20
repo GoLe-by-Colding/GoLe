@@ -9,17 +9,23 @@ class Stage(StrEnum):
     DRAFTING = "DRAFTING"
     SUCCEEDED = "SUCCEEDED"
     SKIPPED = "SKIPPED"
+    # 탐색 예산을 다 쓴 것은 "홍보하지 않기로 판단함"과 다르다. 다음 실행이 다시 본다.
+    DEFERRED = "DEFERRED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
 
 
-_TERMINAL = frozenset({Stage.SUCCEEDED, Stage.SKIPPED, Stage.FAILED, Stage.CANCELLED})
+_TERMINAL = frozenset(
+    {Stage.SUCCEEDED, Stage.SKIPPED, Stage.DEFERRED, Stage.FAILED, Stage.CANCELLED}
+)
 
 # 사진 필터와 달리 탐색 단계가 순환하므로 다음 단계를 집합으로 둔다.
 _NEXT: dict[Stage, frozenset[Stage]] = {
-    Stage.ACCEPTED: frozenset({Stage.EXPLORING, Stage.SKIPPED}),
-    Stage.EXPLORING: frozenset({Stage.EXPLORING, Stage.DRAFTING, Stage.SKIPPED}),
-    Stage.DRAFTING: frozenset({Stage.DRAFTING, Stage.SUCCEEDED}),
+    Stage.ACCEPTED: frozenset({Stage.EXPLORING, Stage.SKIPPED, Stage.DEFERRED}),
+    Stage.EXPLORING: frozenset(
+        {Stage.EXPLORING, Stage.DRAFTING, Stage.SKIPPED, Stage.DEFERRED}
+    ),
+    Stage.DRAFTING: frozenset({Stage.DRAFTING, Stage.SUCCEEDED, Stage.DEFERRED}),
 }
 
 

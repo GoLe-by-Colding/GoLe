@@ -11,6 +11,7 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
+from urllib.parse import urlsplit
 
 from gole_promotion_agent import policy
 from gole_promotion_agent.ports import Candidate, ToolCall, Turn
@@ -24,8 +25,10 @@ class ProviderUnavailable(Exception):
 
 
 def _git(repo: Path, *args: str, limit: int | None = None) -> str:
+    # 컨테이너 uid 와 /repo 소유자가 다르면 git 이 dubious ownership 으로 거부한다.
+    # 저장소의 다른 코드(bootstrap-host.sh)도 같은 이유로 safe.directory 를 붙인다.
     result = subprocess.run(
-        ["git", *args],
+        ["git", "-c", f"safe.directory={repo}", *args],
         cwd=str(repo),
         capture_output=True,
         text=True,
@@ -48,6 +51,7 @@ class GitReleaseScanner:
         repo: Path,
         is_promoted: Callable[[str], bool],
         is_skipped: Callable[[str], bool] | None = None,
+        retryable: Callable[[], tuple[str, ...]] | None = None,
         ref: str = "HEAD",
         max_commits: int = policy.MAX_WALK_COMMITS,
         max_days: int = policy.MAX_WALK_DAYS,
@@ -57,6 +61,9 @@ class GitReleaseScanner:
         self._is_promoted = is_promoted
         # 건너뛴 커밋은 경계가 아니라 개별 제외 대상이다 — 아래 candidates() 참고.
         self._is_skipped = is_skipped or (lambda _sha: False)
+        # 실패·중단으로 "다시 볼 것"으로 남은 커밋이다. 홍보 경계보다 오래되면 walk 가 닿지 못하므로
+        # 원장에서 따로 받아 되살린다 — 없으면 앞선 실패가 조용히 영영 사라진다.
+        self._retryable = retryable or (lambda: ())
         self._ref = ref
         self._max_commits = max_commits
         self._max_days = max_days
@@ -89,13 +96,17 @@ class GitReleaseScanner:
             "--format=%H%x09%s",
             self._ref,
         )
-        found: list[Candidate] = []
+        window: list[tuple[str, str]] = []
         for line in listed.splitlines():
             sha, _, subject = line.partition("\t")
-            if not policy.SHA_PATTERN.match(sha):
-                continue
+            if policy.SHA_PATTERN.match(sha):
+                window.append((sha, subject))
+
+        chosen: set[str] = set()
+        for sha, _subject in window:
             if self._is_promoted(sha):
-                # 여기서부터는 이미 홍보한 영역이다.
+                # 여기서부터는 이미 홍보한 영역이다. 다만 경계 너머에 "다시 볼 것"으로 남은 커밋이
+                # 있을 수 있어, 아래에서 원장을 보고 되살린다.
                 break
             if self._is_skipped(sha):
                 # 이미 평가해서 홍보하지 않기로 한 커밋이다. **break 가 아니라 continue 다** —
@@ -103,9 +114,19 @@ class GitReleaseScanner:
                 # break 하면 그보다 오래된 후보가 통째로 조용히 사라진다.
                 continue
             if self._touches_web(sha):
-                found.append(Candidate(sha, subject))
+                chosen.add(sha)
+
+        # 실패·중단으로 끝난 커밋을 되살린다. walk 가 홍보 경계에서 멈추므로, 그보다 오래된
+        # 실패는 경계에 가려 영영 후보가 되지 못한다 — 건너뛴 커밋에 대해 이미 막아 둔 함정이
+        # 실패 경로에만 남아 있었다. 탐색 창 밖으로 밀려난 것은 되살리지 않는다.
+        in_window = {sha for sha, _ in window}
+        for sha in self._retryable():
+            if sha in in_window and not self._is_promoted(sha):
+                chosen.add(sha)
+
         # 오래된 것부터 처리한다 — 이야기 순서가 시간 순서와 같아야 한다.
-        self._cache = tuple(reversed(found))[: self._max_candidates]
+        ordered = [Candidate(sha, subject) for sha, subject in reversed(window) if sha in chosen]
+        self._cache = tuple(ordered)[: self._max_candidates]
         return self._cache
 
     def diff(self, sha: str) -> str:
@@ -122,10 +143,12 @@ class GitReleaseScanner:
             sha,
             "--",
             "apps/web/src",
-            limit=2 * 1024 * 1024,
+            limit=policy.MAX_DIFF_CHARS + 1,
         )
         if not patch.strip():
             raise ValueError("NO_WEB_CHANGES")
+        if len(patch) > policy.MAX_DIFF_CHARS:
+            return patch[: policy.MAX_DIFF_CHARS] + policy.DIFF_TRUNCATED_NOTICE
         return patch
 
 
@@ -226,9 +249,23 @@ class PlaywrightCamera:
             page.wait_for_timeout(1_000)
             for index, step in enumerate(interactions):
                 self._interact(page, step, index)
+            # 라우트 허용 검사는 **이동 시작점에만** 걸린다. 상호작용이 클릭으로 다른 화면에 데려갈 수
+            # 있는데, 봇은 로그인 상태라 그 끝이 /profile·/notifications 같은 사설 화면일 수 있다.
+            # 찍기 직전에 지금 서 있는 곳을 다시 확인한다(D12·D19).
+            self._assert_still_allowed(page.url)
             page.screenshot(path=str(destination), animations="disabled")
         finally:
             context.close()
+
+    def _assert_still_allowed(self, current: str) -> None:
+        """상호작용 뒤에도 허용된 공개 화면에 서 있는지 확인한다."""
+        if not current.startswith(f"{self._base_url}/") and current != self._base_url:
+            raise ValueError("NAVIGATED_OFF_SITE")
+        path = urlsplit(current).path or "/"
+        if path != "/" and path.endswith("/"):
+            path = path.rstrip("/")
+        if path not in self._allowed or not policy.is_public_capture_route(path):
+            raise ValueError("NAVIGATED_TO_FORBIDDEN_ROUTE")
 
     def _interact(self, page: Any, step: Mapping[str, Any], index: int) -> None:
         kind = step.get("kind")
@@ -344,7 +381,17 @@ class AnthropicConversation:
             message = self._client.messages.create(
                 model=self._model,
                 max_tokens=policy.MAX_TOKENS,
-                system=self._system,
+                # 브레이크포인트가 없으면 캐싱이 **아예 걸리지 않는다.** 이력을 시스템 프롬프트에
+                # 둔 이유(D18)가 여기서 값을 받는다 — tools + system 이 안정 접두사가 되어
+                # 매 턴 같은 앞부분을 다시 계산하지 않는다. 확인은 응답의
+                # usage.cache_read_input_tokens 가 0 이 아닌지로 한다.
+                system=[
+                    {
+                        "type": "text",
+                        "text": self._system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 tools=list(policy.tool_schemas()),
                 messages=_blocks_from_transcript(transcript),
             )
@@ -372,7 +419,9 @@ def anthropic_conversation_factory() -> Callable[..., AnthropicConversation]:
         raise ValueError("ANTHROPIC_KEY_REQUIRED")
     from anthropic import Anthropic
 
-    client = Anthropic(api_key=key, max_retries=0)
+    # 예전 0 은 429·5xx 한 번에 후보 하나가 통째로 실패한다는 뜻이었다. 하루 한 번 도는
+    # 배치라 재시도가 사람을 기다리게 하지 않는다.
+    client = Anthropic(api_key=key, max_retries=2)
     model = os.environ.get("PROMOTION_AGENT_MODEL", policy.DEFAULT_MODEL)
 
     def factory(*, system: str) -> AnthropicConversation:

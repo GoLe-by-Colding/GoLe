@@ -52,6 +52,34 @@ def skipped_ledger(sessions_root: Path) -> Callable[[str], bool]:
     return is_skipped
 
 
+def retry_ledger(sessions_root: Path) -> Callable[[], tuple[str, ...]]:
+    """다음 실행이 다시 봐야 할 커밋을 모은다(실패·중단).
+
+    스캐너는 이미 홍보한 커밋을 만나면 거기서 walk 를 멈춘다. 그 경계보다 오래된 실패는
+    경계에 가려 영영 후보가 되지 못하므로, 세션 디렉터리의 manifest 를 원장 삼아 되살린다.
+    보존 기간이 탐색 창과 같아서(RETENTION_DAYS == MAX_WALK_DAYS) 창 밖 커밋은 저절로 빠진다.
+    """
+    root = Path(sessions_root)
+    retryable = {"failed", "deferred"}
+
+    def pending() -> tuple[str, ...]:
+        if not root.is_dir():
+            return ()
+        found: list[str] = []
+        for entry in sorted(root.iterdir()):
+            if not entry.is_dir():
+                continue
+            try:
+                payload = json.loads((entry / "manifest.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if payload.get("done") in retryable and isinstance(payload.get("sha"), str):
+                found.append(payload["sha"])
+        return tuple(found)
+
+    return pending
+
+
 @dataclass(frozen=True)
 class CandidateOutcome:
     sha: str
@@ -194,9 +222,13 @@ class PromotionHarness:
                     config,
                 )
         except InactiveRequest:
+            # 실패도 manifest 에 남긴다. 남기지 않으면 다음 실행의 스캐너가 홍보 경계에서 멈출 때
+            # 이 커밋이 경계 너머에 가려 영영 후보가 되지 못한다.
+            self._write_manifest(session_dir, sha, subject, done="failed")
             self._append_event(session_dir, "cancelled", {})
             return CandidateOutcome(sha, "failed", resumed, error="TIMEOUT")
         except Exception as error:
+            self._write_manifest(session_dir, sha, subject, done="failed")
             self._append_event(session_dir, "failed", {"type": type(error).__name__})
             return CandidateOutcome(sha, "failed", resumed, error=type(error).__name__)
 
