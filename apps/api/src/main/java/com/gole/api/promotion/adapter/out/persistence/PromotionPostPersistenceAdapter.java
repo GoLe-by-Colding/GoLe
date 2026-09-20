@@ -33,6 +33,11 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     }
 
     @Override
+    public boolean existsBySourceCommitSha(String sourceCommitSha) {
+        return repository.existsBySourceCommitSha(sourceCommitSha);
+    }
+
+    @Override
     public List<PromotionPost> findRecentFirst(PromotionPostStatus status, int limit) {
         PageRequest page = PageRequest.of(0, Math.max(1, limit));
         List<PromotionPostDocument> documents = status == null
@@ -48,6 +53,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 promotionPost.getCaption(),
                 promotionPost.getMediaUrls(),
                 promotionPost.getAuthorId(),
+                promotionPost.getSourceCommitSha(),
                 promotionPost.getStatus().name(),
                 promotionPost.getCreatedAt(),
                 promotionPost.getSubmittedAt(),
@@ -65,6 +71,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 document.getCaption(),
                 document.getMediaUrls(),
                 document.getAuthorId(),
+                document.getSourceCommitSha(),
                 PromotionPostStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 document.getSubmittedAt(),
