@@ -12,6 +12,7 @@ import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
+import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
@@ -26,6 +27,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class PromotionPostService
         implements CreatePromotionPostUseCase, SubmitPromotionPostForReviewUseCase, ManagePromotionPostsUseCase {
+
+    /**
+     * 같은 출처 릴리스로 만들 수 있는 초안의 상한.
+     *
+     * <p>반려가 점유를 놓아주는 덕에 릴리스를 다시 홍보할 수 있게 됐는데(D2), 그 반대급부로
+     * 에이전트가 탐색 창(7일) 안에서 매일 같은 릴리스를 후보로 다시 집는다. 사람이 세 번 반려한
+     * 릴리스는 네 번째도 반려될 가능성이 크고 그 사이 유료 모델 호출만 쌓이므로 여기서 끊는다.
+     */
+    private static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
 
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
@@ -51,8 +61,17 @@ public class PromotionPostService
         // 미디어를 건드리기 전에 막는다 — 중복으로 거절할 초안 때문에 STAGED 이미지를
         // PUBLIC으로 전이시키면 아무도 참조하지 않는 이미지가 영구히 남는다(D8).
         // 이 검사와 저장 사이의 경쟁은 문서의 unique+sparse 인덱스가 마지막으로 막는다(D11/P11).
-        if (command.sourceCommitSha() != null && repository.existsBySourceCommitSha(command.sourceCommitSha())) {
-            throw new SourceCommitAlreadyPromotedException(command.sourceCommitSha());
+        if (command.sourceCommitSha() != null) {
+            // 점유 기준이다 — 반려된 초안은 점유를 놓아줬으므로 여기서 걸리지 않고, 그 릴리스는
+            // 다시 홍보될 수 있다(D2).
+            if (repository.existsBySourceCommitSha(command.sourceCommitSha())) {
+                throw new SourceCommitAlreadyPromotedException(command.sourceCommitSha());
+            }
+            // 점유가 풀렸다고 무한히 다시 쓰게 두지 않는다 — 출처 기준으로 센다.
+            if (repository.countBySourceCommitSha(command.sourceCommitSha()) >= MAX_DRAFTS_PER_SOURCE_COMMIT) {
+                throw new SourceCommitRetryLimitExceededException(
+                        command.sourceCommitSha(), MAX_DRAFTS_PER_SOURCE_COMMIT);
+            }
         }
         String id = idGenerator.newId();
         // media 컨텍스트의 인바운드 포트만 의존한다 — STAGED(업로더 전용, 24시간 뒤 폐기)를
