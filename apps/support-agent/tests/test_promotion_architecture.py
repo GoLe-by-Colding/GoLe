@@ -81,9 +81,13 @@ def test_runtime_isolates_external_observability():
 
 
 def test_candidate_outcomes_are_structured():
-    """후보별 종료가 문자열 자유형이 아니라 정해진 셋이어야 한다."""
+    """후보별 종료가 문자열 자유형이 아니라 정해진 넷이어야 한다.
+
+    `deferred` 가 빠지면 "판단해서 건너뜀"과 "예산을 다 써 중단됨"이 한 칸에 들어가고,
+    결론이 안 난 릴리스가 영구 제외 원장으로 넘어간다(스펙 D11).
+    """
     source = inspect.getsource(runtime)
-    for outcome in ("submitted", "skipped", "failed"):
+    for outcome in ("submitted", "skipped", "deferred", "failed"):
         assert f'"{outcome}"' in source
 
 
