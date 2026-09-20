@@ -15,13 +15,28 @@ function resultLabel(code: string | null) {
   if (!code) return "결과 대기";
   if (/^EXCEPTIONS_[0-9]+$/.test(code))
     return `현재 예외 ${code.slice(11)}건 · 예외큐에서 조치하세요`;
+  const alert =
+    /^(DISCORD_CONFIGURED|DISCORD_DISABLED)_SENTRY_(DISABLED|MISCONFIGURED|CONFIGURED_UNVERIFIED)$/.exec(
+      code,
+    );
+  if (alert) {
+    const discord =
+      alert[1] === "DISCORD_CONFIGURED" ? "Discord 설정 활성 · 전달 미검증" : "Discord 비활성";
+    const sentry =
+      alert[2] === "DISABLED"
+        ? "API Sentry 수집·웹 조회 비활성"
+        : alert[2] === "MISCONFIGURED"
+          ? "API Sentry 설정 미완료"
+          : "API Sentry 설정 구성됨 · 실제 수집·웹 조회 미검증";
+    return `${discord} / ${sentry}`;
+  }
   const labels: Record<string, string> = {
     PAYMENT_READY: "결제 설정 준비됨 · 실결제 연결은 검증하지 않음",
     PAYMENT_DISABLED: "결제 비활성화",
     PAYMENT_MISCONFIGURED: "결제 설정 미완료 · 주문 관리에서 상세 확인",
     DISCORD_CONFIGURED_SENTRY_NOT_INSTRUMENTED:
-      "Discord 설정 활성 · 전달 미검증 / Sentry SDK 연결 대기",
-    DISCORD_DISABLED_SENTRY_NOT_INSTRUMENTED: "Discord 비활성 / Sentry SDK 연결 대기",
+      "이전 진단: Discord 설정 활성 / 당시 Sentry SDK 미연결",
+    DISCORD_DISABLED_SENTRY_NOT_INSTRUMENTED: "이전 진단: Discord 비활성 / 당시 Sentry SDK 미연결",
     DIAGNOSTIC_UNAVAILABLE: "의존 서비스 점검 실패 · 복구 후 재시도하세요",
   };
   return labels[code] ?? "진단 결과 확인 필요";
