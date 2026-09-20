@@ -24,6 +24,22 @@ def run_validator(path: pathlib.Path) -> subprocess.CompletedProcess[str]:
 
 
 class ProductionEnvironmentPolicyTest(unittest.TestCase):
+    def test_sentry_default_opt_in_and_no_public_read_token(self) -> None:
+        policy = runpy.run_path(str(VALIDATOR))
+        values = policy["parse_env"](PRODUCTION_FIXTURE)
+        policy["validate"](values)
+        values.update(GOLE_SENTRY_ENABLED="true", GOLE_SENTRY_ENVIRONMENT="production", GOLE_SENTRY_DSN="https://public@o0.ingest.sentry.io/1")
+        policy["validate"](values)
+        values["GOLE_SENTRY_POLL_ENABLED"] = "true"
+        with self.assertRaises(policy["PolicyError"]):
+            policy["validate"](values)
+        values["GOLE_SENTRY_READ_TOKEN"] = "SECRET_SENTINEL"
+        policy["validate"](values)
+        values["NEXT_PUBLIC_SENTRY_READ_TOKEN"] = "SECRET_SENTINEL"
+        with self.assertRaises(policy["PolicyError"]) as failure:
+            policy["validate"](values)
+        self.assertNotIn("SECRET_SENTINEL", str(failure.exception))
+
     def test_accepts_exact_initial_production_policy(self) -> None:
         result = run_validator(PRODUCTION_FIXTURE)
         self.assertEqual(0, result.returncode, result.stderr)

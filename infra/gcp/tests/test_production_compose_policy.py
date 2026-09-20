@@ -147,6 +147,59 @@ class ProductionComposePolicyTest(unittest.TestCase):
         cls.validator = load_validator()
         cls.model = render_model()
 
+    def test_previous_release_without_sentry_remains_valid_for_rollback(self) -> None:
+        model = copy.deepcopy(self.model)
+        web = model["services"]["frontend"]
+        for key in ("NEXT_PUBLIC_SENTRY_ENABLED", "NEXT_PUBLIC_SENTRY_ENVIRONMENT", "NEXT_PUBLIC_SENTRY_DSN"):
+            del web["build"]["args"][key]
+        web.pop("environment")
+        self.validator.validate(model, allow_lkg_image_pins=True)
+        web["build"]["args"]["NEXT_PUBLIC_SENTRY_ENABLED"] = "true"
+        with self.assertRaises(self.validator.ComposePolicyError):
+            self.validator.validate(model)
+
+    def test_sentry_render_routes_public_build_and_server_only_token(self) -> None:
+        global ENV_FIXTURE
+        previous = ENV_FIXTURE
+        with tempfile.TemporaryDirectory() as directory:
+            staged = pathlib.Path(directory) / "synthetic.env"
+            staged.write_text(previous.read_text() + "\nNEXT_PUBLIC_SENTRY_ENABLED=true\nNEXT_PUBLIC_SENTRY_ENVIRONMENT=production\nNEXT_PUBLIC_SENTRY_DSN=https://public@o0.ingest.sentry.io/1\nSENTRY_ENABLED=true\nSENTRY_ENVIRONMENT=production\nSENTRY_DSN=https://server@o0.ingest.sentry.io/1\nGOLE_SENTRY_READ_TOKEN=SECRET_SENTINEL\n")
+            try:
+                ENV_FIXTURE = staged
+                model = render_model()
+            finally:
+                ENV_FIXTURE = previous
+        self.validator.validate(model)
+        frontend = model["services"]["frontend"]
+        args = frontend["build"]["args"]
+        self.assertEqual("true", args["NEXT_PUBLIC_SENTRY_ENABLED"])
+        self.assertEqual("https://public@o0.ingest.sentry.io/1", args["NEXT_PUBLIC_SENTRY_DSN"])
+        self.assertEqual("https://server@o0.ingest.sentry.io/1", frontend["environment"]["SENTRY_DSN"])
+        self.assertEqual("SECRET_SENTINEL", model["services"]["backend"]["environment"]["GOLE_SENTRY_READ_TOKEN"])
+        self.assertNotIn("SECRET_SENTINEL", json.dumps(frontend))
+        dockerfile = (ROOT / "infra/gcp/docker/web.Dockerfile").read_text()
+        for key in ("NEXT_PUBLIC_SENTRY_ENABLED", "NEXT_PUBLIC_SENTRY_ENVIRONMENT", "NEXT_PUBLIC_SENTRY_DSN"):
+            self.assertIn(f"ARG {key}", dockerfile)
+            self.assertIn(f"ENV {key}=${key}", dockerfile)
+        self.assertNotIn("ARG SENTRY_DSN", dockerfile)
+        self.assertNotIn("READ_TOKEN", dockerfile)
+
+    def test_sentry_opt_in_and_runtime_secret_boundary(self) -> None:
+        model = copy.deepcopy(self.model)
+        web = model["services"]["frontend"]
+        web["build"]["args"].update(NEXT_PUBLIC_SENTRY_ENABLED="true", NEXT_PUBLIC_SENTRY_ENVIRONMENT="production", NEXT_PUBLIC_SENTRY_DSN="https://public@o0.ingest.sentry.io/1")
+        web["environment"].update(SENTRY_ENABLED="true", SENTRY_ENVIRONMENT="production", SENTRY_DSN="https://public@o0.ingest.sentry.io/1")
+        self.validator.validate(model)
+        web["environment"]["GOLE_SENTRY_READ_TOKEN"] = "SECRET_SENTINEL"
+        with self.assertRaises(self.validator.ComposePolicyError) as failure:
+            self.validator.validate(model)
+        self.assertNotIn("SECRET_SENTINEL", str(failure.exception))
+        del web["environment"]["GOLE_SENTRY_READ_TOKEN"]
+        web["build"]["args"]["NEXT_PUBLIC_SENTRY_DSN"] = "SECRET_SENTINEL"
+        with self.assertRaises(self.validator.ComposePolicyError) as failure:
+            self.validator.validate(model)
+        self.assertNotIn("SECRET_SENTINEL", str(failure.exception))
+
     def test_accepts_fixed_privilege_and_network_model(self) -> None:
         self.validator.validate(copy.deepcopy(self.model))
         self.assertEqual(
@@ -710,7 +763,8 @@ class ProductionComposePolicyTest(unittest.TestCase):
             if mount.get("target") != "/run/gole-cloud-broker"
         ]
         model["services"]["nginx"].pop("healthcheck", None)
-        for key in ("NEXT_PUBLIC_GA_MEASUREMENT_ID", "NEXT_PUBLIC_GTM_ID"):
+        for key in ("NEXT_PUBLIC_GA_MEASUREMENT_ID", "NEXT_PUBLIC_GTM_ID",
+                    "NEXT_PUBLIC_SENTRY_ENABLED", "NEXT_PUBLIC_SENTRY_ENVIRONMENT", "NEXT_PUBLIC_SENTRY_DSN"):
             model["services"]["frontend"]["build"]["args"].pop(key)
         self.validator.validate(model, allow_legacy_adoption=True)
         model["services"]["mongo"]["ports"][0]["host_ip"] = "0.0.0.0"

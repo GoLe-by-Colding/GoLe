@@ -36,6 +36,8 @@ RPC timeout 뒤 이미 시작된 외부 모델의 물리 취소·비용 환급�
 
 ## 2026-09-13 검증 근거
 
+- 후속 `fc4d5cd`·`1045860` 기준 Python 전체 97건, Java 전체 단위 1,190건 통과. 전체 Java 통합은 115건 통과·실제 알림톡 발송 1건 스킵이며 아래 브릭 11건은 모두 실행했다. Linux arm64 worker 이미지 빌드 및 네트워크 없는 읽기 전용 컨테이너의 proto/support/durable/image/privacy smoke도 통과했다. 아래 62/71건은 단계별 과거 기준이다.
+
 - 역할 분리 후 최종 Python 회귀는 71건 통과(0실패/0스킵)이며 아래 62건은 gRPC 연결 직후의 기준이다. 실제 Java/Python 두 모드도 역할 분리 후 재검증했다.
 - 전체 Python pytest 62건 통과(0실패/0스킵). 추가 12건은 실제 gRPC 두 모드, 인증, 중복 인증 헤더, 크기, deadline, 취소·capacity, 원본 메타데이터 제거를 검증한다.
 - Java brickfilter 단위·web·gRPC 테스트 17건 통과(0실패/0스킵). 7건은 새 gRPC 어댑터이며 Spring HTTP 기본값/gRPC 명시 선택에서 provider bean이 하나인지 포함한다.

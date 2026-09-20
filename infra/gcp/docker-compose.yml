@@ -377,8 +377,16 @@ services:
         NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: ${NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY:-}
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
         NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID:-}
+        NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-false}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-local}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     image: gole/frontend:local
     container_name: gole-frontend
+    # 조회 토큰은 backend env_file에만 남기고 web에는 서버 수집 설정만 전달한다.
+    environment:
+      SENTRY_ENABLED: ${SENTRY_ENABLED:-false}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-local}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     logging: *gole-logging
     restart: unless-stopped
     cpus: 0.75
