@@ -15,9 +15,13 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.constraints.Pattern;
+import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.MethodParameter;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -26,6 +30,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -54,6 +59,39 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().code()).isEqualTo("INVALID_PARAMETER");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    /**
+     * {@code @RequestParam @Pattern} 위반은 {@code HandlerMethodValidationException} 으로 온다.
+     * 이 타입을 잡아두지 않으면 catch-all이 먼저 집어 500 + ERROR 등급 운영 이벤트가 되므로,
+     * 실제 디스패치를 거쳐 400을 고정한다.
+     */
+    @Test
+    @DisplayName("파라미터 제약 위반은 400이고 거부한 값은 응답에 싣지 않는다")
+    void constrainedRequestParamViolationIsAClientErrorWithoutOperationalAlert() throws Exception {
+        var mvc = MockMvcBuilders.standaloneSetup(new CommitShaProbeController())
+                .setControllerAdvice(handler)
+                .build();
+
+        var result = mvc.perform(get("/probe-test").param("sourceCommitSha", "definitely-not-a-commit"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .contains("INVALID_PARAMETER")
+                .contains("sourceCommitSha")
+                .doesNotContain("definitely-not-a-commit");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("unique 인덱스 위반은 409이며 운영 알림을 올리지 않는다")
+    void duplicateKeyIsAConflictWithoutOperationalAlert() {
+        var response = handler.handleDuplicateKey(new DuplicateKeyException("E11000 duplicate key: sourceCommitSha"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("DUPLICATE_KEY_CONFLICT");
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 
@@ -130,6 +168,16 @@ class GlobalExceptionHandlerTest {
         @GetMapping(value = "/stream-test", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
         SseEmitter stream() {
             throw new ForbiddenException("CHAT_ROOM_ACCESS_DENIED", "참여 중인 채팅방만 볼 수 있습니다");
+        }
+    }
+
+    /** {@code AdminPromotionPostController#existsBySourceCommitSha} 와 같은 파라미터 제약 모양. */
+    @RestController
+    private static final class CommitShaProbeController {
+
+        @GetMapping("/probe-test")
+        Map<String, Boolean> exists(@RequestParam @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {
+            return Map.of("exists", false);
         }
     }
 }

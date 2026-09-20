@@ -7,11 +7,13 @@ import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateExceptio
 import com.gole.api.promotion.domain.exception.SelfReviewNotAllowedException;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PromotionPostTest {
 
     private static final Instant NOW = Instant.EPOCH;
+    private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
     private PromotionPost draft() {
         return PromotionPost.draft("promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", null, NOW);
@@ -58,17 +60,31 @@ class PromotionPostTest {
     }
 
     @Test
-    void sourceCommitSha는_null이거나_소문자_40자_hex여야_한다() {
-        String sha = "0123456789abcdef0123456789abcdef01234567";
-
+    @DisplayName("sourceCommitSha는 소문자 40자 hex를 그대로 보관한다")
+    void acceptsLowercaseHexSourceCommitSha() {
         PromotionPost post =
-                PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", sha, NOW);
+                PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", SHA, NOW);
 
-        assertThat(post.getSourceCommitSha()).isEqualTo(sha);
+        assertThat(post.getSourceCommitSha()).isEqualTo(SHA);
+    }
+
+    @Test
+    @DisplayName("sourceCommitSha는 사람이 직접 쓴 초안을 위해 null을 허용한다")
+    void allowsNullSourceCommitSha() {
         assertThat(draft().getSourceCommitSha()).isNull();
+    }
+
+    @Test
+    @DisplayName("sourceCommitSha에 대문자가 섞이면 거부한다")
+    void rejectsUppercaseSourceCommitSha() {
         assertThatThrownBy(() -> PromotionPost.draft(
-                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", sha.toUpperCase(), NOW))
+                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", SHA.toUpperCase(), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("sourceCommitSha가 40자가 아니면 거부한다")
+    void rejectsSourceCommitShaOfWrongLength() {
         assertThatThrownBy(() -> PromotionPost.draft(
                         "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", "abc", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
