@@ -30,6 +30,7 @@ import {
   PROMOTION_POST_STATUS_LABEL,
   PROMOTION_POST_STATUS_TONE,
   formatDateTime,
+  shortCommitSha,
   shortId,
 } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
@@ -263,9 +264,9 @@ export function AdminPromotionPostsView() {
 
       <AdminTable
         caption="홍보 게시 검토 목록"
-        headers={["채널", "캡션", "작성자", "상태", "제출/발행", "처리"]}
-        alignRight={[5]}
-        minWidth={860}
+        headers={["채널", "캡션", "작성자", "원본 릴리스", "상태", "제출/발행", "처리"]}
+        alignRight={[6]}
+        minWidth={960}
         empty="해당 상태의 홍보 게시물이 없습니다."
         rowCount={(rows ?? []).length}
       >
@@ -302,6 +303,17 @@ export function AdminPromotionPostsView() {
                     본인
                   </Badge>
                 ) : null}
+              </td>
+              {/* 승인 게이트의 안전 근거는 "누가·무엇을 보고 썼는지"다. 값이 있으면 에이전트가
+                  그 릴리스를 보고 자동 생성한 초안이고, 없으면 사람이 직접 쓴 것이다(D9·D11). */}
+              <td className="px-3 py-2.5 text-neutral-600">
+                {p.sourceCommitSha === null ? (
+                  <span className="text-xs text-neutral-400">직접 작성</span>
+                ) : (
+                  <span className="font-mono text-xs" title={p.sourceCommitSha}>
+                    {shortCommitSha(p.sourceCommitSha)}
+                  </span>
+                )}
               </td>
               <td className="px-3 py-2.5">
                 <Badge tone={PROMOTION_POST_STATUS_TONE[p.status] ?? "neutral"}>
