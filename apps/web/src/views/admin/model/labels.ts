@@ -148,3 +148,11 @@ export function formatDateTime(value: string | null): string {
 export function shortId(value: string): string {
   return value.length > 8 ? value.slice(0, 8) : value;
 }
+
+/**
+ * 릴리스 커밋 SHA를 검토 화면에서 읽기 좋게 앞 12자로 줄인다. id(8자)보다 길게 잡은 것은
+ * git 관례이기도 하고, 검토자가 이 값으로 실제 릴리스를 찾아가기 때문이다.
+ */
+export function shortCommitSha(value: string): string {
+  return value.length > 12 ? value.slice(0, 12) : value;
+}

@@ -214,6 +214,18 @@ for protected_env in /etc/gole/infra.env /etc/gole/gole.env; do
   fi
 done
 
+# 위 둘과 달리 비어 있는 것이 정상 상태다 — 부트스트랩이 빈 파일만 만들고 값은 나중에
+# 오버레이로 들어온다. 크기 대신 존재와 root 전용 권한만 본다. 이 파일이 배포 계정에게
+# 열려 있으면 러너가 루트 docker 프로세스의 환경을 직접 심을 수 있다.
+if [ -f /etc/gole/promotion-agent.env ] && [ ! -L /etc/gole/promotion-agent.env ] &&
+  [ "$(stat -c '%U:%G:%a' /etc/gole/promotion-agent.env)" = "root:root:600" ] &&
+  [ "$(stat -c '%h' /etc/gole/promotion-agent.env)" = 1 ] &&
+  [ "$(stat -c '%s' /etc/gole/promotion-agent.env)" -le 16384 ]; then
+  pass "promotion-agent.env exists and is root-only"
+else
+  fail "promotion-agent.env is missing or not root-only"
+fi
+
 if [ -n "$DEPLOY_USER" ]; then
   if [ "$(id -un)" = "$DEPLOY_USER" ]; then
     sudo_rules="$(sudo -n -l 2>/dev/null || true)"
@@ -262,7 +274,9 @@ if [ -n "$DEPLOY_USER" ]; then
   fi
 fi
 
-for root_service in gole-cloud-broker.service gole-data-backup.timer; do
+# 홍보 에이전트는 실패가 아니라 "등록되지 않음"으로 조용히 빠져 있던 이력이 있다.
+# 타이머가 enable + active 인지를 부트스트랩 검증에서 같이 본다.
+for root_service in gole-cloud-broker.service gole-data-backup.timer gole-promotion-agent.timer; do
   if systemctl is-enabled --quiet "$root_service" && systemctl is-active --quiet "$root_service"; then
     pass "$root_service is enabled and active"
   else

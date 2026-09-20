@@ -17,9 +17,12 @@ import com.gole.api.order.application.port.out.PaymentGatewayUnavailableExceptio
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.UncategorizedMongoDbException;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -70,6 +74,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleOptimisticLock(OptimisticLockingFailureException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("CONCURRENT_UPDATE_CONFLICT", "Resource was updated concurrently"));
+    }
+
+    /**
+     * unique 인덱스 위반 → 409. 멱등 키(홍보 게시의 {@code sourceCommitSha} 등)를 쓰는 곳은
+     * 저장 전에 존재 검사를 하지만, 검사와 저장 사이의 경쟁은 인덱스만 막을 수 있다. 여기서 잡지
+     * 않으면 아래 catch-all이 그 정상적인 동시 요청을 500 + ERROR 등급 운영 이벤트로 올린다.
+     *
+     * <p>어댑터가 자체적으로 삼키는 멱등 삽입(예: {@code PipelineMarkerAdapter})에는 영향이 없다 —
+     * 거기까지 올라오지 않는다.
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("DUPLICATE_KEY_CONFLICT", "이미 등록된 값이라 중복으로 만들 수 없습니다"));
     }
 
     @ExceptionHandler(UnauthorizedException.class)
@@ -166,6 +184,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(
                         "INVALID_PARAMETER", "요청 파라미터 '" + ex.getName() + "' 값이 올바르지 않습니다: " + ex.getValue()));
+    }
+
+    /**
+     * 컨트롤러 메서드 파라미터 제약({@code @RequestParam @Pattern} 등) 위반 → 400.
+     *
+     * <p>바로 위 {@code handleTypeMismatch}와 같은 함정이다. Spring Framework 6.1+ 는 {@code @RequestBody}
+     * 가 아닌 파라미터의 제약을 {@link HandlerMethodValidationException} 으로 던지는데, 이 타입을 잡아두지
+     * 않으면 catch-all이 먼저 집어 400이어야 할 오타가 500이 되고 ERROR 등급 운영 이벤트까지 나간다.
+     * {@code GET /api/admin/promotion-posts/exists?sourceCommitSha=...} 가 첫 사례다.
+     *
+     * <p><b>거부한 값은 응답·로그에 싣지 않는다.</b> 파라미터 이름만 돌려준다 — 잘못된 값 자체가 토큰·개인
+     * 정보일 수 있고, 어느 파라미터가 문제인지만 알면 호출자가 고칠 수 있다.
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleHandlerMethodValidation(HandlerMethodValidationException ex) {
+        String parameterNames = ex.getParameterValidationResults().stream()
+                .map(result -> result.getMethodParameter().getParameterName())
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.joining(", "));
+        String subject = parameterNames.isEmpty() ? "요청 파라미터" : "요청 파라미터 '" + parameterNames + "'";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("INVALID_PARAMETER", subject + " 형식이 올바르지 않습니다"));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

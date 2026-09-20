@@ -33,6 +33,7 @@ PRODUCTION_SECRET_NAME="gole-production-env"
 PRODUCTION_COMPOSE_FILE="$APP_ROOT/infra/gcp/docker-compose.yml"
 PRODUCTION_COMPOSE_VALIDATOR="/usr/local/libexec/gole/validate-production-compose.py"
 PRODUCTION_ENV_VALIDATOR="/usr/local/libexec/gole/validate-production-env.py"
+PROMOTION_AGENT_ENV_FILE="/etc/gole/promotion-agent.env"
 CERTIFICATE_ISSUER="/usr/local/libexec/gole/issue-certificate.sh"
 
 die() {
@@ -224,6 +225,83 @@ install_discord_environment_from_stdin() {
   [ "$size" -le 16384 ] || die "Discord environment request is too large"
   validate_discord_environment "$candidate"
   atomic_install "$candidate" "$DISCORD_ENV_FILE" 0600 root
+  rm -f -- "$candidate"
+  forget_temp_file "$candidate"
+}
+
+validate_promotion_agent_environment() {
+  local path="${1:-$PROMOTION_AGENT_ENV_FILE}" key line value size
+  local -A seen=()
+  # gole-promotion-agent.service 는 이 파일을 '-' 접두사 없이 EnvironmentFile 로 잡는다.
+  # 없으면 유닛이 즉시 실패하므로 부트스트랩이 빈 파일부터 만들어 두고 값은 나중에 온다.
+  # 그래서 Discord 오버레이와 달리 "키가 전부 있어야 한다"를 요구하지 않는다 — 대신
+  # 모르는 키는 거부한다. 이 파일은 루트 docker compose 의 보간 원본이라 임의의 키가
+  # 들어오면 홍보 프로필 밖의 설정까지 흔들 수 있다.
+  if [ ! -f "$path" ] || [ -L "$path" ] ||
+    [ "$(stat -c '%U:%G:%a' "$path")" != "root:root:600" ]; then
+    die "promotion agent environment file is missing or invalid"
+  fi
+  size="$(stat -c '%s' "$path")"
+  if [ "$size" -gt 16384 ]; then
+    die "promotion agent environment file size is invalid"
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" != *$'\r'* ]] ||
+      die "promotion agent environment contains invalid line endings"
+    [[ "$line" =~ ^([A-Z][A-Z0-9_]*)=(.*)$ ]] ||
+      die "promotion agent environment contains invalid syntax"
+    key="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[2]}"
+    [ "${seen[$key]:-0}" -eq 0 ] ||
+      die "promotion agent environment contains a duplicate key"
+    seen[$key]=1
+    [[ "$value" =~ ^[[:print:]]*$ ]] ||
+      die "promotion agent environment contains an invalid value"
+    # 값은 어떤 실패 메시지에도 넣지 않는다. 키 이름까지만 말한다.
+    case "$key" in
+      PROMOTION_AGENT_ANTHROPIC_ENABLED | PROMOTION_AGENT_DRY_RUN)
+        [[ "$value" =~ ^(true|false)$ ]] ||
+          die "promotion agent environment flag is invalid: $key"
+        ;;
+      ANTHROPIC_API_KEY)
+        [[ "$value" =~ ^[A-Za-z0-9_-]{20,256}$ ]] ||
+          die "promotion agent environment value is invalid: $key"
+        ;;
+      PROMOTION_AGENT_MODEL)
+        [[ "$value" =~ ^[a-z0-9][a-z0-9.-]{2,63}$ ]] ||
+          die "promotion agent environment value is invalid: $key"
+        ;;
+      PROMOTION_AGENT_ADMIN_EMAIL)
+        [[ "$value" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}$ ]] ||
+          die "promotion agent environment value is invalid: $key"
+        ;;
+      PROMOTION_AGENT_ADMIN_PASSWORD)
+        [[ "$value" =~ ^[[:graph:]]{12,256}$ ]] ||
+          die "promotion agent environment value is invalid: $key"
+        ;;
+      PROMOTION_AGENT_SITE_URL | PROMOTION_AGENT_API_URL)
+        [[ "$value" =~ ^https://[A-Za-z0-9.-]{1,253}(/[A-Za-z0-9._~/-]{0,200})?$ ]] ||
+          die "promotion agent environment value is invalid: $key"
+        ;;
+      *) die "promotion agent environment contains an unknown key" ;;
+    esac
+  done < "$path"
+}
+
+install_promotion_agent_environment_from_stdin() {
+  local candidate size
+  # Discord 오버레이와 같은 경로다. 러너는 경로도 argv 도 고를 수 없고, 루트가 짧은
+  # 원자적 교체 동안만 rollout lock 을 잡는다.
+  exec 8>>/run/lock/gole-production-rollout.lock
+  flock -n 8 || die "another production rollout is active"
+  candidate="$(mktemp /etc/gole/.promotion-agent.env.request.XXXXXX)"
+  register_temp_file "$candidate"
+  chmod 0600 "$candidate"
+  head -c 16385 > "$candidate"
+  size="$(stat -c '%s' "$candidate")"
+  [ "$size" -le 16384 ] || die "promotion agent environment request is too large"
+  validate_promotion_agent_environment "$candidate"
+  atomic_install "$candidate" "$PROMOTION_AGENT_ENV_FILE" 0600 root
   rm -f -- "$candidate"
   forget_temp_file "$candidate"
 }
@@ -4985,6 +5063,14 @@ case "$hostctl_command" in
   discord-overlay-verify)
     require_argument_count 0 "$@"
     validate_discord_environment
+    ;;
+  promotion-agent-overlay-install)
+    require_argument_count 0 "$@"
+    install_promotion_agent_environment_from_stdin
+    ;;
+  promotion-agent-overlay-verify)
+    require_argument_count 0 "$@"
+    validate_promotion_agent_environment
     ;;
   secret-sync)
     require_argument_count 2 "$@"

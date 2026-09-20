@@ -64,6 +64,48 @@ class NotifyBackupFailureTest(unittest.TestCase):
             pathlib.Path("/etc/gole/discord.env"),
         )
 
+    def test_selects_the_notice_by_unit_key_and_rejects_free_form_argv(self) -> None:
+        webhook = (
+            "https://discord.com/api/webhooks/100000000000000002/"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef_1000000002"
+        )
+        overlay = self.overlay(f"DISCORD_OPERATIONS_WEBHOOK_URL={webhook}\n")
+        response = mock.MagicMock()
+        response.__enter__.return_value.status = 204
+
+        with (
+            mock.patch.object(self.module, "DISCORD_ENV_PATH", overlay),
+            mock.patch.object(
+                self.module.urllib.request, "urlopen", return_value=response
+            ) as urlopen,
+        ):
+            self.assertEqual(self.module.main(["promotion-agent"]), 0)
+            payload = json.loads(urlopen.call_args.args[0].data)
+            self.assertEqual(
+                payload["content"], self.module.NOTICES["promotion-agent"]
+            )
+            self.assertEqual(self.module.main([]), 0)
+            payload = json.loads(urlopen.call_args.args[0].data)
+            self.assertEqual(
+                payload["content"], self.module.NOTICES[self.module.DEFAULT_NOTICE]
+            )
+
+        rejected_argv = (
+            ["@everyone 아무 문구"],
+            ["promotion-agent", "data-backup"],
+            ["unknown-unit"],
+        )
+        for argv in rejected_argv:
+            with self.subTest(argv=argv):
+                with (
+                    mock.patch.object(self.module, "DISCORD_ENV_PATH", overlay),
+                    mock.patch.object(
+                        self.module.urllib.request, "urlopen"
+                    ) as urlopen,
+                ):
+                    self.assertEqual(self.module.main(argv), 1)
+                    urlopen.assert_not_called()
+
     def test_rejects_legacy_key_duplicate_route_and_non_root_file(self) -> None:
         webhook = (
             "https://discord.com/api/webhooks/100000000000000002/"
