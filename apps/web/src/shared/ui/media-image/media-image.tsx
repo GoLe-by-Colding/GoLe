@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } from "react";
 import { env } from "@shared/config";
 import { cn } from "@shared/lib";
+import { BrickPlaceholder } from "./brick-placeholder";
 
 export interface MediaImageProps extends Omit<
   ImgHTMLAttributes<HTMLImageElement>,
@@ -48,13 +49,14 @@ export function MediaImage({
         aria-label={alt || undefined}
         aria-hidden={alt ? undefined : "true"}
         className={cn(
-          "flex items-center justify-center bg-neutral-50 text-xs font-semibold text-neutral-400",
+          "relative flex items-center justify-center overflow-hidden bg-neutral-50 text-xs font-semibold text-neutral-400",
           className,
           fallbackClassName,
         )}
         data-image-fallback="true"
       >
-        {fallback}
+        <BrickPlaceholder seed={alt ?? "GoLe"} />
+        <span className="sr-only">{fallback}</span>
       </span>
     );
   }
