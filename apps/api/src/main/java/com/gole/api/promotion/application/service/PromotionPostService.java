@@ -11,6 +11,7 @@ import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
+import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
@@ -47,6 +48,12 @@ public class PromotionPostService
 
     @Override
     public String create(CreatePromotionPostCommand command) {
+        // 미디어를 건드리기 전에 막는다 — 중복으로 거절할 초안 때문에 STAGED 이미지를
+        // PUBLIC으로 전이시키면 아무도 참조하지 않는 이미지가 영구히 남는다(D8).
+        // 이 검사와 저장 사이의 경쟁은 문서의 unique+sparse 인덱스가 마지막으로 막는다(D11/P11).
+        if (command.sourceCommitSha() != null && repository.existsBySourceCommitSha(command.sourceCommitSha())) {
+            throw new SourceCommitAlreadyPromotedException(command.sourceCommitSha());
+        }
         String id = idGenerator.newId();
         // media 컨텍스트의 인바운드 포트만 의존한다 — STAGED(업로더 전용, 24시간 뒤 폐기)를
         // 이 게시물에 연결해 PUBLIC으로 전이시키지 않으면, 검토자가 첨부 이미지를 못 보고
