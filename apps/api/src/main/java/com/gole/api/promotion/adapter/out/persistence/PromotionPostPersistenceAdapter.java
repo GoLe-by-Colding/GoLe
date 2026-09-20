@@ -46,6 +46,16 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
         return documents.stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public long countByStatus(PromotionPostStatus status) {
+        return repository.countByStatus(status.name());
+    }
+
+    @Override
+    public List<PromotionPost> findAll() {
+        return repository.findAll().stream().map(this::toDomain).toList();
+    }
+
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {
         return new PromotionPostDocument(
                 promotionPost.getId(),
