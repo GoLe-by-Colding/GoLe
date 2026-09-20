@@ -23,6 +23,9 @@ public class PromotionPostDocument {
     private String authorId;
 
     @Indexed
+    private String sourceCommitSha;
+
+    @Indexed
     private String status;
 
     private Instant createdAt;
@@ -41,6 +44,7 @@ public class PromotionPostDocument {
             String caption,
             List<String> mediaUrls,
             String authorId,
+            String sourceCommitSha,
             String status,
             Instant createdAt,
             Instant submittedAt,
@@ -54,6 +58,7 @@ public class PromotionPostDocument {
         this.caption = caption;
         this.mediaUrls = mediaUrls;
         this.authorId = authorId;
+        this.sourceCommitSha = sourceCommitSha;
         this.status = status;
         this.createdAt = createdAt;
         this.submittedAt = submittedAt;
@@ -82,6 +87,10 @@ public class PromotionPostDocument {
 
     public String getAuthorId() {
         return authorId;
+    }
+
+    public String getSourceCommitSha() {
+        return sourceCommitSha;
     }
 
     public String getStatus() {

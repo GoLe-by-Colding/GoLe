@@ -17,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +65,11 @@ public class AdminPromotionPostController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, String> create(@Valid @RequestBody CreatePromotionPostRequest request, HttpServletRequest http) {
         String id = createPromotionPost.create(new CreatePromotionPostCommand(
-                AdminActor.of(http).id(), request.channel(), request.caption(), request.mediaKeys()));
+                AdminActor.of(http).id(),
+                request.channel(),
+                request.caption(),
+                request.mediaKeys(),
+                request.sourceCommitSha()));
         return Map.of("id", id);
     }
 
@@ -85,6 +90,13 @@ public class AdminPromotionPostController {
     @GetMapping("/{id}")
     public PromotionPost get(@PathVariable String id) {
         return managePromotionPosts.get(id);
+    }
+
+    @Operation(summary = "원본 커밋으로 생성된 홍보 게시 존재 여부 조회")
+    @GetMapping("/exists")
+    public Map<String, Boolean> existsBySourceCommitSha(
+            @RequestParam @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {
+        return Map.of("exists", managePromotionPosts.existsBySourceCommitSha(sourceCommitSha));
     }
 
     @Operation(summary = "승인", description = "PENDING_REVIEW → APPROVED. 작성자 본인은 승인할 수 없다.")
@@ -125,7 +137,8 @@ public class AdminPromotionPostController {
     public record CreatePromotionPostRequest(
             @NotNull PromotionChannel channel,
             @NotBlank @Size(max = 500) String caption,
-            @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys) {}
+            @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys,
+            @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {}
 
     public record RejectPromotionPostRequest(
             @NotBlank @Size(max = 1000) String reason) {}

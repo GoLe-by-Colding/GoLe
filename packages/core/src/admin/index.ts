@@ -36,6 +36,7 @@ export type {
   PromotionPostStatus,
   AdminPromotionPost,
   CreatePromotionPostInput,
+  PromotionPostExistsResponse,
 } from "./api/admin-api";
 export {
   fetchAdminOverview,
@@ -90,6 +91,7 @@ export {
   fetchAdminOrderContacts,
   fetchAdminPromotionPosts,
   createAdminPromotionPost,
+  promotionPostExistsForCommit,
   submitAdminPromotionPost,
   approveAdminPromotionPost,
   rejectAdminPromotionPost,

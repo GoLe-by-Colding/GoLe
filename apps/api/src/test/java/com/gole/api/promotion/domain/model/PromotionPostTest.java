@@ -14,7 +14,7 @@ class PromotionPostTest {
     private static final Instant NOW = Instant.EPOCH;
 
     private PromotionPost draft() {
-        return PromotionPost.draft("promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", NOW);
+        return PromotionPost.draft("promo-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), "author-1", null, NOW);
     }
 
     @Test
@@ -27,15 +27,16 @@ class PromotionPostTest {
     @Test
     void rejectsCaptionOver500Chars() {
         String tooLong = "a".repeat(501);
-        assertThatThrownBy(() ->
-                        PromotionPost.draft("promo-1", PromotionChannel.THREADS, tooLong, List.of(), "author-1", NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, tooLong, List.of(), "author-1", null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void acceptsUpToTenMediaUrls() {
         List<String> tenUrls = List.of("u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10");
-        PromotionPost post = PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", tenUrls, "author-1", NOW);
+        PromotionPost post =
+                PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", tenUrls, "author-1", null, NOW);
 
         assertThat(post.getMediaUrls()).hasSize(10);
     }
@@ -44,15 +45,32 @@ class PromotionPostTest {
     void rejectsMoreThanTenMediaUrls() {
         List<String> elevenUrls = List.of("u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11");
 
-        assertThatThrownBy(() ->
-                        PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", elevenUrls, "author-1", NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", elevenUrls, "author-1", null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsBlankMediaUrlEntries() {
-        assertThatThrownBy(() ->
-                        PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", List.of(" "), "author-1", NOW))
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(" "), "author-1", null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sourceCommitSha는_null이거나_소문자_40자_hex여야_한다() {
+        String sha = "0123456789abcdef0123456789abcdef01234567";
+
+        PromotionPost post =
+                PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", sha, NOW);
+
+        assertThat(post.getSourceCommitSha()).isEqualTo(sha);
+        assertThat(draft().getSourceCommitSha()).isNull();
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", sha.toUpperCase(), NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PromotionPost.draft(
+                        "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", "abc", NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

@@ -1,0 +1,40 @@
+[Unit]
+Description=Create GoLe promotion drafts from the deployed release
+Documentation=file:///app/.kiro/specs/promotion-review/spec.md
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/app
+
+# 운영 전체 비밀이 든 /etc/gole/gole.env 를 쓰지 않는다. 브라우저를 띄우고 외부 모델로
+# 데이터를 보내는 프로세스에는 필요한 값만 준다(스펙 D10·D14). 이 파일은 손편집이 아니라
+# Secret Sync 워크플로와 gole-hostctl 을 거쳐 설치한다.
+EnvironmentFile=/etc/gole/promotion-agent.env
+
+# deploy.sh 의 SERVICES 목록에 이 서비스가 없으므로 CD 는 이 이미지를 빌드하지 않는다.
+# 빌드를 여기서 하지 않으면 /app 이 새 커밋으로 바뀌어도 이미지가 조용히 낡는다.
+# 대부분 캐시 적중이라 비용은 작다.
+ExecStartPre=/usr/bin/docker compose \
+  --env-file /etc/gole/infra.env \
+  --env-file /etc/gole/promotion-agent.env \
+  -f /app/infra/gcp/docker-compose.yml \
+  --profile promotion build promotion-agent
+
+# compose 가 자원 한도와 마운트를 소유하므로 유닛에는 MemoryMax 를 두지 않는다.
+# 예전 유닛의 MemoryMax=1G 는 가용량(~900 MB)보다 커서 운영 컨테이너를 보호하지 못했다.
+ExecStart=/usr/bin/docker compose \
+  --env-file /etc/gole/infra.env \
+  --env-file /etc/gole/promotion-agent.env \
+  -f /app/infra/gcp/docker-compose.yml \
+  --profile promotion run --rm --no-deps promotion-agent
+
+TimeoutStartSec=25min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

@@ -131,6 +131,30 @@ SMTP 앱 비밀번호, Discord webhook URL을 커밋하거나 채팅에 붙여 �
 환경 갱신은 `Secret Sync` workflow와 `gole-hostctl`의 검증·트랜잭션을 통과해야 한다.
 서버의 `/etc/gole/gole.env`를 편집기로 직접 고치지 않는다.
 
+### 자격증명은 필요한 만큼만 준다
+
+`/etc/gole/gole.env`는 Compose 스택 전체가 쓰는 **운영 전체 비밀**(DB·SMTP·PortOne·OAuth)이다.
+이것을 통째로 주입받는 프로세스를 늘리지 않는다. 값이 몇 개만 필요하면 전용 파일을 만든다.
+
+홍보 초안 에이전트가 그 예다. `/etc/gole/promotion-agent.env`에 모델 키와 봇 전용 ADMIN
+계정만 둔다 — 브라우저를 띄우고 외부 모델로 데이터를 보내는 프로세스에 결제·DB 자격증명까지
+줄 이유가 없다. 항목은 `apps/support-agent/.env.example`에 있다. 이 파일도 손편집 대상이
+아니라 위와 같은 `Secret Sync`·`gole-hostctl` 경로를 거친다.
+
+## 정기 배치 — 홍보 초안 에이전트
+
+`gole-promotion-agent.timer`가 매일 `12:00 UTC`(21:00 KST)에 oneshot 컨테이너를 띄운다.
+상시 서비스가 아니라 **떴다 지는 프로세스**인 것이 자원 때문이다: 컨테이너 `mem_limit`
+합계가 8 GiB 중 6,784 MB라 여유가 1.4 GB인데 Chromium 하나가 400 MB~1 GB를 쓴다. 상주
+서비스는 그 몫을 계속 물고 있을 수 없다.
+
+- compose profile `promotion`으로 분리돼 있어 `compose up`에는 뜨지 않는다.
+- **`deploy.sh`의 `SERVICES` 목록에 없으므로 CD가 이 이미지를 빌드하지 않는다.** 유닛의
+  `ExecStartPre`가 매 실행 전에 빌드한다(대부분 캐시 적중).
+- 상태는 `gole_promotion-agent-state` 볼륨에 남는다. 체크포인트가 재기동을 넘어 살아남아야
+  하므로 tmpfs로 바꾸지 않는다.
+- 진단은 `journalctl -u gole-promotion-agent`와 볼륨 안의 `session.jsonl`을 본다.
+
 ## 운영 안전 규칙
 
 - `main` CI를 통과하지 않은 SHA를 운영에 배포하지 않음

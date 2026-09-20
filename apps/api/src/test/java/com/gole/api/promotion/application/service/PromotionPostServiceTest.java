@@ -39,8 +39,8 @@ class PromotionPostServiceTest {
             new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, clock);
 
     private PromotionPost saved(PromotionPostStatus status, String authorId) {
-        PromotionPost post =
-                PromotionPost.draft("promo-1", PromotionChannel.THREADS, "캡션", List.of(), authorId, Instant.EPOCH);
+        PromotionPost post = PromotionPost.draft(
+                "promo-1", PromotionChannel.THREADS, "캡션", List.of(), authorId, null, Instant.EPOCH);
         if (status != PromotionPostStatus.DRAFT) {
             post.submitForReview(Instant.EPOCH);
         }
@@ -57,15 +57,17 @@ class PromotionPostServiceTest {
     void createSavesDraftAndReturnsId() {
         when(idGenerator.newId()).thenReturn("promo-1");
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        String sourceCommitSha = "0123456789abcdef0123456789abcdef01234567";
 
-        String id = service.create(
-                new CreatePromotionPostCommand("author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of()));
+        String id = service.create(new CreatePromotionPostCommand(
+                "author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(), sourceCommitSha));
 
         assertThat(id).isEqualTo("promo-1");
         ArgumentCaptor<PromotionPost> captor = ArgumentCaptor.forClass(PromotionPost.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(PromotionPostStatus.DRAFT);
         assertThat(captor.getValue().getAuthorId()).isEqualTo("author-1");
+        assertThat(captor.getValue().getSourceCommitSha()).isEqualTo(sourceCommitSha);
     }
 
     @Test
@@ -75,7 +77,7 @@ class PromotionPostServiceTest {
         String key = "images/11111111-1111-4111-8111-111111111111.png";
 
         String id = service.create(
-                new CreatePromotionPostCommand("author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(key)));
+                new CreatePromotionPostCommand("author-1", PromotionChannel.THREADS, "새 기능 나왔습니다", List.of(key), null));
 
         assertThat(id).isEqualTo("promo-1");
         verify(mediaAssets)
