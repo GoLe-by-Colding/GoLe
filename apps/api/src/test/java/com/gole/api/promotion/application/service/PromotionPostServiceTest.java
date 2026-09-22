@@ -15,6 +15,7 @@ import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort.PublishResult;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
@@ -82,6 +83,22 @@ class PromotionPostServiceTest {
             return store.values().stream()
                     .filter(post -> status == null || post.getStatus() == status)
                     .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public long countByStatus(PromotionPostStatus status) {
+            return store.values().stream()
+                    .filter(post -> post.getStatus() == status)
+                    .count();
+        }
+
+        // 실제 어댑터는 이 필터를 쿼리(NotNull)로 내리므로, 페이크도 같은 것만 돌려줘야 한다.
+        @Override
+        public List<ReviewTimestamps> findReviewTimestamps() {
+            return store.values().stream()
+                    .filter(post -> post.getSubmittedAt() != null && post.getReviewedAt() != null)
+                    .map(post -> new ReviewTimestamps(post.getSubmittedAt(), post.getReviewedAt()))
                     .toList();
         }
     }

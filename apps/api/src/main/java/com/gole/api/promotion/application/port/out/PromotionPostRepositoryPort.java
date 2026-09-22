@@ -2,6 +2,7 @@ package com.gole.api.promotion.application.port.out;
 
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,6 +30,15 @@ public interface PromotionPostRepositoryPort {
 
     long countByStatus(PromotionPostStatus status);
 
-    /** 지표 집계용 — 데이터 양이 적어(하루 최대 몇 건) 애플리케이션 레이어에서 reduce한다. */
-    List<PromotionPost> findAll();
+    /**
+     * 검토 소요시간 집계용 — 제출·검토 시각이 <b>둘 다 있는</b> 게시물의 그 두 값만 읽는다.
+     *
+     * <p>지표가 쓰는 것이 이 두 필드뿐이라 전량 조회({@code findAll})를 이것으로 좁혔다. 예전
+     * 구현은 caption·mediaUrls까지 끌고 와 도큐먼트와 도메인 객체를 컬렉션 크기만큼 동시에
+     * 힙에 올렸는데, 보존 정책이 없어 단조 증가하는 컬렉션에 그 비용을 걸어 둘 이유가 없다.
+     */
+    List<ReviewTimestamps> findReviewTimestamps();
+
+    /** 제출~검토 완료 구간. 둘 다 non-null인 것만 담긴다 — 소요시간 계산은 호출자 몫이다. */
+    record ReviewTimestamps(Instant submittedAt, Instant reviewedAt) {}
 }

@@ -14,6 +14,7 @@ import com.gole.api.promotion.application.port.out.PromotionAuditMetricsPort;
 import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.domain.exception.PromotionPostEvaluationNotFoundException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
@@ -136,7 +137,7 @@ class PromotionPostEvaluationServiceTest {
         for (PromotionPostStatus status : PromotionPostStatus.values()) {
             when(promotionPosts.countByStatus(status)).thenReturn(0L);
         }
-        when(promotionPosts.findAll()).thenReturn(List.of());
+        when(promotionPosts.findReviewTimestamps()).thenReturn(List.of());
         when(evaluations.findAll()).thenReturn(List.of());
         when(auditMetrics.countApprove()).thenReturn(0L);
         when(auditMetrics.countReject()).thenReturn(0L);
@@ -160,7 +161,7 @@ class PromotionPostEvaluationServiceTest {
         for (PromotionPostStatus status : PromotionPostStatus.values()) {
             when(promotionPosts.countByStatus(status)).thenReturn(0L);
         }
-        when(promotionPosts.findAll()).thenReturn(List.of());
+        when(promotionPosts.findReviewTimestamps()).thenReturn(List.of());
         when(evaluations.findAll()).thenReturn(List.of());
         when(auditMetrics.countApprove()).thenReturn(3L);
         when(auditMetrics.countReject()).thenReturn(1L);
@@ -179,7 +180,7 @@ class PromotionPostEvaluationServiceTest {
         for (PromotionPostStatus status : PromotionPostStatus.values()) {
             when(promotionPosts.countByStatus(status)).thenReturn(0L);
         }
-        when(promotionPosts.findAll()).thenReturn(List.of());
+        when(promotionPosts.findReviewTimestamps()).thenReturn(List.of());
         when(auditMetrics.countApprove()).thenReturn(0L);
         when(auditMetrics.countReject()).thenReturn(0L);
         when(auditMetrics.countPublish()).thenReturn(0L);
@@ -211,10 +212,9 @@ class PromotionPostEvaluationServiceTest {
         when(auditMetrics.countReject()).thenReturn(0L);
         when(auditMetrics.countPublish()).thenReturn(0L);
 
-        PromotionPost reviewed = draft();
-        reviewed.submitForReview(Instant.parse("2026-09-19T00:00:00Z"));
-        reviewed.approve("reviewer-1", Instant.parse("2026-09-19T00:10:00Z"));
-        when(promotionPosts.findAll()).thenReturn(List.of(reviewed));
+        when(promotionPosts.findReviewTimestamps())
+                .thenReturn(List.of(new ReviewTimestamps(
+                        Instant.parse("2026-09-19T00:00:00Z"), Instant.parse("2026-09-19T00:10:00Z"))));
 
         PromotionMetrics metrics = service.getMetrics();
 
