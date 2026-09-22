@@ -41,6 +41,11 @@ public class AdminAuditPersistenceAdapter implements AdminAuditPort {
                 .toList();
     }
 
+    @Override
+    public long countByType(AdminActionType type) {
+        return repository.countByType(type.name());
+    }
+
     private static AdminAction toDomain(AdminActionDocument document) {
         return new AdminAction(
                 document.getId(),

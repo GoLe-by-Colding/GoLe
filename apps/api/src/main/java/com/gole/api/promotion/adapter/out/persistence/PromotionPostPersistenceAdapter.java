@@ -1,6 +1,7 @@
 package com.gole.api.promotion.adapter.out.persistence;
 
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -51,6 +52,19 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 ? repository.findAllByOrderByCreatedAtDesc(page)
                 : repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
         return documents.stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countByStatus(PromotionPostStatus status) {
+        return repository.countByStatus(status.name());
+    }
+
+    @Override
+    public List<ReviewTimestamps> findReviewTimestamps() {
+        // 필터가 쿼리에 있으므로 여기서 다시 null 을 거르지 않는다.
+        return repository.findBySubmittedAtNotNullAndReviewedAtNotNull().stream()
+                .map(projection -> new ReviewTimestamps(projection.getSubmittedAt(), projection.getReviewedAt()))
+                .toList();
     }
 
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {

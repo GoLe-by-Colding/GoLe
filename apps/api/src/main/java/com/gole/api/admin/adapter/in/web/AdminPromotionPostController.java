@@ -6,25 +6,39 @@ import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
+import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase;
+import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase.PromotionMetrics;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
+import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase;
+import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase.EvaluationCommand;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
+import com.gole.api.promotion.domain.model.EvaluationCriterion;
+import com.gole.api.promotion.domain.model.EvaluationReasonTag;
+import com.gole.api.promotion.domain.model.FirstReviewVerdict;
+import com.gole.api.promotion.domain.model.HoldReasonKind;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostEvaluation;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,16 +61,22 @@ public class AdminPromotionPostController {
     private final CreatePromotionPostUseCase createPromotionPost;
     private final SubmitPromotionPostForReviewUseCase submitPromotionPost;
     private final ManagePromotionPostsUseCase managePromotionPosts;
+    private final RecordPromotionPostEvaluationUseCase recordEvaluation;
+    private final GetPromotionMetricsUseCase getMetrics;
     private final RecordAdminActionUseCase audit;
 
     public AdminPromotionPostController(
             CreatePromotionPostUseCase createPromotionPost,
             SubmitPromotionPostForReviewUseCase submitPromotionPost,
             ManagePromotionPostsUseCase managePromotionPosts,
+            RecordPromotionPostEvaluationUseCase recordEvaluation,
+            GetPromotionMetricsUseCase getMetrics,
             RecordAdminActionUseCase audit) {
         this.createPromotionPost = createPromotionPost;
         this.submitPromotionPost = submitPromotionPost;
         this.managePromotionPosts = managePromotionPosts;
+        this.recordEvaluation = recordEvaluation;
+        this.getMetrics = getMetrics;
         this.audit = audit;
     }
 
@@ -86,10 +106,41 @@ public class AdminPromotionPostController {
         return managePromotionPosts.list(status, limit);
     }
 
+    @Operation(summary = "홍보 운영·품질 지표", description = "상태별 건수, 승인/반려/발행 건수, 반려율, 검토 소요시간과 루브릭 집계.")
+    @GetMapping("/metrics")
+    public PromotionMetrics metrics() {
+        return getMetrics.getMetrics();
+    }
+
     @Operation(summary = "홍보 게시 단건 조회")
     @GetMapping("/{id}")
     public PromotionPost get(@PathVariable String id) {
         return managePromotionPosts.get(id);
+    }
+
+    @Operation(summary = "품질 평가 기록", description = "게시물당 평가는 1건 — 다시 호출하면 기존 평가를 덮어쓴다. 채점 자체는 사람이 한다.")
+    @PutMapping("/{id}/evaluation")
+    public PromotionPostEvaluation upsertEvaluation(
+            @PathVariable String id, @Valid @RequestBody RecordEvaluationRequest request, HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        return recordEvaluation.upsert(
+                id,
+                actor.id(),
+                new EvaluationCommand(
+                        request.criterionScores(),
+                        request.verdict(),
+                        request.holdReasonKind(),
+                        request.reasonTags(),
+                        request.factualFixNeeded(),
+                        request.reviewSeconds(),
+                        request.reviseSeconds(),
+                        request.notes()));
+    }
+
+    @Operation(summary = "품질 평가 조회", description = "평가가 없으면 404.")
+    @GetMapping("/{id}/evaluation")
+    public PromotionPostEvaluation getEvaluation(@PathVariable String id) {
+        return recordEvaluation.get(id);
     }
 
     @Operation(summary = "원본 커밋으로 생성된 홍보 게시 존재 여부 조회")
@@ -142,4 +193,15 @@ public class AdminPromotionPostController {
 
     public record RejectPromotionPostRequest(
             @NotBlank @Size(max = 1000) String reason) {}
+
+    /** @param criterionScores 루브릭 항목별 0~2점. 항목이 빠지면 N/A로 취급한다. */
+    public record RecordEvaluationRequest(
+            Map<EvaluationCriterion, @Min(0) @Max(2) Integer> criterionScores,
+            @NotNull FirstReviewVerdict verdict,
+            HoldReasonKind holdReasonKind,
+            Set<EvaluationReasonTag> reasonTags,
+            Boolean factualFixNeeded,
+            @PositiveOrZero Integer reviewSeconds,
+            @PositiveOrZero Integer reviseSeconds,
+            @Size(max = 2000) String notes) {}
 }

@@ -10,4 +10,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 public interface AdminActionMongoRepository extends MongoRepository<AdminActionDocument, String> {
 
     List<AdminActionDocument> findBy(Pageable pageable);
+
+    long countByType(String type);
 }
