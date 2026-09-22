@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class HttpBrickGeneratorTest {
     @Test
     void disabledAndNonPrivateHttpEndpointsFailClosed() {
-        var adapter = new HttpBrickGenerator(false, URI.create("http://127.0.0.1:50052/internal/brick-filter"), "");
+        var adapter = new HttpBrickGenerator(false, URI.create("http://127.0.0.1:50054/internal/brick-filter"), "");
         assertThat(adapter.enabled()).isFalse();
         assertThatThrownBy(() -> adapter.generate(new byte[] {1}, Mode.MINIFIGURE))
                 .isInstanceOf(ServiceUnavailableException.class);
