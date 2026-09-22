@@ -34,6 +34,7 @@ import {
   shortId,
 } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
+import { PromotionEvaluationForm } from "./promotion-evaluation-form";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -56,6 +57,7 @@ export function AdminPromotionPostsView() {
   const [status, setStatus] = useState<StatusFilter>("PENDING_REVIEW");
   const [rows, setRows] = useState<readonly AdminPromotionPost[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -371,6 +373,14 @@ export function AdminPromotionPostsView() {
                 {p.status === "PUBLISHED" ? (
                   <span className="text-xs text-neutral-400">완료됨</span>
                 ) : null}
+                <Button
+                  className="ml-1"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEvaluatingId(p.id)}
+                >
+                  평가
+                </Button>
               </td>
             </tr>
           );
@@ -386,6 +396,20 @@ export function AdminPromotionPostsView() {
           error={reviewAction.error}
           onConfirm={reviewAction.confirm}
           onCancel={reviewAction.cancel}
+        />
+      ) : null}
+
+      {evaluatingId !== null ? (
+        <PromotionEvaluationForm
+          promotionPostId={evaluatingId}
+          target={(() => {
+            const target = (rows ?? []).find((row) => row.id === evaluatingId);
+            return target
+              ? `${PROMOTION_CHANNEL_LABEL[target.channel] ?? target.channel} · ${shortId(target.id)}`
+              : shortId(evaluatingId);
+          })()}
+          onSaved={() => setEvaluatingId(null)}
+          onCancel={() => setEvaluatingId(null)}
         />
       ) : null}
     </div>
