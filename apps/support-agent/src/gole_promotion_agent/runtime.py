@@ -17,6 +17,8 @@ from gole_promotion_agent.ports import (
     Camera,
     ConversationFactory,
     DraftPublisher,
+    DraftRequest,
+    DraftRequestQueue,
     ReleaseScanner,
     RouteCatalog,
 )
@@ -80,6 +82,18 @@ def retry_ledger(sessions_root: Path) -> Callable[[], tuple[str, ...]]:
     return pending
 
 
+def _safe_failure_code(error: BaseException) -> str:
+    """관리자에게 보일 실패 사유를 고른다(스펙 D20).
+
+    이 패키지가 직접 정한 고정 코드만 통과시키고 나머지는 예외 종류 이름으로 줄인다 —
+    예외 원문에는 diff·캡션·파일 경로가 섞일 수 있다.
+    """
+    text = str(error).strip()
+    if text in policy.SAFE_FAILURE_CODES:
+        return text
+    return type(error).__name__
+
+
 @dataclass(frozen=True)
 class CandidateOutcome:
     sha: str
@@ -108,6 +122,8 @@ class PromotionHarness:
         publisher: DraftPublisher,
         conversation_factory: ConversationFactory,
         sessions_root: Path,
+        queue: DraftRequestQueue | None = None,
+        pinned_scanner_factory: Callable[[str], ReleaseScanner] | None = None,
     ):
         self._scanner = scanner
         self._routes = routes
@@ -115,6 +131,9 @@ class PromotionHarness:
         self._publisher = publisher
         self._conversations = conversation_factory
         self._root = Path(sessions_root)
+        # 큐가 없으면 지금까지처럼 타이머 발 자동 실행만 한다 — 기존 동작을 바꾸지 않는다.
+        self._queue = queue
+        self._pinned_scanner_factory = pinned_scanner_factory
 
     # --- 보존 ---
 
@@ -136,6 +155,14 @@ class PromotionHarness:
         self._root.mkdir(parents=True, exist_ok=True)
         self.cleanup_expired()
 
+        # 관리자 요청이 먼저다. 사람이 기다리고 있는 일을 타이머 몫 뒤로 미루지 않는다(D20).
+        request = self._queue.claim() if self._queue else None
+        if request is not None:
+            return self._run_requested(request)
+
+        return self._run_automatic()
+
+    def _run_automatic(self) -> RunResult:
         pending = self._publisher.pending_count()
         if pending >= policy.MAX_PENDING_REVIEW:
             # 사람 검토가 병목인 설계다. 큐를 더 밀어 넣지 않는다(스펙 D18).
@@ -153,6 +180,52 @@ class PromotionHarness:
         finally:
             self._camera.close()
         return RunResult(f"후보 {len(candidates)}건 처리", tuple(outcomes))
+
+    def _run_requested(self, request: DraftRequest) -> RunResult:
+        """관리자가 남긴 요청 하나를 처리하고 **반드시 결과를 회신한다**(스펙 D20).
+
+        회신이 빠지면 요청이 lease 만료까지 IN_PROGRESS 로 남고, 관리자 화면에는 영영
+        "처리 중"만 보인다 — 조용한 0건과 똑같이 나쁘다. 그래서 성공·실패 어느 쪽이든
+        코드를 붙여 돌려준다.
+        """
+        assert self._queue is not None
+        scanner = self._scanner
+        if request.source_commit_sha:
+            if self._pinned_scanner_factory is None:
+                self._queue.fail(request, "PINNED_SCANNER_UNAVAILABLE")
+                return RunResult("지정 커밋 실행을 구성하지 못함")
+            try:
+                scanner = self._pinned_scanner_factory(request.source_commit_sha)
+            except Exception:
+                self._queue.fail(request, "COMMIT_NOT_FOUND")
+                return RunResult("지정한 커밋을 찾지 못함")
+
+        try:
+            candidates = scanner.candidates()
+        except Exception:
+            self._queue.fail(request, "COMMIT_NOT_FOUND")
+            return RunResult("지정한 커밋을 찾지 못함")
+
+        if not candidates:
+            # 자동 선정 요청인데 후보가 없을 때다. 관리자에게는 사유가 보여야 한다.
+            self._queue.fail(request, "NO_CANDIDATES")
+            return RunResult("요청을 받았으나 새로 홍보할 릴리스가 없음")
+
+        history = self._publisher.history(policy.HISTORY_LIMIT)
+        outcomes: list[CandidateOutcome] = []
+        try:
+            for candidate in candidates:
+                outcomes.append(self._run_candidate(candidate.sha, candidate.subject, history))
+        finally:
+            self._camera.close()
+
+        submitted = next((item for item in outcomes if item.post_id), None)
+        if submitted is not None:
+            self._queue.succeed(request, submitted.post_id or "")
+        else:
+            first = outcomes[0]
+            self._queue.fail(request, (first.error or first.outcome or "UNKNOWN")[:64])
+        return RunResult(f"요청 처리 — 후보 {len(candidates)}건", tuple(outcomes))
 
     def _run_candidate(
         self, sha: str, subject: str, history: Sequence[Mapping[str, Any]]
@@ -228,9 +301,10 @@ class PromotionHarness:
             self._append_event(session_dir, "cancelled", {})
             return CandidateOutcome(sha, "failed", resumed, error="TIMEOUT")
         except Exception as error:
+            reason = _safe_failure_code(error)
             self._write_manifest(session_dir, sha, subject, done="failed")
-            self._append_event(session_dir, "failed", {"type": type(error).__name__})
-            return CandidateOutcome(sha, "failed", resumed, error=type(error).__name__)
+            self._append_event(session_dir, "failed", {"type": reason})
+            return CandidateOutcome(sha, "failed", resumed, error=reason)
 
         outcome = state.get("outcome", "skipped")
         if outcome == "submitted":

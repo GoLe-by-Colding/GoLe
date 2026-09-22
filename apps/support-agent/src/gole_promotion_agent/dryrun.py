@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from gole_promotion_agent.ports import ToolCall, Turn
+from gole_promotion_agent.ports import DraftRequest, ToolCall, Turn
 
 # 1x1 PNG. 실제 촬영 대신 형식만 맞춘 파일을 남긴다.
 _PIXEL = base64.b64decode(
@@ -148,3 +148,38 @@ class RecordingPublisher:
 
     def finalize(self, post_id: str) -> None:
         self._record("finalize", {"id": post_id})
+
+
+class RecordingQueue:
+    """드라이런에서 관리자 요청 하나를 흉내 낸다(스펙 D20).
+
+    요청을 **한 번만** 내놓는다 — 실제 큐도 한 실행에서 요청 하나만 집는다. 회신은 세션
+    디렉터리에 남겨, 지정 실행이 성공·실패 어느 쪽으로 끝났는지 눈으로 확인할 수 있게 한다.
+    """
+
+    def __init__(self, session_root: Path, sha: str | None = None):
+        self._root = Path(session_root)
+        self._sha = sha
+        self._claimed = False
+
+    def _record(self, action: str, payload: Mapping[str, Any]) -> None:
+        self._root.mkdir(parents=True, exist_ok=True)
+        with (self._root / "dry-run.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"action": action, **payload}, ensure_ascii=False))
+            handle.write("\n")
+
+    def claim(self) -> DraftRequest | None:
+        if self._claimed:
+            return None
+        self._claimed = True
+        request = DraftRequest(
+            id="dry-run-request", lease_token="dry-run-lease", source_commit_sha=self._sha
+        )
+        self._record("claim", {"id": request.id, "sha": self._sha})
+        return request
+
+    def succeed(self, request: DraftRequest, promotion_post_id: str) -> None:
+        self._record("request-succeed", {"id": request.id, "postId": promotion_post_id})
+
+    def fail(self, request: DraftRequest, code: str) -> None:
+        self._record("request-fail", {"id": request.id, "code": code})
