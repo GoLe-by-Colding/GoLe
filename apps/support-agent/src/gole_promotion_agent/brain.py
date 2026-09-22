@@ -199,9 +199,12 @@ def build_graph(
     def after_think(state: PromotionState) -> str:
         transcript = state.get("transcript", [])
         last = transcript[-1] if transcript else {}
-        if last.get("calls"):
-            return "act" if state.get("turns", 0) < policy.MAX_TURNS else "give_up"
-        return "give_up"
+        if not last.get("calls"):
+            # 도구를 더 부르지 않았다 = 모델이 스스로 "홍보할 것이 없다"고 판단한 것이다.
+            return "give_up"
+        # 턴 예산을 다 썼을 뿐이다. 이것을 "판단"과 같이 취급하면 아직 결론이 안 난 릴리스가
+        # 영구 제외 원장에 들어가 다시는 후보가 되지 않는다.
+        return "act" if state.get("turns", 0) < policy.MAX_TURNS else "defer"
 
     def after_act(state: PromotionState) -> str:
         return "upload" if state.get("draft") and not state.get("submitted") else "think"
@@ -210,6 +213,11 @@ def build_graph(
         on_stage(Stage.SKIPPED)
         return {"outcome": "skipped"}
 
+    def defer(state: PromotionState) -> dict[str, Any]:
+        """예산을 다 썼다. 결론이 아니라 중단이므로 다음 실행이 다시 본다."""
+        on_stage(Stage.DEFERRED)
+        return {"outcome": "deferred"}
+
     graph = StateGraph(PromotionState)
     graph.add_node("think", think)
     graph.add_node("act", act)
@@ -217,12 +225,16 @@ def build_graph(
     graph.add_node("create", create)
     graph.add_node("finalize", finalize)
     graph.add_node("give_up", give_up)
+    graph.add_node("defer", defer)
 
     graph.add_edge(START, "think")
-    graph.add_conditional_edges("think", after_think, {"act": "act", "give_up": "give_up"})
+    graph.add_conditional_edges(
+        "think", after_think, {"act": "act", "give_up": "give_up", "defer": "defer"}
+    )
     graph.add_conditional_edges("act", after_act, {"upload": "upload", "think": "think"})
     graph.add_edge("upload", "create")
     graph.add_edge("create", "finalize")
     graph.add_edge("finalize", END)
     graph.add_edge("give_up", END)
+    graph.add_edge("defer", END)
     return graph

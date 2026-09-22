@@ -700,6 +700,11 @@ def validate(
                     expected_argument_keys.update(
                         {"NEXT_PUBLIC_GA_MEASUREMENT_ID", "NEXT_PUBLIC_GTM_ID"}
                     )
+                # 이전 정상 배포의 rollback 모델은 Sentry 키가 전부 없을 수 있다.
+                # 일부만 있거나 다른 키가 끼면 계속 거부한다.
+                sentry_keys = {"NEXT_PUBLIC_SENTRY_ENABLED", "NEXT_PUBLIC_SENTRY_ENVIRONMENT", "NEXT_PUBLIC_SENTRY_DSN"}
+                if not allow_legacy_adoption and set(build_arguments).intersection(sentry_keys):
+                    expected_argument_keys.update(sentry_keys)
                 reject(
                     set(build_arguments) != expected_argument_keys,
                     "frontend build argument set changed",
@@ -740,6 +745,22 @@ def validate(
                         )
         else:
             reject(build is not None, f"service {name} unexpectedly builds a local image")
+
+    if not allow_legacy_adoption:
+        # web은 수집용 DSN만 받는다. backend의 read token을 env_file로 공유하지 않는다.
+        frontend = services["frontend"]
+        frontend_environment = frontend.get("environment", {})
+        reject(bool(frontend_environment) and set(frontend_environment) != {"SENTRY_ENABLED", "SENTRY_ENVIRONMENT", "SENTRY_DSN"},
+               "frontend Sentry runtime environment set changed")
+        build_args = frontend.get("build", {}).get("args", {})
+        for config, prefix in ((frontend_environment, "SENTRY"), (build_args, "NEXT_PUBLIC_SENTRY")):
+            enabled = str(config.get(f"{prefix}_ENABLED", "false"))
+            dsn = str(config.get(f"{prefix}_DSN", ""))
+            reject(enabled not in {"true", "false"}, "Sentry enabled flag is invalid")
+            reject(bool(dsn) and re.fullmatch(r"https://[A-Za-z0-9]{1,64}@[A-Za-z0-9.-]+\.sentry\.io/[0-9]+", dsn) is None,
+                   "Sentry DSN format is invalid")
+            reject(enabled == "true" and (config.get(f"{prefix}_ENVIRONMENT") != "production" or not dsn),
+                   "Sentry opt-in requires production environment and DSN")
 
     if not allow_legacy_adoption:
         # GOLE_VERIFICATION_EMAIL_ENABLED must be exactly "true" or "false",

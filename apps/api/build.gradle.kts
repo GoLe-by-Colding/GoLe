@@ -34,6 +34,9 @@ extra["grpcVersion"] = "1.84.0"
 extra["protobufVersion"] = "4.36.1"
 
 dependencies {
+    // 자동 request/logback 수집 없이 기존 운영 오류 경계에서 안전한 이벤트만 보낸다.
+    implementation("io.sentry:sentry:8.56.0")
+
     // Web / Validation / Actuator
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")

@@ -1,5 +1,5 @@
-import { VerifyEmailView } from "@/views/auth";
+import { WebScreen } from "@/views/web";
 
-export default function VerifyEmailScreen() {
-  return <VerifyEmailView />;
+export default function Screen() {
+  return <WebScreen path="/verify" />;
 }

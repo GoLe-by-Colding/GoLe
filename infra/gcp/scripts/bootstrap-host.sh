@@ -695,6 +695,21 @@ if [ -e /etc/gole/gole.env.version ] || [ -L /etc/gole/gole.env.version ]; then
   chown root:root /etc/gole/gole.env.version
   chmod 0644 /etc/gole/gole.env.version
 fi
+# gole-promotion-agent.service 는 이 파일을 '-' 접두사 없이 EnvironmentFile 로 잡으므로
+# 파일이 없으면 유닛이 시작하자마자 실패한다. 부트스트랩은 소유자·권한만 맞춘 빈 파일을
+# 만들고 값은 넣지 않는다 — 주입은 다른 오버레이와 같은 경로
+# (`gole-hostctl promotion-agent-overlay-install` + Secret Sync)를 거친다.
+if [ -e /etc/gole/promotion-agent.env ] || [ -L /etc/gole/promotion-agent.env ]; then
+  if [ ! -f /etc/gole/promotion-agent.env ] || [ -L /etc/gole/promotion-agent.env ]; then
+    echo "existing promotion agent environment path is invalid" >&2
+    exit 1
+  fi
+else
+  install -m 0600 -o root -g root /dev/null /etc/gole/promotion-agent.env
+fi
+chown root:root /etc/gole/promotion-agent.env
+chmod 0600 /etc/gole/promotion-agent.env
+sync -f /etc/gole
 
 printf '%s:%s\n' "$DEPLOY_USER" "$DEPLOY_GROUP" > /etc/gole/deploy-user
 chown root:root /etc/gole/deploy-user
@@ -774,6 +789,12 @@ install -m 0755 "$TRUST_ROOT/infra/gcp/scripts/notify-backup-failure.py" /usr/lo
 for backup_unit in gole-data-backup.service gole-data-backup.timer gole-data-backup-failure.service; do
   install -m 0644 "$TRUST_ROOT/infra/gcp/systemd/$backup_unit" "/etc/systemd/system/$backup_unit"
 done
+# 홍보 초안 에이전트(스펙 D10). 유닛이 호스트에 없으면 타이머가 돌지 않을 뿐 아니라
+# journalctl -u gole-promotion-agent 가 Unit could not be found 만 내서 "한 번도 안 돌았다"는
+# 사실 자체가 보이지 않는다. 실패 알림 유닛은 논리 백업과 같은 스크립트를 재사용한다.
+for promotion_unit in gole-promotion-agent.service gole-promotion-agent.timer gole-promotion-agent-failure.service; do
+  install -m 0644 "$TRUST_ROOT/infra/gcp/systemd/$promotion_unit" "/etc/systemd/system/$promotion_unit"
+done
 install -m 0755 "$TRUST_ROOT/infra/gcp/scripts/stack-start.sh" /usr/local/sbin/gole-stack-start
 install -m 0644 "$TRUST_ROOT/infra/gcp/systemd/gole-stack.service" /etc/systemd/system/gole-stack.service
 
@@ -821,6 +842,9 @@ if ! systemctl enable --now gole-metadata-firewall.service ||
 fi
 systemctl enable --now docker
 systemctl enable --now gole-data-backup.timer
+# 켜는 것은 타이머다. 서비스를 enable 하면 WantedBy=multi-user.target 때문에 부팅마다
+# 한 번 더 돌아 같은 릴리스로 초안이 중복 생성된다(논리 백업도 타이머만 켠다).
+systemctl enable --now gole-promotion-agent.timer
 # 부팅 시 운영 컨테이너를 다시 켠다. --now 를 쓰지 않는다 — 부트스트랩 시점에는
 # CD 가 아직 컨테이너를 만들지 않았을 수 있고, 그때 start 는 할 일이 없다.
 systemctl enable gole-stack.service

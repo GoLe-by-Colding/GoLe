@@ -8,7 +8,9 @@ public interface PromotionPostMongoRepository extends MongoRepository<PromotionP
 
     List<PromotionPostDocument> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 
-    boolean existsBySourceCommitSha(String sourceCommitSha);
+    boolean existsByClaimedSourceCommitSha(String claimedSourceCommitSha);
+
+    long countBySourceCommitSha(String sourceCommitSha);
 
     List<PromotionPostDocument> findAllByOrderByCreatedAtDesc(Pageable pageable);
 

@@ -6,7 +6,7 @@ import {
   type Notification,
 } from "@gole/core/notification";
 import { useSession } from "@/entities/user";
-import { useAsync } from "@/shared/lib";
+import { notificationRoute, useAsync } from "@/shared/lib";
 import { radius, space, useTheme } from "@/shared/theme";
 import { Button, EmptyState, ErrorState, LoadingState, Screen, Text } from "@/shared/ui";
 
@@ -69,8 +69,9 @@ function SignedIn({ accountId }: { readonly accountId: string }) {
       result.reload();
     }
     // 앱 내부 경로만 따른다. 서버가 준 링크라도 외부 URL을 그대로 열지 않는다.
-    if (item.link !== null && item.link.startsWith("/")) {
-      router.push(item.link as Parameters<typeof router.push>[0]);
+    const link = notificationRoute(item.link);
+    if (link !== null) {
+      router.push(link as Parameters<typeof router.push>[0]);
     }
   }
 

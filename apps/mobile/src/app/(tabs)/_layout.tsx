@@ -1,17 +1,18 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
-import { useTheme } from "@/shared/theme";
+import { themes } from "@/shared/theme";
 
 /**
- * 하단 탭 5개. 웹의 주요 동선(홈·검색·판매·채팅·내 정보)을 그대로 옮긴다.
- * 관리자 화면은 앱에 두지 않는다 — 웹을 쓴다.
+ * 하단 탭만 네이티브로 소유하고 본문은 동일한 모바일 웹을 연다.
  */
 export default function TabsLayout() {
-  const colors = useTheme();
+  const colors = themes.light;
 
   return (
     <Tabs
       screenOptions={{
+        headerShown: false,
+        tabBarHideOnKeyboard: true,
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
         tabBarActiveTintColor: colors.tint,

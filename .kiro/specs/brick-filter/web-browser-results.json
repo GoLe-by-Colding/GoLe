@@ -1,0 +1,44 @@
+{
+  "loggedOut": {
+    "fileInputs": 0,
+    "login": true
+  },
+  "invalidSelectionClearsPrevious": {
+    "consent": false,
+    "disabled": true,
+    "preview": false
+  },
+  "server503PreservesPending": {
+    "disabled": true,
+    "posts": 1
+  },
+  "sameRequestRetry": {
+    "posts": 2,
+    "same": true,
+    "samePayload": true
+  },
+  "serialPolling": {
+    "lookups": 3,
+    "maxActive": 1
+  },
+  "staleManualDoesNotRegress": {
+    "pending": false,
+    "result": true
+  },
+  "authenticatedResult": {
+    "blob": true,
+    "posts": 2
+  },
+  "quotaGate_remaining": true,
+  "quotaGate_retryAvailable": true,
+  "quotaGate_enabled": true,
+  "expiredSession": {
+    "disabled": true,
+    "status": true
+  },
+  "ownerChangeResetsEditor": {
+    "consent": false,
+    "file": "",
+    "result": false
+  }
+}
