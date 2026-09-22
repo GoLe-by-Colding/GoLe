@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from gole_promotion_agent import policy
-from gole_promotion_agent.ports import Candidate, ToolCall, Turn
+from gole_promotion_agent.ports import Candidate, DraftRequest, ToolCall, Turn
 
 
 class ProviderUnavailable(Exception):
@@ -38,6 +38,44 @@ def _git(repo: Path, *args: str, limit: int | None = None) -> str:
         check=True,
     )
     return result.stdout if limit is None else result.stdout[:limit]
+
+
+class CommitNotFound(Exception):
+    """관리자가 지정한 커밋이 이 체크아웃에 없다."""
+
+
+class PinnedReleaseScanner:
+    """관리자가 지정한 커밋 하나만 내놓는다(스펙 D20).
+
+    **로컬 휴리스틱을 일절 보지 않는다** — 이미 홍보했는지, 건너뛴 적이 있는지,
+    `apps/web/src` 를 건드렸는지, 7일 창 안인지 모두 무시한다. 그 판단은 Java 가 접수
+    시점에 점유(`claimedSourceCommitSha`)와 3회 상한으로 이미 끝냈고, 여기서 한 번 더
+    거르면 **관리자 눈에는 아무 일도 안 일어난 것처럼 보인다** — 이번 변경이 없애려는
+    바로 그 증상이다.
+
+    자동 경로는 그대로 `GitReleaseScanner` 가 담당한다. 원장은 그쪽 휴리스틱이다.
+    """
+
+    def __init__(self, repo: Path, sha: str):
+        if not policy.SHA_PATTERN.match(sha):
+            raise ValueError("INVALID_SHA")
+        self._repo = Path(repo)
+        self._sha = sha
+        self._delegate = GitReleaseScanner(repo, lambda _sha: False)
+
+    def candidates(self) -> tuple[Candidate, ...]:
+        try:
+            listed = _git(self._repo, "log", "-1", "--format=%H%x09%s", self._sha)
+        except subprocess.CalledProcessError as failure:
+            # 운영 체크아웃은 squash 전용 main 에 고정돼 있어 지정한 SHA 가 없을 수 있다.
+            raise CommitNotFound(self._sha) from failure
+        sha, _, subject = listed.strip().partition("	")
+        if not policy.SHA_PATTERN.match(sha):
+            raise CommitNotFound(self._sha)
+        return (Candidate(sha, subject),)
+
+    def diff(self, sha: str) -> str:
+        return self._delegate.diff(sha)
 
 
 class GitReleaseScanner:
@@ -525,5 +563,47 @@ class BackendPublisher:
     def finalize(self, post_id: str) -> None:
         response = self._http().post(
             f"/api/admin/promotion-posts/{post_id}/submit", headers=self._headers()
+        )
+        response.raise_for_status()
+
+
+class BackendDraftRequestQueue:
+    """관리자 요청을 백엔드에서 집어오고 결과를 회신한다(스펙 D20).
+
+    `BackendPublisher` 의 세션을 그대로 재사용한다 — 같은 봇 ADMIN 계정이고, 로그인을 두 번
+    할 이유가 없다.
+    """
+
+    def __init__(self, publisher: "BackendPublisher"):
+        self._publisher = publisher
+
+    def claim(self) -> DraftRequest | None:
+        response = self._publisher._http().post(
+            "/api/admin/promotion-posts/requests/claim", headers=self._publisher._headers()
+        )
+        if response.status_code == 204:
+            return None
+        response.raise_for_status()
+        payload = response.json()
+        return DraftRequest(
+            id=payload["id"],
+            lease_token=payload["leaseToken"],
+            source_commit_sha=payload.get("sourceCommitSha"),
+        )
+
+    def succeed(self, request: DraftRequest, promotion_post_id: str) -> None:
+        response = self._publisher._http().post(
+            f"/api/admin/promotion-posts/requests/{request.id}/succeed",
+            json={"leaseToken": request.lease_token, "promotionPostId": promotion_post_id},
+            headers=self._publisher._headers(),
+        )
+        response.raise_for_status()
+
+    def fail(self, request: DraftRequest, code: str) -> None:
+        response = self._publisher._http().post(
+            f"/api/admin/promotion-posts/requests/{request.id}/fail",
+            # 코드만 보낸다 — 예외 원문에는 diff·캡션·경로가 섞일 수 있다.
+            json={"leaseToken": request.lease_token, "failureCode": code[:64]},
+            headers=self._publisher._headers(),
         )
         response.raise_for_status()

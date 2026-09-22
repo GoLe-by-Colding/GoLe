@@ -4,10 +4,13 @@ import { type ChangeEvent, useCallback, useEffect, useState } from "react";
 import {
   approveAdminPromotionPost,
   createAdminPromotionPost,
+  fetchAdminPromotionDraftRequests,
   fetchAdminPromotionPosts,
   publishAdminPromotionPost,
+  requestAdminPromotionDraft,
   rejectAdminPromotionPost,
   submitAdminPromotionPost,
+  type AdminPromotionDraftRequest,
   type AdminPromotionPost,
   type PromotionPostStatus,
 } from "@entities/admin";
@@ -20,6 +23,7 @@ import {
   Card,
   Field,
   Heading,
+  Input,
   MediaImage,
   Select,
   Text,
@@ -28,6 +32,9 @@ import {
 import {
   PROMOTION_CHANNEL_LABEL,
   PROMOTION_POST_STATUS_LABEL,
+  PROMOTION_DRAFT_REQUEST_STATUS_LABEL,
+  PROMOTION_DRAFT_REQUEST_STATUS_TONE,
+  PROMOTION_DRAFT_FAILURE_LABEL,
   PROMOTION_POST_STATUS_TONE,
   formatDateTime,
   shortCommitSha,
@@ -65,6 +72,12 @@ export function AdminPromotionPostsView() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
 
+  const [requests, setRequests] = useState<readonly AdminPromotionDraftRequest[]>([]);
+  const [requestSha, setRequestSha] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  const [requestError, setRequestError] = useState<string | undefined>(undefined);
+  const [requestNotice, setRequestNotice] = useState<string | undefined>(undefined);
+
   const load = useCallback(() => {
     if (token === null) {
       return;
@@ -79,7 +92,18 @@ export function AdminPromotionPostsView() {
       });
   }, [token, status]);
 
+  const loadRequests = useCallback(() => {
+    if (token === null) {
+      return;
+    }
+    void fetchAdminPromotionDraftRequests(token, 10)
+      .then(setRequests)
+      // 요청 목록을 못 불러와도 검토 화면 자체는 계속 쓸 수 있어야 한다.
+      .catch(() => setRequests([]));
+  }, [token]);
+
   useEffect(load, [load]);
+  useEffect(loadRequests, [loadRequests]);
   const reviewAction = useModerationAction(load);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -131,6 +155,29 @@ export function AdminPromotionPostsView() {
       setCreateError(cause instanceof ApiError ? cause.message : "홍보 게시 등록에 실패했습니다.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleRequestDraft() {
+    if (token === null) {
+      return;
+    }
+    setRequesting(true);
+    setRequestError(undefined);
+    setRequestNotice(undefined);
+    try {
+      const accepted = await requestAdminPromotionDraft(token, requestSha);
+      setRequestSha("");
+      setRequestNotice(
+        accepted.sourceCommitSha === null
+          ? "요청을 접수했습니다. 다음 에이전트 실행이 대상을 골라 초안을 만듭니다."
+          : `요청을 접수했습니다. 다음 에이전트 실행이 ${shortCommitSha(accepted.sourceCommitSha)} 로 초안을 만듭니다.`,
+      );
+      loadRequests();
+    } catch (cause) {
+      setRequestError(cause instanceof ApiError ? cause.message : "초안 생성 요청에 실패했습니다.");
+    } finally {
+      setRequesting(false);
     }
   }
 
@@ -187,6 +234,60 @@ export function AdminPromotionPostsView() {
         Threads에 올릴 초안을 작성해 검토를 요청하면, 작성자 본인이 아닌 다른 관리자가 승인해야
         발행할 수 있습니다. 발행은 지금 모의(스텁) 처리되어 실제 Threads 계정에는 올라가지 않습니다.
       </Text>
+
+      <Card padded className="flex flex-col gap-3">
+        <Heading level={3}>에이전트에 초안 요청</Heading>
+        <Text tone="muted" size="sm">
+          즉시 만들어지지 않습니다. 요청을 남기면 다음 에이전트 실행이 먼저 처리합니다. 커밋을
+          비우면 에이전트가 대상을 직접 고릅니다.
+        </Text>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-neutral-700">
+            릴리스 커밋 (선택)
+            <Input
+              value={requestSha}
+              onChange={(e) => setRequestSha(e.target.value)}
+              placeholder="40자리 커밋 SHA — 비우면 자동 선정"
+              spellCheck={false}
+            />
+          </label>
+          <Button onClick={() => void handleRequestDraft()} disabled={requesting || token === null}>
+            {requesting ? "요청 중…" : "초안 요청"}
+          </Button>
+        </div>
+        {requestError !== undefined ? <p className="text-sm text-danger">{requestError}</p> : null}
+        {requestNotice !== undefined ? (
+          <Text tone="muted" size="sm">
+            {requestNotice}
+          </Text>
+        ) : null}
+
+        {requests.length > 0 && (
+          <ul className="flex flex-col gap-1.5 border-t border-neutral-200 pt-3">
+            {requests.map((request) => (
+              <li key={request.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge tone={PROMOTION_DRAFT_REQUEST_STATUS_TONE[request.status] ?? "neutral"}>
+                  {PROMOTION_DRAFT_REQUEST_STATUS_LABEL[request.status] ?? request.status}
+                </Badge>
+                <span className="text-neutral-700">
+                  {request.sourceCommitSha === null
+                    ? "자동 선정"
+                    : shortCommitSha(request.sourceCommitSha)}
+                </span>
+                <span className="text-neutral-500">{formatDateTime(request.createdAt)}</span>
+                {request.failureCode !== null && (
+                  <span className="text-red-700">
+                    {PROMOTION_DRAFT_FAILURE_LABEL[request.failureCode] ?? request.failureCode}
+                  </span>
+                )}
+                {request.promotionPostId !== null && (
+                  <span className="text-neutral-500">초안 {shortId(request.promotionPostId)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <Card padded className="flex flex-col gap-3">
         <Heading level={3}>새 홍보 게시 작성</Heading>

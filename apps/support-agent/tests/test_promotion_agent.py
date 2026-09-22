@@ -14,9 +14,20 @@ import pytest
 from gole_promotion_agent import policy
 from gole_promotion_agent.checkpoints import BinaryInCheckpoint, SessionSaver, reject_binary
 from gole_promotion_agent.dryrun import FakeCamera, RecordingPublisher, ScriptedConversation
-from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, _blocks_from_transcript
-from gole_promotion_agent.ports import ToolCall, Turn
-from gole_promotion_agent.runtime import PromotionHarness, retry_ledger, skipped_ledger
+from gole_promotion_agent.hands import (
+    AppRouteCatalog,
+    CommitNotFound,
+    GitReleaseScanner,
+    PinnedReleaseScanner,
+    _blocks_from_transcript,
+)
+from gole_promotion_agent.ports import DraftRequest, ToolCall, Turn
+from gole_promotion_agent.runtime import (
+    PromotionHarness,
+    _safe_failure_code,
+    retry_ledger,
+    skipped_ledger,
+)
 from gole_promotion_agent.session import EphemeralSession, Stage
 
 
@@ -693,3 +704,150 @@ def test_model_request_marks_a_cache_breakpoint(tmp_path: Path):
     system = captured["system"]
     assert isinstance(system, list) and system[0]["cache_control"] == {"type": "ephemeral"}
     assert system[0]["text"] == "SYSTEM"
+
+
+# --------------------------------------------------- 관리자 콘솔 발 요청 (스펙 D20)
+
+
+def test_pinned_scanner_ignores_promoted_skipped_and_window(repo: Path):
+    """지정 실행은 로컬 휴리스틱을 일절 보지 않는다.
+
+    홍보 가능 여부의 판단은 Java 가 접수 시점에 점유와 3회 상한으로 이미 끝냈다. 여기서 또
+    거르면 관리자 눈에는 아무 일도 안 일어난 것처럼 보인다 — 이번 변경이 없애려는 증상이다.
+    """
+    target = _commit(repo, "feat(web): 첫 화면", web=True)
+    for index in range(12):
+        _commit(repo, f"chore: 이후 커밋 {index}", web=True)
+
+    # 자동 경로는 탐색 창(-n10)에 가려 이 커밋을 못 본다.
+    automatic = GitReleaseScanner(repo, lambda _sha: False)
+    assert target not in {item.sha for item in automatic.candidates()}
+
+    # 지정 실행은 홍보됨·건너뜀·창 밖 여부와 무관하게 그 커밋을 내놓는다.
+    pinned = PinnedReleaseScanner(repo, target)
+    assert [item.sha for item in pinned.candidates()] == [target]
+
+
+def test_pinned_scanner_ignores_web_change_filter_for_selection(repo: Path):
+    """선정 단계에서는 apps/web/src 변경 여부를 보지 않는다."""
+    backend_only = _commit(repo, "feat(api): 백엔드만 고침", web=False)
+
+    assert GitReleaseScanner(repo, lambda _sha: False).candidates() == ()
+    assert [item.sha for item in PinnedReleaseScanner(repo, backend_only).candidates()] == [
+        backend_only
+    ]
+
+
+def test_pinned_scanner_still_reports_missing_web_changes_as_a_reason(repo: Path):
+    """다만 찍을 화면이 없다는 사실은 숨기지 않는다.
+
+    이건 로컬 원장 같은 휴리스틱이 아니라 도메인 제약이다 — 캡션은 스크린샷에서 나오므로
+    (D9·D12) 웹 변경이 없으면 홍보할 화면 자체가 없다. 우회하지 않고 사유로 돌려준다.
+    """
+    backend_only = _commit(repo, "feat(api): 백엔드만 고침", web=False)
+
+    with pytest.raises(ValueError, match="NO_WEB_CHANGES"):
+        PinnedReleaseScanner(repo, backend_only).diff(backend_only)
+
+
+def test_pinned_scanner_rejects_unknown_commit(repo: Path):
+    _commit(repo, "feat(web): 첫 화면", web=True)
+    missing = "0" * 40
+
+    with pytest.raises(CommitNotFound):
+        PinnedReleaseScanner(repo, missing).candidates()
+
+
+def test_pinned_scanner_rejects_malformed_sha(repo: Path):
+    with pytest.raises(ValueError, match="INVALID_SHA"):
+        PinnedReleaseScanner(repo, "not-a-sha")
+
+
+def test_safe_failure_code_passes_known_codes_but_hides_free_text():
+    """고정 코드만 관리자에게 보이고 나머지는 종류 이름으로 줄인다."""
+    assert _safe_failure_code(ValueError("NO_WEB_CHANGES")) == "NO_WEB_CHANGES"
+    # 예외 원문에는 diff·캡션·경로가 섞일 수 있다.
+    assert _safe_failure_code(ValueError("/repo/apps/web/src/secret.tsx 에서 실패")) == "ValueError"
+    assert _safe_failure_code(RuntimeError("boom")) == "RuntimeError"
+
+
+class _StubQueue:
+    """claim 을 한 번만 내주고 회신을 기록한다."""
+
+    def __init__(self, sha=None):
+        self.request = DraftRequest("req-1", "lease-1", sha)
+        self.claimed = False
+        self.result = None
+
+    def claim(self):
+        if self.claimed:
+            return None
+        self.claimed = True
+        return self.request
+
+    def succeed(self, request, promotion_post_id):
+        self.result = ("succeed", request.id, promotion_post_id)
+
+    def fail(self, request, code):
+        self.result = ("fail", request.id, code)
+
+
+def _request_harness(repo: Path, sessions: Path, queue=None) -> PromotionHarness:
+    routes = AppRouteCatalog(repo)
+    available = routes.routes() or ("/",)
+    publisher = RecordingPublisher(sessions)
+    from gole_promotion_agent.dryrun import scripted_conversation_factory
+
+    return PromotionHarness(
+        GitReleaseScanner(repo, publisher.exists),
+        routes,
+        FakeCamera(available),
+        publisher,
+        scripted_conversation_factory(available[0]),
+        sessions,
+        queue,
+        lambda pinned: PinnedReleaseScanner(repo, pinned),
+    )
+
+
+def test_requested_run_reports_success_with_the_created_post(repo: Path, tmp_path: Path):
+    sha = _commit(repo, "feat(web): 홍보할 화면", web=True)
+    queue = _StubQueue(sha)
+
+    _request_harness(repo, tmp_path / "sessions", queue).run()
+
+    assert queue.result is not None
+    action, request_id, payload = queue.result
+    assert (action, request_id) == ("succeed", "req-1")
+    assert payload
+
+
+def test_requested_run_always_answers_even_when_nothing_matches(repo: Path, tmp_path: Path):
+    """회신이 빠지면 요청이 lease 만료까지 '처리 중'으로 남아 조용한 0건과 똑같아진다."""
+    _commit(repo, "feat(web): 이미 홍보함", web=True)
+    queue = _StubQueue(None)  # 자동 선정 요청
+    harness = _request_harness(repo, tmp_path / "sessions", queue)
+    harness._scanner = GitReleaseScanner(repo, lambda _sha: True)  # 전부 홍보된 상태
+
+    harness.run()
+
+    assert queue.result == ("fail", "req-1", "NO_CANDIDATES")
+
+
+def test_requested_run_answers_commit_not_found(repo: Path, tmp_path: Path):
+    _commit(repo, "feat(web): 첫 화면", web=True)
+    queue = _StubQueue("0" * 40)
+
+    _request_harness(repo, tmp_path / "sessions", queue).run()
+
+    assert queue.result == ("fail", "req-1", "COMMIT_NOT_FOUND")
+
+
+def test_run_without_queue_keeps_the_existing_automatic_path(repo: Path, tmp_path: Path):
+    """큐를 주지 않으면 지금까지의 타이머 발 동작을 그대로 유지한다."""
+    _commit(repo, "feat(web): 홍보할 화면", web=True)
+
+    result = _request_harness(repo, tmp_path / "sessions", None).run()
+
+    assert result.candidates
+    assert "요청" not in result.reason

@@ -70,6 +70,41 @@ export const PROMOTION_POST_STATUS_TONE: Readonly<Record<string, BadgeTone>> = {
   PUBLISHED: "success",
 };
 
+/** 관리자 콘솔 발 초안 요청의 상태(promotion-review D20). */
+export const PROMOTION_DRAFT_REQUEST_STATUS_LABEL: Readonly<Record<string, string>> = {
+  PENDING: "대기중",
+  IN_PROGRESS: "처리중",
+  SUCCEEDED: "완료",
+  FAILED: "실패",
+};
+
+export const PROMOTION_DRAFT_REQUEST_STATUS_TONE: Readonly<Record<string, BadgeTone>> = {
+  PENDING: "neutral",
+  IN_PROGRESS: "warning",
+  SUCCEEDED: "success",
+  FAILED: "danger",
+};
+
+/**
+ * 에이전트가 돌려준 실패 사유 코드를 사람 말로 옮긴다.
+ *
+ * 코드 자체는 고정 목록이라(`policy.SAFE_FAILURE_CODES`) 자유 문장이 섞여 들어오지 않는다.
+ * 목록에 없는 코드는 화면에서 원문 그대로 보여 준다 — 가리면 원인을 알 수 없다.
+ */
+export const PROMOTION_DRAFT_FAILURE_LABEL: Readonly<Record<string, string>> = {
+  NO_CANDIDATES: "새로 홍보할 릴리스가 없습니다",
+  COMMIT_NOT_FOUND: "그 커밋을 찾을 수 없습니다",
+  NO_WEB_CHANGES: "화면 변경이 없어 찍을 것이 없습니다",
+  DUPLICATE_SOURCE_COMMIT: "이미 홍보된 릴리스입니다",
+  MODEL_REFUSED: "모델이 작성을 거부했습니다",
+  TIMEOUT: "제한 시간을 넘겼습니다",
+  ROUTE_NOT_ALLOWED: "허용되지 않은 화면을 찍으려 했습니다",
+  NAVIGATED_OFF_SITE: "사이트 밖으로 이동했습니다",
+  ANTHROPIC_KEY_REQUIRED: "모델 키가 설정되지 않았습니다",
+  EXTERNAL_DISABLED: "외부 모델 호출이 꺼져 있습니다",
+  LEASE_EXPIRED_AFTER_MAX_ATTEMPTS: "여러 번 시도했지만 끝내지 못했습니다",
+};
+
 export const PROMOTION_CHANNEL_LABEL: Readonly<Record<string, string>> = {
   THREADS: "Threads",
 };

@@ -880,6 +880,47 @@ export function publishAdminPromotionPost(
   return post<AdminPromotionPost>(token, `/api/admin/promotion-posts/${promotionPostId}/publish`);
 }
 
+// ── 홍보 초안 생성 요청 (promotion-review D20) ───────────────────
+//
+// 즉시 생성이 아니다. 요청을 남기면 다음 에이전트 실행이 우선 처리한다 — 백엔드에는
+// 에이전트 프로세스를 띄울 수단이 없다. 홍보 불가 사유는 접수 응답에서 곧바로 돌려준다.
+
+export type PromotionDraftRequestStatus = "PENDING" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED";
+
+export interface AdminPromotionDraftRequest {
+  readonly id: string;
+  /** 비어 있으면 에이전트가 대상을 자동 선정한다. */
+  readonly sourceCommitSha: string | null;
+  readonly requestedBy: string;
+  readonly status: PromotionDraftRequestStatus;
+  readonly attempts: number;
+  readonly promotionPostId: string | null;
+  /** 실패 사유 코드. 자유 문장이 아니라 고정 코드다. */
+  readonly failureCode: string | null;
+  readonly createdAt: string;
+  readonly finishedAt: string | null;
+}
+
+export function requestAdminPromotionDraft(
+  token: string,
+  sourceCommitSha?: string,
+): Promise<AdminPromotionDraftRequest> {
+  return post<AdminPromotionDraftRequest>(token, "/api/admin/promotion-posts/requests", {
+    sourceCommitSha: sourceCommitSha?.trim() || null,
+  });
+}
+
+export function fetchAdminPromotionDraftRequests(
+  token: string,
+  limit = 20,
+): Promise<readonly AdminPromotionDraftRequest[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return get<readonly AdminPromotionDraftRequest[]>(
+    token,
+    `/api/admin/promotion-posts/requests?${params}`,
+  );
+}
+
 // ── 홍보 평가 지표 (promotion-review/eval.md) ───────────────────
 //
 // 채점 자체는 여전히 사람이 한다 — 여기 API는 그 결과를 저장·집계만 한다(자동 채점기 아님).

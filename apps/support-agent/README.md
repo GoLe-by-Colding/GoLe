@@ -16,7 +16,28 @@
 
 ## 영속 작업자의 코드 구조와 읽는 순서
 
-`src/gole_agent_worker/`는 여러 목적의 에이전트가 공유하는 실행 기반이다.
+> **⏸ 보류 중 — 2026-09-22 기준 이 패키지를 쓰는 소비자가 0개다.**
+>
+> 지우지도 켜지도 않기로 했다. 버리기엔 만든 지 얼마 안 됐고(커밋 3개, 마지막 2026-09-14),
+> 켜기엔 저장소·보관기간·경보 정책을 먼저 세워야 하는데 **쓸 사람이 없는 상태에서 그걸
+> 정하는 건 순서가 뒤집힌 것**이라 판단했다.
+>
+> - **운영 이미지에 싣지 않는다.** `Dockerfile`이 `gole_support_agent`·`gole_agent_runtime`만
+>   복사한다. 돌지 않는 코드로 운영 컨테이너 표면을 넓히지 않기 위해서다.
+> - **소스·테스트·스펙은 그대로 둔다.** CI 가 매 PR 마다 전부 돌린다 — 보류는 검증을 멈추는
+>   것이 아니다. 깨울 때는 `Dockerfile`의 `COPY`와 배선만 되돌린다.
+> - **깨우는 조건**: ① ~~홍보 트리거가 관리자 콘솔 발 요청으로 바뀔 때~~ → 2026-09-22 에
+>   왔으나 재검토 결과 편입하지 않음(D20). 다시 볼 지점은 T12(온디맨드 기동)
+>   ② brickfilter 3회/일 ledger 를 영속 작업과 연결할 때(아래 "내부 호출 계약" 참고)
+>   ③ 둘 다 없이 결정 기한이 지나면 제거 재검토.
+> - 판단 근거와 기한은 볼트 `08_개선과제/알려진 개선 과제.md`, 코드 쪽 요약은
+>   `src/gole_agent_worker/__init__.py`.
+>
+> 아래 구조 설명은 보류와 무관하게 유효하다.
+
+`src/gole_agent_worker/`는 여러 목적의 에이전트가 공유하도록 **설계된** 실행 기반이다.
+다만 사진·홍보는 편입을 명시적으로 거부했고(각각 이미지의 SQLite 영속 금지, 분산 leasing
+불필요), 문의는 동기 서버로 충분해 **실제 공유 사용자는 아직 없다.**
 기존 `gole_support_agent/` 동기 서버와 `gole_brick_filter/` 이미지 서비스는 별도 진입점을 유지한다.
 
 ```text
@@ -90,6 +111,7 @@ PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
 ```
 
 - `AGENT_GRPC_PORT`: 기본 50052, **127.0.0.1에만 bind**한다. 원격 Java 연결과 mTLS 프록시는 미구현이다.
+  포트 배분은 아래 "loopback 포트 배분"을 본다 — 이 패키지의 서버 넷이 같은 호스트를 나눠 쓴다.
 - `AGENT_DB_PATH`: 기본 패키지 루트의 `apps/support-agent/data/agent-jobs.sqlite3`(이미지 안에서는 `/app/data/agent-jobs.sqlite3`). 재시작 때 반드시 같은 파일을 쓴다.
   컨테이너 재생성까지 보존하려면 영속 로컬 볼륨 경로를 명시해야 한다.
 - 기본 시도 3회, lease 15초, heartbeat 5초, 재시도 2초/4초(상한 60초), 실행 제한 60초다.
@@ -99,6 +121,27 @@ PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
 - DB는 0600으로 생성한다. payload/checkpoint에 문의 내용이 있으므로 디렉터리 접근권한,
   볼륨 암호화·백업·보관기간·삭제 절차는 운영 연결 전에 정해야 한다. 내부 Purge는 논리 파기를 제공하며 WAL/백업 물리 삭제는 별도 정책이 필요하다.
 - `LANGCHAIN_TRACING`, `LANGCHAIN_TRACING_V2`, `LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2` 중 하나라도 `true`면 기동을 거절한다.
+
+### loopback 포트 배분
+
+이 패키지의 서버는 넷이고 전부 같은 호스트의 loopback 에 뜬다. **기본값이 겹치면 나중에
+뜨는 쪽이 조용히 bind 에 실패하므로** 배분을 여기에 고정한다. Python 서버와 Java 클라이언트는
+**짝이며 함께 움직인다** — 한쪽만 바꾸면 기본값이 어긋나 그 경로가 끊긴다.
+
+| 포트 | Python (서버) | Java (클라이언트 기본값) | 상태 |
+|---|---|---|---|
+| 50051 | `gole_support_agent.server` | `GOLE_SUPPORT_AGENT_GRPC_TARGET` | 운영 배포됨 |
+| 50052 | `gole_agent_worker.bootstrap` | `gole.support-agent.durable.target` | opt-in, 미배포 |
+| 50053 | `gole_brick_filter.grpc_server` | `gole.brick-filter.grpc-target` | opt-in(local 전용), 미배포 |
+| 50054 | `gole_brick_filter.server` (HTTP) | `gole.brick-filter.endpoint` | 기본 transport, 미배포 |
+
+`tests/test_port_allocation.py`가 이 표를 강제한다 — 기본값이 겹치거나 위 배분에서 벗어나면
+서버를 켜 보지 않아도 테스트가 깨진다. 포트를 옮기려면 표·테스트·Java 기본값을 함께 고친다.
+
+> 사진 HTTP 서버는 원래 :50052 에 있었다. 영속 작업자가 나중에 같은 포트를 기본값으로 잡았고,
+> 둘 다 배포돼 있지 않아 아무도 모르고 지나갔다. `.kiro/specs/agent-worker/brick-grpc.md` 는
+> gRPC 를 :50053 에 두면서 ":50052 를 재사용하지 않는다"고 적었지만, 그때 이미 HTTP 가
+> 거기 앉아 있는 것은 보지 못했다. 2026-09-22 에 HTTP 를 :50054 로 옮겨 정리했다.
 
 ### 내부 호출 계약
 
@@ -151,7 +194,7 @@ HTTP와 gRPC 모두 같은 Harness를 사용하고 `agent.py`는 기존 import �
 
 `gole_brick_filter.grpc_server`는 기존 Java BrickFilterService의 quota·provider gate 뒤에서 호출하는
 별도 사진 실행 프로세스다. `gole.brick.v1.BrickImages.Generate` 계약과 :50053을 사용한다.
-`gole.brick-filter.transport=grpc`에서만 Java 어댑터가 바뀌며 기본 HTTP는 유지한다.
+`gole.brick-filter.transport=grpc`에서만 Java 어댑터가 바뀌며 기본 HTTP(:50054)는 유지한다.
 사진은 LangGraph에서 validate→generate→result로 처리하지만 checkpoint·디스크에 저장하지 않는다.
 입력 4MiB·출력 8MiB·필수 deadline·동시 실행 2개·인증을 검사하며 자동 재시도는 하지 않는다.
 
@@ -284,7 +327,16 @@ PYTHONPATH=apps/support-agent/src \
 
 ## 배포 이미지의 오프라인 smoke 검사
 
-관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다. 컨테이너에서도 proto 세 종류, rules-v1, SQLite 영속 fake 작업, 사진 두 모드와 상위 callback 격리를 실행한다. 운영 키·네트워크·호스트 데이터 쓰기 없이 실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다.
+컨테이너에서는 **이미지가 실제로 싣는 것만** 실행한다 — support proto, rules-v1, 상위 callback
+격리. 더해서 보류·미배포 패키지(`gole_agent_worker`·`gole_brick_filter`·`gole_promotion_agent`)가
+이미지에 섞여 들어오지 않았는지 import 로 확인한다. 운영 키·네트워크·호스트 데이터 쓰기 없이
+실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+
+> 예전에는 이 probe 가 워커의 SQLite 작업과 사진 두 모드까지 돌렸다. 그 코드가 이미지에서
+> 빠지면서 함께 줄였다. **검증이 약해진 것이 아니라 옮겨간 것이다** — 두 패키지는 CI 의
+> `uv run pytest`가 매 PR 마다 전부 돌린다. 이 probe 의 역할은 "배포되는 이미지가 자기가
+> 싣는 것을 실제로 돌릴 수 있는가" 하나다.
 
 ```sh
 docker build -f apps/support-agent/Dockerfile -t gole-agent-hour:test .
@@ -295,3 +347,4 @@ docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64
 ```
 
 2026-09-13 Linux arm64 이미지 빌드와 이 smoke 검사 통과. 원격 gRPC 배포, 실제 OpenAI 호출 및 이미지 품질 검증과는 구분한다.
+2026-09-22 보류 패키지를 이미지에서 빼면서 probe 범위를 축소했다.

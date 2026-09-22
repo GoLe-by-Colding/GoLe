@@ -103,3 +103,30 @@ def test_policy_holds_every_limit():
         "RETENTION_DAYS",
     ):
         assert isinstance(getattr(policy, name), int)
+
+
+def test_draft_request_queue_port_is_a_contract_only():
+    """관리자 요청 큐도 다른 포트와 같은 규율을 받는다(스펙 D20).
+
+    `DraftPublisher` 에 얹지 않고 따로 둔 이유는 관심사 분리이기도 하지만, 나중에 봇 권한을
+    홍보 리소스로 좁힐 때(T11) 경계가 이미 있어야 하기 때문이다.
+    """
+    assert hasattr(ports, "DraftRequestQueue")
+    assert hasattr(ports, "DraftRequest")
+    # Protocol 은 메서드 시그니처만 갖는다 — 전송 계층을 알지 않는다.
+    for name in ("claim", "succeed", "fail"):
+        assert hasattr(ports.DraftRequestQueue, name)
+
+
+def test_runtime_reports_only_fixed_failure_codes():
+    """실패 사유 허용 목록이 정책에 있고, 런타임이 그것만 통과시킨다."""
+    assert policy.SAFE_FAILURE_CODES
+    assert "NO_WEB_CHANGES" in policy.SAFE_FAILURE_CODES
+    # 목록에 없는 자유 문자열은 예외 종류 이름으로 줄인다.
+    assert runtime._safe_failure_code(ValueError("/repo/apps/web/src/a.tsx")) == "ValueError"
+
+
+def test_pinned_scanner_lives_in_hands_and_needs_no_sdk():
+    """지정 스캐너는 git 만 쓴다 — 모델·브라우저·HTTP 를 모른다."""
+    assert hasattr(hands, "PinnedReleaseScanner")
+    assert not any(name.startswith(("anthropic", "playwright")) for name in top_level_imports(hands))

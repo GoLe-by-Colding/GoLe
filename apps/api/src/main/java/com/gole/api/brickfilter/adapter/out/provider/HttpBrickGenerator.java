@@ -25,7 +25,9 @@ public class HttpBrickGenerator implements BrickGeneratorPort {
 
     public HttpBrickGenerator(
             @Value("${gole.brick-filter.enabled:false}") boolean enabled,
-            @Value("${gole.brick-filter.endpoint:http://127.0.0.1:50052/internal/brick-filter}") URI endpoint,
+            // :50052 는 영속 작업자(gole.support-agent.durable.target)의 포트다. 사진 HTTP 는 :50054 를 쓴다.
+            // Python 짝은 gole_brick_filter.policy.DEFAULT_HTTP_PORT 이며 함께 움직인다.
+            @Value("${gole.brick-filter.endpoint:http://127.0.0.1:50054/internal/brick-filter}") URI endpoint,
             @Value("${gole.brick-filter.internal-token:}") String token) {
         this.enabled = enabled;
         this.endpoint = endpoint;

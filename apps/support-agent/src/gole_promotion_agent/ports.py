@@ -53,12 +53,38 @@ class ConversationFactory(Protocol):
     def __call__(self, *, system: str) -> Conversation: ...
 
 
+@dataclass(frozen=True)
+class DraftRequest:
+    """관리자가 콘솔에서 남긴 초안 생성 요청 하나(스펙 D20).
+
+    `source_commit_sha` 가 없으면 "지금 한 번 돌려 달라"는 뜻이고, 대상은 자동 선정한다.
+    """
+
+    id: str
+    lease_token: str
+    source_commit_sha: str | None = None
+
+
 class ReleaseScanner(Protocol):
     """main 이력에서 아직 홍보하지 않은 릴리스를 고른다(스펙 D11)."""
 
     def candidates(self) -> tuple[Candidate, ...]: ...
 
     def diff(self, sha: str) -> str: ...
+
+
+class DraftRequestQueue(Protocol):
+    """관리자 요청을 집어오고 결과를 회신한다(스펙 D20).
+
+    **`DraftPublisher` 에 얹지 않았다** — 초안을 발행하는 일과 요청의 수명을 관리하는 일은
+    관심사가 다르고, 나중에 봇 권한을 홍보 리소스로 좁힐 때(T11) 경계가 따로 있어야 한다.
+    """
+
+    def claim(self) -> DraftRequest | None: ...
+
+    def succeed(self, request: DraftRequest, promotion_post_id: str) -> None: ...
+
+    def fail(self, request: DraftRequest, code: str) -> None: ...
 
 
 class RouteCatalog(Protocol):

@@ -58,5 +58,8 @@ public enum AdminActionType {
     /** 홍보 게시물 검토 반려(promotion-review D7). */
     PROMOTION_POST_REJECT,
     /** 홍보 게시물 외부 채널 발행(promotion-review D7). */
-    PROMOTION_POST_PUBLISH
+    PROMOTION_POST_PUBLISH,
+
+    /** 관리자가 콘솔에서 초안 생성을 요청함(D20). 봇의 점유·회신은 사람의 결정이 아니라 남기지 않는다. */
+    PROMOTION_DRAFT_REQUEST
 }

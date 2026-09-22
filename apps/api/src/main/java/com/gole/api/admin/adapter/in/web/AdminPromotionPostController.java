@@ -4,6 +4,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.promotion.application.port.in.ConsumePromotionDraftRequestUseCase;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase;
@@ -11,12 +12,14 @@ import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase.Pro
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase.EvaluationCommand;
+import com.gole.api.promotion.application.port.in.RequestPromotionDraftUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.EvaluationReasonTag;
 import com.gole.api.promotion.domain.model.FirstReviewVerdict;
 import com.gole.api.promotion.domain.model.HoldReasonKind;
 import com.gole.api.promotion.domain.model.PromotionChannel;
+import com.gole.api.promotion.domain.model.PromotionDraftRequest;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostEvaluation;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -63,6 +67,8 @@ public class AdminPromotionPostController {
     private final ManagePromotionPostsUseCase managePromotionPosts;
     private final RecordPromotionPostEvaluationUseCase recordEvaluation;
     private final GetPromotionMetricsUseCase getMetrics;
+    private final RequestPromotionDraftUseCase requestDraft;
+    private final ConsumePromotionDraftRequestUseCase consumeDraftRequest;
     private final RecordAdminActionUseCase audit;
 
     public AdminPromotionPostController(
@@ -71,12 +77,16 @@ public class AdminPromotionPostController {
             ManagePromotionPostsUseCase managePromotionPosts,
             RecordPromotionPostEvaluationUseCase recordEvaluation,
             GetPromotionMetricsUseCase getMetrics,
+            RequestPromotionDraftUseCase requestDraft,
+            ConsumePromotionDraftRequestUseCase consumeDraftRequest,
             RecordAdminActionUseCase audit) {
         this.createPromotionPost = createPromotionPost;
         this.submitPromotionPost = submitPromotionPost;
         this.managePromotionPosts = managePromotionPosts;
         this.recordEvaluation = recordEvaluation;
         this.getMetrics = getMetrics;
+        this.requestDraft = requestDraft;
+        this.consumeDraftRequest = consumeDraftRequest;
         this.audit = audit;
     }
 
@@ -177,6 +187,47 @@ public class AdminPromotionPostController {
         return published;
     }
 
+    @Operation(
+            summary = "홍보 초안 생성 요청",
+            description =
+                    "다음 에이전트 실행이 처리할 요청을 남긴다. 커밋을 비우면 에이전트가 자동 선정한다. " + "즉시 생성이 아니며, 홍보 불가 사유는 이 접수 단계에서 곧바로 돌려준다.")
+    @PostMapping("/requests")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public PromotionDraftRequest requestDraft(
+            @Valid @RequestBody RequestPromotionDraftRequest request, HttpServletRequest http) {
+        AdminActor actor = AdminActor.of(http);
+        PromotionDraftRequest accepted = requestDraft.request(request.sourceCommitSha(), actor.id());
+        record(http, AdminActionType.PROMOTION_DRAFT_REQUEST, accepted.getId(), accepted.getSourceCommitSha());
+        return accepted;
+    }
+
+    @Operation(summary = "홍보 초안 요청 목록", description = "최신순. 관리자 화면이 진행 상태를 보여주는 데 쓴다.")
+    @GetMapping("/requests")
+    public List<PromotionDraftRequest> listDraftRequests(@RequestParam(defaultValue = "20") int limit) {
+        return requestDraft.findRecentFirst(limit);
+    }
+
+    @Operation(summary = "홍보 초안 요청 점유(에이전트용)", description = "대기 중인 요청 하나를 점유한다. 없으면 204. 사람이 부르는 API 가 아니다.")
+    @PostMapping("/requests/claim")
+    public ResponseEntity<PromotionDraftRequest> claimDraftRequest() {
+        return consumeDraftRequest.claimNext().map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent()
+                .build());
+    }
+
+    @Operation(summary = "홍보 초안 요청 성공 회신(에이전트용)")
+    @PostMapping("/requests/{id}/succeed")
+    public PromotionDraftRequest succeedDraftRequest(
+            @PathVariable String id, @Valid @RequestBody SucceedDraftRequestRequest request) {
+        return consumeDraftRequest.succeed(id, request.leaseToken(), request.promotionPostId());
+    }
+
+    @Operation(summary = "홍보 초안 요청 실패 회신(에이전트용)", description = "사유는 코드만 받는다 — 예외 원문에는 diff·캡션이 섞일 수 있다.")
+    @PostMapping("/requests/{id}/fail")
+    public PromotionDraftRequest failDraftRequest(
+            @PathVariable String id, @Valid @RequestBody FailDraftRequestRequest request) {
+        return consumeDraftRequest.fail(id, request.leaseToken(), request.failureCode());
+    }
+
     private void record(HttpServletRequest http, AdminActionType type, String promotionPostId, String reason) {
         AdminActor actor = AdminActor.of(http);
         audit.record(new RecordAdminActionCommand(
@@ -190,6 +241,18 @@ public class AdminPromotionPostController {
             @NotBlank @Size(max = 500) String caption,
             @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys,
             @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {}
+
+    /** @param sourceCommitSha 비우면 에이전트가 지금처럼 자동 선정한다. */
+    public record RequestPromotionDraftRequest(
+            @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {}
+
+    public record SucceedDraftRequestRequest(
+            @NotBlank @Size(max = 80) String leaseToken,
+            @NotBlank @Size(max = 80) String promotionPostId) {}
+
+    public record FailDraftRequestRequest(
+            @NotBlank @Size(max = 80) String leaseToken,
+            @NotBlank @Size(max = 64) String failureCode) {}
 
     public record RejectPromotionPostRequest(
             @NotBlank @Size(max = 1000) String reason) {}
