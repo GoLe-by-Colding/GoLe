@@ -104,8 +104,17 @@
 | 기술적 실패율 | 모델·도구 오류 또는 한도 도달로 완료하지 못한 시도 / 실행 시도 수 |
 
 실행 결과는 `submitted / intentional_skip / technical_failure / blocked_by_queue / no_candidate /
-unknown_skip`으로 평가 기록에 구분한다. 현재 코드의 `skipped`는 의도적 판단과 턴 한도 도달을
-합치므로 전사를 확인한다. 구분할 근거가 없으면 `unknown_skip`이며 올바른 건너뛰기로 세지 않는다.
+unknown_skip`으로 평가 기록에 구분한다.
+
+**2026-09-20 갱신 — 전사를 뒤질 필요가 없어졌다.** 코드가 의도적 판단(`skipped`)과 턴 한도
+도달(`deferred`)을 세션 `manifest.json` 의 `done` 필드에 따로 기록한다(D11). 매핑은 그대로
+읽으면 된다 — `skipped → intentional_skip`, `deferred → technical_failure`(한도 도달),
+`failed → technical_failure`(오류). `unknown_skip` 은 원장이 유실됐을 때만 쓴다.
+
+**건너뛴 릴리스를 분모에 넣는다.** 주 지표인 첫 검토 채택률은 *만들어진 초안만* 세므로,
+홍보할 만했는데 건너뛴 경우(거짓 음성)가 어디에도 잡히지 않는다. 실행마다
+`skipped`·`deferred`·`failed` 건수를 함께 보고하고, 그중 사람이 "홍보했어야 했다"고 본 건수를
+따로 센다.
 큐 차단·후보 없음은 실행 실패율에서 제외하되 각각 건수를 공개한다. 후보 탐색의 누락도
 확보율에서 드러나도록 사전 대상 목록과 실제 선택 목록을 대조한다.
 

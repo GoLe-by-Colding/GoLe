@@ -1,5 +1,7 @@
-import { SellerShopView } from "@/views/seller-shop";
+import { useLocalSearchParams } from "expo-router";
+import { WebScreen } from "@/views/web";
 
-export default function SellerShopScreen() {
-  return <SellerShopView />;
+export default function Screen() {
+  const { sellerId } = useLocalSearchParams<{ sellerId: string }>();
+  return <WebScreen path={`/shops/${encodeURIComponent(sellerId ?? "")}`} />;
 }

@@ -1,6 +1,7 @@
 package com.gole.api.promotion.adapter.out.persistence;
 
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -34,7 +35,14 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
 
     @Override
     public boolean existsBySourceCommitSha(String sourceCommitSha) {
-        return repository.existsBySourceCommitSha(sourceCommitSha);
+        // 출처가 아니라 점유를 본다 — 반려된 초안은 점유를 놓아줬으므로 걸리지 않는다(D2).
+        return repository.existsByClaimedSourceCommitSha(sourceCommitSha);
+    }
+
+    @Override
+    public long countBySourceCommitSha(String sourceCommitSha) {
+        // 이쪽은 출처다 — 반려된 것까지 세야 재시도가 몇 번째인지 알 수 있다.
+        return repository.countBySourceCommitSha(sourceCommitSha);
     }
 
     @Override
@@ -52,8 +60,11 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     }
 
     @Override
-    public List<PromotionPost> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+    public List<ReviewTimestamps> findReviewTimestamps() {
+        // 필터가 쿼리에 있으므로 여기서 다시 null 을 거르지 않는다.
+        return repository.findBySubmittedAtNotNullAndReviewedAtNotNull().stream()
+                .map(projection -> new ReviewTimestamps(projection.getSubmittedAt(), projection.getReviewedAt()))
+                .toList();
     }
 
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {
@@ -64,6 +75,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 promotionPost.getMediaUrls(),
                 promotionPost.getAuthorId(),
                 promotionPost.getSourceCommitSha(),
+                promotionPost.getClaimedSourceCommitSha(),
                 promotionPost.getStatus().name(),
                 promotionPost.getCreatedAt(),
                 promotionPost.getSubmittedAt(),
@@ -82,6 +94,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 document.getMediaUrls(),
                 document.getAuthorId(),
                 document.getSourceCommitSha(),
+                document.getClaimedSourceCommitSha(),
                 PromotionPostStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 document.getSubmittedAt(),

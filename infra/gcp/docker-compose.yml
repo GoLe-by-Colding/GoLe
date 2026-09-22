@@ -160,6 +160,11 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PROMOTION_AGENT_ADMIN_EMAIL: ${PROMOTION_AGENT_ADMIN_EMAIL:-}
       PROMOTION_AGENT_ADMIN_PASSWORD: ${PROMOTION_AGENT_ADMIN_PASSWORD:-}
+      # 비우면 SITE_URL 과 같다(.env.example).
+      PROMOTION_AGENT_API_URL: ${PROMOTION_AGENT_API_URL:-}
+      # 봇 계정과 모델 키를 넣기 전에 타이머만 먼저 켜 두는 경로다. true 면 외부 SDK 와
+      # 백엔드 클라이언트를 import 조차 하지 않아 유료 호출도 초안 제출도 없다.
+      PROMOTION_AGENT_DRY_RUN: ${PROMOTION_AGENT_DRY_RUN:-false}
     volumes:
       # 커밋 이력과 라우트만 읽는다. 운영 checkout 을 절대 쓰지 않는다.
       - /app:/repo:ro
@@ -377,8 +382,16 @@ services:
         NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: ${NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY:-}
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
         NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID:-}
+        NEXT_PUBLIC_SENTRY_ENABLED: ${NEXT_PUBLIC_SENTRY_ENABLED:-false}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-local}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     image: gole/frontend:local
     container_name: gole-frontend
+    # 조회 토큰은 backend env_file에만 남기고 web에는 서버 수집 설정만 전달한다.
+    environment:
+      SENTRY_ENABLED: ${SENTRY_ENABLED:-false}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-local}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     logging: *gole-logging
     restart: unless-stopped
     cpus: 0.75

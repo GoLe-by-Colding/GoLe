@@ -135,6 +135,28 @@ def validate(values: dict[str, str]) -> None:
             if not values.get(key)
         )
 
+    # Sentry는 기본 비활성이며 잘못된 DSN/토큰 값을 오류 로그에 포함하지 않는다.
+    dsn_pattern = r"https://[A-Za-z0-9]{1,64}@[A-Za-z0-9.-]+\.sentry\.io/[0-9]+"
+    for prefix in ("NEXT_PUBLIC_SENTRY", "SENTRY", "GOLE_SENTRY"):
+        enabled = values.get(f"{prefix}_ENABLED", "false")
+        if enabled not in ("true", "false"):
+            violations.append(f"{prefix}_ENABLED must be true or false")
+        dsn = values.get(f"{prefix}_DSN", "")
+        if dsn and not re.fullmatch(dsn_pattern, dsn):
+            violations.append(f"{prefix}_DSN has an invalid format")
+        if enabled == "true" and (values.get(f"{prefix}_ENVIRONMENT") != "production" or not dsn):
+            violations.append(f"{prefix} requires production environment and DSN")
+    poll_enabled = values.get("GOLE_SENTRY_POLL_ENABLED", "false")
+    if poll_enabled not in ("true", "false"):
+        violations.append("GOLE_SENTRY_POLL_ENABLED must be true or false")
+    if poll_enabled == "true" and (values.get("GOLE_SENTRY_ENVIRONMENT") != "production" or not values.get("GOLE_SENTRY_READ_TOKEN")):
+        violations.append("Sentry poll requires production environment and server read token")
+    for key in values:
+        if key.startswith("NEXT_PUBLIC_SENTRY_") and key not in {
+            "NEXT_PUBLIC_SENTRY_ENABLED", "NEXT_PUBLIC_SENTRY_ENVIRONMENT", "NEXT_PUBLIC_SENTRY_DSN"
+        }:
+            violations.append("unexpected public Sentry configuration key")
+
     optional_public_ids = {
         "NEXT_PUBLIC_GA_MEASUREMENT_ID": r"G-[A-Z0-9]+",
         "NEXT_PUBLIC_GTM_ID": r"GTM-[A-Z0-9]+",

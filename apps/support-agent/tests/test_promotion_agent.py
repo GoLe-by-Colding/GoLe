@@ -15,7 +15,8 @@ from gole_promotion_agent import policy
 from gole_promotion_agent.checkpoints import BinaryInCheckpoint, SessionSaver, reject_binary
 from gole_promotion_agent.dryrun import FakeCamera, RecordingPublisher, ScriptedConversation
 from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, _blocks_from_transcript
-from gole_promotion_agent.runtime import PromotionHarness, skipped_ledger
+from gole_promotion_agent.ports import ToolCall, Turn
+from gole_promotion_agent.runtime import PromotionHarness, retry_ledger, skipped_ledger
 from gole_promotion_agent.session import EphemeralSession, Stage
 
 
@@ -552,3 +553,143 @@ def test_dry_run_records_without_network(tmp_path: Path, repo: Path):
         for line in (tmp_path / "sessions" / "dry-run.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert [entry["action"] for entry in recorded] == ["upload", "create", "finalize"]
+
+
+# ------------------------------------------------------- 실패는 다시 본다 (리뷰 후속)
+
+
+def _manifest(sessions: Path, sha: str, done: str) -> None:
+    (sessions / sha).mkdir(parents=True, exist_ok=True)
+    (sessions / sha / "manifest.json").write_text(
+        json.dumps({"sha": sha, "subject": "x", "schema": 1, "done": done}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def test_failed_release_survives_the_promoted_boundary(repo: Path, tmp_path: Path):
+    """실패한 옛 후보가 나중 성공에 가려 영영 사라지면 안 된다.
+
+    건너뛴 커밋에 대해서는 이미 막아 둔 함정(`test_skipped_release_does_not_swallow_older_candidates`)이
+    실패 경로에만 남아 있었다. 홍보 경계에서 walk 가 멈추므로 원장으로 되살려야 한다.
+    """
+    failed = _commit(repo, "chore(release): 처리 중 실패한 옛 릴리스", web=True)
+    promoted = _commit(repo, "chore(release): 그 뒤에 홍보 성공한 릴리스", web=True)
+
+    sessions = tmp_path / "sessions"
+    _manifest(sessions, failed, "failed")
+
+    blind = GitReleaseScanner(repo, lambda sha: sha == promoted)
+    assert blind.candidates() == (), "원장이 없으면 경계에 가려 사라진다(고치기 전 동작)"
+
+    scanner = GitReleaseScanner(
+        repo, lambda sha: sha == promoted, None, retry_ledger(sessions)
+    )
+    assert [c.sha for c in scanner.candidates()] == [failed]
+
+
+def test_deferred_release_is_retried_but_skipped_one_is_not(repo: Path, tmp_path: Path):
+    """예산 소진(deferred)과 판단(skipped)을 다르게 다룬다."""
+    deferred = _commit(repo, "chore(release): 턴을 다 써서 결론을 못 낸 릴리스", web=True)
+    skipped = _commit(repo, "chore(release): 홍보 가치가 없다고 판단한 릴리스", web=True)
+
+    sessions = tmp_path / "sessions"
+    _manifest(sessions, deferred, "deferred")
+    _manifest(sessions, skipped, "skipped")
+
+    scanner = GitReleaseScanner(
+        repo, lambda _sha: False, skipped_ledger(sessions), retry_ledger(sessions)
+    )
+    assert [c.sha for c in scanner.candidates()] == [deferred]
+
+
+def test_retry_ledger_ignores_submitted_and_broken_manifests(tmp_path: Path):
+    sessions = tmp_path / "sessions"
+    _manifest(sessions, "a" * 40, "submitted")
+    _manifest(sessions, "b" * 40, "failed")
+    (sessions / "stray").mkdir(parents=True, exist_ok=True)
+    (sessions / "broken").mkdir(parents=True, exist_ok=True)
+    (sessions / "broken" / "manifest.json").write_text("{", encoding="utf-8")
+
+    assert retry_ledger(sessions)() == ("b" * 40,)
+
+
+def test_turn_budget_exhaustion_defers_instead_of_skipping(tmp_path: Path, repo: Path):
+    """20턴을 다 써도 '안 하기로 했음'으로 기록하지 않는다."""
+    _repo_with_page(repo)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+
+    class _NeverFinishes(ScriptedConversation):
+        def advance(self, transcript):
+            # 매 턴 같은 도구만 불러 결론에 도달하지 않는다.
+            return Turn("", (ToolCall(f"c{len(transcript)}", "list_routes", {}),), "tool_use")
+
+    result = _harness(tmp_path, repo, FakeCamera(("/",)), publisher, _NeverFinishes("/")).run()
+
+    assert [item.outcome for item in result.candidates] == ["deferred"]
+    manifest = json.loads(
+        (tmp_path / "sessions" / result.candidates[0].sha / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["done"] == "deferred"
+    assert skipped_ledger(tmp_path / "sessions")(result.candidates[0].sha) is False
+
+
+# ----------------------------------------------------------- 캡처 이탈 / 컨텍스트
+
+
+def test_capture_refuses_when_interaction_navigates_to_private_route(tmp_path: Path):
+    """클릭이 사설 화면으로 데려가면 찍지 않는다. 시작점 검사만으로는 못 막는다."""
+    from gole_promotion_agent.hands import PlaywrightCamera
+
+    camera = PlaywrightCamera("https://gole.co.kr", ("/", "/search"))
+    camera._assert_still_allowed("https://gole.co.kr/search")
+    for wandered in (
+        "https://gole.co.kr/profile",
+        "https://gole.co.kr/admin/reports",
+        "https://evil.example/search",
+    ):
+        with pytest.raises(ValueError):
+            camera._assert_still_allowed(wandered)
+
+
+def test_release_diff_is_capped_by_context_budget_and_says_so(repo: Path, monkeypatch):
+    """diff 상한은 바이트가 아니라 컨텍스트 예산이어야 한다."""
+    monkeypatch.setattr(policy, "MAX_DIFF_CHARS", 400)
+    page = repo / "apps/web/src/app/page.tsx"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text("\n".join(f"// line {index}" for index in range(400)), encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t.test", "-c", "user.name=t", "commit", "-q", "-m", "big")
+    sha = _git(repo, "rev-parse", "HEAD")
+
+    patch = GitReleaseScanner(repo, lambda _s: False).diff(sha)
+
+    assert len(patch) <= policy.MAX_DIFF_CHARS + len(policy.DIFF_TRUNCATED_NOTICE)
+    assert patch.endswith(policy.DIFF_TRUNCATED_NOTICE)
+
+
+def test_model_request_marks_a_cache_breakpoint(tmp_path: Path):
+    """캐싱은 브레이크포인트가 있어야 걸린다 — 스펙 D18 이 주장하던 것."""
+    from gole_promotion_agent.hands import AnthropicConversation
+
+    captured: dict[str, object] = {}
+
+    class _Messages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class _Reply:
+                stop_reason = "end_turn"
+                content: list[object] = []
+
+            return _Reply()
+
+    class _Client:
+        messages = _Messages()
+
+    AnthropicConversation(_Client(), "SYSTEM", "claude-opus-5").advance([])
+
+    system = captured["system"]
+    assert isinstance(system, list) and system[0]["cache_control"] == {"type": "ephemeral"}
+    assert system[0]["text"] == "SYSTEM"

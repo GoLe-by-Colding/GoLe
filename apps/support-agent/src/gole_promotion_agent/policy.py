@@ -24,6 +24,11 @@ MAX_TURNS = 20
 MAX_CONTEXT_IMAGES = 4
 DEFAULT_MODEL = "claude-opus-5"
 MAX_TOKENS = 16_000
+# diff 상한은 바이트가 아니라 **컨텍스트 예산**이어야 한다. 예전 2MB 상한은 토큰으로 환산하면
+# 컨텍스트를 훌쩍 넘겨서, 큰 릴리스 하나가 매일 같은 자리에서 실패하게 만든다. 잘렸다는 사실을
+# 모델에게 알려 주는 것까지가 이 상한의 일이다 — 조용히 자르면 모델이 없는 변경을 없다고 단정한다.
+MAX_DIFF_CHARS = 120_000
+DIFF_TRUNCATED_NOTICE = "\n\n[잘림] 변경이 너무 커서 여기까지만 보여준다. 나머지는 읽을 수 없다."
 
 # 캡션 (스펙 D13)
 MAX_CAPTION = 450

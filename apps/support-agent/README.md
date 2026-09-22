@@ -43,10 +43,19 @@ Brain은 `ExecutionContext.check_active()`로 실행 가능 여부를 확인하�
 DB 트랜잭션과 lease 검사는 Runtime이, 체크포인트 쓰기의 fencing은 Session이 책임진다.
 Session은 한 작업의 복구를 위한 것으로 콘텐츠 발행 이력·장기 기억 저장소가 아니다.
 
-신규 작업은 `agents/`에 `Agent` 계약의 입력 검증과 실행을 구현한 뒤
-`runtime/registry.py`에 명시적으로 등록한다. 필요한 외부 기능은 Hands의 계약 뒤에 둔다.
-현재 공통 그래프는 v1 고정 순서이며 목표 기반 플래너와 홍보 기능은 아직 없다.
-다른 단계·상태가 필요해지면 흐름 버전과 이전 작업의 재개 정책부터 정한다.
+**새 에이전트를 어디에 붙일지는 기동 방식이 정한다.** 이 문서 안에 규칙이 둘 있어 보이는데,
+서로 다른 것을 말한다.
+
+- **Java 가 gRPC 로 접수하는 작업**이면 `agents/`에 `Agent` 계약(입력 검증 + 실행)을 구현하고
+  `runtime/registry.py`에 명시적으로 등록한다. lease·fence·재시도·재개를 공통 실행 계층이 준다.
+- **스스로 깨어나는 일회성 배치**면 독립 모듈로 세운다(`gole_promotion_agent` 가 그 예다).
+  워커 하나가 프로세스 하나를 통째로 쓰므로 분산 조정이 필요 없고, SQLite 잡 큐를 끌고 오면
+  쓰지 않을 lease·fence까지 함께 유지해야 한다.
+
+어느 쪽이든 **구조 관용구(Brain/Hands/Policy/Ports/Runtime/Session)와 관측 격리
+(`gole_agent_runtime`)는 공유한다.** 공유하지 않는 것은 프로세스·이미지·자원 한도다.
+필요한 외부 기능은 Hands의 계약 뒤에 둔다. 현재 공통 그래프는 v1 고정 순서이며 목표 기반
+플래너는 아직 없다. 다른 단계·상태가 필요해지면 흐름 버전과 이전 작업의 재개 정책부터 정한다.
 
 기존 `brain/model/runner/store/server` import는 얇은 호환 진입점으로 남긴다.
 `hands`와 `session`도 기존 공개 이름을 재노출한다. 실행 명령·기본 DB 경로·gRPC·DB 스키마와

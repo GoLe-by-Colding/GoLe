@@ -22,7 +22,21 @@ public final class PromotionPost {
     private final String caption;
     private final List<String> mediaUrls;
     private final String authorId;
+
+    /** 출처 — 이 초안이 어느 릴리스에서 나왔나. 불변이라 반려돼도 남고, 화면 표시·집계가 이것을 본다. */
     private final String sourceCommitSha;
+
+    /**
+     * 점유 — 지금 이 릴리스를 붙잡고 있나. 생성 시 {@code sourceCommitSha}와 같은 값으로 시작하고
+     * 반려되면 null로 놓아준다(D2).
+     *
+     * <p><b>왜 출처와 나눴나.</b> 한 필드가 둘을 겸하면 반려된 초안이 그 릴리스를 영구히 잠근다 —
+     * 에이전트는 {@code /exists}가 참이라 다시 만들지 않고, 사람이 같은 SHA로 만들려 하면 DB
+     * unique 인덱스가 막는데 초안을 고칠 엔드포인트도 없다. 둘을 나누면 "어디서 나왔나"는 남기고
+     * "아직 붙잡고 있나"만 놓아줄 수 있다.
+     */
+    private String claimedSourceCommitSha;
+
     private PromotionPostStatus status;
     private final Instant createdAt;
     private Instant submittedAt;
@@ -39,6 +53,7 @@ public final class PromotionPost {
             List<String> mediaUrls,
             String authorId,
             String sourceCommitSha,
+            String claimedSourceCommitSha,
             PromotionPostStatus status,
             Instant createdAt,
             Instant submittedAt,
@@ -53,6 +68,8 @@ public final class PromotionPost {
         this.mediaUrls = requireMediaUrls(mediaUrls);
         this.authorId = requireText(authorId, "authorId");
         this.sourceCommitSha = requireSourceCommitSha(sourceCommitSha);
+        // 점유는 저장된 값을 그대로 되살린다 — 반려된 초안은 출처만 남고 점유는 null이다.
+        this.claimedSourceCommitSha = requireSourceCommitSha(claimedSourceCommitSha);
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.submittedAt = submittedAt;
@@ -78,6 +95,8 @@ public final class PromotionPost {
                 caption,
                 mediaUrls,
                 authorId,
+                sourceCommitSha,
+                // 새 초안은 자기 출처 릴리스를 곧바로 점유한다. 반려될 때 이 값만 풀린다.
                 sourceCommitSha,
                 PromotionPostStatus.DRAFT,
                 now,
@@ -105,11 +124,20 @@ public final class PromotionPost {
         this.reviewedAt = Objects.requireNonNull(now, "now");
     }
 
-    /** 반려: PENDING_REVIEW → DRAFT. 사유를 남기고 작성자가 고쳐 다시 제출할 수 있게 한다. */
+    /**
+     * 반려: PENDING_REVIEW → DRAFT. 사유를 남기고 작성자가 고쳐 다시 제출할 수 있게 한다.
+     *
+     * <p><b>이때 릴리스 점유를 놓아준다</b>(D2). 반려된 초안은 그 릴리스를 홍보한 것이 아니므로
+     * 계속 붙잡고 있는 것이 사실과 어긋나고, 무엇보다 붙잡고 있으면 그 릴리스가 영영 홍보되지
+     * 않는다 — 에이전트는 {@code /exists}가 참이라 건너뛰고, 사람이 같은 SHA로 다시 만들려 하면
+     * 409로 막힌다. 출처({@code sourceCommitSha})는 불변이라 그대로 남으므로 화면 표시와 집계는
+     * 깨지지 않는다.
+     */
     public void reject(String reviewerId, String reason, Instant now) {
         requireStatus(PromotionPostStatus.PENDING_REVIEW);
         requireNotAuthor(reviewerId);
         this.status = PromotionPostStatus.DRAFT;
+        this.claimedSourceCommitSha = null;
         this.reviewerId = reviewerId;
         this.reviewedAt = Objects.requireNonNull(now, "now");
         this.rejectionReason = requireText(reason, "reason");
@@ -200,6 +228,11 @@ public final class PromotionPost {
 
     public String getSourceCommitSha() {
         return sourceCommitSha;
+    }
+
+    /** 반려되면 null이다 — 그 릴리스는 다시 후보가 된다. */
+    public String getClaimedSourceCommitSha() {
+        return claimedSourceCommitSha;
     }
 
     public PromotionPostStatus getStatus() {

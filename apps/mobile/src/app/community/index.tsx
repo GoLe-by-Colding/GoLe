@@ -1,5 +1,5 @@
-import { CommunityView } from "@/views/community";
+import { WebScreen } from "@/views/web";
 
-export default function CommunityScreen() {
-  return <CommunityView />;
+export default function Screen() {
+  return <WebScreen path="/community" />;
 }

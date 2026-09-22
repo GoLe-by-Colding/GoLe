@@ -5,6 +5,10 @@ After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
 
+# 조용히 실패하면 "오늘 초안이 없다"가 정상인지 고장인지 구분되지 않는다. 논리 백업과 같은
+# 방식으로 실패를 Discord 운영 채널에 흘린다(gole-data-backup.service 참고).
+OnFailure=gole-promotion-agent-failure.service
+
 [Service]
 Type=oneshot
 WorkingDirectory=/app
@@ -31,7 +35,14 @@ ExecStart=/usr/bin/docker compose \
   -f /app/infra/gcp/docker-compose.yml \
   --profile promotion run --rm --no-deps promotion-agent
 
-TimeoutStartSec=25min
+# Type=oneshot 의 TimeoutStartSec 은 ExecStartPre 의 docker build 까지 한 덩어리로 잰다.
+# 앱의 최악 실행 시간은 후보당 15분(runtime.py CANDIDATE_TIMEOUT_SECONDS) × 최대 3건
+# (policy.py MAX_DRAFTS_PER_RUN) = 45분이고, 그 위에 이미지 빌드가 더 얹힌다.
+# 빌드는 대부분 캐시 적중이지만 베이스 이미지나 uv.lock 이 바뀐 날은 Chromium 내려받기까지
+# 다시 하므로 여유를 봐야 한다. 45분 + 빌드 여유 = 75분으로 둔다.
+# 예전 값 25분은 앱 한도(45분)보다 작아, 후보가 2건만 돼도 systemd 가 먼저 SIGTERM 을
+# 보내고 그 실행분이 통째로 버려지는 구조였다.
+TimeoutStartSec=75min
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

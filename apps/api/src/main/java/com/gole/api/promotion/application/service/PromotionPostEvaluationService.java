@@ -29,8 +29,13 @@ import org.springframework.stereotype.Service;
  * 홍보 게시물 평가 입력·집계 서비스. (promotion-review/eval.md)
  *
  * <p>지표 계산은 하루 최대 몇 건 수준의 소량 데이터를 전제로 한다. MongoDB aggregation
- * 파이프라인을 따로 유지보수하는 비용이 이 규모에서 얻는 이득보다 커서, 저장소에서 전량을 읽어
- * 애플리케이션 레이어(자바 스트림)에서 계산한다.
+ * 파이프라인을 따로 유지보수하는 비용이 이 규모에서 얻는 이득보다 커서, 집계는 애플리케이션
+ * 레이어(자바 스트림)에서 한다.
+ *
+ * <p>다만 <b>무엇을 읽는지는 지표마다 다르다.</b> 품질 지표는 평가 한 건의 거의 모든 필드를
+ * 여러 번 훑으므로 전량을 읽는다. 운영 지표는 상태별 건수를 DB 에서 세고({@code countByStatus}),
+ * 검토 소요시간은 타임스탬프 두 개만 읽는다({@code findReviewTimestamps}) — 컬렉션에 보존
+ * 정책이 없어 단조 증가하는 만큼, 쓰지 않는 필드까지 끌고 오지 않는다.
  */
 @Service
 public class PromotionPostEvaluationService
@@ -105,9 +110,8 @@ public class PromotionPostEvaluationService
         long reviewedDecisions = approveCount + rejectCount;
         Double rejectionRate = reviewedDecisions == 0 ? null : (double) rejectCount / reviewedDecisions;
 
-        List<Long> reviewDurationSeconds = promotionPosts.findAll().stream()
-                .filter(post -> post.getSubmittedAt() != null && post.getReviewedAt() != null)
-                .map(post -> Duration.between(post.getSubmittedAt(), post.getReviewedAt())
+        List<Long> reviewDurationSeconds = promotionPosts.findReviewTimestamps().stream()
+                .map(timestamps -> Duration.between(timestamps.submittedAt(), timestamps.reviewedAt())
                         .getSeconds())
                 .toList();
 
