@@ -16,7 +16,27 @@
 
 ## 영속 작업자의 코드 구조와 읽는 순서
 
-`src/gole_agent_worker/`는 여러 목적의 에이전트가 공유하는 실행 기반이다.
+> **⏸ 보류 중 — 2026-09-22 기준 이 패키지를 쓰는 소비자가 0개다.**
+>
+> 지우지도 켜지도 않기로 했다. 버리기엔 만든 지 얼마 안 됐고(커밋 3개, 마지막 2026-09-14),
+> 켜기엔 저장소·보관기간·경보 정책을 먼저 세워야 하는데 **쓸 사람이 없는 상태에서 그걸
+> 정하는 건 순서가 뒤집힌 것**이라 판단했다.
+>
+> - **운영 이미지에 싣지 않는다.** `Dockerfile`이 `gole_support_agent`·`gole_agent_runtime`만
+>   복사한다. 돌지 않는 코드로 운영 컨테이너 표면을 넓히지 않기 위해서다.
+> - **소스·테스트·스펙은 그대로 둔다.** CI 가 매 PR 마다 전부 돌린다 — 보류는 검증을 멈추는
+>   것이 아니다. 깨울 때는 `Dockerfile`의 `COPY`와 배선만 되돌린다.
+> - **깨우는 조건**: ① 홍보 트리거가 관리자 콘솔 발 요청으로 바뀔 때
+>   ② brickfilter 3회/일 ledger 를 영속 작업과 연결할 때(아래 "내부 호출 계약" 참고)
+>   ③ 둘 다 없이 결정 기한이 지나면 제거 재검토.
+> - 판단 근거와 기한은 볼트 `08_개선과제/알려진 개선 과제.md`, 코드 쪽 요약은
+>   `src/gole_agent_worker/__init__.py`.
+>
+> 아래 구조 설명은 보류와 무관하게 유효하다.
+
+`src/gole_agent_worker/`는 여러 목적의 에이전트가 공유하도록 **설계된** 실행 기반이다.
+다만 사진·홍보는 편입을 명시적으로 거부했고(각각 이미지의 SQLite 영속 금지, 분산 leasing
+불필요), 문의는 동기 서버로 충분해 **실제 공유 사용자는 아직 없다.**
 기존 `gole_support_agent/` 동기 서버와 `gole_brick_filter/` 이미지 서비스는 별도 진입점을 유지한다.
 
 ```text
@@ -306,7 +326,16 @@ PYTHONPATH=apps/support-agent/src \
 
 ## 배포 이미지의 오프라인 smoke 검사
 
-관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다. 컨테이너에서도 proto 세 종류, rules-v1, SQLite 영속 fake 작업, 사진 두 모드와 상위 callback 격리를 실행한다. 운영 키·네트워크·호스트 데이터 쓰기 없이 실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+관측 경계가 직접 사용하는 `langchain-core`와 `langsmith`는 검증한 버전을 직접 의존성으로 고정한다.
+컨테이너에서는 **이미지가 실제로 싣는 것만** 실행한다 — support proto, rules-v1, 상위 callback
+격리. 더해서 보류·미배포 패키지(`gole_agent_worker`·`gole_brick_filter`·`gole_promotion_agent`)가
+이미지에 섞여 들어오지 않았는지 import 로 확인한다. 운영 키·네트워크·호스트 데이터 쓰기 없이
+실행하며 장기 실행 서비스나 운영 배포는 시작하지 않는다.
+
+> 예전에는 이 probe 가 워커의 SQLite 작업과 사진 두 모드까지 돌렸다. 그 코드가 이미지에서
+> 빠지면서 함께 줄였다. **검증이 약해진 것이 아니라 옮겨간 것이다** — 두 패키지는 CI 의
+> `uv run pytest`가 매 PR 마다 전부 돌린다. 이 probe 의 역할은 "배포되는 이미지가 자기가
+> 싣는 것을 실제로 돌릴 수 있는가" 하나다.
 
 ```sh
 docker build -f apps/support-agent/Dockerfile -t gole-agent-hour:test .
@@ -317,3 +346,4 @@ docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64
 ```
 
 2026-09-13 Linux arm64 이미지 빌드와 이 smoke 검사 통과. 원격 gRPC 배포, 실제 OpenAI 호출 및 이미지 품질 검증과는 구분한다.
+2026-09-22 보류 패키지를 이미지에서 빼면서 probe 범위를 축소했다.
