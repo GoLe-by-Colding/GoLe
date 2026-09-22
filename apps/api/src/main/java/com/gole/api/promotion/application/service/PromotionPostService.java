@@ -35,7 +35,9 @@ public class PromotionPostService
      * 에이전트가 탐색 창(7일) 안에서 매일 같은 릴리스를 후보로 다시 집는다. 사람이 세 번 반려한
      * 릴리스는 네 번째도 반려될 가능성이 크고 그 사이 유료 모델 호출만 쌓이므로 여기서 끊는다.
      */
-    private static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
+    /* 같은 패키지의 PromotionDraftRequestService 가 접수 시점에 이 상한을 미리 묻는다(D20).
+     * 값을 복사하지 않으려고 패키지 범위로 열었다 — 두 벌이 되면 반드시 어긋난다. */
+    static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
 
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
