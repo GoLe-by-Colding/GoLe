@@ -263,3 +263,27 @@ def build_system_prompt(history: Sequence[Mapping[str, Any]]) -> str:
                 lines.append(f"  반려 사유: {reason}")
         rendered = "\n".join(lines)
     return _SYSTEM_TEMPLATE.format(tone=tone_guide(), history=rendered)
+
+# 관리자 화면에 그대로 보여도 되는 실패 사유(스펙 D20).
+#
+# 예외 원문은 기본적으로 내보내지 않는다 — diff·캡션·파일 경로가 섞일 수 있기 때문이다.
+# 다만 아래 값들은 이 패키지가 **직접 정한 고정 코드**라 내용이 없고, 이것마저 가리면
+# 관리자는 "ValueError" 만 보고 왜 실패했는지 알 수 없다. 목록에 없는 예외는 지금처럼
+# 종류 이름만 남긴다.
+SAFE_FAILURE_CODES = frozenset(
+    {
+        "ANTHROPIC_KEY_REQUIRED",
+        "BOT_ACCOUNT_NOT_ADMIN",
+        "DUPLICATE_SOURCE_COMMIT",
+        "EXTERNAL_DISABLED",
+        "INVALID_SHA",
+        "MODEL_REFUSED",
+        "NAVIGATED_OFF_SITE",
+        "NAVIGATED_TO_FORBIDDEN_ROUTE",
+        "NO_WEB_CHANGES",
+        "ROUTE_NOT_ALLOWED",
+        "SESSION_TOKEN_MISSING",
+        "SESSION_TOKEN_REQUIRED",
+        "UNKNOWN_INTERACTION",
+    }
+)
