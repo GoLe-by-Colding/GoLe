@@ -6,7 +6,7 @@ from gole_agent_runtime.privacy import reject_external_tracing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import BoundedSemaphore
 
-from gole_brick_filter.policy import MAX_INPUT
+from gole_brick_filter.policy import DEFAULT_HTTP_PORT, MAX_INPUT
 from gole_brick_filter.hands import OpenAIEditor
 from gole_brick_filter.runtime import ImageHarness, InvalidImage, CapacityExceeded
 
@@ -73,7 +73,8 @@ def serve():
     client = OpenAI(timeout=120.0, max_retries=0)
     graph = ImageHarness(OpenAIEditor(client, os.environ.get("BRICK_FILTER_MODEL", "gpt-image-2")))
     server = ThreadingHTTPServer(
-        (os.environ.get("BRICK_FILTER_BIND", "127.0.0.1"), int(os.environ.get("BRICK_FILTER_PORT", "50052"))),
+        (os.environ.get("BRICK_FILTER_BIND", "127.0.0.1"),
+         int(os.environ.get("BRICK_FILTER_PORT", str(DEFAULT_HTTP_PORT)))),
         make_handler(graph, os.environ.get("BRICK_FILTER_INTERNAL_TOKEN", "")),
     )
     server.serve_forever()

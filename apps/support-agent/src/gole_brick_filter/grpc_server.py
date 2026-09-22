@@ -10,7 +10,7 @@ import grpc
 
 from gole.brick.v1 import brick_images_pb2 as pb
 from gole.brick.v1 import brick_images_pb2_grpc as rpc
-from gole_brick_filter.policy import MAX_INPUT, MAX_OUTPUT, PROMPTS
+from gole_brick_filter.policy import DEFAULT_GRPC_PORT, MAX_INPUT, MAX_OUTPUT, PROMPTS
 from gole_brick_filter.hands import OpenAIEditor
 from gole_brick_filter.runtime import ImageHarness, InactiveRequest, CapacityExceeded, InvalidImage
 
@@ -50,7 +50,7 @@ class BrickImages(rpc.BrickImagesServicer):
             context.abort(grpc.StatusCode.UNAVAILABLE, "IMAGE_PROVIDER_UNAVAILABLE")
 
 
-def create_server(editor, token: str, port: int = 50053):
+def create_server(editor, token: str, port: int = DEFAULT_GRPC_PORT):
     service = BrickImages(editor, token)
     server = grpc.server(
         ThreadPoolExecutor(max_workers=4), maximum_concurrent_rpcs=4,
@@ -73,7 +73,7 @@ def serve():
     from openai import OpenAI
     editor = OpenAIEditor(OpenAI(timeout=120.0, max_retries=0), os.environ.get("BRICK_FILTER_MODEL", "gpt-image-2"))
     server, _ = create_server(editor, os.environ.get("BRICK_FILTER_INTERNAL_TOKEN", ""),
-                              int(os.environ.get("BRICK_FILTER_GRPC_PORT", "50053")))
+                              int(os.environ.get("BRICK_FILTER_GRPC_PORT", str(DEFAULT_GRPC_PORT))))
     server.start()
     try:
         server.wait_for_termination()
