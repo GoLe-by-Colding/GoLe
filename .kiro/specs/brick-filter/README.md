@@ -46,6 +46,6 @@
 
 Java 기본 `gole.brick-filter.enabled=false`. 활성화에는 endpoint와 32자 이상의 internal-token을 명시해야 한다. endpoint는 HTTPS 또는 loopback HTTP만 허용한다. Python 별도 프로세스도 `BRICK_FILTER_PROVIDER_ENABLED=true`를 명시해야 실행된다. 토큰은 `BRICK_FILTER_INTERNAL_TOKEN`으로 공급하고 Java와 일치해야 하며 provider credential은 안전한 프로세스 환경으로만 공급한다. 사진이 포함된 LangSmith/LangChain tracing 활성화 상태에서는 server 시작을 거부한다.
 
-개발/배포 담당자가 이후 활성화를 승인한 경우의 별도 Python entrypoint는 `PYTHONPATH=apps/support-agent/src ... python -m gole_brick_filter.server`이며 기본 bind는 127.0.0.1:50052다. 기존 support Docker entrypoint를 바꾸지 않았으므로 별도 프로세스/서비스 설정이 필요하다. 이 보고서는 유료 호출·프로세스 실행·배포 승인이 아니다.
+개발/배포 담당자가 이후 활성화를 승인한 경우의 별도 Python entrypoint는 `PYTHONPATH=apps/support-agent/src ... python -m gole_brick_filter.server`이며 기본 bind는 127.0.0.1:50054다(2026-09-22 이전에는 :50052였으나 영속 작업자와 겹쳐 옮겼다 — `apps/support-agent/README.md`의 "loopback 포트 배분"). 기존 support Docker entrypoint를 바꾸지 않았으므로 별도 프로세스/서비스 설정이 필요하다. 이 보고서는 유료 호출·프로세스 실행·배포 승인이 아니다.
 
 브라우저 검증은 기존 web3010의 별도 Orca 탭에서 브릭 API에만 로컬 fetch mock을 설치했다. 실제 실행 API의 신규 endpoint 활성화나 실제 생성 품질/계정 모델 접근 권한은 검증하지 않았다.

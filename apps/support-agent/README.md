@@ -90,6 +90,7 @@ PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
 ```
 
 - `AGENT_GRPC_PORT`: 기본 50052, **127.0.0.1에만 bind**한다. 원격 Java 연결과 mTLS 프록시는 미구현이다.
+  포트 배분은 아래 "loopback 포트 배분"을 본다 — 이 패키지의 서버 넷이 같은 호스트를 나눠 쓴다.
 - `AGENT_DB_PATH`: 기본 패키지 루트의 `apps/support-agent/data/agent-jobs.sqlite3`(이미지 안에서는 `/app/data/agent-jobs.sqlite3`). 재시작 때 반드시 같은 파일을 쓴다.
   컨테이너 재생성까지 보존하려면 영속 로컬 볼륨 경로를 명시해야 한다.
 - 기본 시도 3회, lease 15초, heartbeat 5초, 재시도 2초/4초(상한 60초), 실행 제한 60초다.
@@ -99,6 +100,27 @@ PYTHONPATH=apps/support-agent/src:apps/support-agent/generated \
 - DB는 0600으로 생성한다. payload/checkpoint에 문의 내용이 있으므로 디렉터리 접근권한,
   볼륨 암호화·백업·보관기간·삭제 절차는 운영 연결 전에 정해야 한다. 내부 Purge는 논리 파기를 제공하며 WAL/백업 물리 삭제는 별도 정책이 필요하다.
 - `LANGCHAIN_TRACING`, `LANGCHAIN_TRACING_V2`, `LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2` 중 하나라도 `true`면 기동을 거절한다.
+
+### loopback 포트 배분
+
+이 패키지의 서버는 넷이고 전부 같은 호스트의 loopback 에 뜬다. **기본값이 겹치면 나중에
+뜨는 쪽이 조용히 bind 에 실패하므로** 배분을 여기에 고정한다. Python 서버와 Java 클라이언트는
+**짝이며 함께 움직인다** — 한쪽만 바꾸면 기본값이 어긋나 그 경로가 끊긴다.
+
+| 포트 | Python (서버) | Java (클라이언트 기본값) | 상태 |
+|---|---|---|---|
+| 50051 | `gole_support_agent.server` | `GOLE_SUPPORT_AGENT_GRPC_TARGET` | 운영 배포됨 |
+| 50052 | `gole_agent_worker.bootstrap` | `gole.support-agent.durable.target` | opt-in, 미배포 |
+| 50053 | `gole_brick_filter.grpc_server` | `gole.brick-filter.grpc-target` | opt-in(local 전용), 미배포 |
+| 50054 | `gole_brick_filter.server` (HTTP) | `gole.brick-filter.endpoint` | 기본 transport, 미배포 |
+
+`tests/test_port_allocation.py`가 이 표를 강제한다 — 기본값이 겹치거나 위 배분에서 벗어나면
+서버를 켜 보지 않아도 테스트가 깨진다. 포트를 옮기려면 표·테스트·Java 기본값을 함께 고친다.
+
+> 사진 HTTP 서버는 원래 :50052 에 있었다. 영속 작업자가 나중에 같은 포트를 기본값으로 잡았고,
+> 둘 다 배포돼 있지 않아 아무도 모르고 지나갔다. `.kiro/specs/agent-worker/brick-grpc.md` 는
+> gRPC 를 :50053 에 두면서 ":50052 를 재사용하지 않는다"고 적었지만, 그때 이미 HTTP 가
+> 거기 앉아 있는 것은 보지 못했다. 2026-09-22 에 HTTP 를 :50054 로 옮겨 정리했다.
 
 ### 내부 호출 계약
 
@@ -151,7 +173,7 @@ HTTP와 gRPC 모두 같은 Harness를 사용하고 `agent.py`는 기존 import �
 
 `gole_brick_filter.grpc_server`는 기존 Java BrickFilterService의 quota·provider gate 뒤에서 호출하는
 별도 사진 실행 프로세스다. `gole.brick.v1.BrickImages.Generate` 계약과 :50053을 사용한다.
-`gole.brick-filter.transport=grpc`에서만 Java 어댑터가 바뀌며 기본 HTTP는 유지한다.
+`gole.brick-filter.transport=grpc`에서만 Java 어댑터가 바뀌며 기본 HTTP(:50054)는 유지한다.
 사진은 LangGraph에서 validate→generate→result로 처리하지만 checkpoint·디스크에 저장하지 않는다.
 입력 4MiB·출력 8MiB·필수 deadline·동시 실행 2개·인증을 검사하며 자동 재시도는 하지 않는다.
 

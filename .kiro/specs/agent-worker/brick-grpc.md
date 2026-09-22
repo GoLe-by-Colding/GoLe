@@ -5,6 +5,10 @@
 - 기존 Java BrickFilterService의 사용자 인증·서울 날짜 하루 3회·전역 provider gate를 그대로 사용한다.
 - HTTP 기본값은 유지하고 `gole.brick-filter.transport=grpc`에서만 새 어댑터를 선택한다. 실패 시 HTTP fallback/자동 재시도를 하지 않는다.
 - Python은 별도 loopback :50053에서 내부 토큰을 검사한다. 영속 작업자 :50052와 충돌하지 않는다.
+  (2026-09-22 정정: 이 항목은 gRPC 경로에 대해서만 참이었다. 같은 패키지의 **HTTP** 서버가
+  이미 :50052를 기본값으로 잡고 있었고 — 둘 다 미배포라 드러나지 않았다 — 이를 :50054로
+  옮겼다. 배분은 `apps/support-agent/README.md`의 "loopback 포트 배분" 표가 정본이며
+  `tests/test_port_allocation.py`가 강제한다.)
 - 입력 4MiB·결과 8MiB, 알려진 모드, 필수 deadline, 동시 provider 2개를 제한한다.
 - LangGraph validate→generate→result를 그대로 사용하며 provider 직전과 결과 반환 전 취소를 확인한다.
 - 원본 사진·결과를 worker checkpoint/로그/디스크에 저장하지 않는다. 기존 Java 저장·만료 정책을 유지한다.
