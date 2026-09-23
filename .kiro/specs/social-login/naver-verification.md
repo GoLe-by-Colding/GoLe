@@ -16,6 +16,14 @@
 - PDF에는 개발 환경과 기존 계정 연결 경로라는 점을 명시함. 기연동 계정의 동의 화면은 공식 `auth_type=reprompt`로 다시 표시해 실제 화면을 캡처함.
 - 일반 사용자 공개는 네이버 검수 승인 이후임. 앱 등록자 계정으로 로그인한 사실과 전체 사용자 공개를 구분함.
 
+## 운영 실검증
+
+- main `5cf0f18b`의 [CD #35910838302](https://github.com/GoLe-by-Colding/GoLe/actions/runs/35910838302) 성공 후 실제 env v9와 운영 providers의 naver 활성화를 확인함.
+- Orca 운영 로그인 화면의 네이버 버튼에서 실제 인증 코드 교환·기존 이메일 계정 연결·홈 복귀를 확인함. 신규 네이버 계정 생성이나 신규 가입 검증으로 보고하지 않음.
+- 쿠키 인증의 `GET /api/v1/accounts/me` 200, UI 로그아웃 후 401·메타데이터 삭제, 네이버 재로그인 후 홈과 API 200을 확인함.
+- [Secret Sync #35912576700](https://github.com/GoLe-by-Colding/GoLe/actions/runs/35912576700)이 성공했고 Control 최신 v9 원장도 `배포 완료`임.
+- 이 검증은 앱 등록자 계정의 실제 운영 로그인임. 일반 사용자 공개를 위한 외부 검수 승인은 아직 확인되지 않음.
+
 근거: [네이버 사전 검수 가이드](https://developers.naver.com/docs/login/verify/verify.md),
 [네이버 로그인 개발 가이드](https://developers.naver.com/docs/login/devguide/devguide.md).
 제출 자료와 운영 적용 상태는 팀 볼트의 2026-09-24 개발로그·승찬 개발일지에 기록함.
