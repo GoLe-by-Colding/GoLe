@@ -268,6 +268,66 @@ class PromotionPostServiceTest {
     }
 
     @Test
+    @DisplayName("반려 초안을 다시 제출하면 점유를 복구하고 이전 검토 결과를 비운다")
+    void submit_reclaimsRejectedDraft() {
+        InMemoryRepo repo = new InMemoryRepo();
+        PromotionPostService target = serviceOver(repo);
+        when(idGenerator.newId()).thenReturn("promo-1");
+        String id = createAndSubmit(target, SHA);
+        target.reject(id, "reviewer-1", "내용 확인 필요");
+
+        PromotionPost submitted = target.submit(id);
+
+        assertThat(submitted.getStatus()).isEqualTo(PromotionPostStatus.PENDING_REVIEW);
+        assertThat(target.existsBySourceCommitSha(SHA)).isTrue();
+        assertThat(submitted.getSourceCommitSha()).isEqualTo(SHA);
+        assertThat(submitted.getReviewerId()).isNull();
+        assertThat(submitted.getReviewedAt()).isNull();
+        assertThat(submitted.getRejectionReason()).isNull();
+        assertThat(repo.countBySourceCommitSha(SHA)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("다른 초안이 릴리스를 점유했으면 반려 초안의 재제출을 거절한다")
+    void submit_rejectsClaimedReleaseWithoutChangingDraft() {
+        InMemoryRepo repo = new InMemoryRepo();
+        PromotionPostService target = serviceOver(repo);
+        when(idGenerator.newId()).thenReturn("promo-1", "promo-2");
+        String first = createAndSubmit(target, SHA);
+        target.reject(first, "reviewer-1", "내용 확인 필요");
+        createAndSubmit(target, SHA);
+
+        assertThatThrownBy(() -> target.submit(first)).isInstanceOf(SourceCommitAlreadyPromotedException.class);
+        assertThat(target.get(first).getStatus()).isEqualTo(PromotionPostStatus.DRAFT);
+        assertThat(target.get(first).getClaimedSourceCommitSha()).isNull();
+        assertThat(target.get(first).getRejectionReason()).isEqualTo("내용 확인 필요");
+    }
+
+    @Test
+    @DisplayName("제출 응답 유실 뒤 재요청은 검토대기 초안과 시각을 그대로 반환한다")
+    void submit_replaysPendingWithoutSaving() {
+        PromotionPost pending = saved(PromotionPostStatus.PENDING_REVIEW, "author-1");
+        when(repository.findById("promo-1")).thenReturn(Optional.of(pending));
+
+        assertThat(service.submit("promo-1")).isSameAs(pending);
+        assertThat(pending.getSubmittedAt()).isEqualTo(Instant.EPOCH);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("초안 검증 실패는 미디어를 공개하거나 참조를 변경하지 않는다")
+    void create_validatesBeforeChangingMedia() {
+        when(idGenerator.newId()).thenReturn("promo-1");
+
+        assertThatThrownBy(() -> service.create(new CreatePromotionPostCommand(
+                        "author-1", PromotionChannel.THREADS, "가".repeat(501), List.of(), null)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(mediaAssets, never()).replaceReferences(any(), any(), any(), any(), anyBoolean());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void publishCallsPublishPortAndStoresExternalPostId() {
         PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
         when(repository.findById("promo-1")).thenReturn(Optional.of(approved));

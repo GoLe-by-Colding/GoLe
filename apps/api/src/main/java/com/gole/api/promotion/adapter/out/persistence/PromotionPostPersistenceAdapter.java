@@ -2,11 +2,13 @@ package com.gole.api.promotion.adapter.out.persistence;
 
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
+import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -25,7 +27,14 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
 
     @Override
     public PromotionPost save(PromotionPost promotionPost) {
-        return toDomain(repository.save(toDocument(promotionPost)));
+        try {
+            return toDomain(repository.save(toDocument(promotionPost)));
+        } catch (DuplicateKeyException conflict) {
+            if (promotionPost.getClaimedSourceCommitSha() != null) {
+                throw new SourceCommitAlreadyPromotedException(promotionPost.getClaimedSourceCommitSha());
+            }
+            throw conflict;
+        }
     }
 
     @Override

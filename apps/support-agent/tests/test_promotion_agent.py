@@ -635,6 +635,84 @@ def test_turn_budget_exhaustion_defers_instead_of_skipping(tmp_path: Path, repo:
     assert skipped_ledger(tmp_path / "sessions")(result.candidates[0].sha) is False
 
 
+def test_last_allowed_turn_can_submit(tmp_path: Path, repo: Path, monkeypatch):
+    """마지막 턴에 모델이 결정한 제출을 버리지 않는다."""
+    _repo_with_page(repo)
+    monkeypatch.setattr(policy, "MAX_TURNS", 4)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+
+    result = _harness(
+        tmp_path, repo, FakeCamera(("/",)), publisher, ScriptedConversation("/")
+    ).run()
+
+    assert [item.outcome for item in result.candidates] == ["submitted"]
+
+
+def test_deferred_checkpoint_actually_continues_next_run(tmp_path: Path, repo: Path, monkeypatch):
+    """종료된 보류 체크포인트를 다시 읽는 것만으로는 재개가 되지 않는다."""
+    _repo_with_page(repo)
+    monkeypatch.setattr(policy, "MAX_TURNS", 2)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+    camera = _CountingCamera(("/",))
+
+    first = _harness(tmp_path, repo, camera, publisher, ScriptedConversation("/")).run()
+    assert [item.outcome for item in first.candidates] == ["deferred"]
+
+    second = _harness(tmp_path, repo, camera, publisher, ScriptedConversation("/")).run()
+
+    assert [item.outcome for item in second.candidates] == ["submitted"]
+    assert second.candidates[0].resumed is True
+    assert camera.shots == 1
+
+
+def test_interrupted_manifest_is_retryable(tmp_path: Path):
+    """강제 종료는 실패 표식을 쓸 기회조차 없으므로 미완료 후보도 복구한다."""
+    sessions = tmp_path / "sessions"
+    sha = "a" * 40
+    (sessions / sha).mkdir(parents=True)
+    (sessions / sha / "manifest.json").write_text(
+        json.dumps({"sha": sha, "subject": "중단된 릴리스", "schema": 1}), encoding="utf-8"
+    )
+
+    assert retry_ledger(sessions)() == (sha,)
+
+
+def test_run_stops_before_filling_review_queue(tmp_path: Path, repo: Path):
+    """처음 한 번 검사한 여유보다 많은 초안을 같은 배치가 밀어 넣지 않는다."""
+    _repo_with_page(repo)
+    _commit(repo, "chore(release): 두 번째 화면", web=True)
+    publisher = RecordingPublisher(tmp_path / "sessions", pending=policy.MAX_PENDING_REVIEW - 1)
+    camera = _CountingCamera(("/",))
+
+    result = _harness(tmp_path, repo, camera, publisher, ScriptedConversation("/")).run()
+
+    assert [item.outcome for item in result.candidates] == ["submitted"]
+    assert camera.shots == 1
+
+
+def test_candidate_initialization_failure_does_not_abort_later_candidates(tmp_path: Path, repo: Path):
+    """한 후보의 모델 초기화 실패도 실패 원장에 남기고 다음 후보를 처리한다."""
+    _repo_with_page(repo)
+    _commit(repo, "chore(release): 두 번째 화면", web=True)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+    calls = 0
+
+    def factory(*, system):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("PROVIDER_INIT_FAILED")
+        return ScriptedConversation("/")
+
+    result = PromotionHarness(
+        GitReleaseScanner(repo, publisher.exists), AppRouteCatalog(repo), FakeCamera(("/",)),
+        publisher, factory, tmp_path / "sessions"
+    ).run()
+
+    assert [item.outcome for item in result.candidates] == ["failed", "submitted"]
+    assert retry_ledger(tmp_path / "sessions")() == (result.candidates[0].sha,)
+
+
 # ----------------------------------------------------------- 캡처 이탈 / 컨텍스트
 
 

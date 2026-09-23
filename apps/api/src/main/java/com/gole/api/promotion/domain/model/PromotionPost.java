@@ -111,8 +111,13 @@ public final class PromotionPost {
     /** 검토 요청: DRAFT → PENDING_REVIEW. DRAFT가 아니면 거부한다. */
     public void submitForReview(Instant now) {
         requireStatus(PromotionPostStatus.DRAFT);
+        Objects.requireNonNull(now, "now");
         this.status = PromotionPostStatus.PENDING_REVIEW;
-        this.submittedAt = Objects.requireNonNull(now, "now");
+        this.claimedSourceCommitSha = sourceCommitSha;
+        this.submittedAt = now;
+        this.reviewerId = null;
+        this.reviewedAt = null;
+        this.rejectionReason = null;
     }
 
     /** 승인: PENDING_REVIEW → APPROVED. 작성자 본인은 승인할 수 없다(D4). */

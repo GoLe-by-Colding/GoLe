@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ApiError } from "@shared/api";
 
 /** 사유 입력 모달이 열려 있을 때의 대상 정보. */
@@ -36,22 +36,26 @@ export function useModerationAction(onDone: () => void): UseModerationActionResu
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const inFlight = useRef(false);
 
   const ask = useCallback((action: PendingAction) => {
+    if (inFlight.current) return;
     setError(undefined);
     setPending(action);
   }, []);
 
   const cancel = useCallback(() => {
+    if (inFlight.current) return;
     setPending(null);
     setError(undefined);
   }, []);
 
   const confirm = useCallback(
     (reason: string) => {
-      if (pending === null) {
+      if (pending === null || inFlight.current) {
         return;
       }
+      inFlight.current = true;
       setBusy(true);
       setError(undefined);
       void pending
@@ -63,7 +67,10 @@ export function useModerationAction(onDone: () => void): UseModerationActionResu
         .catch((cause: unknown) => {
           setError(cause instanceof ApiError ? cause.message : "조치에 실패했습니다.");
         })
-        .finally(() => setBusy(false));
+        .finally(() => {
+          inFlight.current = false;
+          setBusy(false);
+        });
     },
     [pending, onDone],
   );

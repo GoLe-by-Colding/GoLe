@@ -74,11 +74,6 @@ public class PromotionPostService
             }
         }
         String id = idGenerator.newId();
-        // media 컨텍스트의 인바운드 포트만 의존한다 — STAGED(업로더 전용, 24시간 뒤 폐기)를
-        // 이 게시물에 연결해 PUBLIC으로 전이시키지 않으면, 검토자가 첨부 이미지를 못 보고
-        // 하루 뒤 원본이 삭제된다(promotion-review D8).
-        mediaAssets.replaceReferences(
-                command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);
         List<String> mediaUrls =
                 command.mediaKeys().stream().map(MediaKey::publicPath).toList();
         PromotionPost draft = PromotionPost.draft(
@@ -89,12 +84,25 @@ public class PromotionPostService
                 command.authorId(),
                 command.sourceCommitSha(),
                 Instant.now(clock));
+        // 도메인 검증에 실패할 입력으로 미디어를 공개하지 않는다. 검증한 초안만 연결한다.
+        mediaAssets.replaceReferences(
+                command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);
         return repository.save(draft).getId();
     }
 
     @Override
     public PromotionPost submit(String promotionPostId) {
         PromotionPost promotionPost = getOrThrow(promotionPostId);
+        // 제출 응답 유실 뒤 재시도해도 검토 시각을 바꾸거나 중복 저장하지 않는다.
+        if (promotionPost.getStatus() == PromotionPostStatus.PENDING_REVIEW) {
+            return promotionPost;
+        }
+        if (promotionPost.getStatus() == PromotionPostStatus.DRAFT
+                && promotionPost.getSourceCommitSha() != null
+                && promotionPost.getClaimedSourceCommitSha() == null
+                && repository.existsBySourceCommitSha(promotionPost.getSourceCommitSha())) {
+            throw new SourceCommitAlreadyPromotedException(promotionPost.getSourceCommitSha());
+        }
         promotionPost.submitForReview(Instant.now(clock));
         return repository.save(promotionPost);
     }

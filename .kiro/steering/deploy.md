@@ -21,8 +21,8 @@ Mac의 전역 Nginx도 GoLe 배포를 위해 중지하거나 재시작하지 않
 
 ## 개발과 배포 흐름
 
-운영 수정은 피처 브랜치에서 충분히 검증한 뒤 `main`에 병합한다. 피처 브랜치 push와 PR은
-CI만 실행하며 운영 배포를 만들지 않는다. `main` push의 CI가 성공하면 저장소 전용
+운영 수정도 작업 브랜치에서 검증한 뒤 `dev`에 머지 커밋으로 병합한다. `dev → main` 릴리스
+PR만 squash로 병합한다. 작업 브랜치 push와 PR은 운영 배포를 만들지 않는다. `main` push의 CI가 성공하면 저장소 전용
 self-hosted runner가 GCP VM에서 CD를 실행한다.
 
 ```bash
@@ -30,20 +30,21 @@ cd /Users/kscold/Desktop/GoLe
 git switch -c feat/<작업명>
 
 # 로컬 검증 후
-git push --force-with-lease origin feat/<작업명>
-gh pr create --base main --head feat/<작업명>
+git push -u origin feat/<작업명>
+gh pr create --base dev --head feat/<작업명> --body-file /tmp/gole-pr-body.md
 ```
 
 커밋 제목과 본문은 한국어로 쓴다. 본문은 변경한 일을 `- ...함` 한 줄씩 기록한다.
 
 ```text
-기능: 운영 출시 흐름을 완성함
+feat(infra): 운영 출시 흐름을 완성함
 
 - 단일 GCP 배포 경로를 고정함
 - 운영 안전 검증을 추가함
+- 검증: 실행한 검증과 결과를 기록함
 ```
 
-PR CI가 모두 성공한 뒤 `main`에 병합한다. CD를 우회하는 서버 수동 pull·빌드·재시작은
+PR CI가 모두 성공한 뒤 `dev`에 병합하고 릴리스 PR을 별도로 검증한다. CD를 우회하는 서버 수동 pull·빌드·재시작은
 장애 복구가 아닌 이상 사용하지 않는다. CD는 CI를 통과한 SHA를 직접 checkout하고,
 Compose 갱신·내부 readiness·공개 HTTPS 확인까지 성공해야 배포 완료 SHA를 기록한다.
 
@@ -51,13 +52,11 @@ Compose 갱신·내부 readiness·공개 HTTPS 확인까지 성공해야 배포 
 
 ```bash
 cd /Users/kscold/Desktop/GoLe
-docker compose up -d mongo redis minio minio-init
+pnpm infra:up
 pnpm install --frozen-lockfile
-pnpm --filter web dev
-
-# 별도 터미널
-cd apps/api
-./gradlew bootRun
+# 실행 중인 포트를 확인한 뒤 Orca 터미널 두 개에서 각각 실행한다.
+pnpm dev:web
+pnpm dev:api
 ```
 
 로컬 주소는 Web `http://localhost:3000`, API `http://localhost:8080`이다. 운영 Secret은
