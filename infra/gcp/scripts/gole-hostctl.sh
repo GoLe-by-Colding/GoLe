@@ -1506,6 +1506,36 @@ verify_compose_container_identity() {
   [ "$labels" = "gole|$service" ] || die "Compose container ownership is invalid: $service"
 }
 
+resolve_container_image_identity() {
+  local container="$1" image_ref="$2" mode="$3" image_id resolved_id descriptor manifest platform
+  image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+    die "could not inspect container image: $container"
+  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || die "container image identity is invalid"
+  if resolved_id="$(docker image inspect --format '{{.Id}}' "$image_id" 2>/dev/null)"; then
+    [ "$resolved_id" = "$image_id" ] || die "container image identity changed"
+    printf '%s\n' "$image_id"
+    return
+  fi
+  [ "$mode" = legacy-adoption ] || die "container image is missing outside legacy adoption"
+
+  # 저장소 이전으로 사라진 과거 ID는 실행 manifest를 증명할 때만 정규화한다.
+  descriptor="$(docker inspect --format \
+    '{{with .ImageManifestDescriptor}}{{.digest}}|{{with .platform}}{{.os}}/{{.architecture}}{{with index . "variant"}}/{{.}}{{end}}{{end}}{{end}}' \
+    "$container")" || die "legacy container image manifest is unavailable"
+  IFS='|' read -r manifest platform <<<"$descriptor"
+  [[ "$manifest" =~ ^sha256:[0-9a-f]{64}$ ]] &&
+    [[ "$platform" =~ ^linux/(amd64|arm64)(/v[0-9]+)?$ ]] ||
+    die "legacy container image manifest or platform is invalid"
+
+  # mutable 참조는 먼저 불변 ID로 고정하고, 그 ID의 실제 플랫폼 manifest를 대조한다.
+  resolved_id="$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null)" ||
+    die "legacy container image reference is unavailable"
+  [[ "$resolved_id" =~ ^sha256:[0-9a-f]{64}$ ]] || die "legacy image reference identity is invalid"
+  [ "$(docker image inspect --platform "$platform" --format '{{.Id}}' "$resolved_id" 2>/dev/null)" = "$manifest" ] ||
+    die "legacy container image manifest does not match the preserved image"
+  printf '%s\n' "$resolved_id"
+}
+
 resolve_snapshot_service_image() {
   local container_id container_ids image_id image_ref model="$1" mode="$2" service="$3" state
   if ! compose_model_has_service "$model" "$service"; then
@@ -1536,7 +1566,7 @@ resolve_snapshot_service_image() {
         die "could not inspect initializer state: $service"
       [ "$state" = exited:0 ] || die "historical initializer did not complete successfully: $service"
     fi
-    image_id="$(docker inspect --format '{{.Image}}' "$container_id")" ||
+    image_id="$(resolve_container_image_identity "$container_id" "$image_ref" "$mode")" ||
       die "could not inspect deployment service image: $service"
   else
     if deployment_long_running_service "$service"; then
@@ -2213,7 +2243,7 @@ verify_restored_deployment_images() {
     if deployment_long_running_service "$service"; then
       container="$(deployment_container_name "$service")"
       verify_compose_container_identity "$container" "$service"
-      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+      image_id="$(resolve_container_image_identity "$container" "$expected_id" "$SNAPSHOT_MODE")" ||
         die "could not inspect restored service: $service"
       [ "$image_id" = "$expected_id" ] || die "restored service image does not match: $service"
       state="$(docker inspect --format \
@@ -2230,7 +2260,7 @@ verify_restored_deployment_images() {
         die "restored initializer provenance is missing: $service"
       container="$container_ids"
       verify_compose_container_identity "$container" "$service"
-      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+      image_id="$(resolve_container_image_identity "$container" "$expected_id" "$SNAPSHOT_MODE")" ||
         die "could not inspect restored initializer: $service"
       [ "$image_id" = "$expected_id" ] ||
         die "restored initializer image does not match: $service"
