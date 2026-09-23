@@ -113,6 +113,9 @@ jobs:
       - name: Build support agent image
         run: docker build -f apps/support-agent/Dockerfile -t gole/support-agent:ci .
 
+      - name: Verify agent readiness with production resource limits
+        run: python apps/support-agent/tests/verify_healthcheck_runtime.py gole/support-agent:ci
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
