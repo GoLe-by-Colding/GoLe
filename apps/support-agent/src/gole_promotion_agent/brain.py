@@ -202,12 +202,13 @@ def build_graph(
         if not last.get("calls"):
             # 도구를 더 부르지 않았다 = 모델이 스스로 "홍보할 것이 없다"고 판단한 것이다.
             return "give_up"
-        # 턴 예산을 다 썼을 뿐이다. 이것을 "판단"과 같이 취급하면 아직 결론이 안 난 릴리스가
-        # 영구 제외 원장에 들어가 다시는 후보가 되지 않는다.
-        return "act" if state.get("turns", 0) < policy.MAX_TURNS else "defer"
+        # 마지막 허용 턴에 결정한 도구도 실행한다. 예산은 다음 모델 호출 전에 검사한다.
+        return "act"
 
     def after_act(state: PromotionState) -> str:
-        return "upload" if state.get("draft") and not state.get("submitted") else "think"
+        if state.get("draft") and not state.get("submitted"):
+            return "upload"
+        return "think" if state.get("turns", 0) < policy.MAX_TURNS else "defer"
 
     def give_up(state: PromotionState) -> dict[str, Any]:
         on_stage(Stage.SKIPPED)
@@ -231,7 +232,7 @@ def build_graph(
     graph.add_conditional_edges(
         "think", after_think, {"act": "act", "give_up": "give_up", "defer": "defer"}
     )
-    graph.add_conditional_edges("act", after_act, {"upload": "upload", "think": "think"})
+    graph.add_conditional_edges("act", after_act, {"upload": "upload", "think": "think", "defer": "defer"})
     graph.add_edge("upload", "create")
     graph.add_edge("create", "finalize")
     graph.add_edge("finalize", END)

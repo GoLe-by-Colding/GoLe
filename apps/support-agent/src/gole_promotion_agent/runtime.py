@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -47,7 +48,7 @@ def skipped_ledger(sessions_root: Path) -> Callable[[str], bool]:
             payload = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
-        return payload.get("done") == "skipped"
+        return isinstance(payload, dict) and payload.get("done") == "skipped"
 
     return is_skipped
 
@@ -60,7 +61,7 @@ def retry_ledger(sessions_root: Path) -> Callable[[], tuple[str, ...]]:
     보존 기간이 탐색 창과 같아서(RETENTION_DAYS == MAX_WALK_DAYS) 창 밖 커밋은 저절로 빠진다.
     """
     root = Path(sessions_root)
-    retryable = {"failed", "deferred"}
+    retryable = (None, "failed", "deferred")
 
     def pending() -> tuple[str, ...]:
         if not root.is_dir():
@@ -73,7 +74,12 @@ def retry_ledger(sessions_root: Path) -> Callable[[], tuple[str, ...]]:
                 payload = json.loads((entry / "manifest.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if payload.get("done") in retryable and isinstance(payload.get("sha"), str):
+            if (
+                isinstance(payload, dict)
+                and payload.get("done") in retryable
+                and payload.get("sha") == entry.name
+                and re.fullmatch(r"[0-9a-f]{40}", entry.name)
+            ):
                 found.append(payload["sha"])
         return tuple(found)
 
@@ -145,14 +151,20 @@ class PromotionHarness:
         if not candidates:
             return RunResult("새로 홍보할 릴리스가 없음")
 
-        history = self._publisher.history(policy.HISTORY_LIMIT)
         outcomes: list[CandidateOutcome] = []
+        submitted = 0
         try:
             for candidate in candidates:
-                outcomes.append(self._run_candidate(candidate.sha, candidate.subject, history))
+                # 같은 배치의 제출과 다른 실행의 큐 증가를 모두 반영한다.
+                if max(pending + submitted, self._publisher.pending_count()) >= policy.MAX_PENDING_REVIEW:
+                    break
+                history = self._publisher.history(policy.HISTORY_LIMIT)
+                outcome = self._run_candidate(candidate.sha, candidate.subject, history)
+                outcomes.append(outcome)
+                submitted += outcome.outcome == "submitted"
         finally:
             self._camera.close()
-        return RunResult(f"후보 {len(candidates)}건 처리", tuple(outcomes))
+        return RunResult(f"후보 {len(candidates)}건 중 {len(outcomes)}건 처리", tuple(outcomes))
 
     def _run_candidate(
         self, sha: str, subject: str, history: Sequence[Mapping[str, Any]]
@@ -187,19 +199,26 @@ class PromotionHarness:
             session = EphemeralSession()
             self._write_manifest(session_dir, sha, subject)
 
-        graph = build_graph(
-            self._conversations(system=system),
-            self._scanner,
-            self._routes,
-            self._camera,
-            self._publisher,
-            session_dir,
-            guard,
-            session.advance,
-        ).compile(checkpointer=saver)
-
         try:
+            graph = build_graph(
+                self._conversations(system=system),
+                self._scanner,
+                self._routes,
+                self._camera,
+                self._publisher,
+                session_dir,
+                guard,
+                session.advance,
+            ).compile(checkpointer=saver)
             if resumed:
+                snapshot = graph.get_state(config)
+                if not snapshot.next and snapshot.values.get("outcome") == "deferred":
+                    # END 체크포인트는 invoke(None)만으로 진행하지 않는다. 기존 전사를
+                    # 유지하고 다음 노드를 예약한다. 구 버전은 마지막 도구 실행 전 보류했다.
+                    transcript = snapshot.values.get("transcript", [])
+                    last = transcript[-1] if transcript else {}
+                    after = "think" if last.get("role") == "assistant" and last.get("calls") else "act"
+                    graph.update_state(config, {"turns": 0, "outcome": ""}, as_node=after)
                 state = graph.invoke(None, config)
             else:
                 state = graph.invoke(
@@ -247,9 +266,11 @@ class PromotionHarness:
         payload = {"sha": sha, "subject": subject, "schema": 1}
         if done:
             payload["done"] = done
-        (session_dir / "manifest.json").write_text(
+        temporary = session_dir / "manifest.json.tmp"
+        temporary.write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8"
         )
+        temporary.replace(session_dir / "manifest.json")
 
     def _append_event(self, session_dir: Path, kind: str, payload: Mapping[str, Any]) -> None:
         """감사 로그에는 경로와 단계만 남긴다 — 이미지도 캡션 원문도 넣지 않는다."""
