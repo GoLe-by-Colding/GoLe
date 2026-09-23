@@ -65,6 +65,18 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 `GOLE_OAUTH_ALLOWED_REDIRECT_URIS`로 apex 콜백 3종만 주입해야 한다(그 외 값이면 기동 실패).
 
 ## Tasks
+
+### 카카오 실연동 (2026-09-24)
+
+- GoLe 카카오 앱의 비즈앱·로그인 활성화·`account_email` 필수 동의와 수집을 확인한다.
+- 운영 콜백은 `https://gole.co.kr/auth/callback/kakao`, 개발은 localhost 3000·3001·3010의 같은 경로로 등록한다.
+- `KAKAO_OAUTH_CLIENT_ID`·`KAKAO_OAUTH_CLIENT_SECRET`은 로컬 gitignore 환경 파일과 control.kscold.com의 GoLe 운영 대상에만 반영한다. 값은 문서·출력·커밋에 남기지 않는다.
+- 개발 CORS·리다이렉트 허용목록에 실제 실행 중인 3001을 포함하고, 운영 허용목록은 기존 apex 콜백 3종을 유지한다.
+- 기존 가입 정책을 그대로 검증하며, 미가입 카카오 계정을 Google 계정으로 잘못 안내하지 않는다.
+- 운영 호스트의 metadata migration pending은 정식 첫 CD로 완료한 뒤 Secret Sync를 실행한다(`infra/gcp/README.md`).
+- 실제 인증 코드 교환·프로필 조회·신규 가입·다음 로그인과 운영 배포 상태를 구분해 기록한다.
+
+### 구현
 - [x] B1 AuthProvider, SocialLoginUseCase, SocialIdentityProviderPort, SocialProfile
 - [x] B2 SocialAuthService (find-or-create + 세션 발급)
 - [x] B3 OAuthProperties + RestClientSocialIdentityProviderAdapter + application.yml

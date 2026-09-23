@@ -219,7 +219,7 @@ test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
     await page.goto(`/login?returnTo=${encodeURIComponent("/admin/reports")}`);
     await page.getByLabel("이메일").fill("user@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/$/);
   });
@@ -236,7 +236,7 @@ test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
     await page.goto(`/login?returnTo=${encodeURIComponent("/admin/reports")}`);
     await page.getByLabel("이메일").fill("admin@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/admin\/reports$/);
   });
@@ -313,7 +313,7 @@ test.describe("컬렉션 로그인 왕복", () => {
 
     await page.getByLabel("이메일").fill("user@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/collection$/);
 
@@ -374,7 +374,7 @@ test.describe("컬렉션 로그인 왕복", () => {
 
     await page.getByLabel("이메일").fill("new@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
     await expect(page).toHaveURL(/\/collection$/);
   });
 });
