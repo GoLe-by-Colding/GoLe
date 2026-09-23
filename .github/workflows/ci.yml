@@ -211,6 +211,10 @@ jobs:
       # E2E_WITH_BACKEND: 관리자 API 가드 테스트는 이 값이 없으면 조용히 스킵된다.
       # 백엔드가 실제로 떠 있는 이 잡이 그 테스트를 돌릴 수 있는 유일한 곳이다.
       #
+      # GOLE_ADMIN_*: 권한 경계 3건은 실제로 로그인해 ADMIN 세션을 받는다. 예전에는 이 값이
+      # 없어 test.skip 으로 빠졌고, skip 은 실패가 아니라 초록으로 보여 "CI 통과 = 권한
+      # 검증됨"이 아니었다. 시더가 gole_e2e 에 심는 테스트 전용 계정이라 시크릿이 아니다.
+      #
       # 아래 NEXT_PUBLIC_* 는 Playwright가 띄우는 dev 서버(webServer)가 읽는다.
       # API_BASE_URL: next.config.ts가 이 원점을 CSP img-src에 넣는다. 없으면 API가 서빙하는
       #               매물 이미지가 차단돼 업로드 미리보기 단정이 실패한다.
@@ -220,6 +224,8 @@ jobs:
       - name: E2E
         env:
           E2E_WITH_BACKEND: "1"
+          GOLE_ADMIN_EMAIL: e2e-admin@gole.test
+          GOLE_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
           NEXT_PUBLIC_PAYMENT_MODE: portone-test
           NEXT_PUBLIC_PORTONE_STORE_ID: store-test
@@ -311,6 +317,9 @@ jobs:
             infra/gcp/scripts/apply-secret-env.sh \
             scripts/deploy.sh
           failure_file="$RUNNER_TEMP/gole-cost-guard-watchdog.failures"
+          # 계약은 "연속 실패가 임계값에 닿으면 fail-closed" 다. 임계값 자체는 여기서
+          # 명시적으로 고정해, 기본값을 조정해도 이 테스트가 깨지지 않게 한다.
+          export GOLE_COST_GUARD_MAX_FAILURES=2
           GOLE_COST_GUARD_CONTAINER_NAME=gole-nonexistent-ci \
           GOLE_COST_GUARD_FAILURE_FILE="$failure_file" \
           GOLE_COST_GUARD_WATCHDOG_DRY_RUN=true \
@@ -322,19 +331,98 @@ jobs:
             echo "두 번째 연속 장애에서 watchdog이 실패해야 합니다." >&2
             exit 1
           fi
+          # 회귀 가드: 기본 임계값이 다시 짧아지면 2026-09-11 중단이 재발한다.
+          # 검사 간격이 30초이므로 4회 미만은 2분도 못 버틴다 — docker 재시작에 부족하다.
+          default_max="$(grep -oE 'GOLE_COST_GUARD_MAX_FAILURES:-[0-9]+' \
+            infra/gcp/scripts/cost-guard-watchdog.sh | grep -oE '[0-9]+$')"
+          if [ "${default_max:-0}" -lt 4 ]; then
+            echo "MAX_FAILURES 기본값이 ${default_max:-미검출} 이다. 30초 간격이므로 4회(2분) 미만이면" >&2
+            echo "docker 재시작 중 컨테이너 복귀를 기다리지 못하고 호스트 전원을 내린다 (2026-09-11 중단)." >&2
+            exit 1
+          fi
+          echo "MAX_FAILURES 기본값 ${default_max} 회 (= $((default_max * 30))초 유예) 확인."
 
-      - name: Secret Sync log security contract
+      - name: Boot stack unit contract
+        run: |
+          bash -n infra/gcp/scripts/stack-start.sh
+          unit=infra/gcp/systemd/gole-stack.service
+          script=infra/gcp/scripts/stack-start.sh
+          code() { grep -vE '^[[:space:]]*#' "$1"; }
+
+          # 이 유닛이 실패해도 호스트가 꺼지면 안 된다. 꺼지면 2026-09-11 중단을
+          # 그 수정본이 그대로 재생산한다.
+          if grep -qE '^[[:space:]]*OnFailure' "$unit"; then
+            echo "gole-stack.service 에 OnFailure 가 있다. 이 유닛의 실패는 전원 차단으로 이어지면 안 된다." >&2
+            exit 1
+          fi
+
+          # docker compose 는 쓰지 않는다.
+          #  - `compose start` 는 depends_on 을 해석해 mongo-init·minio-init 을 부팅마다
+          #    재실행한다. 그 컨테이너의 exited:0 은 배포 검증기가 읽는 증거다
+          #    (gole-hostctl.sh: "historical initializer did not complete successfully").
+          #  - `compose up` 은 컨테이너를 재생성하며, 검증 전에 중단된 배포가 남긴
+          #    미검증 :local 이미지를 공개 서비스에 올릴 수 있다.
+          if code "$script" | grep -qE 'docker[[:space:]]+compose'; then
+            echo "stack-start.sh 가 docker compose 를 쓴다. docker start <컨테이너 이름> 만 써야 한다." >&2
+            exit 1
+          fi
+          code "$script" | grep -qE 'docker[[:space:]]+start[[:space:]]' || {
+            echo "stack-start.sh 에서 docker start 호출을 찾지 못했다." >&2
+            exit 1
+          }
+
+          # init 컨테이너를 직접 켜서도 안 된다. hostctl 도 deployment_container_name() 에서
+          # 그 둘만 제외한다.
+          if code "$script" | grep -qE 'gole-(mongo|minio)-init'; then
+            echo "stack-start.sh 가 init 컨테이너를 직접 다룬다. 배포 증거를 덮어쓴다." >&2
+            exit 1
+          fi
+
+          # 일부러 멈춰 있는 상태에서는 끼어들지 않아야 한다.
+          for marker in deployment.transaction gole.env.transaction initial-deploy.pending; do
+            grep -q "ConditionPathExists=!/etc/gole/$marker" "$unit" || {
+              echo "gole-stack.service 에 $marker 가드가 없다. 배포 중에 끼어들 수 있다." >&2
+              exit 1
+            }
+          done
+
+          # 부트스트랩이 실제로 설치·활성화하는지 (유닛 파일만 추가하면 죽은 코드가 된다)
+          grep -q 'gole-stack.service' infra/gcp/scripts/bootstrap-host.sh || {
+            echo "bootstrap-host.sh 가 gole-stack.service 를 설치하지 않는다." >&2
+            exit 1
+          }
+          grep -q 'systemctl enable gole-stack.service' infra/gcp/scripts/bootstrap-host.sh || {
+            echo "bootstrap-host.sh 가 gole-stack.service 를 enable 하지 않는다." >&2
+            exit 1
+          }
+          echo "부팅 스택 유닛 계약 통과."
+
+      - name: Dockerfile digest policy tests
+        run: python -m unittest discover -s infra/gcp/tests -p 'test_dockerfile_pins.py'
+
+      - name: Bootstrap and policy contracts
         run: |
           GOLE_BOOTSTRAP_CONTRACT_STATIC_ONLY=true \
             bash infra/gcp/tests/bootstrap-contract.test.sh
+
+      - name: Production host contracts
+        run: |
           for infra_test in infra/gcp/tests/*.test.sh; do
             if [ "$infra_test" = infra/gcp/tests/bootstrap-contract.test.sh ]; then
               continue
             fi
+            echo "::group::$infra_test"
             bash "$infra_test"
+            echo "::endgroup::"
           done
+
+      - name: Secret Sync log security contract
+        run: |
           bash scripts/__tests__/secret-sync-security.test.sh
           bash scripts/__tests__/sync-dev-env-security.test.sh
+
+      - name: Application operational contracts
+        run: |
           bash scripts/__tests__/onboarding-phone-policy-contract.test.sh
           bash scripts/__tests__/media-storage-boundary.test.sh
           node --test scripts/__tests__/migrate-production-demo-content.test.mjs

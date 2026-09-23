@@ -1,0 +1,10 @@
+{
+  "passed": 4,
+  "tests": [
+    "listing: 업로드 중 Enter·중복 파일 이벤트 차단",
+    "listing: 중복 등록 차단·실패 후 재시도·성공 후 잠금 유지",
+    "post: 업로드 중 Enter·중복 파일 이벤트 차단",
+    "post: 중복 등록 차단·실패 후 재시도·성공 후 잠금 유지"
+  ],
+  "boundary": "실제 TSX 핸들러 + 메모리 hooks, DOM 미검증"
+}

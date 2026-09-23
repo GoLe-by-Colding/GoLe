@@ -314,6 +314,10 @@ function post<T>(
   return apiRequest<T>(path, { method: "POST", headers: { ...auth(token), ...headers }, body });
 }
 
+function put<T>(token: string, path: string, body?: unknown): Promise<T> {
+  return apiRequest<T>(path, { method: "PUT", headers: auth(token), body });
+}
+
 // ── 대시보드 · 감사 ───────────────────────────────────────────
 
 export function fetchAdminOverview(token: string): Promise<AdminOverview> {
@@ -795,6 +799,7 @@ export interface AdminPromotionPost {
   readonly caption: string;
   readonly mediaUrls: readonly string[];
   readonly authorId: string;
+  readonly sourceCommitSha: string | null;
   readonly status: PromotionPostStatus;
   readonly createdAt: string | null;
   readonly submittedAt: string | null;
@@ -811,6 +816,11 @@ export interface CreatePromotionPostInput {
   /** 업로드 스테이지 키 목록(예: `images/<uuid>.png`) — `POST /api/v1/media/images`의 응답 `key`를
    *  그대로 담는다. 공개 URL이 아니다(promotion-review D8). */
   readonly mediaKeys: readonly string[];
+  readonly sourceCommitSha?: string | null;
+}
+
+export interface PromotionPostExistsResponse {
+  readonly exists: boolean;
 }
 
 export function fetchAdminPromotionPosts(
@@ -828,6 +838,14 @@ export function createAdminPromotionPost(
   input: CreatePromotionPostInput,
 ): Promise<{ readonly id: string }> {
   return post<{ readonly id: string }>(token, "/api/admin/promotion-posts", input);
+}
+
+export function promotionPostExistsForCommit(
+  token: string,
+  sourceCommitSha: string,
+): Promise<PromotionPostExistsResponse> {
+  const params = new URLSearchParams({ sourceCommitSha });
+  return get<PromotionPostExistsResponse>(token, `/api/admin/promotion-posts/exists?${params}`);
 }
 
 export function submitAdminPromotionPost(
@@ -860,4 +878,123 @@ export function publishAdminPromotionPost(
   promotionPostId: string,
 ): Promise<AdminPromotionPost> {
   return post<AdminPromotionPost>(token, `/api/admin/promotion-posts/${promotionPostId}/publish`);
+}
+
+// ── 홍보 평가 지표 (promotion-review/eval.md) ───────────────────
+//
+// 채점 자체는 여전히 사람이 한다 — 여기 API는 그 결과를 저장·집계만 한다(자동 채점기 아님).
+
+export type EvaluationCriterion =
+  "FACT_BASIS" | "SCREEN_MATCH" | "READER_VALUE" | "PERSONA_NATURALNESS" | "SPECIFICITY_VARIETY";
+
+export type FirstReviewVerdict = "USE_AS_IS" | "MINOR_EDIT" | "MAJOR_REWRITE" | "UNUSABLE" | "HOLD";
+
+export type HoldReasonKind = "CONFIRMED_DEFECT" | "EVIDENCE_GAP";
+
+export type EvaluationReasonTag =
+  | "FACTUAL_ERROR"
+  | "EVIDENCE_GAP"
+  | "SCREEN_MISMATCH"
+  | "INFO_EXPOSURE"
+  | "LOW_PROMO_VALUE"
+  | "TONE"
+  | "REPETITION"
+  | "FORMAT"
+  | "OTHER";
+
+/** 게시물당 평가는 1건 — 다시 저장하면 기존 평가를 덮어쓴다. */
+export interface AdminPromotionPostEvaluation {
+  readonly id: string;
+  readonly promotionPostId: string;
+  readonly evaluatorId: string;
+  readonly evaluatedAt: string;
+  /** 항목이 없으면 N/A. */
+  readonly criterionScores: Partial<Readonly<Record<EvaluationCriterion, number>>>;
+  readonly verdict: FirstReviewVerdict;
+  readonly holdReasonKind: HoldReasonKind | null;
+  readonly reasonTags: readonly EvaluationReasonTag[];
+  readonly factualFixNeeded: boolean | null;
+  readonly reviewSeconds: number | null;
+  readonly reviseSeconds: number | null;
+  readonly notes: string | null;
+}
+
+export interface RecordPromotionPostEvaluationInput {
+  readonly criterionScores: Partial<Readonly<Record<EvaluationCriterion, number>>>;
+  readonly verdict: FirstReviewVerdict;
+  /** {@code verdict}이 HOLD가 아니면 반드시 null이어야 한다. */
+  readonly holdReasonKind: HoldReasonKind | null;
+  readonly reasonTags: readonly EvaluationReasonTag[];
+  readonly factualFixNeeded: boolean | null;
+  readonly reviewSeconds: number | null;
+  readonly reviseSeconds: number | null;
+  readonly notes: string | null;
+}
+
+/** 분모 0이면 중앙값·최댓값 모두 null(N/A) — "0"으로 잘못 표시되지 않게 한다. */
+export interface PromotionDurationStats {
+  readonly medianSeconds: number | null;
+  readonly maxSeconds: number | null;
+}
+
+export interface PromotionCriterionScoreDistribution {
+  readonly score0: number;
+  readonly score1: number;
+  readonly score2: number;
+  readonly notApplicable: number;
+}
+
+export interface PromotionOperationalMetrics {
+  readonly countByStatus: Partial<Readonly<Record<PromotionPostStatus, number>>>;
+  readonly approveCount: number;
+  readonly rejectCount: number;
+  readonly publishCount: number;
+  /** 반려 / (승인 + 반려). 분모 0이면 null(N/A). */
+  readonly rejectionRate: number | null;
+  readonly reviewDuration: PromotionDurationStats;
+}
+
+export interface PromotionQualityMetrics {
+  readonly evaluationCount: number;
+  readonly firstReviewAdoptionRate: number | null;
+  readonly confirmedDefectRate: number | null;
+  readonly evidenceGapRate: number | null;
+  readonly factualFixNeededRate: number | null;
+  readonly criterionScoreDistribution: Partial<
+    Readonly<Record<EvaluationCriterion, PromotionCriterionScoreDistribution>>
+  >;
+  readonly reviewSeconds: PromotionDurationStats;
+  readonly reviseSeconds: PromotionDurationStats;
+}
+
+export interface PromotionMetrics {
+  readonly operational: PromotionOperationalMetrics;
+  readonly quality: PromotionQualityMetrics;
+}
+
+export function fetchAdminPromotionMetrics(token: string): Promise<PromotionMetrics> {
+  return get<PromotionMetrics>(token, "/api/admin/promotion-posts/metrics");
+}
+
+/** 평가가 없으면 404(`ApiError`)를 던진다 — 호출부가 "아직 미평가"로 구분해 처리한다. */
+export function fetchAdminPromotionPostEvaluation(
+  token: string,
+  promotionPostId: string,
+): Promise<AdminPromotionPostEvaluation> {
+  return get<AdminPromotionPostEvaluation>(
+    token,
+    `/api/admin/promotion-posts/${promotionPostId}/evaluation`,
+  );
+}
+
+export function saveAdminPromotionPostEvaluation(
+  token: string,
+  promotionPostId: string,
+  input: RecordPromotionPostEvaluationInput,
+): Promise<AdminPromotionPostEvaluation> {
+  return put<AdminPromotionPostEvaluation>(
+    token,
+    `/api/admin/promotion-posts/${promotionPostId}/evaluation`,
+    input,
+  );
 }

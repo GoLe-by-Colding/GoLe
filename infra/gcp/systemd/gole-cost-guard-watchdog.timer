@@ -2,7 +2,11 @@
 Description=Check the GoLe cost guard every 30 seconds
 
 [Timer]
-OnBootSec=2min
+# 부팅 직후에는 docker 가 컨테이너를 다시 띄우는 중이라 relay 가 아직 healthy 가 아니다.
+# 2min 이면 첫 검사(2:00)와 두 번째(2:30) 사이에 전원이 내려가, 한 번 꺼진 VM 이
+# 영영 부팅에 성공하지 못하는 잠김이 생긴다 (2026-09-11 8일 중단).
+# 실측: 부팅 +37초 docker 준비, +100~130초 컨테이너 healthy. 5min 이면 충분한 여유다.
+OnBootSec=5min
 OnUnitActiveSec=30s
 AccuracySec=5s
 Unit=gole-cost-guard-watchdog.service

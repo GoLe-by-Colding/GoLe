@@ -1,17 +1,36 @@
 #!/usr/bin/env python3
-"""Send a fixed backup failure notice without exposing the webhook value."""
+"""Send a fixed unit failure notice without exposing the webhook value."""
 
 from __future__ import annotations
 
 import json
 import pathlib
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Sequence
 
 
 DISCORD_ENV_PATH = pathlib.Path("/etc/gole/discord.env")
+
+# 유닛마다 알림 스크립트를 새로 만들지 않는다. OnFailure= 유닛이 어떤 실패인지만 인자로
+# 넘기고, 실제 문구는 여기 고정한 목록에서 고른다 — 루트로 도는 프로세스이므로 argv 의
+# 자유 문자열을 그대로 Discord 로 흘리지 않는다. 인자가 없으면 논리 백업(원래 용도)이다.
+NOTICES = {
+    "data-backup": "❌ GoLe 운영 논리 백업 실패 · 다음 자동 스냅샷 복원 보장 중단",
+    "promotion-agent": "❌ GoLe 홍보 초안 에이전트 실패 · 오늘자 초안 생성 중단",
+}
+DEFAULT_NOTICE = "data-backup"
+
+
+def notice_content(argv: Sequence[str]) -> str:
+    if not argv:
+        return NOTICES[DEFAULT_NOTICE]
+    if len(argv) != 1 or argv[0] not in NOTICES:
+        raise ValueError("unknown failure notice")
+    return NOTICES[argv[0]]
 
 
 def operations_webhook_url() -> str:
@@ -45,8 +64,9 @@ def operations_webhook_url() -> str:
     return webhook
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     try:
+        content = notice_content(() if argv is None else tuple(argv))
         webhook = operations_webhook_url()
     except (OSError, ValueError):
         return 1
@@ -54,7 +74,7 @@ def main() -> int:
         webhook,
         data=json.dumps(
             {
-                "content": "❌ GoLe 운영 논리 백업 실패 · 다음 자동 스냅샷 복원 보장 중단",
+                "content": content,
                 "allowed_mentions": {"parse": []},
             },
             ensure_ascii=False,
@@ -70,4 +90,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

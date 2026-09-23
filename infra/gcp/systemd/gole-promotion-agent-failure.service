@@ -1,0 +1,10 @@
+[Unit]
+Description=Notify GoLe operations that the promotion draft agent failed
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+# 알림 스크립트를 유닛마다 늘리지 않는다. 논리 백업이 쓰던 것과 같은 루트 소유 스크립트에
+# 어떤 실패인지만 인자로 넘긴다 — webhook 값은 /etc/gole/discord.env 에서만 읽는다.
+ExecStart=/usr/local/libexec/gole/notify-backup-failure.py promotion-agent

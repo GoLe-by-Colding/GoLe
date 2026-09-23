@@ -142,16 +142,11 @@ while IFS= read -r image_reference; do
   [[ "$image_reference" =~ @sha256:[0-9a-f]{64}$ ]] ||
     fail "production Compose image is not digest-pinned: $image_reference"
 done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' infra/gcp/docker-compose.yml)
-for dockerfile in \
+python3 infra/gcp/tests/dockerfile_pins.py \
   infra/gcp/docker/api.Dockerfile \
   infra/gcp/docker/web.Dockerfile \
   infra/gcp/budget-relay/Dockerfile \
-  apps/support-agent/Dockerfile; do
-  while IFS= read -r base_image; do
-    [[ "$base_image" =~ @sha256:[0-9a-f]{64}$ ]] ||
-      fail "production Dockerfile base is not digest-pinned: $dockerfile ($base_image)"
-  done < <(awk '$1 == "FROM" {print $2}' "$dockerfile")
-done
+  apps/support-agent/Dockerfile
 grep -q 'google-cloud-cli' infra/gcp/scripts/bootstrap-host.sh ||
   fail "host bootstrap must install Google Cloud CLI"
 grep -q '/usr/local/libexec/gole/validate-production-env.py' infra/gcp/scripts/bootstrap-host.sh ||
@@ -758,6 +753,40 @@ fi
 grep -q '^ExecStart=/usr/local/sbin/gole-hostctl certificate-renew$' \
   infra/gcp/systemd/gole-cert-renew.service ||
   fail "certificate renewal must use the root-owned validated dispatcher"
+
+# 홍보 에이전트는 코드가 다 있는데도 유닛이 호스트에 깔리지 않아 한 번도 돌지 않았고,
+# 돌지 않는다는 신호도 없었다. 설치·활성화·실패 알림·시간 예산을 계약으로 고정한다.
+grep -Fq 'for promotion_unit in gole-promotion-agent.service gole-promotion-agent.timer gole-promotion-agent-failure.service; do' \
+  infra/gcp/scripts/bootstrap-host.sh ||
+  fail "host bootstrap must install the promotion agent units"
+grep -Fq 'systemctl enable --now gole-promotion-agent.timer' \
+  infra/gcp/scripts/bootstrap-host.sh ||
+  fail "host bootstrap must enable the promotion agent timer"
+if grep -Eq 'systemctl enable( --now)? gole-promotion-agent\.service' \
+  infra/gcp/scripts/bootstrap-host.sh; then
+  fail "promotion agent must be driven by its timer, not enabled as a boot service"
+fi
+grep -Fqx 'Unit=gole-promotion-agent.service' \
+  infra/gcp/systemd/gole-promotion-agent.timer ||
+  fail "promotion agent timer must trigger its own service"
+grep -Fqx 'OnFailure=gole-promotion-agent-failure.service' \
+  infra/gcp/systemd/gole-promotion-agent.service ||
+  fail "promotion agent failure must reach the operations channel"
+grep -Fqx 'ExecStart=/usr/local/libexec/gole/notify-backup-failure.py promotion-agent' \
+  infra/gcp/systemd/gole-promotion-agent-failure.service ||
+  fail "promotion agent failure must reuse the root-owned notifier"
+promotion_timeout="$(sed -n 's/^TimeoutStartSec=\([0-9]\{1,4\}\)min$/\1/p' \
+  infra/gcp/systemd/gole-promotion-agent.service)"
+# 앱의 최악 실행 시간은 후보당 15분 × 최대 3건 = 45분이고, systemd 는 여기에
+# ExecStartPre 의 이미지 빌드까지 한 덩어리로 잰다.
+[ -n "$promotion_timeout" ] && [ "$promotion_timeout" -ge 45 ] ||
+  fail "promotion agent start deadline must cover the 45-minute worst-case run"
+grep -Fq 'install -m 0600 -o root -g root /dev/null /etc/gole/promotion-agent.env' \
+  infra/gcp/scripts/bootstrap-host.sh ||
+  fail "host bootstrap must create the root-only promotion agent environment file"
+grep -Fq '/usr/local/sbin/gole-hostctl ^promotion-agent-overlay-install$' \
+  infra/gcp/sudoers/gole-deploy ||
+  fail "promotion agent overlay must use an exact no-argument sudo command"
 
 for removed_hostctl_operation in \
   env-current-sha256 env-backup env-install env-restore env-record-version; do

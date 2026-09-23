@@ -1,5 +1,6 @@
 "use client";
 
+import { captureMessage } from "@sentry/nextjs";
 import { useEffect } from "react";
 import { Button, LinkButton, Logo } from "@shared/ui";
 
@@ -14,8 +15,8 @@ export default function Error({
   readonly reset: () => void;
 }) {
   useEffect(() => {
-    // 운영 환경에서는 모니터링으로 전송할 수 있다(현재는 콘솔).
-    console.error(error);
+    // 원문 메시지·digest는 외부 수집에 포함하지 않는다.
+    captureMessage("UNEXPECTED_ERROR", "error");
   }, [error]);
 
   return (

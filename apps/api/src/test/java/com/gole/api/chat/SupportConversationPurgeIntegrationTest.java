@@ -25,6 +25,7 @@ import com.gole.api.chat.application.SupportConversationPrivacyService.Retention
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
@@ -73,6 +74,9 @@ class SupportConversationPurgeIntegrationTest {
         registry.add("gole.media.seed-on-startup", () -> "false");
         registry.add("gole.support-agent.enabled", () -> "false");
     }
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    SupportAssistantPurgePort assistantPurge;
 
     @Autowired
     SupportConversationPrivacyService service;
@@ -284,6 +288,83 @@ class SupportConversationPurgeIntegrationTest {
                 .find(new Document("_id", "audit-1"))
                 .first();
         assertThat(originalAudit.getString("targetId")).isEqualTo(roomId);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 파기 실패는 실제 Mongo 삭제와 성공 영수증을 rollback함")
+    void remoteFailureRollsBackMongoAndReceipt() {
+        String roomId = "remote-purge-failure";
+        seedResolvedConversation(roomId);
+        org.mockito.Mockito.doThrow(new IllegalStateException("REMOTE_UNAVAILABLE"))
+                .when(assistantPurge)
+                .purge(roomId, "requester-purge");
+        assertThatThrownBy(() -> service.purge(
+                        roomId,
+                        ADMIN_ID,
+                        roomId,
+                        PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED,
+                        true,
+                        UUID.randomUUID().toString()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(ticketDocuments.findById(roomId)).isPresent();
+        assertThat(messageDocuments.findTop60ByRoomIdOrderBySentAtDesc(roomId)).hasSize(2);
+        assertThat(receiptDocuments.count()).isZero();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 성공 후 Mongo rollback은 원문을 보존하고 같은 키로 재시도함")
+    void remoteSuccessThenMongoRollbackCanRetrySamePurge() {
+        String roomId = "remote-success-local-rollback";
+        String key = UUID.randomUUID().toString();
+        seedResolvedConversation(roomId);
+        java.util.concurrent.atomic.AtomicBoolean remoteTombstone = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.doAnswer(invocation -> {
+                    remoteTombstone.set(true);
+                    return null;
+                })
+                .when(assistantPurge)
+                .purge(roomId, "requester-purge");
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(ignored -> {
+                    service.purge(roomId, ADMIN_ID, roomId, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, key);
+                    throw new IllegalStateException("MONGO_COMMIT_FAILED");
+                }))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(remoteTombstone).isTrue();
+        assertThat(ticketDocuments.findById(roomId)).isPresent();
+        assertThat(receiptDocuments.count()).isZero();
+        var result = service.purge(roomId, ADMIN_ID, roomId, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, key);
+        assertThat(result.replayed()).isFalse();
+        assertThat(ticketDocuments.findById(roomId)).isEmpty();
+        assertThat(receiptDocuments.count()).isEqualTo(1);
+        org.mockito.Mockito.verify(assistantPurge, org.mockito.Mockito.times(2)).purge(roomId, "requester-purge");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 사본이 있는데 durable 파기 설정을 끄면 파기를 거절함")
+    void disabledRemotePurgeCannotLeaveHistoricalCopy() {
+        String roomId = "remote-copy-disabled-config";
+        seedResolvedConversation(roomId);
+        mongoTemplate
+                .getDb()
+                .getCollection("support_assistant_analyses")
+                .updateOne(new Document("_id", roomId), new Document("$set", new Document("remoteCopyPossible", true)));
+        org.mockito.Mockito.doAnswer(invocation -> {
+                    new com.gole.api.chat.adapter.out.assistant.DisabledSupportAssistantPurgeAdapter()
+                            .requireAvailable(invocation.getArgument(0));
+                    return null;
+                })
+                .when(assistantPurge)
+                .requireAvailable(true);
+        assertThatThrownBy(() -> service.purge(
+                        roomId,
+                        ADMIN_ID,
+                        roomId,
+                        PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED,
+                        true,
+                        UUID.randomUUID().toString()))
+                .hasMessage("SUPPORT_ASSISTANT_PURGE_CONFIGURATION_REQUIRED");
+        assertThat(ticketDocuments.findById(roomId)).isPresent();
+        assertThat(receiptDocuments.count()).isZero();
     }
 
     private SupportTicket seedResolvedConversation(String roomId) {

@@ -1,11 +1,14 @@
 package com.gole.api.promotion.adapter.out.persistence;
 
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
+import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -24,12 +27,31 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
 
     @Override
     public PromotionPost save(PromotionPost promotionPost) {
-        return toDomain(repository.save(toDocument(promotionPost)));
+        try {
+            return toDomain(repository.save(toDocument(promotionPost)));
+        } catch (DuplicateKeyException conflict) {
+            if (promotionPost.getClaimedSourceCommitSha() != null) {
+                throw new SourceCommitAlreadyPromotedException(promotionPost.getClaimedSourceCommitSha());
+            }
+            throw conflict;
+        }
     }
 
     @Override
     public Optional<PromotionPost> findById(String promotionPostId) {
         return repository.findById(promotionPostId).map(this::toDomain);
+    }
+
+    @Override
+    public boolean existsBySourceCommitSha(String sourceCommitSha) {
+        // 출처가 아니라 점유를 본다 — 반려된 초안은 점유를 놓아줬으므로 걸리지 않는다(D2).
+        return repository.existsByClaimedSourceCommitSha(sourceCommitSha);
+    }
+
+    @Override
+    public long countBySourceCommitSha(String sourceCommitSha) {
+        // 이쪽은 출처다 — 반려된 것까지 세야 재시도가 몇 번째인지 알 수 있다.
+        return repository.countBySourceCommitSha(sourceCommitSha);
     }
 
     @Override
@@ -41,6 +63,19 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
         return documents.stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public long countByStatus(PromotionPostStatus status) {
+        return repository.countByStatus(status.name());
+    }
+
+    @Override
+    public List<ReviewTimestamps> findReviewTimestamps() {
+        // 필터가 쿼리에 있으므로 여기서 다시 null 을 거르지 않는다.
+        return repository.findBySubmittedAtNotNullAndReviewedAtNotNull().stream()
+                .map(projection -> new ReviewTimestamps(projection.getSubmittedAt(), projection.getReviewedAt()))
+                .toList();
+    }
+
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {
         return new PromotionPostDocument(
                 promotionPost.getId(),
@@ -48,6 +83,8 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 promotionPost.getCaption(),
                 promotionPost.getMediaUrls(),
                 promotionPost.getAuthorId(),
+                promotionPost.getSourceCommitSha(),
+                promotionPost.getClaimedSourceCommitSha(),
                 promotionPost.getStatus().name(),
                 promotionPost.getCreatedAt(),
                 promotionPost.getSubmittedAt(),
@@ -65,6 +102,8 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 document.getCaption(),
                 document.getMediaUrls(),
                 document.getAuthorId(),
+                document.getSourceCommitSha(),
+                document.getClaimedSourceCommitSha(),
                 PromotionPostStatus.valueOf(document.getStatus()),
                 document.getCreatedAt(),
                 document.getSubmittedAt(),

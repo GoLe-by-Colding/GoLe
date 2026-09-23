@@ -6,10 +6,12 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /** 문의 AI를 켠 환경에서 잘못된 gRPC 대상이나 무제한 대기를 기동 단계에서 차단한다. */
 @Component
+@ConditionalOnProperty(name = "gole.support-agent.durable.enabled", havingValue = "false", matchIfMissing = true)
 public class SupportAssistantConfigurationGuard implements ApplicationRunner {
 
     private static final Set<String> DEVELOPER_ENVIRONMENTS = Set.of("local", "development", "dev", "test", "e2e");

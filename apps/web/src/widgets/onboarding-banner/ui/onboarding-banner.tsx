@@ -52,7 +52,9 @@ export function OnboardingBanner() {
   }
 
   return (
-    <div className="border-b border-brand-200 bg-brand-50 print:hidden">
+    // data-promotion-hide: 이 배너는 모든 화면 위에 걸려 홍보 스크린샷마다 잡힌다.
+    // 기능과 무관하므로 홍보 에이전트의 캡처에서는 감춘다.
+    <div className="border-b border-brand-200 bg-brand-50 print:hidden" data-promotion-hide>
       <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-2.5 text-sm text-brand-900">
         <p className="flex-1">
           프로필을 완성해 보세요. 닉네임과 관심 테마를 등록하면 더 잘 맞는 매물을 추천해 드려요.

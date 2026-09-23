@@ -9,6 +9,17 @@ public interface SupportAssistantPort {
 
     Optional<Analysis> analyze(Request request);
 
+    default boolean usesDurableJobs() {
+        return false;
+    }
+
+    /** 원격 실행은 정상 진행 중이며 이번 poll은 실패 시도에 포함하지 않는다. */
+    final class AnalysisPendingException extends RuntimeException {
+        public AnalysisPendingException() {
+            super("SUPPORT_ANALYSIS_PENDING", null, false, false);
+        }
+    }
+
     record Request(String ticketId, SupportCategory declaredCategory, String title, String message, String locale) {}
 
     record Analysis(

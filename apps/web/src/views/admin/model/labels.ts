@@ -74,6 +74,48 @@ export const PROMOTION_CHANNEL_LABEL: Readonly<Record<string, string>> = {
   THREADS: "Threads",
 };
 
+/** 홍보 초안 품질 루브릭 항목(promotion-review/eval.md). */
+export const EVALUATION_CRITERION_LABEL: Readonly<Record<string, string>> = {
+  FACT_BASIS: "사실·근거",
+  SCREEN_MATCH: "글·화면 일치",
+  READER_VALUE: "독자 가치",
+  PERSONA_NATURALNESS: "페르소나·자연스러움",
+  SPECIFICITY_VARIETY: "구체성·다양성",
+};
+
+export const FIRST_REVIEW_VERDICT_LABEL: Readonly<Record<string, string>> = {
+  USE_AS_IS: "그대로 사용",
+  MINOR_EDIT: "경미한 수정",
+  MAJOR_REWRITE: "대폭 수정",
+  UNUSABLE: "사용 불가",
+  HOLD: "보류",
+};
+
+export const FIRST_REVIEW_VERDICT_TONE: Readonly<Record<string, BadgeTone>> = {
+  USE_AS_IS: "success",
+  MINOR_EDIT: "brand",
+  MAJOR_REWRITE: "warning",
+  UNUSABLE: "danger",
+  HOLD: "danger",
+};
+
+export const HOLD_REASON_KIND_LABEL: Readonly<Record<string, string>> = {
+  CONFIRMED_DEFECT: "확정 결함",
+  EVIDENCE_GAP: "증거 부족",
+};
+
+export const EVALUATION_REASON_TAG_LABEL: Readonly<Record<string, string>> = {
+  FACTUAL_ERROR: "사실 오류",
+  EVIDENCE_GAP: "증거 부족",
+  SCREEN_MISMATCH: "화면 부적합",
+  INFO_EXPOSURE: "정보 노출",
+  LOW_PROMO_VALUE: "홍보 가치 부족",
+  TONE: "말투",
+  REPETITION: "반복",
+  FORMAT: "형식",
+  OTHER: "기타",
+};
+
 export const COUNT_LABEL: Readonly<Record<string, string>> = {
   accounts: "회원",
   lego_sets: "카탈로그 세트",
@@ -147,4 +189,33 @@ export function formatDateTime(value: string | null): string {
 /** 목록에서 긴 id를 접두 8자로 줄인다. */
 export function shortId(value: string): string {
   return value.length > 8 ? value.slice(0, 8) : value;
+}
+
+/**
+ * 릴리스 커밋 SHA를 검토 화면에서 읽기 좋게 앞 12자로 줄인다. id(8자)보다 길게 잡은 것은
+ * git 관례이기도 하고, 검토자가 이 값으로 실제 릴리스를 찾아가기 때문이다.
+ */
+export function shortCommitSha(value: string): string {
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+/** 비율을 %로. null(N/A)은 "N/A"로 표시한다 — 분모 0을 0%로 잘못 보이지 않게 한다. */
+export function formatRate(value: number | null): string {
+  if (value === null) {
+    return "N/A";
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
+/** 초 단위 값을 사람이 읽는 형식으로. null(N/A)은 "N/A". */
+export function formatSeconds(value: number | null): string {
+  if (value === null) {
+    return "N/A";
+  }
+  if (value < 60) {
+    return `${value}초`;
+  }
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return seconds === 0 ? `${minutes}분` : `${minutes}분 ${seconds}초`;
 }

@@ -16,6 +16,7 @@ const NAV_ITEMS: ReadonlyArray<{ readonly href: string; readonly label: string }
   { href: "/prices", label: "시세" },
   { href: "/community", label: "커뮤니티" },
   { href: "/collection", label: "컬렉션" },
+  { href: "/brick-filter", label: "브릭 필터" },
   { href: "/chat", label: "채팅" },
 ];
 
@@ -151,9 +152,14 @@ export function SiteHeader() {
             {session ? (
               <div className="inline-flex items-center gap-2">
                 {session.role === "ADMIN" ? (
-                  <LinkButton href="/admin" size="sm" variant="ghost">
-                    관리자
-                  </LinkButton>
+                  // 홍보 에이전트가 봇 ADMIN 계정으로 로그인해 화면을 찍으므로, 운영자
+                  // 메뉴가 홍보물에 섞이지 않도록 표식을 둔다. `contents` 라 평소 레이아웃에는
+                  // 영향이 없다.
+                  <span className="contents" data-promotion-hide>
+                    <LinkButton href="/admin" size="sm" variant="ghost">
+                      관리자
+                    </LinkButton>
+                  </span>
                 ) : null}
                 <LinkButton href="/sell" size="sm" variant="accent">
                   판매하기
@@ -241,14 +247,16 @@ export function SiteHeader() {
                 {session ? (
                   <>
                     {session.role === "ADMIN" ? (
-                      <LinkButton
-                        href="/admin"
-                        fullWidth
-                        variant="ghost"
-                        onClick={() => setMenuOpen(false)}
-                      >
-                        관리자
-                      </LinkButton>
+                      <span className="contents" data-promotion-hide>
+                        <LinkButton
+                          href="/admin"
+                          fullWidth
+                          variant="ghost"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          관리자
+                        </LinkButton>
+                      </span>
                     ) : null}
                     <LinkButton
                       href="/sell"

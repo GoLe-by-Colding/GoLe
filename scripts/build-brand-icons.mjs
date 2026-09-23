@@ -2,45 +2,40 @@
 /**
  * 모바일 브랜드 아이콘 생성기.
  *
- * 정본 마크는 `apps/web/src/app/icon.svg`(고래 + 골드 브릭 스터드)다. 그 도형을 여기 한 번만
- * 두고 플랫폼별 변형을 찍어낸다 — 규격이 서로 달라(iOS 정방형·무알파 / Android 세이프존 /
- * 모노크롬 실루엣) 파일을 손으로 관리하면 반드시 어긋난다.
- *
- * 사용: node scripts/build-brand-icons.mjs        (ImageMagick `magick` 필요)
+ * 정본 마크는 웹 Logo 컴포넌트다. Next에 설치된 sharp로 PNG를 생성한다.
+ * 사용: node scripts/build-brand-icons.mjs
  */
-import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const webRequire = createRequire(join(ROOT, "apps/web/package.json"));
+const sharp = createRequire(webRequire.resolve("next/package.json"))("sharp");
 const SRC_DIR = join(ROOT, "apps/mobile/assets/brand");
 const OUT_DIR = join(ROOT, "apps/mobile/assets/images");
 
 /** 브랜드 단색. 그라데이션은 `brand-identity.md`에서 금지한다. */
-const BRAND = "#1d4ed8";
-const GOLD = "#facc15";
+const BRAND = "#EFF3FF";
 
 /** 마크의 원본 좌표계 경계 — 배치 계산의 기준이다. */
-const BOX = { x: 3.7, y: 10.5, w: 33.3, h: 18.3 };
+const BOX = { x: 8, y: -5, w: 260, h: 151 };
 const CENTER = { x: BOX.x + BOX.w / 2, y: BOX.y + BOX.h / 2 };
 
-/** 얼굴(눈·입)은 흰 몸통을 파내는 브랜드 색이다. 실루엣 변형에서는 뺀다. */
-function markBody(mono) {
-  const skin = mono ? "#ffffff" : "#ffffff";
-  const stud = mono ? "#ffffff" : GOLD;
-  return `
-    <rect x="9.5" y="10.5" width="5" height="3.2" rx="1.3" fill="${skin}"/>
-    <rect x="15.55" y="10.5" width="5" height="3.2" rx="1.3" fill="${stud}"/>
-    <rect x="21.6" y="10.5" width="5" height="3.2" rx="1.3" fill="${skin}"/>
-    <path d="M9 13 L26.3 13 C28.4 13 29.4 14.9 29.8 17.4 C30.8 16 32.6 14.8 35 14.4 C36.4 14.2 37.2 15.6 36.4 16.8 C35.4 18.3 34.2 19.4 32.8 20.1 C34.3 20.9 35.6 22.1 36.6 23.7 C37.4 24.9 36.5 26.3 35.1 26 C32.7 25.5 30.8 24.2 29.7 22.4 C28.9 25.6 26.4 28.8 21.8 28.8 L13 28.8 C7.5 28.8 3.7 25.2 3.7 20.6 C3.7 16.5 5.7 13.4 9 13 Z" fill="${skin}"/>`;
-}
-
-function markFace() {
-  return `
-    <circle cx="9.6" cy="19.6" r="2.1" fill="${BRAND}"/>
-    <circle cx="10.4" cy="18.9" r="0.62" fill="#ffffff" opacity="0.9"/>
-    <path d="M6 22.6 Q8.3 24.6 11 23.2" stroke="${BRAND}" stroke-width="1.1" stroke-linecap="round" fill="none" opacity="0.5"/>`;
+/** 웹의 현재 고래 도형을 정본으로 사용한다. 분수는 히어로 전용이므로 제외한다. */
+function currentMark(mono) {
+  const source = readFileSync(join(ROOT, "apps/web/src/shared/ui/logo/logo.tsx"), "utf8");
+  const start = source.indexOf('<polygon points="204,74');
+  const end = source.indexOf("</svg>", start);
+  if (start < 0 || end < 0) throw new Error("Logo 정적 도형 경계를 확인해야 함");
+  const mark = source.slice(start, end)
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replaceAll("strokeWidth", "stroke-width")
+    .replaceAll("strokeLinecap", "stroke-linecap")
+    .replace(/[ \t]+$/gm, "");
+  if (/[{}]/.test(mark)) throw new Error("동적 JSX 도형은 직접 변환할 수 없음");
+  return mono ? mark.replace(/(fill|stroke)="#[0-9a-f]+"/gi, '$1="#ffffff"') : mark;
 }
 
 /** 캔버스 한가운데에 목표 너비로 마크를 앉힌다. */
@@ -48,7 +43,7 @@ function placedMark({ canvas, targetWidth, mono = false }) {
   const scale = targetWidth / BOX.w;
   const tx = canvas / 2 - CENTER.x * scale;
   const ty = canvas / 2 - CENTER.y * scale;
-  const body = markBody(mono) + (mono ? "" : markFace());
+  const body = currentMark(mono);
   return `  <g transform="translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${scale.toFixed(4)})">${body}
   </g>`;
 }
@@ -85,14 +80,10 @@ for (const v of VARIANTS) {
   const pngPath = join(OUT_DIR, `${v.name}.png`);
   writeFileSync(svgPath, body, "utf8");
 
-  // 밀도는 캔버스 대비로 잡는다 — 고정값을 쓰면 캔버스가 큰 변형에서 수만 픽셀을 렌더링한다.
-  const density = Math.round((72 * v.png * 2) / v.canvas);
-  const args = ["-background", "none", "-density", String(density), svgPath, "-resize", `${v.png}x${v.png}`];
-  // iOS 아이콘은 알파가 있으면 App Store Connect가 업로드를 거부한다.
-  if (v.flatten) args.push("-background", BRAND, "-alpha", "remove", "-alpha", "off");
-  // 타임스탬프를 빼야 재실행 결과가 바이트까지 같다 — 안 그러면 재생성마다 헛 diff가 난다.
-  args.push("-strip", "-define", "png:exclude-chunk=date,time", pngPath);
-  execFileSync("magick", args, { stdio: "inherit" });
+  let raster = sharp(Buffer.from(body)).resize(v.png, v.png);
+  if (v.flatten) raster = raster.flatten({ background: BRAND }).removeAlpha();
+  await raster.png().toFile(pngPath);
   console.log(`  ${v.name}.svg → ${v.name}.png (${v.png}px)`);
 }
-console.log("완료.");
+writeFileSync(join(ROOT, "apps/web/src/app/icon.svg"), svg({ canvas: 64, background: BRAND, targetWidth: 52 }), "utf8");
+console.log("웹 favicon까지 생성 완료.");

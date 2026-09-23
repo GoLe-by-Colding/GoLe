@@ -1,5 +1,6 @@
 package com.gole.api.common.operations;
 
+import com.gole.api.common.operations.sentry.SentryErrorCollector;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -84,8 +85,34 @@ public class DiscordOperationalEventPublisher implements OperationalEventPublish
         this.maxAttempts = Math.max(1, maxAttempts);
     }
 
+    private SentryErrorCollector sentryCollector;
+
+    @Autowired(required = false)
+    void setSentryCollector(SentryErrorCollector collector) {
+        this.sentryCollector = collector;
+    }
+
     @Override
     public void publish(OperationalEvent event) {
+        if (sentryCollector != null
+                && event.category() == OperationalEvent.Category.APPLICATION
+                && event.level() == OperationalEvent.Level.ERROR) {
+            sentryCollector.capture();
+        }
+        if (event.category() == OperationalEvent.Category.APPLICATION
+                && event.level() == OperationalEvent.Level.ERROR) {
+            event = new OperationalEvent(
+                    OperationalEvent.Category.APPLICATION,
+                    OperationalEvent.Level.ERROR,
+                    "API 오류 발생",
+                    "서버에서 운영 오류가 발생했습니다.",
+                    Map.of("component", "api", "diagnostic", "UNEXPECTED_ERROR"),
+                    event.occurredAt());
+        }
+        publishDiscord(event);
+    }
+
+    private void publishDiscord(OperationalEvent event) {
         String webhookUrl = properties.webhookFor(event.category());
         if (!properties.isEnabled() || webhookUrl == null || webhookUrl.isBlank()) {
             return;
