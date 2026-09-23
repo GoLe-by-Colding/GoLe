@@ -18,3 +18,13 @@ deployment-mutation-cleanup-runtime, deployment-runtime-verifier의 Docker 검�
 기존 main helper에서는 새 회귀 검사가 실패함. 수정 후 위 4종과 hostctl-runtime의
 Docker 검사 5종 및 ShellCheck warning 게이트가 통과함. 운영 Docker에서도 선택적
 variant 필드가 없는 amd64 descriptor의 추출과 manifest 일치를 확인함.
+
+- [x] 실제 운영 이미지의 0.25 CPU import가 3초를 초과함을 재현한다.
+- [x] bytecode 사전 생성과 healthcheck 실행 예산을 수정한다.
+- [x] 실제 이미지의 운영 자원 제한 기동·문의 RPC·비정상 health 거부를 CI에서 검사한다.
+- [x] root Compose 정책과 이전 LKG 복구 경계를 검증한다.
+- [ ] main CI·검토된 bootstrap·CD와 운영 소셜 로그인을 확인한다.
+
+로컬 검증: Python 161건·0 스킵, Compose 정책 39건·0 스킵, bootstrap 정적 계약과
+actionlint 통과함. 실제 이미지가 0.25 CPU·192 MiB에서 연속 healthcheck 3회와
+문의 RPC 2초 제한을 통과함. CI에도 같은 실행을 추가했으며 원격 결과는 별도 확인함.

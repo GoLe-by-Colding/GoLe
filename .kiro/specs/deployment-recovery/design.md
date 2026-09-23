@@ -11,3 +11,11 @@ Docker fixture에 실제 legacy 상태를 넣어 회귀를 재현한다. 성공 
 CD #35887681306은 예산 감시 컨테이너의 과거 `.Image`가 더 이상 로컬 image ID로 조회되지 않아 스냅샷에서 중단됐다. 실행 컨테이너의 `ImageManifestDescriptor`는 보존됐으며, 현재 Compose 태그의 `docker image inspect --platform linux/amd64` 결과와 manifest digest가 일치함을 운영에서 읽기 전용으로 확인했다.
 
 기존 ID가 조회되는 경우에는 그대로 사용한다. 조회되지 않는 legacy-adoption에서만 컨테이너의 manifest digest와 플랫폼을 읽고, Compose 이미지 참조를 먼저 불변 ID로 고정한 뒤 그 ID의 플랫폼 manifest와 비교한다. 이 순서는 조회 중 mutable 태그 변경을 실행 이미지로 오인하지 않게 한다. 복구 검증도 스냅샷의 불변 ID를 같은 방식으로 대조한다. manifest가 같다는 증명 없이 태그를 따르거나 컨테이너를 다시 만들지 않는다.
+
+## 제한된 CPU의 문의 에이전트 readiness
+
+CD #35892855977은 이미지 스냅샷과 빌드를 통과했으나, 문의 에이전트 healthcheck가 매번 3초를 초과해 자동 복구했다. 기존 서비스의 공개 health 200과 원장 정리를 확인했다. 동일 운영 이미지의 격리된 일회성 프로세스를 0.25 CPU·192 MiB로 측정하니 gRPC 모듈 import만 3.407초였다. 서버는 이미 SERVING 상태로 기동했으므로 RPC 요청 전 준비 시간이 검사 예산을 소진한 것이다.
+
+빌드 때 의존성과 서비스 코드를 bytecode로 미리 컴파일해 매 검사마다 파싱하지 않게 한다. Docker 검사 전체는 10초, 초기 기동 유예는 30초로 두며 실제 RPC 제한 2초와 서비스 이름별 SERVING 확인은 유지한다. Compose와 이미지 기본 healthcheck를 맞추고 root Compose 정책에도 같은 계약을 반영한다. 이전 3초 설정은 검증된 LKG 복구 모드에서만 허용한다.
+
+CI에서 실제 이미지를 외부 연결·호스트 포트 없이 운영과 같은 자원 제한으로 띄운다. Docker가 healthy로 판단하는지와 실제 문의 RPC 응답을 확인하고, NOT_SERVING·무응답 fixture에 같은 healthcheck를 실행해 실패하는지 검증한다. 테스트가 끝나면 생성한 컨테이너만 제거한다.
