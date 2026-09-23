@@ -108,6 +108,9 @@ ref_file() {
 
 resolve_ref() {
   local file ref="$1"
+  if [ -f "$state_root/missing-image" ] && [ "$ref" = "$(cat "$state_root/missing-image")" ]; then
+    return 1
+  fi
   if [[ "$ref" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     printf '%s\n' "$ref"
     return
@@ -231,7 +234,12 @@ case "${1:-}" in
     case "${2:-}" in
       inspect)
         printf 'resolve-%s\n' "${@: -1}" >> "$state_root/transaction.events"
-        resolve_ref "${@: -1}"
+        if [[ " $* " == *' --platform '* ]]; then
+          resolve_ref "${@: -1}" >/dev/null
+          cat "$state_root/platform-image"
+        else
+          resolve_ref "${@: -1}"
+        fi
         ;;
       tag) store_ref "$4" "$(resolve_ref "$3")" ;;
       rm)
@@ -258,6 +266,7 @@ case "${1:-}" in
     done
     case "$format" in
       *com.docker.compose.project*) cat "$state_root/services/$service/labels" ;;
+      *ImageManifestDescriptor*) cat "$state_root/services/$service/manifest" ;;
       *'.State.ExitCode'*)
         [ "$service" != minio-init ] ||
           printf 'verify-minio-init\n' >> "$state_root/transaction.events"
@@ -534,6 +543,49 @@ dump_failure_context() {
   exit "$status"
 }
 trap dump_failure_context ERR
+
+# 과거 ID가 저장소에서 사라졌어도 실행 manifest가 같으면 불변 ID로 백업한다.
+setup_snapshot legacy
+printf '%s\n' "$conflict_id" > "$state_root/services/budget-relay/image"
+printf '%s\n' "$conflict_id" > "$state_root/missing-image"
+printf '%s|linux/amd64\n' "$candidate_id" > "$state_root/services/budget-relay/manifest"
+printf '%s\n' "$candidate_id" > "$state_root/platform-image"
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id"
+assert_manifest_line "image.budget-relay=$budget_id" \
+  "/var/backups/gole-images/images.$compact_request_id"
+grep -Fq "image inspect --platform linux/amd64 --format {{.Id}} $budget_id" "$state_root/docker.calls"
+# 빌드가 canonical 태그를 바꾼 뒤 실패해도 스냅샷 ID로 같은 실행 manifest를 검증한다.
+set_ref gole/budget-relay:local "$drift_id"
+sed -i 's/^state=snapshotted$/state=built/' /etc/gole/deployment.transaction
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$request_id"
+[ "$(cat "$state_root/services/budget-relay/image")" = "$conflict_id" ]
+assert_ref gole/budget-relay:local "$budget_id"
+[ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /tmp/poweroff-requested ]
+! grep -Eq '^(stop|up|rm|pull)(-|$)' "$state_root/transaction.events"
+
+for invalid_proof in mismatch missing-manifest invalid-platform strict; do
+  mode=legacy
+  [ "$invalid_proof" != strict ] || mode=strict
+  setup_snapshot "$mode"
+  printf '%s\n' "$conflict_id" > "$state_root/services/budget-relay/image"
+  printf '%s\n' "$conflict_id" > "$state_root/missing-image"
+  printf '%s|linux/amd64\n' "$candidate_id" > "$state_root/services/budget-relay/manifest"
+  printf '%s\n' "$candidate_id" > "$state_root/platform-image"
+  case "$invalid_proof" in
+    mismatch) printf '%s\n' "$drift_id" > "$state_root/platform-image" ;;
+    missing-manifest) rm "$state_root/services/budget-relay/manifest" ;;
+    invalid-platform) printf '%s|linux/amd64/invalid\n' "$candidate_id" > "$state_root/services/budget-relay/manifest" ;;
+  esac
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id" \
+    > /tmp/legacy-manifest-rejection.out 2>&1; then
+    echo "snapshot accepted invalid legacy manifest proof: $invalid_proof" >&2
+    exit 1
+  fi
+  grep -q '^state=prepared$' /etc/gole/deployment.transaction
+  [ ! -e "/var/backups/gole-images/images.$compact_request_id" ]
+  ! grep -Eq '^(stop|up|rm|pull)(-|$)' "$state_root/transaction.events"
+done
 
 # 이전 Nginx에는 healthcheck가 없으며 prepared 복구가 이를 장애로 오인하면 안 된다.
 setup_snapshot legacy
