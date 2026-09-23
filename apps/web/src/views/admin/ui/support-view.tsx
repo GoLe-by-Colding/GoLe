@@ -131,6 +131,7 @@ export function AdminSupportView() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [notes, setNotes] = useState<readonly AdminSupportNote[]>([]);
   const [reply, setReply] = useState("");
+  const [confirmDraftReplacement, setConfirmDraftReplacement] = useState(false);
   const [note, setNote] = useState("");
   const [transferTo, setTransferTo] = useState("");
   const [takeoverReason, setTakeoverReason] = useState("");
@@ -156,6 +157,7 @@ export function AdminSupportView() {
     setLoadingOlderMessages(false);
     setNotes([]);
     setReply("");
+    setConfirmDraftReplacement(false);
     setNote("");
     setTransferTo("");
     setTakeoverReason("");
@@ -728,7 +730,10 @@ export function AdminSupportView() {
                         rows={2}
                         maxLength={2000}
                         value={reply}
-                        onChange={(event) => setReply(event.target.value)}
+                        onChange={(event) => {
+                          setReply(event.target.value);
+                          setConfirmDraftReplacement(false);
+                        }}
                         placeholder="사용자에게 보낼 답변"
                         disabled={busy || selected.status === "RESOLVED"}
                       />
@@ -794,10 +799,43 @@ export function AdminSupportView() {
                               selected.status === "RESOLVED" ||
                               selected.assistantAnalysis.draft.trim().length === 0
                             }
-                            onClick={() => setReply(selected.assistantAnalysis?.draft ?? "")}
+                            onClick={() => {
+                              const draft = selected.assistantAnalysis?.draft ?? "";
+                              if (reply.trim().length > 0 && reply !== draft) {
+                                setConfirmDraftReplacement(true);
+                              } else {
+                                setReply(draft);
+                              }
+                            }}
                           >
                             초안을 답변에 넣기
                           </Button>
+                          {confirmDraftReplacement ? (
+                            <div role="alert" className="mt-3 space-y-2">
+                              <p>작성 중인 답변이 있습니다. AI 초안으로 바꾸시겠어요?</p>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => setConfirmDraftReplacement(false)}
+                                >
+                                  작성한 답변 유지
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={busy || selected.status === "RESOLVED"}
+                                  onClick={() => {
+                                    setReply(selected.assistantAnalysis?.draft ?? "");
+                                    setConfirmDraftReplacement(false);
+                                  }}
+                                >
+                                  AI 초안으로 바꾸기
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
                           <p className="mt-2 text-[11px] leading-4 text-neutral-400">
                             {selected.assistantAnalysis.engine} ·
                             {selected.assistantAnalysis.externalModel
