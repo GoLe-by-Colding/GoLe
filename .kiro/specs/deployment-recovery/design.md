@@ -25,3 +25,11 @@ CI에서 실제 이미지를 외부 연결·호스트 포트 없이 운영과 �
 main `c328a7c4`의 CI #35898208316과 check suite는 completed·success였지만, `status=completed` 또는 `status=success`를 붙인 workflow 목록에서는 10분 넘게 해당 실행이 빠졌다. 같은 `branch=main&event=push&head_sha=<SHA>` 조회는 즉시 정확한 성공 실행을 반환했다. bootstrap과 release verifier가 이 목록 필터에 의존해 설치 전 단계에서 중단됐다.
 
 상태 필터를 제거하고 정확한 SHA로 조회한다. 반환된 각 실행의 head_sha·head_branch=main·event=push·status=completed·conclusion=success를 모두 확인한다. root 소유 저장소의 현재 main 일치, 과거 릴리스의 main 조상 검증, immutable archive와 파일 권한 검증은 그대로 유지한다. bootstrap 본문·README 진입 명령·설치 release verifier 모두 같은 판정을 사용한다. 상태 필터를 쓰면 과거 목록만 주는 fixture로 재현하고, 미완료·실패·다른 브랜치/이벤트/SHA·잘못된 응답은 거부한다.
+
+## 실제 Docker inspect 계약
+
+CD #35903369477은 문의 에이전트·API·웹·Nginx·비용 가드 모두 healthy가 된 뒤 `strict runtime network boundary changed: mongo`로 자동 복구했다. Docker의 `println` 템플릿과 CLI가 각각 개행을 추가해 `sort | paste` 결과 앞에 쉼표가 생겼다. 기존 fixture는 이 마지막 빈 줄을 재현하지 못했다. 네트워크를 JSON 객체로 읽고 모든 키를 정렬해 정확한 허용목록과 비교한다.
+
+실제 Mongo 이미지가 선언한 `/data/configdb` 익명 볼륨도 운영·개발 inspect에서 확인했다. strict 검증은 이미 승인 이미지의 불변 ID를 대조하므로, mongo의 해당 경로에 한해 64자리 소문자 hex 이름·local driver·쓰기 가능한 volume 하나를 인정한다. 주 데이터의 `gole_mongo-data:/data/db` 계약은 유지하며 bind·다른 이름/driver·읽기 전용·중복·다른 경로는 거부한다. 새 데이터 볼륨을 생성하거나 기존 운영 데이터를 옮기지 않는다.
+
+실제 고정 Mongo 이미지로 실행하지 않는 일회성 컨테이너를 만들어 원본 inspect 출력을 파서에 전달하고, 정상 마운트와 변조된 마운트를 검사한다. 생성한 컨테이너와 익명 볼륨만 정리한다. CD 진입 검증에도 R11과 같은 정확한 SHA 조회 및 응답 검증을 적용한다.

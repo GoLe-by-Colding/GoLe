@@ -36,3 +36,12 @@ actionlint 통과함. 실제 이미지가 0.25 CPU·192 MiB에서 연속 healthc
 기존 release verifier는 실제 성공한 `c328a7c4`를 거부하며 수정본은 같은 SHA를 통과함.
 bootstrap 본문과 README 진입 명령도 HTTP fixture로 직접 실행해 동일 경계를 검증함.
 관련 단위 8건, bootstrap 정적 계약 130건, ShellCheck warning·bash 구문·diff 검사 통과함.
+
+- [x] 실제 Docker의 이중 개행과 Mongo 암묵적 configdb 볼륨을 재현한다.
+- [x] JSON 기반 네트워크·마운트 검사와 경계 회귀를 검증한다.
+- [x] CD 진입점도 CI 완료 목록 지연에 독립적으로 검증한다.
+- [ ] main CI·공식 bootstrap·full CD 후 운영 OAuth와 원장을 확인한다.
+
+실제 고정 Mongo 이미지의 Docker inspect 계약, deployment-runtime-verifier,
+secret-sync-runtime, metadata-ratchet-transaction Docker 검사 4종 통과함.
+CI 조회 단위 8건(CD 본문 포함)·bootstrap 정적 계약 130건·ShellCheck warning·actionlint·diff 통과함.
