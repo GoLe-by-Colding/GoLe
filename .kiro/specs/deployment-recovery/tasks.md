@@ -28,3 +28,11 @@ variant 필드가 없는 amd64 descriptor의 추출과 manifest 일치를 확인
 로컬 검증: Python 161건·0 스킵, Compose 정책 39건·0 스킵, bootstrap 정적 계약과
 actionlint 통과함. 실제 이미지가 0.25 CPU·192 MiB에서 연속 healthcheck 3회와
 문의 RPC 2초 제한을 통과함. CI에도 같은 실행을 추가했으며 원격 결과는 별도 확인함.
+
+- [x] 성공한 main CI·check suite와 상태 필터 목록의 불일치를 재현한다.
+- [x] 정확한 SHA 조회와 응답 필드 검증을 bootstrap·진입 명령·release verifier에 적용한다.
+- [x] 상태 목록 지연 fixture와 미완료·실패·브랜치·이벤트·SHA 거부 경계를 검증한다.
+
+기존 release verifier는 실제 성공한 `c328a7c4`를 거부하며 수정본은 같은 SHA를 통과함.
+bootstrap 본문과 README 진입 명령도 HTTP fixture로 직접 실행해 동일 경계를 검증함.
+관련 단위 8건, bootstrap 정적 계약 130건, ShellCheck warning·bash 구문·diff 검사 통과함.
