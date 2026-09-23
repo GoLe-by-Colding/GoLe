@@ -85,7 +85,7 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 - [x] F1 entities/user social API
 - [x] F2 features/social-login 버튼
 - [x] F3 views/oauth-callback + app route + sign-in 연동
-- [ ] D1 빌드·배포·스모크
+- [x] D1 빌드·배포·스모크 — 운영에 설정된 카카오·네이버의 실제 로그인·재로그인 및 서버 세션 확인. Google은 미설정으로 실제 로그인 미검증.
 
 ### 요청 관측의 비동기 검증
 
