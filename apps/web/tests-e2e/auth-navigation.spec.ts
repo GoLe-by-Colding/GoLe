@@ -87,17 +87,19 @@ test.describe("Auth navigation", () => {
     await expect(submit).toBeEnabled();
     await submit.click();
 
-    expect(registerBody).toEqual({
-      email: "policy@gole.test",
-      password: "password1",
-      termsVersion: "2026-09-04",
-      privacyVersion: "2026-09-05",
-      thirdPartyProvisionVersion: "2026-09-04",
-      termsAccepted: true,
-      privacyAcknowledged: true,
-      thirdPartyProvisionAccepted: false,
-      minimumAgeConfirmed: true,
-    });
+    await expect
+      .poll(() => registerBody)
+      .toEqual({
+        email: "policy@gole.test",
+        password: "password1",
+        termsVersion: "2026-09-04",
+        privacyVersion: "2026-09-05",
+        thirdPartyProvisionVersion: "2026-09-04",
+        termsAccepted: true,
+        privacyAcknowledged: true,
+        thirdPartyProvisionAccepted: false,
+        minimumAgeConfirmed: true,
+      });
     await expect(page).toHaveURL(/\/verify\?returnTo=%2Fcollection/);
     await expect
       .poll(() =>

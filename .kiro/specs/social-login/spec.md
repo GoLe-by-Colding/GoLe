@@ -87,6 +87,13 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 - [x] F3 views/oauth-callback + app route + sign-in 연동
 - [ ] D1 빌드·배포·스모크
 
+### 요청 관측의 비동기 검증
+
+main CI #35898208316에서 회원가입 요청 본문 검사가 클릭 직후 `undefined`를 읽어
+1회 재시도했다. 브라우저 클릭 완료와 route 핸들러의 요청 관측은 같은 시점이 아니므로,
+정책 버전과 동의 본문은 관측값을 기다리는 assertion으로 검사한다. 요청 본문 계약과
+가입 후 이동·세션 저장 검증은 유지하며 고정 sleep으로 대체하지 않는다.
+
 ## 보안/후속
 - state는 서버가 발급·Redis 저장·콜백 1회 소비로 검증하고(CSRF), `gole_oauth_transaction` HttpOnly
   쿠키로 브라우저에도 결박해 상수시간 비교로 이중 방어한다(`OAuthTransactionCookie`). provider별
