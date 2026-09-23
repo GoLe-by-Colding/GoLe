@@ -35,6 +35,7 @@ drift_id="$(image_id 9)"
 install -d -m 0755 /etc/gole /usr/local/libexec/gole /usr/local/sbin /test-bin \
   /var/backups/gole-images "$release/infra/gcp"
 touch "$release/infra/gcp/docker-compose.yml"
+printf 'server_name __DOMAIN__;\n' > "$release/infra/gcp/nginx-https.conf.template"
 printf '%s\n' "$previous_sha" > "$release/.gole-source-sha"
 chown -R root:root /var/lib/gole
 chmod -R go-w /var/lib/gole
@@ -296,15 +297,22 @@ EOF
 cat > /test-bin/curl <<'EOF'
 #!/bin/sh
 case "$*" in
+  *'http://gole.co.kr/__gole-legacy-transport-check?source=adoption'*)
+    printf '301|https://gole.co.kr/__gole-legacy-transport-check?source=adoption'
+    ;;
+  *'http://www.gole.co.kr/__gole-legacy-transport-check?source=adoption'*)
+    printf '301|https://www.gole.co.kr/__gole-legacy-transport-check?source=adoption'
+    ;;
   *'http://www.gole.co.kr/__gole-canonical-check?source=runtime'*)
     printf '301|https://gole.co.kr/__gole-canonical-check?source=runtime'
     ;;
   *'https://www.gole.co.kr/__gole-canonical-check?source=runtime'*)
     printf '301|https://gole.co.kr/__gole-canonical-check?source=runtime'
     ;;
-  *'https://gole.co.kr/'*)
+  *'-fsSI '*'https://gole.co.kr/'*|*'-fsSI '*'https://www.gole.co.kr/'*)
     printf 'HTTP/2 200\r\nStrict-Transport-Security: max-age=31536000\r\n\r\n'
     ;;
+  *'https://gole.co.kr/'*|*'https://www.gole.co.kr/'*) printf '200|' ;;
 esac
 exit 0
 EOF
@@ -458,6 +466,9 @@ EOF
     printf 'state=pending\nlegacy_sha=%s\n' "$previous_sha" > /etc/gole/metadata-migration.pending
     chmod 0644 /etc/gole/metadata-migration.pending
   fi
+  sed 's/__DOMAIN__/gole.co.kr/g' "$release/infra/gcp/nginx-https.conf.template" \
+    > /etc/gole/nginx.conf
+  chmod 0644 /etc/gole/nginx.conf
   write_model "$mode"
   seed_lkg_runtime "$mode"
 }
@@ -523,6 +534,56 @@ dump_failure_context() {
   exit "$status"
 }
 trap dump_failure_context ERR
+
+# 이전 Nginx에는 healthcheck가 없으며 prepared 복구가 이를 장애로 오인하면 안 된다.
+setup_snapshot legacy
+printf 'missing\n' > "$state_root/services/nginx/health"
+legacy_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
+[ "$recovery" = RECOVERED ]
+[ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /tmp/poweroff-requested ]
+[ "$(cat /etc/gole/deployed.sha)" = "$previous_sha" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$legacy_env_hash" ]
+if grep -Eq 'action=(up|run) service=' "$state_root/compose.calls" ||
+  grep -Eq '^(stop|rm) ' "$state_root/docker.calls"; then
+  echo 'prepared recovery mutated the existing runtime' >&2
+  exit 1
+fi
+
+# 예외는 legacy Nginx의 healthcheck 부재에만 적용한다.
+for broken_service in nginx backend frontend budget-relay; do
+  setup_snapshot legacy
+  health=missing
+  [ "$broken_service" != nginx ] || health=unhealthy
+  printf '%s\n' "$health" > "$state_root/services/$broken_service/health"
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover \
+    >/tmp/prepared-unhealthy.out 2>&1; then
+    echo "prepared recovery accepted unhealthy service: $broken_service" >&2
+    exit 1
+  fi
+  grep -q 'pre-snapshot LKG container is not healthy' /tmp/prepared-unhealthy.out
+  grep -qx 'state=prepared' /etc/gole/deployment.transaction
+  [ -e /tmp/poweroff-requested ]
+done
+
+# 같은 legacy 모드여도 채택 SHA나 실제 Nginx 설정이 달라지면 복구 원장을 보존한다.
+for drift in marker nginx; do
+  setup_snapshot legacy
+  if [ "$drift" = marker ]; then
+    sed -i "s/legacy_sha=$previous_sha/legacy_sha=$new_sha/" /etc/gole/metadata-migration.pending
+  else
+    printf '# drift\n' >> /etc/gole/nginx.conf
+  fi
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover \
+    >/tmp/prepared-drift.out 2>&1; then
+    echo "prepared recovery accepted legacy drift: $drift" >&2
+    exit 1
+  fi
+  grep -q 'does not match' /tmp/prepared-drift.out
+  grep -qx 'state=prepared' /etc/gole/deployment.transaction
+done
 
 # The first strict main CD starts from the exact legacy-adoption snapshot mode.
 # It must replace every data service/initializer before every application

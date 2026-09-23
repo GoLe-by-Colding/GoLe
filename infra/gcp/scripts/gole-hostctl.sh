@@ -2321,13 +2321,19 @@ verify_pre_snapshot_lkg_runtime() {
     verify_metadata_full_policy
     verify_broker_native_budget_relay
   else
+    read_metadata_migration_marker && [ "$METADATA_MIGRATION_LEGACY_SHA" = "$expected_sha" ] ||
+      die "pre-snapshot legacy release does not match the migration marker"
     verify_metadata_pending_policy
   fi
   for container in gole-backend gole-frontend gole-budget-relay gole-nginx; do
     state="$(docker inspect --format \
       '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
       "$container" 2>/dev/null || true)"
-    [ "$state" = running:healthy ] || die "pre-snapshot LKG container is not healthy"
+    # 채택한 이전 Nginx만 healthcheck가 없다. 다른 컨테이너와 strict 모드는 계속 강제한다.
+    case "$container:$mode:$state" in
+      gole-nginx:legacy-adoption:running:missing | *:*:running:healthy) ;;
+      *) die "pre-snapshot LKG container is not healthy: $container" ;;
+    esac
   done
   if [ "$mode" = strict ]; then
     state="$(docker inspect --format \
@@ -2335,7 +2341,16 @@ verify_pre_snapshot_lkg_runtime() {
       gole-support-agent 2>/dev/null || true)"
     [ "$state" = running:healthy ] || die "pre-snapshot support agent is not healthy"
   fi
-  verify_public_transport_runtime
+  if [ "$mode" = legacy-adoption ]; then
+    # 전환 전 원장 복구에서는 정확한 이전 설정과 전송 계약을 검증한다.
+    verify_legacy_adopted_transport_runtime
+    curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null ||
+      die "backend readiness check failed"
+    curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null ||
+      die "frontend readiness check failed"
+  else
+    verify_public_transport_runtime
+  fi
   systemctl is-active --quiet gole-cost-guard-watchdog.timer ||
     die "cost guard watchdog timer is not active"
 }
