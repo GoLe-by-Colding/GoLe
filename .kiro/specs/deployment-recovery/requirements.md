@@ -8,3 +8,5 @@
 - R6. legacy 컨테이너의 과거 image ID가 로컬 이미지 저장소에 없더라도, Docker가 기록한 실행 manifest와 플랫폼이 보존된 이미지의 manifest와 정확히 일치하면 그 불변 image ID로 백업할 수 있다.
 - R7. 태그 이름만으로 같은 이미지라고 추정하지 않는다. manifest·플랫폼 부재나 불일치, strict 모드의 누락된 image ID는 거부한다.
 - R8. 이미지 ID를 정규화한 뒤 빌드 전에 실패해도 기존 컨테이너를 재생성하지 않고 같은 manifest를 검증해 복구한다.
+- R9. 문의 에이전트의 0.25 CPU·192 MiB 제한에서 Python 실행 준비와 gRPC health 응답을 포함한 검사가 완료돼야 한다. RPC 자체의 2초 제한과 SERVING 검증은 유지한다.
+- R10. 이미지 빌드만으로 기동 성공을 판단하지 않는다. CI에서 운영 자원 제한으로 실제 서버와 Docker healthcheck를 실행하고, 응답하지 않는 서버와 NOT_SERVING 상태를 거부한다.
