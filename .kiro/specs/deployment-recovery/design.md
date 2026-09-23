@@ -19,3 +19,9 @@ CD #35892855977은 이미지 스냅샷과 빌드를 통과했으나, 문의 에�
 빌드 때 의존성과 서비스 코드를 bytecode로 미리 컴파일해 매 검사마다 파싱하지 않게 한다. Docker 검사 전체는 10초, 초기 기동 유예는 30초로 두며 실제 RPC 제한 2초와 서비스 이름별 SERVING 확인은 유지한다. Compose와 이미지 기본 healthcheck를 맞추고 root Compose 정책에도 같은 계약을 반영한다. 이전 3초 설정은 검증된 LKG 복구 모드에서만 허용한다.
 
 CI에서 실제 이미지를 외부 연결·호스트 포트 없이 운영과 같은 자원 제한으로 띄운다. Docker가 healthy로 판단하는지와 실제 문의 RPC 응답을 확인하고, NOT_SERVING·무응답 fixture에 같은 healthcheck를 실행해 실패하는지 검증한다. 테스트가 끝나면 생성한 컨테이너만 제거한다.
+
+## GitHub CI 완료 목록 반영 지연
+
+main `c328a7c4`의 CI #35898208316과 check suite는 completed·success였지만, `status=completed` 또는 `status=success`를 붙인 workflow 목록에서는 10분 넘게 해당 실행이 빠졌다. 같은 `branch=main&event=push&head_sha=<SHA>` 조회는 즉시 정확한 성공 실행을 반환했다. bootstrap과 release verifier가 이 목록 필터에 의존해 설치 전 단계에서 중단됐다.
+
+상태 필터를 제거하고 정확한 SHA로 조회한다. 반환된 각 실행의 head_sha·head_branch=main·event=push·status=completed·conclusion=success를 모두 확인한다. root 소유 저장소의 현재 main 일치, 과거 릴리스의 main 조상 검증, immutable archive와 파일 권한 검증은 그대로 유지한다. bootstrap 본문·README 진입 명령·설치 release verifier 모두 같은 판정을 사용한다. 상태 필터를 쓰면 과거 목록만 주는 fixture로 재현하고, 미완료·실패·다른 브랜치/이벤트/SHA·잘못된 응답은 거부한다.

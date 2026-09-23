@@ -460,9 +460,10 @@ import urllib.request
 
 sha = sys.argv[1]
 repo = urllib.parse.quote("GoLe-by-Colding/GoLe", safe="/")
+# 상태 필터의 검색 반영 지연과 무관하게 정확한 SHA의 완료·성공을 직접 검증한다.
 request = urllib.request.Request(
     f"https://api.github.com/repos/{repo}/actions/workflows/ci.yml/runs"
-    "?branch=main&event=push&status=completed&per_page=20",
+    f"?branch=main&event=push&head_sha={sha}&per_page=20",
     headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "GoLe-Root-Bootstrap/1.0",
@@ -471,9 +472,12 @@ request = urllib.request.Request(
 )
 with urllib.request.urlopen(request, timeout=15) as response:
     runs = json.load(response).get("workflow_runs", [])
-if not any(
+if not isinstance(runs, list) or not any(
     isinstance(run, dict)
     and run.get("head_sha") == sha
+    and run.get("head_branch") == "main"
+    and run.get("event") == "push"
+    and run.get("status") == "completed"
     and run.get("conclusion") == "success"
     for run in runs
 ):
