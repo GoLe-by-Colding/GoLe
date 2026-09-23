@@ -131,9 +131,10 @@ services:
     healthcheck:
       test: ["CMD", "python", "-m", "gole_support_agent.healthcheck"]
       interval: 10s
-      timeout: 3s
+      # 0.25 CPU에서 Python import와 RPC의 2초 제한을 함께 수용한다.
+      timeout: 10s
       retries: 12
-      start_period: 10s
+      start_period: 30s
 
   # 하루 한 번 떴다 지는 홍보 초안 에이전트(스펙 D10). profile 로 분리했으므로 `compose up`
   # 에서는 뜨지 않고 타이머가 `run --rm` 으로만 부른다.
