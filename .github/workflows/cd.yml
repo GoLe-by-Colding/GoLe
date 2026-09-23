@@ -64,13 +64,15 @@ jobs:
 
           runs_url = (
               f"https://api.github.com/repos/{repository}/actions/workflows/ci.yml/runs"
-              "?branch=main&event=push&status=completed&per_page=100"
+              f"?branch=main&event=push&head_sha={sha}&per_page=20"
           )
           request = urllib.request.Request(runs_url, headers=headers)
           with urllib.request.urlopen(request, timeout=15) as response:
               runs = json.load(response).get("workflow_runs", [])
           if not any(
-              run.get("head_sha") == sha and run.get("conclusion") == "success"
+              isinstance(run, dict) and run.get("head_sha") == sha and
+              run.get("head_branch") == "main" and run.get("event") == "push" and
+              run.get("status") == "completed" and run.get("conclusion") == "success"
               for run in runs
           ):
               raise SystemExit("현재 main SHA의 성공한 push CI 실행을 찾지 못했습니다.")

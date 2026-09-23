@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
 import unittest
 from unittest import mock
 
@@ -60,9 +61,11 @@ class VerifyGithubReleaseTests(unittest.TestCase):
         sources = {
             "bootstrap": (SCRIPT.parent / "bootstrap-host.sh").read_text(),
             "entrypoint": (root / "infra/gcp/README.md").read_text(),
+            "cd": (root / ".github/workflows/cd.yml").read_text(),
         }
         for name, source in sources.items():
-            blocks = re.findall(r"<<'PY'\n(.*?)\nPY", source, re.S)
+            blocks = [textwrap.dedent(block) for block in
+                      re.findall(r"<<'PY'\n(.*?)\n[ \t]*PY\n", source, re.S)]
             code = next(block for block in blocks if "actions/workflows/ci.yml/runs" in block)
             for change, succeeds in (({}, True), ({"status": "in_progress"}, False),
                                      ({"conclusion": "failure"}, False), ({"head_branch": "dev"}, False),
@@ -71,14 +74,18 @@ class VerifyGithubReleaseTests(unittest.TestCase):
                     payload = self.successful_run()
                     payload["workflow_runs"][0].update(change)
                     harness = """
-import io, json, sys, urllib.request
+import io, json, os, sys, urllib.request
 from unittest.mock import patch
 code, payload, sha = json.loads(sys.stdin.read())
 def response(request, timeout):
+    if request.full_url.endswith('/git/ref/heads/main'):
+        return io.StringIO(json.dumps({'object': {'sha': sha}}))
     assert 'head_sha=' + sha in request.full_url
     value = {'workflow_runs': []} if 'status=' in request.full_url else payload
     return io.StringIO(json.dumps(value))
 sys.argv = ['bootstrap', sha]
+os.environ.update(GITHUB_REPOSITORY='GoLe-by-Colding/GoLe', CANDIDATE_SHA=sha,
+                  GH_TOKEN='fixture-only')
 with patch.object(urllib.request, 'urlopen', side_effect=response):
     exec(compile(code, '<bootstrap-ci-verifier>', 'exec'))
 """

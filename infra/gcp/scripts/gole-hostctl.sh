@@ -2723,6 +2723,39 @@ expected_runtime_resource_limits() {
   esac
 }
 
+runtime_network_names() {
+  # Docker의 println 템플릿은 CLI 개행과 겹친다. 원본 JSON 키만 비교한다.
+  python3 -c 'import json,sys
+networks=json.load(sys.stdin)
+if not isinstance(networks,dict) or not networks: raise SystemExit(1)
+if any(not name or not isinstance(value,dict) for name,value in networks.items()):
+    raise SystemExit(1)
+print(",".join(sorted(networks)))'
+}
+
+runtime_data_mounts() {
+  # 승인된 Mongo 이미지가 선언한 보조 익명 볼륨만 별도로 인정한다.
+  # 주 데이터 볼륨의 이름·대상·쓰기 계약과 다른 서비스의 검증은 유지한다.
+  python3 -c 'import json,re,sys
+mounts=json.load(sys.stdin)
+if not isinstance(mounts,list): raise SystemExit(1)
+rows=[]
+config_count=0
+for mount in mounts:
+    if not isinstance(mount,dict) or not isinstance(mount.get("RW"),bool):
+        raise SystemExit(1)
+    if sys.argv[1] == "mongo" and mount.get("Destination") == "/data/configdb":
+        config_count += 1
+        if (config_count != 1 or mount.get("Type") != "volume"
+                or mount.get("Driver") != "local" or mount["RW"] is not True
+                or not re.fullmatch(r"[0-9a-f]{64}", mount.get("Name", ""))):
+            raise SystemExit(1)
+        continue
+    rows.append("%s|%s|%s|%s" % (mount.get("Type",""),mount.get("Name",""),
+                mount.get("Destination",""),str(mount["RW"]).lower()))
+print(",".join(sorted(rows)))' "$1"
+}
+
 verify_strict_live_compose_runtime() {
   local actual_image actual_mounts actual_networks actual_ports container container_ids
   local actual_resources expected_image expected_mounts expected_networks expected_ports
@@ -2740,9 +2773,8 @@ verify_strict_live_compose_runtime() {
     actual_image="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
     [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ ]] && [ "$actual_image" = "$expected_image" ] ||
       die "strict runtime image identity changed: $service"
-    actual_networks="$(docker inspect --format \
-      '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
-      "$container" | LC_ALL=C sort | paste -sd, -)" ||
+    actual_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' \
+      "$container" | runtime_network_names)" ||
       die "strict runtime networks could not be inspected: $service"
     case "$service" in
       backend) expected_networks=gole_agent,gole_data,gole_edge ;;
@@ -2764,13 +2796,7 @@ verify_strict_live_compose_runtime() {
     [ "$actual_ports" = "$expected_ports" ] || die "strict runtime published ports changed: $service"
     if [ "$service" = mongo ] || [ "$service" = redis ] || [ "$service" = minio ]; then
       actual_mounts="$(docker inspect --format '{{json .Mounts}}' "$container" |
-        python3 -c 'import json,sys
-m=json.load(sys.stdin) or []
-rows=[]
-for x in m:
-    if not isinstance(x,dict): raise SystemExit(1)
-    rows.append("%s|%s|%s|%s" % (x.get("Type",""),x.get("Name",""),x.get("Destination",""),str(bool(x.get("RW"))).lower()))
-print(",".join(sorted(rows)))')" || die "strict runtime mounts could not be inspected: $service"
+        runtime_data_mounts "$service")" || die "strict runtime mounts could not be inspected: $service"
       case "$service" in
         mongo) expected_mounts='volume|gole_mongo-data|/data/db|true' ;;
         redis) expected_mounts='volume|gole_redis-data|/data|true' ;;
