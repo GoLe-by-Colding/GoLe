@@ -24,12 +24,13 @@
 - Orca 운영 Google 버튼에서 미가입 안내 → 필수 정책 3종 동의 → 실제 신규 계정 생성 → 3단계 온보딩 → 홈을 확인함. 개발과 마찬가지로 선택 동의는 하지 않음.
 - 운영 계정 API 200·온보딩 `required=false`, UI 로그아웃 후 401·메타데이터 삭제, Google 재로그인 후 홈·계정 API 200·온보딩 완료 유지까지 확인함. 가짜 코드나 모의 provider로 검증하지 않음.
 
-## 공개와 브랜드 인증의 구분
+## 공개와 브랜드 인증
 
 - 외부 사용자용 프로덕션 로그인 설정과 실제 계정 로그인을 확인함. 다른 일반 사용자 계정 전부의 로그인을 검증한 것은 아님.
-- Google 브랜드 자동 검증은 홈페이지 도메인이 해당 계정에 등록되지 않았다는 이유로 미완료임. 앱 이름·로고의 사용자 표시를 승인 완료로 보고하지 않음.
-- 프로젝트 소유 계정의 Search Console에 `gole.co.kr` 도메인 속성과 DNS TXT 확인 값을 준비함. 가비아에 도메인 소유 계정 로그인이 필요하여 TXT 저장·재검증은 아직 수행하지 않음. 기존 A 레코드는 변경하지 않음.
-- [Google 도메인 인증 가이드](https://support.google.com/cloud/answer/13804266?hl=en)에 따라 DNS 방식의 도메인 속성을 확인해야 함. URL 접두어 파일 추가로 대체하지 않음. 이후 [브랜드 인증 절차](https://developers.google.com/identity/verification/authentication-verification)에 따라 재검증과 브랜딩 게시를 완료해야 함.
+- 2026-09-24 가비아의 `gole.co.kr` 루트에 Search Console 소유 확인용 TXT 레코드를 추가함. 권한 있는 네임서버에서 TXT 응답을 확인했으며 기존 apex·www A 레코드 `35.216.80.123`은 유지함.
+- 프로젝트 소유 계정의 Search Console에서 DNS 방식 도메인 속성의 **소유권이 확인됨**을 확인함. Google Auth Platform에서 이전 홈페이지 소유 미확인 문제를 해결한 것으로 재검증 요청함.
+- Google Auth Platform의 **브랜딩이 인증되었으며 사용자에게 표시되고 있습니다** 상태를 확인함. GoLe 앱 이름과 등록한 고래 로고의 브랜드 인증·게시가 완료됨. DNS TXT 레코드는 소유권 유지에 필요하므로 보존함.
+- [Google 도메인 인증 가이드](https://support.google.com/cloud/answer/13804266?hl=en)의 DNS 방식과 [브랜드 인증 절차](https://developers.google.com/identity/verification/authentication-verification)를 따름. URL 접두어 파일 방식은 사용하지 않음.
 - 네이버 일반 공개 검수는 별도 승인 대기임. 네이버 앱 등록자 로그인 성공을 일반 사용자 전체 공개로 보고하지 않음.
 
 구현 근거: `RestClientSocialIdentityProviderAdapter`, `SocialAuthService`, `OnboardingService`,
