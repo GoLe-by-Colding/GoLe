@@ -7,7 +7,7 @@ import {
   fetchAdminPromotionPosts,
   publishAdminPromotionPost,
   rejectAdminPromotionPost,
-  requestAdminPromotionPublishRun,
+  publishNextAdminPromotionPost,
   submitAdminPromotionPost,
   type AdminPromotionPost,
   type PromotionPostStatus,
@@ -75,7 +75,7 @@ function PromotionWorkspace({
   const requestGeneration = useRef(0);
   const mutationInFlight = useRef(false);
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
-  const [publishRunBusy, setPublishRunBusy] = useState(false);
+  const [publishNextBusy, setPublishNextBusy] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -193,20 +193,33 @@ function PromotionWorkspace({
     }
   }
 
-  // 무엇을 언제 올릴지는 에이전트가 승인된 글 중에서 고른다. 실행은 비동기라 결과는 목록으로 확인한다.
-  async function handlePublishRun() {
+  // 규칙에 따른 발행 거절은 장애가 아니라 예상된 결과라, 연결 오류 배너가 아닌 안내로 보여준다.
+  const PUBLISH_NEXT_MESSAGES: Readonly<Record<string, string>> = {
+    PROMOTION_NO_APPROVED_POSTS: "발행할 승인된 글이 없습니다. 먼저 검토 대기 글을 승인해 주세요.",
+    PROMOTION_PUBLISH_TOO_SOON: "직전 발행 후 6시간이 지나야 다음 글을 올릴 수 있습니다.",
+  };
+
+  async function handlePublishNext() {
     if (token === null || mutationInFlight.current) return;
     mutationInFlight.current = true;
-    setPublishRunBusy(true);
+    setPublishNextBusy(true);
     setError(undefined);
     setNotice("");
     try {
-      await requestAdminPromotionPublishRun(token);
-      setNotice("발행 에이전트를 시작했습니다. 몇 분 뒤 '발행됨' 목록에서 확인하세요.");
+      const published = await publishNextAdminPromotionPost(token);
+      setNotice(`승인된 글 중 가장 먼저 승인된 글(${shortId(published.id)})을 발행했습니다.`);
+      reload();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "발행 에이전트를 시작하지 못했습니다.");
+      const known = cause instanceof ApiError ? PUBLISH_NEXT_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "발행하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
     } finally {
-      setPublishRunBusy(false);
+      setPublishNextBusy(false);
       mutationInFlight.current = false;
     }
   }
@@ -380,10 +393,10 @@ function PromotionWorkspace({
           </Button>
           <Button
             size="sm"
-            disabled={busy || publishRunBusy}
-            onClick={() => void handlePublishRun()}
+            disabled={busy || publishNextBusy}
+            onClick={() => void handlePublishNext()}
           >
-            승인된 글 발행 (에이전트)
+            다음 차례 발행
           </Button>
         </div>
       </div>

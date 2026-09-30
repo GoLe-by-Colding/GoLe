@@ -881,11 +881,12 @@ export function publishAdminPromotionPost(
 }
 
 /**
- * 발행 에이전트 실행을 요청한다. 승인된 글 중 지금 올릴 것을 에이전트가 골라 발행하며,
- * 실행은 GitHub Actions 에서 비동기로 돈다. 승인된 글이 없으면 409, 설정 전이면 503.
+ * 승인된 글 중 가장 먼저 승인된 것 하나를 발행한다. 무엇을 올릴지는 서버 규칙이 정한다.
+ * 승인된 글이 없으면 409 PROMOTION_NO_APPROVED_POSTS, 직전 발행 후 6시간이 안 됐으면
+ * 409 PROMOTION_PUBLISH_TOO_SOON.
  */
-export function requestAdminPromotionPublishRun(token: string): Promise<{ status: "DISPATCHED" }> {
-  return post<{ status: "DISPATCHED" }>(token, "/api/admin/promotion-posts/publish-runs");
+export function publishNextAdminPromotionPost(token: string): Promise<AdminPromotionPost> {
+  return post<AdminPromotionPost>(token, "/api/admin/promotion-posts/publish-next");
 }
 
 // ── 홍보 평가 지표 (promotion-review/eval.md) ───────────────────
