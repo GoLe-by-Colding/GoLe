@@ -117,3 +117,31 @@ def test_run_publish_lets_model_retry_after_guard_error():
     assert board.calls == ["a"]
     assert result.published == ({"id": "a", "reason": "가장 오래 기다림"},)
     assert result.summary == "올렸어."
+
+
+def test_first_provider_request_carries_a_user_message():
+    """실제 AnthropicConversation 에 캡처 클라이언트를 끼워 첫 요청의 messages 를 본다."""
+    from gole_promotion_agent.hands import AnthropicConversation
+
+    captured = {}
+
+    class _Messages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class _Reply:
+                stop_reason = "end_turn"
+                content: list = []
+
+            return _Reply()
+
+    class _Client:
+        messages = _Messages()
+
+    def factory(*, system, tools):
+        return AnthropicConversation(_Client(), system, "model", tools)
+
+    run_publish(FakeBoard(), factory)
+
+    assert captured["messages"] and captured["messages"][0]["role"] == "user"
+    assert [tool["name"] for tool in captured["tools"]][-1] == "publish_now"

@@ -305,7 +305,11 @@ def run_publish(board: Any, conversations: ConversationFactory) -> PublishResult
         publisher=None,
         check_active=lambda: None,
     ).compile()
-    state = private_execution(graph.invoke)({}, {"recursion_limit": policy.MAX_TURNS * 3})
+    # 첫 요청에 user 메시지가 없으면 Messages API 가 "at least one message" 로 거절한다.
+    opening = {"role": "user", "text": "승인된 글 중 지금 올릴 글을 골라 발행해. 없으면 이유만 말해."}
+    state = private_execution(graph.invoke)(
+        {"transcript": [opening]}, {"recursion_limit": policy.MAX_TURNS * 3}
+    )
     transcript = state.get("transcript", [])
     summary = next(
         (entry.get("text", "") for entry in reversed(transcript) if entry.get("role") == "assistant"),
