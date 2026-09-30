@@ -11,6 +11,7 @@ import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase.Pro
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase.EvaluationCommand;
+import com.gole.api.promotion.application.port.in.RequestPromotionPublishRunUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.EvaluationReasonTag;
@@ -64,6 +65,7 @@ public class AdminPromotionPostController {
     private final RecordPromotionPostEvaluationUseCase recordEvaluation;
     private final GetPromotionMetricsUseCase getMetrics;
     private final RecordAdminActionUseCase audit;
+    private final RequestPromotionPublishRunUseCase requestPublishRun;
 
     public AdminPromotionPostController(
             CreatePromotionPostUseCase createPromotionPost,
@@ -71,13 +73,15 @@ public class AdminPromotionPostController {
             ManagePromotionPostsUseCase managePromotionPosts,
             RecordPromotionPostEvaluationUseCase recordEvaluation,
             GetPromotionMetricsUseCase getMetrics,
-            RecordAdminActionUseCase audit) {
+            RecordAdminActionUseCase audit,
+            RequestPromotionPublishRunUseCase requestPublishRun) {
         this.createPromotionPost = createPromotionPost;
         this.submitPromotionPost = submitPromotionPost;
         this.managePromotionPosts = managePromotionPosts;
         this.recordEvaluation = recordEvaluation;
         this.getMetrics = getMetrics;
         this.audit = audit;
+        this.requestPublishRun = requestPublishRun;
     }
 
     @Operation(summary = "홍보 게시 초안 등록", description = "DRAFT 상태로 저장. 작성자는 요청한 관리자로 고정된다.")
@@ -175,6 +179,15 @@ public class AdminPromotionPostController {
         PromotionPost published = managePromotionPosts.publish(id);
         record(http, AdminActionType.PROMOTION_POST_PUBLISH, id, published.getExternalPostId());
         return published;
+    }
+
+    @Operation(
+            summary = "발행 에이전트 실행 요청",
+            description = "승인된 글 중 지금 올릴 것을 에이전트가 골라 발행한다. 실행은 GitHub Actions 에서 비동기로 돈다.")
+    @PostMapping("/publish-runs")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void requestPublishRun(HttpServletRequest http) {
+        requestPublishRun.requestPublishRun(AdminActor.of(http).email());
     }
 
     private void record(HttpServletRequest http, AdminActionType type, String promotionPostId, String reason) {
