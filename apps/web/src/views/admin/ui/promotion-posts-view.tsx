@@ -36,6 +36,7 @@ import {
 } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 import { PromotionEvaluationForm } from "./promotion-evaluation-form";
+import { PromotionReviewPanel } from "./promotion-review-panel";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -75,6 +76,7 @@ function PromotionWorkspace({
   const requestGeneration = useRef(0);
   const mutationInFlight = useRef(false);
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [publishNextBusy, setPublishNextBusy] = useState(false);
 
   const [caption, setCaption] = useState("");
@@ -536,6 +538,14 @@ function PromotionWorkspace({
                   className="ml-1"
                   size="sm"
                   variant="secondary"
+                  onClick={() => setReviewingId(p.id)}
+                >
+                  검토 자료
+                </Button>
+                <Button
+                  className="ml-1"
+                  size="sm"
+                  variant="secondary"
                   disabled={busy}
                   onClick={() => setEvaluatingId(p.id)}
                 >
@@ -558,6 +568,17 @@ function PromotionWorkspace({
           onCancel={reviewAction.cancel}
         />
       ) : null}
+
+      {(() => {
+        const reviewing = (rows ?? []).find((row) => row.id === reviewingId);
+        return reviewing !== undefined ? (
+          <PromotionReviewPanel
+            key={reviewing.id}
+            post={reviewing}
+            onClose={() => setReviewingId(null)}
+          />
+        ) : null;
+      })()}
 
       {evaluatingId !== null ? (
         <PromotionEvaluationForm

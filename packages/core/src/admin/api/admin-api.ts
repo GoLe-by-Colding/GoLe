@@ -808,6 +808,34 @@ export interface AdminPromotionPost {
   readonly rejectionReason: string | null;
   readonly publishedAt: string | null;
   readonly externalPostId: string | null;
+  /** 트리거가 정한 글 종류. 예전 글·사람이 쓴 글은 FEATURE. */
+  readonly category: PromotionCategory;
+  /** 사진마다 설명표 — `mediaUrls` 와 같은 순서. 사람이 쓴 글은 빈 배열. */
+  readonly captures: readonly PromotionCapture[];
+  /** 에이전트 초안의 출처. 사람이 쓴 글은 null. */
+  readonly provenance: PromotionProvenance | null;
+}
+
+export type PromotionCategory = "FEATURE" | "SERVICE";
+
+/** DEMO 면 매물·닉네임·가격이 실제가 아닌 데모 데이터로 찍힌 화면이다. */
+export type CaptureDataSource = "DEMO" | "PRODUCTION";
+
+export interface PromotionCapture {
+  readonly label: string;
+  readonly route: string;
+  /** 찍기 전 조작. 예: "'필터' 클릭 → 맨 아래로 스크롤". 없으면 빈 문자열. */
+  readonly actions: string;
+  readonly dataSource: CaptureDataSource;
+  readonly capturedAt: string;
+}
+
+export interface PromotionProvenance {
+  readonly releaseTitle: string | null;
+  /** 에이전트가 이 화면·주제를 고른 이유. */
+  readonly rationale: string | null;
+  /** 초안을 만든 GitHub Actions 실행. 서버가 https://github.com/ 만 받는다. */
+  readonly runUrl: string | null;
 }
 
 export interface CreatePromotionPostInput {
