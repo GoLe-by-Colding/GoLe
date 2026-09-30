@@ -13,14 +13,19 @@ import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCas
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase.EvaluationCommand;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.EvaluationReasonTag;
 import com.gole.api.promotion.domain.model.FirstReviewVerdict;
 import com.gole.api.promotion.domain.model.HoldReasonKind;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostEvaluation;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionProvenance;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +37,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,7 +99,8 @@ public class AdminPromotionPostController {
                 request.channel(),
                 request.caption(),
                 request.mediaKeys(),
-                request.sourceCommitSha()));
+                request.sourceCommitSha(),
+                request.toContext()));
         return Map.of("id", id);
     }
 
@@ -197,11 +204,53 @@ public class AdminPromotionPostController {
 
     /** @param mediaKeys 업로드 스테이지 키 목록(공개 URL 아님) — {@code POST /api/v1/media/images}로
      *  먼저 올린 뒤 그 응답의 {@code key}를 그대로 담는다. */
+    /**
+     * @param category 비우면 FEATURE.
+     * @param captures 스크린샷 설명표. 넣으면 mediaKeys 와 같은 순서·같은 개수여야 한다.
+     * @param provenance 초안 출처. 에이전트가 채운다.
+     */
     public record CreatePromotionPostRequest(
             @NotNull PromotionChannel channel,
             @NotBlank @Size(max = 500) String caption,
             @Size(max = 10) List<@NotBlank @Size(max = 80) String> mediaKeys,
-            @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha) {}
+            @Pattern(regexp = "[0-9a-f]{40}") String sourceCommitSha,
+            PromotionCategory category,
+            @Size(max = 10) List<@Valid CaptureRequest> captures,
+            @Valid ProvenanceRequest provenance) {
+
+        PromotionPostContext toContext() {
+            return new PromotionPostContext(
+                    category,
+                    captures == null
+                            ? List.of()
+                            : captures.stream()
+                                    .map(capture -> new PromotionCapture(
+                                            capture.label(),
+                                            capture.route(),
+                                            capture.actions(),
+                                            capture.dataSource(),
+                                            capture.capturedAt()))
+                                    .toList(),
+                    provenance == null
+                            ? null
+                            : new PromotionProvenance(
+                                    provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
+        }
+    }
+
+    public record CaptureRequest(
+            @NotBlank @Size(max = 300) String label,
+            @NotBlank @Size(max = 300) String route,
+            @Size(max = 300) String actions,
+            @NotNull CaptureDataSource dataSource,
+            @NotNull Instant capturedAt) {}
+
+    public record ProvenanceRequest(
+            @Size(max = 500) String releaseTitle,
+            @Size(max = 500) String rationale,
+
+            @Size(max = 500) @Pattern(regexp = "https://github\\.com/.*")
+            String runUrl) {}
 
     public record RejectPromotionPostRequest(
             @NotBlank @Size(max = 1000) String reason) {}

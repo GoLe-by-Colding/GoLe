@@ -93,7 +93,8 @@ public class PromotionPostService
                 mediaUrls,
                 command.authorId(),
                 command.sourceCommitSha(),
-                Instant.now(clock));
+                Instant.now(clock),
+                command.context());
         // 도메인 검증에 실패할 입력으로 미디어를 공개하지 않는다. 검증한 초안만 연결한다.
         mediaAssets.replaceReferences(
                 command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);

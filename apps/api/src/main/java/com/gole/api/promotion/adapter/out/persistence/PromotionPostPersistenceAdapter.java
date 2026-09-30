@@ -3,9 +3,14 @@ package com.gole.api.promotion.adapter.out.persistence;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionProvenance;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -99,7 +104,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     }
 
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {
-        return new PromotionPostDocument(
+        PromotionPostDocument document = new PromotionPostDocument(
                 promotionPost.getId(),
                 promotionPost.getChannel().name(),
                 promotionPost.getCaption(),
@@ -115,6 +120,44 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 promotionPost.getRejectionReason(),
                 promotionPost.getPublishedAt(),
                 promotionPost.getExternalPostId());
+        PromotionPostContext context = promotionPost.context();
+        PromotionProvenance provenance = context.provenance();
+        document.setContext(
+                context.category().name(),
+                context.captures().stream()
+                        .map(capture -> new PromotionPostDocument.CaptureDocument(
+                                capture.label(),
+                                capture.route(),
+                                capture.actions(),
+                                capture.dataSource().name(),
+                                capture.capturedAt()))
+                        .toList(),
+                provenance == null
+                        ? null
+                        : new PromotionPostDocument.ProvenanceDocument(
+                                provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
+        return document;
+    }
+
+    private static PromotionPostContext toContext(PromotionPostDocument document) {
+        List<PromotionCapture> captures = document.getCaptures() == null
+                ? List.of()
+                : document.getCaptures().stream()
+                        .map(capture -> new PromotionCapture(
+                                capture.label(),
+                                capture.route(),
+                                capture.actions(),
+                                CaptureDataSource.valueOf(capture.dataSource()),
+                                capture.capturedAt()))
+                        .toList();
+        PromotionPostDocument.ProvenanceDocument provenance = document.getProvenance();
+        return new PromotionPostContext(
+                document.getCategory() == null ? null : PromotionCategory.valueOf(document.getCategory()),
+                captures,
+                provenance == null
+                        ? null
+                        : new PromotionProvenance(
+                                provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
     }
 
     private PromotionPost toDomain(PromotionPostDocument document) {
@@ -133,6 +176,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 document.getReviewedAt(),
                 document.getRejectionReason(),
                 document.getPublishedAt(),
-                document.getExternalPostId());
+                document.getExternalPostId(),
+                toContext(document));
     }
 }

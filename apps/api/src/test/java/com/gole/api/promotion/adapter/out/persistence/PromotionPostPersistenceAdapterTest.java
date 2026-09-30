@@ -1,5 +1,6 @@
 package com.gole.api.promotion.adapter.out.persistence;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -7,10 +8,20 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionChannel;
+import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionProvenance;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class PromotionPostPersistenceAdapterTest {
 
@@ -37,5 +48,42 @@ class PromotionPostPersistenceAdapterTest {
         adapter.findRecentFirst(PromotionPostStatus.APPROVED, 20);
 
         verify(repository).findByStatusOrderByCreatedAtDesc(eq("APPROVED"), any());
+    }
+
+    @Test
+    @DisplayName("종류·설명표·출처가 저장했다 읽어도 그대로다")
+    void contextSurvivesRoundTrip() {
+        var capture = new PromotionCapture("필터 열린 목록", "/market", "필터 클릭", CaptureDataSource.DEMO, Instant.EPOCH);
+        var context = new PromotionPostContext(
+                PromotionCategory.SERVICE,
+                List.of(capture),
+                new PromotionProvenance("릴리스", "이유", "https://github.com/o/r/actions/runs/1"));
+        PromotionPost post = PromotionPost.draft(
+                "promo-1", PromotionChannel.THREADS, "캡션", List.of("/a.png"), "author-1", null, Instant.EPOCH, context);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        adapter.save(post);
+        ArgumentCaptor<PromotionPostDocument> saved = ArgumentCaptor.forClass(PromotionPostDocument.class);
+        verify(repository).save(saved.capture());
+        when(repository.findById("promo-1")).thenReturn(Optional.of(saved.getValue()));
+        PromotionPost read = adapter.findById("promo-1").orElseThrow();
+
+        assertThat(read.context()).isEqualTo(context);
+    }
+
+    @Test
+    @DisplayName("맥락 필드가 없는 예전 문서는 기능 홍보·설명표 없음으로 읽힌다")
+    void legacyDocumentReadsAsFeature() {
+        PromotionPost post = PromotionPost.draft(
+                "promo-1", PromotionChannel.THREADS, "캡션", List.of(), "author-1", null, Instant.EPOCH);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        adapter.save(post);
+        ArgumentCaptor<PromotionPostDocument> saved = ArgumentCaptor.forClass(PromotionPostDocument.class);
+        verify(repository).save(saved.capture());
+        PromotionPostDocument legacy = saved.getValue();
+        legacy.setContext(null, null, null);
+        when(repository.findById("promo-1")).thenReturn(Optional.of(legacy));
+
+        assertThat(adapter.findById("promo-1").orElseThrow().context()).isEqualTo(PromotionPostContext.NONE);
     }
 }
