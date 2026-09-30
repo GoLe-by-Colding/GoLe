@@ -107,6 +107,7 @@ export {
   approveAdminPromotionPost,
   rejectAdminPromotionPost,
   publishAdminPromotionPost,
+  requestAdminPromotionPublishRun,
   fetchAdminPromotionMetrics,
   fetchAdminPromotionPostEvaluation,
   saveAdminPromotionPostEvaluation,

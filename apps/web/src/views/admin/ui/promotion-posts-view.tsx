@@ -7,6 +7,7 @@ import {
   fetchAdminPromotionPosts,
   publishAdminPromotionPost,
   rejectAdminPromotionPost,
+  requestAdminPromotionPublishRun,
   submitAdminPromotionPost,
   type AdminPromotionPost,
   type PromotionPostStatus,
@@ -74,6 +75,7 @@ function PromotionWorkspace({
   const requestGeneration = useRef(0);
   const mutationInFlight = useRef(false);
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
+  const [publishRunBusy, setPublishRunBusy] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -187,6 +189,24 @@ function PromotionWorkspace({
       }
     } finally {
       setCreating(false);
+      mutationInFlight.current = false;
+    }
+  }
+
+  // 무엇을 언제 올릴지는 에이전트가 승인된 글 중에서 고른다. 실행은 비동기라 결과는 목록으로 확인한다.
+  async function handlePublishRun() {
+    if (token === null || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setPublishRunBusy(true);
+    setError(undefined);
+    setNotice("");
+    try {
+      await requestAdminPromotionPublishRun(token);
+      setNotice("발행 에이전트를 시작했습니다. 몇 분 뒤 '발행됨' 목록에서 확인하세요.");
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "발행 에이전트를 시작하지 못했습니다.");
+    } finally {
+      setPublishRunBusy(false);
       mutationInFlight.current = false;
     }
   }
@@ -354,9 +374,18 @@ function PromotionWorkspace({
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <AdminStatus error={listError ?? error} loading={rows === null} />
-        <Button size="sm" variant="secondary" disabled={busy || rows === null} onClick={reload}>
-          목록 새로고침
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={busy || rows === null} onClick={reload}>
+            목록 새로고침
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || publishRunBusy}
+            onClick={() => void handlePublishRun()}
+          >
+            승인된 글 발행 (에이전트)
+          </Button>
+        </div>
       </div>
       {actionId !== null ? (
         <p role="status" className="text-sm text-neutral-600">
