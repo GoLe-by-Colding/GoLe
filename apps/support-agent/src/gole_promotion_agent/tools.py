@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -98,6 +99,7 @@ class DraftToolset:
                 "route": payload.route,
                 "interactions": interactions,
                 "path": str(destination),
+                "captured_at": datetime.now(timezone.utc).isoformat(),
             }
         )
         return ToolOutcome(
@@ -115,5 +117,9 @@ class DraftToolset:
         ]
         if missing:
             return _error(f"세션에 없는 스크린샷 라벨: {', '.join(missing)}")
-        draft = {"caption": payload.caption, "labels": list(payload.screenshot_labels)}
+        draft = {
+            "caption": payload.caption,
+            "labels": list(payload.screenshot_labels),
+            "rationale": payload.rationale,
+        }
         return ToolOutcome("초안 제출을 시작함", update={"draft": draft})

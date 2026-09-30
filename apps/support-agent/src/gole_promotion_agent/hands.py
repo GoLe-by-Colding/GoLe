@@ -7,6 +7,7 @@ SDK import는 전부 지연시킨다 — 드라이런 경로가 이 모듈을 �
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 import os
 import subprocess
 from pathlib import Path
@@ -460,7 +461,16 @@ def anthropic_conversation_factory() -> Callable[..., AnthropicConversation]:
 class BackendPublisher:
     """봇 전용 ADMIN 계정으로 로그인해 초안을 만든다. 토큰은 여기 밖으로 나가지 않는다."""
 
-    def __init__(self, base_url: str, email: str, password: str, client: Any | None = None):
+    def __init__(
+        self,
+        base_url: str,
+        email: str,
+        password: str,
+        client: Any | None = None,
+        run: Mapping[str, Any] | None = None,
+    ):
+        """run: 실행 단위로 같은 값 — category(FEATURE/SERVICE)·dataSource(DEMO/PRODUCTION)·runUrl."""
+        self._run = dict(run or {})
         self._base_url = base_url.rstrip("/")
         self._email = email
         self._password = password
@@ -532,7 +542,11 @@ class BackendPublisher:
         response.raise_for_status()
         return tuple(item["key"] for item in response.json())
 
-    def create(self, sha: str, caption: str, media_keys: Sequence[str]) -> str:
+    def create(
+        self, sha: str, caption: str, media_keys: Sequence[str], details: Mapping[str, Any]
+    ) -> str:
+        data_source = self._run.get("dataSource", "PRODUCTION")
+        captured_fallback = datetime.now(timezone.utc).isoformat()
         response = self._http().post(
             "/api/admin/promotion-posts",
             json={
@@ -540,6 +554,22 @@ class BackendPublisher:
                 "caption": caption,
                 "mediaKeys": list(media_keys),
                 "sourceCommitSha": sha,
+                "category": self._run.get("category", "FEATURE"),
+                "captures": [
+                    {
+                        "label": item["label"],
+                        "route": item["route"],
+                        "actions": item.get("actions", ""),
+                        "dataSource": data_source,
+                        "capturedAt": item.get("capturedAt") or captured_fallback,
+                    }
+                    for item in details.get("captures", [])
+                ],
+                "provenance": {
+                    "releaseTitle": details.get("releaseTitle"),
+                    "rationale": details.get("rationale"),
+                    "runUrl": self._run.get("runUrl"),
+                },
             },
             headers=self._headers(),
         )

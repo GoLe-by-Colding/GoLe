@@ -47,6 +47,7 @@ class ScriptedConversation:
                             "sha": sha,
                             "caption": "드라이런으로 만든 초안이야. 실제로는 나가지 않아.",
                             "screenshot_labels": ["메인"],
+                            "rationale": "드라이런이라 대표 화면 하나만 골랐어.",
                         },
                     )
                 ],
@@ -137,12 +138,20 @@ class RecordingPublisher:
         self._record("upload", {"keys": list(keys)})
         return keys
 
-    def create(self, sha: str, caption: str, media_keys: Sequence[str]) -> str:
+    def create(
+        self, sha: str, caption: str, media_keys: Sequence[str], details: Mapping[str, Any]
+    ) -> str:
         self._sequence += 1
         post_id = f"dry-run-{self._sequence}"
         self._record(
             "create",
-            {"id": post_id, "sha": sha, "caption": caption, "mediaKeys": list(media_keys)},
+            {
+                "id": post_id,
+                "sha": sha,
+                "caption": caption,
+                "mediaKeys": list(media_keys),
+                "details": dict(details),
+            },
         )
         return post_id
 

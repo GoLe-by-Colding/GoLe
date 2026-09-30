@@ -38,11 +38,17 @@ class DraftLog:
     def __getattr__(self, name: str):
         return getattr(self._publisher, name)
 
-    def create(self, sha: str, caption: str, media_keys) -> str:
-        post_id = self._publisher.create(sha, caption, media_keys)
+    def create(self, sha: str, caption: str, media_keys, details) -> str:
+        post_id = self._publisher.create(sha, caption, media_keys, details)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as handle:
-            record = {"id": post_id, "sha": sha, "caption": caption, "mediaKeys": list(media_keys)}
+            record = {
+                "id": post_id,
+                "sha": sha,
+                "caption": caption,
+                "mediaKeys": list(media_keys),
+                "rationale": details.get("rationale"),
+            }
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         return post_id
 
@@ -87,16 +93,35 @@ def build_harness(
         anthropic_conversation_factory,
     )
 
+    # 찍는 곳과 제출하는 곳이 다를 수 있다 — Actions 에서는 러너 안 데모 스택을 찍고 운영에 낸다.
+    # 찍는 쪽 로그인을 따로 주지 않으면 제출 계정으로 찍는다(같은 곳을 찍고 내는 경우).
+    capture_api = os.environ.get("PROMOTION_AGENT_CAPTURE_API_URL")
+    run = {
+        "category": os.environ.get("PROMOTION_AGENT_CATEGORY") or "FEATURE",
+        "dataSource": os.environ.get("PROMOTION_AGENT_DATA_SOURCE")
+        or ("DEMO" if capture_api else "PRODUCTION"),
+        "runUrl": os.environ.get("PROMOTION_AGENT_RUN_URL") or None,
+    }
     publisher = BackendPublisher(
         (os.environ.get("PROMOTION_AGENT_API_URL") or site).rstrip("/"),
         _required("PROMOTION_AGENT_ADMIN_EMAIL"),
         _required("PROMOTION_AGENT_ADMIN_PASSWORD"),
+        run=run,
+    )
+    capture_login = (
+        BackendPublisher(
+            capture_api.rstrip("/"),
+            _required("PROMOTION_AGENT_CAPTURE_ADMIN_EMAIL"),
+            _required("PROMOTION_AGENT_CAPTURE_ADMIN_PASSWORD"),
+        )
+        if capture_api
+        else publisher
     )
     return PromotionHarness(
         scanner_for(publisher),
         routes,
-        # 봇 계정으로 로그인된 상태로 찍는다 — 로그인 뒤에만 보이는 기능도 홍보 대상이다(D12).
-        PlaywrightCamera(site, routes.routes(), publisher.browser_session),
+        # 로그인된 상태로 찍는다 — 로그인 뒤에만 보이는 기능도 홍보 대상이다(D12).
+        PlaywrightCamera(site, routes.routes(), capture_login.browser_session),
         DraftLog(publisher, sessions),
         anthropic_conversation_factory(),
         sessions,

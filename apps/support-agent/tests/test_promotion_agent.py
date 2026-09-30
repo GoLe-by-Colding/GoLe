@@ -475,7 +475,7 @@ def test_capture_is_not_repeated_for_same_route_and_interactions(tmp_path: Path,
                     [
                         (
                             "submit_promotion_draft",
-                            {"sha": sha, "caption": "좋아.", "screenshot_labels": ["첫째"]},
+                            {"sha": sha, "caption": "좋아.", "screenshot_labels": ["첫째"], "rationale": "첫 화면이 바뀌었어."},
                         )
                     ],
                 ),
@@ -503,12 +503,12 @@ class _FlakyPublisher(RecordingPublisher):
         self.uploads += 1
         return super().upload(paths)
 
-    def create(self, sha, caption, media_keys):
+    def create(self, sha, caption, media_keys, details):
         if self.explode:
             self.explode = False
             raise RuntimeError("BACKEND_DOWN")
         self.creates += 1
-        return super().create(sha, caption, media_keys)
+        return super().create(sha, caption, media_keys, details)
 
 
 def test_resume_does_not_reupload_after_crash(tmp_path: Path, repo: Path):
@@ -822,3 +822,77 @@ def test_loop_runs_only_the_injected_toolset():
     assert toolset.seen == ["echo"]
     assert state["captures"] == [{"label": "x"}]
     assert state["transcript"][1]["results"][0]["text"] == "ok"
+
+
+def test_backend_publisher_sends_capture_notes_and_provenance():
+    """검토 화면이 쓸 설명표·출처가 백엔드 생성 요청 계약 모양으로 나간다."""
+    from gole_promotion_agent.hands import BackendPublisher
+
+    sent = {}
+
+    class _Response:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class _Client:
+        def post(self, path, json=None, headers=None, files=None):
+            if path == "/api/v1/accounts/sessions":
+                return _Response({"role": "ADMIN", "sessionToken": "t", "accountId": "bot"})
+            sent.update(json)
+            return _Response({"id": "promo-1"})
+
+    publisher = BackendPublisher(
+        "https://gole.test",
+        "bot@gole.test",
+        "pw",
+        client=_Client(),
+        run={"category": "FEATURE", "dataSource": "DEMO", "runUrl": "https://github.com/o/r/actions/runs/1"},
+    )
+    details = {
+        "captures": [{"label": "목록", "route": "/market", "actions": "'필터' 클릭", "capturedAt": "2026-09-30T00:00:00+00:00"}],
+        "rationale": "필터가 새로 생겼어.",
+        "releaseTitle": "feat(web): 필터",
+    }
+
+    assert publisher.create("a" * 40, "캡션", ["k1"], details) == "promo-1"
+    assert sent["category"] == "FEATURE"
+    assert sent["captures"] == [
+        {"label": "목록", "route": "/market", "actions": "'필터' 클릭", "dataSource": "DEMO", "capturedAt": "2026-09-30T00:00:00+00:00"}
+    ]
+    assert sent["provenance"] == {
+        "releaseTitle": "feat(web): 필터",
+        "rationale": "필터가 새로 생겼어.",
+        "runUrl": "https://github.com/o/r/actions/runs/1",
+    }
+
+
+def test_describe_interactions_reads_like_steps():
+    from gole_promotion_agent import policy
+
+    text = policy.describe_interactions(
+        [{"kind": "click", "role": "button", "name": "필터"}, {"kind": "scroll", "to": "bottom"}]
+    )
+
+    assert text == "'필터' 클릭 → 맨 아래로 스크롤"
+
+
+def test_dry_run_hands_capture_notes_to_publisher(tmp_path: Path, repo: Path):
+    """그래프가 draft 라벨 순서대로 설명표를 만들어 퍼블리셔에 넘긴다."""
+    import json as _json
+
+    _repo_with_page(repo)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+    result = _harness(tmp_path, repo, FakeCamera(("/",)), publisher, ScriptedConversation("/")).run()
+
+    assert [item.outcome for item in result.candidates] == ["submitted"]
+    lines = (tmp_path / "sessions" / "dry-run.jsonl").read_text(encoding="utf-8").splitlines()
+    created = next(_json.loads(line) for line in lines if '"create"' in line)
+    captures = created["details"]["captures"]
+    assert [c["label"] for c in captures] == ["메인"] and captures[0]["route"] == "/"
+    assert created["details"]["rationale"]

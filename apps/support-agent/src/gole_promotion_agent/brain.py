@@ -104,9 +104,23 @@ def build_graph(
         sha = state["sha"]
         if publisher.exists(sha):
             raise ValueError("DUPLICATE_SOURCE_COMMIT")
-        return {
-            "post_id": publisher.create(sha, state["draft"]["caption"], state["media_keys"])
+        draft = state["draft"]
+        by_label = {item["label"]: item for item in state.get("captures", [])}
+        captures = [
+            {
+                "label": label,
+                "route": by_label[label]["route"],
+                "actions": policy.describe_interactions(by_label[label].get("interactions", [])),
+                "capturedAt": by_label[label].get("captured_at"),
+            }
+            for label in draft["labels"]
+        ]
+        details = {
+            "captures": captures,
+            "rationale": draft.get("rationale", ""),
+            "releaseTitle": state.get("subject"),
         }
+        return {"post_id": publisher.create(sha, draft["caption"], state["media_keys"], details)}
 
     def finalize(state: PromotionState) -> dict[str, Any]:
         check_active()

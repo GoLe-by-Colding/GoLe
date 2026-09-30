@@ -32,6 +32,7 @@ DIFF_TRUNCATED_NOTICE = "\n\n[잘림] 변경이 너무 커서 여기까지만 �
 
 # 캡션 (스펙 D13)
 MAX_CAPTION = 450
+MAX_RATIONALE = 300
 
 # 캡처 (스펙 D12)
 MAX_INTERACTIONS = 6
@@ -178,6 +179,8 @@ class SubmitPromotionDraftInput(BaseModel):
     sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     caption: str = Field(min_length=1, max_length=MAX_CAPTION)
     screenshot_labels: list[str] = Field(min_length=1, max_length=MAX_SCREENSHOTS)
+    # 검토자가 판단 근거를 따라가게 한다 — 관리자 화면에 그대로 보인다.
+    rationale: str = Field(min_length=1, max_length=MAX_RATIONALE)
 
 
 TOOL_MODELS: Mapping[str, type[BaseModel]] = {
@@ -198,7 +201,8 @@ _DESCRIPTIONS: Mapping[str, str] = {
         "같은 라우트·상호작용 조합을 다시 요청하면 이미 찍은 화면을 그대로 돌려준다."
     ),
     "submit_promotion_draft": (
-        "고른 스크린샷과 캡션으로 홍보 초안을 만들어 검토 요청 상태까지 올린다."
+        "고른 스크린샷과 캡션으로 홍보 초안을 만들어 검토 요청 상태까지 올린다. "
+        "rationale 에는 왜 이 화면들을 골랐는지 검토자가 읽을 한두 문장을 쓴다."
     ),
 }
 
@@ -263,3 +267,17 @@ def build_system_prompt(history: Sequence[Mapping[str, Any]]) -> str:
                 lines.append(f"  반려 사유: {reason}")
         rendered = "\n".join(lines)
     return _SYSTEM_TEMPLATE.format(tone=tone_guide(), history=rendered)
+
+
+def describe_interactions(interactions: Sequence[Mapping[str, Any]]) -> str:
+    """검토자가 읽을 조작 설명. 예: "'필터' 클릭 → 맨 아래로 스크롤"."""
+    steps: list[str] = []
+    for item in interactions:
+        kind = item.get("kind")
+        if kind == "click":
+            steps.append(f"'{item.get('name')}' 클릭")
+        elif kind == "select":
+            steps.append(f"'{item.get('label')}'에서 '{item.get('value')}' 선택")
+        elif kind == "scroll":
+            steps.append("맨 아래로 스크롤" if item.get("to") == "bottom" else "맨 위로 스크롤")
+    return " → ".join(steps)
