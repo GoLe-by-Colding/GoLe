@@ -34,11 +34,30 @@ jobs:
     if: inputs.mode != 'publish'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # 입력은 ${{ }} 로 run 에 직접 넣지 않는다 — 셸 명령 치환 경로가 된다. 환경변수로만 읽는다.
+      SHA: ${{ inputs.sha }}
     steps:
+      # 비싼 스택 기동 전에 입력부터 막는다.
+      - name: Validate SHA
+        run: |
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::draft 모드는 40자 소문자 SHA 가 필요하다"
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
         with:
           # 지정 커밋의 diff 를 읽어야 하므로 이력이 필요하다.
           fetch-depth: 0
+
+      # 에이전트 코드는 dispatch 한 ref(최신)를 쓰고, 찍는 화면은 대상 릴리스로 고정한다.
+      # 둘을 같은 체크아웃으로 쓰면 A 릴리스 diff 와 B 릴리스 화면이 섞인다.
+      - name: Prepare capture source at target SHA
+        run: |
+          git cat-file -e "$SHA^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/target" "$SHA"
+          echo "TARGET=$RUNNER_TEMP/target" >> "$GITHUB_ENV"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -67,7 +86,7 @@ jobs:
 
       - name: Install
         run: |
-          pnpm install --frozen-lockfile
+          (cd "$TARGET" && pnpm install --frozen-lockfile)
           python -m pip install uv==0.10.2
 
       - name: Install agent
@@ -78,17 +97,18 @@ jobs:
 
       # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
       - name: Start infra (Mongo rs0 · Redis · MinIO)
+        working-directory: ${{ env.TARGET }}
         run: |
           docker compose up -d --wait mongo redis minio
           docker compose run --rm --no-deps mongo-init
           docker compose run --rm --no-deps minio-init
 
       - name: Build API jar
-        working-directory: apps/api
+        working-directory: ${{ env.TARGET }}/apps/api
         run: ./gradlew bootJar --no-daemon -x test
 
       - name: Start API
-        working-directory: apps/api
+        working-directory: ${{ env.TARGET }}/apps/api
         env:
           SPRING_PROFILES_ACTIVE: e2e
           GOLE_ENVIRONMENT: e2e
@@ -116,6 +136,7 @@ jobs:
           exit 1
 
       - name: Seed E2E accounts and sessions
+        working-directory: ${{ env.TARGET }}
         env:
           MONGO_DB: gole_e2e
           REDIS_DATABASE: "15"
@@ -123,6 +144,7 @@ jobs:
 
       # 홍보 화면이므로 dev 서버(개발 표시기 노출)가 아니라 프로덕션 빌드를 띄운다.
       - name: Start web
+        working-directory: ${{ env.TARGET }}
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
           NEXT_PUBLIC_PAYMENT_MODE: stub
@@ -143,7 +165,6 @@ jobs:
       - name: Run agent
         working-directory: apps/support-agent
         env:
-          SHA: ${{ inputs.sha }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PYTHONPATH: src
           PROMOTION_AGENT_ANTHROPIC_ENABLED: "true"
@@ -152,9 +173,8 @@ jobs:
           PROMOTION_AGENT_ADMIN_EMAIL: e2e-admin@gole.test
           PROMOTION_AGENT_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
         run: |
-          if [ -z "$SHA" ]; then echo "::error::draft 모드는 sha 입력이 필요하다"; exit 1; fi
           uv run --no-sync python -m gole_promotion_agent \
-            --repo "$GITHUB_WORKSPACE" \
+            --repo "$TARGET" \
             --sessions "$RUNNER_TEMP/promotion" \
             --sha "$SHA"
 
@@ -162,7 +182,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## 홍보 초안 — \`${{ inputs.sha }}\`"
+            printf "## 홍보 초안 — \`%s\`\n" "$SHA"
             if [ -s "$RUNNER_TEMP/promotion/drafts.jsonl" ]; then
               jq -r '"### 캡션\n\n" + .caption + "\n\n스크린샷 " + (.mediaKeys | length | tostring) + "장"' \
                 "$RUNNER_TEMP/promotion/drafts.jsonl"
