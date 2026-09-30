@@ -925,3 +925,57 @@ def test_demo_prompt_forbids_numbers_in_caption():
 
     assert "데모 데이터" in demo and "가격" in demo
     assert "자기 데이터가 없다" in bot and "데모 데이터" not in bot
+
+
+def test_service_run_submits_without_source_release(tmp_path: Path, repo: Path):
+    """서비스 홍보는 릴리스 없이 초안을 내고, 출처 SHA 없이(None) 제출한다."""
+    import json as _json
+    from datetime import date
+
+    from gole_promotion_agent.kinds import SERVICE, ServiceScanner
+    from gole_promotion_agent.runtime import PromotionHarness
+
+    _repo_with_page(repo)
+    publisher = RecordingPublisher(tmp_path / "sessions")
+    exists_calls: list[str] = []
+    original_exists = publisher.exists
+    publisher.exists = lambda sha: exists_calls.append(sha) or original_exists(sha)
+    harness = PromotionHarness(
+        ServiceScanner(date(2026, 9, 30)),
+        AppRouteCatalog(repo),
+        FakeCamera(("/",)),
+        publisher,
+        lambda *, system, tools: ScriptedConversation("/"),
+        tmp_path / "sessions",
+        kind=SERVICE,
+    )
+
+    result = harness.run()
+
+    assert [item.outcome for item in result.candidates] == ["submitted"]
+    lines = (tmp_path / "sessions" / "dry-run.jsonl").read_text(encoding="utf-8").splitlines()
+    created = next(_json.loads(line) for line in lines if '"create"' in line)
+    assert created["sha"] is None
+    assert exists_calls == []
+
+
+def test_service_toolset_has_no_release_tools():
+    from gole_promotion_agent import policy
+
+    names = [tool["name"] for tool in policy.service_tool_schemas()]
+
+    assert names == ["list_routes", "capture", "submit_service_draft"]
+    assert "서비스 자체" in policy.build_system_prompt([], demo=True, service=True)
+
+
+def test_service_scanner_uses_same_session_for_same_day():
+    from datetime import date
+
+    from gole_promotion_agent.kinds import ServiceScanner
+
+    first = ServiceScanner(date(2026, 9, 30)).candidates()[0]
+    again = ServiceScanner(date(2026, 9, 30)).candidates()[0]
+    other = ServiceScanner(date(2026, 10, 2)).candidates()[0]
+
+    assert first.sha == again.sha != other.sha
+    assert len(first.sha) == 40

@@ -17,6 +17,7 @@ class PromotionState(TypedDict, total=False):
 
     sha: str
     subject: str
+    source_sha: str | None  # 백엔드에 남길 출처 릴리스. 서비스 홍보는 None
     system: str  # 실행 시작에 동결한 시스템 프롬프트(이력 포함)
     transcript: list[dict[str, Any]]
     turns: int
@@ -101,8 +102,9 @@ def build_graph(
         check_active()
         if state.get("post_id"):
             return {}
-        sha = state["sha"]
-        if publisher.exists(sha):
+        # 출처 릴리스. 서비스 홍보는 None 이라 점유 검사도 하지 않는다. 예전 체크포인트엔 키가 없다.
+        sha = state.get("source_sha", state["sha"])
+        if sha is not None and publisher.exists(sha):
             raise ValueError("DUPLICATE_SOURCE_COMMIT")
         draft = state["draft"]
         by_label = {item["label"]: item for item in state.get("captures", [])}

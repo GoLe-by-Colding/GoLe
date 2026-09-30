@@ -190,6 +190,12 @@ class SubmitPromotionDraftInput(BaseModel):
     rationale: str = Field(min_length=1, max_length=MAX_RATIONALE)
 
 
+class SubmitServiceDraftInput(BaseModel):
+    caption: str = Field(min_length=1, max_length=MAX_CAPTION)
+    screenshot_labels: list[str] = Field(min_length=1, max_length=MAX_SCREENSHOTS)
+    rationale: str = Field(min_length=1, max_length=MAX_RATIONALE)
+
+
 TOOL_MODELS: Mapping[str, type[BaseModel]] = {
     "list_releases": ListReleasesInput,
     "read_release_diff": ReadReleaseDiffInput,
@@ -269,7 +275,9 @@ _DEMO_SCREEN_NOTE = """네가 보는 화면에 대해 알아둘 것:
 - 관리자 링크처럼 운영자에게만 보이는 요소는 촬영 때 감춰진다."""
 
 
-def build_system_prompt(history: Sequence[Mapping[str, Any]], demo: bool = False) -> str:
+def build_system_prompt(
+    history: Sequence[Mapping[str, Any]], demo: bool = False, service: bool = False
+) -> str:
     """이력은 시스템 프롬프트(안정 접두사)에 둔다 — 프롬프트 캐싱이 걸린다(스펙 D18)."""
     if not history:
         rendered = _NO_HISTORY
@@ -283,7 +291,8 @@ def build_system_prompt(history: Sequence[Mapping[str, Any]], demo: bool = False
             if reason:
                 lines.append(f"  반려 사유: {reason}")
         rendered = "\n".join(lines)
-    return _SYSTEM_TEMPLATE.format(
+    template = _SERVICE_TEMPLATE if service else _SYSTEM_TEMPLATE
+    return template.format(
         tone=tone_guide(),
         history=rendered,
         screen_note=_DEMO_SCREEN_NOTE if demo else _BOT_SCREEN_NOTE,
@@ -302,3 +311,57 @@ def describe_interactions(interactions: Sequence[Mapping[str, Any]]) -> str:
         elif kind == "scroll":
             steps.append("맨 아래로 스크롤" if item.get("to") == "bottom" else "맨 위로 스크롤")
     return " → ".join(steps)
+
+
+# ---------------------------------------------------------------- 서비스 홍보
+# 릴리스와 무관하게 서비스 자체를 소개하는 글(월·수·금). diff 가 없으므로 조사 도구가 없고,
+# 건너뛰기 없이 주제 하나를 골라 쓴다. 트리거가 이 경로를 정한다(LLM 분류기 없음).
+
+SERVICE_TOOL_MODELS: Mapping[str, type[BaseModel]] = {
+    "list_routes": ListRoutesInput,
+    "capture": CaptureInput,
+    "submit_service_draft": SubmitServiceDraftInput,
+}
+
+_SERVICE_DESCRIPTIONS: Mapping[str, str] = {
+    "list_routes": _DESCRIPTIONS["list_routes"],
+    "capture": _DESCRIPTIONS["capture"],
+    "submit_service_draft": (
+        "고른 스크린샷과 캡션으로 서비스 소개 초안을 만들어 검토 요청 상태까지 올린다. "
+        "rationale 에는 왜 이 주제와 화면을 골랐는지 검토자가 읽을 한두 문장을 쓴다."
+    ),
+}
+
+
+def service_tool_schemas() -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {
+            "name": name,
+            "description": _SERVICE_DESCRIPTIONS[name],
+            "input_schema": model.model_json_schema(),
+        }
+        for name, model in SERVICE_TOOL_MODELS.items()
+    )
+
+
+_SERVICE_TEMPLATE = """{tone}
+
+너는 GoLe 홍보 초안 에이전트다. 오늘은 새 기능이 아니라 **GoLe 라는 서비스 자체**를 소개하는
+글을 하나 쓴다. 레고 중고거래에서 GoLe 가 주는 가치 하나를 주제로 고른다 — 예: 세트 번호로
+찾는 매물, 체결가 기반 시세, 구매확정까지 돈을 맡아 두는 안전거래, 내 컬렉션 정리, 판매자와의
+대화, 커뮤니티.
+
+작업 순서:
+1. 아래 "최근 글"을 보고 겹치지 않는 주제 하나를 정한다.
+2. list_routes 로 찍을 수 있는 화면을 확인한다.
+3. capture 로 그 주제가 잘 드러나는 화면을 찍는다.
+4. 캡션을 쓰고 submit_service_draft 를 호출한다.
+
+{screen_note}
+
+지켜야 할 것:
+- 캡션은 **네가 직접 찍어서 본 화면**에 근거해 쓴다. 화면에 없는 기능을 말하지 않는다.
+- 최근 글과 같은 주제·같은 화면·같은 구조를 반복하지 않는다.
+- 스크린샷에 다른 이용자의 닉네임·프로필 사진·매물 사진이 크게 잡히지 않는 화면을 고른다.
+
+{history}"""

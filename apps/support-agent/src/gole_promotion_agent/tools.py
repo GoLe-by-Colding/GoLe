@@ -52,8 +52,10 @@ class DraftToolset:
     def schemas(self) -> tuple[dict[str, Any], ...]:
         return policy.tool_schemas()
 
+    MODELS: Mapping[str, type[BaseModel]] = policy.TOOL_MODELS
+
     def run(self, call: ToolCall, state: Mapping[str, Any]) -> ToolOutcome:
-        payload, invalid = validate(policy.TOOL_MODELS, call)
+        payload, invalid = validate(self.MODELS, call)
         if invalid is not None:
             return invalid
         handler = getattr(self, f"_{call.name}")
@@ -109,6 +111,31 @@ class DraftToolset:
     def _submit_promotion_draft(self, payload: Any, state: Mapping[str, Any]) -> ToolOutcome:
         if payload.sha != state["sha"]:
             return _error(f"현재 후보와 다른 SHA는 제출할 수 없음: {payload.sha}")
+        captures = state.get("captures", [])
+        missing = [
+            label
+            for label in payload.screenshot_labels
+            if not any(item["label"] == label for item in captures)
+        ]
+        if missing:
+            return _error(f"세션에 없는 스크린샷 라벨: {', '.join(missing)}")
+        draft = {
+            "caption": payload.caption,
+            "labels": list(payload.screenshot_labels),
+            "rationale": payload.rationale,
+        }
+        return ToolOutcome("초안 제출을 시작함", update={"draft": draft})
+
+
+class ServiceToolset(DraftToolset):
+    """서비스 소개 글용 묶음 — 화면 목록·촬영·제출만 있다. 조사할 릴리스가 없어 diff 도구가 없다."""
+
+    MODELS: Mapping[str, type[BaseModel]] = policy.SERVICE_TOOL_MODELS
+
+    def schemas(self) -> tuple[dict[str, Any], ...]:
+        return policy.service_tool_schemas()
+
+    def _submit_service_draft(self, payload: Any, state: Mapping[str, Any]) -> ToolOutcome:
         captures = state.get("captures", [])
         missing = [
             label

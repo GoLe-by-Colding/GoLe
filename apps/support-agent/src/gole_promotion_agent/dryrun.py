@@ -54,14 +54,35 @@ class ScriptedConversation:
             ),
         ]
 
+    def _service_plan(self) -> list[tuple[str, list[tuple[str, dict[str, Any]]]]]:
+        route = self._route
+        return [
+            ("찍을 수 있는 화면을 본다.", [("list_routes", {})]),
+            (
+                "대표 화면을 찍는다.",
+                [("capture", {"route": route, "interactions": [], "label": "메인"})],
+            ),
+            (
+                "초안을 낸다.",
+                [
+                    (
+                        "submit_service_draft",
+                        {
+                            "caption": "드라이런으로 만든 서비스 소개 초안이야.",
+                            "screenshot_labels": ["메인"],
+                            "rationale": "드라이런이라 대표 화면 하나만 골랐어.",
+                        },
+                    )
+                ],
+            ),
+        ]
+
     def advance(self, transcript: Sequence[Mapping[str, Any]]) -> Turn:
         opening = next(
             (entry["text"] for entry in transcript if entry.get("role") == "user"), ""
         )
         found = re.search(r"[0-9a-f]{40}", opening)
-        if found is None:
-            return Turn("대상 릴리스를 찾지 못했어.", (), "end_turn")
-        plan = self._plan_for(found.group(0))
+        plan = self._plan_for(found.group(0)) if found else self._service_plan()
         step = sum(1 for entry in transcript if entry.get("role") == "assistant")
         if step >= len(plan):
             return Turn("드라이런을 마쳤어.", (), "end_turn")

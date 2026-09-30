@@ -15,13 +15,14 @@ from gole_promotion_agent import policy
 from gole_promotion_agent.brain import build_graph
 from gole_promotion_agent.checkpoints import SessionSaver
 from gole_promotion_agent.ports import (
+    Candidate,
     Camera,
     ConversationFactory,
     DraftPublisher,
     ReleaseScanner,
     RouteCatalog,
 )
-from gole_promotion_agent.tools import DraftToolset
+from gole_promotion_agent.kinds import FEATURE, PromotionKind
 from gole_promotion_agent.session import EphemeralSession, Stage
 
 CANDIDATE_TIMEOUT_SECONDS = 15 * 60
@@ -116,8 +117,10 @@ class PromotionHarness:
         conversation_factory: ConversationFactory,
         sessions_root: Path,
         demo: bool = False,
+        kind: PromotionKind = FEATURE,
     ):
         self._demo = demo
+        self._kind = kind
         self._scanner = scanner
         self._routes = routes
         self._camera = camera
@@ -162,7 +165,7 @@ class PromotionHarness:
                 if max(pending + submitted, self._publisher.pending_count()) >= policy.MAX_PENDING_REVIEW:
                     break
                 history = self._publisher.history(policy.HISTORY_LIMIT)
-                outcome = self._run_candidate(candidate.sha, candidate.subject, history)
+                outcome = self._run_candidate(candidate, history)
                 outcomes.append(outcome)
                 submitted += outcome.outcome == "submitted"
         finally:
@@ -170,8 +173,9 @@ class PromotionHarness:
         return RunResult(f"후보 {len(candidates)}건 중 {len(outcomes)}건 처리", tuple(outcomes))
 
     def _run_candidate(
-        self, sha: str, subject: str, history: Sequence[Mapping[str, Any]]
+        self, candidate: Candidate, history: Sequence[Mapping[str, Any]]
     ) -> CandidateOutcome:
+        sha, subject = candidate.sha, candidate.subject
         session_dir = self._root / sha
         session_dir.mkdir(parents=True, exist_ok=True)
         saver = SessionSaver(session_dir, sha)
@@ -193,17 +197,17 @@ class PromotionHarness:
             # 같은 대화에는 같은 맥락이 실려야 한다(스펙 D18).
             stored = saver.get_tuple(config)
             values = stored.checkpoint.get("channel_values", {}) if stored else {}
-            system = values.get("system") or policy.build_system_prompt(history, self._demo)
+            system = values.get("system") or self._kind.system(history, self._demo)
             session = EphemeralSession(
                 Stage.DRAFTING if values.get("draft") else Stage.EXPLORING
             )
         else:
-            system = policy.build_system_prompt(history, self._demo)
+            system = self._kind.system(history, self._demo)
             session = EphemeralSession()
             self._write_manifest(session_dir, sha, subject)
 
         try:
-            toolset = DraftToolset(self._scanner, self._routes, self._camera, session_dir)
+            toolset = self._kind.toolset(self._scanner, self._routes, self._camera, session_dir)
             graph = build_graph(
                 self._conversations(system=system, tools=toolset.schemas()),
                 toolset,
@@ -225,17 +229,10 @@ class PromotionHarness:
                 state = graph.invoke(
                     {
                         "sha": sha,
+                        "source_sha": self._kind.source_sha(sha),
                         "subject": subject,
                         "system": system,
-                        "transcript": [
-                            {
-                                "role": "user",
-                                "text": (
-                                    f"방금 배포된 릴리스 {sha} 를 조사해 홍보 초안을 만들지 "
-                                    f"판단해. 릴리스 제목은 탐색 단서로만 써: {subject}"
-                                ),
-                            }
-                        ],
+                        "transcript": [{"role": "user", "text": self._kind.opening(candidate)}],
                         "turns": 0,
                         "captures": [],
                     },

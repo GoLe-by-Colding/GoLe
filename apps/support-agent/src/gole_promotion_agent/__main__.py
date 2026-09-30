@@ -11,6 +11,7 @@ from pathlib import Path
 from gole_agent_runtime.privacy import reject_external_tracing
 from gole_promotion_agent import policy
 from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, SingleReleaseScanner
+from gole_promotion_agent.kinds import FEATURE, SERVICE, ServiceScanner
 from gole_promotion_agent.runtime import (
     PromotionHarness,
     retry_ledger,
@@ -54,8 +55,9 @@ class DraftLog:
 
 
 def build_harness(
-    dry_run: bool, repo: Path, sessions: Path, sha: str | None = None
+    dry_run: bool, repo: Path, sessions: Path, sha: str | None = None, service: bool = False
 ) -> PromotionHarness:
+    kind = SERVICE if service else FEATURE
     site = (os.environ.get("PROMOTION_AGENT_SITE_URL") or DEFAULT_SITE).rstrip("/")
     capture_api = os.environ.get("PROMOTION_AGENT_CAPTURE_API_URL")
     data_source = os.environ.get("PROMOTION_AGENT_DATA_SOURCE") or (
@@ -68,7 +70,9 @@ def build_harness(
     # 실패·중단으로 결론이 안 난 커밋은 반대로 다시 본다. 홍보 경계에 가려 사라지지 않게 한다.
     retryable = retry_ledger(sessions)
 
-    def scanner_for(publisher) -> GitReleaseScanner:
+    def scanner_for(publisher):
+        if service:
+            return ServiceScanner()
         if sha:
             return SingleReleaseScanner(repo, sha)
         return GitReleaseScanner(repo, publisher.exists, skipped, retryable)
@@ -90,6 +94,7 @@ def build_harness(
             publisher,
             scripted_conversation_factory(available[0] if available else "/"),
             sessions,
+            kind=kind,
         )
 
     from gole_promotion_agent.hands import (
@@ -101,7 +106,7 @@ def build_harness(
     # 찍는 곳과 제출하는 곳이 다를 수 있다 — Actions 에서는 러너 안 데모 스택을 찍고 운영에 낸다.
     # 찍는 쪽 로그인을 따로 주지 않으면 제출 계정으로 찍는다(같은 곳을 찍고 내는 경우).
     run = {
-        "category": os.environ.get("PROMOTION_AGENT_CATEGORY") or "FEATURE",
+        "category": kind.category,
         "dataSource": data_source,
         "runUrl": os.environ.get("PROMOTION_AGENT_RUN_URL") or None,
     }
@@ -129,6 +134,7 @@ def build_harness(
         anthropic_conversation_factory(),
         sessions,
         demo=demo,
+        kind=kind,
     )
 
 
@@ -140,12 +146,15 @@ def main(argv: list[str] | None = None) -> int:
         "--sessions", default=os.environ.get("PROMOTION_AGENT_OUTPUT_DIR", DEFAULT_SESSIONS)
     )
     parser.add_argument("--sha", help="이 릴리스 하나만 본다(탐색·원장 생략)")
+    parser.add_argument(
+        "--service", action="store_true", help="릴리스 대신 서비스 소개 글을 쓴다(월·수·금 경로)"
+    )
     arguments = parser.parse_args(argv)
 
     reject_external_tracing()
     dry_run = arguments.dry_run or os.environ.get("PROMOTION_AGENT_DRY_RUN") == "true"
 
-    harness = build_harness(dry_run, Path(arguments.repo), Path(arguments.sessions), arguments.sha)
+    harness = build_harness(dry_run, Path(arguments.repo), Path(arguments.sessions), arguments.sha, arguments.service)
     result = harness.run()
 
     mode = "드라이런" if dry_run else "실행"
