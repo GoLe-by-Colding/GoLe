@@ -5,17 +5,21 @@ import com.gole.api.media.domain.model.MediaKey;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
+import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
+import com.gole.api.promotion.domain.exception.NoApprovedPromotionPostsException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
+import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -26,7 +30,10 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class PromotionPostService
-        implements CreatePromotionPostUseCase, SubmitPromotionPostForReviewUseCase, ManagePromotionPostsUseCase {
+        implements CreatePromotionPostUseCase,
+                SubmitPromotionPostForReviewUseCase,
+                ManagePromotionPostsUseCase,
+                PublishNextPromotionPostUseCase {
 
     /**
      * 같은 출처 릴리스로 만들 수 있는 초안의 상한.
@@ -36,6 +43,9 @@ public class PromotionPostService
      * 릴리스는 네 번째도 반려될 가능성이 크고 그 사이 유료 모델 호출만 쌓이므로 여기서 끊는다.
      */
     private static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
+
+    /** 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 한다. */
+    static final Duration MIN_PUBLISH_INTERVAL = Duration.ofHours(6);
 
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
@@ -147,6 +157,19 @@ public class PromotionPostService
         SocialPublishPort.PublishResult result = publishPort.publish(promotionPost);
         promotionPost.markPublished(result.externalPostId(), Instant.now(clock));
         return repository.save(promotionPost);
+    }
+
+    @Override
+    public PromotionPost publishNext() {
+        Instant now = Instant.now(clock);
+        repository.findLatestPublishedAt().ifPresent(latest -> {
+            Instant availableAt = latest.plus(MIN_PUBLISH_INTERVAL);
+            if (now.isBefore(availableAt)) {
+                throw new PromotionPublishTooSoonException(availableAt);
+            }
+        });
+        PromotionPost next = repository.findOldestApproved().orElseThrow(NoApprovedPromotionPostsException::new);
+        return publish(next.getId());
     }
 
     private PromotionPost getOrThrow(String promotionPostId) {

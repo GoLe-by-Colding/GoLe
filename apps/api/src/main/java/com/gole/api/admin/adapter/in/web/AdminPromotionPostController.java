@@ -9,9 +9,9 @@ import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.Cre
 import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase;
 import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase.PromotionMetrics;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
+import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionPostEvaluationUseCase.EvaluationCommand;
-import com.gole.api.promotion.application.port.in.RequestPromotionPublishRunUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.EvaluationReasonTag;
@@ -65,7 +65,7 @@ public class AdminPromotionPostController {
     private final RecordPromotionPostEvaluationUseCase recordEvaluation;
     private final GetPromotionMetricsUseCase getMetrics;
     private final RecordAdminActionUseCase audit;
-    private final RequestPromotionPublishRunUseCase requestPublishRun;
+    private final PublishNextPromotionPostUseCase publishNext;
 
     public AdminPromotionPostController(
             CreatePromotionPostUseCase createPromotionPost,
@@ -74,14 +74,14 @@ public class AdminPromotionPostController {
             RecordPromotionPostEvaluationUseCase recordEvaluation,
             GetPromotionMetricsUseCase getMetrics,
             RecordAdminActionUseCase audit,
-            RequestPromotionPublishRunUseCase requestPublishRun) {
+            PublishNextPromotionPostUseCase publishNext) {
         this.createPromotionPost = createPromotionPost;
         this.submitPromotionPost = submitPromotionPost;
         this.managePromotionPosts = managePromotionPosts;
         this.recordEvaluation = recordEvaluation;
         this.getMetrics = getMetrics;
         this.audit = audit;
-        this.requestPublishRun = requestPublishRun;
+        this.publishNext = publishNext;
     }
 
     @Operation(summary = "홍보 게시 초안 등록", description = "DRAFT 상태로 저장. 작성자는 요청한 관리자로 고정된다.")
@@ -181,15 +181,12 @@ public class AdminPromotionPostController {
         return published;
     }
 
-    @Operation(
-            summary = "발행 에이전트 실행 요청",
-            description = "승인된 글 중 지금 올릴 것을 에이전트가 골라 발행한다. 실행은 GitHub Actions 에서 비동기로 돈다.")
-    @PostMapping("/publish-runs")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public Map<String, String> requestPublishRun(HttpServletRequest http) {
-        requestPublishRun.requestPublishRun(AdminActor.of(http).email());
-        // 웹 클라이언트는 본문을 JSON 으로 읽는다 — 빈 202 는 파싱에 실패한다.
-        return Map.of("status", "DISPATCHED");
+    @Operation(summary = "다음 차례 발행", description = "승인된 글 중 가장 먼저 승인된 것 하나를 발행한다. 직전 발행 후 6시간이 지나야 한다.")
+    @PostMapping("/publish-next")
+    public PromotionPost publishNext(HttpServletRequest http) {
+        PromotionPost published = publishNext.publishNext();
+        record(http, AdminActionType.PROMOTION_POST_PUBLISH, published.getId(), published.getExternalPostId());
+        return published;
     }
 
     private void record(HttpServletRequest http, AdminActionType type, String promotionPostId, String reason) {

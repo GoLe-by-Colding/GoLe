@@ -6,6 +6,7 @@ import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedExcept
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
@@ -68,6 +69,20 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
             documents = repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
         }
         return documents.stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public Optional<PromotionPost> findOldestApproved() {
+        return repository
+                .findFirstByStatusOrderByReviewedAtAsc(PromotionPostStatus.APPROVED.name())
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<Instant> findLatestPublishedAt() {
+        return repository
+                .findFirstByStatusOrderByPublishedAtDesc(PromotionPostStatus.PUBLISHED.name())
+                .map(PromotionPostDocument::getPublishedAt);
     }
 
     @Override

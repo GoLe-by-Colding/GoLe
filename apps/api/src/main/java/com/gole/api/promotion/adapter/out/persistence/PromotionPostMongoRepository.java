@@ -2,6 +2,7 @@ package com.gole.api.promotion.adapter.out.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
@@ -11,6 +12,10 @@ public interface PromotionPostMongoRepository extends MongoRepository<PromotionP
 
     /** 발행 목록은 발행 시각 순이어야 "가장 최근 발행"이 limit 에 잘리지 않는다. */
     List<PromotionPostDocument> findByStatusOrderByPublishedAtDesc(String status, Pageable pageable);
+
+    Optional<PromotionPostDocument> findFirstByStatusOrderByReviewedAtAsc(String status);
+
+    Optional<PromotionPostDocument> findFirstByStatusOrderByPublishedAtDesc(String status);
 
     boolean existsByClaimedSourceCommitSha(String claimedSourceCommitSha);
 

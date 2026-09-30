@@ -19,7 +19,9 @@ import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.R
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort.PublishResult;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
+import com.gole.api.promotion.domain.exception.NoApprovedPromotionPostsException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
+import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionChannel;
@@ -91,6 +93,21 @@ class PromotionPostServiceTest {
             return store.values().stream()
                     .filter(post -> post.getStatus() == status)
                     .count();
+        }
+
+        @Override
+        public Optional<PromotionPost> findOldestApproved() {
+            return store.values().stream()
+                    .filter(post -> post.getStatus() == PromotionPostStatus.APPROVED)
+                    .min(java.util.Comparator.comparing(PromotionPost::getReviewedAt));
+        }
+
+        @Override
+        public Optional<Instant> findLatestPublishedAt() {
+            return store.values().stream()
+                    .map(PromotionPost::getPublishedAt)
+                    .filter(java.util.Objects::nonNull)
+                    .max(Instant::compareTo);
         }
 
         // 실제 어댑터는 이 필터를 쿼리(NotNull)로 내리므로, 페이크도 같은 것만 돌려줘야 한다.
@@ -338,6 +355,55 @@ class PromotionPostServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
         assertThat(result.getExternalPostId()).isEqualTo("stub-post-1");
+    }
+
+    @Test
+    @DisplayName("다음 차례 발행은 가장 먼저 승인된 글을 올린다")
+    void publishNext_publishesOldestApproved() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
+        when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PromotionPost result = service.publishNext();
+
+        assertThat(result.getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
+    }
+
+    @Test
+    @DisplayName("승인된 글이 없으면 외부 발행을 부르지 않고 거절한다")
+    void publishNext_rejectsWhenNothingApproved() {
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
+        when(repository.findOldestApproved()).thenReturn(Optional.empty());
+
+        assertThatThrownBy(service::publishNext).isInstanceOf(NoApprovedPromotionPostsException.class);
+        verify(publishPort, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("직전 발행 후 6시간이 안 지났으면 거절한다")
+    void publishNext_rejectsWithinInterval() {
+        // clock 은 EPOCH 고정 — 1시간 전에 발행한 것으로 둔다.
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.of(Instant.EPOCH.minusSeconds(3600)));
+
+        assertThatThrownBy(service::publishNext).isInstanceOf(PromotionPublishTooSoonException.class);
+        verify(publishPort, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("직전 발행 후 6시간이 지났으면 발행한다")
+    void publishNext_allowsAfterInterval() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
+        when(repository.findLatestPublishedAt())
+                .thenReturn(Optional.of(Instant.EPOCH.minus(PromotionPostService.MIN_PUBLISH_INTERVAL)));
+        when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.publishNext().getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
     }
 
     @Test
