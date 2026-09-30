@@ -186,8 +186,10 @@ public class AdminPromotionPostController {
             description = "승인된 글 중 지금 올릴 것을 에이전트가 골라 발행한다. 실행은 GitHub Actions 에서 비동기로 돈다.")
     @PostMapping("/publish-runs")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public void requestPublishRun(HttpServletRequest http) {
+    public Map<String, String> requestPublishRun(HttpServletRequest http) {
         requestPublishRun.requestPublishRun(AdminActor.of(http).email());
+        // 웹 클라이언트는 본문을 JSON 으로 읽는다 — 빈 202 는 파싱에 실패한다.
+        return Map.of("status", "DISPATCHED");
     }
 
     private void record(HttpServletRequest http, AdminActionType type, String promotionPostId, String reason) {
