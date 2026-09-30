@@ -1,0 +1,175 @@
+name: Promotion agent
+
+# 릴리스 하나로 홍보 초안을 만든다. 러너 안에 시드 데이터가 든 스택을 띄우고 거기서 화면을
+# 찍는다 — 운영 VM 메모리를 쓰지 않고, 데이터가 비어 있는 운영 봇 계정 화면 문제도 없다.
+# 지금은 초안을 러너 안 백엔드에 제출하고 결과(캡션·스크린샷)를 아티팩트로만 남긴다.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 홍보할 릴리스 커밋 (40자 SHA)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-agent
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft from release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 지정 커밋의 diff 를 읽어야 하므로 이력이 필요하다.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.30.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          python -m pip install uv==0.10.2
+
+      - name: Install agent
+        working-directory: apps/support-agent
+        run: |
+          uv sync --locked --extra promotion
+          uv run --no-sync playwright install --with-deps chromium
+
+      # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
+      - name: Start infra (Mongo rs0 · Redis · MinIO)
+        run: |
+          docker compose up -d --wait mongo redis minio
+          docker compose run --rm --no-deps mongo-init
+          docker compose run --rm --no-deps minio-init
+
+      - name: Build API jar
+        working-directory: apps/api
+        run: ./gradlew bootJar --no-daemon -x test
+
+      - name: Start API
+        working-directory: apps/api
+        env:
+          SPRING_PROFILES_ACTIVE: e2e
+          GOLE_ENVIRONMENT: e2e
+          MONGODB_URI: mongodb://localhost:27017/gole_e2e?replicaSet=rs0
+          MONGODB_DATABASE: gole_e2e
+          REDIS_DATABASE: "15"
+          PORTONE_ENABLED: "false"
+          GOLE_SETTLEMENT_MODE: MANUAL
+          GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED: "true"
+          GOLE_SETTLEMENT_PAYOUT_HOLDBACK: PT0S
+          STORAGE_S3_ENDPOINT: http://localhost:9000
+          STORAGE_S3_BUCKET: gole-e2e
+          STORAGE_PUBLIC_BASE_URL: http://localhost:8080
+          MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+        run: |
+          nohup java -jar build/libs/*.jar > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/actuator/health > /dev/null; then
+              echo "API up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API failed to start"
+          tail -100 "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Seed E2E accounts and sessions
+        env:
+          MONGO_DB: gole_e2e
+          REDIS_DATABASE: "15"
+        run: bash scripts/seed-e2e-accounts.sh
+
+      # 홍보 화면이므로 dev 서버(개발 표시기 노출)가 아니라 프로덕션 빌드를 띄운다.
+      - name: Start web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          NEXT_PUBLIC_PAYMENT_MODE: stub
+        run: |
+          pnpm --filter web build
+          nohup pnpm --filter web start > "$RUNNER_TEMP/web.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Web up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Web failed to start"
+          tail -100 "$RUNNER_TEMP/web.log"
+          exit 1
+
+      # 시드 관리자 계정은 gole_e2e 전용 테스트 계정이라 시크릿이 아니다(ci.yml 과 같다).
+      - name: Run agent
+        working-directory: apps/support-agent
+        env:
+          SHA: ${{ inputs.sha }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: src
+          PROMOTION_AGENT_ANTHROPIC_ENABLED: "true"
+          PROMOTION_AGENT_SITE_URL: http://localhost:3000
+          PROMOTION_AGENT_API_URL: http://localhost:8080
+          PROMOTION_AGENT_ADMIN_EMAIL: e2e-admin@gole.test
+          PROMOTION_AGENT_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
+        run: |
+          uv run --no-sync python -m gole_promotion_agent \
+            --repo "$GITHUB_WORKSPACE" \
+            --sessions "$RUNNER_TEMP/promotion" \
+            --sha "$SHA"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 홍보 초안 — \`${{ inputs.sha }}\`"
+            if [ -s "$RUNNER_TEMP/promotion/drafts.jsonl" ]; then
+              jq -r '"### 캡션\n\n" + .caption + "\n\n스크린샷 " + (.mediaKeys | length | tostring) + "장"' \
+                "$RUNNER_TEMP/promotion/drafts.jsonl"
+            else
+              echo "초안 없음 — 건너뛰었거나 실패했다. 로그와 아티팩트의 session.jsonl 을 본다."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload session
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: promotion-${{ inputs.sha }}
+          path: ${{ runner.temp }}/promotion
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -100 "$RUNNER_TEMP/api.log" || true
+          tail -100 "$RUNNER_TEMP/web.log" || true

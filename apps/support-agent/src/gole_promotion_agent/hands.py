@@ -152,6 +152,27 @@ class GitReleaseScanner:
         return patch
 
 
+class SingleReleaseScanner(GitReleaseScanner):
+    """지정한 릴리스 하나만 후보로 낸다 — 릴리스 이벤트가 대상을 이미 정해 준 실행용이다.
+
+    탐색 창·원장·홍보 경계를 보지 않는다. 화면 변경이 없으면 후보가 없다(건너뜀).
+    """
+
+    def __init__(self, repo: Path, sha: str):
+        if not policy.SHA_PATTERN.match(sha):
+            raise ValueError("INVALID_SHA")
+        super().__init__(repo, lambda _sha: False)
+        self._sha = sha
+
+    def candidates(self) -> tuple[Candidate, ...]:
+        if self._cache is None:
+            subject = _git(self._repo, "log", "-1", "--format=%s", self._sha).strip()
+            self._cache = (
+                (Candidate(self._sha, subject),) if self._touches_web(self._sha) else ()
+            )
+        return self._cache
+
+
 # ------------------------------------------------------------------------ routes
 
 

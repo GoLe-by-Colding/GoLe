@@ -14,7 +14,12 @@ import pytest
 from gole_promotion_agent import policy
 from gole_promotion_agent.checkpoints import BinaryInCheckpoint, SessionSaver, reject_binary
 from gole_promotion_agent.dryrun import FakeCamera, RecordingPublisher, ScriptedConversation
-from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, _blocks_from_transcript
+from gole_promotion_agent.hands import (
+    AppRouteCatalog,
+    GitReleaseScanner,
+    SingleReleaseScanner,
+    _blocks_from_transcript,
+)
 from gole_promotion_agent.ports import ToolCall, Turn
 from gole_promotion_agent.runtime import PromotionHarness, retry_ledger, skipped_ledger
 from gole_promotion_agent.session import EphemeralSession, Stage
@@ -154,6 +159,21 @@ def test_release_scanner_caps_candidates_per_run(repo: Path):
     scanner = GitReleaseScanner(repo, lambda _sha: False)
 
     assert len(scanner.candidates()) == policy.MAX_DRAFTS_PER_RUN
+
+
+def test_single_release_scanner_returns_only_given_release(repo: Path):
+    target = _commit(repo, "feat(web): 지정 릴리스", web=True)
+    _commit(repo, "feat(web): 그 뒤 릴리스", web=True)
+
+    scanner = SingleReleaseScanner(repo, target)
+
+    assert [(c.sha, c.subject) for c in scanner.candidates()] == [(target, "feat(web): 지정 릴리스")]
+
+
+def test_single_release_scanner_skips_release_without_web_changes(repo: Path):
+    target = _commit(repo, "fix(api): 백엔드만", web=False)
+
+    assert SingleReleaseScanner(repo, target).candidates() == ()
 
 
 def test_release_diff_rejects_foreign_sha(repo: Path):
