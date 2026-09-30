@@ -43,6 +43,10 @@ READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # 게이트·보존 (스펙 D17·D18)
 MAX_PENDING_REVIEW = 5
+# 발행 실행 가드. 관리자 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 코드로 막는다.
+MAX_PUBLISH_PER_RUN = 1
+MIN_PUBLISH_INTERVAL_HOURS = 6
+PUBLISH_LIST_LIMIT = 20
 HISTORY_LIMIT = 10
 RETENTION_DAYS = 7
 
@@ -263,3 +267,23 @@ def build_system_prompt(history: Sequence[Mapping[str, Any]]) -> str:
                 lines.append(f"  반려 사유: {reason}")
         rendered = "\n".join(lines)
     return _SYSTEM_TEMPLATE.format(tone=tone_guide(), history=rendered)
+
+
+PUBLISH_SYSTEM = """{tone}
+
+너는 GoLe 홍보 발행 에이전트다. 사람이 승인한 글 중에서 지금 올릴 글을 고른다.
+
+작업 순서:
+1. list_approved_posts 로 승인된 글을 본다.
+2. list_recent_published 로 최근에 올린 글을 본다.
+3. 최근 글과 주제·어조가 겹치지 않고, 오래 기다린 글을 우선해 하나를 고른다.
+4. publish_now 로 올린다. 올릴 글이 없거나 지금은 올리지 않는 편이 낫다고 판단하면
+   도구를 부르지 말고 이유를 말하고 끝낸다.
+
+지켜야 할 것:
+- 캡션을 고치지 않는다. 승인된 그대로 올라간다.
+- 도구가 오류를 돌려주면 그 사유를 읽고 따른다. 간격·횟수 제한은 우회하지 않는다."""
+
+
+def build_publish_prompt() -> str:
+    return PUBLISH_SYSTEM.format(tone=tone_guide())

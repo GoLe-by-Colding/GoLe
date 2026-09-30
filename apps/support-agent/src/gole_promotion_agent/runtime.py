@@ -281,3 +281,34 @@ class PromotionHarness:
                 )
             )
             handle.write("\n")
+
+
+@dataclass(frozen=True)
+class PublishResult:
+    published: tuple[Mapping[str, str], ...]
+    outcome: str  # skipped(모델이 올리지 않기로 함) · deferred(턴 상한) · 그 외
+    summary: str  # 모델이 마지막에 남긴 말
+
+
+def run_publish(board: Any, conversations: ConversationFactory) -> PublishResult:
+    """승인된 글 중 지금 올릴 것을 모델이 고르고 PublishToolset 으로 발행한다.
+
+    초안 실행과 달리 체크포인트를 두지 않는다 — 몇 턴짜리 목록 조회와 발행 한 번이고,
+    발행 자체가 백엔드 상태(PUBLISHED)로 멱등하다.
+    """
+    from gole_promotion_agent.tools import PublishToolset
+
+    toolset = PublishToolset(board)
+    graph = build_graph(
+        conversations(system=policy.build_publish_prompt(), tools=toolset.schemas()),
+        toolset,
+        publisher=None,
+        check_active=lambda: None,
+    ).compile()
+    state = private_execution(graph.invoke)({}, {"recursion_limit": policy.MAX_TURNS * 3})
+    transcript = state.get("transcript", [])
+    summary = next(
+        (entry.get("text", "") for entry in reversed(transcript) if entry.get("role") == "assistant"),
+        "",
+    )
+    return PublishResult(tuple(toolset.published), state.get("outcome", ""), summary)

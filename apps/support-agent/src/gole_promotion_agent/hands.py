@@ -518,6 +518,17 @@ class BackendPublisher:
     def pending_count(self) -> int:
         return len(self._list("PENDING_REVIEW", policy.MAX_PENDING_REVIEW + 1))
 
+    def posts(self, status: str, limit: int) -> tuple[Mapping[str, Any], ...]:
+        return tuple(self._list(status, limit))
+
+    def publish(self, post_id: str) -> Mapping[str, Any]:
+        """APPROVED 가 아니면 백엔드가 409 로 거절한다 — 가드가 한 겹 더 있다."""
+        response = self._http().post(
+            f"/api/admin/promotion-posts/{post_id}/publish", headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
     def history(self, limit: int) -> tuple[Mapping[str, Any], ...]:
         # 발행이 스텁인 동안 PUBLISHED 는 계속 0건이라 전체 상태를 본다(스펙 D18).
         return tuple(self._list(None, limit))
