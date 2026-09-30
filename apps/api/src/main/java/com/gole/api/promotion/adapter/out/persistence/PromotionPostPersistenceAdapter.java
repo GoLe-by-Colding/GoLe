@@ -57,9 +57,16 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     @Override
     public List<PromotionPost> findRecentFirst(PromotionPostStatus status, int limit) {
         PageRequest page = PageRequest.of(0, Math.max(1, limit));
-        List<PromotionPostDocument> documents = status == null
-                ? repository.findAllByOrderByCreatedAtDesc(page)
-                : repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
+        List<PromotionPostDocument> documents;
+        if (status == null) {
+            documents = repository.findAllByOrderByCreatedAtDesc(page);
+        } else if (status == PromotionPostStatus.PUBLISHED) {
+            // 생성 순으로 자르면 오래전에 만든 글을 방금 발행했을 때 그 글이 목록 밖으로 밀려
+            // 발행 에이전트의 최소 간격 가드가 최신 발행을 보지 못한다.
+            documents = repository.findByStatusOrderByPublishedAtDesc(status.name(), page);
+        } else {
+            documents = repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
+        }
         return documents.stream().map(this::toDomain).toList();
     }
 

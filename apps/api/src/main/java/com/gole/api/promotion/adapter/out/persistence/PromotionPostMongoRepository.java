@@ -9,6 +9,9 @@ public interface PromotionPostMongoRepository extends MongoRepository<PromotionP
 
     List<PromotionPostDocument> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 
+    /** 발행 목록은 발행 시각 순이어야 "가장 최근 발행"이 limit 에 잘리지 않는다. */
+    List<PromotionPostDocument> findByStatusOrderByPublishedAtDesc(String status, Pageable pageable);
+
     boolean existsByClaimedSourceCommitSha(String claimedSourceCommitSha);
 
     long countBySourceCommitSha(String sourceCommitSha);
