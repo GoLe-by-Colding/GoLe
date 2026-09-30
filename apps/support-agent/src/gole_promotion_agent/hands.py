@@ -180,8 +180,9 @@ class SingleReleaseScanner(GitReleaseScanner):
 class AppRouteCatalog:
     """`apps/web/src/app/**/page.tsx`에서 정적 공개 라우트만 열거한다."""
 
-    def __init__(self, repo: Path):
+    def __init__(self, repo: Path, demo: bool = False):
         self._app_dir = Path(repo) / "apps" / "web" / "src" / "app"
+        self._demo = demo
 
     def routes(self) -> tuple[str, ...]:
         if not self._app_dir.is_dir():
@@ -189,7 +190,7 @@ class AppRouteCatalog:
         found: set[str] = set()
         for page in self._app_dir.rglob("page.tsx"):
             route = self._route_of(page)
-            if route is not None and policy.is_public_capture_route(route):
+            if route is not None and policy.is_public_capture_route(route, self._demo):
                 found.add(route)
         return tuple(sorted(found))
 

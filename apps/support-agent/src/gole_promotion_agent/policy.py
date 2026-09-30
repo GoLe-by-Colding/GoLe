@@ -57,8 +57,15 @@ FORBIDDEN_ROUTE = re.compile(
 PRIVATE_ROUTE = re.compile(r"\A/(?:profile(?:/|\Z)|notifications(?:/|\Z)|settings(?:/|\Z))")
 
 
-def is_public_capture_route(route: str) -> bool:
+# 데모 데이터로 찍을 때만 막는다. 가짜 체결가로 그린 시세 화면이 밖에 나가면 "이 세트가 이 가격에
+# 거래된다"는 잘못된 시장 정보가 된다. 기능을 보여주는 화면과 달리 숫자 자체가 사실 주장이다.
+DEMO_FACT_ROUTE = re.compile(r"\A/prices(?:/|\Z)")
+
+
+def is_public_capture_route(route: str, demo: bool = False) -> bool:
     if not route.startswith("/") or route.startswith("//"):
+        return False
+    if demo and DEMO_FACT_ROUTE.search(route):
         return False
     return not FORBIDDEN_ROUTE.search(route) and not PRIVATE_ROUTE.search(route)
 
@@ -229,12 +236,7 @@ _SYSTEM_TEMPLATE = """{tone}
 3. capture 로 사용자에게 보이는 변화가 드러나는 화면을 순서대로 찍는다.
 4. 캡션을 쓰고 submit_promotion_draft 를 호출한다.
 
-네가 보는 화면에 대해 알아둘 것:
-- 너는 **봇 전용 계정으로 로그인된 상태**로 화면을 본다. 로그인해야 쓸 수 있는 기능도
-  찍을 수 있다는 뜻이다.
-- 다만 이 계정은 **자기 데이터가 없다** — 컬렉션·대화·알림·등록한 매물이 비어 있다.
-  화면이 "아직 없어요" 같은 빈 상태로만 보이면 그것은 그 기능의 모습이 아니다.
-  그런 화면은 홍보에 쓰지 말고 다른 화면을 고르거나, 보여줄 것이 없으면 건너뛴다.
+{screen_note}
 
 지켜야 할 것:
 - 캡션은 diff 원문이 아니라 **네가 직접 찍어서 본 화면**에 근거해 쓴다.
@@ -252,7 +254,22 @@ _HISTORY_HEADER = """최근에 올렸거나 올리려던 글이다. **같은 구
 같은 화면을 또 찍어 비슷한 이야기를 하지 않는다. 반려된 글이 있으면 그 사유를 피한다."""
 
 
-def build_system_prompt(history: Sequence[Mapping[str, Any]]) -> str:
+_BOT_SCREEN_NOTE = """네가 보는 화면에 대해 알아둘 것:
+- 너는 **봇 전용 계정으로 로그인된 상태**로 화면을 본다. 로그인해야 쓸 수 있는 기능도
+  찍을 수 있다는 뜻이다.
+- 다만 이 계정은 **자기 데이터가 없다** — 컬렉션·대화·알림·등록한 매물이 비어 있다.
+  화면이 "아직 없어요" 같은 빈 상태로만 보이면 그것은 그 기능의 모습이 아니다.
+  그런 화면은 홍보에 쓰지 말고 다른 화면을 고르거나, 보여줄 것이 없으면 건너뛴다."""
+
+_DEMO_SCREEN_NOTE = """네가 보는 화면에 대해 알아둘 것:
+- 너는 **데모 데이터로 채운 연습용 사이트**를 관리자 계정으로 로그인해 본다. 매물·닉네임·
+  가격·후기는 실제가 아니다. 이 화면은 "이런 걸 할 수 있다"를 보여주는 데만 쓴다.
+- 캡션에 **구체적인 가격·체결가·거래 건수·이용자 수·별점을 쓰지 마라.** 데모 숫자가 사실처럼
+  읽힌다. 가격이나 거래 숫자가 화면의 주인공인 장면은 고르지 않는다.
+- 관리자 링크처럼 운영자에게만 보이는 요소는 촬영 때 감춰진다."""
+
+
+def build_system_prompt(history: Sequence[Mapping[str, Any]], demo: bool = False) -> str:
     """이력은 시스템 프롬프트(안정 접두사)에 둔다 — 프롬프트 캐싱이 걸린다(스펙 D18)."""
     if not history:
         rendered = _NO_HISTORY
@@ -266,7 +283,11 @@ def build_system_prompt(history: Sequence[Mapping[str, Any]]) -> str:
             if reason:
                 lines.append(f"  반려 사유: {reason}")
         rendered = "\n".join(lines)
-    return _SYSTEM_TEMPLATE.format(tone=tone_guide(), history=rendered)
+    return _SYSTEM_TEMPLATE.format(
+        tone=tone_guide(),
+        history=rendered,
+        screen_note=_DEMO_SCREEN_NOTE if demo else _BOT_SCREEN_NOTE,
+    )
 
 
 def describe_interactions(interactions: Sequence[Mapping[str, Any]]) -> str:

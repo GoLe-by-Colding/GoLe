@@ -57,7 +57,12 @@ def build_harness(
     dry_run: bool, repo: Path, sessions: Path, sha: str | None = None
 ) -> PromotionHarness:
     site = (os.environ.get("PROMOTION_AGENT_SITE_URL") or DEFAULT_SITE).rstrip("/")
-    routes = AppRouteCatalog(repo)
+    capture_api = os.environ.get("PROMOTION_AGENT_CAPTURE_API_URL")
+    data_source = os.environ.get("PROMOTION_AGENT_DATA_SOURCE") or (
+        "DEMO" if capture_api else "PRODUCTION"
+    )
+    demo = not dry_run and data_source == "DEMO"
+    routes = AppRouteCatalog(repo, demo=demo)
     # 건너뛴 커밋을 다시 평가하지 않는다(스펙 D11). 드라이런도 같은 원장을 본다.
     skipped = skipped_ledger(sessions)
     # 실패·중단으로 결론이 안 난 커밋은 반대로 다시 본다. 홍보 경계에 가려 사라지지 않게 한다.
@@ -95,11 +100,9 @@ def build_harness(
 
     # 찍는 곳과 제출하는 곳이 다를 수 있다 — Actions 에서는 러너 안 데모 스택을 찍고 운영에 낸다.
     # 찍는 쪽 로그인을 따로 주지 않으면 제출 계정으로 찍는다(같은 곳을 찍고 내는 경우).
-    capture_api = os.environ.get("PROMOTION_AGENT_CAPTURE_API_URL")
     run = {
         "category": os.environ.get("PROMOTION_AGENT_CATEGORY") or "FEATURE",
-        "dataSource": os.environ.get("PROMOTION_AGENT_DATA_SOURCE")
-        or ("DEMO" if capture_api else "PRODUCTION"),
+        "dataSource": data_source,
         "runUrl": os.environ.get("PROMOTION_AGENT_RUN_URL") or None,
     }
     publisher = BackendPublisher(
@@ -125,6 +128,7 @@ def build_harness(
         DraftLog(publisher, sessions),
         anthropic_conversation_factory(),
         sessions,
+        demo=demo,
     )
 
 

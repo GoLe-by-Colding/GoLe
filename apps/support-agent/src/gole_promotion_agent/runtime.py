@@ -115,7 +115,9 @@ class PromotionHarness:
         publisher: DraftPublisher,
         conversation_factory: ConversationFactory,
         sessions_root: Path,
+        demo: bool = False,
     ):
+        self._demo = demo
         self._scanner = scanner
         self._routes = routes
         self._camera = camera
@@ -191,12 +193,12 @@ class PromotionHarness:
             # 같은 대화에는 같은 맥락이 실려야 한다(스펙 D18).
             stored = saver.get_tuple(config)
             values = stored.checkpoint.get("channel_values", {}) if stored else {}
-            system = values.get("system") or policy.build_system_prompt(history)
+            system = values.get("system") or policy.build_system_prompt(history, self._demo)
             session = EphemeralSession(
                 Stage.DRAFTING if values.get("draft") else Stage.EXPLORING
             )
         else:
-            system = policy.build_system_prompt(history)
+            system = policy.build_system_prompt(history, self._demo)
             session = EphemeralSession()
             self._write_manifest(session_dir, sha, subject)
 

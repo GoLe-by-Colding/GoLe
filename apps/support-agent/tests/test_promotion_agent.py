@@ -896,3 +896,32 @@ def test_dry_run_hands_capture_notes_to_publisher(tmp_path: Path, repo: Path):
     captures = created["details"]["captures"]
     assert [c["label"] for c in captures] == ["메인"] and captures[0]["route"] == "/"
     assert created["details"]["rationale"]
+
+
+def test_demo_capture_excludes_price_screens():
+    """데모 데이터로 찍을 때 시세 화면은 가짜 체결가가 사실처럼 읽히므로 막는다."""
+    from gole_promotion_agent import policy
+
+    assert policy.is_public_capture_route("/prices")
+    assert not policy.is_public_capture_route("/prices", demo=True)
+    assert policy.is_public_capture_route("/search", demo=True)
+
+
+def test_demo_route_catalog_drops_prices(repo: Path):
+    for route in ("prices", "search"):
+        page = repo / "apps/web/src/app/(main)" / route / "page.tsx"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text("export default function Page() { return null; }", encoding="utf-8")
+
+    assert "/prices" in AppRouteCatalog(repo).routes()
+    assert "/prices" not in AppRouteCatalog(repo, demo=True).routes()
+
+
+def test_demo_prompt_forbids_numbers_in_caption():
+    from gole_promotion_agent import policy
+
+    demo = policy.build_system_prompt([], demo=True)
+    bot = policy.build_system_prompt([])
+
+    assert "데모 데이터" in demo and "가격" in demo
+    assert "자기 데이터가 없다" in bot and "데모 데이터" not in bot
