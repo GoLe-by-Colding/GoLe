@@ -6,9 +6,19 @@ name: Promotion agent
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: draft(릴리스로 초안 작성) · publish(승인된 글 발행)
+        required: false
+        default: draft
+        type: choice
+        options: [draft, publish]
       sha:
-        description: 홍보할 릴리스 커밋 (40자 SHA)
-        required: true
+        description: draft 모드에서 홍보할 릴리스 커밋 (40자 SHA)
+        required: false
+        type: string
+      requested_by:
+        description: 실행을 요청한 관리자 (관리자 콘솔 버튼이 채운다)
+        required: false
         type: string
 
 permissions:
@@ -21,6 +31,7 @@ concurrency:
 jobs:
   draft:
     name: Draft from release
+    if: inputs.mode != 'publish'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -141,6 +152,7 @@ jobs:
           PROMOTION_AGENT_ADMIN_EMAIL: e2e-admin@gole.test
           PROMOTION_AGENT_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
         run: |
+          if [ -z "$SHA" ]; then echo "::error::draft 모드는 sha 입력이 필요하다"; exit 1; fi
           uv run --no-sync python -m gole_promotion_agent \
             --repo "$GITHUB_WORKSPACE" \
             --sessions "$RUNNER_TEMP/promotion" \
@@ -173,3 +185,45 @@ jobs:
         run: |
           tail -100 "$RUNNER_TEMP/api.log" || true
           tail -100 "$RUNNER_TEMP/web.log" || true
+
+  # 관리자 콘솔의 "승인된 글 발행" 버튼이 백엔드를 거쳐 이 모드로 dispatch 한다.
+  # 화면을 찍지 않으므로 스택을 띄우지 않고 운영 API 만 부른다.
+  publish:
+    name: Publish approved post
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install agent
+        working-directory: apps/support-agent
+        run: |
+          python -m pip install uv==0.10.2
+          uv sync --locked --extra promotion
+
+      - name: Run publish agent
+        working-directory: apps/support-agent
+        env:
+          REQUESTED_BY: ${{ inputs.requested_by }}
+          PYTHONPATH: src
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROMOTION_AGENT_ANTHROPIC_ENABLED: "true"
+          PROMOTION_AGENT_API_URL: https://gole.co.kr
+          PROMOTION_AGENT_ADMIN_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
+          PROMOTION_AGENT_ADMIN_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
+        run: |
+          set -o pipefail
+          echo "요청자: ${REQUESTED_BY:-수동 실행}"
+          uv run --no-sync python -m gole_promotion_agent --mode publish | tee "$RUNNER_TEMP/publish.log"
+          {
+            echo "## 홍보 발행"
+            echo
+            sed 's/^\[promotion-agent\] //' "$RUNNER_TEMP/publish.log"
+          } >> "$GITHUB_STEP_SUMMARY"
