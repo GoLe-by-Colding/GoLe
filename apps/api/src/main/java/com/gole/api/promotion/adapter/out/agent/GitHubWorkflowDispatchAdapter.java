@@ -3,6 +3,7 @@ package com.gole.api.promotion.adapter.out.agent;
 import com.gole.api.promotion.application.port.out.PromotionAgentRunPort;
 import com.gole.api.promotion.domain.exception.PromotionAgentNotConfiguredException;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,8 @@ public class GitHubWorkflowDispatchAdapter implements PromotionAgentRunPort {
     private final String ref;
     private final RestClient client;
 
+    // 테스트용 생성자가 하나 더 있어 Spring 이 고를 생성자를 명시한다. 없으면 기동이 실패한다.
+    @Autowired
     public GitHubWorkflowDispatchAdapter(
             @Value("${gole.promotion.agent.github-token:}") String token,
             @Value("${gole.promotion.agent.repository:GoLe-by-Colding/GoLe}") String repository,
