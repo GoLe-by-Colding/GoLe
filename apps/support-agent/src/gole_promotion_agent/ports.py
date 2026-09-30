@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -50,7 +50,28 @@ class Conversation(Protocol):
 
 
 class ConversationFactory(Protocol):
-    def __call__(self, *, system: str) -> Conversation: ...
+    def __call__(self, *, system: str, tools: Sequence[Mapping[str, Any]]) -> Conversation: ...
+
+
+@dataclass(frozen=True)
+class ToolOutcome:
+    """도구 하나를 실행한 결과. update 는 그래프 상태에 합칠 값이다(예: captures, draft)."""
+
+    text: str
+    image_path: str | None = None
+    update: Mapping[str, Any] = field(default_factory=dict)
+    is_error: bool = False
+
+
+class Toolset(Protocol):
+    """루프에 주입하는 도구 묶음 — 스키마와 실행을 함께 가진다.
+
+    루프(brain)는 어떤 도구가 있는지 모른다. 실행 종류(초안·발행)마다 다른 묶음을 끼운다.
+    """
+
+    def schemas(self) -> tuple[dict[str, Any], ...]: ...
+
+    def run(self, call: ToolCall, state: Mapping[str, Any]) -> ToolOutcome: ...
 
 
 class ReleaseScanner(Protocol):

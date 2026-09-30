@@ -76,7 +76,7 @@ class ScriptedConversation:
 
 
 def scripted_conversation_factory(route: str = "/"):
-    def factory(*, system: str) -> ScriptedConversation:
+    def factory(*, system: str, tools: Sequence[Mapping[str, Any]] = ()) -> ScriptedConversation:
         # system 프롬프트는 드라이런에서도 만들어지지만 모델에 보내지 않는다.
         return ScriptedConversation(route)
 

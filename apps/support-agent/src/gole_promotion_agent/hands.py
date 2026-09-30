@@ -392,10 +392,13 @@ def _blocks_from_transcript(transcript: Sequence[Mapping[str, Any]]) -> list[dic
 
 
 class AnthropicConversation:
-    def __init__(self, client: Any, system: str, model: str):
+    def __init__(
+        self, client: Any, system: str, model: str, tools: Sequence[Mapping[str, Any]]
+    ):
         self._client = client
         self._system = system
         self._model = model
+        self._tools = [dict(tool) for tool in tools]
 
     def advance(self, transcript: Sequence[Mapping[str, Any]]) -> Turn:
         try:
@@ -413,7 +416,7 @@ class AnthropicConversation:
                         "cache_control": {"type": "ephemeral"},
                     }
                 ],
-                tools=list(policy.tool_schemas()),
+                tools=self._tools,
                 messages=_blocks_from_transcript(transcript),
             )
         except Exception as error:
@@ -445,8 +448,8 @@ def anthropic_conversation_factory() -> Callable[..., AnthropicConversation]:
     client = Anthropic(api_key=key, max_retries=2)
     model = os.environ.get("PROMOTION_AGENT_MODEL", policy.DEFAULT_MODEL)
 
-    def factory(*, system: str) -> AnthropicConversation:
-        return AnthropicConversation(client, system, model)
+    def factory(*, system: str, tools: Sequence[Mapping[str, Any]]) -> AnthropicConversation:
+        return AnthropicConversation(client, system, model, tools)
 
     return factory
 

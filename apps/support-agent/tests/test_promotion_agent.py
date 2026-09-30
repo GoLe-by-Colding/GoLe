@@ -446,7 +446,7 @@ def _harness(tmp_path: Path, repo: Path, camera, publisher, conversation):
         AppRouteCatalog(repo),
         camera,
         publisher,
-        lambda *, system: conversation,
+        lambda *, system, tools: conversation,
         tmp_path / "sessions",
     )
 
@@ -717,7 +717,7 @@ def test_candidate_initialization_failure_does_not_abort_later_candidates(tmp_pa
     publisher = RecordingPublisher(tmp_path / "sessions")
     calls = 0
 
-    def factory(*, system):
+    def factory(*, system, tools):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -786,8 +786,39 @@ def test_model_request_marks_a_cache_breakpoint(tmp_path: Path):
     class _Client:
         messages = _Messages()
 
-    AnthropicConversation(_Client(), "SYSTEM", "claude-opus-5").advance([])
+    AnthropicConversation(_Client(), "SYSTEM", "claude-opus-5", ()).advance([])
 
     system = captured["system"]
     assert isinstance(system, list) and system[0]["cache_control"] == {"type": "ephemeral"}
     assert system[0]["text"] == "SYSTEM"
+
+
+def test_loop_runs_only_the_injected_toolset():
+    """루프는 도구를 모른다 — 주입한 묶음의 도구만 실행하고 결과를 전사에 남긴다."""
+    from gole_promotion_agent.brain import build_graph
+    from gole_promotion_agent.ports import ToolOutcome, Turn
+
+    class _Echo:
+        def __init__(self):
+            self.seen: list[str] = []
+
+        def schemas(self):
+            return ({"name": "echo", "description": "", "input_schema": {}},)
+
+        def run(self, call, state):
+            self.seen.append(call.name)
+            return ToolOutcome("ok", update={"captures": [{"label": "x"}]})
+
+    class _Conversation:
+        def advance(self, transcript):
+            if transcript:
+                return Turn("끝", (), "end_turn")
+            return Turn("", (ToolCall("1", "echo", {}),), "tool_use")
+
+    toolset = _Echo()
+    graph = build_graph(_Conversation(), toolset, publisher=None, check_active=lambda: None)
+    state = graph.compile().invoke({})
+
+    assert toolset.seen == ["echo"]
+    assert state["captures"] == [{"label": "x"}]
+    assert state["transcript"][1]["results"][0]["text"] == "ok"

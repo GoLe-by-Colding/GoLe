@@ -21,6 +21,7 @@ from gole_promotion_agent.ports import (
     ReleaseScanner,
     RouteCatalog,
 )
+from gole_promotion_agent.tools import DraftToolset
 from gole_promotion_agent.session import EphemeralSession, Stage
 
 CANDIDATE_TIMEOUT_SECONDS = 15 * 60
@@ -200,13 +201,11 @@ class PromotionHarness:
             self._write_manifest(session_dir, sha, subject)
 
         try:
+            toolset = DraftToolset(self._scanner, self._routes, self._camera, session_dir)
             graph = build_graph(
-                self._conversations(system=system),
-                self._scanner,
-                self._routes,
-                self._camera,
+                self._conversations(system=system, tools=toolset.schemas()),
+                toolset,
                 self._publisher,
-                session_dir,
                 guard,
                 session.advance,
             ).compile(checkpointer=saver)
