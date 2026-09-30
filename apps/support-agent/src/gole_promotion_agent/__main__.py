@@ -14,7 +14,6 @@ from gole_promotion_agent.hands import AppRouteCatalog, GitReleaseScanner, Singl
 from gole_promotion_agent.runtime import (
     PromotionHarness,
     retry_ledger,
-    run_publish,
     skipped_ledger,
 )
 
@@ -112,16 +111,10 @@ def main(argv: list[str] | None = None) -> int:
         "--sessions", default=os.environ.get("PROMOTION_AGENT_OUTPUT_DIR", DEFAULT_SESSIONS)
     )
     parser.add_argument("--sha", help="이 릴리스 하나만 본다(탐색·원장 생략)")
-    parser.add_argument(
-        "--mode", choices=("draft", "publish"), default="draft", help="초안 작성 또는 승인 글 발행"
-    )
     arguments = parser.parse_args(argv)
 
     reject_external_tracing()
     dry_run = arguments.dry_run or os.environ.get("PROMOTION_AGENT_DRY_RUN") == "true"
-
-    if arguments.mode == "publish":
-        return publish(dry_run)
 
     harness = build_harness(dry_run, Path(arguments.repo), Path(arguments.sessions), arguments.sha)
     result = harness.run()
@@ -136,27 +129,6 @@ def main(argv: list[str] | None = None) -> int:
     if result.failed:
         print(f"[promotion-agent] 실패 {len(result.failed)}건", file=sys.stderr)
         return 1
-    return 0
-
-
-def publish(dry_run: bool) -> int:
-    if dry_run:
-        # 되돌릴 수 없는 행동이라 드라이런 경로를 두지 않는다 — 가짜로 도는 발행은 없다.
-        print("[promotion-agent] 발행은 드라이런을 지원하지 않음", file=sys.stderr)
-        return 2
-    from gole_promotion_agent.hands import BackendPublisher, anthropic_conversation_factory
-
-    site = (os.environ.get("PROMOTION_AGENT_SITE_URL") or DEFAULT_SITE).rstrip("/")
-    board = BackendPublisher(
-        (os.environ.get("PROMOTION_AGENT_API_URL") or site).rstrip("/"),
-        _required("PROMOTION_AGENT_ADMIN_EMAIL"),
-        _required("PROMOTION_AGENT_ADMIN_PASSWORD"),
-    )
-    result = run_publish(board, anthropic_conversation_factory())
-    for item in result.published:
-        print(f"[promotion-agent] 발행 {item['id']}: {item['reason']}")
-    if not result.published:
-        print(f"[promotion-agent] 발행 없음 ({result.outcome}): {result.summary}")
     return 0
 
 
