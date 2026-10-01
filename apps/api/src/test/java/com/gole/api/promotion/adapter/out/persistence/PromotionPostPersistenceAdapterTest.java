@@ -54,12 +54,21 @@ class PromotionPostPersistenceAdapterTest {
     @DisplayName("종류·설명표·출처가 저장했다 읽어도 그대로다")
     void contextSurvivesRoundTrip() {
         var capture = new PromotionCapture("필터 열린 목록", "/market", "필터 클릭", CaptureDataSource.DEMO, Instant.EPOCH);
+        var polished = new PromotionCapture("검색", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)
+                .withOriginal("/api/v1/media/images/raw.png", "목업에 넣음");
         var context = new PromotionPostContext(
                 PromotionCategory.SERVICE,
-                List.of(capture),
+                List.of(capture, polished),
                 new PromotionProvenance("릴리스", "이유", "https://github.com/o/r/actions/runs/1"));
         PromotionPost post = PromotionPost.draft(
-                "promo-1", PromotionChannel.THREADS, "캡션", List.of("/a.png"), "author-1", null, Instant.EPOCH, context);
+                "promo-1",
+                PromotionChannel.THREADS,
+                "캡션",
+                List.of("/a.png", "/b.png"),
+                "author-1",
+                null,
+                Instant.EPOCH,
+                context);
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         adapter.save(post);

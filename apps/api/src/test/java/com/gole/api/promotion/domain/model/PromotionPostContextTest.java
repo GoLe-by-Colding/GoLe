@@ -54,4 +54,19 @@ class PromotionPostContextTest {
         assertThatThrownBy(() -> new PromotionCapture("x", "https://evil", "", CaptureDataSource.DEMO, Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("다듬기 원본은 사이트 경로여야 하고 지시문과 함께 온다")
+    void capture_originalMustBeSitePathAndPairedWithEdit() {
+        var capture = new PromotionCapture("목록", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH);
+
+        assertThat(capture.withOriginal("/api/v1/media/images/raw.png", "목업").originalUrl())
+                .isEqualTo("/api/v1/media/images/raw.png");
+        assertThatThrownBy(() -> capture.withOriginal("https://evil.example/a.png", "목업"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> capture.withOriginal("//evil.example/a.png", "목업"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> capture.withOriginal("/api/v1/media/images/raw.png", " "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

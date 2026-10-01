@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
+import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
@@ -24,12 +25,17 @@ import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,6 +168,60 @@ class PromotionPostServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PromotionPostStatus.DRAFT);
         assertThat(captor.getValue().getAuthorId()).isEqualTo("author-1");
         assertThat(captor.getValue().getSourceCommitSha()).isEqualTo(sourceCommitSha);
+    }
+
+    @Test
+    @DisplayName("AI 로 다듬은 사진은 원본도 공개·연결하고 설명표에 원본 경로와 지시문을 남긴다")
+    void create_attachesOriginalsAndRecordsThemOnCaptures() {
+        when(idGenerator.newId()).thenReturn("promo-1");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        String polished = "images/11111111-1111-4111-8111-111111111111.png";
+        String raw = "images/22222222-2222-4222-8222-222222222222.png";
+        String plain = "images/33333333-3333-4333-8333-333333333333.png";
+        var context = new PromotionPostContext(
+                PromotionCategory.SERVICE,
+                List.of(
+                        new PromotionCapture("컬렉션", "/collection", "", CaptureDataSource.DEMO, Instant.EPOCH),
+                        new PromotionCapture("검색", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)),
+                null);
+        var originals = new ArrayList<CaptureOriginal>();
+        originals.add(new CaptureOriginal(raw, "브라우저 목업에 넣고 배경만 바꿈"));
+        originals.add(null);
+
+        service.create(new CreatePromotionPostCommand(
+                "author-1", PromotionChannel.THREADS, "캡션", List.of(polished, plain), null, context, originals));
+
+        verify(mediaAssets)
+                .replaceReferences(
+                        "author-1", MediaTargetType.PROMOTION_POST, "promo-1", List.of(polished, plain, raw), true);
+        ArgumentCaptor<PromotionPost> captor = ArgumentCaptor.forClass(PromotionPost.class);
+        verify(repository).save(captor.capture());
+        List<PromotionCapture> captures = captor.getValue().getCaptures();
+        assertThat(captures.get(0).originalUrl()).isEqualTo("/api/v1/media/" + raw);
+        assertThat(captures.get(0).edit()).isEqualTo("브라우저 목업에 넣고 배경만 바꿈");
+        assertThat(captures.get(1).originalUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("원본 목록이 설명표와 개수가 다르면 미디어를 건드리기 전에 거부한다")
+    void create_rejectsOriginalsThatDoNotMatchCaptures() {
+        when(idGenerator.newId()).thenReturn("promo-1");
+        var context = new PromotionPostContext(
+                PromotionCategory.FEATURE,
+                List.of(new PromotionCapture("목록", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)),
+                null);
+        String key = "images/11111111-1111-4111-8111-111111111111.png";
+
+        assertThatThrownBy(() -> service.create(new CreatePromotionPostCommand(
+                        "author-1",
+                        PromotionChannel.THREADS,
+                        "캡션",
+                        List.of(key),
+                        null,
+                        context,
+                        List.of(new CaptureOriginal(key, "다듬음"), new CaptureOriginal(key, "다듬음")))))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(mediaAssets, never()).replaceReferences(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test

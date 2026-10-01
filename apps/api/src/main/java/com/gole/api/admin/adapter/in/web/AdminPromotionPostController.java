@@ -5,6 +5,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdm
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
+import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase;
 import com.gole.api.promotion.application.port.in.GetPromotionMetricsUseCase.PromotionMetrics;
@@ -100,7 +101,8 @@ public class AdminPromotionPostController {
                 request.caption(),
                 request.mediaKeys(),
                 request.sourceCommitSha(),
-                request.toContext()));
+                request.toContext(),
+                request.toOriginals()));
         return Map.of("id", id);
     }
 
@@ -236,14 +238,29 @@ public class AdminPromotionPostController {
                             : new PromotionProvenance(
                                     provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
         }
+
+        List<CaptureOriginal> toOriginals() {
+            if (captures == null || captures.stream().allMatch(capture -> capture.originalMediaKey() == null)) {
+                return List.of();
+            }
+            return captures.stream()
+                    .map(capture -> capture.originalMediaKey() == null
+                            ? null
+                            : new CaptureOriginal(capture.originalMediaKey(), capture.edit()))
+                    // Stream.toList 는 null 을 담는다 — 원본 없이 올린 사진 자리다.
+                    .toList();
+        }
     }
 
+    /** @param originalMediaKey AI 로 다듬은 사진이면 다듬기 전 원본의 스테이지 키. edit 와 함께 온다. */
     public record CaptureRequest(
             @NotBlank @Size(max = 300) String label,
             @NotBlank @Size(max = 300) String route,
             @Size(max = 300) String actions,
             @NotNull CaptureDataSource dataSource,
-            @NotNull Instant capturedAt) {}
+            @NotNull Instant capturedAt,
+            @Size(max = 80) String originalMediaKey,
+            @Size(max = 1000) String edit) {}
 
     public record ProvenanceRequest(
             @Size(max = 500) String releaseTitle,

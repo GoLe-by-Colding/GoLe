@@ -130,7 +130,9 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                                 capture.route(),
                                 capture.actions(),
                                 capture.dataSource().name(),
-                                capture.capturedAt()))
+                                capture.capturedAt(),
+                                capture.originalUrl(),
+                                capture.edit()))
                         .toList(),
                 provenance == null
                         ? null
@@ -148,7 +150,9 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                                 capture.route(),
                                 capture.actions(),
                                 CaptureDataSource.valueOf(capture.dataSource()),
-                                capture.capturedAt()))
+                                capture.capturedAt(),
+                                capture.originalUrl(),
+                                capture.edit()))
                         .toList();
         PromotionPostDocument.ProvenanceDocument provenance = document.getProvenance();
         return new PromotionPostContext(

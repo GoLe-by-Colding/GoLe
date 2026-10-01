@@ -67,7 +67,15 @@ public class PromotionPostDocument {
 
     private ProvenanceDocument provenance;
 
-    public record CaptureDocument(String label, String route, String actions, String dataSource, Instant capturedAt) {}
+    /** originalUrl·edit 는 AI 로 다듬은 사진에만 있다. 예전 문서는 둘 다 null 이다. */
+    public record CaptureDocument(
+            String label,
+            String route,
+            String actions,
+            String dataSource,
+            Instant capturedAt,
+            String originalUrl,
+            String edit) {}
 
     public record ProvenanceDocument(String releaseTitle, String rationale, String runUrl) {}
 

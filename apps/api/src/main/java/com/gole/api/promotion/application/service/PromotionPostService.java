@@ -4,6 +4,7 @@ import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaKey;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
+import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
@@ -16,12 +17,16 @@ import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
+import com.gole.api.promotion.domain.model.PromotionCapture;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 /**
@@ -94,11 +99,36 @@ public class PromotionPostService
                 command.authorId(),
                 command.sourceCommitSha(),
                 Instant.now(clock),
-                command.context());
+                withOriginals(command.context(), command.originals()));
         // 도메인 검증에 실패할 입력으로 미디어를 공개하지 않는다. 검증한 초안만 연결한다.
-        mediaAssets.replaceReferences(
-                command.authorId(), MediaTargetType.PROMOTION_POST, id, command.mediaKeys(), true);
+        // 다듬기 전 원본도 검토 화면이 띄우므로 게시 이미지와 같이 공개·연결한다.
+        List<String> referenced = new ArrayList<>(command.mediaKeys());
+        command.originals().stream()
+                .filter(Objects::nonNull)
+                .map(CaptureOriginal::mediaKey)
+                .forEach(referenced::add);
+        mediaAssets.replaceReferences(command.authorId(), MediaTargetType.PROMOTION_POST, id, referenced, true);
         return repository.save(draft).getId();
+    }
+
+    /** 설명표마다 다듬기 전 원본을 붙인다. 원본은 스테이지 키로 받아 공개 경로로 바꾼다. */
+    private static PromotionPostContext withOriginals(PromotionPostContext context, List<CaptureOriginal> originals) {
+        if (originals.isEmpty()) {
+            return context;
+        }
+        if (originals.size() != context.captures().size()) {
+            throw new IllegalArgumentException("originals must match captures one to one");
+        }
+        List<PromotionCapture> captures = new ArrayList<>();
+        for (int index = 0; index < originals.size(); index++) {
+            CaptureOriginal original = originals.get(index);
+            PromotionCapture capture = context.captures().get(index);
+            captures.add(
+                    original == null
+                            ? capture
+                            : capture.withOriginal(MediaKey.publicPath(original.mediaKey()), original.edit()));
+        }
+        return new PromotionPostContext(context.category(), captures, context.provenance());
     }
 
     @Override
