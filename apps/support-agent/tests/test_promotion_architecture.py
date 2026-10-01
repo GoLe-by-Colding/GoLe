@@ -1,22 +1,13 @@
 """홍보 모듈의 경계를 실제로 검사한다.
 
-두뇌는 Claude Code 로 옮겼으므로, 이 패키지에 남은 것은 손(캡처·합성)과 래퍼다. 지켜야 할 경계는
+두뇌는 게이트웨이 뒤의 claude·codex CLI 이고, 이 패키지에 남은 것은 손(캡처·백엔드)과 래퍼다. 지켜야 할 경계는
 "promotion extra 없이도 import 된다"와 "모델 SDK 를 직접 부르지 않는다" 두 가지다.
 """
 
 import ast
 from pathlib import Path
 
-from gole_promotion_agent import (
-    capture_cli,
-    cli_prompt,
-    cli_runner,
-    compose_cli,
-    fakes,
-    hands,
-    policy,
-    ports,
-)
+from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, policy, ports
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
 
@@ -48,13 +39,13 @@ def test_ports_declare_contracts_without_sdk_or_environment():
 
 def test_no_module_imports_sdks_at_module_level():
     """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다."""
-    for module in (capture_cli, cli_prompt, cli_runner, compose_cli, fakes, hands, policy):
+    for module in (drafter, drafting, fakes, gateway_client, hands, policy):
         assert not any(name.startswith(SDK_PREFIXES) for name in top_level_imports(module)), module
 
 
 def test_package_never_calls_a_model_sdk_directly():
-    """모델 호출은 claude CLI 프로세스뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
-    for module in (capture_cli, cli_prompt, cli_runner, compose_cli, fakes, hands, policy, ports):
+    """모델 호출은 게이트웨이(CLI)뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
+    for module in (drafter, drafting, fakes, gateway_client, hands, policy, ports):
         assert not any(
             name.startswith(("anthropic", "openai", "langgraph", "langchain"))
             for name in imported_modules(module)
@@ -63,7 +54,7 @@ def test_package_never_calls_a_model_sdk_directly():
 
 def test_runner_isolates_external_observability():
     """상위 호출자의 tracing 설정이 섞이지 않게 실행 전에 막는다."""
-    assert "gole_agent_runtime.privacy" in imported_modules(cli_runner)
+    assert "gole_agent_runtime.privacy" in imported_modules(drafter)
 
 
 def test_policy_holds_every_limit():

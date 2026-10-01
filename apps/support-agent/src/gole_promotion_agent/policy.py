@@ -49,6 +49,15 @@ PRIVATE_ROUTE = re.compile(r"\A/(?:profile(?:/|\Z)|notifications(?:/|\Z)|setting
 DEMO_FACT_ROUTE = re.compile(r"\A/prices(?:/|\Z)")
 
 
+# 찍을 수는 있지만 홍보 후보로는 의미가 없는 화면(약관·정책·첫 진입 안내). 후보를 미리 다 찍어
+# 모델에 한 번에 보내므로, 쓸모없는 장수만큼 비용과 판단 잡음이 는다.
+NON_PROMOTIONAL_ROUTE = re.compile(r"\A/(?:privacy|terms|review-policy|onboarding)(?:/|\Z)")
+
+
+def promotional_routes(routes: Sequence[str]) -> tuple[str, ...]:
+    return tuple(route for route in routes if not NON_PROMOTIONAL_ROUTE.search(route))
+
+
 def is_public_capture_route(route: str, demo: bool = False) -> bool:
     if not route.startswith("/") or route.startswith("//"):
         return False

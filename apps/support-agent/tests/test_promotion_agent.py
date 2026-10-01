@@ -288,8 +288,22 @@ def test_backend_publisher_sends_capture_notes_and_provenance():
     assert publisher.create("a" * 40, "캡션", ["k1"], details) == "promo-1"
     assert sent["category"] == "FEATURE"
     assert sent["captures"] == [
-        {"label": "목록", "route": "/market", "actions": "'필터' 클릭", "dataSource": "DEMO", "capturedAt": "2026-09-30T00:00:00+00:00"}
+        {
+            "label": "목록",
+            "route": "/market",
+            "actions": "'필터' 클릭",
+            "dataSource": "DEMO",
+            "capturedAt": "2026-09-30T00:00:00+00:00",
+            "originalMediaKey": None,
+            "edit": None,
+        }
     ]
+
+    # AI 로 다듬은 사진이면 원본 키와 지시문이 같이 나간다(검토 화면이 나란히 대조한다).
+    details["captures"][0] |= {"originalMediaKey": "raw-1", "edit": "목업에 넣음"}
+    publisher.create("a" * 40, "캡션", ["k1"], details)
+    assert sent["captures"][0]["originalMediaKey"] == "raw-1"
+    assert sent["captures"][0]["edit"] == "목업에 넣음"
     assert sent["provenance"] == {
         "releaseTitle": "feat(web): 필터",
         "rationale": "필터가 새로 생겼어.",

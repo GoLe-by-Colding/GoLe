@@ -1,4 +1,4 @@
-"""래퍼(cli_runner)와 캡처 명령이 쓰는 계약. SDK·환경변수·전송 계층에 의존하지 않는다."""
+"""초안 실행(drafter)이 쓰는 계약. SDK·환경변수·전송 계층에 의존하지 않는다."""
 
 from __future__ import annotations
 

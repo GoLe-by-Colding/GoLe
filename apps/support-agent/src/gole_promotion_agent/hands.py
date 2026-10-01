@@ -339,6 +339,9 @@ class BackendPublisher:
                         "actions": item.get("actions", ""),
                         "dataSource": data_source,
                         "capturedAt": item.get("capturedAt") or captured_fallback,
+                        # AI 로 다듬은 사진이면 원본 키와 지시문. 검토 화면이 나란히 대조한다.
+                        "originalMediaKey": item.get("originalMediaKey"),
+                        "edit": item.get("edit"),
                     }
                     for item in details.get("captures", [])
                 ],
