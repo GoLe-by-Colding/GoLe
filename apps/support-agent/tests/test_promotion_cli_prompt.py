@@ -46,3 +46,8 @@ def test_draftOutput_requiresCompleteDraft():
 def test_draftImage_rejectsAmbiguousOrPathLike(image):
     with pytest.raises(ValidationError):
         cli_prompt.DraftImage.model_validate(image)
+
+
+def test_systemPrompt_forbidsEmptyStatesInDemoToo():
+    # 첫 실제 실행에서 데모 관리자의 빈 컬렉션 화면을 홍보 카드로 골랐다.
+    assert "빈 상태 화면은 쓰지 않는다" in cli_prompt.system_prompt([], demo=True, service=True)
