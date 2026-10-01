@@ -165,13 +165,28 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
             structured = json.loads(text)
         except ValueError:
             return {"ok": False, "error": "codex 구조화 출력 해석 실패"}
-    images = [
-        {"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")}
-        for path in sorted((workdir / "out").glob("*.png"))
-    ]
+    try:
+        images = [
+            {"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")}
+            for path in sorted((workdir / "out").glob("*.png"))
+        ]
+    except OSError as error:
+        # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
+        return {"ok": False, "error": f"codex 결과 이미지를 읽지 못함: {error}"}
     if request.get("want_images") and not images:
         return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
     return {"ok": True, "text": text, "structured": structured, "images": images}
+
+
+def _workdir(root: Path | None) -> Path:
+    if os.name != "nt":
+        # 0700 — 공용 서버에서 다른 유저가 요청 이미지를 읽지 못하게 한다.
+        return Path(tempfile.mkdtemp(prefix="gole-gw-", dir=root))
+    # Windows 의 mkdtemp(Python 3.13+)는 소유자 전용 ACL 을 건다. codex 샌드박스 유저가 그 안에 만든
+    # 결과 이미지를 이 프로세스가 다시 읽지 못하므로 기본 상속 ACL 로 만든다(로컬 시험 경로 전용).
+    path = Path(root or tempfile.gettempdir()) / f"gole-gw-{os.getpid()}-{time.time_ns()}"
+    path.mkdir()
+    return path
 
 
 def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None = None) -> dict[str, Any]:
@@ -183,7 +198,7 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
     prompt = request.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         raise BadRequest(f"prompt 는 1~{MAX_PROMPT_CHARS}자 문자열")
-    workdir = Path(tempfile.mkdtemp(prefix="gole-gw-", dir=root))
+    workdir = _workdir(root)
     try:
         (workdir / "in").mkdir()
         (workdir / "out").mkdir()

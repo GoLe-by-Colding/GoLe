@@ -115,3 +115,15 @@ def test_timeout_isReportedNotRaised(tmp_path):
     response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
 
     assert not response["ok"] and "시간 초과" in response["error"]
+
+
+def test_codex_unreadableOutput_isReportedNotRaised(tmp_path, monkeypatch):
+    def write_output(command, kwargs):
+        (Path(kwargs["cwd"]) / "out" / "p.png").write_bytes(PNG)
+
+    runner, _ = _recording(on_call=write_output)
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(PermissionError("denied")))
+
+    response = gateway.handle({"engine": "codex", "prompt": "x", "want_images": True}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and "읽지 못함" in response["error"]
