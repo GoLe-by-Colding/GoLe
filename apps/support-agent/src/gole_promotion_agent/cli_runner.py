@@ -145,15 +145,15 @@ class ClaudeCodeDrafter:
 
         subject, diff = None, None
         if not self._service:
-            from gole_promotion_agent.hands import SingleReleaseScanner
+            from gole_promotion_agent.hands import ReleaseScanner
 
-            scanner = SingleReleaseScanner(self._repo, self._sha)
+            scanner = ReleaseScanner(self._repo, self._sha)
             candidates = scanner.candidates()
             if not candidates:
                 return RunResult("skipped", "웹 화면 변경이 없는 릴리스")
             if self._publisher.exists(self._sha):
                 return RunResult("skipped", "이미 초안이 있는 릴리스")
-            subject, diff = candidates[0].subject, scanner.diff(self._sha)
+            subject, diff = candidates[0].subject, scanner.diff()
 
         private = self._run_dir / "private"
         private.mkdir(parents=True, exist_ok=True)
@@ -260,6 +260,38 @@ class ClaudeCodeDrafter:
         return paths, details
 
 
+def _required(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        raise ValueError(f"{name}_REQUIRED")
+    return value
+
+
+class DraftLog:
+    """제출한 초안을 실행 디렉터리에 남긴다 — Actions 요약·아티팩트에서 캡션을 보기 위해서다."""
+
+    def __init__(self, publisher: Any, run_dir: Path):
+        self._publisher = publisher
+        self._path = Path(run_dir) / "drafts.jsonl"
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._publisher, name)
+
+    def create(self, sha: str | None, caption: str, media_keys: Sequence[str], details: Mapping[str, Any]) -> str:
+        post_id = self._publisher.create(sha, caption, media_keys, details)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with self._path.open("a", encoding="utf-8") as handle:
+            record = {
+                "id": post_id,
+                "sha": sha,
+                "caption": caption,
+                "mediaKeys": list(media_keys),
+                "rationale": details.get("rationale"),
+            }
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        return post_id
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="gole_promotion_agent.cli_runner")
     parser.add_argument("--repo", required=True, help="찍을 대상 소스(릴리스 worktree)")
@@ -270,7 +302,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     from gole_agent_runtime.privacy import reject_external_tracing
-    from gole_promotion_agent.__main__ import DraftLog, _required
     from gole_promotion_agent.hands import BackendPublisher
 
     reject_external_tracing()

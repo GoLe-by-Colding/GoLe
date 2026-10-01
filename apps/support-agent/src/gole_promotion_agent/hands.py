@@ -1,25 +1,18 @@
-"""외부 세계를 만지는 구현. git·브라우저·모델 SDK·백엔드 HTTP가 전부 여기 있다.
+"""외부 세계를 만지는 구현. git·브라우저·백엔드 HTTP가 전부 여기 있다.
 
-SDK import는 전부 지연시킨다 — 드라이런 경로가 이 모듈을 쓰더라도 외부 클라이언트가
-인스턴스화되지 않아야 한다(스펙 D16).
+SDK import는 전부 지연시킨다 — promotion extra 없이도 이 모듈을 import 해 테스트할 수 있어야 한다.
 """
 
 from __future__ import annotations
 
-import base64
 from datetime import datetime, timezone
-import os
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from gole_promotion_agent import policy
-from gole_promotion_agent.ports import Candidate, ToolCall, Turn
-
-
-class ProviderUnavailable(Exception):
-    pass
+from gole_promotion_agent.ports import Candidate
 
 
 # --------------------------------------------------------------------------- git
@@ -41,34 +34,14 @@ def _git(repo: Path, *args: str, limit: int | None = None) -> str:
     return result.stdout if limit is None else result.stdout[:limit]
 
 
-class GitReleaseScanner:
-    """이미 홍보한 지점까지 뒤로 걸으며 후보를 고른다(스펙 D11).
+class ReleaseScanner:
+    """트리거가 정해 준 릴리스 하나를 본다. 화면(apps/web/src) 변경이 없으면 후보가 없다(건너뜀)."""
 
-    시간창 대신 이 방식을 쓰는 이유는 실행이 밀려도 릴리스를 빠뜨리지 않기 때문이다.
-    """
-
-    def __init__(
-        self,
-        repo: Path,
-        is_promoted: Callable[[str], bool],
-        is_skipped: Callable[[str], bool] | None = None,
-        retryable: Callable[[], tuple[str, ...]] | None = None,
-        ref: str = "HEAD",
-        max_commits: int = policy.MAX_WALK_COMMITS,
-        max_days: int = policy.MAX_WALK_DAYS,
-        max_candidates: int = policy.MAX_DRAFTS_PER_RUN,
-    ):
+    def __init__(self, repo: Path, sha: str):
+        if not policy.SHA_PATTERN.match(sha):
+            raise ValueError("INVALID_SHA")
         self._repo = Path(repo)
-        self._is_promoted = is_promoted
-        # 건너뛴 커밋은 경계가 아니라 개별 제외 대상이다 — 아래 candidates() 참고.
-        self._is_skipped = is_skipped or (lambda _sha: False)
-        # 실패·중단으로 "다시 볼 것"으로 남은 커밋이다. 홍보 경계보다 오래되면 walk 가 닿지 못하므로
-        # 원장에서 따로 받아 되살린다 — 없으면 앞선 실패가 조용히 영영 사라진다.
-        self._retryable = retryable or (lambda: ())
-        self._ref = ref
-        self._max_commits = max_commits
-        self._max_days = max_days
-        self._max_candidates = max_candidates
+        self._sha = sha
         self._cache: tuple[Candidate, ...] | None = None
 
     def _touches_web(self, sha: str) -> bool:
@@ -87,52 +60,14 @@ class GitReleaseScanner:
         return bool(changed.strip())
 
     def candidates(self) -> tuple[Candidate, ...]:
-        if self._cache is not None:
-            return self._cache
-        listed = _git(
-            self._repo,
-            "log",
-            f"-n{self._max_commits}",
-            f"--since={self._max_days} days ago",
-            "--format=%H%x09%s",
-            self._ref,
-        )
-        window: list[tuple[str, str]] = []
-        for line in listed.splitlines():
-            sha, _, subject = line.partition("\t")
-            if policy.SHA_PATTERN.match(sha):
-                window.append((sha, subject))
-
-        chosen: set[str] = set()
-        for sha, _subject in window:
-            if self._is_promoted(sha):
-                # 여기서부터는 이미 홍보한 영역이다. 다만 경계 너머에 "다시 볼 것"으로 남은 커밋이
-                # 있을 수 있어, 아래에서 원장을 보고 되살린다.
-                break
-            if self._is_skipped(sha):
-                # 이미 평가해서 홍보하지 않기로 한 커밋이다. **break 가 아니라 continue 다** —
-                # 건너뛴 커밋은 "여기까지 처리했다"는 경계가 아니라 개별 제외 대상이라,
-                # break 하면 그보다 오래된 후보가 통째로 조용히 사라진다.
-                continue
-            if self._touches_web(sha):
-                chosen.add(sha)
-
-        # 실패·중단으로 끝난 커밋을 되살린다. walk 가 홍보 경계에서 멈추므로, 그보다 오래된
-        # 실패는 경계에 가려 영영 후보가 되지 못한다 — 건너뛴 커밋에 대해 이미 막아 둔 함정이
-        # 실패 경로에만 남아 있었다. 탐색 창 밖으로 밀려난 것은 되살리지 않는다.
-        in_window = {sha for sha, _ in window}
-        for sha in self._retryable():
-            if sha in in_window and not self._is_promoted(sha):
-                chosen.add(sha)
-
-        # 오래된 것부터 처리한다 — 이야기 순서가 시간 순서와 같아야 한다.
-        ordered = [Candidate(sha, subject) for sha, subject in reversed(window) if sha in chosen]
-        self._cache = tuple(ordered)[: self._max_candidates]
+        if self._cache is None:
+            subject = _git(self._repo, "log", "-1", "--format=%s", self._sha).strip()
+            self._cache = (
+                (Candidate(self._sha, subject),) if self._touches_web(self._sha) else ()
+            )
         return self._cache
 
-    def diff(self, sha: str) -> str:
-        if not policy.SHA_PATTERN.match(sha):
-            raise ValueError("INVALID_SHA")
+    def diff(self) -> str:
         patch = _git(
             self._repo,
             "diff-tree",
@@ -141,7 +76,7 @@ class GitReleaseScanner:
             "--stat",
             "-r",
             "--root",
-            sha,
+            self._sha,
             "--",
             "apps/web/src",
             limit=policy.MAX_DIFF_CHARS + 1,
@@ -151,27 +86,6 @@ class GitReleaseScanner:
         if len(patch) > policy.MAX_DIFF_CHARS:
             return patch[: policy.MAX_DIFF_CHARS] + policy.DIFF_TRUNCATED_NOTICE
         return patch
-
-
-class SingleReleaseScanner(GitReleaseScanner):
-    """지정한 릴리스 하나만 후보로 낸다 — 릴리스 이벤트가 대상을 이미 정해 준 실행용이다.
-
-    탐색 창·원장·홍보 경계를 보지 않는다. 화면 변경이 없으면 후보가 없다(건너뜀).
-    """
-
-    def __init__(self, repo: Path, sha: str):
-        if not policy.SHA_PATTERN.match(sha):
-            raise ValueError("INVALID_SHA")
-        super().__init__(repo, lambda _sha: False)
-        self._sha = sha
-
-    def candidates(self) -> tuple[Candidate, ...]:
-        if self._cache is None:
-            subject = _git(self._repo, "log", "-1", "--format=%s", self._sha).strip()
-            self._cache = (
-                (Candidate(self._sha, subject),) if self._touches_web(self._sha) else ()
-            )
-        return self._cache
 
 
 # ------------------------------------------------------------------------ routes
@@ -316,144 +230,6 @@ class PlaywrightCamera:
         if self._playwright is not None:
             self._playwright.stop()
             self._playwright = None
-
-
-# ------------------------------------------------------------------------- model
-
-
-def _blocks_from_transcript(transcript: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """전사에서 요청 메시지를 다시 만든다 — 재개했을 때도 같은 맥락이 나와야 한다."""
-    retained = 0
-    keep: set[int] = set()
-    # 뒤에서부터 세어 최근 이미지만 남긴다(스펙 D17).
-    for position in range(len(transcript) - 1, -1, -1):
-        entry = transcript[position]
-        if entry.get("role") != "tool":
-            continue
-        for order in range(len(entry.get("results", [])) - 1, -1, -1):
-            if not entry["results"][order].get("image_path"):
-                continue
-            retained += 1
-            if retained <= policy.MAX_CONTEXT_IMAGES:
-                keep.add((position << 8) | order)
-
-    messages: list[dict[str, Any]] = []
-    for position, entry in enumerate(transcript):
-        role = entry.get("role")
-        if role == "user":
-            messages.append({"role": "user", "content": [{"type": "text", "text": entry["text"]}]})
-        elif role == "assistant":
-            content: list[dict[str, Any]] = []
-            if entry.get("text"):
-                content.append({"type": "text", "text": entry["text"]})
-            for call in entry.get("calls", []):
-                content.append(
-                    {
-                        "type": "tool_use",
-                        "id": call["id"],
-                        "name": call["name"],
-                        "input": call.get("arguments", {}),
-                    }
-                )
-            messages.append({"role": "assistant", "content": content or [{"type": "text", "text": "."}]})
-        elif role == "tool":
-            blocks: list[dict[str, Any]] = []
-            for order, result in enumerate(entry.get("results", [])):
-                inner: list[dict[str, Any]] = [{"type": "text", "text": result["text"]}]
-                image_path = result.get("image_path")
-                if image_path:
-                    if (position << 8) | order in keep:
-                        data = base64.b64encode(Path(image_path).read_bytes()).decode("ascii")
-                        inner.append(
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": data,
-                                },
-                            }
-                        )
-                    else:
-                        inner.append(
-                            {
-                                "type": "text",
-                                "text": f"이전 스크린샷은 파일 경로 요약으로 대체됨: {image_path}",
-                            }
-                        )
-                blocks.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": result["call_id"],
-                        "content": inner,
-                        "is_error": bool(result.get("is_error")),
-                    }
-                )
-            messages.append({"role": "user", "content": blocks})
-    return messages
-
-
-class AnthropicConversation:
-    def __init__(
-        self, client: Any, system: str, model: str, tools: Sequence[Mapping[str, Any]]
-    ):
-        self._client = client
-        self._system = system
-        self._model = model
-        self._tools = [dict(tool) for tool in tools]
-
-    def advance(self, transcript: Sequence[Mapping[str, Any]]) -> Turn:
-        try:
-            message = self._client.messages.create(
-                model=self._model,
-                max_tokens=policy.MAX_TOKENS,
-                # 브레이크포인트가 없으면 캐싱이 **아예 걸리지 않는다.** 이력을 시스템 프롬프트에
-                # 둔 이유(D18)가 여기서 값을 받는다 — tools + system 이 안정 접두사가 되어
-                # 매 턴 같은 앞부분을 다시 계산하지 않는다. 확인은 응답의
-                # usage.cache_read_input_tokens 가 0 이 아닌지로 한다.
-                system=[
-                    {
-                        "type": "text",
-                        "text": self._system,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                tools=self._tools,
-                messages=_blocks_from_transcript(transcript),
-            )
-        except Exception as error:
-            raise ProviderUnavailable(str(type(error).__name__)) from None
-        if message.stop_reason == "refusal":
-            return Turn("", (), "refusal")
-        text = "".join(
-            block.text for block in message.content if getattr(block, "type", "") == "text"
-        )
-        calls = tuple(
-            ToolCall(block.id, block.name, dict(block.input))
-            for block in message.content
-            if getattr(block, "type", "") == "tool_use"
-        )
-        return Turn(text, calls, message.stop_reason or "end_turn")
-
-
-def anthropic_conversation_factory() -> Callable[..., AnthropicConversation]:
-    """이중 opt-in — 환경이 명시적으로 허용하지 않으면 기동하지 않는다(스펙 D16)."""
-    if os.environ.get("PROMOTION_AGENT_ANTHROPIC_ENABLED") != "true":
-        raise ValueError("EXTERNAL_DISABLED")
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise ValueError("ANTHROPIC_KEY_REQUIRED")
-    from anthropic import Anthropic
-
-    # 예전 0 은 429·5xx 한 번에 후보 하나가 통째로 실패한다는 뜻이었다. 하루 한 번 도는
-    # 배치라 재시도가 사람을 기다리게 하지 않는다.
-    client = Anthropic(api_key=key, max_retries=2)
-    model = os.environ.get("PROMOTION_AGENT_MODEL", policy.DEFAULT_MODEL)
-
-    def factory(*, system: str, tools: Sequence[Mapping[str, Any]]) -> AnthropicConversation:
-        return AnthropicConversation(client, system, model, tools)
-
-    return factory
 
 
 # ----------------------------------------------------------------------- backend

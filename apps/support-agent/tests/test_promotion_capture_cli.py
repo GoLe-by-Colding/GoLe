@@ -5,7 +5,7 @@ import json
 import pytest
 
 from gole_promotion_agent import capture_cli
-from gole_promotion_agent.dryrun import FakeCamera
+from gole_promotion_agent.fakes import FakeCamera
 
 ROUTES = ("/", "/listings", "/prices")
 

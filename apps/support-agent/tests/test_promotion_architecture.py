@@ -1,16 +1,24 @@
-"""홍보 모듈의 레이어 경계를 실제로 검사한다.
+"""홍보 모듈의 경계를 실제로 검사한다.
 
-옛 TypeScript 구현은 `apps/web/scripts/` 아래라 FSD 경계 검사(eslint-plugin-boundaries·
-steiger)가 닿지 않는 저장소 유일의 코드였다. 파이썬으로 옮기면서 그 빈칸을 이 파일이 메운다.
+두뇌는 Claude Code 로 옮겼으므로, 이 패키지에 남은 것은 손(캡처·합성)과 래퍼다. 지켜야 할 경계는
+"promotion extra 없이도 import 된다"와 "모델 SDK 를 직접 부르지 않는다" 두 가지다.
 """
 
 import ast
-import inspect
 from pathlib import Path
 
-from gole_promotion_agent import brain, checkpoints, dryrun, hands, policy, ports, runtime
+from gole_promotion_agent import (
+    capture_cli,
+    cli_prompt,
+    cli_runner,
+    compose_cli,
+    fakes,
+    hands,
+    policy,
+    ports,
+)
 
-SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc")
+SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
 
 
 def imported_modules(module) -> set[str]:
@@ -38,68 +46,34 @@ def test_ports_declare_contracts_without_sdk_or_environment():
     assert "os" not in imported and "subprocess" not in imported
 
 
-def test_brain_depends_only_on_graph_policy_and_ports():
-    assert imported_modules(brain) <= {
-        "__future__",
-        "pathlib",
-        "typing",
-        "langgraph.graph",
-        "pydantic",
-        "gole_promotion_agent",
-        "gole_promotion_agent.ports",
-        "gole_promotion_agent.session",
-    }
+def test_no_module_imports_sdks_at_module_level():
+    """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다."""
+    for module in (capture_cli, cli_prompt, cli_runner, compose_cli, fakes, hands, policy):
+        assert not any(name.startswith(SDK_PREFIXES) for name in top_level_imports(module)), module
 
 
-def test_hands_never_imports_sdks_at_module_level():
-    """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다.
-
-    promotion extra 가 없는 CI 환경에서 이 모듈을 import 하는 것만으로 실패하면 안 된다.
-    """
-    assert not any(name.startswith(SDK_PREFIXES) for name in top_level_imports(hands))
-    # 반대로, 지연 import 로라도 실제 SDK 를 쓰고 있어야 한다.
-    assert any(name.startswith(SDK_PREFIXES) for name in imported_modules(hands))
-
-
-def test_dry_run_module_never_touches_sdks_at_all():
-    """드라이런은 나가는 경로가 물리적으로 없어야 한다(스펙 D16)."""
-    assert not any(name.startswith(SDK_PREFIXES) for name in imported_modules(dryrun))
+def test_package_never_calls_a_model_sdk_directly():
+    """모델 호출은 claude CLI 프로세스뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
+    for module in (capture_cli, cli_prompt, cli_runner, compose_cli, fakes, hands, policy, ports):
+        assert not any(
+            name.startswith(("anthropic", "openai", "langgraph", "langchain"))
+            for name in imported_modules(module)
+        ), module
 
 
-def test_checkpoints_do_not_depend_on_durable_worker():
-    """lease·fencing 을 쓰지 않는다 — 일회성 프로세스에는 분산 조정이 필요 없다."""
-    assert not any(
-        name.startswith("gole_agent_worker") for name in imported_modules(checkpoints)
-    )
-
-
-def test_runtime_isolates_external_observability():
-    """상위 호출자의 tracing context 가 섞이지 않게 실행을 감싼다."""
-    assert "gole_agent_runtime.privacy" in imported_modules(runtime)
-    # private_execution 은 @wraps 를 쓰므로 감싼 흔적이 __wrapped__ 로 남는다.
-    assert hasattr(runtime.PromotionHarness.run, "__wrapped__")
-
-
-def test_candidate_outcomes_are_structured():
-    """후보별 종료가 문자열 자유형이 아니라 정해진 넷이어야 한다.
-
-    `deferred` 가 빠지면 "판단해서 건너뜀"과 "예산을 다 써 중단됨"이 한 칸에 들어가고,
-    결론이 안 난 릴리스가 영구 제외 원장으로 넘어간다(스펙 D11).
-    """
-    source = inspect.getsource(runtime)
-    for outcome in ("submitted", "skipped", "deferred", "failed"):
-        assert f'"{outcome}"' in source
+def test_runner_isolates_external_observability():
+    """상위 호출자의 tracing 설정이 섞이지 않게 실행 전에 막는다."""
+    assert "gole_agent_runtime.privacy" in imported_modules(cli_runner)
 
 
 def test_policy_holds_every_limit():
     """상한이 코드 여기저기 흩어지지 않게 한 곳에 모은다."""
     for name in (
-        "MAX_WALK_COMMITS",
-        "MAX_DRAFTS_PER_RUN",
-        "MAX_TURNS",
-        "MAX_CONTEXT_IMAGES",
         "MAX_CAPTION",
+        "MAX_RATIONALE",
+        "MAX_INTERACTIONS",
+        "MAX_SCREENSHOTS",
         "MAX_PENDING_REVIEW",
-        "RETENTION_DAYS",
+        "MAX_DIFF_CHARS",
     ):
         assert isinstance(getattr(policy, name), int)

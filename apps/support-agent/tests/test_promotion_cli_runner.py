@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from gole_promotion_agent import cli_runner
-from gole_promotion_agent.dryrun import _PIXEL
+from gole_promotion_agent.fakes import PIXEL as _PIXEL
 
 
 class FakePublisher:

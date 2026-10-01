@@ -3,7 +3,7 @@
 import json
 
 from gole_promotion_agent import compose_cli
-from gole_promotion_agent.dryrun import _PIXEL
+from gole_promotion_agent.fakes import PIXEL as _PIXEL
 
 
 def _seed_capture(captures, label="목록"):

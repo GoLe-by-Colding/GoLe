@@ -3,7 +3,7 @@
 에이전트는 HTML 을 쓰지 못하고 **캡처 라벨과 헤드라인 텍스트만** 넘긴다. 레이아웃·색은 템플릿이
 고정하므로 카드가 브랜드에서 벗어나지 않고, 텍스트는 이스케이프돼 마크업이 되지 못한다.
 
-    uv run python -m gole_promotion_agent.compose_cli --capture 목록 --headline "원하는 부품만 골라 보기"
+    python -m gole_promotion_agent.compose_cli --capture 목록 --headline "원하는 부품만 골라 보기"
 """
 
 from __future__ import annotations

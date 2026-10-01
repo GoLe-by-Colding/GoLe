@@ -3,7 +3,7 @@
 에이전트는 이 명령만 Bash 로 실행할 수 있다(허용 목록). 경로 허용·데모 가드·쓰기 요청 차단은
 여기서 코드로 건다 — 프롬프트가 무엇이라 하든 금지 화면은 찍히지 않는다.
 
-    uv run python -m gole_promotion_agent.capture_cli \
+    python -m gole_promotion_agent.capture_cli \
         --label 필터 --route /listings --interactions '[{"kind":"scroll","to":"bottom"}]'
 
 환경:
