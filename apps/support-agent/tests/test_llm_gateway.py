@@ -75,8 +75,9 @@ def test_codex_returnsGeneratedImages(tmp_path):
     assert response["ok"]
     assert response["images"] == [{"name": "polished.png", "data": PNG_B64}]
     command = calls[0]["command"]
-    # -i 뒤에 프롬프트가 오면 파일로 삼킨다 — 프롬프트가 -i 보다 앞이어야 한다.
-    assert command.index("-i") > next(i for i, a in enumerate(command) if "다듬어" in a)
+    # 프롬프트는 stdin 으로 간다 — 인자에 두면 Windows shim 이 깨뜨려 -i 첨부까지 사라졌다.
+    assert "다듬어" in calls[0]["input"] and not any("다듬어" in a for a in command)
+    assert command[command.index("-i") + 1].endswith("img-01.png")
     assert command[command.index("-s") + 1] == "workspace-write"
 
 

@@ -142,14 +142,14 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         prompt = f"{request['system']}\n\n{prompt}"
     if request.get("want_images"):
         prompt += "\n\n만든 이미지는 out/ 폴더에 PNG 파일로 저장한다."
-    # -i 는 여러 값을 받으므로 프롬프트를 앞에 둔다. 뒤에 두면 프롬프트까지 파일로 삼킨다.
-    command.append(prompt + _attachment_note(paths, workdir))
+    # 프롬프트는 인자가 아니라 stdin 으로 준다. 인자로 주면 셸 shim(Windows 의 codex.cmd)이 괄호·따옴표
+    # 섞인 문장을 깨뜨려 뒤의 -i 까지 사라진다 — 모델이 "첨부 이미지가 없다"고 답한다.
     for path in paths:
         command += ["-i", str(path)]
     completed = runner(
         command,
         cwd=str(workdir),
-        stdin=subprocess.DEVNULL,
+        input=prompt + _attachment_note(paths, workdir),
         capture_output=True,
         text=True,
         encoding="utf-8",
