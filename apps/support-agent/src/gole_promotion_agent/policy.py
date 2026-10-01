@@ -279,24 +279,28 @@ def build_system_prompt(
     history: Sequence[Mapping[str, Any]], demo: bool = False, service: bool = False
 ) -> str:
     """이력은 시스템 프롬프트(안정 접두사)에 둔다 — 프롬프트 캐싱이 걸린다(스펙 D18)."""
-    if not history:
-        rendered = _NO_HISTORY
-    else:
-        lines = [_HISTORY_HEADER, ""]
-        for entry in history:
-            status = entry.get("status", "?")
-            caption = str(entry.get("caption", "")).replace("\n", " ")
-            lines.append(f"- [{status}] {caption}")
-            reason = entry.get("rejectionReason")
-            if reason:
-                lines.append(f"  반려 사유: {reason}")
-        rendered = "\n".join(lines)
     template = _SERVICE_TEMPLATE if service else _SYSTEM_TEMPLATE
     return template.format(
-        tone=tone_guide(),
-        history=rendered,
-        screen_note=_DEMO_SCREEN_NOTE if demo else _BOT_SCREEN_NOTE,
+        tone=tone_guide(), history=render_history(history), screen_note=screen_note(demo)
     )
+
+
+def render_history(history: Sequence[Mapping[str, Any]]) -> str:
+    if not history:
+        return _NO_HISTORY
+    lines = [_HISTORY_HEADER, ""]
+    for entry in history:
+        status = entry.get("status", "?")
+        caption = str(entry.get("caption", "")).replace("\n", " ")
+        lines.append(f"- [{status}] {caption}")
+        reason = entry.get("rejectionReason")
+        if reason:
+            lines.append(f"  반려 사유: {reason}")
+    return "\n".join(lines)
+
+
+def screen_note(demo: bool) -> str:
+    return _DEMO_SCREEN_NOTE if demo else _BOT_SCREEN_NOTE
 
 
 def describe_interactions(interactions: Sequence[Mapping[str, Any]]) -> str:
