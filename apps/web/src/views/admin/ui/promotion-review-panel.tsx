@@ -97,11 +97,35 @@ export function PromotionReviewPanel({
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex flex-col gap-2">
-            <MediaImage
-              src={url}
-              alt={capture?.label ?? `첨부 이미지 ${current + 1}`}
-              className="max-h-[480px] w-full rounded-lg border border-neutral-200 object-contain"
-            />
+            {capture?.originalUrl ? (
+              // AI 가 화면을 다시 그렸다 — 글자·숫자·버튼이 바뀌지 않았는지 원본과 나란히 대조한다.
+              <div className="grid gap-2 sm:grid-cols-2">
+                <figure className="flex flex-col gap-1">
+                  <MediaImage
+                    src={url}
+                    alt={`${capture.label} (다듬은 이미지)`}
+                    className="max-h-[420px] w-full rounded-lg border border-neutral-200 object-contain"
+                  />
+                  <figcaption className="text-xs text-neutral-500">
+                    게시될 이미지 (AI로 다듬음)
+                  </figcaption>
+                </figure>
+                <figure className="flex flex-col gap-1">
+                  <MediaImage
+                    src={capture.originalUrl}
+                    alt={`${capture.label} (원본 캡처)`}
+                    className="max-h-[420px] w-full rounded-lg border border-neutral-200 object-contain"
+                  />
+                  <figcaption className="text-xs text-neutral-500">원본 캡처</figcaption>
+                </figure>
+              </div>
+            ) : (
+              <MediaImage
+                src={url}
+                alt={capture?.label ?? `첨부 이미지 ${current + 1}`}
+                className="max-h-[480px] w-full rounded-lg border border-neutral-200 object-contain"
+              />
+            )}
             {total > 1 ? (
               <div className="flex items-center justify-center gap-3">
                 <Button
@@ -139,6 +163,11 @@ export function PromotionReviewPanel({
                   화면 <span className="font-mono">{capture.route}</span>
                   {capture.actions !== "" ? ` · ${capture.actions}` : ""}
                 </p>
+                {capture.edit !== null ? (
+                  <p className="rounded-md bg-violet-50 px-2 py-1 text-violet-800">
+                    AI로 다듬은 이미지입니다. 지시문: {capture.edit}
+                  </p>
+                ) : null}
                 {capture.dataSource === "DEMO" ? (
                   <p className="rounded-md bg-amber-50 px-2 py-1 text-amber-800">
                     데모 데이터로 찍은 화면입니다. 매물·닉네임·가격은 실제가 아닙니다.
@@ -164,6 +193,12 @@ export function PromotionReviewPanel({
                 <input id={`review-safe-${post.id}-${current}`} type="checkbox" />
                 다른 이용자 정보·사실처럼 읽히는 가짜 숫자가 없다
               </label>
+              {capture?.originalUrl ? (
+                <label className="flex items-center gap-2">
+                  <input id={`review-faithful-${post.id}-${current}`} type="checkbox" />
+                  원본과 글자·숫자·버튼이 같다
+                </label>
+              ) : null}
             </fieldset>
           </div>
         </div>

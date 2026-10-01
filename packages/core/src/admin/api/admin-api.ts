@@ -828,6 +828,10 @@ export interface PromotionCapture {
   readonly actions: string;
   readonly dataSource: CaptureDataSource;
   readonly capturedAt: string;
+  /** AI 로 다듬은 사진이면 다듬기 전 원본 캡처. 원본을 그대로 올렸으면 null. */
+  readonly originalUrl: string | null;
+  /** 다듬기 지시문. originalUrl 과 함께 온다. */
+  readonly edit: string | null;
 }
 
 export interface PromotionProvenance {
