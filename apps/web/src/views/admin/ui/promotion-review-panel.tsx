@@ -100,24 +100,8 @@ export function PromotionReviewPanel({
             {capture?.originalUrl ? (
               // AI 가 화면을 다시 그렸다 — 글자·숫자·버튼이 바뀌지 않았는지 원본과 나란히 대조한다.
               <div className="grid gap-2 sm:grid-cols-2">
-                <figure className="flex flex-col gap-1">
-                  <MediaImage
-                    src={url}
-                    alt={`${capture.label} (다듬은 이미지)`}
-                    className="max-h-[420px] w-full rounded-lg border border-neutral-200 object-contain"
-                  />
-                  <figcaption className="text-xs text-neutral-500">
-                    게시될 이미지 (AI로 다듬음)
-                  </figcaption>
-                </figure>
-                <figure className="flex flex-col gap-1">
-                  <MediaImage
-                    src={capture.originalUrl}
-                    alt={`${capture.label} (원본 캡처)`}
-                    className="max-h-[420px] w-full rounded-lg border border-neutral-200 object-contain"
-                  />
-                  <figcaption className="text-xs text-neutral-500">원본 캡처</figcaption>
-                </figure>
+                <Shot src={url} label={capture.label} caption="게시될 이미지 (AI로 다듬음)" />
+                <Shot src={capture.originalUrl} label={capture.label} caption="원본 캡처" />
               </div>
             ) : (
               <MediaImage
@@ -163,7 +147,7 @@ export function PromotionReviewPanel({
                   화면 <span className="font-mono">{capture.route}</span>
                   {capture.actions !== "" ? ` · ${capture.actions}` : ""}
                 </p>
-                {capture.edit !== null ? (
+                {capture.originalUrl ? (
                   <p className="rounded-md bg-violet-50 px-2 py-1 text-violet-800">
                     AI로 다듬은 이미지입니다. 지시문: {capture.edit}
                   </p>
@@ -204,5 +188,18 @@ export function PromotionReviewPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function Shot({ src, label, caption }: { src: string; label: string; caption: string }) {
+  return (
+    <figure className="flex flex-col gap-1">
+      <MediaImage
+        src={src}
+        alt={`${label} (${caption})`}
+        className="max-h-[420px] w-full rounded-lg border border-neutral-200 object-contain"
+      />
+      <figcaption className="text-xs text-neutral-500">{caption}</figcaption>
+    </figure>
   );
 }
