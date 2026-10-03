@@ -3,7 +3,9 @@ name: Promotion agent
 # 홍보 초안을 만든다. 경로는 트리거가 정한다.
 #   - 운영 배포(CD) 성공 · 릴리스 SHA 수동 입력 → 기능 홍보
 #   - 월·수·금 10:00 KST 스케줄 · service=true   → 서비스 소개 글
-# 러너 안에 데모 데이터가 든 스택을 띄워 후보 화면을 찍는다. 화면 고르기·캡션(claude)과 화면 다듬기
+# 러너 안에 데모 데이터가 든 스택을 띄워 후보 화면을 찍는다. 스택은 릴리스(기능 홍보) 때만 띄우고,
+# 서비스 소개는 마지막으로 찍어 둔 캡처(promotion-captures 아티팩트)를 받아 쓴다 — 화면은 다음 릴리스
+# 전까지 같다. 받을 캡처가 없을 때만 스택을 띄워 찍는다. 화면 고르기·캡션(claude)과 화면 다듬기
 # (codex)는 SSH 로 부르는 LLM 게이트웨이(apps/support-agent/gateway)의 CLI 가 한다. 초안(다듬은
 # 이미지·원본·설명표·출처)은 운영 검토 큐에 낸다. 발행은 사람이 관리자 화면에서 한다.
 on:
@@ -28,6 +30,8 @@ on:
 
 permissions:
   contents: read
+  # 지난 실행의 캡처 아티팩트를 받는다.
+  actions: read
 
 concurrency:
   group: promotion-agent
@@ -87,32 +91,55 @@ jobs:
           # 지정 커밋의 diff 를 읽어야 하므로 이력이 필요하다.
           fetch-depth: 0
 
+      # 서비스 소개는 마지막으로 성공한 실행이 남긴 캡처를 쓴다. 찾으면 아래 스택 단계를 모두 건너뛴다.
+      - name: Reuse last captures
+        if: env.SERVICE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dest="$RUNNER_TEMP/promotion/captures"
+          for id in $(gh run list --workflow promotion-agent.yml --status success -L 30 --json databaseId -q '.[].databaseId'); do
+            if gh run download "$id" -n promotion-captures -D "$dest" 2>/dev/null && [ -f "$dest/manifest.json" ]; then
+              echo "실행 $id 의 캡처를 쓴다"
+              echo "REUSE=true" >> "$GITHUB_ENV"
+              echo "TARGET=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            rm -rf "$dest"
+          done
+          echo "받을 캡처가 없다 — 스택을 띄워 찍는다"
+
       # 에이전트 코드는 dispatch 한 ref(최신)를 쓰고, 찍는 화면은 대상 릴리스로 고정한다.
       # 둘을 같은 체크아웃으로 쓰면 A 릴리스 diff 와 B 릴리스 화면이 섞인다.
       - name: Prepare capture source at target SHA
+        if: env.REUSE != 'true'
         run: |
           git cat-file -e "$SHA^{commit}"
           git worktree add --detach "$RUNNER_TEMP/target" "$SHA"
           echo "TARGET=$RUNNER_TEMP/target" >> "$GITHUB_ENV"
 
       - name: Setup pnpm
+        if: env.REUSE != 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 10.30.3
 
       - name: Setup Node
+        if: env.REUSE != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
       - name: Setup JDK 21
+        if: env.REUSE != 'true'
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Setup Gradle
+        if: env.REUSE != 'true'
         uses: gradle/actions/setup-gradle@v6
 
       - name: Setup Python 3.13
@@ -120,19 +147,25 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install
-        run: |
-          (cd "$TARGET" && pnpm install --frozen-lockfile)
-          python -m pip install uv==0.10.2
+      - name: Install web
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}
+        run: pnpm install --frozen-lockfile
 
       - name: Install agent
         working-directory: apps/support-agent
         run: |
+          python -m pip install uv==0.10.2
           uv sync --locked --extra promotion
-          uv run --no-sync playwright install --with-deps chromium
+
+      - name: Install browser
+        if: env.REUSE != 'true'
+        working-directory: apps/support-agent
+        run: uv run --no-sync playwright install --with-deps chromium
 
       # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
       - name: Start infra (Mongo rs0 · Redis · MinIO)
+        if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}
         run: |
           docker compose up -d --wait mongo redis minio
@@ -140,10 +173,12 @@ jobs:
           docker compose run --rm --no-deps minio-init
 
       - name: Build API jar
+        if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}/apps/api
         run: ./gradlew bootJar --no-daemon -x test
 
       - name: Start API
+        if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}/apps/api
         env:
           SPRING_PROFILES_ACTIVE: e2e
@@ -172,6 +207,7 @@ jobs:
           exit 1
 
       - name: Seed E2E accounts and sessions
+        if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}
         env:
           MONGO_DB: gole_e2e
@@ -180,6 +216,7 @@ jobs:
 
       # 홍보 화면이므로 dev 서버(개발 표시기 노출)가 아니라 프로덕션 빌드를 띄운다.
       - name: Start web
+        if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
@@ -236,6 +273,9 @@ jobs:
           else
             set -- --sha "$SHA"
           fi
+          if [ "${REUSE:-}" = "true" ]; then
+            set -- "$@" --reuse-captures
+          fi
           uv run --no-sync python -m gole_promotion_agent \
             --repo "$TARGET" \
             --run-dir "$RUNNER_TEMP/promotion" \
@@ -266,6 +306,15 @@ jobs:
           path: ${{ runner.temp }}/promotion
           retention-days: 14
           if-no-files-found: warn
+
+      # 다음 서비스 소개가 스택 없이 쓸 캡처. 이 실행이 새로 찍었을 때만 올린다.
+      - name: Upload captures for reuse
+        if: env.REUSE != 'true' && hashFiles(format('{0}/promotion/captures/manifest.json', runner.temp)) != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: promotion-captures
+          path: ${{ runner.temp }}/promotion/captures
+          retention-days: 90
 
       - name: Logs on failure
         if: failure()

@@ -181,3 +181,24 @@ def test_choiceIsKeptForTheArtifact(tmp_path):
     _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
 
     assert json.loads((tmp_path / "run" / "choice.json").read_text(encoding="utf-8"))["picks"][0]["image"] == 2
+
+
+def test_reusedCaptures_skipCameraAndKeepRouteOrder(tmp_path):
+    # 릴리스 때 찍어 둔 화면으로 서비스 소개를 쓴다 — 스택 없이 돈다.
+    first = FakeGateway(DRAFT)
+    _drafter(tmp_path, first, FakePublisher()).run()
+    assert json.loads((tmp_path / "run" / "captures" / "manifest.json").read_text(encoding="utf-8"))[1]["route"] == "/collection"
+
+    again = FakeGateway(DRAFT)
+    publisher = FakePublisher()
+    result = _drafter(tmp_path, again, publisher, camera=None).run()
+
+    assert result.outcome == "submitted"
+    assert "1. /\n2. /collection\n3. /search" in again.requests[0]["prompt"]
+    assert publisher.created[0][3]["captures"][0]["route"] == "/collection"
+
+
+def test_reusedCaptures_withoutManifest_fails(tmp_path):
+    result = _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher(), camera=None).run()
+
+    assert result.outcome == "failed"

@@ -50,7 +50,7 @@ class Drafter:
         run_dir: Path,
         publisher: Any,
         gateway: Gateway,
-        camera: Any,
+        camera: Any | None,  # None 이면 run_dir/captures 의 지난 캡처를 쓴다
         routes: Sequence[str],
         demo: bool,
         service: bool,
@@ -135,6 +135,16 @@ class Drafter:
 
     def _capture_all(self) -> list[Shot]:
         out = self._run_dir / "captures"
+        manifest = out / "manifest.json"
+        if self._camera is None:
+            # 지난 릴리스 때 찍어 둔 화면을 그대로 쓴다(서비스 소개). 화면은 다음 릴리스 전까지 같다.
+            if not manifest.exists():
+                return []
+            return [
+                Shot(item["route"], out / item["file"], item["captured_at"])
+                for item in json.loads(manifest.read_text(encoding="utf-8"))
+                if (out / item["file"]).exists()
+            ]
         shots: list[Shot] = []
         try:
             for index, route in enumerate(self._routes, start=1):
@@ -148,6 +158,15 @@ class Drafter:
                 shots.append(Shot(route, destination, datetime.now(timezone.utc).isoformat()))
         finally:
             self._camera.close()
+        # 다음 서비스 소개 실행이 다시 찍지 않고 쓰도록 무엇을 언제 찍었는지 남긴다.
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            json.dumps(
+                [{"route": s.route, "file": s.path.name, "captured_at": s.captured_at} for s in shots],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         return shots
 
     def _choose(self, shots: Sequence[Shot], subject: str | None, diff: str | None) -> drafting.DraftOutput:
@@ -233,6 +252,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--sha")
     parser.add_argument("--service", action="store_true")
+    parser.add_argument(
+        "--reuse-captures", action="store_true", help="run-dir/captures 의 지난 캡처를 쓰고 찍지 않는다"
+    )
     arguments = parser.parse_args(argv)
 
     from gole_agent_runtime.privacy import reject_external_tracing
@@ -240,7 +262,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     from gole_promotion_agent.hands import AppRouteCatalog, BackendPublisher, PlaywrightCamera
 
     reject_external_tracing()
-    site = _required("PROMOTION_AGENT_CAPTURE_SITE").rstrip("/")
     data_source = os.environ.get("PROMOTION_AGENT_DATA_SOURCE") or "DEMO"
     demo = data_source == "DEMO"
     publisher = BackendPublisher(
@@ -253,20 +274,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             "runUrl": os.environ.get("PROMOTION_AGENT_RUN_URL") or None,
         },
     )
-    capture_login = BackendPublisher(
-        _required("PROMOTION_AGENT_CAPTURE_API_URL").rstrip("/"),
-        _required("PROMOTION_AGENT_CAPTURE_ADMIN_EMAIL"),
-        _required("PROMOTION_AGENT_CAPTURE_ADMIN_PASSWORD"),
-    )
     routes = AppRouteCatalog(Path(arguments.repo), demo=demo).routes()
+    camera = None
+    if not arguments.reuse_captures:
+        capture_login = BackendPublisher(
+            _required("PROMOTION_AGENT_CAPTURE_API_URL").rstrip("/"),
+            _required("PROMOTION_AGENT_CAPTURE_ADMIN_EMAIL"),
+            _required("PROMOTION_AGENT_CAPTURE_ADMIN_PASSWORD"),
+        )
+        # 로그인된 상태로 찍는다 — 로그인 뒤에만 보이는 기능도 홍보 대상이다(D12).
+        camera = PlaywrightCamera(
+            _required("PROMOTION_AGENT_CAPTURE_SITE").rstrip("/"), routes, capture_login.browser_session
+        )
     run_dir = Path(arguments.run_dir)
     result = Drafter(
         repo=Path(arguments.repo),
         run_dir=run_dir,
         publisher=DraftLog(publisher, run_dir),
         gateway=gateway_client.from_env(),
-        # 로그인된 상태로 찍는다 — 로그인 뒤에만 보이는 기능도 홍보 대상이다(D12).
-        camera=PlaywrightCamera(site, routes, capture_login.browser_session),
+        camera=camera,
         routes=routes,
         demo=demo,
         service=arguments.service,
