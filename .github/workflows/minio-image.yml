@@ -1,0 +1,64 @@
+name: MinIO image
+
+# MinIO 공식 이미지가 공개 레지스트리에서 사라져 같은 릴리스를 소스에서 빌드해 GHCR 에 올린다.
+# compose 와 인프라 테스트는 여기서 나온 digest 로 고정한다. 자세한 사정은 infra/images/minio/README.md.
+on:
+  push:
+    paths:
+      - infra/images/minio/**
+      - .github/workflows/minio-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: minio-image
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/gole-by-colding
+  MINIO_RELEASE: RELEASE.2025-09-07T16-13-09Z
+  MC_RELEASE: RELEASE.2025-08-13T08-35-41Z
+
+jobs:
+  publish:
+    name: Build and publish MinIO images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # Go 는 교차 컴파일하지만 arm64 최종 단계의 apk 설치는 에뮬레이션이 필요하다.
+      - name: Enable arm64 emulation
+        run: >-
+          docker run --privileged --rm
+          tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          --install arm64
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: Build and push
+        run: |
+          docker buildx create --use --name gole-minio
+          for target in minio mc; do
+            case "$target" in
+              minio) tag="$REGISTRY/minio:$MINIO_RELEASE" ;;
+              mc) tag="$REGISTRY/mc:$MC_RELEASE" ;;
+            esac
+            docker buildx build infra/images/minio \
+              --target "$target" \
+              --platform linux/amd64,linux/arm64 \
+              --provenance=false \
+              --sbom=false \
+              --tag "$tag" \
+              --push
+            digest="$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])')"
+            echo "- \`$target\`: \`$tag@$digest\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
