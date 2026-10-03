@@ -10,7 +10,10 @@
     "ios": {
       "bundleIdentifier": "kr.gole.app",
       "supportsTablet": false,
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "kr.gole.app",
@@ -24,7 +27,7 @@
       "googleServicesFile": "./google-services.json"
     },
     "plugins": [
-      "@react-native-firebase/app",
+      ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
       "@react-native-firebase/messaging",
       ["expo-build-properties", { "ios": { "useFrameworks": "static" } }],
       "expo-router",
@@ -42,6 +45,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "coldings-team",
+    "extra": {
+      "eas": {
+        "projectId": "c6cfe908-e355-413c-9bf6-5780b8d2d6a7"
+      }
     }
   }
 }
