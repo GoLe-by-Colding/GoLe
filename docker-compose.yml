@@ -58,7 +58,8 @@ services:
   # 시드 커버 아트를 여기에 올린다. 이게 없으면 MediaSeeder가 전부 실패하고
   # 로컬은 이미지가 깨진 채로 뜬다.
   minio:
-    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # 공식 이미지가 사라져 같은 릴리스를 소스에서 빌드한 GHCR 이미지를 쓴다 → infra/images/minio
+    image: ghcr.io/gole-by-colding/minio:RELEASE.2025-09-07T16-13-09Z@sha256:fd4bf518becea030ae14e629d74ac3c41182c548689c3896937b72439d2d1ef8
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000" # S3 API
@@ -81,7 +82,7 @@ services:
   # 콘솔로 확인하거나 mc로 다룰 수 있도록 여기서 미리 준비한다. 사용자 미디어는
   # 반드시 백엔드 접근 원장을 통과해야 하므로 버킷 직접 공개를 금지한다.
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: ghcr.io/gole-by-colding/mc:RELEASE.2025-08-13T08-35-41Z@sha256:47a390e3b5f38ad99c025f1f956b04344feee74f802673f9379452b6e617b69f
     depends_on:
       minio:
         condition: service_healthy
