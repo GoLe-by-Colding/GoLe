@@ -184,28 +184,39 @@ export function SiteHeader() {
           </div>
 
           {/* 모바일 햄버거 */}
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
-            aria-expanded={menuOpen}
-            aria-controls="mobile-menu"
-            aria-haspopup="dialog"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-700 hover:bg-neutral-100 max-lg:inline-flex"
-          >
-            <span className="relative block h-4 w-5">
-              <span
-                className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 rotate-45" : "top-0"}`}
-              />
-              <span
-                className={`absolute left-0 top-1.5 block h-0.5 w-5 bg-current transition-opacity ${menuOpen ? "opacity-0" : "opacity-100"}`}
-              />
-              <span
-                className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 -rotate-45" : "top-3"}`}
-              />
-            </span>
-          </button>
+          <div className="hidden shrink-0 items-center gap-1 max-lg:flex">
+            {/*
+              640px 미만에서는 위 액션 영역이 통째로 숨어 알림 벨까지 사라진다. 앱도 이 모바일 웹을
+              WebView로 띄우므로, 벨만은 햄버거 옆에 남겨 알림 진입점과 안읽음 배지를 유지한다.
+            */}
+            {session ? (
+              <span className="sm:hidden">
+                <NotificationBell />
+              </span>
+            ) : null}
+            <button
+              ref={menuButtonRef}
+              type="button"
+              aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-menu"
+              aria-haspopup="dialog"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-700 hover:bg-neutral-100"
+            >
+              <span className="relative block h-4 w-5">
+                <span
+                  className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 rotate-45" : "top-0"}`}
+                />
+                <span
+                  className={`absolute left-0 top-1.5 block h-0.5 w-5 bg-current transition-opacity ${menuOpen ? "opacity-0" : "opacity-100"}`}
+                />
+                <span
+                  className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 -rotate-45" : "top-3"}`}
+                />
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* 모바일 메뉴 패널 */}
