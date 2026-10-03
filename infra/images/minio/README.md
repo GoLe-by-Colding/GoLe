@@ -28,8 +28,11 @@ compose 는 워크플로 요약에 찍히는 digest 로 고정한다. 라이선�
 
 ## 어디에 쓰나
 
-- 루트 `docker-compose.yml`(로컬 `pnpm infra:up`·CI E2E)
-- `infra/gcp/tests/backup-minio-integration.test.sh`(CI Infra)
+- CI E2E — `ci.yml` 이 GHCR 에 로그인하고 루트 compose 의 `GOLE_MINIO_IMAGE`·`GOLE_MC_IMAGE` 를 이 이미지로 지정한다
+- `infra/gcp/tests/backup-minio-integration.test.sh`(CI Infra, 같은 로그인)
+- 로컬 `pnpm infra:up` 은 기본값(각자 PC 에 캐시된 quay 이미지)을 그대로 쓴다. 캐시가 없는 새 PC 는
+  `gh auth refresh -s read:packages && gh auth token | docker login ghcr.io -u <GitHub 아이디> --password-stdin`
+  뒤 두 환경변수를 위 GHCR 참조로 지정한다(패키지는 비공개 — 조직이 공개 패키지를 막아 둠).
 
 **운영(`infra/gcp/docker-compose.yml`·`validate-production-compose.py`·`backup-data.sh`)은 아직
 `quay.io` digest 그대로다.** 호스트에 캐시돼 있어 지금은 돈다. 운영을 옮기면 CD 가 데이터 이미지
