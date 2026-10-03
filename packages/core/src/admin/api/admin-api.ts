@@ -258,6 +258,8 @@ export interface AdminChatReportSnapshot {
   readonly capturedAt: string;
 }
 
+export type AdminRetirementStatus = "ACTIVE" | "RETIRING_SOON" | "RETIRED";
+
 export interface AdminLegoSet {
   readonly setNumber: string;
   readonly name: string;
@@ -275,7 +277,7 @@ export interface CreateSetInput {
   readonly theme: string;
   readonly pieceCount: number;
   readonly releaseYear: number;
-  readonly retirementStatus: "ACTIVE" | "RETIRED";
+  readonly retirementStatus: AdminRetirementStatus;
   readonly imageUrl: string;
   readonly featured: boolean;
 }

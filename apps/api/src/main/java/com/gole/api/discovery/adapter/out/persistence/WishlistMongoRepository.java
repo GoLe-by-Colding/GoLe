@@ -13,4 +13,6 @@ public interface WishlistMongoRepository extends MongoRepository<WishlistEntryDo
     void deleteByUserIdAndTargetTypeAndTargetId(String userId, String targetType, String targetId);
 
     List<WishlistEntryDocument> findByUserId(String userId);
+
+    List<WishlistEntryDocument> findByTargetTypeAndTargetId(String targetType, String targetId);
 }

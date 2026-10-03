@@ -45,6 +45,14 @@ public class WishlistPersistenceAdapter implements WishlistRepositoryPort {
         return repository.findByUserId(userId).stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public List<String> findUserIdsByTarget(WishlistTargetType type, String targetId) {
+        return repository.findByTargetTypeAndTargetId(type.name(), targetId).stream()
+                .map(WishlistEntryDocument::getUserId)
+                .distinct()
+                .toList();
+    }
+
     private WishlistEntryDocument toDocument(WishlistEntry entry) {
         // id 는 MongoDB가 생성하도록 null 로 둔다.
         return new WishlistEntryDocument(

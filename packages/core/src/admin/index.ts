@@ -29,6 +29,7 @@ export type {
   AdminSupportMessage,
   AdminSupportNote,
   AdminLegoSet,
+  AdminRetirementStatus,
   AdminAuditEntry,
   CreateSetInput,
   UpdateSetInput,
