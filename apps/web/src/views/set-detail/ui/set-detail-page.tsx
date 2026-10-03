@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { LegoSet } from "@entities/lego-set";
-import { isRetired } from "@entities/lego-set";
+import { isRetired, isRetiringSoon } from "@entities/lego-set";
 import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
+import { WishlistButton } from "@features/wishlist-toggle";
 import { ListingGrid } from "@widgets/listing-grid";
 import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
@@ -64,6 +65,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{set.theme}</Badge>
             {isRetired(set) ? <Badge tone="danger">단종</Badge> : null}
+            {isRetiringSoon(set) ? <Badge tone="warning">단종 임박</Badge> : null}
           </div>
 
           <Heading level={1}>
@@ -73,6 +75,13 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
           <Text tone="muted">
             {set.name} 중고 매물과 실제 체결가 기반 시세를 한눈에 확인하세요.
           </Text>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <WishlistButton targetType="catalog_set" targetId={set.setNumber} />
+            <Text size="sm" tone="muted">
+              관심 세트로 담으면 새 매물·단종 소식을 알려드려요
+            </Text>
+          </div>
 
           <dl className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCell label="세트번호" value={set.setNumber} />
