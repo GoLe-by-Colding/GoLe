@@ -49,9 +49,11 @@ class PublicAuthRateLimitServiceTest {
         assertThat(first)
                 .extracting(Bucket::key)
                 .containsExactlyElementsOf(second.stream().map(Bucket::key).toList());
-        assertThat(first).extracting(Bucket::key).allSatisfy(key -> assertThat(key)
-                .doesNotContainIgnoringCase("member", "gole.test")
-                .doesNotContain("198.51.100.24"));
+        assertThat(first)
+                .extracting(Bucket::key)
+                .allSatisfy(key -> assertThat(key)
+                        .doesNotContainIgnoringCase("member", "gole.test")
+                        .doesNotContain("198.51.100.24"));
     }
 
     @Test
