@@ -2,6 +2,7 @@ package com.gole.api.collection.adapter.out.persistence;
 
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -10,6 +11,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 매핑은 {@link CollectionItemPersistenceAdapter}가 담당한다. 보유 상태는 문자열로 저장한다.
  */
 @Document(collection = "collection_items")
+@CompoundIndex(name = "ix_set_status", def = "{'setNumber': 1, 'status': 1}")
 public class CollectionItemDocument {
 
     @Id

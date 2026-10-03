@@ -20,4 +20,7 @@ public interface WishlistRepositoryPort {
 
     /** 사용자의 위시리스트 전체. */
     List<WishlistEntry> findByUser(String userId);
+
+    /** 같은 대상을 위시리스트에 담은 사용자 id 목록. 관심 세트 알림 수신자 해석에 쓴다. */
+    List<String> findUserIdsByTarget(WishlistTargetType type, String targetId);
 }

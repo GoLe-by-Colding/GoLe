@@ -79,6 +79,14 @@ class CollectionServiceTest {
         }
 
         @Override
+        public List<String> findUserIdsBySetAndStatus(String setNumber, OwnershipStatus status) {
+            return store.stream()
+                    .filter(i -> i.setNumber().equals(setNumber) && i.status() == status)
+                    .map(CollectionItem::userId)
+                    .toList();
+        }
+
+        @Override
         public void delete(CollectionItem item) {
             store.removeIf(i -> i.id().equals(item.id()));
         }
