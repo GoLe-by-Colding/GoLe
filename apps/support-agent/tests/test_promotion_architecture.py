@@ -7,7 +7,7 @@
 import ast
 from pathlib import Path
 
-from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, policy, ports
+from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, policy
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
 
@@ -31,12 +31,6 @@ def top_level_imports(module) -> set[str]:
     return names
 
 
-def test_ports_declare_contracts_without_sdk_or_environment():
-    imported = imported_modules(ports)
-    assert not any(name.startswith(SDK_PREFIXES) for name in imported)
-    assert "os" not in imported and "subprocess" not in imported
-
-
 def test_no_module_imports_sdks_at_module_level():
     """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다."""
     for module in (drafter, drafting, fakes, gateway_client, hands, policy):
@@ -45,7 +39,7 @@ def test_no_module_imports_sdks_at_module_level():
 
 def test_package_never_calls_a_model_sdk_directly():
     """모델 호출은 게이트웨이(CLI)뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
-    for module in (drafter, drafting, fakes, gateway_client, hands, policy, ports):
+    for module in (drafter, drafting, fakes, gateway_client, hands, policy):
         assert not any(
             name.startswith(("anthropic", "openai", "langgraph", "langchain"))
             for name in imported_modules(module)
@@ -62,8 +56,6 @@ def test_policy_holds_every_limit():
     for name in (
         "MAX_CAPTION",
         "MAX_RATIONALE",
-        "MAX_INTERACTIONS",
-        "MAX_SCREENSHOTS",
         "MAX_PENDING_REVIEW",
         "MAX_DIFF_CHARS",
     ):

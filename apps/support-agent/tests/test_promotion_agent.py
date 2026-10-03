@@ -53,13 +53,13 @@ def test_release_scanner_returns_only_given_release(repo: Path):
 
     scanner = ReleaseScanner(repo, target)
 
-    assert [(c.sha, c.subject) for c in scanner.candidates()] == [(target, "feat(web): 지정 릴리스")]
+    assert scanner.touches_web() and scanner.subject() == "feat(web): 지정 릴리스"
 
 
 def test_release_scanner_skips_release_without_web_changes(repo: Path):
     target = _commit(repo, "fix(api): 백엔드만", web=False)
 
-    assert ReleaseScanner(repo, target).candidates() == ()
+    assert not ReleaseScanner(repo, target).touches_web()
 
 
 def test_route_catalog_excludes_dynamic_and_private_routes(repo: Path):
@@ -179,7 +179,7 @@ def _capture_with_fake_browser(tmp_path: Path, session_provider) -> list[str]:
     camera = PlaywrightCamera("http://localhost:3000", ("/",), session_provider)
     browser = _FakeBrowser()
     camera._browser = browser  # 실제 Chromium 없이 조립만 검사한다
-    camera.capture("/", [], tmp_path / "shot.png")
+    camera.capture("/", tmp_path / "shot.png")
     return browser.contexts[0].init_scripts
 
 
@@ -309,16 +309,6 @@ def test_backend_publisher_sends_capture_notes_and_provenance():
         "rationale": "필터가 새로 생겼어.",
         "runUrl": "https://github.com/o/r/actions/runs/1",
     }
-
-
-def test_describe_interactions_reads_like_steps():
-    from gole_promotion_agent import policy
-
-    text = policy.describe_interactions(
-        [{"kind": "click", "role": "button", "name": "필터"}, {"kind": "scroll", "to": "bottom"}]
-    )
-
-    assert text == "'필터' 클릭 → 맨 아래로 스크롤"
 
 
 def test_demo_capture_excludes_price_screens():

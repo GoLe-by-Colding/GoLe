@@ -83,12 +83,11 @@ class Drafter:
             from gole_promotion_agent.hands import ReleaseScanner
 
             scanner = ReleaseScanner(self._repo, self._sha)
-            candidates = scanner.candidates()
-            if not candidates:
+            if not scanner.touches_web():
                 return RunResult("skipped", "웹 화면 변경이 없는 릴리스")
             if self._publisher.exists(self._sha):
                 return RunResult("skipped", "이미 초안이 있는 릴리스")
-            subject, diff = candidates[0].subject, scanner.diff()
+            subject, diff = scanner.subject(), scanner.diff()
 
         shots = self._capture_all()
         if not shots:
@@ -104,18 +103,13 @@ class Drafter:
         picked = [shots[pick.image - 1] for pick in draft.picks]
         polished = [self._polish(shot, index) for index, shot in enumerate(picked, start=1)]
 
-        # 게시 이미지 먼저, 그 뒤에 다듬은 사진의 원본 — 업로드 한 번으로 키를 받아 둘로 나눈다.
-        originals = [shot for shot, path in zip(picked, polished) if path is not None]
-        keys = self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)] + [o.path for o in originals])
-        media_keys, original_keys = list(keys[: len(picked)]), iter(keys[len(picked):])
+        media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
+        # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
+        originals = [shot.path for shot, path in zip(picked, polished) if path is not None]
+        original_keys = iter(self._publisher.upload(originals) if originals else ())
         captures = []
         for pick, shot, path in zip(draft.picks, picked, polished):
-            capture = {
-                "label": pick.label,
-                "route": shot.route,
-                "actions": "",
-                "capturedAt": shot.captured_at,
-            }
+            capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at}
             if path is not None:
                 capture |= {"originalMediaKey": next(original_keys), "edit": drafting.POLISH_PROMPT}
             captures.append(capture)
@@ -150,7 +144,7 @@ class Drafter:
             for index, route in enumerate(self._routes, start=1):
                 destination = out / f"{index:02d}-{_slug(route)}.png"
                 try:
-                    self._camera.capture(route, [], destination)
+                    self._camera.capture(route, destination)
                 except ValueError as error:
                     # 화면 하나가 안 찍혀도 나머지로 판단한다. 무엇이 빠졌는지는 로그에 남긴다.
                     self._log(f"[promotion-agent] 캡처 실패 {route}: {error}")

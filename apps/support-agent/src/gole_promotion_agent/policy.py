@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Annotated, Any, Literal, Mapping, Sequence
-
-from pydantic import BaseModel, Field
+from typing import Any, Mapping, Sequence
 
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -23,10 +20,7 @@ MAX_CAPTION = 450
 MAX_RATIONALE = 300
 
 # 캡처 (스펙 D12)
-MAX_INTERACTIONS = 6
-MAX_SCREENSHOTS = 10
 INTERACTION_TIMEOUT_SECONDS = 5.0
-CAPTURE_TIMEOUT_SECONDS = 45.0
 NAVIGATION_TIMEOUT_SECONDS = 30.0
 READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
@@ -64,17 +58,6 @@ def is_public_capture_route(route: str, demo: bool = False) -> bool:
     if demo and DEMO_FACT_ROUTE.search(route):
         return False
     return not FORBIDDEN_ROUTE.search(route) and not PRIVATE_ROUTE.search(route)
-
-
-def capture_key(route: str, interactions: Sequence[Mapping[str, Any]]) -> str:
-    """같은 화면을 두 번 찍지 않기 위한 키. 재개했을 때도 같은 값이어야 한다(스펙 D12)."""
-    canonical = json.dumps(
-        {"route": route, "interactions": list(interactions)},
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 # --------------------------------------------------------------- 인증된 캡처 (D12·D14)
@@ -140,32 +123,6 @@ def tone_guide() -> str:
     return (Path(__file__).parent / "prompts" / "caption-tone.md").read_text(encoding="utf-8")
 
 
-class Click(BaseModel):
-    kind: Literal["click"]
-    role: str = Field(min_length=1, max_length=40)
-    name: str = Field(min_length=1, max_length=200)
-
-
-class Select(BaseModel):
-    kind: Literal["select"]
-    label: str = Field(min_length=1, max_length=200)
-    value: str = Field(min_length=1, max_length=200)
-
-
-class Scroll(BaseModel):
-    kind: Literal["scroll"]
-    to: Literal["top", "bottom"]
-
-
-Interaction = Annotated[Click | Select | Scroll, Field(discriminator="kind")]
-
-
-class CaptureInput(BaseModel):
-    route: str = Field(min_length=1, max_length=200)
-    interactions: list[Interaction] = Field(default_factory=list, max_length=MAX_INTERACTIONS)
-    label: str = Field(min_length=1, max_length=80)
-
-
 _NO_HISTORY = "아직 올린 글이 없다. 첫 글이므로 톤 가이드만 따른다."
 
 _HISTORY_HEADER = """최근에 올렸거나 올리려던 글이다. **같은 구조·같은 리듬을 반복하지 마라.**
@@ -204,17 +161,3 @@ def render_history(history: Sequence[Mapping[str, Any]]) -> str:
 
 def screen_note(demo: bool) -> str:
     return _DEMO_SCREEN_NOTE if demo else _BOT_SCREEN_NOTE
-
-
-def describe_interactions(interactions: Sequence[Mapping[str, Any]]) -> str:
-    """검토자가 읽을 조작 설명. 예: "'필터' 클릭 → 맨 아래로 스크롤"."""
-    steps: list[str] = []
-    for item in interactions:
-        kind = item.get("kind")
-        if kind == "click":
-            steps.append(f"'{item.get('name')}' 클릭")
-        elif kind == "select":
-            steps.append(f"'{item.get('label')}'에서 '{item.get('value')}' 선택")
-        elif kind == "scroll":
-            steps.append("맨 아래로 스크롤" if item.get("to") == "bottom" else "맨 위로 스크롤")
-    return " → ".join(steps)

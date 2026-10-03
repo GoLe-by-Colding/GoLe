@@ -13,10 +13,9 @@ GATEWAY = Path(__file__).resolve().parents[1] / "gateway"
 sys.path.insert(0, str(GATEWAY))
 
 import gole_llm_gateway as gateway  # noqa: E402
+from gole_promotion_agent.fakes import PIXEL  # noqa: E402
 
-PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-)
+PNG = PIXEL
 PNG_B64 = base64.b64encode(PNG).decode()
 
 

@@ -34,8 +34,9 @@ class FakePublisher:
         return ({"status": "PUBLISHED", "caption": "지난 글"},)
 
     def upload(self, paths):
+        start = sum(len(batch) for batch in self.uploaded)
         self.uploaded.append([Path(p) for p in paths])
-        return tuple(f"key-{i}" for i, _ in enumerate(paths))
+        return tuple(f"key-{start + i}" for i, _ in enumerate(paths))
 
     def create(self, sha, caption, media_keys, details):
         self.created.append((sha, caption, list(media_keys), details))
@@ -99,9 +100,10 @@ def test_draft_sendsAllPromotionalScreensOnceThenPolishesPicks(tmp_path):
     assert polish[0]["prompt"] == drafting.POLISH_PROMPT
 
     # 게시 이미지 2장 + 다듬은 사진의 원본 2장을 한 번에 올린다.
-    (uploaded,) = publisher.uploaded
-    assert [p.parent.name for p in uploaded] == ["polished", "polished", "captures", "captures"]
-    assert uploaded[0].read_bytes() == POLISHED
+    published, originals = publisher.uploaded
+    assert [p.parent.name for p in published] == ["polished", "polished"]
+    assert [p.parent.name for p in originals] == ["captures", "captures"]
+    assert published[0].read_bytes() == POLISHED
     sha, caption, keys, details = publisher.created[0]
     assert sha is None and keys == ["key-0", "key-1"]
     first, second = details["captures"]
@@ -117,7 +119,7 @@ def test_polishFailure_fallsBackToOriginal(tmp_path):
     result = _drafter(tmp_path, FakeGateway(DRAFT, polish_fails=True), publisher).run()
 
     assert result.outcome == "submitted"
-    (uploaded,) = publisher.uploaded
+    (uploaded,) = publisher.uploaded  # 원본만 올렸으니 원본 업로드는 따로 없다
     assert [p.parent.name for p in uploaded] == ["captures", "captures"]
     assert all("originalMediaKey" not in c for c in publisher.created[0][3]["captures"])
 

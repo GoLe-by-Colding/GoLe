@@ -242,6 +242,10 @@ class _Lock:
             self._handle.close()
 
 
+def _failure(message: str) -> dict[str, Any]:
+    return {"ok": False, "error": message, "text": "", "structured": None, "images": []}
+
+
 def main() -> int:
     raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
     try:
@@ -250,11 +254,10 @@ def main() -> int:
         request = json.loads(raw.decode("utf-8"))
         with _Lock():
             response = handle(request)
-    except (BadRequest, ValueError, TimeoutError) as error:
-        response = {"ok": False, "error": str(error), "text": "", "structured": None, "images": []}
+    except (ValueError, TimeoutError) as error:  # BadRequest 포함
+        response = _failure(str(error))
     except Exception as error:  # noqa: BLE001 — 클라이언트는 언제나 JSON 을 받아야 한다
-        response = {"ok": False, "error": f"게이트웨이 오류: {type(error).__name__}: {error}",
-                    "text": "", "structured": None, "images": []}
+        response = _failure(f"게이트웨이 오류: {type(error).__name__}: {error}")
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

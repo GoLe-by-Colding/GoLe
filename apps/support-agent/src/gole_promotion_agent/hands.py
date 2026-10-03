@@ -12,7 +12,6 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from gole_promotion_agent import policy
-from gole_promotion_agent.ports import Candidate
 
 
 # --------------------------------------------------------------------------- git
@@ -38,13 +37,10 @@ class ReleaseScanner:
     """트리거가 정해 준 릴리스 하나를 본다. 화면(apps/web/src) 변경이 없으면 후보가 없다(건너뜀)."""
 
     def __init__(self, repo: Path, sha: str):
-        if not policy.SHA_PATTERN.match(sha):
-            raise ValueError("INVALID_SHA")
         self._repo = Path(repo)
         self._sha = sha
-        self._cache: tuple[Candidate, ...] | None = None
 
-    def _touches_web(self, sha: str) -> bool:
+    def touches_web(self) -> bool:
         changed = _git(
             self._repo,
             "diff-tree",
@@ -53,19 +49,14 @@ class ReleaseScanner:
             "-r",
             # --root 가 없으면 부모 없는 최초 커밋이 조용히 빈 diff 를 낸다.
             "--root",
-            sha,
+            self._sha,
             "--",
             "apps/web/src",
         )
         return bool(changed.strip())
 
-    def candidates(self) -> tuple[Candidate, ...]:
-        if self._cache is None:
-            subject = _git(self._repo, "log", "-1", "--format=%s", self._sha).strip()
-            self._cache = (
-                (Candidate(self._sha, subject),) if self._touches_web(self._sha) else ()
-            )
-        return self._cache
+    def subject(self) -> str:
+        return _git(self._repo, "log", "-1", "--format=%s", self._sha).strip()
 
     def diff(self) -> str:
         patch = _git(
@@ -136,7 +127,7 @@ class PlaywrightCamera:
     ):
         self._base_url = base_url.rstrip("/")
         self._allowed = frozenset(allowed_routes)
-        # None 이면 익명으로 찍는다 — 드라이런과 단위 테스트가 백엔드 없이 살아야 한다.
+        # None 이면 익명으로 찍는다 — 단위 테스트가 백엔드 없이 살아야 한다.
         self._session_provider = session_provider
         self._playwright: Any = None
         self._browser: Any = None
@@ -158,12 +149,7 @@ class PlaywrightCamera:
             return
         route_handler.continue_()
 
-    def capture(
-        self,
-        route: str,
-        interactions: Sequence[Mapping[str, Any]],
-        destination: Path,
-    ) -> None:
+    def capture(self, route: str, destination: Path) -> None:
         if route not in self._allowed:
             raise ValueError("ROUTE_NOT_ALLOWED")
         destination = Path(destination)
@@ -184,10 +170,8 @@ class PlaywrightCamera:
                 timeout=policy.NAVIGATION_TIMEOUT_SECONDS * 1000,
             )
             page.wait_for_timeout(1_000)
-            for index, step in enumerate(interactions):
-                self._interact(page, step, index)
-            # 라우트 허용 검사는 **이동 시작점에만** 걸린다. 상호작용이 클릭으로 다른 화면에 데려갈 수
-            # 있는데, 봇은 로그인 상태라 그 끝이 /profile·/notifications 같은 사설 화면일 수 있다.
+            # 라우트 허용 검사는 **이동 시작점에만** 걸린다. 리다이렉트가 다른 화면에 데려갈 수 있는데,
+            # 로그인 상태라 그 끝이 /profile·/notifications 같은 사설 화면일 수 있다.
             # 찍기 직전에 지금 서 있는 곳을 다시 확인한다(D12·D19).
             self._assert_still_allowed(page.url)
             page.screenshot(path=str(destination), animations="disabled")
@@ -195,7 +179,7 @@ class PlaywrightCamera:
             context.close()
 
     def _assert_still_allowed(self, current: str) -> None:
-        """상호작용 뒤에도 허용된 공개 화면에 서 있는지 확인한다."""
+        """이동이 끝난 뒤에도 허용된 공개 화면에 서 있는지 확인한다."""
         if not current.startswith(f"{self._base_url}/") and current != self._base_url:
             raise ValueError("NAVIGATED_OFF_SITE")
         path = urlsplit(current).path or "/"
@@ -203,25 +187,6 @@ class PlaywrightCamera:
             path = path.rstrip("/")
         if path not in self._allowed or not policy.is_public_capture_route(path):
             raise ValueError("NAVIGATED_TO_FORBIDDEN_ROUTE")
-
-    def _interact(self, page: Any, step: Mapping[str, Any], index: int) -> None:
-        kind = step.get("kind")
-        timeout = policy.INTERACTION_TIMEOUT_SECONDS * 1000
-        try:
-            if kind == "click":
-                page.get_by_role(step["role"], name=step["name"], exact=True).click(timeout=timeout)
-            elif kind == "select":
-                page.get_by_label(step["label"], exact=True).select_option(
-                    step["value"], timeout=timeout
-                )
-            elif kind == "scroll":
-                target = 0 if step["to"] == "top" else "document.body.scrollHeight"
-                page.evaluate(f"window.scrollTo(0, {target})")
-            else:
-                raise ValueError("UNKNOWN_INTERACTION")
-            page.wait_for_timeout(500)
-        except Exception as error:  # 부분 성공 화면을 남기지 않는다.
-            raise ValueError(f"INTERACTION_FAILED: {kind} #{index}") from error
 
     def close(self) -> None:
         if self._browser is not None:
@@ -323,7 +288,6 @@ class BackendPublisher:
         self, sha: str, caption: str, media_keys: Sequence[str], details: Mapping[str, Any]
     ) -> str:
         data_source = self._run.get("dataSource", "PRODUCTION")
-        captured_fallback = datetime.now(timezone.utc).isoformat()
         response = self._http().post(
             "/api/admin/promotion-posts",
             json={
@@ -338,7 +302,7 @@ class BackendPublisher:
                         "route": item["route"],
                         "actions": item.get("actions", ""),
                         "dataSource": data_source,
-                        "capturedAt": item.get("capturedAt") or captured_fallback,
+                        "capturedAt": item["capturedAt"],
                         # AI 로 다듬은 사진이면 원본 키와 지시문. 검토 화면이 나란히 대조한다.
                         "originalMediaKey": item.get("originalMediaKey"),
                         "edit": item.get("edit"),
