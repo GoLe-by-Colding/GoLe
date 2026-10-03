@@ -7,8 +7,13 @@
 - API 재기동 후 providers가 kakao를 반환함. 로그인에서 미가입 정책 동의 안내를 확인하고, 필수 약관에 동의한 카카오 가입·인증 코드 교환·세션 발급·홈 복귀까지 Orca에서 실제 수행함.
 - 인증 E2E 43건 통과함. 미가입 카카오를 Google 계정으로 잘못 부르던 안내를 소셜 계정으로 수정함.
 
-## 운영 반영 조건
+## 운영 실검증
 
-운영은 기존 prepared 배포 원장과 metadata migration pending이 남아 있음. 첫 full CD가 legacy Nginx healthcheck 부재를 장애로 오인해 실패했으며 VM을 다시 시작해 공개 health UP과 adopted runtime 검증을 확인함. 배포 게이트는 false로 복구함.
+- 릴리스 PR #160의 main `5cf0f18b`·main CI #35909805772 성공 후 검토된 공식 bootstrap을 설치함. [CD #35910838302](https://github.com/GoLe-by-Colding/GoLe/actions/runs/35910838302)이 성공함.
+- 실제 배포 SHA와 env v9, 배포 원장·metadata migration marker 부재, 엄격한 호스트 검증 및 전체 서비스 healthy를 확인함. 공개 health는 200 UP, www는 apex로 301 이동함.
+- 운영 providers가 kakao·naver를 반환하며 카카오 버튼으로 실제 인증 코드 교환을 수행함. 미가입 안내 → 필수 정책 3종 동의 → 카카오 가입 → 환영 화면 → 홈을 확인함. 선택적 제3자 제공 동의는 체크하지 않음.
+- 같은 브라우저의 쿠키 인증으로 `GET /api/v1/accounts/me` 200을 확인함. UI 로그아웃 후 401과 세션 메타데이터 삭제, 카카오 재로그인 후 홈 복귀와 같은 API 200을 확인함.
+- Control 최신 v9만 재시도해 [Secret Sync #35912576700](https://github.com/GoLe-by-Colding/GoLe/actions/runs/35912576700) 성공과 원장의 `배포 완료`를 확인함. 과거 v7·v8을 재배포하지 않음.
 
-운영 키 저장·배포와 실제 운영 로그인을 로컬 성공과 혼동하지 않는다. 검토된 호스트 코드 배포와 원장 복구, full CD 이후 Secret Sync 결과까지 별도로 확인해야 한다. 구체적인 운영 결과는 팀 볼트 이슈 기록에 이어 적는다.
+실제 계정·키·세션 토큰·인가 코드는 기록하지 않음. 복구 과정의 상세 근거는 팀 볼트의
+2026-09-24 이슈 기록과 승찬 개발일지에 남김.

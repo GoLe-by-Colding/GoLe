@@ -85,6 +85,10 @@ public class ListingService
                 command.sellerId(), MediaTargetType.LISTING, listingId, command.photoKeys(), true);
         Listing saved = listingRepository.save(listing);
         newListingNotifier.notifyFollowers(saved.getSellerId(), saved.getId(), saved.getTitle());
+        if (saved.getCatalogSetNumber() != null) {
+            newListingNotifier.notifySetWatchers(
+                    saved.getSellerId(), saved.getId(), saved.getTitle(), saved.getCatalogSetNumber());
+        }
         if (saved.getInterestTag() != null) {
             notifyInterestTagSubscribers(saved);
         }

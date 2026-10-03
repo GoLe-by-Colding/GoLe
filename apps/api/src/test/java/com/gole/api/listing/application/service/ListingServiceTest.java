@@ -71,6 +71,7 @@ class ListingServiceTest {
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getPrice().amount()).isEqualTo(280_000);
         assertThat(notifier.notifications).containsExactly(new NewListingNotice("seller-1", id, "에펠탑 10307"));
+        assertThat(notifier.setWatcherNotices).containsExactly(new SetWatcherNotice("seller-1", id, "10307"));
         assertThat(interestTagNotifier.notifications).isEmpty();
     }
 
@@ -366,6 +367,8 @@ class ListingServiceTest {
 
     private record NewListingNotice(String sellerId, String listingId, String title) {}
 
+    private record SetWatcherNotice(String sellerId, String listingId, String setNumber) {}
+
     private record InterestTagListingNotice(String sellerId, String listingId, String title, InterestTag interestTag) {}
 
     private static final class RecordingNewListingNotifier implements NewListingNotifierPort {
@@ -374,6 +377,13 @@ class ListingServiceTest {
         @Override
         public void notifyFollowers(String sellerId, String listingId, String title) {
             notifications.add(new NewListingNotice(sellerId, listingId, title));
+        }
+
+        private final List<SetWatcherNotice> setWatcherNotices = new ArrayList<>();
+
+        @Override
+        public void notifySetWatchers(String sellerId, String listingId, String title, String setNumber) {
+            setWatcherNotices.add(new SetWatcherNotice(sellerId, listingId, setNumber));
         }
     }
 

@@ -1,6 +1,7 @@
 package com.gole.api.collection.application.port.out;
 
 import com.gole.api.collection.domain.model.CollectionItem;
+import com.gole.api.collection.domain.model.OwnershipStatus;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +18,9 @@ public interface CollectionRepositoryPort {
 
     /** 특정 사용자의 컬렉션 항목 전체를 조회한다. */
     List<CollectionItem> findByUser(String userId);
+
+    /** 특정 세트를 해당 상태로 등록한 사용자 id 목록. 관심 세트 알림 수신자 해석에 쓴다. */
+    List<String> findUserIdsBySetAndStatus(String setNumber, OwnershipStatus status);
 
     /** 컬렉션 항목을 삭제한다. */
     void delete(CollectionItem item);

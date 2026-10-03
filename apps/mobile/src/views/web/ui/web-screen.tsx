@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { useDevicePushToken, webPushTokenScript } from "@/features/push-notifications";
 import { themes } from "@/shared/theme";
 import { navigationTarget, resolveWebOrigin } from "../model/navigation";
 
@@ -30,6 +31,13 @@ export function WebScreen({ path = "/" }: { path?: string }) {
     Platform.OS === "android",
   );
   const source = useMemo(() => ({ uri: origin + path }), [origin, path]);
+  const pushToken = useDevicePushToken();
+  const pushScript = pushToken === null ? null : webPushTokenScript(pushToken);
+
+  // 토큰이 페이지를 띄운 뒤에 오면 지금 페이지에 바로 건넨다. 다음 탐색부터는 아래 주입이 맡는다.
+  useEffect(() => {
+    if (pushScript !== null) web.current?.injectJavaScript(pushScript);
+  }, [pushScript]);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,6 +91,8 @@ export function WebScreen({ path = "/" }: { path?: string }) {
           source={source}
           style={styles.container}
           applicationNameForUserAgent="GoLeApp/1.0"
+          // 웹이 로그인 계정으로 푸시 토큰을 등록한다. 신뢰 원점만 이 WebView 에 뜬다(아래 탐색 정책).
+          {...(pushScript === null ? {} : { injectedJavaScriptBeforeContentLoaded: pushScript })}
           // 모든 탐색을 아래 정책에서 판정한다. WebView의 자동 외부 앱 열기를 막는다.
           originWhitelist={["*"]}
           onShouldStartLoadWithRequest={(request) => {

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge, Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import type { LegoSet } from "@gole/core/lego-set";
-import { isRetired } from "@gole/core/lego-set";
+import { isRetired, isRetiringSoon } from "@gole/core/lego-set";
 import { OfficialLegoLink } from "./official-lego-link";
 
 export interface LegoSetCardProps {
@@ -20,6 +20,7 @@ export interface LegoSetCardProps {
 export function LegoSetCard({ set }: LegoSetCardProps) {
   const detailHref = `/sets/${encodeURIComponent(set.setNumber)}`;
   const retired = isRetired(set);
+  const retiringSoon = isRetiringSoon(set);
 
   return (
     <Card interactive padded={false} className="relative flex flex-col" data-testid="lego-set-card">
@@ -41,6 +42,13 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
           <span className="absolute left-3 top-3">
             <Badge tone="danger" data-testid="retired-badge">
               단종
+            </Badge>
+          </span>
+        ) : null}
+        {retiringSoon ? (
+          <span className="absolute left-3 top-3">
+            <Badge tone="warning" data-testid="retiring-soon-badge">
+              단종 임박
             </Badge>
           </span>
         ) : null}

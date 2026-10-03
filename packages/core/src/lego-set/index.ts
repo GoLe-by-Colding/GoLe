@@ -5,4 +5,4 @@ export {
   fetchFeaturedLegoSets,
 } from "./api/lego-set-api";
 export type { LegoSet, RetirementStatus } from "./model/types";
-export { isRetired } from "./model/types";
+export { isRetired, isRetiringSoon } from "./model/types";

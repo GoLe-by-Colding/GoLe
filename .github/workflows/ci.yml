@@ -119,6 +119,13 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    # MinIO 공식 이미지가 공개 레지스트리에서 사라져 같은 릴리스를 소스에서 빌드한 GHCR 이미지를 쓴다.
+    env:
+      GOLE_MINIO_IMAGE: ghcr.io/gole-by-colding/minio:RELEASE.2025-09-07T16-13-09Z@sha256:fd4bf518becea030ae14e629d74ac3c41182c548689c3896937b72439d2d1ef8
+      GOLE_MC_IMAGE: ghcr.io/gole-by-colding/mc:RELEASE.2025-08-13T08-35-41Z@sha256:47a390e3b5f38ad99c025f1f956b04344feee74f802673f9379452b6e617b69f
     steps:
       - uses: actions/checkout@v7
 
@@ -152,6 +159,12 @@ jobs:
       # mongo-init: replica set 초기화 — 없으면 멀티 도큐먼트 트랜잭션이 실패한다.
       # minio-init: 버킷과 읽기 정책 — 로컬 `pnpm infra:up`과 같은 상태를 맞춘다.
       #             (이미지는 API가 프록시하므로 공개 정책에 의존하지는 않는다)
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
       - name: Start infra (Mongo rs0 · Redis · MinIO)
         run: |
           docker compose up -d --wait mongo redis minio
@@ -296,6 +309,9 @@ jobs:
   infra:
     name: Infra (budget relay · Compose · Terraform)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -407,6 +423,13 @@ jobs:
         run: |
           GOLE_BOOTSTRAP_CONTRACT_STATIC_ONLY=true \
             bash infra/gcp/tests/bootstrap-contract.test.sh
+
+      # backup-minio-integration 이 소스 빌드 GHCR MinIO 이미지(비공개)를 받는다.
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
       - name: Production host contracts
         run: |

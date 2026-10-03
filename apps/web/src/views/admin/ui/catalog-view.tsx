@@ -7,6 +7,7 @@ import {
   setAdminSetFeatured,
   updateAdminSet,
   type AdminLegoSet,
+  type AdminRetirementStatus,
   type CreateSetInput,
 } from "@entities/admin";
 import { useSession } from "@entities/user";
@@ -24,6 +25,19 @@ const EMPTY_FORM: CreateSetInput = {
   imageUrl: "",
   featured: false,
 };
+
+const RETIREMENT_BADGE: Record<
+  AdminRetirementStatus,
+  { readonly tone: "success" | "warning" | "danger"; readonly label: string }
+> = {
+  ACTIVE: { tone: "success", label: "판매중" },
+  RETIRING_SOON: { tone: "warning", label: "단종 임박" },
+  RETIRED: { tone: "danger", label: "단종" },
+};
+
+function toAdminRetirementStatus(value: string): AdminRetirementStatus {
+  return value === "RETIRED" || value === "RETIRING_SOON" ? value : "ACTIVE";
+}
 
 function validateCatalogForm(form: CreateSetInput, editing: string | null): string | undefined {
   if (editing === null && form.setNumber.trim() === "") return "세트 번호를 입력해 주세요.";
@@ -87,7 +101,7 @@ export function AdminCatalogView() {
       theme: set.theme,
       pieceCount: set.pieceCount,
       releaseYear: set.releaseYear,
-      retirementStatus: set.retirementStatus === "RETIRED" ? "RETIRED" : "ACTIVE",
+      retirementStatus: toAdminRetirementStatus(set.retirementStatus),
       imageUrl: set.imageUrl ?? "",
       featured: set.featured,
     });
@@ -217,11 +231,17 @@ export function AdminCatalogView() {
                 id={inputId}
                 value={form.retirementStatus}
                 onChange={(e) =>
-                  setForm({ ...form, retirementStatus: e.target.value as "ACTIVE" | "RETIRED" })
+                  setForm({
+                    ...form,
+                    retirementStatus: toAdminRetirementStatus(e.target.value),
+                  })
                 }
               >
                 <option value="ACTIVE">판매중(ACTIVE)</option>
-                <option value="RETIRED">단종(RETIRED)</option>
+                <option value="RETIRING_SOON">
+                  단종 임박(RETIRING_SOON) — 관심 사용자에게 알림
+                </option>
+                <option value="RETIRED">단종(RETIRED) — 관심·보유 사용자에게 알림</option>
               </Select>
             )}
           </Field>
@@ -302,8 +322,8 @@ export function AdminCatalogView() {
                   {s.pieceCount.toLocaleString("ko-KR")}
                 </td>
                 <td className="px-3 py-2.5">
-                  <Badge tone={s.retirementStatus === "RETIRED" ? "warning" : "success"}>
-                    {s.retirementStatus === "RETIRED" ? "단종" : "판매중"}
+                  <Badge tone={RETIREMENT_BADGE[toAdminRetirementStatus(s.retirementStatus)].tone}>
+                    {RETIREMENT_BADGE[toAdminRetirementStatus(s.retirementStatus)].label}
                   </Badge>
                 </td>
                 <td className="px-3 py-2.5 text-right">

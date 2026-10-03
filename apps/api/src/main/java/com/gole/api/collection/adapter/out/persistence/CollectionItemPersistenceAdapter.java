@@ -36,6 +36,14 @@ public class CollectionItemPersistenceAdapter implements CollectionRepositoryPor
     }
 
     @Override
+    public List<String> findUserIdsBySetAndStatus(String setNumber, OwnershipStatus status) {
+        return repository.findBySetNumberAndStatus(setNumber, status.name()).stream()
+                .map(CollectionItemDocument::getUserId)
+                .distinct()
+                .toList();
+    }
+
+    @Override
     public void delete(CollectionItem item) {
         repository.deleteById(item.id());
     }

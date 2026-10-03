@@ -46,10 +46,16 @@ pnpm infra:reset             # 볼륨까지 날리고 재기동
 **`orca skills get orca-cli`** 로 받는다 — 버전에 맞는 가이드가 나오므로 플래그를 기억이나
 이 문서에서 추측하지 않는다.
 
-### 워크트리를 만들지 않는다
+### 워크트리는 쓰지 않는다 (2026-10-03 폐기)
 
-**기본값은 "브랜치 하나, 체크아웃 하나"다.** `orca worktree create`를 스스로 부르지 않는다
-(`.claude/settings.json`이 막아둔다). 새 작업은 `git switch -c <type>/<이름>`으로 판다.
+**체크아웃은 하나다 — `~/Desktop/github-repo/gole-project/GoLe`(Orca 의 GoLe-Terminal).** 가원이
+2026-10-03 워크트리 사용을 폐기했다. `orca worktree create`를 부르지 않고(`.claude/settings.json`이
+막아둔다), 새 작업은 그 체크아웃에서 `git switch -c <type>/<이름>`으로 판다.
+
+**Orca 사이드바의 "새 워크스페이스"도 git 워크트리다**(`~/orca/workspaces/...`). 에이전트 세션을 거기서
+띄우지 않는다. 세션이 워크트리 안에서 시작됐으면 git·빌드·dev 서버는 기준 체크아웃에서 돌린다
+(`git -C <기준 경로>`, 절대 경로). 2026-10-03 워크트리에서 작업하다 GitKraken 에 변경이 안 보이고,
+`.env`·`node_modules` 를 복사해야 했고, 두 체크아웃이 같은 포트를 두고 엇갈렸다.
 
 모노레포라 새 체크아웃이 비싸고, 비싼 만큼 조용히 고장 난다:
 
@@ -59,7 +65,7 @@ pnpm infra:reset             # 볼륨까지 날리고 재기동
 - `main` 같은 브랜치가 워크트리에 묶이면 원래 체크아웃에서 체크아웃이 막힌다
   (`fatal: 'main' is already used by worktree at ...`). 2026-09-11에 실제로 그렇게 막혔다.
 
-사람이 명시적으로 요청할 때만 만든다. 만들었으면 그 턴 안에 정리까지 합의한다.
+예외를 두지 않는다. 병렬 작업은 아래처럼 같은 체크아웃의 새 터미널로 나눈다.
 
 ### 새 세션은 지금 체크아웃에 띄운다
 
