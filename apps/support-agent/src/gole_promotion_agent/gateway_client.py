@@ -78,8 +78,8 @@ class SshGateway:
         except subprocess.TimeoutExpired as error:
             raise GatewayError(f"게이트웨이 시간 초과({int(self._timeout)}초)") from error
         if completed.returncode != 0:
-            tail = completed.stderr.decode("utf-8", "replace")[-300:]
-            raise GatewayError(f"ssh 종료 코드 {completed.returncode}: {tail}")
+            # ssh stderr 에는 서버 주소가 섞인다. 공개 저장소의 Actions 로그로 가므로 종료 코드만 남긴다.
+            raise GatewayError(f"ssh 실패(종료 코드 {completed.returncode})")
         try:
             return _checked(json.loads(completed.stdout.decode("utf-8")))
         except ValueError as error:

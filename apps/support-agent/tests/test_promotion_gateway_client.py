@@ -64,3 +64,12 @@ def test_localGateway_turnsAnyFailureIntoGatewayError(monkeypatch):
 
     with pytest.raises(GatewayError):
         gateway.call({"engine": "codex", "prompt": "x"})
+
+
+def test_ssh_failureMessage_hidesServerAddress(tmp_path):
+    runner, _ = _ssh(b"", 255, b"ssh: connect to host 203.0.113.7 port 22: Connection refused")
+
+    with pytest.raises(GatewayError) as error:
+        SshGateway("me@host", tmp_path / "k", tmp_path / "kh", runner=runner).call({"engine": "claude"})
+
+    assert "203.0.113.7" not in str(error.value)

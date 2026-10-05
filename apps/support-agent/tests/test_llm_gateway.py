@@ -1,6 +1,7 @@
 """SSH 게이트웨이. 서버에 홀로 복사되는 파일이라 표준 라이브러리만 쓰고, 요청 하나가 서버에 남기는 것이 없어야 한다."""
 
 import ast
+import io
 import base64
 import json
 import subprocess
@@ -36,8 +37,8 @@ def test_gateway_uses_only_stdlib():
     modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {
         a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names
     }
-    assert modules <= {"__future__", "base64", "json", "os", "shutil", "subprocess", "sys",
-                       "tempfile", "time", "pathlib", "typing", "fcntl"}
+    # 서버에 단독으로 복사되는 파일이다 — 표준 라이브러리 밖의 import 가 생기면 서버에서 깨진다.
+    assert all(name == "__future__" or name.split(".")[0] in sys.stdlib_module_names for name in modules)
 
 
 def test_claude_returnsStructuredOutputAndOnlyReadsInbox(tmp_path):
@@ -126,3 +127,59 @@ def test_codex_unreadableOutput_isReportedNotRaised(tmp_path, monkeypatch):
     response = gateway.handle({"engine": "codex", "prompt": "x", "want_images": True}, runner=runner, root=tmp_path)
 
     assert not response["ok"] and "읽지 못함" in response["error"]
+
+
+def test_codexFailure_keepsServerDetailsOutOfTheResponse(tmp_path, monkeypatch):
+    """응답은 공개 Actions 로그에 찍힌다 — stderr 의 경로·사용자명은 서버 로그에만 남아야 한다."""
+    log = tmp_path / "gw.log"
+    monkeypatch.setattr(gateway, "LOG_PATH", log)
+    runner_with_stderr = lambda command, **kw: subprocess.CompletedProcess(  # noqa: E731
+        command, 1, "", "Error: /home/friend/.codex/auth.json permission denied"
+    )
+
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner_with_stderr, root=tmp_path)
+
+    assert response == {"ok": False, "error": "codex 실패(종료 코드 1)", "images": [], "text": "", "structured": None}
+    assert "/home/friend" in log.read_text(encoding="utf-8")
+
+
+def test_unexpectedError_isGenericInResponse(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(gateway, "LOG_PATH", tmp_path / "gw.log")
+    monkeypatch.setattr(gateway, "LOCK_PATH", tmp_path / "gw.lock")
+
+    def boom(request):
+        raise RuntimeError("C:/Users/friend/secret-path")
+
+    monkeypatch.setattr(gateway, "handle", boom)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"claude","prompt":"x"}')))
+
+    gateway.main()
+
+    out = json.loads(capsys.readouterr().out)
+    assert out["error"] == "게이트웨이 오류(서버 로그 참고)"
+    assert "secret-path" in (tmp_path / "gw.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("model", ["--dangerously-skip-permissions", "-x", "a b", "", 3])
+def test_flagLikeModel_isRejectedBeforeAnyCli(tmp_path, model):
+    runner, calls = _recording()
+
+    with pytest.raises(gateway.BadRequest):
+        gateway.handle({"engine": "claude", "prompt": "x", "model": model}, runner=runner, root=tmp_path)
+    assert calls == []
+
+
+def test_system_isPassedAsFileNotArgument(tmp_path):
+    seen = {}
+
+    def runner(command, **kwargs):
+        flag = command.index("--append-system-prompt-file")
+        seen["text"] = Path(command[flag + 1]).read_text(encoding="utf-8")
+        seen["command"] = command
+        return subprocess.CompletedProcess(command, 0, json.dumps({"subtype": "success", "result": "ok"}), "")
+
+    gateway.handle({"engine": "claude", "prompt": "x", "system": "--tools Bash", "model": "sonnet"}, runner=runner, root=tmp_path)
+
+    assert seen["text"] == "--tools Bash"
+    assert "--tools Bash" not in seen["command"]
+    assert seen["command"][seen["command"].index("--model") + 1] == "sonnet"

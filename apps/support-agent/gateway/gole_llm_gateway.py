@@ -14,6 +14,9 @@
 응답:  {"ok": bool, "text": str, "structured": obj|null, "images": [{"name", "data"}], "error"?: str}
 
 CLI 는 요청마다 새 임시 폴더에서 돌고, 끝나면 폴더째 지운다. 읽기는 in/ 첨부, 쓰기는 out/ 뿐이다.
+
+응답의 error 는 짧은 문장만 담는다. 호출 쪽(공개 저장소의 Actions)이 로그에 찍으므로, stderr·경로·
+예외 원문처럼 서버 사정이 드러나는 내용은 서버의 로그 파일(LOG_PATH, 0600)에만 남긴다.
 """
 
 from __future__ import annotations
@@ -21,11 +24,14 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -36,12 +42,26 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TIMEOUT_SECONDS = int(os.environ.get("GOLE_GATEWAY_TIMEOUT", "900"))
 LOCK_WAIT_SECONDS = 30 * 60
 LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "gole-llm-gateway.lock"))
+LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
+# 모델 이름은 CLI 인자로 들어간다. "-" 로 시작하면 옵션으로 읽힐 수 있어 첫 글자를 영숫자로 묶는다.
+MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
 class BadRequest(ValueError):
     pass
+
+
+def _log(detail: str) -> None:
+    """서버에만 남기는 상세 기록. 실패해도 응답을 막지 않는다."""
+    try:
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
+            handle.write(f"{datetime.now(timezone.utc).isoformat()} {detail}\n")
+    except OSError:
+        pass
 
 
 def _images(request: dict[str, Any], inbox: Path) -> list[Path]:
@@ -96,9 +116,12 @@ def _claude(request: dict[str, Any], workdir: Path, paths: list[Path], runner: R
     if request.get("json_schema"):
         command += ["--json-schema", json.dumps(request["json_schema"], ensure_ascii=False)]
     if request.get("system"):
-        command += ["--append-system-prompt", str(request["system"])]
+        # 값이 "-" 로 시작해도 옵션으로 읽히지 않게 파일로 넘긴다.
+        system_file = workdir / "system.md"
+        system_file.write_text(str(request["system"]), encoding="utf-8")
+        command += ["--append-system-prompt-file", str(system_file)]
     if request.get("model"):
-        command += ["--model", str(request["model"])]
+        command += ["--model", request["model"]]
     completed = runner(
         command,
         cwd=str(workdir),
@@ -111,6 +134,7 @@ def _claude(request: dict[str, Any], workdir: Path, paths: list[Path], runner: R
     try:
         result = json.loads(completed.stdout)
     except (TypeError, ValueError):
+        _log(f"claude 출력 해석 실패 rc={completed.returncode} stderr={(completed.stderr or '')[-2000:]!r}")
         return {"ok": False, "error": f"claude 출력 해석 실패(종료 코드 {completed.returncode})"}
     if result.get("is_error") or result.get("subtype") != "success":
         return {"ok": False, "error": f"claude 실패: {result.get('subtype')}"}
@@ -136,7 +160,7 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         schema.write_text(json.dumps(request["json_schema"], ensure_ascii=False), encoding="utf-8")
         command += ["--output-schema", str(schema)]
     if request.get("model"):
-        command += ["-m", str(request["model"])]
+        command += ["-m", request["model"]]
     prompt = str(request["prompt"])
     if request.get("system"):
         prompt = f"{request['system']}\n\n{prompt}"
@@ -156,8 +180,8 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         timeout=TIMEOUT_SECONDS,
     )
     if completed.returncode != 0:
-        tail = (completed.stderr or completed.stdout or "")[-500:]
-        return {"ok": False, "error": f"codex 종료 코드 {completed.returncode}: {tail}"}
+        _log(f"codex rc={completed.returncode} stderr={(completed.stderr or completed.stdout or '')[-2000:]!r}")
+        return {"ok": False, "error": f"codex 실패(종료 코드 {completed.returncode})"}
     text = last.read_text(encoding="utf-8").strip() if last.exists() else ""
     structured = None
     if request.get("json_schema"):
@@ -172,7 +196,8 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         ]
     except OSError as error:
         # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
-        return {"ok": False, "error": f"codex 결과 이미지를 읽지 못함: {error}"}
+        _log(f"codex 결과 읽기 실패: {error!r}")
+        return {"ok": False, "error": "codex 결과 이미지를 읽지 못함"}
     if request.get("want_images") and not images:
         return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
     return {"ok": True, "text": text, "structured": structured, "images": images}
@@ -198,6 +223,13 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
     prompt = request.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         raise BadRequest(f"prompt 는 1~{MAX_PROMPT_CHARS}자 문자열")
+    model = request.get("model")
+    if model is not None and not (isinstance(model, str) and MODEL_PATTERN.fullmatch(model)):
+        raise BadRequest("model 은 영문·숫자·._:- 로 된 이름이어야 한다")
+    if request.get("system") is not None and not isinstance(request["system"], str):
+        raise BadRequest("system 은 문자열이다")
+    if request.get("json_schema") is not None and not isinstance(request["json_schema"], dict):
+        raise BadRequest("json_schema 는 JSON 객체다")
     workdir = _workdir(root)
     try:
         (workdir / "in").mkdir()
@@ -208,6 +240,9 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
             response = call(request, workdir, paths, runner)
         except subprocess.TimeoutExpired:
             return {"ok": False, "error": f"{engine} 시간 초과({TIMEOUT_SECONDS}초)"}
+        except OSError as error:  # CLI 를 찾지 못함 등 — 경로가 드러나므로 서버 로그에만
+            _log(f"{engine} 실행 실패: {error!r}")
+            return {"ok": False, "error": f"{engine} 를 실행하지 못함"}
         response.setdefault("images", [])
         response.setdefault("text", "")
         response.setdefault("structured", None)
@@ -254,10 +289,13 @@ def main() -> int:
         request = json.loads(raw.decode("utf-8"))
         with _Lock():
             response = handle(request)
-    except (ValueError, TimeoutError) as error:  # BadRequest 포함
+    except BadRequest as error:  # 우리가 쓴 문장이라 그대로 돌려줘도 된다
         response = _failure(str(error))
-    except Exception as error:  # noqa: BLE001 — 클라이언트는 언제나 JSON 을 받아야 한다
-        response = _failure(f"게이트웨이 오류: {type(error).__name__}: {error}")
+    except (ValueError, TimeoutError) as error:  # JSON 형식 오류·잠금 대기 초과
+        response = _failure("요청을 처리하지 못함" if isinstance(error, ValueError) else str(error))
+    except Exception:  # noqa: BLE001 — 클라이언트는 언제나 JSON 을 받아야 한다
+        _log("게이트웨이 오류\n" + traceback.format_exc())
+        response = _failure("게이트웨이 오류(서버 로그 참고)")
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 
