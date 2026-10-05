@@ -164,7 +164,7 @@ unknown_skip`으로 평가 기록에 구분한다.
 
 ## 참고
 
-- [구현 스펙](spec.md), `brain.py`, `runtime.py`, `hands.py`, `prompts/caption-tone.md`.
+- [구현 스펙](spec.md), `drafter.py`, `drafting.py`, `hands.py`, `prompts/caption-tone.md`.
 - [BlackTwist 제작자의 출시 회고](https://themakerjourney.kit.com/posts/how-we-made-3-7k-in-pre-sale-for-blacktwist):
   개발 과정 공유와 독자 참여의 참고 자료. 한국어 말투나 성과의 검증 기준은 아니다.
 - Threads 원문 다수를 직접 분석한 데이터셋이 아니다. 특정 계정의 표현을 복제하지 않는다.
