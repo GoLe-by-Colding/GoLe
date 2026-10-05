@@ -70,13 +70,15 @@ jobs:
       - name: Check secrets
         env:
           GATEWAY_KEY: ${{ secrets.PROMOTION_GATEWAY_SSH_KEY }}
+          GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
           GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
           GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
           BOT_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
           BOT_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
         run: |
           missing=""
-          [ -n "$GATEWAY_KEY" ] || missing="$missing PROMOTION_GATEWAY_SSH_KEY"
+          # 인증은 키(셸이 안 열림, 권장) 또는 비밀번호(서버가 키 로그인을 막아 둔 경우) 중 하나면 된다.
+          [ -n "$GATEWAY_KEY" ] || [ -n "$GATEWAY_PASSWORD" ] || missing="$missing PROMOTION_GATEWAY_SSH_KEY|PROMOTION_GATEWAY_PASSWORD"
           [ -n "$GATEWAY_TARGET" ] || missing="$missing PROMOTION_GATEWAY_TARGET"
           [ -n "$GATEWAY_KNOWN_HOSTS" ] || missing="$missing PROMOTION_GATEWAY_KNOWN_HOSTS"
           [ -n "$BOT_EMAIL" ] || missing="$missing PROMOTION_AGENT_ADMIN_EMAIL"
@@ -236,15 +238,21 @@ jobs:
           exit 1
 
       # 시드 관리자 계정은 gole_e2e 전용 테스트 계정이라 시크릿이 아니다(ci.yml 과 같다).
-      # 게이트웨이 키와 호스트 키를 파일로 남긴다. 키는 forced command 로 묶여 셸을 열지 못한다.
+      # 호스트 키를 고정하고, 키가 있으면 키 파일을, 없으면 비밀번호용 sshpass 를 준비한다.
+      # 키는 forced command 로 묶여 셸을 열지 못한다. 비밀번호는 셸 전체 권한이라 이 환경을 main 전용으로 둔다.
       - name: Prepare gateway SSH
         env:
           GATEWAY_KEY: ${{ secrets.PROMOTION_GATEWAY_SSH_KEY }}
           GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
         run: |
           umask 077
-          printf '%s\n' "$GATEWAY_KEY" > "$RUNNER_TEMP/gateway_key"
           printf '%s\n' "$GATEWAY_KNOWN_HOSTS" > "$RUNNER_TEMP/gateway_known_hosts"
+          if [ -n "$GATEWAY_KEY" ]; then
+            printf '%s\n' "$GATEWAY_KEY" > "$RUNNER_TEMP/gateway_key"
+            echo "PROMOTION_GATEWAY_KEY_FILE=$RUNNER_TEMP/gateway_key" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y -qq sshpass
+          fi
 
       - name: Run agent
         working-directory: apps/support-agent
@@ -253,7 +261,8 @@ jobs:
           # 게이트웨이(SSH). TARGET 은 user@host, 포트는 PROMOTION_GATEWAY_PORT(기본 22).
           PROMOTION_GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
           PROMOTION_GATEWAY_PORT: ${{ vars.PROMOTION_GATEWAY_PORT }}
-          PROMOTION_GATEWAY_KEY_FILE: ${{ runner.temp }}/gateway_key
+          # 키가 있으면 Prepare 단계가 PROMOTION_GATEWAY_KEY_FILE 을 넣고, 그쪽이 비밀번호보다 우선한다.
+          PROMOTION_GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
           PROMOTION_GATEWAY_KNOWN_HOSTS_FILE: ${{ runner.temp }}/gateway_known_hosts
           PROMOTION_AGENT_CLAUDE_MODEL: ${{ vars.PROMOTION_AGENT_CLAUDE_MODEL }}
           PROMOTION_AGENT_CODEX_MODEL: ${{ vars.PROMOTION_AGENT_CODEX_MODEL }}

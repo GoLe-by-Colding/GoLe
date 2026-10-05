@@ -1,6 +1,10 @@
 """러너에서 LLM 게이트웨이를 부르는 쪽. 요청 JSON 을 SSH stdin 으로 보내고 stdout JSON 을 받는다.
 
-서버의 authorized_keys 가 이 키를 forced command 로 묶어 두므로 원격 명령은 보내지 않는다. 호스트 키는
+인증은 둘 중 하나다.
+- 키: authorized_keys 의 forced command 로 묶인 전용 키. 셸이 열리지 않아 더 안전하다.
+- 비밀번호: 서버가 키 로그인을 막아 둔 경우. sshpass 로 넣고, 비밀번호는 인자가 아니라 SSHPASS
+  환경변수로만 넘긴다. 이 방식은 셸 전체 권한이라 production 환경을 main 전용으로 묶어 둔다.
+어느 쪽이든 원격 명령으로 게이트웨이를 실행한다(forced command 가 있으면 그쪽이 이긴다). 호스트 키는
 known_hosts 로 고정한다 — 처음 보는 서버에는 붙지 않는다(StrictHostKeyChecking=yes).
 
 로컬에서 서버 없이 시험할 때는 PROMOTION_GATEWAY=local 로 같은 처리를 프로세스 안에서 돌린다.
@@ -18,6 +22,7 @@ from typing import Any, Callable, Mapping, Protocol
 
 GATEWAY_SCRIPT = Path(__file__).resolve().parents[2] / "gateway" / "gole_llm_gateway.py"
 DEFAULT_TIMEOUT_SECONDS = 20 * 60
+REMOTE_COMMAND = "~/gole-llm-gateway/run.sh"
 
 
 class GatewayError(RuntimeError):
@@ -40,30 +45,34 @@ class SshGateway:
     def __init__(
         self,
         target: str,
-        key_file: Path,
         known_hosts: Path,
+        *,
+        key_file: Path | None = None,
+        password: str | None = None,
         port: int = 22,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ):
-        self._command = [
-            "ssh",
-            "-i",
-            str(key_file),
+        if (key_file is None) == (password is None):
+            raise ValueError("key_file 과 password 중 하나만 준다")
+        common = [
             "-p",
             str(port),
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "IdentitiesOnly=yes",
             "-o",
             f"UserKnownHostsFile={known_hosts}",
             "-o",
             "StrictHostKeyChecking=yes",
             "-o",
             "ServerAliveInterval=30",
-            target,
         ]
+        if key_file is not None:
+            auth = ["ssh", "-i", str(key_file), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes"]
+            self._env = None
+        else:
+            # BatchMode 는 비밀번호 입력을 막으므로 쓰지 않는다. 비밀번호 외 방식은 시도하지 않는다.
+            auth = ["sshpass", "-e", "ssh", "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no"]
+            self._env = {**os.environ, "SSHPASS": password}
+        self._command = [*auth, *common, "-T", target, REMOTE_COMMAND]
         self._timeout = timeout
         self._runner = runner
 
@@ -74,6 +83,7 @@ class SshGateway:
                 input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
                 capture_output=True,
                 timeout=self._timeout,
+                env=self._env,
             )
         except subprocess.TimeoutExpired as error:
             raise GatewayError(f"게이트웨이 시간 초과({int(self._timeout)}초)") from error
@@ -108,11 +118,19 @@ def from_env(env: Mapping[str, str] | None = None) -> Gateway:
     if env.get("PROMOTION_GATEWAY") == "local":
         return LocalGateway()
     target = (env.get("PROMOTION_GATEWAY_TARGET") or "").strip()
-    key = (env.get("PROMOTION_GATEWAY_KEY_FILE") or "").strip()
     known_hosts = (env.get("PROMOTION_GATEWAY_KNOWN_HOSTS_FILE") or "").strip()
-    if not (target and key and known_hosts):
-        raise ValueError("PROMOTION_GATEWAY_TARGET·KEY_FILE·KNOWN_HOSTS_FILE_REQUIRED")
-    return SshGateway(target, Path(key), Path(known_hosts), int(env.get("PROMOTION_GATEWAY_PORT") or 22))
+    key = (env.get("PROMOTION_GATEWAY_KEY_FILE") or "").strip()
+    password = env.get("PROMOTION_GATEWAY_PASSWORD") or ""
+    if not (target and known_hosts and (key or password)):
+        raise ValueError("PROMOTION_GATEWAY_TARGET·KNOWN_HOSTS_FILE 과 KEY_FILE 또는 PASSWORD 가 필요하다")
+    return SshGateway(
+        target,
+        Path(known_hosts),
+        # 키가 있으면 키를 쓴다 — 셸이 열리지 않는 쪽이 더 안전하다.
+        key_file=Path(key) if key else None,
+        password=None if key else password,
+        port=int(env.get("PROMOTION_GATEWAY_PORT") or 22),
+    )
 
 
 def encode_png(path: Path) -> dict[str, str]:

@@ -21,12 +21,14 @@ def _ssh(stdout=b"", returncode=0, stderr=b""):
 
 def test_ssh_pinsHostKeyAndSendsRequestOnStdin(tmp_path):
     runner, calls = _ssh(json.dumps({"ok": True, "text": "hi"}).encode())
-    gateway = SshGateway("me@host", tmp_path / "key", tmp_path / "known_hosts", port=2222, runner=runner)
+    gateway = SshGateway("me@host", tmp_path / "known_hosts", key_file=tmp_path / "key", port=2222, runner=runner)
 
     assert gateway.call({"engine": "claude", "prompt": "x"})["text"] == "hi"
     command = calls[0]["command"]
     assert "StrictHostKeyChecking=yes" in command and "BatchMode=yes" in command
-    assert command[command.index("-p") + 1] == "2222" and command[-1] == "me@host"
+    assert command[command.index("-p") + 1] == "2222"
+    assert command[-2:] == ["me@host", "~/gole-llm-gateway/run.sh"]
+    assert calls[0]["env"] is None
     assert json.loads(calls[0]["input"])["prompt"] == "x"
 
 
@@ -38,7 +40,7 @@ def test_ssh_failuresRaiseGatewayError(tmp_path, stdout, returncode):
     runner, _ = _ssh(stdout, returncode)
 
     with pytest.raises(GatewayError):
-        SshGateway("me@host", tmp_path / "k", tmp_path / "kh", runner=runner).call({"engine": "claude"})
+        SshGateway("me@host", tmp_path / "kh", key_file=tmp_path / "k", runner=runner).call({"engine": "claude"})
 
 
 def test_fromEnv_requiresAllSshSettings():
@@ -70,6 +72,31 @@ def test_ssh_failureMessage_hidesServerAddress(tmp_path):
     runner, _ = _ssh(b"", 255, b"ssh: connect to host 203.0.113.7 port 22: Connection refused")
 
     with pytest.raises(GatewayError) as error:
-        SshGateway("me@host", tmp_path / "k", tmp_path / "kh", runner=runner).call({"engine": "claude"})
+        SshGateway("me@host", tmp_path / "kh", key_file=tmp_path / "k", runner=runner).call({"engine": "claude"})
 
     assert "203.0.113.7" not in str(error.value)
+
+
+def test_password_goesThroughSshpassEnvNeverArgv(tmp_path):
+    """비밀번호는 프로세스 목록(ps)에 보이는 인자가 아니라 SSHPASS 환경변수로만 넘긴다."""
+    runner, calls = _ssh(json.dumps({"ok": True}).encode())
+
+    SshGateway("me@host", tmp_path / "kh", password="pw-123", runner=runner).call({"engine": "claude"})
+
+    command, env = calls[0]["command"], calls[0]["env"]
+    assert command[:3] == ["sshpass", "-e", "ssh"]
+    assert "pw-123" not in " ".join(command)
+    assert env["SSHPASS"] == "pw-123"
+    assert "StrictHostKeyChecking=yes" in command and "BatchMode=yes" not in command
+
+
+def test_fromEnv_prefersKeyOverPassword(tmp_path):
+    base = {"PROMOTION_GATEWAY_TARGET": "me@host", "PROMOTION_GATEWAY_KNOWN_HOSTS_FILE": str(tmp_path / "kh")}
+
+    with_password = gateway_client.from_env({**base, "PROMOTION_GATEWAY_PASSWORD": "pw"})
+    with_both = gateway_client.from_env({**base, "PROMOTION_GATEWAY_PASSWORD": "pw", "PROMOTION_GATEWAY_KEY_FILE": "k"})
+
+    assert with_password._command[0] == "sshpass"
+    assert with_both._command[0] == "ssh"
+    with pytest.raises(ValueError):
+        gateway_client.from_env(base)
