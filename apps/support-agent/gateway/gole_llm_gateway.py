@@ -45,6 +45,8 @@ LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "g
 LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
 # 모델 이름은 CLI 인자로 들어간다. "-" 로 시작하면 옵션으로 읽힐 수 있어 첫 글자를 영숫자로 묶는다.
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
+# codex exec 가 stderr 머리에 찍는 세션 ID. 경로 조각이 되므로 UUID 모양만 받는다.
+SESSION_ID_PATTERN = re.compile(r"^session id: ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$", re.MULTILINE)
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -189,15 +191,24 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
             structured = json.loads(text)
         except ValueError:
             return {"ok": False, "error": "codex 구조화 출력 해석 실패"}
+    generated = _generated_folder(completed.stderr)
     try:
-        images = [
-            {"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")}
-            for path in sorted((workdir / "out").glob("*.png"))
-        ]
+        paths = sorted((workdir / "out").glob("*.png"))
+        if not paths and generated is not None:
+            # 샌드박스가 셸을 못 띄우는 서버(비특권 user namespace 금지)에서는 codex 가 만든 이미지를 out/ 로
+            # 옮기지 못한다. 이미지 생성 도구가 저장한 원래 자리에서 가져온다.
+            paths = sorted(generated.glob("*.png"))
+            if paths:
+                _log(f"codex out/ 비어 있어 generated_images 에서 {len(paths)}장 가져옴")
+        images = [{"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")} for path in paths]
     except OSError as error:
         # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
         _log(f"codex 결과 읽기 실패: {error!r}")
         return {"ok": False, "error": "codex 결과 이미지를 읽지 못함"}
+    finally:
+        # 요청 하나가 서버에 남기는 것이 없어야 한다 — 이번 세션이 만든 이미지 폴더도 지운다.
+        if generated is not None:
+            shutil.rmtree(generated, ignore_errors=True)
     if request.get("want_images"):
         if not images:
             return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
@@ -205,6 +216,15 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 호출 쪽은 이미지만 쓴다.
         return {"ok": True, "images": images}
     return {"ok": True, "text": text, "structured": structured, "images": images}
+
+
+def _generated_folder(stderr: str | None) -> Path | None:
+    """codex 이미지 생성 도구가 이번 세션 결과를 두는 폴더. 세션 ID 를 못 찾으면 None."""
+    match = SESSION_ID_PATTERN.search(stderr or "")
+    if match is None:
+        return None
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    return home / "generated_images" / match.group(1)
 
 
 def _workdir(root: Path | None) -> Path:

@@ -83,6 +83,31 @@ def test_codex_returnsGeneratedImages(tmp_path):
     assert command[command.index("-s") + 1] == "workspace-write"
 
 
+def test_codex_sandboxWithoutShell_takesImageFromGeneratedFolderAndCleansIt(tmp_path, monkeypatch):
+    # 비특권 user namespace 를 막은 서버에서는 codex 가 셸을 못 띄워 out/ 로 복사하지 못한다(실서버 재현).
+    session = "01a10d13-16a3-7fa3-beca-331c77a53838"
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    generated = tmp_path / "codex" / "generated_images" / session
+    other = tmp_path / "codex" / "generated_images" / "11111111-2222-3333-4444-555555555555"
+
+    def runner(command, **kwargs):
+        generated.mkdir(parents=True)
+        other.mkdir(parents=True)
+        (generated / "exec-1.png").write_bytes(PNG)
+        (other / "not-mine.png").write_bytes(PNG)
+        return subprocess.CompletedProcess(command, 0, "", f"workdir: x\nsession id: {session}\n")
+
+    response = gateway.handle(
+        {"engine": "codex", "prompt": "다듬어", "want_images": True, "images": [{"data": PNG_B64}]},
+        runner=runner, root=tmp_path,
+    )
+
+    assert response["ok"]
+    assert response["images"] == [{"name": "exec-1.png", "data": PNG_B64}]
+    # 이번 세션 폴더만 지운다 — 같은 계정의 다른 codex 작업 결과는 건드리지 않는다.
+    assert not generated.exists() and other.exists()
+
+
 def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     runner, _ = _recording()
 
