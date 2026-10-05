@@ -2,7 +2,6 @@
 
 import base64
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,6 +10,8 @@ from gole_promotion_agent import drafting
 from gole_promotion_agent.drafter import Drafter
 from gole_promotion_agent.fakes import PIXEL, FakeCamera
 from gole_promotion_agent.gateway_client import GatewayError
+
+from .gitrepo import commit
 
 ROUTES = ("/", "/collection", "/search", "/terms")
 POLISHED = PIXEL + b"polished"
@@ -160,21 +161,11 @@ def test_fullReviewQueue_skipsWithoutCapturingOrCalling(tmp_path):
     assert gateway.requests == [] and camera.calls == []
 
 
-def test_featureWithoutWebChanges_skipsWithoutCalling(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-
-    def git(*args):
-        return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
-
-    git("init", "-q")
-    (repo / "docs").mkdir()
-    (repo / "docs" / "note.md").write_text("x", encoding="utf-8")
-    git("add", ".")
-    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "docs: note")
+def test_featureWithoutWebChanges_skipsWithoutCalling(tmp_path, repo):
+    sha = commit(repo, "docs: note", web=False)
     gateway = FakeGateway(DRAFT)
 
-    result = _drafter(tmp_path, gateway, FakePublisher(), service=False, sha=git("rev-parse", "HEAD")).run()
+    result = _drafter(tmp_path, gateway, FakePublisher(), service=False, sha=sha).run()
 
     assert result.outcome == "skipped" and gateway.requests == []
 

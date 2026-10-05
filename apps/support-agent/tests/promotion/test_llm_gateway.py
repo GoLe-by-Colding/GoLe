@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-GATEWAY = Path(__file__).resolve().parents[1] / "gateway"
+GATEWAY = Path(__file__).resolve().parents[2] / "gateway"
 sys.path.insert(0, str(GATEWAY))
 
 import gole_llm_gateway as gateway  # noqa: E402
