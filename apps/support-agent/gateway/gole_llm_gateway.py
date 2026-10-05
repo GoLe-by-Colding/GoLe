@@ -198,8 +198,12 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
         _log(f"codex 결과 읽기 실패: {error!r}")
         return {"ok": False, "error": "codex 결과 이미지를 읽지 못함"}
-    if request.get("want_images") and not images:
-        return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
+    if request.get("want_images"):
+        if not images:
+            return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
+        # 이미지 요청에는 글을 돌려주지 않는다. codex 는 홈 폴더를 읽을 수 있어서, 키가 샌 쪽이 "토큰 파일을
+        # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 호출 쪽은 이미지만 쓴다.
+        return {"ok": True, "images": images}
     return {"ok": True, "text": text, "structured": structured, "images": images}
 
 

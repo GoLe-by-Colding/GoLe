@@ -74,6 +74,8 @@ def test_codex_returnsGeneratedImages(tmp_path):
 
     assert response["ok"]
     assert response["images"] == [{"name": "polished.png", "data": PNG_B64}]
+    # 이미지 요청에는 codex 의 글(여기선 "done")을 돌려주지 않는다 — 홈 폴더를 읽은 내용이 새는 통로다.
+    assert response["text"] == "" and response["structured"] is None
     command = calls[0]["command"]
     # 프롬프트는 stdin 으로 간다 — 인자에 두면 Windows shim 이 깨뜨려 -i 첨부까지 사라졌다.
     assert "다듬어" in calls[0]["input"] and not any("다듬어" in a for a in command)
