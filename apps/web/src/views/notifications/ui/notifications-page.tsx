@@ -146,11 +146,16 @@ export function NotificationsPage() {
       <div className="flex flex-col gap-5 pt-10 pb-16">
         <div className="flex items-center justify-between">
           <Heading level={1}>알림</Heading>
-          {visibleItems.some((n) => !n.read) ? (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={handleReadAll}>
-              {busy ? "처리 중" : "전체 읽음"}
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-1">
+            {visibleItems.some((n) => !n.read) ? (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={handleReadAll}>
+                {busy ? "처리 중" : "전체 읽음"}
+              </Button>
+            ) : null}
+            <LinkButton href="/profile/notifications" variant="ghost" size="sm">
+              설정
+            </LinkButton>
+          </div>
         </div>
 
         {visibleLoading ? (

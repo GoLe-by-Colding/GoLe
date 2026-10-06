@@ -327,6 +327,15 @@ export function ProfilePage() {
                 </Link>
               </InfoRow>
 
+              <InfoRow label="알림 설정">
+                <Link
+                  href="/profile/notifications"
+                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                >
+                  받을 알림 고르기
+                </Link>
+              </InfoRow>
+
               <InfoRow label="개인정보 권리">
                 <Link
                   href="/chat?compose=support&category=PRIVACY_ACCESS"
