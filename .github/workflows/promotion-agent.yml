@@ -339,3 +339,60 @@ jobs:
         run: |
           tail -100 "$RUNNER_TEMP/api.log" || true
           tail -100 "$RUNNER_TEMP/web.log" || true
+
+      # 사람이 손대야 하는 상황만 운영 채널에 한 줄 남긴다 — 실패·취소, 검토 큐 가득, 원장 기록 실패.
+      # 정상 건너뛰기는 조용히 둔다. 저장소가 공개라 고정 문구·사유 코드·링크만 싣는다(D23).
+      # 알림이 실패해도 홍보 결과는 바꾸지 않는다. 초안 제출 알림은 백엔드가 따로 낸다.
+      - name: Notify Discord
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          DISCORD_OPERATIONS_WEBHOOK_URL: ${{ secrets.DISCORD_OPERATIONS_WEBHOOK_URL }}
+          DISCORD_AVATAR_URL: https://gole.co.kr/icon.svg
+          DISCORD_SUPPRESS_NOTIFICATIONS: ${{ vars.DISCORD_SUPPRESS_NOTIFICATIONS || 'false' }}
+        run: |
+          run="$RUNNER_TEMP/promotion/run.json"
+          code=""
+          recorded=""
+          if [ -s "$run" ]; then
+            code=$(jq -r '.reasonCode // ""' "$run")
+            recorded=$(jq -r '.recorded' "$run")
+          fi
+          kind="기능 홍보"
+          if [ "$SERVICE" = "true" ]; then
+            kind="서비스 소개"
+          fi
+          link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$JOB_STATUS" = "failure" ] || [ "$JOB_STATUS" = "cancelled" ]; then
+            if [ -n "$code" ]; then
+              reason="$code"
+            elif [ "$JOB_STATUS" = "cancelled" ]; then
+              reason="시간 초과·취소"
+            else
+              reason="실행 기록 없음(에이전트 시작 전)"
+            fi
+            content="❌ GoLe 홍보 초안 실패 · $kind · $reason · $link"
+          elif [ "$code" = "QUEUE_FULL" ]; then
+            content="⚠️ GoLe 홍보 검토 대기가 가득 차 초안 생성이 멈춤 · 관리자 화면에서 검토 필요 · $link"
+          elif [ "$recorded" = "false" ]; then
+            content="⚠️ GoLe 홍보 실행 원장 기록 실패 · $kind · $code · $link"
+          else
+            exit 0
+          fi
+          echo "$content"
+          if [ -z "$DISCORD_OPERATIONS_WEBHOOK_URL" ]; then
+            echo "::warning::DISCORD_OPERATIONS_WEBHOOK_URL 이 없어 알리지 않았다"
+            exit 0
+          fi
+          flags=null
+          if [ "$DISCORD_SUPPRESS_NOTIFICATIONS" = "true" ]; then
+            flags=4096
+          fi
+          payload=$(jq -n \
+            --arg content "$content" \
+            --arg avatar_url "$DISCORD_AVATAR_URL" \
+            --argjson flags "$flags" \
+            '{content: $content, avatar_url: $avatar_url, allowed_mentions: {parse: []}}
+             + (if $flags == null then {} else {flags: $flags} end)')
+          curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "$payload" "$DISCORD_OPERATIONS_WEBHOOK_URL" \
+            || echo "::warning::Discord 알림 전송 실패"
