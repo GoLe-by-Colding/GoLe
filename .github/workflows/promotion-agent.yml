@@ -8,6 +8,9 @@ name: Promotion agent
 # 전까지 같다. 받을 캡처가 없을 때만 스택을 띄워 찍는다. 화면 고르기·캡션(claude)과 화면 다듬기
 # (codex)는 SSH 로 부르는 LLM 게이트웨이(apps/support-agent/gateway)의 CLI 가 한다. 초안(다듬은
 # 이미지·원본·설명표·출처)은 운영 검토 큐에 낸다. 발행은 사람이 관리자 화면에서 한다.
+#
+# 저장소가 공개라 이 실행의 로그·요약·아티팩트는 누구나 본다. 여기에는 숫자·고정 코드·링크만 남긴다.
+# 캡션·고른 이유·모델이 쓴 사유 같은 글과 판단은 운영 DB(초안·실행 원장 promotion_runs)에만 둔다(D23).
 on:
   # main 운영 배포가 끝난 릴리스. 배포 전 코드를 홍보하지 않도록 CI 가 아니라 CD 를 기다린다.
   workflow_run:
@@ -296,44 +299,31 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          run="$RUNNER_TEMP/promotion/run.json"
           {
             if [ "$SERVICE" = "true" ]; then
-              echo "## 서비스 홍보 초안"
+              echo "## 서비스 홍보 실행"
             else
-              printf "## 기능 홍보 초안 — \`%s\`\n" "$SHA"
+              printf "## 기능 홍보 실행 — \`%s\`\n" "$SHA"
             fi
-            if [ -s "$RUNNER_TEMP/promotion/drafts.jsonl" ]; then
-              jq -r '"### 캡션\n\n" + .caption + "\n\n스크린샷 " + (.mediaKeys | length | tostring) + "장"' \
-                "$RUNNER_TEMP/promotion/drafts.jsonl"
-            else
-              echo "초안 없음 — 건너뛰었거나 실패했다. 로그와 아티팩트의 choice.json 을 본다."
+            if [ ! -s "$run" ]; then
+              echo "실행 기록 없음 — 에이전트가 시작 전에 멈췄다. 로그를 본다."
+              exit 0
             fi
-            usage="$RUNNER_TEMP/promotion/usage.json"
-            if [ -s "$usage" ]; then
-              echo
-              echo "### 모델 사용량"
-              echo
-              echo "| 엔진 | 모델 | 결과 | 입력(캐시) | 출력 | 시간 |"
-              echo "| --- | --- | --- | --- | --- | --- |"
-              jq -r '.calls[] | (.usage // {}) as $u
-                | "| \($u.engine // "?") | \($u.model // "?") | \(if .ok then "성공" else "실패" end)"
-                  + " | \($u.input_tokens // 0)(\($u.cached_input_tokens // 0)) | \($u.output_tokens // 0)"
-                  + " | \(if $u.duration_ms then "\($u.duration_ms / 1000 | floor)초" else "-" end) |"' "$usage"
-              echo
-              jq -r '.totals | to_entries[] | "- \(.key) 합계: \(.value.calls)회, 입력 \(.value.input_tokens // 0)"
-                + " (캐시 \(.value.cached_input_tokens // 0)), 출력 \(.value.output_tokens // 0)"
-                + (if .value.cost_usd then ", API 환산 $\(.value.cost_usd * 1000 | round / 1000)" else "" end)' "$usage"
-            fi
+            jq -r '"결과: **\(.outcome)** (`\(.reasonCode)`)"
+              + (if .promotionPostId then " · 초안이 검토 큐에 들어갔다 → https://gole.co.kr/admin/promotion" else "" end)
+              + "\n\n실행 원장: " + (if .recorded then "기록함" else "**기록 실패** — 사용량은 이 요약에만 남고 사유 원문은 남지 않았다" end)' "$run"
+            echo
+            echo "| 엔진 | 모델 | 결과 | 입력(캐시) | 출력 | 시간 |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.calls[] | "| \(.engine // "?") | \(.model // "?") | \(if .ok then "성공" else "실패" end)"
+              + " | \(.inputTokens)(\(.cachedInputTokens)) | \(.outputTokens)"
+              + " | \(if .durationMs then "\(.durationMs / 1000 | floor)초" else "-" end) |"' "$run"
+            echo
+            jq -r '.totals | to_entries[] | "- \(.key) 합계: \(.value.calls)회, 입력 \(.value.inputTokens)"
+              + " (캐시 \(.value.cachedInputTokens)), 출력 \(.value.outputTokens)"
+              + (if .value.costUsd then ", API 환산 $\(.value.costUsd * 1000 | round / 1000)" else "" end)' "$run"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload session
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: promotion-${{ github.run_id }}
-          path: ${{ runner.temp }}/promotion
-          retention-days: 14
-          if-no-files-found: warn
 
       # 다음 서비스 소개가 스택 없이 쓸 캡처. 이 실행이 새로 찍었을 때만 올린다.
       - name: Upload captures for reuse
