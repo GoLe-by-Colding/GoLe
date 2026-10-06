@@ -1,7 +1,6 @@
-"""배포된 릴리스를 근거로 홍보 게시 초안을 만드는 일회성 에이전트.
+"""배포된 릴리스나 서비스 자체를 근거로 홍보 게시 초안을 만드는 일회성 실행.
 
-문의(`gole_support_agent`)·사진(`gole_brick_filter`)과 같은 패키지에 있지만 실행 형태가 다르다.
-저쪽은 상시 기동 gRPC 서비스이고 이쪽은 하루 한 번 도는 배치다. 공유하는 것은 구조 관용구와
-관측 격리(`gole_agent_runtime`)이지 프로세스·이미지·자원 한도가 아니다. 설계 근거는
-`.kiro/specs/promotion-review/spec.md` D9~D19를 본다.
+초안을 쓰는 두뇌는 self-hosted 서버의 Claude Code(`claude -p`)이고, 이 패키지는 그 손(캡처·합성
+명령)과 래퍼(검증·제출)다. 문의(`gole_support_agent`)·사진(`gole_brick_filter`)과 같은 패키지에
+있지만 저쪽은 상시 기동 gRPC 서비스다. 설계 근거는 `.kiro/specs/promotion-review/spec.md`를 본다.
 """

@@ -1,0 +1,80 @@
+name: Promotion gateway deploy
+
+# 홍보 LLM 게이트웨이(apps/support-agent/gateway)가 main 에서 바뀌면 지인 서버에 그대로 반영한다.
+# 사람 관문은 main 이다 — main 은 리뷰를 거친 릴리스 PR 로만 바뀐다(production 환경도 main 전용).
+#
+# 러너가 체크아웃한 파일을 SSH stdin 으로 직접 보낸다. 서버는 GitHub 에서 아무것도 받지 않고, 러너가 계산한
+# sha256 과 맞는지 확인한 뒤 한 번에 바꿔 끼우고, 연기 테스트가 실패하면 이전 파일로 되돌린다
+# (apps/support-agent/gateway/install-remote.sh). 저장소가 공개라 이 로그에는 고정 문구만 남는다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/support-agent/gateway/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 홍보 실행과 같은 그룹 — 초안을 만드는 도중에 게이트웨이를 바꾸지 않는다.
+concurrency:
+  group: promotion-agent
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Check secrets
+        env:
+          GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
+          GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
+          GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
+        run: |
+          missing=""
+          # 전용 키는 forced command 로 게이트웨이 실행만 열려 있어 파일을 바꿀 수 없다. 배포는 비밀번호 접속으로 한다.
+          [ -n "$GATEWAY_PASSWORD" ] || missing="$missing PROMOTION_GATEWAY_PASSWORD"
+          [ -n "$GATEWAY_TARGET" ] || missing="$missing PROMOTION_GATEWAY_TARGET"
+          [ -n "$GATEWAY_KNOWN_HOSTS" ] || missing="$missing PROMOTION_GATEWAY_KNOWN_HOSTS"
+          if [ -n "$missing" ]; then
+            echo "::error::production 환경 시크릿이 없다:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - name: Prepare SSH
+        env:
+          GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          printf '%s\n' "$GATEWAY_KNOWN_HOSTS" > "$RUNNER_TEMP/gateway_known_hosts"
+          sudo apt-get install -y -qq sshpass
+
+      - name: Deploy
+        env:
+          SSHPASS: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
+          GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
+          GATEWAY_PORT: ${{ vars.PROMOTION_GATEWAY_PORT }}
+        run: |
+          src=apps/support-agent/gateway
+          # 값은 base64·16진수뿐이라 따옴표 안에서 깨지지 않는다. 스크립트 본문은 저장소 파일 그대로다.
+          {
+            printf "GATEWAY_B64='%s'\n" "$(base64 -w0 "$src/gole_llm_gateway.py")"
+            printf "RUN_B64='%s'\n" "$(base64 -w0 "$src/run.sh")"
+            printf "GATEWAY_SHA='%s'\n" "$(sha256sum < "$src/gole_llm_gateway.py" | cut -d' ' -f1)"
+            printf "RUN_SHA='%s'\n" "$(sha256sum < "$src/run.sh" | cut -d' ' -f1)"
+            cat "$src/install-remote.sh"
+          } > "$RUNNER_TEMP/deploy.sh"
+          # 실패해도 ssh 의 stderr(서버 주소가 섞인다)는 찍지 않는다. 원격 스크립트가 고정 문구만 출력한다.
+          if ! sshpass -e ssh -p "${GATEWAY_PORT:-22}" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/gateway_known_hosts" -o StrictHostKeyChecking=yes \
+            -o PreferredAuthentications=password -o PubkeyAuthentication=no -o LogLevel=ERROR \
+            -T "$GATEWAY_TARGET" 'bash -s' < "$RUNNER_TEMP/deploy.sh" 2>/dev/null; then
+            echo "::error::게이트웨이 배포 실패 — 접속 실패(시크릿·호스트 키)이거나, 서버 ~/.cache/gole-llm-gateway.log 에 원인이 있다"
+            exit 1
+          fi
+          echo "배포한 커밋: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

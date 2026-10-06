@@ -1,0 +1,341 @@
+name: Promotion agent
+
+# 홍보 초안을 만든다. 경로는 트리거가 정한다.
+#   - 운영 배포(CD) 성공 · 릴리스 SHA 수동 입력 → 기능 홍보
+#   - 월·수·금 10:00 KST 스케줄 · service=true   → 서비스 소개 글
+# 러너 안에 데모 데이터가 든 스택을 띄워 후보 화면을 찍는다. 스택은 릴리스(기능 홍보) 때만 띄우고,
+# 서비스 소개는 마지막으로 찍어 둔 캡처(promotion-captures 아티팩트)를 받아 쓴다 — 화면은 다음 릴리스
+# 전까지 같다. 받을 캡처가 없을 때만 스택을 띄워 찍는다. 화면 고르기·캡션(claude)과 화면 다듬기
+# (codex)는 SSH 로 부르는 LLM 게이트웨이(apps/support-agent/gateway)의 CLI 가 한다. 초안(다듬은
+# 이미지·원본·설명표·출처)은 운영 검토 큐에 낸다. 발행은 사람이 관리자 화면에서 한다.
+#
+# 저장소가 공개라 이 실행의 로그·요약·아티팩트는 누구나 본다. 여기에는 숫자·고정 코드·링크만 남긴다.
+# 캡션·고른 이유·모델이 쓴 사유 같은 글과 판단은 운영 DB(초안·실행 원장 promotion_runs)에만 둔다(D23).
+on:
+  # main 운영 배포가 끝난 릴리스. 배포 전 코드를 홍보하지 않도록 CI 가 아니라 CD 를 기다린다.
+  workflow_run:
+    workflows: [CD]
+    types: [completed]
+  schedule:
+    # 월·수·금 10:00 KST = 01:00 UTC. 서비스 소개 글.
+    - cron: "0 1 * * 1,3,5"
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 기능 홍보할 릴리스 커밋 (40자 SHA). 서비스 홍보면 비운다
+        required: false
+        type: string
+      service:
+        description: 릴리스 대신 서비스 소개 글을 쓴다
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  # 지난 실행의 캡처 아티팩트를 받는다.
+  actions: read
+
+concurrency:
+  group: promotion-agent
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft promotion
+    # 배포가 실패했거나 main 이 아니면 홍보할 것이 없다.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # 운영 봇 계정 자격증명이 여기 있다. main 보호 규칙과 함께 이 환경으로 범위를 좁힌다.
+    environment: production
+    env:
+      # 입력은 ${{ }} 로 run 에 직접 넣지 않는다 — 셸 명령 치환 경로가 된다. 환경변수로만 읽는다.
+      SHA: ${{ github.event.workflow_run.head_sha || inputs.sha }}
+      SERVICE: ${{ github.event_name == 'schedule' || inputs.service }}
+    steps:
+      # 비싼 스택 기동 전에 입력부터 막는다. 서비스 홍보는 지금 main 화면을 찍는다.
+      - name: Validate input
+        run: |
+          if [ "$SERVICE" = "true" ]; then
+            echo "SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::기능 홍보는 40자 소문자 SHA 가 필요하다 (서비스 홍보면 service 를 켠다)"
+            exit 1
+          fi
+
+      # 스택을 띄운 뒤 게이트웨이·제출 단계에서 실패하지 않게, 필요한 비밀부터 확인한다(값은 출력하지 않는다).
+      - name: Check secrets
+        env:
+          GATEWAY_KEY: ${{ secrets.PROMOTION_GATEWAY_SSH_KEY }}
+          GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
+          GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
+          GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
+          BOT_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
+          BOT_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
+        run: |
+          missing=""
+          # 인증은 키(셸이 안 열림, 권장) 또는 비밀번호(서버가 키 로그인을 막아 둔 경우) 중 하나면 된다.
+          [ -n "$GATEWAY_KEY" ] || [ -n "$GATEWAY_PASSWORD" ] || missing="$missing PROMOTION_GATEWAY_SSH_KEY|PROMOTION_GATEWAY_PASSWORD"
+          [ -n "$GATEWAY_TARGET" ] || missing="$missing PROMOTION_GATEWAY_TARGET"
+          [ -n "$GATEWAY_KNOWN_HOSTS" ] || missing="$missing PROMOTION_GATEWAY_KNOWN_HOSTS"
+          [ -n "$BOT_EMAIL" ] || missing="$missing PROMOTION_AGENT_ADMIN_EMAIL"
+          [ -n "$BOT_PASSWORD" ] || missing="$missing PROMOTION_AGENT_ADMIN_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::production 환경 시크릿이 없다:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          # 지정 커밋의 diff 를 읽어야 하므로 이력이 필요하다.
+          fetch-depth: 0
+
+      # 서비스 소개는 마지막으로 성공한 실행이 남긴 캡처를 쓴다. 찾으면 아래 스택 단계를 모두 건너뛴다.
+      - name: Reuse last captures
+        if: env.SERVICE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dest="$RUNNER_TEMP/promotion/captures"
+          # 이름으로 가장 최근의 만료 안 된 캡처 아티팩트 하나를 찾는다(실행을 하나씩 뒤지지 않는다).
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=promotion-captures&per_page=10" \
+            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+          if [ -n "$id" ] && gh run download "$id" -n promotion-captures -D "$dest" && [ -f "$dest/manifest.json" ]; then
+            echo "실행 $id 의 캡처를 쓴다"
+            echo "REUSE=true" >> "$GITHUB_ENV"
+            echo "TARGET=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          else
+            rm -rf "$dest"
+            echo "받을 캡처가 없다 — 스택을 띄워 찍는다"
+          fi
+
+      # 에이전트 코드는 dispatch 한 ref(최신)를 쓰고, 찍는 화면은 대상 릴리스로 고정한다.
+      # 둘을 같은 체크아웃으로 쓰면 A 릴리스 diff 와 B 릴리스 화면이 섞인다.
+      - name: Prepare capture source at target SHA
+        if: env.REUSE != 'true'
+        run: |
+          git cat-file -e "$SHA^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/target" "$SHA"
+          echo "TARGET=$RUNNER_TEMP/target" >> "$GITHUB_ENV"
+
+      - name: Setup pnpm
+        if: env.REUSE != 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.30.3
+
+      - name: Setup Node
+        if: env.REUSE != 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup JDK 21
+        if: env.REUSE != 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        if: env.REUSE != 'true'
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install web
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Install agent
+        working-directory: apps/support-agent
+        run: |
+          python -m pip install uv==0.10.2
+          uv sync --locked --extra promotion
+
+      - name: Install browser
+        if: env.REUSE != 'true'
+        working-directory: apps/support-agent
+        run: uv run --no-sync playwright install --with-deps chromium
+
+      # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
+      - name: Start infra (Mongo rs0 · Redis · MinIO)
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}
+        run: |
+          docker compose up -d --wait mongo redis minio
+          docker compose run --rm --no-deps mongo-init
+          docker compose run --rm --no-deps minio-init
+
+      - name: Build API jar
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}/apps/api
+        run: ./gradlew bootJar --no-daemon -x test
+
+      - name: Start API
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}/apps/api
+        env:
+          SPRING_PROFILES_ACTIVE: e2e
+          GOLE_ENVIRONMENT: e2e
+          MONGODB_URI: mongodb://localhost:27017/gole_e2e?replicaSet=rs0
+          MONGODB_DATABASE: gole_e2e
+          REDIS_DATABASE: "15"
+          PORTONE_ENABLED: "false"
+          GOLE_SETTLEMENT_MODE: MANUAL
+          GOLE_SETTLEMENT_PAYOUT_CONTRACT_VERIFIED: "true"
+          GOLE_SETTLEMENT_PAYOUT_HOLDBACK: PT0S
+          STORAGE_S3_ENDPOINT: http://localhost:9000
+          STORAGE_S3_BUCKET: gole-e2e
+          STORAGE_PUBLIC_BASE_URL: http://localhost:8080
+          MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+        run: |
+          nohup java -jar build/libs/*.jar > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/actuator/health > /dev/null; then
+              echo "API up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API failed to start"
+          tail -100 "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Seed E2E accounts and sessions
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}
+        env:
+          MONGO_DB: gole_e2e
+          REDIS_DATABASE: "15"
+        run: bash scripts/seed-e2e-accounts.sh
+
+      # 홍보 화면이므로 dev 서버(개발 표시기 노출)가 아니라 프로덕션 빌드를 띄운다.
+      - name: Start web
+        if: env.REUSE != 'true'
+        working-directory: ${{ env.TARGET }}
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          NEXT_PUBLIC_PAYMENT_MODE: stub
+        run: |
+          pnpm --filter web build
+          nohup pnpm --filter web start > "$RUNNER_TEMP/web.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Web up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Web failed to start"
+          tail -100 "$RUNNER_TEMP/web.log"
+          exit 1
+
+      # 시드 관리자 계정은 gole_e2e 전용 테스트 계정이라 시크릿이 아니다(ci.yml 과 같다).
+      # 호스트 키를 고정하고, 키가 있으면 키 파일을, 없으면 비밀번호용 sshpass 를 준비한다.
+      # 키는 forced command 로 묶여 셸을 열지 못한다. 비밀번호는 셸 전체 권한이라 이 환경을 main 전용으로 둔다.
+      - name: Prepare gateway SSH
+        env:
+          GATEWAY_KEY: ${{ secrets.PROMOTION_GATEWAY_SSH_KEY }}
+          GATEWAY_KNOWN_HOSTS: ${{ secrets.PROMOTION_GATEWAY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          printf '%s\n' "$GATEWAY_KNOWN_HOSTS" > "$RUNNER_TEMP/gateway_known_hosts"
+          if [ -n "$GATEWAY_KEY" ]; then
+            printf '%s\n' "$GATEWAY_KEY" > "$RUNNER_TEMP/gateway_key"
+            echo "PROMOTION_GATEWAY_KEY_FILE=$RUNNER_TEMP/gateway_key" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y -qq sshpass
+          fi
+
+      - name: Run agent
+        working-directory: apps/support-agent
+        env:
+          PYTHONPATH: src
+          # 게이트웨이(SSH). TARGET 은 user@host, 포트는 PROMOTION_GATEWAY_PORT(기본 22).
+          PROMOTION_GATEWAY_TARGET: ${{ secrets.PROMOTION_GATEWAY_TARGET }}
+          PROMOTION_GATEWAY_PORT: ${{ vars.PROMOTION_GATEWAY_PORT }}
+          # 키가 있으면 Prepare 단계가 PROMOTION_GATEWAY_KEY_FILE 을 넣고, 그쪽이 비밀번호보다 우선한다.
+          PROMOTION_GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
+          PROMOTION_GATEWAY_KNOWN_HOSTS_FILE: ${{ runner.temp }}/gateway_known_hosts
+          PROMOTION_AGENT_CLAUDE_MODEL: ${{ vars.PROMOTION_AGENT_CLAUDE_MODEL }}
+          PROMOTION_AGENT_CODEX_MODEL: ${{ vars.PROMOTION_AGENT_CODEX_MODEL }}
+          # 찍는 곳: 러너 안 데모 스택. 시드 관리자는 gole_e2e 전용 테스트 계정이라 시크릿이 아니다.
+          PROMOTION_AGENT_CAPTURE_SITE: http://localhost:3000
+          PROMOTION_AGENT_CAPTURE_API_URL: http://localhost:8080
+          PROMOTION_AGENT_CAPTURE_ADMIN_EMAIL: e2e-admin@gole.test
+          PROMOTION_AGENT_CAPTURE_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
+          # 내는 곳: 운영 검토 큐.
+          PROMOTION_AGENT_API_URL: https://gole.co.kr
+          PROMOTION_AGENT_ADMIN_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}
+          PROMOTION_AGENT_ADMIN_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
+          PROMOTION_AGENT_DATA_SOURCE: DEMO
+          PROMOTION_AGENT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # 어떤 에이전트 코드로 만든 초안인지 usage.json 에 남긴다(버전별 평가).
+          PROMOTION_AGENT_CODE_SHA: ${{ github.sha }}
+        run: |
+          if [ "$SERVICE" = "true" ]; then
+            set -- --service
+          else
+            set -- --sha "$SHA"
+          fi
+          if [ "${REUSE:-}" = "true" ]; then
+            set -- "$@" --reuse-captures
+          fi
+          uv run --no-sync python -m gole_promotion_agent \
+            --repo "$TARGET" \
+            --run-dir "$RUNNER_TEMP/promotion" \
+            "$@"
+
+      - name: Summary
+        if: always()
+        run: |
+          run="$RUNNER_TEMP/promotion/run.json"
+          {
+            if [ "$SERVICE" = "true" ]; then
+              echo "## 서비스 홍보 실행"
+            else
+              printf "## 기능 홍보 실행 — \`%s\`\n" "$SHA"
+            fi
+            if [ ! -s "$run" ]; then
+              echo "실행 기록 없음 — 에이전트가 시작 전에 멈췄다. 로그를 본다."
+              exit 0
+            fi
+            jq -r '"결과: **\(.outcome)** (`\(.reasonCode)`)"
+              + (if .promotionPostId then " · 초안이 검토 큐에 들어갔다 → https://gole.co.kr/admin/promotion" else "" end)
+              + "\n\n실행 원장: " + (if .recorded then "기록함" else "**기록 실패** — 사용량은 이 요약에만 남고 사유 원문은 남지 않았다" end)' "$run"
+            echo
+            echo "| 엔진 | 모델 | 결과 | 입력(캐시) | 출력 | 시간 |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.calls[] | "| \(.engine // "?") | \(.model // "?") | \(if .ok then "성공" else "실패" end)"
+              + " | \(.inputTokens)(\(.cachedInputTokens)) | \(.outputTokens)"
+              + " | \(if .durationMs then "\(.durationMs / 1000 | floor)초" else "-" end) |"' "$run"
+            echo
+            jq -r '.totals | to_entries[] | "- \(.key) 합계: \(.value.calls)회, 입력 \(.value.inputTokens)"
+              + " (캐시 \(.value.cachedInputTokens)), 출력 \(.value.outputTokens)"
+              + (if .value.costUsd then ", API 환산 $\(.value.costUsd * 1000 | round / 1000)" else "" end)' "$run"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 다음 서비스 소개가 스택 없이 쓸 캡처. 이 실행이 새로 찍었을 때만 올린다.
+      - name: Upload captures for reuse
+        if: env.REUSE != 'true' && hashFiles(format('{0}/promotion/captures/manifest.json', runner.temp)) != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: promotion-captures
+          path: ${{ runner.temp }}/promotion/captures
+          retention-days: 90
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -100 "$RUNNER_TEMP/api.log" || true
+          tail -100 "$RUNNER_TEMP/web.log" || true

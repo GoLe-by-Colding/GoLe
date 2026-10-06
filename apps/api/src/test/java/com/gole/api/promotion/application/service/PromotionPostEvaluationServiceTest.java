@@ -15,16 +15,22 @@ import com.gole.api.promotion.application.port.out.PromotionPostEvaluationReposi
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
+import com.gole.api.promotion.application.port.out.PromotionRunRepositoryPort;
 import com.gole.api.promotion.domain.exception.PromotionPostEvaluationNotFoundException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.EvaluationReasonTag;
 import com.gole.api.promotion.domain.model.FirstReviewVerdict;
 import com.gole.api.promotion.domain.model.HoldReasonKind;
+import com.gole.api.promotion.domain.model.ModelCall;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostEvaluation;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionRun;
+import com.gole.api.promotion.domain.model.RunOutcome;
+import com.gole.api.promotion.domain.model.RunReasonCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -40,9 +46,10 @@ class PromotionPostEvaluationServiceTest {
     private final PromotionPostEvaluationRepositoryPort evaluations = mock(PromotionPostEvaluationRepositoryPort.class);
     private final PromotionPostIdGeneratorPort idGenerator = mock(PromotionPostIdGeneratorPort.class);
     private final PromotionAuditMetricsPort auditMetrics = mock(PromotionAuditMetricsPort.class);
+    private final PromotionRunRepositoryPort runs = mock(PromotionRunRepositoryPort.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-20T00:00:00Z"), ZoneOffset.UTC);
     private final PromotionPostEvaluationService service =
-            new PromotionPostEvaluationService(promotionPosts, evaluations, idGenerator, auditMetrics, clock);
+            new PromotionPostEvaluationService(promotionPosts, evaluations, idGenerator, auditMetrics, runs, clock);
 
     private static PromotionPost draft() {
         return PromotionPost.draft(
@@ -237,5 +244,46 @@ class PromotionPostEvaluationServiceTest {
                 30,
                 0,
                 null);
+    }
+
+    @Test
+    void runMetricsCountSkippedAndFailedRunsAndFailedCallsToo() {
+        // 초안이 없는 실행과 실패한 호출도 비용·분모에 들어가야 한다(promotion-review D23).
+        ModelCall claude = new ModelCall("claude", "claude-opus-5-5", true, 120, 95, 4, 0.2, 2500L);
+        ModelCall failedCodex = new ModelCall("codex", "gpt-6.1-sol", false, 60, 50, 7, null, 70000L);
+        when(runs.findAll())
+                .thenReturn(List.of(
+                        run("gh-1-1", RunOutcome.SUBMITTED, RunReasonCode.SUBMITTED, "promo-1", List.of(claude)),
+                        run("gh-2-1", RunOutcome.SKIPPED, RunReasonCode.MODEL_SKIPPED, null, List.of(claude)),
+                        run("gh-3-1", RunOutcome.FAILED, RunReasonCode.GATEWAY_FAILED, null, List.of(failedCodex))));
+
+        PromotionMetrics metrics = service.getMetrics();
+
+        assertThat(metrics.runs().runCount()).isEqualTo(3);
+        assertThat(metrics.runs().countByOutcome()).containsEntry(RunOutcome.SKIPPED, 1L);
+        assertThat(metrics.runs().countByReason()).containsEntry(RunReasonCode.GATEWAY_FAILED, 1L);
+        var codex = metrics.runs().usageByEngine().get("codex");
+        assertThat(codex.calls()).isEqualTo(1);
+        assertThat(codex.failedCalls()).isEqualTo(1);
+        assertThat(codex.inputTokens()).isEqualTo(60);
+        assertThat(codex.costUsd()).isNull();
+        assertThat(metrics.runs().usageByEngine().get("claude").costUsd()).isEqualTo(0.4);
+    }
+
+    private static PromotionRun run(
+            String key, RunOutcome outcome, RunReasonCode reason, String postId, List<ModelCall> calls) {
+        return new PromotionRun(
+                key,
+                key,
+                PromotionCategory.SERVICE,
+                null,
+                outcome,
+                reason,
+                null,
+                postId,
+                null,
+                null,
+                calls,
+                Instant.EPOCH);
     }
 }

@@ -2,6 +2,8 @@ package com.gole.api.promotion.application.port.in;
 
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.RunOutcome;
+import com.gole.api.promotion.domain.model.RunReasonCode;
 import java.util.Map;
 
 /**
@@ -13,7 +15,30 @@ public interface GetPromotionMetricsUseCase {
 
     PromotionMetrics getMetrics();
 
-    record PromotionMetrics(OperationalMetrics operational, QualityMetrics quality) {}
+    record PromotionMetrics(OperationalMetrics operational, QualityMetrics quality, RunMetrics runs) {}
+
+    /**
+     * 실행 원장(promotion_runs) 기준 지표. 초안이 만들어지지 않은 실행(건너뜀·실패)까지 분모에 든다.
+     *
+     * @param runCount 기록된 실행 수
+     * @param countByOutcome 결과별 실행 수
+     * @param countByReason 사유별 실행 수
+     * @param usageByEngine 엔진(claude·codex)별 호출 수·토큰·API 환산 금액 합계. 실패한 호출 포함
+     */
+    record RunMetrics(
+            long runCount,
+            Map<RunOutcome, Long> countByOutcome,
+            Map<RunReasonCode, Long> countByReason,
+            Map<String, EngineUsage> usageByEngine) {}
+
+    /** @param costUsd 환산 금액을 알려 준 호출이 하나도 없으면 {@code null}(N/A) */
+    record EngineUsage(
+            long calls,
+            long failedCalls,
+            long inputTokens,
+            long cachedInputTokens,
+            long outputTokens,
+            Double costUsd) {}
 
     /**
      * @param countByStatus 상태별 게시물 건수
