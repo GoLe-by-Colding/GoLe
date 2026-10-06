@@ -180,6 +180,9 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
                 "notifications",
                 remove("notifications", Criteria.where("recipientId").is(expectedAccountId)));
         counts.put(
+                "notificationPreferences",
+                remove("notification_preferences", Criteria.where("_id").is(expectedAccountId)));
+        counts.put(
                 "wishlistEntries",
                 remove("wishlist_entries", Criteria.where("userId").is(expectedAccountId)));
         counts.put(
