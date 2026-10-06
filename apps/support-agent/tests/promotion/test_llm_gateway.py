@@ -20,6 +20,13 @@ PNG = PIXEL
 PNG_B64 = base64.b64encode(PNG).decode()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_server_state(tmp_path, monkeypatch):
+    """테스트가 실제 서버 로그(~/.cache)를 더럽히거나 실제 codex 이미지 폴더를 지우지 않게 한다."""
+    monkeypatch.setattr(gateway, "LOG_PATH", tmp_path / "gw.log")
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+
+
 def _recording(stdout="", returncode=0, on_call=None):
     calls = []
 
