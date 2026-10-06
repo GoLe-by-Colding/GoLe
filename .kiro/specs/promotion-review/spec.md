@@ -562,6 +562,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - claude는 `--tools Read`와 입력 폴더 한정 `--allowedTools`, `--permission-mode dontAsk`로
     돈다. codex는 작업 폴더 한정 `workspace-write` 샌드박스다.
   - 실패 응답에는 짧은 문장만 싣고 상세는 서버의 `~/.cache/gole-llm-gateway.log`(0600)에 남긴다.
+  - 응답에는 사용량(`usage`: 토큰 수·claude API 환산 금액·모델 이름·소요 시간)을 싣는다. 숫자와 모델
+    이름뿐이라 공개 로그에 나가도 된다. 실패한 호출에도 싣는다 — 실패도 토큰을 쓴다.
     공개 저장소라 Actions 로그를 누구나 읽기 때문이다. codex 이미지 요청은 글 응답을 돌려주지
     않는다(홈 폴더를 읽을 수 있는 CLI가 토큰을 글로 내보내는 경로를 막는다).
   - `model`은 영숫자로 시작하는 이름만, `system`은 인자가 아니라 파일로 넘긴다(옵션 주입 차단).
