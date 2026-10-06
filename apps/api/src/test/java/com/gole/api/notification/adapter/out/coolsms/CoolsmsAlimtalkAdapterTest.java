@@ -64,12 +64,14 @@ class CoolsmsAlimtalkAdapterTest {
         });
 
         assertThatThrownBy(() -> adapter.send(new SendAlimtalkCommand("0111234567", "TEMPLATE-1", Map.of())))
-                .isInstanceOfSatisfying(AlimtalkSendException.class, exception -> assertThat(exception.getFailureType())
-                        .isEqualTo(FailureType.INVALID_REQUEST));
+                .isInstanceOfSatisfying(
+                        AlimtalkSendException.class,
+                        exception -> assertThat(exception.getFailureType()).isEqualTo(FailureType.INVALID_REQUEST));
         assertThatThrownBy(() ->
                         adapter.send(new SendAlimtalkCommand("01012345678", "TEMPLATE-1", Map.of("#{name}", " "))))
-                .isInstanceOfSatisfying(AlimtalkSendException.class, exception -> assertThat(exception.getFailureType())
-                        .isEqualTo(FailureType.INVALID_REQUEST));
+                .isInstanceOfSatisfying(
+                        AlimtalkSendException.class,
+                        exception -> assertThat(exception.getFailureType()).isEqualTo(FailureType.INVALID_REQUEST));
         assertThat(sentMessage.get()).isNull();
     }
 
@@ -96,8 +98,9 @@ class CoolsmsAlimtalkAdapterTest {
         CoolsmsAlimtalkAdapter adapter = new CoolsmsAlimtalkAdapter("PF-1", (message, config) -> response);
 
         assertThatThrownBy(() -> adapter.send(new SendAlimtalkCommand("01012345678", "TEMPLATE-1", Map.of())))
-                .isInstanceOfSatisfying(AlimtalkSendException.class, exception -> assertThat(exception.getFailureType())
-                        .isEqualTo(FailureType.ACCEPTANCE_UNKNOWN));
+                .isInstanceOfSatisfying(
+                        AlimtalkSendException.class,
+                        exception -> assertThat(exception.getFailureType()).isEqualTo(FailureType.ACCEPTANCE_UNKNOWN));
     }
 
     @Test

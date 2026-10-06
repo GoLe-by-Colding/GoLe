@@ -10,5 +10,9 @@ public enum NotificationType {
     POST_LIKED,
     FOLLOW,
     NEW_LISTING,
+    /** 관심·보유 세트의 단종 상태 변경(단종 임박·단종). */
+    SET_RETIREMENT,
+    /** 관심 세트에 새 매물이 등록됨. */
+    WATCHED_SET_LISTING,
     GENERAL
 }

@@ -9,9 +9,11 @@ import com.gole.api.catalog.application.port.in.SearchLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
+import com.gole.api.catalog.application.port.out.SetRetirementNotifierPort;
 import com.gole.api.catalog.domain.exception.LegoSetNotFoundException;
 import com.gole.api.catalog.domain.model.CatalogImagePath;
 import com.gole.api.catalog.domain.model.LegoSet;
+import com.gole.api.catalog.domain.model.RetirementStatus;
 import com.gole.api.common.exception.BadRequestException;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -35,10 +37,15 @@ public class CatalogService
 
     private final LoadLegoSetPort loadLegoSetPort;
     private final CatalogAdminPort catalogAdminPort;
+    private final SetRetirementNotifierPort retirementNotifier;
 
-    public CatalogService(LoadLegoSetPort loadLegoSetPort, CatalogAdminPort catalogAdminPort) {
+    public CatalogService(
+            LoadLegoSetPort loadLegoSetPort,
+            CatalogAdminPort catalogAdminPort,
+            SetRetirementNotifierPort retirementNotifier) {
         this.loadLegoSetPort = loadLegoSetPort;
         this.catalogAdminPort = catalogAdminPort;
+        this.retirementNotifier = retirementNotifier;
     }
 
     @Override
@@ -83,10 +90,15 @@ public class CatalogService
         return loadLegoSetPort.loadFeatured(FEATURED_LIMIT);
     }
 
-    /** 세트 수정(관리자). 존재하지 않으면 404. (admin-console 요구사항 7.3) */
+    /**
+     * 세트 수정(관리자). 존재하지 않으면 404. (admin-console 요구사항 7.3)
+     *
+     * <p>단종 상태가 실제로 바뀐 경우에만 관심 사용자에게 알린다 — 같은 상태로 재저장하면 조용하다.
+     * (set-watch-alerts W2)
+     */
     @Override
     public void update(UpdateLegoSetCommand command) {
-        requireExisting(command.setNumber());
+        RetirementStatus previous = requireExisting(command.setNumber()).getRetirementStatus();
         LegoSet updated = new LegoSet(
                 command.setNumber(),
                 command.name(),
@@ -96,6 +108,10 @@ public class CatalogService
                 command.retirementStatus(),
                 CatalogImagePath.requireSafeInput(command.imageUrl()));
         catalogAdminPort.save(updated, command.featured());
+        if (previous != updated.getRetirementStatus() && updated.getRetirementStatus() != RetirementStatus.ACTIVE) {
+            retirementNotifier.retirementChanged(
+                    updated.getSetNumber(), updated.getName(), updated.getRetirementStatus());
+        }
     }
 
     /** 홈 추천 토글(관리자). 다른 필드는 그대로 두고 플래그만 바꾼다. (요구사항 7.4) */

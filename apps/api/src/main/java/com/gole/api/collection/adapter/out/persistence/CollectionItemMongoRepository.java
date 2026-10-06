@@ -10,4 +10,7 @@ public interface CollectionItemMongoRepository extends MongoRepository<Collectio
 
     /** 특정 사용자의 컬렉션 항목 전체. */
     List<CollectionItemDocument> findByUserId(String userId);
+
+    /** 특정 세트·보유 상태의 항목 전체(알림 수신자 해석). */
+    List<CollectionItemDocument> findBySetNumberAndStatus(String setNumber, String status);
 }

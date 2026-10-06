@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlatList, StyleSheet, View } from "react-native";
 import { formatKrw } from "@gole/core";
-import { fetchLegoSetByNumber, isRetired, type LegoSet } from "@gole/core/lego-set";
+import { fetchLegoSetByNumber, isRetired, isRetiringSoon, type LegoSet } from "@gole/core/lego-set";
 import { fetchPriceStatistics, type PriceStatistics } from "@gole/core/pricing";
 import { fetchListingsBySet, type Listing } from "@gole/core/listing";
 import { ListingCard } from "@/entities/listing";
@@ -77,6 +77,7 @@ function SetSummary({ set }: { readonly set: LegoSet }) {
       <Text variant="caption" muted>
         {set.pieceCount.toLocaleString("ko-KR")}피스 · {set.releaseYear}년
         {isRetired(set) ? " · 단종" : ""}
+        {isRetiringSoon(set) ? " · 단종 임박" : ""}
       </Text>
     </View>
   );

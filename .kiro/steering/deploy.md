@@ -22,7 +22,7 @@ Mac의 전역 Nginx도 GoLe 배포를 위해 중지하거나 재시작하지 않
 ## 개발과 배포 흐름
 
 운영 수정도 작업 브랜치에서 검증한 뒤 `dev`에 머지 커밋으로 병합한다. `dev → main` 릴리스
-PR만 squash로 병합한다. 작업 브랜치 push와 PR은 운영 배포를 만들지 않는다. `main` push의 CI가 성공하면 저장소 전용
+PR도 머지 커밋이다(2026-10-03 squash 폐기). 작업 브랜치 push와 PR은 운영 배포를 만들지 않는다. `main` push의 CI가 성공하면 저장소 전용
 self-hosted runner가 GCP VM에서 CD를 실행한다.
 
 ```bash

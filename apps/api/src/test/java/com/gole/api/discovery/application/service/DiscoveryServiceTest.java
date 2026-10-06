@@ -142,6 +142,14 @@ class DiscoveryServiceTest {
         public List<WishlistEntry> findByUser(String userId) {
             return store.stream().filter(e -> e.userId().equals(userId)).toList();
         }
+
+        @Override
+        public List<String> findUserIdsByTarget(WishlistTargetType type, String targetId) {
+            return store.stream()
+                    .filter(e -> e.targetType() == type && e.targetId().equals(targetId))
+                    .map(WishlistEntry::userId)
+                    .toList();
+        }
     }
 
     private static final class NoopListingQuery implements ListingQueryPort {

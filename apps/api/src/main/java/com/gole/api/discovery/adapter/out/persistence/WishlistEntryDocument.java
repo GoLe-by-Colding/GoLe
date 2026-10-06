@@ -13,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  */
 @Document(collection = "wishlist_entries")
 @CompoundIndex(name = "uq_user_target", def = "{'userId': 1, 'targetType': 1, 'targetId': 1}", unique = true)
+@CompoundIndex(name = "ix_target", def = "{'targetType': 1, 'targetId': 1}")
 public class WishlistEntryDocument {
 
     @Id

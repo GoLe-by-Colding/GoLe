@@ -32,7 +32,7 @@ public final class FcmPushSenderAdapter implements PushSenderPort {
     private final GoogleCredentials credentials;
     private final URI endpoint;
     private final HttpClient httpClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public FcmPushSenderAdapter(FcmProperties properties) {
         this.credentials = loadCredentials(properties);
@@ -95,8 +95,9 @@ public final class FcmPushSenderAdapter implements PushSenderPort {
         return PushOutcome.FAILED;
     }
 
-    private String body(PushMessage message) {
-        ObjectNode root = objectMapper.createObjectNode();
+    /** FCM HTTP v1 요청 본문. 테스트에서 모양을 고정하려고 패키지 범위로 둔다. */
+    static String body(PushMessage message) {
+        ObjectNode root = OBJECT_MAPPER.createObjectNode();
         ObjectNode fcmMessage = root.putObject("message");
         fcmMessage.put("token", message.token());
 
@@ -109,6 +110,10 @@ public final class FcmPushSenderAdapter implements PushSenderPort {
         if (message.link() != null && !message.link().isBlank()) {
             fcmMessage.putObject("data").put("link", message.link());
         }
+
+        // 기본 알림음. 지정하지 않으면 iOS 는 배너만 소리 없이 뜨고 Android 는 채널 기본값을 따른다.
+        fcmMessage.putObject("apns").putObject("payload").putObject("aps").put("sound", "default");
+        fcmMessage.putObject("android").putObject("notification").put("default_sound", true);
         return root.toString();
     }
 }
