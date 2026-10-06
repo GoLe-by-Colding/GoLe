@@ -240,6 +240,35 @@ class DraftLog:
         return post_id
 
 
+class UsageMeter:
+    """게이트웨이 호출마다 사용량을 모은다. 실패한 호출도 토큰을 쓰므로 예외에 실린 몫까지 센다."""
+
+    def __init__(self, gateway: Gateway):
+        self._gateway = gateway
+        self.calls: list[dict[str, Any]] = []
+
+    def call(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        try:
+            response = self._gateway.call(request)
+        except GatewayError as error:
+            self.calls.append({"ok": False, "usage": error.usage})
+            raise
+        self.calls.append({"ok": True, "usage": response.get("usage")})
+        return response
+
+    def report(self, outcome: str, agent_sha: str | None) -> dict[str, Any]:
+        totals: dict[str, dict[str, Any]] = {}
+        for call in self.calls:
+            usage = call["usage"] or {}
+            total = totals.setdefault(usage.get("engine") or "unknown", {"calls": 0, "cost_usd": None})
+            total["calls"] += 1
+            for key in ("input_tokens", "cached_input_tokens", "output_tokens"):
+                total[key] = total.get(key, 0) + (usage.get(key) or 0)
+            if usage.get("cost_usd") is not None:
+                total["cost_usd"] = (total["cost_usd"] or 0) + usage["cost_usd"]
+        return {"agentSha": agent_sha, "outcome": outcome, "calls": self.calls, "totals": totals}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="gole_promotion_agent")
     parser.add_argument("--repo", required=True, help="찍을 대상 소스(릴리스 worktree)")
@@ -281,19 +310,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             _required("PROMOTION_AGENT_CAPTURE_SITE").rstrip("/"), routes, capture_login.browser_session
         )
     run_dir = Path(arguments.run_dir)
-    result = Drafter(
-        repo=Path(arguments.repo),
-        run_dir=run_dir,
-        publisher=DraftLog(publisher, run_dir),
-        gateway=gateway_client.from_env(),
-        camera=camera,
-        routes=routes,
-        demo=demo,
-        service=arguments.service,
-        sha=arguments.sha,
-        claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
-        codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
-    ).run()
+    meter = UsageMeter(gateway_client.from_env())
+    outcome = "failed"  # 예외로 빠져나가도 그때까지 쓴 사용량은 남긴다
+    try:
+        result = Drafter(
+            repo=Path(arguments.repo),
+            run_dir=run_dir,
+            publisher=DraftLog(publisher, run_dir),
+            gateway=meter,
+            camera=camera,
+            routes=routes,
+            demo=demo,
+            service=arguments.service,
+            sha=arguments.sha,
+            claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
+            codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
+        ).run()
+        outcome = result.outcome
+    finally:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        report = meter.report(outcome, os.environ.get("PROMOTION_AGENT_CODE_SHA") or None)
+        (run_dir / "usage.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"[promotion-agent] {result.outcome}: {result.reason}")
     return 1 if result.outcome == "failed" else 0

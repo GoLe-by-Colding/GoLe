@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from gole_promotion_agent import drafting
-from gole_promotion_agent.drafter import Drafter
+from gole_promotion_agent.drafter import Drafter, UsageMeter
 from gole_promotion_agent.fakes import PIXEL, FakeCamera
 from gole_promotion_agent.gateway_client import GatewayError
 
@@ -195,3 +195,28 @@ def test_reusedCaptures_withoutManifest_fails(tmp_path):
     result = _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher(), camera=None).run()
 
     assert result.outcome == "failed"
+
+
+def test_usageMeter_countsFailedCallsToo():
+    # 다듬기에 실패한 codex 호출도 토큰을 썼다 — 합계에서 빠지면 비용을 낮게 본다.
+    claude = {"engine": "claude", "input_tokens": 100, "cached_input_tokens": 80, "output_tokens": 5, "cost_usd": 0.2}
+    codex = {"engine": "codex", "input_tokens": 60, "cached_input_tokens": 50, "output_tokens": 7, "cost_usd": None}
+
+    class Scripted:
+        def call(self, request):
+            if request["engine"] == "claude":
+                return {"ok": True, "usage": claude}
+            raise GatewayError("codex 가 이미지를 만들지 않았다", codex)
+
+    meter = UsageMeter(Scripted())
+    meter.call({"engine": "claude"})
+    with pytest.raises(GatewayError):
+        meter.call({"engine": "codex"})
+
+    report = meter.report("submitted", "abc123")
+    assert [c["ok"] for c in report["calls"]] == [True, False]
+    assert report["totals"]["codex"] == {
+        "calls": 1, "cost_usd": None, "input_tokens": 60, "cached_input_tokens": 50, "output_tokens": 7,
+    }
+    assert report["totals"]["claude"]["cost_usd"] == 0.2
+    assert report["agentSha"] == "abc123" and report["outcome"] == "submitted"

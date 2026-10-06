@@ -277,6 +277,8 @@ jobs:
           PROMOTION_AGENT_ADMIN_PASSWORD: ${{ secrets.PROMOTION_AGENT_ADMIN_PASSWORD }}
           PROMOTION_AGENT_DATA_SOURCE: DEMO
           PROMOTION_AGENT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # 어떤 에이전트 코드로 만든 초안인지 usage.json 에 남긴다(버전별 평가).
+          PROMOTION_AGENT_CODE_SHA: ${{ github.sha }}
         run: |
           if [ "$SERVICE" = "true" ]; then
             set -- --service
@@ -305,6 +307,22 @@ jobs:
                 "$RUNNER_TEMP/promotion/drafts.jsonl"
             else
               echo "초안 없음 — 건너뛰었거나 실패했다. 로그와 아티팩트의 choice.json 을 본다."
+            fi
+            usage="$RUNNER_TEMP/promotion/usage.json"
+            if [ -s "$usage" ]; then
+              echo
+              echo "### 모델 사용량"
+              echo
+              echo "| 엔진 | 모델 | 결과 | 입력(캐시) | 출력 | 시간 |"
+              echo "| --- | --- | --- | --- | --- | --- |"
+              jq -r '.calls[] | (.usage // {}) as $u
+                | "| \($u.engine // "?") | \($u.model // "?") | \(if .ok then "성공" else "실패" end)"
+                  + " | \($u.input_tokens // 0)(\($u.cached_input_tokens // 0)) | \($u.output_tokens // 0)"
+                  + " | \(if $u.duration_ms then "\($u.duration_ms / 1000 | floor)초" else "-" end) |"' "$usage"
+              echo
+              jq -r '.totals | to_entries[] | "- \(.key) 합계: \(.value.calls)회, 입력 \(.value.input_tokens // 0)"
+                + " (캐시 \(.value.cached_input_tokens // 0)), 출력 \(.value.output_tokens // 0)"
+                + (if .value.cost_usd then ", API 환산 $\(.value.cost_usd * 1000 | round / 1000)" else "" end)' "$usage"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
