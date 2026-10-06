@@ -144,8 +144,8 @@ D6은 "배포 이벤트에서 자동으로 초안을 만드는 것은 범위 밖
 ### D10. 실행 위치: 운영 VM의 일회성 컨테이너 — 이전 systemd 직접 실행을 정정한다
 
 > **2026-10-05 — D20이 대체한다.** 실행 위치는 GitHub 러너, 모델 호출은 SSH LLM 게이트웨이다.
-> 아래 VM 컨테이너·타이머 파일은 철거 승인 전까지 저장소와 운영 VM에 남아 있지만 새 경로가
-> 쓰지 않는다.
+> 아래 VM 컨테이너·타이머 파일은 저장소에서 지웠다. 이미 깔린 운영 VM의 유닛은 운영 승인을 받아
+> 손으로 걷어낸다(`.kiro/steering/deploy.md`).
 
 **정정 이유 1 — 자격증명이 과다 공급됐다.** 이전 유닛은 `EnvironmentFile=/etc/gole/gole.env`로
 운영 전체 비밀(DB·SMTP·PortOne·OAuth)을 주입받았다. 에이전트가 실제로 필요한 값은 셋뿐인데,
@@ -710,9 +710,10 @@ GitHub 러너 (ubuntu-latest, environment: production)
     `.../{id}/submit`, `GET .../exists`, `GET .../?status=`.
   - `prompts/caption-tone.md`의 톤 가이드는 `policy.py`가 시스템 프롬프트로 승계한다(D13).
   - 운영 VM의 옛 경로(`Dockerfile.promotion`, compose `promotion-agent` 서비스,
-    `infra/gcp/systemd/gole-promotion-agent.*`, `/etc/gole/promotion-agent.env`)는 새 경로가 쓰지
-    않는다. 엔트리포인트 인자가 바뀌어 이 릴리스가 운영에 나간 뒤 타이머가 돌면 실패한다 — 타이머
-    중지·철거는 운영 승인을 받아 따로 한다.
+    `infra/gcp/systemd/gole-promotion-agent.*`, `hostctl` 오버레이)는 저장소에서 지웠고,
+    `bootstrap-contract.test.sh`가 다시 생기지 않는지 본다. 이미 깔린 VM의 타이머는 남아 있으므로
+    운영 승인을 받아 `deploy.md`의 절차로 걷어낸다 — 이 릴리스가 나간 뒤에는 엔트리포인트 인자가
+    바뀌어 그 타이머가 실패한다.
 
 ## 수용 기준 (테스트로 고정할 것)
 
