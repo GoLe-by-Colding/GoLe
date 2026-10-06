@@ -10,6 +10,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
@@ -50,9 +52,10 @@ class PromotionPostServiceTest {
     private final PromotionPostIdGeneratorPort idGenerator = mock(PromotionPostIdGeneratorPort.class);
     private final SocialPublishPort publishPort = mock(SocialPublishPort.class);
     private final ManageMediaAssetsUseCase mediaAssets = mock(ManageMediaAssetsUseCase.class);
+    private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
     private final PromotionPostService service =
-            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, clock);
+            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
 
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -127,7 +130,7 @@ class PromotionPostServiceTest {
     }
 
     private PromotionPostService serviceOver(InMemoryRepo repo) {
-        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, clock);
+        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
     }
 
     /** 같은 릴리스로 초안 하나를 만들고 검토 요청까지 올린다 — 그 릴리스를 점유한 상태. */
@@ -342,6 +345,25 @@ class PromotionPostServiceTest {
         assertThatThrownBy(() -> service.publish("promo-1")).isInstanceOf(InvalidPromotionPostStateException.class);
 
         verify(publishPort, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("검토 요청이 들어가면 캡션 없이 운영 채널에 한 번만 알리고, 재시도 제출은 다시 알리지 않는다")
+    void submit_notifiesOperationsOnceWithoutCaption() {
+        PromotionPostService target = serviceOver(new InMemoryRepo());
+        when(idGenerator.newId()).thenReturn("promo-1");
+        String id = createAndSubmit(target, SHA);
+
+        target.submit(id);
+
+        ArgumentCaptor<OperationalEvent> event = ArgumentCaptor.forClass(OperationalEvent.class);
+        verify(operationalEvents, times(1)).publish(event.capture());
+        assertThat(event.getValue().category()).isEqualTo(OperationalEvent.Category.ADMIN);
+        assertThat(event.getValue().fields())
+                .containsEntry("초안 ID", "promo-1")
+                .containsEntry("릴리스", SHA.substring(0, 7))
+                .containsEntry("관리자 경로", "/admin/promotion")
+                .doesNotContainValue("캡션");
     }
 
     @Test
