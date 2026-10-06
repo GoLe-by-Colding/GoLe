@@ -325,3 +325,8 @@ class BackendPublisher:
             f"/api/admin/promotion-posts/{post_id}/submit", headers=self._headers()
         )
         response.raise_for_status()
+
+    def record_run(self, payload: Mapping[str, Any]) -> int:
+        """실행 원장 한 줄(D23). HTTP 상태만 돌려준다 — 응답 본문은 공개 로그로 보내지 않는다."""
+        response = self._http().post("/api/admin/promotion-runs", json=dict(payload), headers=self._headers())
+        return response.status_code

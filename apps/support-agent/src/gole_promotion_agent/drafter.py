@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,8 +27,11 @@ from gole_promotion_agent.gateway_client import Gateway, GatewayError, decode_pn
 
 @dataclass(frozen=True)
 class RunResult:
+    """실행 결과. 공개 Actions 로그에는 outcome·code 만 나가고 detail 은 관리자 전용 원장에만 간다(D23)."""
+
     outcome: str  # submitted · skipped · failed
-    reason: str
+    code: str  # 원장의 RunReasonCode 와 같은 이름
+    detail: str | None = None  # 모델이 쓴 사유·내부 오류 요약. 공개 로그에 찍지 않는다
     post_id: str | None = None
 
 
@@ -76,7 +80,7 @@ class Drafter:
 
     def run(self) -> RunResult:
         if self._publisher.pending_count() >= policy.MAX_PENDING_REVIEW:
-            return RunResult("skipped", "검토 대기 초안이 가득 참")
+            return RunResult("skipped", "QUEUE_FULL")
 
         subject, diff = None, None
         if not self._service:
@@ -84,21 +88,24 @@ class Drafter:
 
             scanner = ReleaseScanner(self._repo, self._sha)
             if not scanner.touches_web():
-                return RunResult("skipped", "웹 화면 변경이 없는 릴리스")
+                return RunResult("skipped", "NO_WEB_CHANGE")
             if self._publisher.exists(self._sha):
-                return RunResult("skipped", "이미 초안이 있는 릴리스")
+                return RunResult("skipped", "ALREADY_DRAFTED")
             subject, diff = scanner.subject(), scanner.diff()
 
         shots = self._capture_all()
         if not shots:
-            return RunResult("failed", "찍은 화면이 없다")
+            return RunResult("failed", "NO_CAPTURES")
 
         try:
             draft = self._choose(shots, subject, diff)
-        except (GatewayError, ValidationError, ValueError) as error:
-            return RunResult("failed", f"화면 고르기 실패: {error}")
+        except GatewayError as error:
+            return RunResult("failed", "GATEWAY_FAILED", str(error))
+        except (ValidationError, ValueError) as error:
+            # pydantic 오류 문자열에는 모델 출력 일부(input_value)가 들어 있다 — 원장에만 남긴다.
+            return RunResult("failed", "CHOICE_INVALID", str(error))
         if draft.decision == "skip":
-            return RunResult("skipped", draft.skip_reason or "")
+            return RunResult("skipped", "MODEL_SKIPPED", draft.skip_reason)
 
         picked = [shots[pick.image - 1] for pick in draft.picks]
         polished = [self._polish(shot, index) for index, shot in enumerate(picked, start=1)]
@@ -125,7 +132,7 @@ class Drafter:
             },
         )
         self._publisher.finalize(post_id)
-        return RunResult("submitted", "검토 요청함", post_id=post_id)
+        return RunResult("submitted", "SUBMITTED", post_id=post_id)
 
     def _capture_all(self) -> list[Shot]:
         out = self._run_dir / "captures"
@@ -215,33 +222,11 @@ def _required(name: str) -> str:
     return value
 
 
-class DraftLog:
-    """제출한 초안을 실행 디렉터리에 남긴다 — Actions 요약·아티팩트에서 캡션을 보기 위해서다."""
-
-    def __init__(self, publisher: Any, run_dir: Path):
-        self._publisher = publisher
-        self._path = Path(run_dir) / "drafts.jsonl"
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._publisher, name)
-
-    def create(self, sha: str | None, caption: str, media_keys: Sequence[str], details: Mapping[str, Any]) -> str:
-        post_id = self._publisher.create(sha, caption, media_keys, details)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        with self._path.open("a", encoding="utf-8") as handle:
-            record = {
-                "id": post_id,
-                "sha": sha,
-                "caption": caption,
-                "mediaKeys": list(media_keys),
-                "rationale": details.get("rationale"),
-            }
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-        return post_id
-
-
 class UsageMeter:
-    """게이트웨이 호출마다 사용량을 모은다. 실패한 호출도 토큰을 쓰므로 예외에 실린 몫까지 센다."""
+    """게이트웨이 호출마다 사용량을 모은다. 실패한 호출도 토큰을 쓰므로 예외에 실린 몫까지 센다.
+
+    호출 기록은 원장 API(ModelCall)와 같은 모양으로 쌓는다. ssh 자체가 실패해 사용량을 모르면 0 으로 둔다.
+    """
 
     def __init__(self, gateway: Gateway):
         self._gateway = gateway
@@ -251,22 +236,65 @@ class UsageMeter:
         try:
             response = self._gateway.call(request)
         except GatewayError as error:
-            self.calls.append({"ok": False, "usage": error.usage})
+            self._add(request, False, error.usage)
             raise
-        self.calls.append({"ok": True, "usage": response.get("usage")})
+        self._add(request, True, response.get("usage"))
         return response
 
-    def report(self, outcome: str, agent_sha: str | None) -> dict[str, Any]:
+    def _add(self, request: Mapping[str, Any], ok: bool, usage: Mapping[str, Any] | None) -> None:
+        usage = usage or {}
+        self.calls.append(
+            {
+                "engine": usage.get("engine") or request.get("engine"),
+                "model": usage.get("model"),
+                "ok": ok,
+                "inputTokens": usage.get("input_tokens") or 0,
+                "cachedInputTokens": usage.get("cached_input_tokens") or 0,
+                "outputTokens": usage.get("output_tokens") or 0,
+                "costUsd": usage.get("cost_usd"),
+                "durationMs": usage.get("duration_ms"),
+            }
+        )
+
+    def totals(self) -> dict[str, dict[str, Any]]:
         totals: dict[str, dict[str, Any]] = {}
         for call in self.calls:
-            usage = call["usage"] or {}
-            total = totals.setdefault(usage.get("engine") or "unknown", {"calls": 0, "cost_usd": None})
+            total = totals.setdefault(
+                call["engine"] or "unknown",
+                {"calls": 0, "inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "costUsd": None},
+            )
             total["calls"] += 1
-            for key in ("input_tokens", "cached_input_tokens", "output_tokens"):
-                total[key] = total.get(key, 0) + (usage.get(key) or 0)
-            if usage.get("cost_usd") is not None:
-                total["cost_usd"] = (total["cost_usd"] or 0) + usage["cost_usd"]
-        return {"agentSha": agent_sha, "outcome": outcome, "calls": self.calls, "totals": totals}
+            for key in ("inputTokens", "cachedInputTokens", "outputTokens"):
+                total[key] += call[key]
+            if call["costUsd"] is not None:
+                total["costUsd"] = (total["costUsd"] or 0) + call["costUsd"]
+        return totals
+
+
+def run_payload(
+    result: RunResult,
+    calls: Sequence[Mapping[str, Any]],
+    *,
+    service: bool,
+    sha: str | None,
+    env: Mapping[str, str],
+) -> dict[str, Any]:
+    """원장(POST /api/admin/promotion-runs) 한 줄. 모델이 쓴 사유는 detail 에만, 잘라서 담는다."""
+    run_id, attempt = env.get("GITHUB_RUN_ID"), env.get("GITHUB_RUN_ATTEMPT") or "1"
+    run_key = f"gh-{run_id}-{attempt}" if run_id and run_id.isdigit() and attempt.isdigit() else f"local-{uuid.uuid4().hex[:16]}"
+    agent_sha = (env.get("PROMOTION_AGENT_CODE_SHA") or "").lower() or None
+    return {
+        "runKey": run_key,
+        "category": "SERVICE" if service else "FEATURE",
+        "sourceCommitSha": None if service else sha,
+        "outcome": result.outcome.upper(),
+        "reasonCode": result.code,
+        "detail": policy.clean_detail(result.detail),
+        "promotionPostId": result.post_id,
+        "agentSha": agent_sha if agent_sha and policy.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
+        "runUrl": env.get("PROMOTION_AGENT_RUN_URL") or None,
+        "calls": list(calls)[: policy.MAX_RUN_CALLS],
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -311,12 +339,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     run_dir = Path(arguments.run_dir)
     meter = UsageMeter(gateway_client.from_env())
-    outcome = "failed"  # 예외로 빠져나가도 그때까지 쓴 사용량은 남긴다
     try:
         result = Drafter(
             repo=Path(arguments.repo),
             run_dir=run_dir,
-            publisher=DraftLog(publisher, run_dir),
+            publisher=publisher,
             gateway=meter,
             camera=camera,
             routes=routes,
@@ -326,15 +353,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
             codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
         ).run()
-        outcome = result.outcome
-    finally:
-        run_dir.mkdir(parents=True, exist_ok=True)
-        report = meter.report(outcome, os.environ.get("PROMOTION_AGENT_CODE_SHA") or None)
-        (run_dir / "usage.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as error:
+        # 예외로 끝나도 그때까지 쓴 사용량은 원장에 남긴다. 예외 문구에는 내부 사정이 섞일 수 있어 이름만 담는다.
+        _close_run(publisher, run_dir, meter, RunResult("failed", "ERROR", type(error).__name__), arguments)
+        raise
+    return _close_run(publisher, run_dir, meter, result, arguments)
 
-    print(f"[promotion-agent] {result.outcome}: {result.reason}")
+
+def _close_run(publisher: Any, run_dir: Path, meter: UsageMeter, result: RunResult, arguments: Any) -> int:
+    """원장에 한 줄 남기고 공개 로그에는 결과·코드만 찍는다. 원장 기록이 실패해도 실행 결과는 바꾸지 않는다."""
+    payload = run_payload(result, meter.calls, service=arguments.service, sha=arguments.sha, env=os.environ)
+    try:
+        status = publisher.record_run(payload)
+        recorded = status in (200, 201)
+    except Exception as error:  # noqa: BLE001 — 기록 실패가 초안 제출을 되돌리면 안 된다
+        status, recorded = type(error).__name__, False
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # Actions 요약이 읽는 파일이다. 공개되므로 모델이 쓴 사유(detail)는 넣지 않는다.
+    summary = {k: v for k, v in payload.items() if k != "detail"} | {"totals": meter.totals(), "recorded": recorded}
+    (run_dir / "run.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[promotion-agent] {result.outcome} ({result.code})")
+    if not recorded:
+        print(f"[promotion-agent] 실행 원장 기록 실패: {status}")
     return 1 if result.outcome == "failed" else 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
