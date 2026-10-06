@@ -14,6 +14,7 @@ const CORE_ROUTES = [
   "/sell",
   "/community/new",
   "/profile/security",
+  "/profile/notifications",
   "/login",
   "/signup",
   "/forgot-password",
@@ -83,7 +84,7 @@ test("핵심 화면의 모든 버튼과 링크가 유효한 단일 상호작용 
         const knownInternalRoutes = [
           /^\/$/,
           /^\/(?:search|brick-filter|prices|community|feed|collection|chat|profile|notifications|sell|login|signup|forgot-password|verify|onboarding|privacy|terms|review-policy)\/?$/,
-          /^\/profile\/security\/?$/,
+          /^\/profile\/(?:security|notifications)\/?$/,
           /^\/(?:listings|orders|sets|shops|community)\/[^/]+\/?$/,
           /^\/payments\/portone\/return\/?$/,
           /^\/auth\/callback\/[^/]+\/?$/,
