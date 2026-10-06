@@ -49,6 +49,10 @@ class ReleaseScanner:
             "-r",
             # --root 가 없으면 부모 없는 최초 커밋이 조용히 빈 diff 를 낸다.
             "--root",
+            # 릴리스는 dev → main 머지 커밋이다. 부모가 둘이면 diff-tree 가 아무것도 내지 않으므로
+            # 직전 main(첫 부모)과 비교해 이번 릴리스 전체 변경을 본다. 일반 커밋에는 영향이 없다.
+            "-m",
+            "--first-parent",
             self._sha,
             "--",
             "apps/web/src",
@@ -67,6 +71,8 @@ class ReleaseScanner:
             "--stat",
             "-r",
             "--root",
+            "-m",
+            "--first-parent",
             self._sha,
             "--",
             "apps/web/src",

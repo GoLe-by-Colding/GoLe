@@ -25,6 +25,26 @@ def test_release_scanner_skips_release_without_web_changes(repo: Path):
     assert not ReleaseScanner(repo, target).touches_web()
 
 
+def _release_merge(repo: Path, *, web: bool) -> str:
+    """dev 에서 작업한 뒤 main 에 머지 커밋으로 릴리스한다(2026-10-03 부터의 릴리스 모양)."""
+    commit(repo, "chore: 기준선", web=False)
+    git(repo, "switch", "-q", "-c", "dev")
+    commit(repo, "feat: dev 작업", web=web)
+    git(repo, "switch", "-q", "main")
+    git(repo, "-c", "user.email=t@t.test", "-c", "user.name=t", "merge", "-q", "--no-ff", "-m", "release", "dev")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_release_scanner_sees_web_changes_in_release_merge_commit(repo: Path):
+    scanner = ReleaseScanner(repo, _release_merge(repo, web=True))
+
+    assert scanner.touches_web() and "apps/web/src/app/page.tsx" in scanner.diff()
+
+
+def test_release_scanner_skips_release_merge_without_web_changes(repo: Path):
+    assert not ReleaseScanner(repo, _release_merge(repo, web=False)).touches_web()
+
+
 def test_route_catalog_excludes_dynamic_and_private_routes(repo: Path):
     app = repo / "apps/web/src/app"
     for relative in [
