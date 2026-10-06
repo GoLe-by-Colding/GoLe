@@ -191,24 +191,12 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
             structured = json.loads(text)
         except ValueError:
             return {"ok": False, "error": "codex 구조화 출력 해석 실패"}
-    generated = _generated_folder(completed.stderr)
     try:
-        paths = sorted((workdir / "out").glob("*.png"))
-        if not paths and generated is not None:
-            # 샌드박스가 셸을 못 띄우는 서버(비특권 user namespace 금지)에서는 codex 가 만든 이미지를 out/ 로
-            # 옮기지 못한다. 이미지 생성 도구가 저장한 원래 자리에서 가져온다.
-            paths = sorted(generated.glob("*.png"))
-            if paths:
-                _log(f"codex out/ 비어 있어 generated_images 에서 {len(paths)}장 가져옴")
-        images = [{"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")} for path in paths]
+        images = _codex_images(workdir, _codex_session_id(completed))
     except OSError as error:
         # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
         _log(f"codex 결과 읽기 실패: {error!r}")
         return {"ok": False, "error": "codex 결과 이미지를 읽지 못함"}
-    finally:
-        # 요청 하나가 서버에 남기는 것이 없어야 한다 — 이번 세션이 만든 이미지 폴더도 지운다.
-        if generated is not None:
-            shutil.rmtree(generated, ignore_errors=True)
     if request.get("want_images"):
         if not images:
             return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
@@ -218,13 +206,34 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
     return {"ok": True, "text": text, "structured": structured, "images": images}
 
 
-def _generated_folder(stderr: str | None) -> Path | None:
-    """codex 이미지 생성 도구가 이번 세션 결과를 두는 폴더. 세션 ID 를 못 찾으면 None."""
-    match = SESSION_ID_PATTERN.search(stderr or "")
-    if match is None:
-        return None
+def _codex_session_id(completed: subprocess.CompletedProcess) -> str | None:
+    """이번 codex 실행의 세션 ID. 못 찾으면 None."""
+    match = SESSION_ID_PATTERN.search(completed.stderr or "")
+    return match.group(1) if match else None
+
+
+def _codex_images(workdir: Path, session_id: str | None) -> list[dict[str, str]]:
+    """codex 가 만든 PNG. out/ 이 비면 이미지 생성 도구의 세션 폴더에서 가져오고, 그 폴더는 지운다."""
+    generated = _generated_folder(session_id) if session_id else None
+    try:
+        paths = sorted((workdir / "out").glob("*.png"))
+        if not paths and generated is not None:
+            # 샌드박스가 셸을 못 띄우는 서버(비특권 user namespace 금지)에서는 codex 가 만든 이미지를 out/ 로
+            # 옮기지 못한다. 이미지 생성 도구가 저장한 원래 자리에서 가져온다.
+            paths = sorted(generated.glob("*.png"))
+            if paths:
+                _log(f"codex out/ 비어 있어 generated_images 에서 {len(paths)}장 가져옴")
+        return [{"name": path.name, "data": base64.b64encode(path.read_bytes()).decode("ascii")} for path in paths]
+    finally:
+        # 요청 하나가 서버에 남기는 것이 없어야 한다 — 이번 세션이 만든 이미지 폴더도 지운다.
+        if generated is not None:
+            shutil.rmtree(generated, ignore_errors=True)
+
+
+def _generated_folder(session_id: str) -> Path:
+    """codex 이미지 생성 도구가 세션 결과를 두는 폴더."""
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    return home / "generated_images" / match.group(1)
+    return home / "generated_images" / session_id
 
 
 def _workdir(root: Path | None) -> Path:
