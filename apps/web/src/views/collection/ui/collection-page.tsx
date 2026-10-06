@@ -25,6 +25,7 @@ import {
   Select,
   Text,
 } from "@shared/ui";
+import { CollectionValueTrend } from "./collection-value-trend";
 
 const STATUSES: readonly OwnershipStatus[] = ["owned", "wanted", "sold"];
 
@@ -55,6 +56,7 @@ export function CollectionPage() {
   const [setNumber, setSetNumber] = useState("");
   const [status, setStatus] = useState<OwnershipStatus>("owned");
   const [busy, setBusy] = useState(false);
+  const [trendRefreshKey, setTrendRefreshKey] = useState(0);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
   const accountIdRef = useRef(accountId);
   const requestRef = useRef<{ generation: number; controller: AbortController } | null>(null);
@@ -129,6 +131,7 @@ export function CollectionPage() {
     try {
       await addCollectionItem(accountId, setNumber.trim(), status);
       setSetNumber("");
+      setTrendRefreshKey((current) => current + 1);
       await reload();
     } catch (cause) {
       setActionError(collectionErrorMessage(cause));
@@ -145,6 +148,7 @@ export function CollectionPage() {
     setActionError(undefined);
     try {
       await removeCollectionItem(itemId, accountId);
+      setTrendRefreshKey((current) => current + 1);
       await reload();
     } catch (cause) {
       setActionError(collectionErrorMessage(cause));
@@ -194,6 +198,8 @@ export function CollectionPage() {
           <Text tone="secondary">보유 추정가</Text>
           <span className="text-2xl font-bold">{formatKrw(visibleCollection.estimate)}</span>
         </Card>
+
+        <CollectionValueTrend accountId={accountId} refreshKey={trendRefreshKey} />
 
         {actionError ? (
           <p className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
