@@ -108,6 +108,81 @@ def test_codex_sandboxWithoutShell_takesImageFromGeneratedFolderAndCleansIt(tmp_
     assert not generated.exists() and other.exists()
 
 
+CODEX_SESSION = "01a11034-bf52-7101-b491-936357ec887f"
+# `codex exec --json` 실측(codex-cli 0.160.1) 모양. 세션 ID 는 stderr 가 아니라 thread.started 에 나온다.
+CODEX_EVENTS = "\n".join(
+    json.dumps(event)
+    for event in (
+        {"type": "thread.started", "thread_id": CODEX_SESSION},
+        {"type": "turn.started"},
+        {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "done"}},
+        {
+            "type": "turn.completed",
+            "usage": {"input_tokens": 67549, "cached_input_tokens": 54656, "output_tokens": 228},
+        },
+    )
+)
+
+
+def test_codexJson_takesImageFromThreadFolderAndReportsUsage(tmp_path, monkeypatch):
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    (codex_home / "config.toml").write_text('model = "gpt-6.1-sol"\n[profiles.x]\nmodel = "other"\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    generated = codex_home / "generated_images" / CODEX_SESSION
+
+    def runner(command, **kwargs):
+        generated.mkdir(parents=True)
+        (generated / "exec-1.png").write_bytes(PNG)
+        return subprocess.CompletedProcess(command, 0, CODEX_EVENTS, "Reading prompt from stdin...\n")
+
+    response = gateway.handle(
+        {"engine": "codex", "prompt": "다듬어", "want_images": True, "images": [{"data": PNG_B64}]},
+        runner=runner, root=tmp_path,
+    )
+
+    assert response["ok"] and response["images"] == [{"name": "exec-1.png", "data": PNG_B64}]
+    assert not generated.exists()
+    usage = response["usage"]
+    assert usage["engine"] == "codex" and usage["model"] == "gpt-6.1-sol"
+    assert (usage["input_tokens"], usage["cached_input_tokens"], usage["output_tokens"]) == (67549, 54656, 228)
+    assert usage["cost_usd"] is None and usage["duration_ms"] >= 0
+
+
+def test_codexFailureWithoutImages_stillReportsUsage(tmp_path, monkeypatch):
+    # 10/6 리허설: 이미지를 못 만든 호출도 토큰은 다 썼다.
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, CODEX_EVENTS, "")
+
+    response = gateway.handle({"engine": "codex", "prompt": "그려", "want_images": True}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and response["usage"]["input_tokens"] == 67549
+    assert "--json" in calls[0]
+
+
+def test_claude_reportsUsageIncludingCacheAndCost(tmp_path):
+    stdout = json.dumps({
+        "subtype": "success", "is_error": False, "result": "ok", "duration_ms": 2498,
+        "total_cost_usd": 0.214875,
+        "usage": {"input_tokens": 2, "cache_creation_input_tokens": 24467,
+                  "cache_read_input_tokens": 95255, "output_tokens": 4},
+        "modelUsage": {"claude-opus-5-5": {"inputTokens": 2}},
+    })
+    runner, _ = _recording(stdout=stdout)
+
+    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert response["usage"] == {
+        "engine": "claude", "model": "claude-opus-5-5",
+        "input_tokens": 2 + 24467 + 95255, "cached_input_tokens": 95255, "output_tokens": 4,
+        "cost_usd": 0.214875, "duration_ms": 2498,
+    }
+
+
 def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     runner, _ = _recording()
 
@@ -160,13 +235,17 @@ def test_codexFailure_keepsServerDetailsOutOfTheResponse(tmp_path, monkeypatch):
     """응답은 공개 Actions 로그에 찍힌다 — stderr 의 경로·사용자명은 서버 로그에만 남아야 한다."""
     log = tmp_path / "gw.log"
     monkeypatch.setattr(gateway, "LOG_PATH", log)
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
     runner_with_stderr = lambda command, **kw: subprocess.CompletedProcess(  # noqa: E731
         command, 1, "", "Error: /home/friend/.codex/auth.json permission denied"
     )
 
     response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner_with_stderr, root=tmp_path)
 
+    usage = response.pop("usage")
     assert response == {"ok": False, "error": "codex 실패(종료 코드 1)", "images": [], "text": "", "structured": None}
+    # 사용량은 숫자와 모델 이름뿐이다 — 경로가 섞일 자리가 없다.
+    assert "/home/friend" not in json.dumps(usage) and usage["engine"] == "codex"
     assert "/home/friend" in log.read_text(encoding="utf-8")
 
 

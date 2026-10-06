@@ -43,6 +43,17 @@ def test_ssh_failuresRaiseGatewayError(tmp_path, stdout, returncode):
         SshGateway("me@host", tmp_path / "kh", key_file=tmp_path / "k", runner=runner).call({"engine": "claude"})
 
 
+def test_failedCall_keepsUsageOnTheError(tmp_path):
+    # 실패한 호출도 토큰을 쓴다 — 실행 기록이 그 몫을 놓치지 않게 예외에 싣는다.
+    usage = {"engine": "codex", "input_tokens": 10}
+    runner, _ = _ssh(json.dumps({"ok": False, "error": "codex 가 이미지를 만들지 않았다", "usage": usage}).encode())
+
+    with pytest.raises(GatewayError) as raised:
+        SshGateway("me@host", tmp_path / "kh", key_file=tmp_path / "k", runner=runner).call({"engine": "codex"})
+
+    assert raised.value.usage == usage
+
+
 def test_fromEnv_requiresAllSshSettings():
     with pytest.raises(ValueError):
         gateway_client.from_env({"PROMOTION_GATEWAY_TARGET": "me@host"})

@@ -26,7 +26,10 @@ REMOTE_COMMAND = "~/gole-llm-gateway/run.sh"
 
 
 class GatewayError(RuntimeError):
-    pass
+    def __init__(self, message: str, usage: Mapping[str, Any] | None = None):
+        super().__init__(message)
+        # 실패한 호출도 토큰을 쓴다. ssh 자체가 실패했으면 None.
+        self.usage = usage
 
 
 class Gateway(Protocol):
@@ -37,7 +40,8 @@ def _checked(response: Any) -> dict[str, Any]:
     if not isinstance(response, dict):
         raise GatewayError("게이트웨이 응답이 JSON 객체가 아니다")
     if not response.get("ok"):
-        raise GatewayError(str(response.get("error") or "게이트웨이 실패"))
+        usage = response.get("usage")
+        raise GatewayError(str(response.get("error") or "게이트웨이 실패"), usage if isinstance(usage, dict) else None)
     return response
 
 

@@ -11,7 +11,8 @@
 
 요청:  {"engine": "claude"|"codex", "prompt": str, "system"?: str, "json_schema"?: obj,
         "model"?: str, "images"?: [{"data": base64}], "want_images"?: bool}
-응답:  {"ok": bool, "text": str, "structured": obj|null, "images": [{"name", "data"}], "error"?: str}
+응답:  {"ok": bool, "text": str, "structured": obj|null, "images": [{"name", "data"}], "error"?: str,
+        "usage": {engine, model, input_tokens, cached_input_tokens, output_tokens, cost_usd, duration_ms}|null}
 
 CLI 는 요청마다 새 임시 폴더에서 돌고, 끝나면 폴더째 지운다. 읽기는 in/ 첨부, 쓰기는 out/ 뿐이다.
 
@@ -45,8 +46,12 @@ LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "g
 LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
 # 모델 이름은 CLI 인자로 들어간다. "-" 로 시작하면 옵션으로 읽힐 수 있어 첫 글자를 영숫자로 묶는다.
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
-# codex exec 가 stderr 머리에 찍는 세션 ID. 경로 조각이 되므로 UUID 모양만 받는다.
-SESSION_ID_PATTERN = re.compile(r"^session id: ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$", re.MULTILINE)
+# codex 세션 ID 는 파일 경로 조각이 되므로 UUID 모양만 받는다. --json 이 아니면 stderr 머리에 찍힌다.
+UUID_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+SESSION_ID_PATTERN = re.compile(rf"^session id: ({UUID_PATTERN.pattern})$", re.MULTILINE)
+CONFIG_MODEL_PATTERN = re.compile(r'model\s*=\s*"([A-Za-z0-9][A-Za-z0-9._:-]{0,63})"')
+# 응답에 싣는 모델 이름. claude 는 여러 모델을 쓰면 쉼표로 잇는다.
+MODEL_LIST_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:,-]{0,255}")
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -138,9 +143,26 @@ def _claude(request: dict[str, Any], workdir: Path, paths: list[Path], runner: R
     except (TypeError, ValueError):
         _log(f"claude 출력 해석 실패 rc={completed.returncode} stderr={(completed.stderr or '')[-2000:]!r}")
         return {"ok": False, "error": f"claude 출력 해석 실패(종료 코드 {completed.returncode})"}
+    tokens = result.get("usage") or {}
+    cached = _count(tokens.get("cache_read_input_tokens"))
+    usage = _usage(
+        "claude",
+        ",".join(result.get("modelUsage") or {}) or request.get("model"),
+        # claude 의 input_tokens 는 캐시를 뺀 값이다. codex 처럼 캐시를 포함한 전체 입력으로 맞춘다.
+        input_tokens=_count(tokens.get("input_tokens")) + cached + _count(tokens.get("cache_creation_input_tokens")),
+        cached_input_tokens=cached,
+        output_tokens=_count(tokens.get("output_tokens")),
+        cost_usd=result.get("total_cost_usd"),
+        duration_ms=result.get("duration_ms"),
+    )
     if result.get("is_error") or result.get("subtype") != "success":
-        return {"ok": False, "error": f"claude 실패: {result.get('subtype')}"}
-    return {"ok": True, "text": result.get("result") or "", "structured": result.get("structured_output")}
+        return {"ok": False, "error": f"claude 실패: {result.get('subtype')}", "usage": usage}
+    return {
+        "ok": True,
+        "text": result.get("result") or "",
+        "structured": result.get("structured_output"),
+        "usage": usage,
+    }
 
 
 def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Runner) -> dict[str, Any]:
@@ -154,6 +176,8 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         "workspace-write",
         "-C",
         str(workdir),
+        # stdout 을 JSONL 이벤트로 받는다 — 토큰 사용량과 세션 ID 가 여기에만 나온다.
+        "--json",
         "-o",
         str(last),
     ]
@@ -172,6 +196,7 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
     # 섞인 문장을 깨뜨려 뒤의 -i 까지 사라진다 — 모델이 "첨부 이미지가 없다"고 답한다.
     for path in paths:
         command += ["-i", str(path)]
+    started = time.monotonic()
     completed = runner(
         command,
         cwd=str(workdir),
@@ -181,35 +206,108 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         encoding="utf-8",
         timeout=TIMEOUT_SECONDS,
     )
+    events = _codex_events(completed.stdout)
+    tokens = next((e.get("usage") or {} for e in reversed(events) if e.get("type") == "turn.completed"), {})
+    # 실패한 호출도 토큰을 쓴다. 아래 어느 응답이든 사용량을 싣는다.
+    usage = _usage(
+        "codex",
+        request.get("model") or _codex_default_model(),
+        input_tokens=_count(tokens.get("input_tokens")),
+        cached_input_tokens=_count(tokens.get("cached_input_tokens")),
+        output_tokens=_count(tokens.get("output_tokens")),
+        duration_ms=int((time.monotonic() - started) * 1000),
+    )
     if completed.returncode != 0:
         _log(f"codex rc={completed.returncode} stderr={(completed.stderr or completed.stdout or '')[-2000:]!r}")
-        return {"ok": False, "error": f"codex 실패(종료 코드 {completed.returncode})"}
+        return {"ok": False, "error": f"codex 실패(종료 코드 {completed.returncode})", "usage": usage}
     text = last.read_text(encoding="utf-8").strip() if last.exists() else ""
     structured = None
     if request.get("json_schema"):
         try:
             structured = json.loads(text)
         except ValueError:
-            return {"ok": False, "error": "codex 구조화 출력 해석 실패"}
+            return {"ok": False, "error": "codex 구조화 출력 해석 실패", "usage": usage}
     try:
-        images = _codex_images(workdir, _codex_session_id(completed))
+        images = _codex_images(workdir, _codex_session_id(events, completed.stderr))
     except OSError as error:
         # Windows 샌드박스는 만든 파일에 권한을 좁혀 둔다. 읽지 못하면 실패로 돌려준다.
         _log(f"codex 결과 읽기 실패: {error!r}")
-        return {"ok": False, "error": "codex 결과 이미지를 읽지 못함"}
+        return {"ok": False, "error": "codex 결과 이미지를 읽지 못함", "usage": usage}
     if request.get("want_images"):
         if not images:
-            return {"ok": False, "error": "codex 가 이미지를 만들지 않았다"}
+            return {"ok": False, "error": "codex 가 이미지를 만들지 않았다", "usage": usage}
         # 이미지 요청에는 글을 돌려주지 않는다. codex 는 홈 폴더를 읽을 수 있어서, 키가 샌 쪽이 "토큰 파일을
         # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 호출 쪽은 이미지만 쓴다.
-        return {"ok": True, "images": images}
-    return {"ok": True, "text": text, "structured": structured, "images": images}
+        return {"ok": True, "images": images, "usage": usage}
+    return {"ok": True, "text": text, "structured": structured, "images": images, "usage": usage}
 
 
-def _codex_session_id(completed: subprocess.CompletedProcess) -> str | None:
-    """이번 codex 실행의 세션 ID. 못 찾으면 None."""
-    match = SESSION_ID_PATTERN.search(completed.stderr or "")
+def _codex_events(stdout: str | None) -> list[dict[str, Any]]:
+    """`codex exec --json` 의 JSONL 이벤트. 해석 못 하는 줄은 건너뛴다."""
+    events = []
+    for line in (stdout or "").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def _codex_session_id(events: list[dict[str, Any]], stderr: str | None) -> str | None:
+    """이번 codex 실행의 세션 ID. --json 이면 thread.started 이벤트, 아니면 stderr 머리에서 찾는다."""
+    for event in events:
+        thread_id = event.get("thread_id")
+        if event.get("type") == "thread.started" and isinstance(thread_id, str) and UUID_PATTERN.fullmatch(thread_id):
+            return thread_id
+    match = SESSION_ID_PATTERN.search(stderr or "")
     return match.group(1) if match else None
+
+
+def _codex_default_model() -> str | None:
+    """`-m` 없이 돌 때 codex 가 쓰는 모델. --json 이벤트에는 모델 이름이 없어 설정 파일에서 읽는다."""
+    config = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+    try:
+        for line in config.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("["):
+                break  # 최상위 키만 본다 — 프로필 안의 model 은 기본값이 아니다
+            match = CONFIG_MODEL_PATTERN.fullmatch(line.strip())
+            if match:
+                return match.group(1)
+    except OSError:
+        pass
+    return None
+
+
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
+def _usage(
+    engine: str,
+    model: str | None,
+    *,
+    input_tokens: int,
+    cached_input_tokens: int,
+    output_tokens: int,
+    cost_usd: Any = None,
+    duration_ms: Any = None,
+) -> dict[str, Any]:
+    """두 CLI 의 사용량을 한 모양으로 맞춘다. 숫자와 모델 이름만 담는다 — 응답은 공개 로그로 간다.
+
+    input_tokens 는 캐시 적중분을 포함한 전체 입력, cached_input_tokens 는 그중 캐시에서 읽은 양이다.
+    cost_usd 는 claude 가 알려 주는 API 환산 금액이다(구독이라 실제 청구액이 아니다). codex 는 None.
+    """
+    return {
+        "engine": engine,
+        "model": model if isinstance(model, str) and MODEL_LIST_PATTERN.fullmatch(model) else None,
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": float(cost_usd) if isinstance(cost_usd, (int, float)) and cost_usd >= 0 else None,
+        "duration_ms": duration_ms if isinstance(duration_ms, int) and duration_ms >= 0 else None,
+    }
 
 
 def _codex_images(workdir: Path, session_id: str | None) -> list[dict[str, str]]:
@@ -279,6 +377,7 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
         response.setdefault("images", [])
         response.setdefault("text", "")
         response.setdefault("structured", None)
+        response.setdefault("usage", None)
         return response
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -311,7 +410,7 @@ class _Lock:
 
 
 def _failure(message: str) -> dict[str, Any]:
-    return {"ok": False, "error": message, "text": "", "structured": None, "images": []}
+    return {"ok": False, "error": message, "text": "", "structured": None, "images": [], "usage": None}
 
 
 def main() -> int:
