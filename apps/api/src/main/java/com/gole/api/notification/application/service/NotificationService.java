@@ -23,19 +23,28 @@ public class NotificationService implements NotifyUseCase, GetNotificationsUseCa
     private final NotificationRepositoryPort repository;
     private final NotificationIdGeneratorPort idGenerator;
     private final PushDispatcher pushDispatcher;
+    private final NotificationPreferenceGate preferences;
     private final Clock clock;
 
     public NotificationService(
             NotificationRepositoryPort repository,
             NotificationIdGeneratorPort idGenerator,
             PushDispatcher pushDispatcher,
+            NotificationPreferenceGate preferences,
             Clock clock) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.pushDispatcher = pushDispatcher;
+        this.preferences = preferences;
         this.clock = clock;
     }
 
+    /**
+     * 알림을 저장하고 새로 저장된 경우에만 단말로 민다.
+     *
+     * @return 저장된(또는 멱등 키로 이미 있던) 알림 id. 수신자가 이 분류를 꺼뒀으면 {@code null}
+     *     (notification-preferences P4)
+     */
     @Override
     public String notify(NotifyCommand command) {
         Notification notification = Notification.create(
@@ -46,6 +55,13 @@ public class NotificationService implements NotifyUseCase, GetNotificationsUseCa
                 command.link(),
                 command.deduplicationKey(),
                 Instant.now(clock));
+
+        // 꺼둔 분류는 저장도 푸시도 하지 않는다. 인앱 목록에만 남기면 "껐는데 쌓인다"가 되고,
+        // 나중에 켰을 때 밀린 알림이 한꺼번에 보이는 것도 원하는 동작이 아니다. (P4)
+        if (!preferences.allows(
+                notification.getRecipientId(), notification.getType().category())) {
+            return null;
+        }
         Notification stored = repository.saveOnce(notification);
 
         // saveOnce는 멱등 키가 겹치면 <b>기존</b> 알림을 돌려준다. 그때 다시 푸시하면
