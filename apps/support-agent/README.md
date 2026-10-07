@@ -230,57 +230,40 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 
 ## 홍보 초안 에이전트 (`gole_promotion_agent`)
 
-배포된 릴리스를 근거로 사이트를 캡처하고 Threads 홍보 게시 초안을 만드는 **일회성 배치**다.
-문의·사진과 달리 서버가 아니다 — 하루 한 번 떴다 진다. 설계 근거는
-`.kiro/specs/promotion-review/spec.md` D9~D19에 있다.
+배포된 릴리스(기능 홍보)나 GoLe 자체(서비스 소개, 월·수·금)를 근거로 홍보 초안 한 편을 만들어
+관리자 검토 큐에 낸다. 발행은 사람이 관리자 화면에서 한다. 실행은 `.github/workflows/promotion-agent.yml`
+이 GitHub 러너에서 한다.
 
 ```text
-gole_promotion_agent/
-├─ policy.py       # 상수·pydantic 툴 스키마·톤 가이드. 자유 프롬프트를 받지 않는다
-├─ ports.py        # Protocol만. SDK·환경변수·HTTP를 모른다
-├─ brain.py        # 순환 LangGraph (think ⇄ act) + 제출 3단 체인
-├─ hands.py        # git·Playwright·Anthropic·백엔드 HTTP. SDK import는 전부 지연
-├─ session.py      # 단계 기계. 내용물을 담지 않는다
-├─ checkpoints.py  # 세션 로컬 saver. lease·fencing 없음
-├─ runtime.py      # 후보 루프·데드라인·보존 정리
-└─ __main__.py     # 일회성 엔트리포인트
+러너 안 데모 스택 ─ 후보 화면 일괄 캡처 (약관·정책·온보딩 제외)
+   └ SSH ─▶ LLM 게이트웨이 claude : 화면 고르기·캡션 (구조화 출력)
+   └ SSH ─▶ LLM 게이트웨이 codex  : 고른 화면을 홍보 이미지로 다듬기 (실패하면 원본)
+   └ 검증 ─▶ 검토 큐 제출: 다듬은 이미지 + 원본 캡처 + 다듬기 지시문 + 출처
 ```
 
-**영속 워커(`gole_agent_worker`)에 넣지 않은 이유**는 필요한 것이 영속성이지 분산 job
-leasing이 아니기 때문이다. 일회성 프로세스 하나뿐이라 `FencedSaver`의 lease·fencing이 풀
-문제가 없고, 그 워커는 운영에 배포된 적도 없다. 대신 `gole_brick_filter`처럼 같은 패키지
-안의 별도 모듈로 두고 관용구만 공유한다.
-
-**후보 선정은 시간창이 아니라 이력이다.** `main`을 `HEAD`부터 뒤로 걸으며 백엔드가 이미
-아는 `sourceCommitSha`를 만나면 멈춘다. 이전 구현은 `feat(` 커밋만 찾았는데 운영 checkout은
-squash 전용 `main`에 고정돼 있어 **영구히 0건**을 냈고, 0건이 정상 종료라 매일 초록으로
-실패했다. 그 실패를 `tests/test_promotion_agent.py`가 직접 겨냥한다.
-
-**체크포인트를 둔다.** 모델 루프가 최대 20턴이고 여유 메모리가 900 MB뿐이라 중단이 현실적
-시나리오인데, 전사를 잃으면 지불한 토큰을 다시 지불하게 된다. 제출은 업로드 → 생성 →
-검토요청 3단으로 쪼개 각 단계가 멱등하게 재개되므로 업로드 직후 죽어도 고아 이미지가 남지
-않는다. **이미지 바이트는 상태·체크포인트에 넣지 않는다** — saver가 직렬화 전에 거부한다.
+- **모델은 만들기만 한다.** 검증과 제출은 `drafter.py`가 한다. 운영 관리자 자격증명은 게이트웨이로
+  가지 않는다 — 서버로 가는 것은 데모 화면 캡처와 프롬프트뿐이다.
+- **다듬은 이미지는 원본과 함께 낸다.** 생성형 편집은 화면을 다시 그리므로 글자·숫자가 바뀔 수 있다.
+  검토 패널이 둘을 나란히 보여준다.
+- **게이트웨이**(`gateway/`)는 서버에 단독으로 복사하는 표준 라이브러리 스크립트다. 설치·
+  `authorized_keys` forced command 설정은 `gateway/gole_llm_gateway.py` 머리말을 본다.
 
 ### 실행
 
-유료 호출 없이 전 과정을 돌리는 드라이런이 기본 검증 경로다. 외부 SDK와 백엔드 클라이언트를
-import조차 하지 않으므로 나가는 경로가 물리적으로 없다.
+서버 없이 이 기기의 `claude`·`codex`로 같은 흐름을 돌릴 수 있다(`PROMOTION_GATEWAY=local`).
+데모 스택(e2e 프로필 API + 웹)이 떠 있어야 하고, 환경 변수는 `.env.example`을 본다.
 
 ```bash
 uv sync --project apps/support-agent --extra promotion
-uv run --project apps/support-agent playwright install chromium   # 실제 실행에만 필요
+uv run --project apps/support-agent playwright install chromium
 
-PYTHONPATH=apps/support-agent/src \
+PYTHONPATH=apps/support-agent/src PROMOTION_GATEWAY=local \
   uv run --project apps/support-agent python -m gole_promotion_agent \
-  --dry-run --repo . --sessions /tmp/promotion-sessions
+  --repo . --run-dir /tmp/promotion-run --service
 ```
 
-실제 실행은 운영 VM의 `gole-promotion-agent.timer`가 `apps/support-agent/Dockerfile.promotion`
-으로 만든 별도 이미지를 oneshot으로 띄운다. 환경 변수는 `.env.example`을 본다. 브라우저를
-넣으면 이미지가 수백 MB 커지므로 **상주 50051 서비스 이미지와 일부러 분리했다.**
-
-`anthropic`·`playwright`·`httpx`는 `promotion` extra에만 있다. 기본 설치(`uv sync --locked`)로도
-테스트가 전부 돌아야 하며, 그래서 `hands.py`의 SDK import는 전부 함수 안에 있다.
+`playwright`·`httpx`는 `promotion` extra에만 있다. 기본 설치(`uv sync --locked`)로도 테스트가
+전부 돌아야 하며, 그래서 `hands.py`의 SDK import는 전부 함수 안에 있다.
 
 ## 배포 이미지의 오프라인 smoke 검사
 

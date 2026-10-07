@@ -1,0 +1,2 @@
+# 서버(리눅스)로 그대로 복사하는 파일이다. Windows 체크아웃에서도 CRLF 로 바뀌면 bash·python shebang 이 깨진다.
+* text eol=lf

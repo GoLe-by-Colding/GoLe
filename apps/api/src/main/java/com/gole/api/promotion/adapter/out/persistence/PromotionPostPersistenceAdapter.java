@@ -3,9 +3,15 @@ package com.gole.api.promotion.adapter.out.persistence;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionProvenance;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
@@ -57,10 +63,31 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     @Override
     public List<PromotionPost> findRecentFirst(PromotionPostStatus status, int limit) {
         PageRequest page = PageRequest.of(0, Math.max(1, limit));
-        List<PromotionPostDocument> documents = status == null
-                ? repository.findAllByOrderByCreatedAtDesc(page)
-                : repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
+        List<PromotionPostDocument> documents;
+        if (status == null) {
+            documents = repository.findAllByOrderByCreatedAtDesc(page);
+        } else if (status == PromotionPostStatus.PUBLISHED) {
+            // 생성 순으로 자르면 오래전에 만든 글을 방금 발행했을 때 그 글이 목록 밖으로 밀려
+            // 발행 에이전트의 최소 간격 가드가 최신 발행을 보지 못한다.
+            documents = repository.findByStatusOrderByPublishedAtDesc(status.name(), page);
+        } else {
+            documents = repository.findByStatusOrderByCreatedAtDesc(status.name(), page);
+        }
         return documents.stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public Optional<PromotionPost> findOldestApproved() {
+        return repository
+                .findFirstByStatusOrderByReviewedAtAsc(PromotionPostStatus.APPROVED.name())
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<Instant> findLatestPublishedAt() {
+        return repository
+                .findFirstByStatusOrderByPublishedAtDesc(PromotionPostStatus.PUBLISHED.name())
+                .map(PromotionPostDocument::getPublishedAt);
     }
 
     @Override
@@ -77,7 +104,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     }
 
     private PromotionPostDocument toDocument(PromotionPost promotionPost) {
-        return new PromotionPostDocument(
+        PromotionPostDocument document = new PromotionPostDocument(
                 promotionPost.getId(),
                 promotionPost.getChannel().name(),
                 promotionPost.getCaption(),
@@ -93,6 +120,48 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 promotionPost.getRejectionReason(),
                 promotionPost.getPublishedAt(),
                 promotionPost.getExternalPostId());
+        PromotionPostContext context = promotionPost.context();
+        PromotionProvenance provenance = context.provenance();
+        document.setContext(
+                context.category().name(),
+                context.captures().stream()
+                        .map(capture -> new PromotionPostDocument.CaptureDocument(
+                                capture.label(),
+                                capture.route(),
+                                capture.actions(),
+                                capture.dataSource().name(),
+                                capture.capturedAt(),
+                                capture.originalUrl(),
+                                capture.edit()))
+                        .toList(),
+                provenance == null
+                        ? null
+                        : new PromotionPostDocument.ProvenanceDocument(
+                                provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
+        return document;
+    }
+
+    private static PromotionPostContext toContext(PromotionPostDocument document) {
+        List<PromotionCapture> captures = document.getCaptures() == null
+                ? List.of()
+                : document.getCaptures().stream()
+                        .map(capture -> new PromotionCapture(
+                                capture.label(),
+                                capture.route(),
+                                capture.actions(),
+                                CaptureDataSource.valueOf(capture.dataSource()),
+                                capture.capturedAt(),
+                                capture.originalUrl(),
+                                capture.edit()))
+                        .toList();
+        PromotionPostDocument.ProvenanceDocument provenance = document.getProvenance();
+        return new PromotionPostContext(
+                document.getCategory() == null ? null : PromotionCategory.valueOf(document.getCategory()),
+                captures,
+                provenance == null
+                        ? null
+                        : new PromotionProvenance(
+                                provenance.releaseTitle(), provenance.rationale(), provenance.runUrl()));
     }
 
     private PromotionPost toDomain(PromotionPostDocument document) {
@@ -111,6 +180,7 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                 document.getReviewedAt(),
                 document.getRejectionReason(),
                 document.getPublishedAt(),
-                document.getExternalPostId());
+                document.getExternalPostId(),
+                toContext(document));
     }
 }

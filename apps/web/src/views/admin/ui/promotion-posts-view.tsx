@@ -7,6 +7,7 @@ import {
   fetchAdminPromotionPosts,
   publishAdminPromotionPost,
   rejectAdminPromotionPost,
+  publishNextAdminPromotionPost,
   submitAdminPromotionPost,
   type AdminPromotionPost,
   type PromotionPostStatus,
@@ -35,6 +36,7 @@ import {
 } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 import { PromotionEvaluationForm } from "./promotion-evaluation-form";
+import { PromotionReviewPanel } from "./promotion-review-panel";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -74,6 +76,8 @@ function PromotionWorkspace({
   const requestGeneration = useRef(0);
   const mutationInFlight = useRef(false);
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [publishNextBusy, setPublishNextBusy] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -187,6 +191,37 @@ function PromotionWorkspace({
       }
     } finally {
       setCreating(false);
+      mutationInFlight.current = false;
+    }
+  }
+
+  // 규칙에 따른 발행 거절은 장애가 아니라 예상된 결과라, 연결 오류 배너가 아닌 안내로 보여준다.
+  const PUBLISH_NEXT_MESSAGES: Readonly<Record<string, string>> = {
+    PROMOTION_NO_APPROVED_POSTS: "발행할 승인된 글이 없습니다. 먼저 검토 대기 글을 승인해 주세요.",
+    PROMOTION_PUBLISH_TOO_SOON: "직전 발행 후 6시간이 지나야 다음 글을 올릴 수 있습니다.",
+  };
+
+  async function handlePublishNext() {
+    if (token === null || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setPublishNextBusy(true);
+    setError(undefined);
+    setNotice("");
+    try {
+      const published = await publishNextAdminPromotionPost(token);
+      setNotice(`승인된 글 중 가장 먼저 승인된 글(${shortId(published.id)})을 발행했습니다.`);
+      reload();
+    } catch (cause) {
+      const known = cause instanceof ApiError ? PUBLISH_NEXT_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "발행하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
+    } finally {
+      setPublishNextBusy(false);
       mutationInFlight.current = false;
     }
   }
@@ -354,9 +389,18 @@ function PromotionWorkspace({
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <AdminStatus error={listError ?? error} loading={rows === null} />
-        <Button size="sm" variant="secondary" disabled={busy || rows === null} onClick={reload}>
-          목록 새로고침
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={busy || rows === null} onClick={reload}>
+            목록 새로고침
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || publishNextBusy}
+            onClick={() => void handlePublishNext()}
+          >
+            다음 차례 발행
+          </Button>
+        </div>
       </div>
       {actionId !== null ? (
         <p role="status" className="text-sm text-neutral-600">
@@ -494,6 +538,14 @@ function PromotionWorkspace({
                   className="ml-1"
                   size="sm"
                   variant="secondary"
+                  onClick={() => setReviewingId(p.id)}
+                >
+                  검토 자료
+                </Button>
+                <Button
+                  className="ml-1"
+                  size="sm"
+                  variant="secondary"
                   disabled={busy}
                   onClick={() => setEvaluatingId(p.id)}
                 >
@@ -516,6 +568,17 @@ function PromotionWorkspace({
           onCancel={reviewAction.cancel}
         />
       ) : null}
+
+      {(() => {
+        const reviewing = (rows ?? []).find((row) => row.id === reviewingId);
+        return reviewing !== undefined ? (
+          <PromotionReviewPanel
+            key={reviewing.id}
+            post={reviewing}
+            onClose={() => setReviewingId(null)}
+          />
+        ) : null;
+      })()}
 
       {evaluatingId !== null ? (
         <PromotionEvaluationForm

@@ -10,8 +10,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
+import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
@@ -19,15 +22,22 @@ import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.R
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort.PublishResult;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
+import com.gole.api.promotion.domain.exception.NoApprovedPromotionPostsException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
+import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,9 +52,10 @@ class PromotionPostServiceTest {
     private final PromotionPostIdGeneratorPort idGenerator = mock(PromotionPostIdGeneratorPort.class);
     private final SocialPublishPort publishPort = mock(SocialPublishPort.class);
     private final ManageMediaAssetsUseCase mediaAssets = mock(ManageMediaAssetsUseCase.class);
+    private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
     private final PromotionPostService service =
-            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, clock);
+            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
 
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -93,6 +104,21 @@ class PromotionPostServiceTest {
                     .count();
         }
 
+        @Override
+        public Optional<PromotionPost> findOldestApproved() {
+            return store.values().stream()
+                    .filter(post -> post.getStatus() == PromotionPostStatus.APPROVED)
+                    .min(java.util.Comparator.comparing(PromotionPost::getReviewedAt));
+        }
+
+        @Override
+        public Optional<Instant> findLatestPublishedAt() {
+            return store.values().stream()
+                    .map(PromotionPost::getPublishedAt)
+                    .filter(java.util.Objects::nonNull)
+                    .max(Instant::compareTo);
+        }
+
         // 실제 어댑터는 이 필터를 쿼리(NotNull)로 내리므로, 페이크도 같은 것만 돌려줘야 한다.
         @Override
         public List<ReviewTimestamps> findReviewTimestamps() {
@@ -104,7 +130,7 @@ class PromotionPostServiceTest {
     }
 
     private PromotionPostService serviceOver(InMemoryRepo repo) {
-        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, clock);
+        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
     }
 
     /** 같은 릴리스로 초안 하나를 만들고 검토 요청까지 올린다 — 그 릴리스를 점유한 상태. */
@@ -145,6 +171,60 @@ class PromotionPostServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PromotionPostStatus.DRAFT);
         assertThat(captor.getValue().getAuthorId()).isEqualTo("author-1");
         assertThat(captor.getValue().getSourceCommitSha()).isEqualTo(sourceCommitSha);
+    }
+
+    @Test
+    @DisplayName("AI 로 다듬은 사진은 원본도 공개·연결하고 설명표에 원본 경로와 지시문을 남긴다")
+    void create_attachesOriginalsAndRecordsThemOnCaptures() {
+        when(idGenerator.newId()).thenReturn("promo-1");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        String polished = "images/11111111-1111-4111-8111-111111111111.png";
+        String raw = "images/22222222-2222-4222-8222-222222222222.png";
+        String plain = "images/33333333-3333-4333-8333-333333333333.png";
+        var context = new PromotionPostContext(
+                PromotionCategory.SERVICE,
+                List.of(
+                        new PromotionCapture("컬렉션", "/collection", "", CaptureDataSource.DEMO, Instant.EPOCH),
+                        new PromotionCapture("검색", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)),
+                null);
+        var originals = new ArrayList<CaptureOriginal>();
+        originals.add(new CaptureOriginal(raw, "브라우저 목업에 넣고 배경만 바꿈"));
+        originals.add(null);
+
+        service.create(new CreatePromotionPostCommand(
+                "author-1", PromotionChannel.THREADS, "캡션", List.of(polished, plain), null, context, originals));
+
+        verify(mediaAssets)
+                .replaceReferences(
+                        "author-1", MediaTargetType.PROMOTION_POST, "promo-1", List.of(polished, plain, raw), true);
+        ArgumentCaptor<PromotionPost> captor = ArgumentCaptor.forClass(PromotionPost.class);
+        verify(repository).save(captor.capture());
+        List<PromotionCapture> captures = captor.getValue().getCaptures();
+        assertThat(captures.get(0).originalUrl()).isEqualTo("/api/v1/media/" + raw);
+        assertThat(captures.get(0).edit()).isEqualTo("브라우저 목업에 넣고 배경만 바꿈");
+        assertThat(captures.get(1).originalUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("원본 목록이 설명표와 개수가 다르면 미디어를 건드리기 전에 거부한다")
+    void create_rejectsOriginalsThatDoNotMatchCaptures() {
+        when(idGenerator.newId()).thenReturn("promo-1");
+        var context = new PromotionPostContext(
+                PromotionCategory.FEATURE,
+                List.of(new PromotionCapture("목록", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)),
+                null);
+        String key = "images/11111111-1111-4111-8111-111111111111.png";
+
+        assertThatThrownBy(() -> service.create(new CreatePromotionPostCommand(
+                        "author-1",
+                        PromotionChannel.THREADS,
+                        "캡션",
+                        List.of(key),
+                        null,
+                        context,
+                        List.of(new CaptureOriginal(key, "다듬음"), new CaptureOriginal(key, "다듬음")))))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(mediaAssets, never()).replaceReferences(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -268,6 +348,25 @@ class PromotionPostServiceTest {
     }
 
     @Test
+    @DisplayName("검토 요청이 들어가면 캡션 없이 운영 채널에 한 번만 알리고, 재시도 제출은 다시 알리지 않는다")
+    void submit_notifiesOperationsOnceWithoutCaption() {
+        PromotionPostService target = serviceOver(new InMemoryRepo());
+        when(idGenerator.newId()).thenReturn("promo-1");
+        String id = createAndSubmit(target, SHA);
+
+        target.submit(id);
+
+        ArgumentCaptor<OperationalEvent> event = ArgumentCaptor.forClass(OperationalEvent.class);
+        verify(operationalEvents, times(1)).publish(event.capture());
+        assertThat(event.getValue().category()).isEqualTo(OperationalEvent.Category.ADMIN);
+        assertThat(event.getValue().fields())
+                .containsEntry("초안 ID", "promo-1")
+                .containsEntry("릴리스", SHA.substring(0, 7))
+                .containsEntry("관리자 경로", "/admin/promotion")
+                .doesNotContainValue("캡션");
+    }
+
+    @Test
     @DisplayName("반려 초안을 다시 제출하면 점유를 복구하고 이전 검토 결과를 비운다")
     void submit_reclaimsRejectedDraft() {
         InMemoryRepo repo = new InMemoryRepo();
@@ -338,6 +437,55 @@ class PromotionPostServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
         assertThat(result.getExternalPostId()).isEqualTo("stub-post-1");
+    }
+
+    @Test
+    @DisplayName("다음 차례 발행은 가장 먼저 승인된 글을 올린다")
+    void publishNext_publishesOldestApproved() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
+        when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PromotionPost result = service.publishNext();
+
+        assertThat(result.getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
+    }
+
+    @Test
+    @DisplayName("승인된 글이 없으면 외부 발행을 부르지 않고 거절한다")
+    void publishNext_rejectsWhenNothingApproved() {
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
+        when(repository.findOldestApproved()).thenReturn(Optional.empty());
+
+        assertThatThrownBy(service::publishNext).isInstanceOf(NoApprovedPromotionPostsException.class);
+        verify(publishPort, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("직전 발행 후 6시간이 안 지났으면 거절한다")
+    void publishNext_rejectsWithinInterval() {
+        // clock 은 EPOCH 고정 — 1시간 전에 발행한 것으로 둔다.
+        when(repository.findLatestPublishedAt()).thenReturn(Optional.of(Instant.EPOCH.minusSeconds(3600)));
+
+        assertThatThrownBy(service::publishNext).isInstanceOf(PromotionPublishTooSoonException.class);
+        verify(publishPort, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("직전 발행 후 6시간이 지났으면 발행한다")
+    void publishNext_allowsAfterInterval() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
+        when(repository.findLatestPublishedAt())
+                .thenReturn(Optional.of(Instant.EPOCH.minus(PromotionPostService.MIN_PUBLISH_INTERVAL)));
+        when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.publishNext().getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
     }
 
     @Test

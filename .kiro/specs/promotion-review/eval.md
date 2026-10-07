@@ -106,10 +106,13 @@
 실행 결과는 `submitted / intentional_skip / technical_failure / blocked_by_queue / no_candidate /
 unknown_skip`으로 평가 기록에 구분한다.
 
-**2026-09-20 갱신 — 전사를 뒤질 필요가 없어졌다.** 코드가 의도적 판단(`skipped`)과 턴 한도
-도달(`deferred`)을 세션 `manifest.json` 의 `done` 필드에 따로 기록한다(D11). 매핑은 그대로
-읽으면 된다 — `skipped → intentional_skip`, `deferred → technical_failure`(한도 도달),
-`failed → technical_failure`(오류). `unknown_skip` 은 원장이 유실됐을 때만 쓴다.
+**2026-10 갱신 — 원천은 실행 원장(`promotion_runs`, 스펙 D23)이다.** 실행 1건마다 결과와 사유 코드가
+남고, 관리자 API(`GET /api/admin/promotion-runs`, `GET .../promotion-posts/metrics` 의 `runs`)로 읽는다.
+매핑: `SUBMITTED → submitted`, `MODEL_SKIPPED → intentional_skip`, `QUEUE_FULL → blocked_by_queue`,
+`NO_WEB_CHANGE`·`ALREADY_DRAFTED → no_candidate`, `NO_CAPTURES`·`CHOICE_INVALID`·`GATEWAY_FAILED`·`ERROR →
+technical_failure`. `unknown_skip` 은 원장 기록이 실패한 실행(Actions 요약에 "기록 실패")에만 쓴다.
+모델이 건너뛴 이유는 원장의 `detail` 에 있어 **적절한 건너뛰기율**을 사람이 판정할 수 있다.
+옛 `manifest.json`·`deferred` 구분은 D20 에서 지웠다.
 
 **건너뛴 릴리스를 분모에 넣는다.** 주 지표인 첫 검토 채택률은 *만들어진 초안만* 세므로,
 홍보할 만했는데 건너뛴 경우(거짓 음성)가 어디에도 잡히지 않는다. 실행마다
@@ -119,7 +122,10 @@ unknown_skip`으로 평가 기록에 구분한다.
 확보율에서 드러나도록 사전 대상 목록과 실제 선택 목록을 대조한다.
 
 비용은 실패·재시도를 포함한 전체 평가 비용 / 채택 가능한 초안 수로 보조 보고할 수 있다.
-현재 모델 응답의 토큰 사용량을 평가용으로 저장하지 않으므로 비용 미수집은 N/A로 표시한다.
+실행 원장의 `calls[]` 에 호출별 입력·캐시·출력 토큰, claude 의 API 환산 금액, 모델 이름이, `agentSha` 에
+에이전트 코드 버전이 남는다. 실패한 호출도 포함한다. 지표 API 의 `runs.usageByEngine` 이 엔진별 합계를 낸다.
+구독 실행이라 금액은 실제 청구액이 아니라 API 키로 바꿨을 때의 환산값이다(codex 는 금액 없이 토큰만).
+`agentSha` 로 묶으면 버전별 채택률·비용을 비교할 수 있다.
 조회수·좋아요·유입·가입은 실제 발행 후 별도 성과 지표이며 v1 초안 품질 점수에 섞지 않는다.
 
 ## 최초 평가 절차와 사례 구성
@@ -159,12 +165,12 @@ unknown_skip`으로 평가 기록에 구분한다.
 운영 초안 등록도 평가에 필수는 아니다. 승인된 격리 환경 또는 보관된 초안을 사용한다.
 
 성공한 실행은 체크포인트를 폐기하므로 전사가 항상 남아 있다고 가정하지 않는다.
-근거·창작·토큰·검토 시간 수집과 `skipped` 사유 구분 자동화는 후속 계측 과제다.
+근거·창작·검토 시간 수집과 `skipped` 사유 구분 자동화는 후속 계측 과제다.
 현재 톤 프롬프트와 평가 기준은 역할이 다르다. 이번 변경은 런타임 프롬프트를 바꾸지 않는다.
 
 ## 참고
 
-- [구현 스펙](spec.md), `brain.py`, `runtime.py`, `hands.py`, `prompts/caption-tone.md`.
+- [구현 스펙](spec.md), `drafter.py`, `drafting.py`, `hands.py`, `prompts/caption-tone.md`.
 - [BlackTwist 제작자의 출시 회고](https://themakerjourney.kit.com/posts/how-we-made-3-7k-in-pre-sale-for-blacktwist):
   개발 과정 공유와 독자 참여의 참고 자료. 한국어 말투나 성과의 검증 기준은 아니다.
 - Threads 원문 다수를 직접 분석한 데이터셋이 아니다. 특정 계정의 표현을 복제하지 않는다.

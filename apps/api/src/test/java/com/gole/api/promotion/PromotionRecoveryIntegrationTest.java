@@ -6,9 +6,14 @@ import com.gole.api.promotion.adapter.out.persistence.PromotionPostDocument;
 import com.gole.api.promotion.adapter.out.persistence.PromotionPostMongoRepository;
 import com.gole.api.promotion.adapter.out.persistence.PromotionPostPersistenceAdapter;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
+import com.gole.api.promotion.domain.model.CaptureDataSource;
+import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
 import com.gole.api.promotion.domain.model.PromotionPost;
+import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionProvenance;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import java.time.Instant;
@@ -94,6 +99,41 @@ class PromotionRecoveryIntegrationTest {
         }
         assertThat(posts.countByStatus(PromotionPostStatus.PENDING_REVIEW)).isEqualTo(1);
         assertThat(posts.countByStatus(PromotionPostStatus.DRAFT)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("실제 Mongo 에서 종류·설명표·출처가 저장했다 읽어도 그대로다")
+    void context_roundTripsThroughMongo() {
+        var context = new PromotionPostContext(
+                PromotionCategory.SERVICE,
+                List.of(new PromotionCapture("필터 열린 목록", "/market", "필터 클릭", CaptureDataSource.DEMO, NOW)),
+                new PromotionProvenance("릴리스", "이유", "https://github.com/o/r/actions/runs/1"));
+        posts.save(PromotionPost.draft(
+                "ctx", PromotionChannel.THREADS, "초안", List.of("/a.png"), "author", null, NOW, context));
+
+        assertThat(posts.findById("ctx").orElseThrow().context()).isEqualTo(context);
+    }
+
+    @Test
+    @DisplayName("다음 차례와 최신 발행 시각을 실제 정렬로 고른다")
+    void publishOrderQueries_useReviewAndPublishTimes() {
+        approved("later", NOW.plusSeconds(20));
+        approved("earlier", NOW.plusSeconds(10));
+        var published = PromotionPost.draft("done", PromotionChannel.THREADS, "초안", List.of(), "author", null, NOW);
+        published.submitForReview(NOW);
+        published.approve("reviewer", NOW);
+        published.markPublished("stub-1", NOW.plusSeconds(30));
+        posts.save(published);
+
+        assertThat(posts.findOldestApproved().orElseThrow().getId()).isEqualTo("earlier");
+        assertThat(posts.findLatestPublishedAt()).contains(NOW.plusSeconds(30));
+    }
+
+    private void approved(String id, Instant reviewedAt) {
+        var post = PromotionPost.draft(id, PromotionChannel.THREADS, "초안", List.of(), "author", null, NOW);
+        post.submitForReview(NOW);
+        post.approve("reviewer", reviewedAt);
+        posts.save(post);
     }
 
     private boolean reclaim(String id, CyclicBarrier barrier) throws Exception {

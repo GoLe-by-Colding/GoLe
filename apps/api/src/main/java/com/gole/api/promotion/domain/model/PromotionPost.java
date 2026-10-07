@@ -46,6 +46,9 @@ public final class PromotionPost {
     private Instant publishedAt;
     private String externalPostId;
 
+    /** 종류·스크린샷 설명표·출처. 검토자가 초안과 함께 본다. 생성 후 바뀌지 않는다. */
+    private final PromotionPostContext context;
+
     public PromotionPost(
             String id,
             PromotionChannel channel,
@@ -62,6 +65,42 @@ public final class PromotionPost {
             String rejectionReason,
             Instant publishedAt,
             String externalPostId) {
+        this(
+                id,
+                channel,
+                caption,
+                mediaUrls,
+                authorId,
+                sourceCommitSha,
+                claimedSourceCommitSha,
+                status,
+                createdAt,
+                submittedAt,
+                reviewerId,
+                reviewedAt,
+                rejectionReason,
+                publishedAt,
+                externalPostId,
+                PromotionPostContext.NONE);
+    }
+
+    public PromotionPost(
+            String id,
+            PromotionChannel channel,
+            String caption,
+            List<String> mediaUrls,
+            String authorId,
+            String sourceCommitSha,
+            String claimedSourceCommitSha,
+            PromotionPostStatus status,
+            Instant createdAt,
+            Instant submittedAt,
+            String reviewerId,
+            Instant reviewedAt,
+            String rejectionReason,
+            Instant publishedAt,
+            String externalPostId,
+            PromotionPostContext context) {
         this.id = Objects.requireNonNull(id, "id");
         this.channel = Objects.requireNonNull(channel, "channel");
         this.caption = requireCaption(caption);
@@ -78,6 +117,7 @@ public final class PromotionPost {
         this.rejectionReason = rejectionReason;
         this.publishedAt = publishedAt;
         this.externalPostId = externalPostId;
+        this.context = requireContext(context, this.mediaUrls);
     }
 
     /** 신규 초안: DRAFT 상태로 생성. */
@@ -89,6 +129,19 @@ public final class PromotionPost {
             String authorId,
             String sourceCommitSha,
             Instant now) {
+        return draft(id, channel, caption, mediaUrls, authorId, sourceCommitSha, now, PromotionPostContext.NONE);
+    }
+
+    /** 신규 초안 + 검토 맥락(에이전트가 만든 초안). */
+    public static PromotionPost draft(
+            String id,
+            PromotionChannel channel,
+            String caption,
+            List<String> mediaUrls,
+            String authorId,
+            String sourceCommitSha,
+            Instant now,
+            PromotionPostContext context) {
         return new PromotionPost(
                 id,
                 channel,
@@ -105,7 +158,8 @@ public final class PromotionPost {
                 null,
                 null,
                 null,
-                null);
+                null,
+                context);
     }
 
     /** 검토 요청: DRAFT → PENDING_REVIEW. DRAFT가 아니면 거부한다. */
@@ -204,11 +258,37 @@ public final class PromotionPost {
         return List.copyOf(mediaUrls);
     }
 
+    /** 설명표는 없거나, 있다면 스크린샷마다 하나씩이어야 한다 — 어긋나면 검토 화면이 엉뚱한 사진에 붙인다. */
+    private static PromotionPostContext requireContext(PromotionPostContext context, List<String> mediaUrls) {
+        PromotionPostContext resolved = context == null ? PromotionPostContext.NONE : context;
+        if (!resolved.captures().isEmpty() && resolved.captures().size() != mediaUrls.size()) {
+            throw new IllegalArgumentException("captures must match mediaUrls one to one");
+        }
+        return resolved;
+    }
+
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
+    }
+
+    public PromotionCategory getCategory() {
+        return context.category();
+    }
+
+    public List<PromotionCapture> getCaptures() {
+        return context.captures();
+    }
+
+    public PromotionProvenance getProvenance() {
+        return context.provenance();
+    }
+
+    /** 영속 어댑터용. getter 이름이 아니라서 API 응답에는 위 세 getter 로만 풀려 나간다. */
+    public PromotionPostContext context() {
+        return context;
     }
 
     public String getId() {

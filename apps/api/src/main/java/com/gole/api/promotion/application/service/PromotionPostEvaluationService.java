@@ -6,19 +6,25 @@ import com.gole.api.promotion.application.port.out.PromotionAuditMetricsPort;
 import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionRunRepositoryPort;
 import com.gole.api.promotion.domain.exception.PromotionPostEvaluationNotFoundException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
 import com.gole.api.promotion.domain.model.EvaluationCriterion;
 import com.gole.api.promotion.domain.model.FirstReviewVerdict;
 import com.gole.api.promotion.domain.model.HoldReasonKind;
+import com.gole.api.promotion.domain.model.ModelCall;
 import com.gole.api.promotion.domain.model.PromotionPostEvaluation;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import com.gole.api.promotion.domain.model.PromotionRun;
+import com.gole.api.promotion.domain.model.RunOutcome;
+import com.gole.api.promotion.domain.model.RunReasonCode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,6 +51,7 @@ public class PromotionPostEvaluationService
     private final PromotionPostEvaluationRepositoryPort evaluations;
     private final PromotionPostIdGeneratorPort idGenerator;
     private final PromotionAuditMetricsPort auditMetrics;
+    private final PromotionRunRepositoryPort runs;
     private final Clock clock;
 
     public PromotionPostEvaluationService(
@@ -52,11 +59,13 @@ public class PromotionPostEvaluationService
             PromotionPostEvaluationRepositoryPort evaluations,
             PromotionPostIdGeneratorPort idGenerator,
             PromotionAuditMetricsPort auditMetrics,
+            PromotionRunRepositoryPort runs,
             Clock clock) {
         this.promotionPosts = promotionPosts;
         this.evaluations = evaluations;
         this.idGenerator = idGenerator;
         this.auditMetrics = auditMetrics;
+        this.runs = runs;
         this.clock = clock;
     }
 
@@ -93,7 +102,7 @@ public class PromotionPostEvaluationService
 
     @Override
     public PromotionMetrics getMetrics() {
-        return new PromotionMetrics(operationalMetrics(), qualityMetrics());
+        return new PromotionMetrics(operationalMetrics(), qualityMetrics(), runMetrics());
     }
 
     private OperationalMetrics operationalMetrics() {
@@ -163,6 +172,33 @@ public class PromotionPostEvaluationService
                 criterionScoreDistribution(all),
                 durationStats(reviewSeconds),
                 durationStats(reviseSeconds));
+    }
+
+    private RunMetrics runMetrics() {
+        List<PromotionRun> all = runs.findAll();
+        Map<RunOutcome, Long> byOutcome = new EnumMap<>(RunOutcome.class);
+        Map<RunReasonCode, Long> byReason = new EnumMap<>(RunReasonCode.class);
+        Map<String, long[]> tokens = new LinkedHashMap<>();
+        Map<String, Double> cost = new LinkedHashMap<>();
+        for (PromotionRun run : all) {
+            byOutcome.merge(run.outcome(), 1L, Long::sum);
+            byReason.merge(run.reasonCode(), 1L, Long::sum);
+            for (ModelCall call : run.calls()) {
+                long[] sum = tokens.computeIfAbsent(call.engine(), engine -> new long[5]);
+                sum[0]++;
+                sum[1] += call.ok() ? 0 : 1;
+                sum[2] += call.inputTokens();
+                sum[3] += call.cachedInputTokens();
+                sum[4] += call.outputTokens();
+                if (call.costUsd() != null) {
+                    cost.merge(call.engine(), call.costUsd(), Double::sum);
+                }
+            }
+        }
+        Map<String, EngineUsage> usage = new LinkedHashMap<>();
+        tokens.forEach((engine, sum) ->
+                usage.put(engine, new EngineUsage(sum[0], sum[1], sum[2], sum[3], sum[4], cost.get(engine))));
+        return new RunMetrics(all.size(), Map.copyOf(byOutcome), Map.copyOf(byReason), Map.copyOf(usage));
     }
 
     /** 분모(평가 건수) 0이면 "0%"로 잘못 표시되지 않게 {@code null}(N/A)을 돌려준다. */

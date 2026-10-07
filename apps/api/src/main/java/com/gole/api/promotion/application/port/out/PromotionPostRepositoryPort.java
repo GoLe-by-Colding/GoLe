@@ -30,6 +30,12 @@ public interface PromotionPostRepositoryPort {
 
     long countByStatus(PromotionPostStatus status);
 
+    /** 발행 차례 — 승인된 글 중 가장 먼저 승인된 것. */
+    Optional<PromotionPost> findOldestApproved();
+
+    /** 가장 최근 발행 시각. 발행 간격 가드용. */
+    Optional<Instant> findLatestPublishedAt();
+
     /**
      * 검토 소요시간 집계용 — 제출·검토 시각이 <b>둘 다 있는</b> 게시물의 그 두 값만 읽는다.
      *
