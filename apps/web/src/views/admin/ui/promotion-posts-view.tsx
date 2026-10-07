@@ -196,7 +196,7 @@ function PromotionWorkspace({
   }
 
   // 규칙에 따른 발행 거절은 장애가 아니라 예상된 결과라, 연결 오류 배너가 아닌 안내로 보여준다.
-  const PUBLISH_NEXT_MESSAGES: Readonly<Record<string, string>> = {
+  const PUBLISH_MESSAGES: Readonly<Record<string, string>> = {
     PROMOTION_NO_APPROVED_POSTS: "발행할 승인된 글이 없습니다. 먼저 검토 대기 글을 승인해 주세요.",
     PROMOTION_PUBLISH_TOO_SOON: "직전 발행 후 6시간이 지나야 다음 글을 올릴 수 있습니다.",
   };
@@ -212,7 +212,7 @@ function PromotionWorkspace({
       setNotice(`승인된 글 중 가장 먼저 승인된 글(${shortId(published.id)})을 발행했습니다.`);
       reload();
     } catch (cause) {
-      const known = cause instanceof ApiError ? PUBLISH_NEXT_MESSAGES[cause.code] : undefined;
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
       if (known !== undefined) {
         setNotice(known);
       } else {
@@ -242,9 +242,15 @@ function PromotionWorkspace({
       reload();
       return true;
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "처리하지 못했습니다. 다시 시도해 주세요.",
-      );
+      // 행별 발행도 6시간 간격을 지키므로 같은 안내를 띄운다.
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "처리하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
       return false;
     } finally {
       mutationInFlight.current = false;
