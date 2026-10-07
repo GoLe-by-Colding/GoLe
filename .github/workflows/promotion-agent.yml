@@ -35,6 +35,8 @@ permissions:
   contents: read
   # 지난 실행의 캡처 아티팩트를 받는다.
   actions: read
+  # 데모 스택의 MinIO·mc 이미지(비공개 GHCR)를 받는다.
+  packages: read
 
 concurrency:
   group: promotion-agent
@@ -56,6 +58,9 @@ jobs:
       # 입력은 ${{ }} 로 run 에 직접 넣지 않는다 — 셸 명령 치환 경로가 된다. 환경변수로만 읽는다.
       SHA: ${{ github.event.workflow_run.head_sha || inputs.sha }}
       SERVICE: ${{ github.event_name == 'schedule' || inputs.service }}
+      # MinIO 공식 이미지가 공개 레지스트리에서 사라져 ci.yml E2E 와 같은 소스 빌드 GHCR 이미지를 쓴다.
+      GOLE_MINIO_IMAGE: ghcr.io/gole-by-colding/minio:RELEASE.2025-09-07T16-13-09Z@sha256:fd4bf518becea030ae14e629d74ac3c41182c548689c3896937b72439d2d1ef8
+      GOLE_MC_IMAGE: ghcr.io/gole-by-colding/mc:RELEASE.2025-08-13T08-35-41Z@sha256:47a390e3b5f38ad99c025f1f956b04344feee74f802673f9379452b6e617b69f
     steps:
       # 비싼 스택 기동 전에 입력부터 막는다. 서비스 홍보는 지금 main 화면을 찍는다.
       - name: Validate input
@@ -170,6 +175,13 @@ jobs:
         run: uv run --no-sync playwright install --with-deps chromium
 
       # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
+      - name: Log in to GHCR
+        if: env.REUSE != 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
       - name: Start infra (Mongo rs0 · Redis · MinIO)
         if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}
