@@ -21,6 +21,26 @@ export interface ListingPriceGap {
   readonly evidenceWarning: string | null;
 }
 
+/** 판매가를 세트 시세와 견줄 수 있는지 볼 때 필요한 매물의 최소 형태. 웹·앱의 매물 타입이 그대로 들어온다. */
+export interface PriceComparableListing {
+  readonly category: string;
+  readonly status: string;
+  readonly catalogSetNumber: string | null;
+}
+
+/**
+ * 이 매물의 판매가를 어느 세트의 시세와 견줄 수 있는지 — 견줄 수 없으면 `null`.
+ *
+ * 세트 시세는 세트 한 벌(`set` 카테고리)의 거래에서 나온다. 미니피규어·부품·MOC 매물도 출처 세트 번호를 달 수
+ * 있지만, 그 가격을 세트 한 벌의 추정 시세와 견주면 "추정 시세보다 95% 낮음" 같은 엉뚱한 판정이 된다.
+ * 거래가 끝난 매물(판매 완료·숨김)도 지금 살 수 있는 가격이 아니므로 견주지 않는다.
+ */
+export function priceComparableSetNumber(listing: PriceComparableListing): string | null {
+  if (listing.category !== "set") return null;
+  if (listing.status !== "active" && listing.status !== "reserved") return null;
+  return listing.catalogSetNumber;
+}
+
 /** 이 비율 안의 차이는 "비슷"으로 부른다. 추정 시세도 표본에 따라 흔들리므로 1~2% 차이를 높다·낮다고 하지 않는다. */
 export const SIMILAR_PRICE_RATIO = 0.03;
 
