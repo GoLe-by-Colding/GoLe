@@ -34,5 +34,6 @@ public interface SupportConversationPrivacyRepositoryPort {
             String reasonCode,
             String idempotencyKeyHash,
             String requestFingerprint,
-            Instant purgedAt) {}
+            Instant purgedAt,
+            long auditReferencesAnonymized) {}
 }

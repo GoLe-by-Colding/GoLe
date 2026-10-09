@@ -261,7 +261,8 @@ class SupportConversationPurgeIntegrationTest {
                 PurgeReasonCode.DUPLICATE_OR_TEST_CONVERSATION.name(),
                 sha256("integration-purge-key-rollback"),
                 sha256(roomId + "\nrollback"),
-                NOW);
+                NOW,
+                0L);
 
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         assertThatThrownBy(() -> transaction.executeWithoutResult(ignored -> {

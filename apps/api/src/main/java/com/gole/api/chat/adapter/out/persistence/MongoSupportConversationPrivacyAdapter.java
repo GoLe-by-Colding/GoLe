@@ -1,7 +1,5 @@
 package com.gole.api.chat.adapter.out.persistence;
 
-import com.gole.api.admin.adapter.out.persistence.AdminActionDocument;
-import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SupportPurgeCounts;
@@ -113,15 +111,8 @@ public class MongoSupportConversationPrivacyAdapter implements SupportConversati
                                         Criteria.where("active").is(false))),
                         SupportConversationRetentionHoldDocument.class)
                 .getDeletedCount();
-        long anonymizedAuditReferences = mongoTemplate
-                .updateMulti(
-                        Query.query(new Criteria()
-                                .andOperator(
-                                        Criteria.where("targetType").is(AdminTargetType.SUPPORT_TICKET.name()),
-                                        Criteria.where("targetId").is(command.roomId()))),
-                        new Update().set("targetId", command.receiptId()),
-                        AdminActionDocument.class)
-                .getModifiedCount();
+        // 감사 기록 가명화는 같은 트랜잭션에서 admin 이 먼저 처리했다(SupportAuditReferencePort). 건수만 영수증에 남긴다.
+        long anonymizedAuditReferences = command.auditReferencesAnonymized();
 
         SupportPurgeCounts counts = new SupportPurgeCounts(
                 deletedMessages,

@@ -7,6 +7,7 @@ import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
+import com.gole.api.chat.application.port.out.SupportAuditReferencePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -55,6 +56,7 @@ public class SupportConversationPrivacyService implements ManageSupportConversat
     private final Clock clock;
     private final SupportAssistantPurgePort assistantPurge;
     private final SupportAssistantAnalysisRepositoryPort analyses;
+    private final SupportAuditReferencePort auditReferencePort;
 
     public SupportConversationPrivacyService(
             ChatAccountPort accounts,
@@ -65,7 +67,8 @@ public class SupportConversationPrivacyService implements ManageSupportConversat
             SupportConversationPrivacyRepositoryPort privacy,
             Clock clock,
             SupportAssistantPurgePort assistantPurge,
-            SupportAssistantAnalysisRepositoryPort analyses) {
+            SupportAssistantAnalysisRepositoryPort analyses,
+            SupportAuditReferencePort auditReferencePort) {
         this.accounts = accounts;
         this.tickets = tickets;
         this.rooms = rooms;
@@ -75,6 +78,7 @@ public class SupportConversationPrivacyService implements ManageSupportConversat
         this.clock = clock;
         this.assistantPurge = assistantPurge;
         this.analyses = analyses;
+        this.auditReferencePort = auditReferencePort;
     }
 
     @Transactional
@@ -128,8 +132,11 @@ public class SupportConversationPrivacyService implements ManageSupportConversat
 
         Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
         assistantPurge.requireAvailable(analyses.hasRemoteCopyPossible(roomId));
+        String receiptId = UUID.randomUUID().toString();
+        // 감사 기록이 파기될 문의방 ID를 계속 가리키지 않게 영수증 ID로 가명화한다. 아래 파기가 실패하면 함께 되돌려진다.
+        long auditReferences = auditReferencePort.pseudonymizeSupportTicketReferences(roomId, receiptId);
         SupportPurgeReceipt receipt = privacy.purge(new PurgeWrite(
-                UUID.randomUUID().toString(),
+                receiptId,
                 roomId,
                 ticket.version(),
                 ticket.resolvedAt(),
@@ -137,7 +144,8 @@ public class SupportConversationPrivacyService implements ManageSupportConversat
                 reasonCode.name(),
                 keyHash,
                 requestFingerprint,
-                now));
+                now,
+                auditReferences));
         // Mongo 변경/영수증은 아직 미커밋이다. 원격 실패는 전체 rollback으로 성공 보고를 막는다.
         // 원격 성공 뒤 Mongo commit 실패는 tombstone으로 복구한다. 재시도는 동일 원격 영수증을 받는다.
         assistantPurge.purge(roomId, ticket.requesterId());

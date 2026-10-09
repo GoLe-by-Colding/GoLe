@@ -17,6 +17,7 @@ import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
+import com.gole.api.chat.application.port.out.SupportAuditReferencePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -51,6 +52,7 @@ class SupportConversationPrivacyServiceTest {
     private final SupportConversationPrivacyRepositoryPort privacy =
             mock(SupportConversationPrivacyRepositoryPort.class);
     private final SupportAssistantPurgePort assistantPurge = mock(SupportAssistantPurgePort.class);
+    private final SupportAuditReferencePort auditReferences = mock(SupportAuditReferencePort.class);
     private final SupportConversationPrivacyService service = new SupportConversationPrivacyService(
             accounts,
             tickets,
@@ -60,7 +62,8 @@ class SupportConversationPrivacyServiceTest {
             privacy,
             Clock.fixed(NOW, ZoneOffset.UTC),
             assistantPurge,
-            mock(SupportAssistantAnalysisRepositoryPort.class));
+            mock(SupportAssistantAnalysisRepositoryPort.class),
+            auditReferences);
 
     @BeforeEach
     void setUp() {
