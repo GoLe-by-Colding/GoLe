@@ -13,6 +13,8 @@ const CORE_ROUTES = [
   "/notifications",
   "/sell",
   "/community/new",
+  "/parts",
+  "/parts/new",
   "/profile/security",
   "/profile/notifications",
   "/login",
@@ -83,9 +85,10 @@ test("핵심 화면의 모든 버튼과 링크가 유효한 단일 상호작용 
         const result: InteractionDefect[] = [];
         const knownInternalRoutes = [
           /^\/$/,
-          /^\/(?:search|brick-filter|prices|community|feed|collection|chat|profile|notifications|sell|login|signup|forgot-password|verify|onboarding|privacy|terms|review-policy)\/?$/,
+          /^\/(?:search|brick-filter|prices|community|feed|collection|chat|profile|notifications|sell|parts|login|signup|forgot-password|verify|onboarding|privacy|terms|review-policy)\/?$/,
           /^\/profile\/(?:security|notifications)\/?$/,
-          /^\/(?:listings|orders|sets|shops|community)\/[^/]+\/?$/,
+          /^\/(?:listings|orders|sets|shops|community|parts)\/[^/]+\/?$/,
+          /^\/listings\/[^/]+\/edit\/?$/,
           /^\/payments\/portone\/return\/?$/,
           /^\/auth\/callback\/[^/]+\/?$/,
           /^\/admin(?:\/(?:account-deletions|accounts|audit|catalog|community|exceptions|launch|listings|orders|reports|settlements|support))?\/?$/,
