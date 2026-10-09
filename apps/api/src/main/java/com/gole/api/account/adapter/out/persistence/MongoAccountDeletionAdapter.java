@@ -188,6 +188,9 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
         counts.put(
                 "collectionItems",
                 remove("collection_items", Criteria.where("userId").is(expectedAccountId)));
+        counts.put(
+                "collectionValueSnapshots",
+                remove("collection_value_snapshots", Criteria.where("userId").is(expectedAccountId)));
         // 부품 요청은 작성자 개인의 게시물이라 익명화하지 않고 지운다. (wanted-parts W11)
         counts.put(
                 "partRequests",
