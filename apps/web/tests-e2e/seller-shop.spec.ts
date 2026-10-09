@@ -33,6 +33,10 @@ test.describe("판매자 샵", () => {
       return grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 0;
     });
     expect(columns).toBe(2);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    // 가로 넘침 없음. 리눅스 CI 브라우저는 세로 스크롤바 폭(15px)을 빼서 clientWidth가 390보다 작으므로 고정값과 견주지 않는다.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });
