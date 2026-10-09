@@ -74,6 +74,20 @@ test.describe("Mobile responsive", () => {
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
   });
 
+  test("모바일 검색은 적용된 필터를 칩으로 보이고 누르면 그 필터만 뺀다", async ({ page }) => {
+    // 상세 필터가 접혀 있는 휴대폰에서도 무엇이 적용됐는지 보인다. 잘못된 금액(abc)은 칩·주소에서 빠진다.
+    await page.goto(
+      "/search?condition=used_good&category=set&minPrice=10000&maxPrice=abc&sort=price_asc",
+    );
+    const chips = page.getByRole("list", { name: "적용된 필터" });
+    await expect(chips.getByRole("link")).toHaveCount(4);
+    await expect(page.getByRole("button", { name: /필터\s*4/ })).toBeVisible();
+
+    await chips.getByRole("link", { name: "중고-양호 필터 빼기" }).click();
+    await expect(page).toHaveURL(/\/search\?category=set&minPrice=10000&sort=price_asc$/);
+    await expect(page.getByRole("list", { name: "적용된 필터" }).getByRole("link")).toHaveCount(3);
+  });
+
   test("모바일에서 데스크톱 인라인 네비는 숨겨진다", async ({ page }) => {
     await page.goto("/");
     // 데스크톱 nav 링크(헤더의 '탐색')는 max-sm에서 hidden

@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   conditionLabel,
@@ -34,6 +35,60 @@ const SORTS: ReadonlyArray<{ readonly value: ListingSort; readonly label: string
   { value: "price_desc", label: "가격 높은순" },
 ];
 
+/** 0 이상 숫자인 금액만 받는다. 주소에 손으로 넣은 "abc" 같은 값은 서버도 버리므로 칩·주소에서도 뺀다. */
+function validPrice(value: string): number | null {
+  const amount = Number(value);
+  return value.trim() !== "" && Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+function priceText(value: string): string | null {
+  const amount = validPrice(value);
+  return amount === null ? null : `${amount.toLocaleString("ko-KR")}원`;
+}
+
+/** 필터 값으로 검색 주소를 만든다. 빈 값·잘못된 금액·기본 정렬은 주소에 싣지 않는다. */
+function searchHref(values: ListingFilterValues): string {
+  const qs = new URLSearchParams();
+  if (values.query.trim()) qs.set("query", values.query.trim());
+  if (values.condition) qs.set("condition", values.condition);
+  if (values.category) qs.set("category", values.category);
+  if (validPrice(values.minPrice) !== null) qs.set("minPrice", values.minPrice.trim());
+  if (validPrice(values.maxPrice) !== null) qs.set("maxPrice", values.maxPrice.trim());
+  if (values.sort !== "newest") qs.set("sort", values.sort);
+  const suffix = qs.toString();
+  return suffix ? `/search?${suffix}` : "/search";
+}
+
+/** 지금 주소에 적용된 필터(검색어 제외)를 칩으로. 각 칩은 그 필터만 뺀 주소를 가리킨다. */
+function appliedFilters(
+  initial: ListingFilterValues,
+): ReadonlyArray<{ readonly key: string; readonly label: string; readonly href: string }> {
+  const chips: Array<{ key: string; label: string; href: string }> = [];
+  const without = (patch: Partial<ListingFilterValues>) => searchHref({ ...initial, ...patch });
+  if (initial.category) {
+    const label = LISTING_CATEGORIES.find((c) => c.key === initial.category)?.label;
+    if (label) chips.push({ key: "category", label, href: without({ category: "" }) });
+  }
+  if (initial.condition) {
+    chips.push({
+      key: "condition",
+      label: conditionLabel(initial.condition),
+      href: without({ condition: "" }),
+    });
+  }
+  const min = priceText(initial.minPrice);
+  if (min !== null)
+    chips.push({ key: "minPrice", label: `${min} 이상`, href: without({ minPrice: "" }) });
+  const max = priceText(initial.maxPrice);
+  if (max !== null)
+    chips.push({ key: "maxPrice", label: `${max} 이하`, href: without({ maxPrice: "" }) });
+  if (initial.sort !== "newest") {
+    const label = SORTS.find((s) => s.value === initial.sort)?.label;
+    if (label) chips.push({ key: "sort", label, href: without({ sort: "newest" }) });
+  }
+  return chips;
+}
+
 export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   const router = useRouter();
   const [values, setValues] = useState<ListingFilterValues>(initial);
@@ -45,15 +100,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const qs = new URLSearchParams();
-    if (values.query.trim()) qs.set("query", values.query.trim());
-    if (values.condition) qs.set("condition", values.condition);
-    if (values.category) qs.set("category", values.category);
-    if (values.minPrice.trim()) qs.set("minPrice", values.minPrice.trim());
-    if (values.maxPrice.trim()) qs.set("maxPrice", values.maxPrice.trim());
-    if (values.sort !== "newest") qs.set("sort", values.sort);
-    const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    router.push(`/search${suffix}`);
+    router.push(searchHref(values));
     setOpen(false);
   }
 
@@ -61,10 +108,11 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
   const activeCount = [
     values.condition,
     values.category,
-    values.minPrice,
-    values.maxPrice,
+    priceText(values.minPrice),
+    priceText(values.maxPrice),
     values.sort !== "newest" ? values.sort : "",
   ].filter(Boolean).length;
+  const chips = appliedFilters(initial);
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white">
@@ -112,6 +160,28 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
             검색
           </Button>
         </div>
+
+        {/* 모바일은 상세 필터가 접혀 있어 무엇이 적용됐는지 보이지 않는다. 적용된 필터를 칩으로 보여 주고
+            누르면 그 필터만 빼고 다시 찾는다(데스크톱은 필터가 늘 펼쳐져 있어 숨긴다). */}
+        {chips.length > 0 && !open ? (
+          <ul
+            aria-label="적용된 필터"
+            className="flex flex-wrap gap-1.5 border-t border-neutral-100 px-3 py-2 sm:hidden"
+          >
+            {chips.map((chip) => (
+              <li key={chip.key}>
+                <Link
+                  href={chip.href}
+                  aria-label={`${chip.label} 필터 빼기`}
+                  className="inline-flex h-7 items-center gap-1 rounded-full bg-brand-50 px-2.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100"
+                >
+                  {chip.label}
+                  <span aria-hidden="true">×</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {/* 상세 필터: 모바일은 토글, 데스크톱은 항상 노출 */}
         <div
