@@ -228,6 +228,13 @@ gole:
     seed-on-empty: ${GOLE_REPORT_SEED:false}
   review:
     seed-on-empty: ${GOLE_REVIEW_SEED:false}
+  # 컬렉션 자산 추이(collection-value-history H2). 매일 보유 항목이 있는 사용자의 하루치 추정가를 찍는다.
+  # 운영은 백엔드 컨테이너 하나라 잠금 없이 돈다 — 사용자·날짜 기준 덮어쓰기라 두 번 돌아도 결과가 같다.
+  collection:
+    value-snapshot:
+      enabled: ${GOLE_COLLECTION_VALUE_SNAPSHOT_ENABLED:true}
+      cron: "${GOLE_COLLECTION_VALUE_SNAPSHOT_CRON:0 30 4 * * *}"
+      zone: ${GOLE_COLLECTION_VALUE_SNAPSHOT_ZONE:Asia/Seoul}
   media:
     seed-on-startup: ${GOLE_MEDIA_SEED:false}
     upload-rate-limit:
