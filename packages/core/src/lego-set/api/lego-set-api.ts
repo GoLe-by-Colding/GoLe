@@ -21,6 +21,13 @@ export function fetchLegoSetForPage(setNumber: string): Promise<LegoSet> {
   });
 }
 
+/** 검색 화면(SSR)용 카탈로그 검색. 카탈로그는 거의 변하지 않으므로 같은 검색어는 1시간 캐시한다. */
+export function searchLegoSetsForPage(query: string): Promise<readonly LegoSet[]> {
+  return apiRequest<readonly LegoSet[]>(`/api/v1/catalog/sets?query=${encodeURIComponent(query)}`, {
+    next: { revalidate: 3600 },
+  });
+}
+
 export function searchLegoSets(query: string, signal?: AbortSignal): Promise<readonly LegoSet[]> {
   const encoded = encodeURIComponent(query);
   return apiRequest<readonly LegoSet[]>(
