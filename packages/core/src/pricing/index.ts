@@ -24,9 +24,10 @@ export {
   priceComparableSetNumber,
   priceGapBasisCaption,
   priceGapLabel,
+  sameGradeEstimate,
   SIMILAR_PRICE_RATIO,
 } from "./model/price-gap";
-export type { ListingPriceGap, PriceComparableListing } from "./model/price-gap";
+export type { ListingPriceGap, PriceComparableListing, SameGradeEstimate } from "./model/price-gap";
 export {
   fetchPriceStatistics,
   fetchPriceStatisticsForPage,

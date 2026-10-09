@@ -11,13 +11,20 @@ import { priceEvidenceWarning, valuationBasisLabel } from "./types";
  *   표본 없이 감가 모델로만 낸 추정(`model`)과 비교하면 근거 없는 판정이 되므로 만들지 않는다.
  * - 출처 경고(데모 포함·직거래 참고 등)는 그대로 들고 다녀 화면이 숨기지 않게 한다.
  */
-export interface ListingPriceGap {
+export interface ListingPriceGap extends SameGradeEstimate {
+  /** (판매가 − 추정 시세) / 추정 시세. 양수면 판매가가 추정 시세보다 높다. */
+  readonly ratio: number;
+}
+
+/**
+ * 한 등급의 추정 시세를 판매가 옆에 놓아도 될 때의 값 — 가격과 견주기 전 단계다.
+ * 판매 등록 화면은 가격을 넣기 전에도 이 값을 보여 준다.
+ */
+export interface SameGradeEstimate {
   readonly condition: SetCondition;
   readonly fairPrice: number;
   readonly basis: ConditionValuation["basis"];
   readonly sampleCount: number;
-  /** (판매가 − 추정 시세) / 추정 시세. 양수면 판매가가 추정 시세보다 높다. */
-  readonly ratio: number;
   readonly evidenceWarning: string | null;
 }
 
@@ -44,25 +51,38 @@ export function priceComparableSetNumber(listing: PriceComparableListing): strin
 /** 이 비율 안의 차이는 "비슷"으로 부른다. 추정 시세도 표본에 따라 흔들리므로 1~2% 차이를 높다·낮다고 하지 않는다. */
 export const SIMILAR_PRICE_RATIO = 0.03;
 
-export function listingPriceGap(
-  price: number,
+/**
+ * 확정 시세에서 그 등급의 추정 시세를 꺼낸다. 실제 체결 표본(`grade`·`group`) 근거일 때만 — 체결 전·참고 단계·
+ * 감가 모델(`model`)이면 `null`이다.
+ */
+export function sameGradeEstimate(
   condition: SetCondition,
   snapshot: PriceSnapshot | null,
-): ListingPriceGap | null {
+): SameGradeEstimate | null {
   if (snapshot === null || snapshot.state !== "ESTABLISHED" || !snapshot.valuation?.hasData) {
     return null;
   }
   const valuation = snapshot.valuation.conditions.find((item) => item.condition === condition);
-  if (valuation === undefined || valuation.basis === "model") return null;
-  if (!(valuation.fairPrice > 0) || !(price > 0)) return null;
+  if (valuation === undefined || valuation.basis === "model" || !(valuation.fairPrice > 0)) {
+    return null;
+  }
   return {
     condition,
     fairPrice: valuation.fairPrice,
     basis: valuation.basis,
     sampleCount: valuation.sampleCount,
-    ratio: (price - valuation.fairPrice) / valuation.fairPrice,
     evidenceWarning: priceEvidenceWarning(snapshot.provenance),
   };
+}
+
+export function listingPriceGap(
+  price: number,
+  condition: SetCondition,
+  snapshot: PriceSnapshot | null,
+): ListingPriceGap | null {
+  const estimate = sameGradeEstimate(condition, snapshot);
+  if (estimate === null || !(price > 0)) return null;
+  return { ...estimate, ratio: (price - estimate.fairPrice) / estimate.fairPrice };
 }
 
 /**
@@ -79,8 +99,8 @@ export function priceGapLabel(ratio: number, lead = "판매가"): string {
  * 비교의 근거 한 줄 — "동일 상태 체결 19건 · 데모 포함". 근거 이름은 시세 영역과 같은 문구를 그대로 쓴다.
  * 이름 뒤에 "기준"을 덧붙이지 않는다 — 유사 등급 근거는 이미 "유사 등급 N건 기준"이라 "기준 기준"이 된다.
  */
-export function priceGapBasisCaption(gap: ListingPriceGap): string {
-  return [valuationBasisLabel(gap.basis, gap.sampleCount), gap.evidenceWarning]
+export function priceGapBasisCaption(estimate: SameGradeEstimate): string {
+  return [valuationBasisLabel(estimate.basis, estimate.sampleCount), estimate.evidenceWarning]
     .filter((part): part is string => part !== null)
     .join(" · ");
 }
