@@ -45,9 +45,12 @@ export function listingPriceGap(
   };
 }
 
-/** 판매가가 추정 시세와 얼마나 다른지 짧게 — "판매가 17.7% 높음" / "판매가 5.2% 낮음" / "시세와 비슷". */
-export function priceGapLabel(ratio: number): string {
+/**
+ * 판매가가 추정 시세와 얼마나 다른지 짧게 — "판매가 17.5% 높음" / "판매가 5.3% 낮음" / "시세와 비슷".
+ * 목록 카드처럼 주어가 다른 자리에서는 `lead`를 바꾼다(예: "추정 시세보다 5.3% 낮음").
+ */
+export function priceGapLabel(ratio: number, lead = "판매가"): string {
   if (Math.abs(ratio) < SIMILAR_PRICE_RATIO) return "시세와 비슷";
   const percent = Math.round(Math.abs(ratio) * 1000) / 10;
-  return `판매가 ${percent.toLocaleString("ko-KR")}% ${ratio > 0 ? "높음" : "낮음"}`;
+  return `${lead} ${percent.toLocaleString("ko-KR")}% ${ratio > 0 ? "높음" : "낮음"}`;
 }
