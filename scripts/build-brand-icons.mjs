@@ -52,12 +52,13 @@ function checkCopies(mark) {
 
 // ── 배치 ──
 /**
- * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 머리가 아래에 무겁고(무게중심 높이 61%) 꼬리가 왼쪽
- * 위로 뻗어(무게중심 너비 46%) 경계 상자 중심에 두면 눈에는 왼쪽 아래로 처져 보인다. 그래서 마크
- * 너비의 1.8%만큼 오른쪽, 높이의 5.5%만큼 위로 옮긴다 — 무게중심과 상자 중심 차이의 절반이다.
+ * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 몸이 아래에 무겁고(무게중심 높이 54.8%) 꼬리가 왼쪽
+ * 위에 조금 나와(무게중심 너비 48.9%) 경계 상자 중심에 두면 눈에는 살짝 왼쪽 아래로 처져 보인다.
+ * 그래서 마크 너비의 0.6%만큼 오른쪽, 높이의 2.4%만큼 위로 옮긴다 — 무게중심과 상자 중심 차이의
+ * 절반이다(2026-10-09 아기 고래 마크 실측. 이전 마크는 꼬리가 길어 1.8%·5.5%였다).
  */
-const NUDGE_X = 0.018;
-const NUDGE_Y = -0.055;
+const NUDGE_X = 0.006;
+const NUDGE_Y = -0.024;
 function placed(mark, { canvas, width, body, gold }) {
   const s = width / mark.w;
   const tx = canvas / 2 - (mark.w / 2) * s + mark.w * s * NUDGE_X;
@@ -78,10 +79,11 @@ const solid = (canvas, fill) => `  <rect width="${canvas}" height="${canvas}" fi
 
 /**
  * Android 어댑티브는 108dp 캔버스 중 지름 66dp 원만 어떤 마스크에서도 남는다.
- * 마크가 정사각형에 가깝고 가장 먼 점(지느러미 끝)이 모서리 쪽이라, 폭 50dp에서 최원점이 약 32dp다
- * (51dp면 32.8dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
+ * 아기 고래 마크는 가로로 넓고 낮아(223.3:172.3) 이전과 같은 높이(약 45dp)를 내려면 폭 58dp가 된다.
+ * 이때 최원점(지느러미 끝)이 약 31dp로 세이프존 안이다(60dp면 32.3dp로 여유가 없다).
+ * 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
  */
-const FG_WIDTH = 50;
+const FG_WIDTH = 58;
 
 function variants(mark) {
   const color = { body: WHITE, gold: GOLD_ON_BRAND };
