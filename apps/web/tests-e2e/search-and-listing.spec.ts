@@ -33,6 +33,14 @@ test.describe("Search & listing detail", () => {
     await expect(page.getByTestId("search-set-shortcut")).toHaveCount(0);
   });
 
+  test("세트 페이지에서 이 세트로 판매 등록을 시작할 수 있다", async ({ page }) => {
+    await page.goto("/sets/10307");
+    await expect(page.getByRole("link", { name: "이 세트 팔기" }).first()).toHaveAttribute(
+      "href",
+      "/sell?setNumber=10307",
+    );
+  });
+
   test("카테고리로 필터링한다", async ({ page }) => {
     await page.goto("/search");
     await page.getByLabel("카테고리").selectOption("parts");
