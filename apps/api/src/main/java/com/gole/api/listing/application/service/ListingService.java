@@ -304,6 +304,13 @@ public class ListingService
     }
 
     @Override
+    public List<Listing> newestActive(int limit) {
+        return listingRepository.search(ListingSearchQuery.newestAll()).stream()
+                .limit(Math.max(0, limit))
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void delete(String listingId) {
         Listing listing = getById(listingId);
