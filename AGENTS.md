@@ -258,8 +258,7 @@ config/ · bootstrap/            (선택) 그 컨텍스트 전용 설정·로컬
 adapter/out/persistence → adapter/in/web.
 
 **경계 규칙은 `HexagonalArchitectureTest`(ArchUnit)가 `./gradlew test` 에서 강제한다.** 어기면
-테스트가 실패한다. 규칙을 바꾸려면 그 테스트와 이 절을 같이 고친다. 아직 정리 중인 기존 위반은
-`apps/api/src/test/resources/archunit_store`에 얼려 두었다 — 새 위반만 실패하고, 고친 위반은 저장소에서 빠진다.
+테스트가 실패한다. 규칙을 바꾸려면 그 테스트와 이 절을 같이 고친다.
 
 - domain 은 Spring·Mongo·Jackson 과 자기 application·adapter 를 모른다.
 - application 은 adapter 와 Mongo·Redis(드라이버 `com.mongodb`·`org.bson` 포함)·Web 을 모른다.

@@ -13,7 +13,6 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
-import com.tngtech.archunit.library.freeze.FreezingArchRule;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -146,7 +145,7 @@ class HexagonalArchitectureTest {
     }
 
     private static void check(ArchRule rule) {
-        FreezingArchRule.freeze(rule).check(classes);
+        rule.check(classes);
     }
 
     /** {@code com.gole.api.<컨텍스트>.…} 의 컨텍스트 이름. common·생성 코드·루트면 {@code null}. */
