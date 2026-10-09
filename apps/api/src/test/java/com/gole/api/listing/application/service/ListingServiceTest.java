@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.listing.adapter.out.media.MediaListingPhotoAdapter;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.ReviseListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.RevisionResult;
@@ -77,7 +78,7 @@ class ListingServiceTest {
                 interestTagNotifier,
                 priceDropNotifier,
                 bidMatchNotifier,
-                mediaAssets,
+                new MediaListingPhotoAdapter(mediaAssets),
                 clock,
                 BUMP_COOLDOWN);
     }

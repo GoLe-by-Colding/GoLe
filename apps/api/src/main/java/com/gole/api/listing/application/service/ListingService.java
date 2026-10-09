@@ -15,6 +15,7 @@ import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingBidMatchNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
+import com.gole.api.listing.application.port.out.ListingPhotoPort;
 import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
@@ -25,8 +26,6 @@ import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingRevision;
 import com.gole.api.listing.domain.model.Money;
 import com.gole.api.listing.domain.model.PriceChange;
-import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
-import com.gole.api.media.domain.model.MediaTargetType;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -61,7 +60,7 @@ public class ListingService
     private final InterestTagListingNotifierPort interestTagListingNotifier;
     private final ListingPriceDropNotifierPort priceDropNotifier;
     private final ListingBidMatchNotifierPort bidMatchNotifier;
-    private final ManageMediaAssetsUseCase mediaAssets;
+    private final ListingPhotoPort photos;
     private final Clock clock;
     private final Duration bumpCooldown;
 
@@ -72,7 +71,7 @@ public class ListingService
             InterestTagListingNotifierPort interestTagListingNotifier,
             ListingPriceDropNotifierPort priceDropNotifier,
             ListingBidMatchNotifierPort bidMatchNotifier,
-            ManageMediaAssetsUseCase mediaAssets,
+            ListingPhotoPort photos,
             Clock clock,
             @Value("${gole.listing.bump.cooldown:PT24H}") Duration bumpCooldown) {
         if (bumpCooldown == null || bumpCooldown.isNegative()) {
@@ -84,7 +83,7 @@ public class ListingService
         this.interestTagListingNotifier = interestTagListingNotifier;
         this.priceDropNotifier = priceDropNotifier;
         this.bidMatchNotifier = bidMatchNotifier;
-        this.mediaAssets = mediaAssets;
+        this.photos = photos;
         this.clock = clock;
         this.bumpCooldown = bumpCooldown;
     }
@@ -106,8 +105,7 @@ public class ListingService
                 command.category(),
                 command.interestTag(),
                 Instant.now(clock));
-        mediaAssets.replaceReferences(
-                command.sellerId(), MediaTargetType.LISTING, listingId, command.photoKeys(), true);
+        photos.replacePhotos(command.sellerId(), listingId, command.photoKeys());
         Listing saved = listingRepository.save(listing);
         newListingNotifier.notifyFollowers(saved.getSellerId(), saved.getId(), saved.getTitle());
         if (saved.getCatalogSetNumber() != null) {
@@ -156,8 +154,7 @@ public class ListingService
                         command.photoKeys(),
                         command.interestTag()),
                 Instant.now(clock));
-        mediaAssets.replaceReferences(
-                command.sellerId(), MediaTargetType.LISTING, listing.getId(), command.photoKeys(), true);
+        photos.replacePhotos(command.sellerId(), listing.getId(), command.photoKeys());
         if (!listingRepository.updateIfActive(listing)) {
             throw lostRace(listing.getId(), Listing::requireEditable);
         }
@@ -312,7 +309,7 @@ public class ListingService
         Listing listing = getById(listingId);
         listing.delete();
         listingRepository.save(listing);
-        mediaAssets.revokeTarget(MediaTargetType.LISTING, listingId);
+        photos.revokePhotos(listingId);
     }
 
     /**
@@ -325,6 +322,6 @@ public class ListingService
         Listing listing = getById(listingId);
         listing.takedown();
         listingRepository.save(listing);
-        mediaAssets.revokeTarget(MediaTargetType.LISTING, listingId);
+        photos.revokePhotos(listingId);
     }
 }

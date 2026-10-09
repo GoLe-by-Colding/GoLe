@@ -4,14 +4,12 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
-import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
-import com.gole.api.media.domain.model.MediaKey;
-import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
+import com.gole.api.promotion.application.port.out.PromotionMediaPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
@@ -63,7 +61,7 @@ public class PromotionPostService
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
     private final SocialPublishPort publishPort;
-    private final ManageMediaAssetsUseCase mediaAssets;
+    private final PromotionMediaPort media;
     private final OperationalEventPublisher operationalEvents;
     private final Clock clock;
 
@@ -71,13 +69,13 @@ public class PromotionPostService
             PromotionPostRepositoryPort repository,
             PromotionPostIdGeneratorPort idGenerator,
             SocialPublishPort publishPort,
-            ManageMediaAssetsUseCase mediaAssets,
+            PromotionMediaPort media,
             OperationalEventPublisher operationalEvents,
             Clock clock) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.publishPort = publishPort;
-        this.mediaAssets = mediaAssets;
+        this.media = media;
         this.operationalEvents = operationalEvents;
         this.clock = clock;
     }
@@ -101,7 +99,7 @@ public class PromotionPostService
         }
         String id = idGenerator.newId();
         List<String> mediaUrls =
-                command.mediaKeys().stream().map(MediaKey::publicPath).toList();
+                command.mediaKeys().stream().map(media::publicPath).toList();
         PromotionPost draft = PromotionPost.draft(
                 id,
                 command.channel(),
@@ -118,12 +116,12 @@ public class PromotionPostService
                 .filter(Objects::nonNull)
                 .map(CaptureOriginal::mediaKey)
                 .forEach(referenced::add);
-        mediaAssets.replaceReferences(command.authorId(), MediaTargetType.PROMOTION_POST, id, referenced, true);
+        media.attachToPost(command.authorId(), id, referenced);
         return repository.save(draft).getId();
     }
 
     /** 설명표마다 다듬기 전 원본을 붙인다. 원본은 스테이지 키로 받아 공개 경로로 바꾼다. */
-    private static PromotionPostContext withOriginals(PromotionPostContext context, List<CaptureOriginal> originals) {
+    private PromotionPostContext withOriginals(PromotionPostContext context, List<CaptureOriginal> originals) {
         if (originals.isEmpty()) {
             return context;
         }
@@ -137,7 +135,7 @@ public class PromotionPostService
             captures.add(
                     original == null
                             ? capture
-                            : capture.withOriginal(MediaKey.publicPath(original.mediaKey()), original.edit()));
+                            : capture.withOriginal(media.publicPath(original.mediaKey()), original.edit()));
         }
         return new PromotionPostContext(context.category(), captures, context.provenance());
     }
