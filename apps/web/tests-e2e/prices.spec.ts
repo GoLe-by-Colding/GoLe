@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 // 시세 기간 필터는 웹·앱 공유 코어에 있다(@gole/core). 파사드가 아니라 원본을 직접 가져와
 // 이 단위 검증이 재수출 계층을 거치지 않게 한다.
 import { filterPricePointsByPeriod, type PricePoint, type PriceSnapshot } from "@gole/core/pricing";
@@ -45,11 +45,30 @@ async function pricedSet(page: Page): Promise<PricedSet> {
   );
 }
 
+/**
+ * 서버 렌더 HTML(세트 이름·"6개월" 눌림)은 하이드레이션 전에도 보인다. 그때 누른 버튼은 React 이벤트가 아직 붙지 않아
+ * 아무 일도 하지 않는다 — CI run 37924434438 첫 시도의 "1개월 체결 없음" 미표시가 이것이었다(CPU 6배 감속에서 10/10 재현,
+ * 클릭 시점에 React 속성 없음·클릭 뒤 aria-pressed=false). React가 요소에 이벤트 속성(`__reactProps$…`)을 붙였는지로
+ * 하이드레이션을 기다린 뒤에 누른다. 기대값은 그대로다.
+ */
+async function waitForHydration(target: Locator): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        target.evaluate((element) =>
+          Object.keys(element).some((key) => key.startsWith("__reactProps$")),
+        ),
+      { message: "하이드레이션(React 이벤트 연결) 대기", timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
 /** 세트를 고정해 연다. 시계는 하이드레이션 뒤에 고정해야 서버 렌더(서버 시각)와 어긋나지 않는다. */
 async function openPrices(page: Page, set: PricedSet, now?: number): Promise<void> {
   await page.goto(`/prices?set=${encodeURIComponent(set.setNumber)}`);
   await expect(page.getByText(new RegExp(`^#${set.setNumber} ·`))).toBeVisible();
   await expect(page.getByRole("button", { name: "6개월" })).toHaveAttribute("aria-pressed", "true");
+  await waitForHydration(page.getByRole("button", { name: "1개월" }));
   if (now !== undefined) await page.clock.setFixedTime(now);
 }
 
@@ -70,6 +89,15 @@ test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않�
 
 // 시세 페이지: 차트·기간 탭·상태별(감가/빠른 판매·구매 추정) 테이블·정렬. (데이터가 있는 환경 대상)
 test.describe("Prices (KREAM-style)", () => {
+  // 느린 기기·CI의 하이드레이션 지연을 재현하는 손잡이. 기본은 꺼져 있다(예: E2E_CPU_THROTTLE=6, chromium만).
+  test.beforeEach(async ({ page, browserName }) => {
+    const rate = Number(process.env.E2E_CPU_THROTTLE ?? 0);
+    if (rate > 1 && browserName === "chromium") {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate });
+    }
+  });
+
   test("시세 차트와 상태별 시세 테이블이 보인다", async ({ page }) => {
     const set = await pricedSet(page);
     await openPrices(page, set);
@@ -167,7 +195,10 @@ test.describe("Prices (KREAM-style)", () => {
     await expect(page.getByText(new RegExp(`^#${initialSet} ·`))).toBeVisible();
 
     // 목록에서 다른 세트를 고르면 URL이 따라온다(세트 목록만 ol 안의 aria-pressed 버튼).
-    await page.locator('ol button[aria-pressed="false"]').first().click();
+    // 하이드레이션 전 클릭은 아무 일도 하지 않으므로 이벤트가 붙은 뒤에 누른다.
+    const other = page.locator('ol button[aria-pressed="false"]').first();
+    await waitForHydration(other);
+    await other.click();
     await expect(page).toHaveURL(/\/prices\?set=[^&]+$/);
     const pickedSet = new URL(page.url()).searchParams.get("set")!;
     expect(pickedSet).not.toBe(initialSet);
