@@ -4,8 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { fetchAdminOverview } from "@entities/admin";
-import { fetchMe, useSession } from "@entities/user";
-import { ApiError } from "@shared/api";
+import { useAdminAccess, useSession } from "@entities/user";
 import { cn } from "@shared/lib";
 import { Badge, Button, Container, Heading, LinkButton, Text } from "@shared/ui";
 
@@ -50,15 +49,6 @@ function getServerLocationSearch(): string {
 }
 
 /**
- * 권한 판정 상태.
- *
- * `localStorage`의 role은 사용자가 직접 바꿀 수 있으므로 **판정 근거로 쓰지 않는다**.
- * 항상 서버(`GET /api/v1/accounts/me`)가 인증 토큰(HttpOnly 쿠키 또는 Bearer)으로
- * 확인해 준 결과만 신뢰하고, 확인 전·확인 실패는 모두 닫힌 쪽으로 떨어진다.
- */
-type Access = "checking" | "granted" | "unauthenticated" | "forbidden" | "error";
-
-/**
  * 운영자 콘솔 셸 — 권한 게이트 + 좌측 내비. (요구사항 1.3, 1.4, 2.1, 2.3)
  *
  * 별도 어드민 앱이 아니라 같은 사이트의 한 영역이므로 사이트 헤더/푸터 안에 들어간다.
@@ -67,14 +57,9 @@ type Access = "checking" | "granted" | "unauthenticated" | "forbidden" | "error"
 export function AdminShell({ children }: { readonly children: ReactNode }) {
   const { session } = useSession();
   const pathname = usePathname();
-  const accountId = session?.accountId ?? null;
   const token = session?.sessionToken ?? "";
-  // 확인 결과를 확인 대상(계정 + 토큰)과 함께 보관해, 세션이 바뀌면 즉시 무효가 되게 한다.
-  const identity = accountId === null ? null : JSON.stringify([accountId, token]);
-  const [verified, setVerified] = useState<{
-    readonly identity: string;
-    readonly access: Exclude<Access, "checking">;
-  } | null>(null);
+  // 권한은 로컬 role이 아니라 서버 확인으로만 판정한다(확인 전·실패는 닫힌 쪽).
+  const { access, retry } = useAdminAccess();
   const [pendingReports, setPendingReports] = useState(0);
   const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
   const search = useSyncExternalStore(
@@ -82,44 +67,6 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     getLocationSearch,
     getServerLocationSearch,
   );
-  const [verificationAttempt, setVerificationAttempt] = useState(0);
-
-  const access: Access =
-    identity === null
-      ? "unauthenticated"
-      : verified !== null && verified.identity === identity
-        ? verified.access
-        : "checking";
-
-  // 서버 권한 확인. 로컬 세션이 아예 없으면 요청 자체를 하지 않는다.
-  useEffect(() => {
-    if (identity === null) {
-      return;
-    }
-    let active = true;
-    const settle = (result: Exclude<Access, "checking">): void => {
-      if (active) {
-        setVerified({ identity, access: result });
-      }
-    };
-    void fetchMe(token)
-      .then((me) => settle(me.role === "ADMIN" ? "granted" : "forbidden"))
-      .catch((cause: unknown) => {
-        if (cause instanceof ApiError && cause.status === 401) {
-          settle("unauthenticated");
-          return;
-        }
-        if (cause instanceof ApiError && cause.status === 403) {
-          settle("forbidden");
-          return;
-        }
-        // 확인 자체가 실패하면 열어주지 않는다(fail closed).
-        settle("error");
-      });
-    return () => {
-      active = false;
-    };
-  }, [identity, token, verificationAttempt]);
 
   // 운영 데이터는 서버 확인이 끝난 뒤에만 요청한다.
   useEffect(() => {
@@ -185,14 +132,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           일시적인 네트워크 오류입니다. 로그인 상태는 유지되며 다시 확인할 수 있습니다.
         </Text>
         <div className="flex flex-wrap justify-center gap-3">
-          <Button
-            onClick={() => {
-              setVerified(null);
-              setVerificationAttempt((attempt) => attempt + 1);
-            }}
-          >
-            다시 시도
-          </Button>
+          <Button onClick={retry}>다시 시도</Button>
           <LinkButton href="/" variant="secondary">
             홈으로
           </LinkButton>
