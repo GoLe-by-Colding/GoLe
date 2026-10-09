@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;

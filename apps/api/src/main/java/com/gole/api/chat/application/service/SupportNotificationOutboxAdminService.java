@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;

@@ -11,9 +11,9 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.service.ChatMessagingService;
+import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;

@@ -5,7 +5,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
-import com.gole.api.chat.application.SupportChatService;
+import com.gole.api.chat.application.service.SupportChatService;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;

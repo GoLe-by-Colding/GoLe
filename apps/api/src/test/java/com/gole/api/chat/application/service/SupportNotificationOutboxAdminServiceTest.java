@@ -1,10 +1,10 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.gole.api.chat.application.SupportNotificationOutboxAdminService.RequeueReasonCode;
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
+import com.gole.api.chat.application.service.SupportNotificationOutboxAdminService.RequeueReasonCode;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.EventType;

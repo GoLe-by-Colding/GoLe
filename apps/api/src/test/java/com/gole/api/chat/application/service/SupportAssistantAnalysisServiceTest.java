@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;

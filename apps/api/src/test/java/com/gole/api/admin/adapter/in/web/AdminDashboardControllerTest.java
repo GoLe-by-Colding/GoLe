@@ -8,7 +8,7 @@ import static org.mockito.Mockito.when;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
-import com.gole.api.chat.application.SupportChatService;
+import com.gole.api.chat.application.service.SupportChatService;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ChannelType;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;

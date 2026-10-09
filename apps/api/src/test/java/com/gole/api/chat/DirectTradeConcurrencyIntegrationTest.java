@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
-import com.gole.api.chat.application.DirectTradeService;
+import com.gole.api.chat.application.service.DirectTradeService;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;

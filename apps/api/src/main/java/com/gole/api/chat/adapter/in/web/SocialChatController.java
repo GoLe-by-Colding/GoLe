@@ -1,9 +1,9 @@
 package com.gole.api.chat.adapter.in.web;
 
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.service.ChatMessagingService;
+import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;

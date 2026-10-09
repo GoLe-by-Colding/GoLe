@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,9 +13,6 @@ import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.Role;
-import com.gole.api.chat.application.SupportConversationPrivacyService.PurgeReasonCode;
-import com.gole.api.chat.application.SupportConversationPrivacyService.RetentionHoldReasonCode;
-import com.gole.api.chat.application.SupportConversationPrivacyService.RetentionReleaseReasonCode;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
@@ -26,6 +23,9 @@ import com.gole.api.chat.application.port.out.SupportConversationPrivacyReposito
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.RetentionHold;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeReasonCode;
+import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionHoldReasonCode;
+import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionReleaseReasonCode;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;

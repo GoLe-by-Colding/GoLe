@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.Claim;

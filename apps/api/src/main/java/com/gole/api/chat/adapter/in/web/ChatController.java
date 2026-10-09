@@ -4,11 +4,11 @@ import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsent
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.ChatReadService;
-import com.gole.api.chat.application.DirectTradeService;
-import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.service.ChatMessagingService;
+import com.gole.api.chat.application.service.ChatReadService;
+import com.gole.api.chat.application.service.DirectTradeService;
+import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;

@@ -1,4 +1,4 @@
-package com.gole.api.chat.application;
+package com.gole.api.chat.application.service;
 
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.domain.model.Account;
