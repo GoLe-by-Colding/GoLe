@@ -25,7 +25,8 @@ public class ListingBidListingAdapter implements BidListingPort {
         return new BidListing(
                 listing.getId(),
                 listing.getSellerId(),
-                listing.getCatalogSetNumber(),
+                // 세트 입찰은 세트 한 벌로만 체결한다 — 출처 세트 번호를 단 미니피규어·부품은 맞지 않는 매물이다.
+                listing.wholeSetNumber(),
                 listing.getCondition().key(),
                 listing.getPrice().amount(),
                 listing.getStatus() == ListingStatus.ACTIVE);
