@@ -425,7 +425,10 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
 
     await page.goto(`/parts?set=${setNumber}`);
     await page.getByRole("link", { name: title }).click();
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    // 게시판 목록도 제목을 heading으로 그린다. 상세로 넘어간 것을 주소로 먼저 확인해야, 아래 "마감"이
+    // 게시판의 상태 필터 버튼을 누르지 않는다.
+    await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
+    await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
 
     await page.getByRole("button", { name: "마감", exact: true }).click();
     await expect(page.getByText("마감된 요청이에요. 필요 없으면 삭제할 수 있어요.")).toBeVisible();

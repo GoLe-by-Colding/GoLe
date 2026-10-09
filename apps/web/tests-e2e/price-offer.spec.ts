@@ -1,5 +1,11 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { E2E_BUYER, E2E_SELLER, signInAs, switchTo } from "./support/e2e-session";
+import {
+  E2E_BUYER,
+  E2E_SELLER,
+  recordThirdPartyConsent,
+  signInAs,
+  switchTo,
+} from "./support/e2e-session";
 
 /**
  * 가격 제안(.kiro/specs/price-offer F2).
@@ -835,6 +841,11 @@ test.describe("가격 제안 — 매물 채팅에서 제안가 주문까지", ()
   }
 
   test("구매자가 제안하고 판매자가 수락하면 구매자는 그 가격으로 진행한다", async ({ page }) => {
+    // 매물 채팅방은 구매자 본인 동의와 함께 판매자 쪽 동의(requireCurrentSubject)도 요구한다. 판매자 동의는
+    // 이 흐름의 화면에 경로가 없고, 동의 대화상자 자체는 third-party-provision-consent 스펙이 검증한다.
+    // 새로 시드한 DB(CI)에는 두 계정 모두 동의가 없으므로 API로 먼저 기록한다. 동의는 덧붙이기 기록이라 멱등하다.
+    await recordThirdPartyConsent(page, E2E_SELLER);
+    await recordThirdPartyConsent(page, E2E_BUYER);
     await signInAs(page, E2E_SELLER);
     await page.goto("/sell");
 
