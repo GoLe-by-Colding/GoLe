@@ -21,7 +21,6 @@ import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
-import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.application.service.OrderPaymentTransitionService.RefundPreparation;
@@ -29,6 +28,7 @@ import com.gole.api.order.application.service.OrderPaymentTransitionService.Refu
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OfferNotUsableException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
+import com.gole.api.order.domain.exception.PaymentGatewayUnavailableException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;

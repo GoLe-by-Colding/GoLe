@@ -1,4 +1,4 @@
-package com.gole.api.order.application.port.out;
+package com.gole.api.order.domain.exception;
 
 /**
  * 결제 승인 또는 환불 완료 여부를 확정할 수 없는 일시적 PG 장애.
