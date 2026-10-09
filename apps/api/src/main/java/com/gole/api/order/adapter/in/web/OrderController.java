@@ -85,8 +85,8 @@ public class OrderController {
     public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request, HttpServletRequest http) {
         String sellerId = getListingUseCase.getById(request.listingId()).getSellerId();
         sellerIdentityVerification.requireVerifiedSeller(sellerId);
-        String id = placeOrderUseCase.place(
-                new PlaceOrderCommand(request.listingId(), AuthenticatedUser.id(http), request.buyerPhone()));
+        String id = placeOrderUseCase.place(new PlaceOrderCommand(
+                request.listingId(), AuthenticatedUser.id(http), request.buyerPhone(), request.offerId()));
         return OrderResponse.from(getOrderUseCase.getById(id));
     }
 

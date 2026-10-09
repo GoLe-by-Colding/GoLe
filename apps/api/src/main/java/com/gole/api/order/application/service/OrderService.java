@@ -11,6 +11,7 @@ import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import com.gole.api.order.application.port.out.AcceptedOfferPort;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.ListingReservationPort.ReservedListing;
@@ -26,6 +27,7 @@ import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.application.service.OrderPaymentTransitionService.RefundPreparation;
 import com.gole.api.order.application.service.OrderPaymentTransitionService.RefundStart;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.OfferNotUsableException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.Order;
@@ -35,6 +37,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +67,7 @@ public class OrderService
     private final Clock clock;
     private final OrderPaymentTransitionService paymentTransitions;
     private final OperationalEventPublisher operationalEvents;
+    private final AcceptedOfferPort acceptedOffers;
 
     public OrderService(
             OrderRepositoryPort orderRepository,
@@ -76,7 +80,8 @@ public class OrderService
             OrderIdGeneratorPort idGenerator,
             Clock clock,
             OrderPaymentTransitionService paymentTransitions,
-            OperationalEventPublisher operationalEvents) {
+            OperationalEventPublisher operationalEvents,
+            AcceptedOfferPort acceptedOffers) {
         this.orderRepository = orderRepository;
         this.listingReservation = listingReservation;
         this.paymentGateway = paymentGateway;
@@ -88,6 +93,7 @@ public class OrderService
         this.clock = clock;
         this.paymentTransitions = paymentTransitions;
         this.operationalEvents = operationalEvents;
+        this.acceptedOffers = acceptedOffers;
     }
 
     @Override
@@ -106,6 +112,9 @@ public class OrderService
             throw new SelfPurchaseException(command.listingId());
         }
 
+        Instant now = Instant.now(clock);
+        long amount = agreedAmount(command, reserved, now);
+
         String orderId;
         try {
             Order order = Order.place(
@@ -115,9 +124,10 @@ public class OrderService
                     reserved.sellerId(),
                     reserved.catalogSetNumber(),
                     reserved.condition(),
-                    reserved.price(),
+                    amount,
                     PhoneNumber.ofNullable(command.buyerPhone()),
-                    Instant.now(clock));
+                    command.offerId(),
+                    now);
             // 브라우저가 금액을 바꿔 요청하더라도 결제되기 전에 PortOne 원장과 주문 금액을 고정한다.
             // 외부 I/O 또는 저장 실패 시 아래 보상 경로에서 매물 선점을 해제한다.
             paymentGateway.preparePayment(order.getId(), order.getAmount());
@@ -133,8 +143,42 @@ public class OrderService
         }
 
         // 알림 N6: 셀러에게 주문 알림(best-effort, 어댑터가 예외 흡수)
-        sellerNotifier.notifyOrderPlaced(reserved.sellerId(), orderId, reserved.price());
+        sellerNotifier.notifyOrderPlaced(reserved.sellerId(), orderId, amount);
         return orderId;
+    }
+
+    /**
+     * 주문 금액. 제안이 없으면 예약 시점 매물가, 있으면 {@code min(제안가, 매물가)}다. (price-offer O16, O17)
+     *
+     * <p>예약·자기거래 검사 뒤에 확인한다. 제안 확인이 실패하거나 쓸 수 없는 제안이면 예약을 풀고 거부한다 —
+     * 예약을 쥔 채로 실패하면 결제 대기 만료까지 매물이 묶인다. 판매자가 그 사이 가격을 더 내렸으면 더 싼 쪽을
+     * 쓴다. 제안은 소모하지 않는다(O18) — 이중 구매는 매물 예약이 막는다.
+     */
+    private long agreedAmount(PlaceOrderCommand command, ReservedListing reserved, Instant now) {
+        if (command.offerId() == null || command.offerId().isBlank()) {
+            return reserved.price();
+        }
+        OptionalLong offerPrice;
+        try {
+            offerPrice = acceptedOffers.usablePrice(command.offerId(), command.listingId(), command.buyerId(), now);
+        } catch (RuntimeException failure) {
+            releaseQuietly(command.listingId(), failure);
+            throw failure;
+        }
+        if (offerPrice.isEmpty()) {
+            OfferNotUsableException rejected = new OfferNotUsableException(command.offerId());
+            releaseQuietly(command.listingId(), rejected);
+            throw rejected;
+        }
+        return Math.min(offerPrice.getAsLong(), reserved.price());
+    }
+
+    private void releaseQuietly(String listingId, RuntimeException cause) {
+        try {
+            listingReservation.release(listingId);
+        } catch (RuntimeException releaseFailure) {
+            cause.addSuppressed(releaseFailure);
+        }
     }
 
     @Override
