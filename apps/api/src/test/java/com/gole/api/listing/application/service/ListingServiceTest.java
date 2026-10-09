@@ -2,18 +2,30 @@ package com.gole.api.listing.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
+import com.gole.api.common.exception.ConflictException;
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
+import com.gole.api.listing.application.port.in.ReviseListingUseCase.ReviseListingCommand;
+import com.gole.api.listing.application.port.in.ReviseListingUseCase.RevisionResult;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
+import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
+import com.gole.api.listing.domain.exception.ListingBumpCooldownException;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.exception.ListingStateException;
 import com.gole.api.listing.domain.exception.MissingPhotoException;
+import com.gole.api.listing.domain.model.Completeness;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
 import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
@@ -21,10 +33,14 @@ import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingCategory;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.media.domain.model.MediaTargetType;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,9 +48,15 @@ import org.junit.jupiter.api.Test;
 
 class ListingServiceTest {
 
+    private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Duration BUMP_COOLDOWN = Duration.ofHours(24);
+
     private InMemoryListingRepository repository;
     private RecordingNewListingNotifier notifier;
     private RecordingInterestTagListingNotifier interestTagNotifier;
+    private RecordingPriceDropNotifier priceDropNotifier;
+    private ManageMediaAssetsUseCase mediaAssets;
+    private MutableClock clock;
     private ListingService service;
 
     @BeforeEach
@@ -42,14 +64,18 @@ class ListingServiceTest {
         repository = new InMemoryListingRepository();
         notifier = new RecordingNewListingNotifier();
         interestTagNotifier = new RecordingInterestTagListingNotifier();
-        Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+        priceDropNotifier = new RecordingPriceDropNotifier();
+        mediaAssets = mock(ManageMediaAssetsUseCase.class);
+        clock = new MutableClock(NOW);
         service = new ListingService(
                 repository,
                 new SequentialIdGenerator(),
                 notifier,
                 interestTagNotifier,
-                mock(ManageMediaAssetsUseCase.class),
-                clock);
+                priceDropNotifier,
+                mediaAssets,
+                clock,
+                BUMP_COOLDOWN);
     }
 
     private CreateListingCommand validCommand() {
@@ -274,6 +300,340 @@ class ListingServiceTest {
         assertThat(service.bySeller("seller-1").getFirst().getSellerId()).isEqualTo("seller-1");
     }
 
+    // ── 수정 (listing-edit-and-bump E1~E9) ─────────────────────────────────────
+
+    private ReviseListingCommand revision(String listingId, String sellerId, long price) {
+        return revision(listingId, sellerId, price, null);
+    }
+
+    private ReviseListingCommand revision(String listingId, String sellerId, long price, InterestTag interestTag) {
+        return new ReviseListingCommand(
+                listingId,
+                sellerId,
+                "에펠탑 10307 (가격 조정)",
+                "미개봉, 박스 모서리 눌림",
+                price,
+                ItemCondition.LIKE_NEW,
+                new ConditionDisclosure(Completeness.FULL_BOX, true, true, false, "", "박스 모서리 눌림"),
+                List.of("photo-1.jpg", "photo-9.jpg"),
+                interestTag);
+    }
+
+    @Test
+    void revise_replacesEditableFieldsAndKeepsSetCategoryAndListedAt() {
+        String id = service.create(validCommand());
+
+        RevisionResult result = service.revise(revision(id, "seller-1", 280_000));
+
+        Listing revised = service.getById(id);
+        assertThat(revised.getTitle()).isEqualTo("에펠탑 10307 (가격 조정)");
+        assertThat(revised.getDescription()).isEqualTo("미개봉, 박스 모서리 눌림");
+        assertThat(revised.getCondition()).isEqualTo(ItemCondition.LIKE_NEW);
+        assertThat(revised.getDisclosure().completeness()).isEqualTo(Completeness.FULL_BOX);
+        assertThat(revised.getPhotoUrls()).containsExactly("photo-1.jpg", "photo-9.jpg");
+        assertThat(revised.getCatalogSetNumber()).isEqualTo("10307");
+        assertThat(revised.getCategory()).isEqualTo(ListingCategory.SET);
+        assertThat(revised.getListedAt()).isEqualTo(NOW);
+        assertThat(result.priceDropped()).isFalse();
+        assertThat(result.oldPrice()).isEqualTo(280_000);
+        verify(mediaAssets)
+                .replaceReferences(
+                        "seller-1", MediaTargetType.LISTING, id, List.of("photo-1.jpg", "photo-9.jpg"), true);
+    }
+
+    @Test
+    void revise_rejectsNonOwnerWith403BeforeTouchingMediaOrStore() {
+        String id = service.create(validCommand());
+
+        assertThatThrownBy(() -> service.revise(revision(id, "intruder", 1_000)))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ACCESS_DENIED"));
+        assertThat(service.getById(id).getPrice().amount()).isEqualTo(280_000);
+        assertThat(repository.updateCalls).isZero();
+        verify(mediaAssets, never())
+                .replaceReferences(any(), any(), eq(id), eq(List.of("photo-1.jpg", "photo-9.jpg")), anyBoolean());
+    }
+
+    @Test
+    void revise_rejectsReservedListingAsOrderInProgress() {
+        repository.save(listingWithStatus("reserved-1", ListingStatus.RESERVED));
+
+        assertThatThrownBy(() -> service.revise(revision("reserved-1", "seller-1", 1_000)))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ORDER_IN_PROGRESS"));
+        assertThat(repository.updateCalls).isZero();
+    }
+
+    @Test
+    void revise_rejectsSoldAndDeletedListingsAsNotEditable() {
+        repository.save(listingWithStatus("sold-1", ListingStatus.SOLD));
+        repository.save(listingWithStatus("deleted-1", ListingStatus.DELETED));
+
+        assertThatThrownBy(() -> service.revise(revision("sold-1", "seller-1", 1_000)))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_NOT_EDITABLE"));
+        assertThatThrownBy(() -> service.revise(revision("deleted-1", "seller-1", 1_000)))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_NOT_EDITABLE"));
+    }
+
+    @Test
+    void revise_losesToReservationTakenBetweenReadAndWrite() {
+        String id = service.create(validCommand());
+        repository.raceTo = ListingStatus.RESERVED;
+
+        assertThatThrownBy(() -> service.revise(revision(id, "seller-1", 200_000)))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ORDER_IN_PROGRESS"));
+
+        // 예약을 덮어쓰지 않고, 지는 쪽의 가격 인하도 알리지 않는다. (E4)
+        Listing stored = service.getById(id);
+        assertThat(stored.getStatus()).isEqualTo(ListingStatus.RESERVED);
+        assertThat(stored.getPrice().amount()).isEqualTo(280_000);
+        assertThat(priceDropNotifier.notices).isEmpty();
+    }
+
+    @Test
+    void revise_reportsOrderInProgressWhenRaceAlreadyResolvedBackToActive() {
+        String id = service.create(validCommand());
+        repository.raceTo = ListingStatus.ACTIVE; // 예약됐다가 곧바로 풀린 경우 — 갱신은 이미 놓쳤다
+
+        assertThatThrownBy(() -> service.revise(revision(id, "seller-1", 200_000)))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ORDER_IN_PROGRESS"));
+    }
+
+    @Test
+    void revise_priceDropNotifiesWishersWithOldAndNewPrice() {
+        String id = service.create(validCommand());
+
+        RevisionResult result = service.revise(revision(id, "seller-1", 250_000));
+
+        assertThat(result.priceDropped()).isTrue();
+        assertThat(result.oldPrice()).isEqualTo(280_000);
+        assertThat(result.listing().getPreviousPrice().amount()).isEqualTo(280_000);
+        assertThat(result.listing().getPriceChangedAt()).isEqualTo(NOW);
+        assertThat(priceDropNotifier.notices)
+                .containsExactly(new PriceDropNotice(id, "seller-1", "에펠탑 10307 (가격 조정)", 280_000, 250_000));
+        assertThat(service.getById(id).getPreviousPrice().amount()).isEqualTo(280_000);
+    }
+
+    @Test
+    void revise_priceRaiseClearsPreviousPriceAndDoesNotNotify() {
+        String id = service.create(validCommand());
+        service.revise(revision(id, "seller-1", 250_000));
+        priceDropNotifier.notices.clear();
+
+        RevisionResult result = service.revise(revision(id, "seller-1", 260_000));
+
+        assertThat(result.priceDropped()).isFalse();
+        assertThat(result.oldPrice()).isEqualTo(250_000);
+        assertThat(service.getById(id).getPreviousPrice()).isNull();
+        assertThat(priceDropNotifier.notices).isEmpty();
+    }
+
+    @Test
+    void revise_samePriceKeepsHistoryAndDoesNotNotify() {
+        String id = service.create(validCommand());
+        service.revise(revision(id, "seller-1", 250_000));
+        priceDropNotifier.notices.clear();
+        clock.advance(Duration.ofHours(1));
+
+        service.revise(revision(id, "seller-1", 250_000));
+
+        Listing stored = service.getById(id);
+        assertThat(stored.getPreviousPrice().amount()).isEqualTo(280_000);
+        assertThat(stored.getPriceChangedAt()).isEqualTo(NOW);
+        assertThat(priceDropNotifier.notices).isEmpty();
+    }
+
+    @Test
+    void revise_doesNotResendNewListingOrInterestTagNotices() {
+        String id = service.create(new CreateListingCommand(
+                "seller-1",
+                "테크닉 매물",
+                "설명",
+                280_000,
+                ItemCondition.NEW_SEALED,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "42143",
+                ListingCategory.SET,
+                InterestTag.TECHNIC));
+
+        service.revise(revision(id, "seller-1", 280_000, InterestTag.STAR_WARS));
+
+        // 수정은 새 매물이 아니다 — 팔로워·관심 세트·관심 테마 알림은 등록 때 한 번뿐이다. (E7)
+        assertThat(service.getById(id).getInterestTag()).isEqualTo(InterestTag.STAR_WARS);
+        assertThat(interestTagNotifier.notifications).hasSize(1);
+        assertThat(notifier.notifications).hasSize(1);
+        assertThat(notifier.setWatcherNotices).hasSize(1);
+    }
+
+    @Test
+    void revise_succeedsWhenPriceDropNotifierFails() {
+        String id = service.create(validCommand());
+        priceDropNotifier.failure = new IllegalStateException("notification unavailable");
+
+        RevisionResult result = service.revise(revision(id, "seller-1", 100_000));
+
+        assertThat(result.priceDropped()).isTrue();
+        assertThat(service.getById(id).getPrice().amount()).isEqualTo(100_000);
+    }
+
+    // ── 끌올 (listing-edit-and-bump B1~B5) ─────────────────────────────────────
+
+    @Test
+    void bump_rejectsRightAfterCreationWithRemainingCooldown() {
+        String id = service.create(validCommand());
+        clock.advance(Duration.ofHours(23));
+
+        assertThatThrownBy(() -> service.bump(id, "seller-1"))
+                .isInstanceOfSatisfying(ListingBumpCooldownException.class, error -> {
+                    assertThat(error.getCode()).isEqualTo("LISTING_BUMP_COOLDOWN");
+                    assertThat(error.getRetryAfter()).isEqualTo(Duration.ofHours(1));
+                });
+        assertThat(repository.updateCalls).isZero();
+    }
+
+    @Test
+    void bump_movesListingToTopOfNewestEverywhere() {
+        String older = service.create(validCommand());
+        clock.advance(Duration.ofHours(1));
+        String newer = service.create(validCommand());
+        assertThat(service.search(ListingSearchQuery.newestAll()))
+                .extracting(Listing::getId)
+                .containsExactly(newer, older);
+
+        clock.advance(Duration.ofHours(23));
+        Instant bumpedAt = NOW.plus(Duration.ofHours(24));
+        Listing bumped = service.bump(older, "seller-1");
+
+        assertThat(bumped.getListedAt()).isEqualTo(bumpedAt);
+        assertThat(bumped.getBumpedAt()).isEqualTo(bumpedAt);
+        assertThat(bumped.bumpAvailableAt(service.bumpCooldown())).isEqualTo(bumpedAt.plus(BUMP_COOLDOWN));
+        assertThat(service.search(ListingSearchQuery.newestAll()))
+                .extracting(Listing::getId)
+                .containsExactly(older, newer);
+        assertThat(service.bySeller("seller-1")).extracting(Listing::getId).containsExactly(older, newer);
+        assertThat(service.activeBySeller("seller-1"))
+                .extracting(Listing::getId)
+                .containsExactly(older, newer);
+    }
+
+    @Test
+    void bump_cooldownRestartsFromLastBump() {
+        String id = service.create(validCommand());
+        clock.advance(BUMP_COOLDOWN);
+        service.bump(id, "seller-1");
+        clock.advance(Duration.ofHours(2));
+
+        assertThatThrownBy(() -> service.bump(id, "seller-1"))
+                .isInstanceOfSatisfying(
+                        ListingBumpCooldownException.class,
+                        error -> assertThat(error.getRetryAfter()).isEqualTo(Duration.ofHours(22)));
+    }
+
+    @Test
+    void bump_doesNotNotifyAnyone() {
+        String id = service.create(validCommand());
+        clock.advance(BUMP_COOLDOWN);
+
+        service.bump(id, "seller-1");
+
+        assertThat(notifier.notifications).hasSize(1); // 등록 때 한 번
+        assertThat(notifier.setWatcherNotices).hasSize(1);
+        assertThat(priceDropNotifier.notices).isEmpty();
+    }
+
+    @Test
+    void bump_rejectsNonOwnerWith403() {
+        String id = service.create(validCommand());
+        clock.advance(BUMP_COOLDOWN);
+
+        assertThatThrownBy(() -> service.bump(id, "intruder"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ACCESS_DENIED"));
+    }
+
+    @Test
+    void bump_rejectsReservedAsOrderInProgressAndOtherInactiveAsNotBumpable() {
+        repository.save(listingWithStatus("reserved-1", ListingStatus.RESERVED));
+        repository.save(listingWithStatus("sold-1", ListingStatus.SOLD));
+        clock.advance(BUMP_COOLDOWN);
+
+        assertThatThrownBy(() -> service.bump("reserved-1", "seller-1"))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ORDER_IN_PROGRESS"));
+        assertThatThrownBy(() -> service.bump("sold-1", "seller-1"))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_NOT_BUMPABLE"));
+    }
+
+    @Test
+    void bump_losesToReservationTakenBetweenReadAndWrite() {
+        String id = service.create(validCommand());
+        clock.advance(BUMP_COOLDOWN);
+        repository.raceTo = ListingStatus.RESERVED;
+
+        assertThatThrownBy(() -> service.bump(id, "seller-1"))
+                .isInstanceOfSatisfying(
+                        ConflictException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("LISTING_ORDER_IN_PROGRESS"));
+        assertThat(service.getById(id).getListedAt()).isEqualTo(NOW);
+    }
+
+    private static Listing copyWithStatus(Listing l, ListingStatus status) {
+        return new Listing(
+                l.getId(),
+                l.getSellerId(),
+                l.getTitle(),
+                l.getDescription(),
+                l.getPrice(),
+                l.getCondition(),
+                l.getDisclosure(),
+                l.getPhotoUrls(),
+                l.getCatalogSetNumber(),
+                l.getCategory(),
+                l.getInterestTag(),
+                status,
+                l.getCreatedAt(),
+                l.getListedAt(),
+                l.getBumpedAt(),
+                l.getPreviousPrice(),
+                l.getPriceChangedAt());
+    }
+
+    private static Listing copyWithTimeline(Listing l, Instant bumpedAt) {
+        return new Listing(
+                l.getId(),
+                l.getSellerId(),
+                l.getTitle(),
+                l.getDescription(),
+                l.getPrice(),
+                l.getCondition(),
+                l.getDisclosure(),
+                l.getPhotoUrls(),
+                l.getCatalogSetNumber(),
+                l.getCategory(),
+                l.getInterestTag(),
+                l.getStatus(),
+                l.getCreatedAt(),
+                bumpedAt,
+                bumpedAt,
+                l.getPreviousPrice(),
+                l.getPriceChangedAt());
+    }
+
     private static Listing listingWithStatus(String id, ListingStatus status) {
         return new Listing(
                 id,
@@ -291,18 +651,27 @@ class ListingServiceTest {
     }
 
     private static final class InMemoryListingRepository implements ListingRepositoryPort {
+        /** 실제 어댑터와 같은 "최신순" — listedAt 내림차순. (B5) */
+        private static final Comparator<Listing> NEWEST =
+                Comparator.comparing(Listing::getListedAt).reversed();
+
         private final List<Listing> store = new ArrayList<>();
 
+        // 실제 저장소처럼 넣고 꺼낼 때 복사한다. 같은 객체를 돌려주면 서비스가 메모리에서 바꾼 값이
+        // 원자 갱신 전에 이미 "저장된" 것처럼 보여, 경합에서 지는 경로를 검증할 수 없다.
         @Override
         public Listing save(Listing listing) {
             store.removeIf(l -> l.getId().equals(listing.getId()));
-            store.add(listing);
+            store.add(copyWithStatus(listing, listing.getStatus()));
             return listing;
         }
 
         @Override
         public Optional<Listing> findById(String listingId) {
-            return store.stream().filter(l -> l.getId().equals(listingId)).findFirst();
+            return store.stream()
+                    .filter(l -> l.getId().equals(listingId))
+                    .findFirst()
+                    .map(l -> copyWithStatus(l, l.getStatus()));
         }
 
         @Override
@@ -310,6 +679,7 @@ class ListingServiceTest {
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> query.setNumber() == null || query.setNumber().equals(l.getCatalogSetNumber()))
+                    .sorted(NEWEST)
                     .toList();
         }
 
@@ -321,8 +691,48 @@ class ListingServiceTest {
         @Override
         public boolean markSoldIfActive(String listingId) {
             Optional<Listing> listing = findById(listingId).filter(Listing::isActive);
-            listing.ifPresent(Listing::markSold);
+            listing.ifPresent(found -> {
+                found.markSold();
+                save(found);
+            });
             return listing.isPresent();
+        }
+
+        /** 다음 원자 갱신을 "그 사이 주문이 예약을 잡았다"로 만든다. 경합을 결정적으로 재현한다. */
+        private ListingStatus raceTo;
+
+        int updateCalls;
+
+        @Override
+        public boolean updateIfActive(Listing listing) {
+            updateCalls++;
+            if (applyRace(listing.getId())) {
+                return false;
+            }
+            Optional<Listing> stored = findById(listing.getId()).filter(Listing::isActive);
+            stored.ifPresent(ignored -> save(listing));
+            return stored.isPresent();
+        }
+
+        @Override
+        public boolean bumpIfActive(String listingId, Instant bumpedAt) {
+            updateCalls++;
+            if (applyRace(listingId)) {
+                return false;
+            }
+            Optional<Listing> stored = findById(listingId).filter(Listing::isActive);
+            stored.ifPresent(listing -> save(copyWithTimeline(listing, bumpedAt)));
+            return stored.isPresent();
+        }
+
+        private boolean applyRace(String listingId) {
+            if (raceTo == null) {
+                return false;
+            }
+            Listing current = findById(listingId).orElseThrow();
+            save(copyWithStatus(current, raceTo));
+            raceTo = null;
+            return true;
         }
 
         @Override
@@ -330,6 +740,7 @@ class ListingServiceTest {
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> l.getSellerId().equals(sellerId))
+                    .sorted(NEWEST)
                     .toList();
         }
 
@@ -338,6 +749,7 @@ class ListingServiceTest {
             return store.stream()
                     .filter(l -> l.getSellerId().equals(sellerId))
                     .filter(l -> l.getStatus() != ListingStatus.DELETED)
+                    .sorted(NEWEST)
                     .toList();
         }
 
@@ -346,6 +758,7 @@ class ListingServiceTest {
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> sellerIds.contains(l.getSellerId()))
+                    .sorted(NEWEST)
                     .limit(limit)
                     .toList();
         }
@@ -384,6 +797,49 @@ class ListingServiceTest {
         @Override
         public void notifySetWatchers(String sellerId, String listingId, String title, String setNumber) {
             setWatcherNotices.add(new SetWatcherNotice(sellerId, listingId, setNumber));
+        }
+    }
+
+    private record PriceDropNotice(String listingId, String sellerId, String title, long oldPrice, long newPrice) {}
+
+    private static final class RecordingPriceDropNotifier implements ListingPriceDropNotifierPort {
+        private final List<PriceDropNotice> notices = new ArrayList<>();
+        private RuntimeException failure;
+
+        @Override
+        public void priceDropped(String listingId, String sellerId, String title, long oldPrice, long newPrice) {
+            if (failure != null) {
+                throw failure;
+            }
+            notices.add(new PriceDropNotice(listingId, sellerId, title, oldPrice, newPrice));
+        }
+    }
+
+    /** 쿨다운 경계를 재현하려고 시간을 앞으로 돌릴 수 있는 시계. */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+
+        private MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
         }
     }
 
