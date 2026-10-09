@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchLegoSetForPage, type LegoSet } from "@entities/lego-set";
 import { fetchListingsBySet, type Listing } from "@entities/listing";
+import { fetchPartRequestsForPage } from "@entities/part-request";
 import { fetchPriceSnapshotForPage, type PriceSnapshot } from "@entities/pricing";
 import { SetDetailPage } from "@views/set-detail";
 import { isApiNotFoundError } from "@shared/api";
@@ -12,6 +13,9 @@ import { absoluteUrl, breadcrumbJsonLd, schemaItemCondition } from "@shared/lib"
 interface PageParams {
   readonly params: Promise<{ readonly setNumber: string }>;
 }
+
+/** "부품 요청 n건"은 게시판 한 쪽(서버 상한 50)까지만 센다. 넘치면 "50건 이상"으로 쓴다. */
+const OPEN_PART_REQUEST_LIMIT = 50;
 
 async function loadSet(setNumber: string): Promise<LegoSet | null> {
   try {
@@ -120,15 +124,28 @@ export default async function Page({ params }: PageParams) {
     notFound();
   }
 
-  // 매물·시세는 실패해도 페이지를 살린다(부분 실패 허용).
-  const [listings, snapshot] = await Promise.all([
+  // 매물·시세·부품 요청 건수는 실패해도 페이지를 살린다(부분 실패 허용).
+  const [listings, snapshot, openPartRequests] = await Promise.all([
     fetchListingsBySet(set.setNumber).catch((): readonly Listing[] => []),
     fetchPriceSnapshotForPage(set.setNumber).catch((): PriceSnapshot | null => null),
+    fetchPartRequestsForPage({
+      setNumber: set.setNumber,
+      status: "open",
+      limit: OPEN_PART_REQUEST_LIMIT,
+    })
+      .then((requests) => requests.length)
+      .catch((): number | null => null),
   ]);
 
   return (
     <>
-      <SetDetailPage set={set} listings={listings} snapshot={snapshot} />
+      <SetDetailPage
+        set={set}
+        listings={listings}
+        snapshot={snapshot}
+        openPartRequestCount={openPartRequests}
+        openPartRequestLimit={OPEN_PART_REQUEST_LIMIT}
+      />
       <JsonLd data={setJsonLd(set, listings, snapshot)} />
       <JsonLd
         data={breadcrumbJsonLd(

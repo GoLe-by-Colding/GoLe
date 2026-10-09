@@ -10,6 +10,7 @@ import {
   type CollectionItem,
   type OwnershipStatus,
 } from "@entities/collection";
+import { partRequestsHref } from "@entities/part-request";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
@@ -189,9 +190,15 @@ export function CollectionPage() {
   return (
     <Container width="lg">
       <div className="flex flex-col gap-6 pt-10 pb-16">
-        <div className="flex flex-col gap-1">
-          <Heading level={1}>내 컬렉션</Heading>
-          <Text tone="secondary">보유·위시 세트와 현재 추정 가치.</Text>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Heading level={1}>내 컬렉션</Heading>
+            <Text tone="secondary">보유·위시 세트와 현재 추정 가치.</Text>
+          </div>
+          {/* 부족 부품 요청(wanted-parts F1). 보유 세트 부품을 찾는 요청에 도울 수도 있다. */}
+          <LinkButton href={partRequestsHref()} variant="secondary" size="sm">
+            부품 요청 게시판
+          </LinkButton>
         </div>
 
         <Card padded className="flex items-center justify-between">
@@ -292,6 +299,15 @@ export function CollectionPage() {
                     >
                       매물 보기
                     </LinkButton>
+                    {item.status === "owned" ? (
+                      <LinkButton
+                        href={partRequestsHref({ setNumber: item.setNumber })}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        부품 요청
+                      </LinkButton>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="sm"

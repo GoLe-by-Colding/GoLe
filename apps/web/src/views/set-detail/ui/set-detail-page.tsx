@@ -3,6 +3,7 @@ import type { LegoSet } from "@entities/lego-set";
 import { isRetired, isRetiringSoon } from "@entities/lego-set";
 import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
+import { partRequestsHref } from "@entities/part-request";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
 import { WishlistButton } from "@features/wishlist-toggle";
 import { ListingGrid } from "@widgets/listing-grid";
@@ -13,6 +14,10 @@ export interface SetDetailPageProps {
   readonly set: LegoSet;
   readonly listings: readonly Listing[];
   readonly snapshot: PriceSnapshot | null;
+  /** 이 세트의 열린 부품 요청 수. 조회에 실패했으면 `null`이고 건수 없이 링크만 보여 준다. */
+  readonly openPartRequestCount?: number | null;
+  /** 건수를 센 상한. 이만큼 왔으면 "n건 이상"으로 쓴다. */
+  readonly openPartRequestLimit?: number;
 }
 
 function StatCell({ label, value }: { readonly label: string; readonly value: string }) {
@@ -30,8 +35,20 @@ function StatCell({ label, value }: { readonly label: string; readonly value: st
  * 서버 컴포넌트로 유지한다. 크롤러가 보는 첫 HTML에 세트 정보·시세·매물이 모두 들어 있어야
  * 색인 가치가 생긴다(클라이언트 로딩이면 빈 페이지가 색인된다).
  */
-export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
+export function SetDetailPage({
+  set,
+  listings,
+  snapshot,
+  openPartRequestCount = null,
+  openPartRequestLimit = 50,
+}: SetDetailPageProps) {
   const activeCount = listings.length;
+  const partRequestLabel =
+    openPartRequestCount === null
+      ? "부품 요청 보기"
+      : openPartRequestCount >= openPartRequestLimit
+        ? `부품 요청 ${openPartRequestLimit}건 이상`
+        : `부품 요청 ${openPartRequestCount}건`;
   const evidenceWarning = snapshot === null ? null : priceEvidenceWarning(snapshot.provenance);
 
   return (
@@ -89,6 +106,29 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
             <StatCell label="출시" value={`${set.releaseYear}년`} />
             <StatCell label="판매 중" value={`${activeCount}건`} />
           </dl>
+
+          <div
+            className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2"
+            data-testid="set-part-requests"
+          >
+            <Text size="sm" tone="secondary" className="mr-auto">
+              조립하다 모자란 부품이 있나요?
+            </Text>
+            <LinkButton
+              href={partRequestsHref({ setNumber: set.setNumber })}
+              size="sm"
+              variant="ghost"
+            >
+              {partRequestLabel}
+            </LinkButton>
+            <LinkButton
+              href={partRequestsHref({ setNumber: set.setNumber, compose: true })}
+              size="sm"
+              variant="secondary"
+            >
+              부품 요청하기
+            </LinkButton>
+          </div>
 
           <a
             href={`https://www.lego.com/ko-kr/search?q=${encodeURIComponent(set.setNumber)}`}

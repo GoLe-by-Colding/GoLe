@@ -28,9 +28,10 @@ function notificationErrorMessage(cause: unknown): string {
     : "알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+/** 알림이 열 수 있는 앱 경로. 부품 요청(`/parts`, `/parts/{id}`)은 wanted-parts W8 보유자 알림이 쓴다. */
 const NOTIFICATION_ROUTE_PATTERNS: readonly RegExp[] = [
-  /^\/(?:chat|collection|community|feed|notifications|prices|profile|search)(?:\/)?$/,
-  /^\/(?:community|listings|orders|sets|shops)\/[^/]+\/?$/,
+  /^\/(?:chat|collection|community|feed|notifications|parts|prices|profile|search)(?:\/)?$/,
+  /^\/(?:community|listings|orders|parts|sets|shops)\/[^/]+\/?$/,
 ];
 
 /** 서버 데이터가 깨져도 알림을 외부 주소나 존재하지 않는 앱 경로의 링크로 만들지 않는다. */
