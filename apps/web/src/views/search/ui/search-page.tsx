@@ -7,10 +7,12 @@ import {
   type ListingSort,
   type SearchListingsParams,
 } from "@entities/listing";
+import { fetchLegoSetForPage, setNumberInSearchText, type LegoSet } from "@entities/lego-set";
 import { fetchPriceSnapshotForPage } from "@entities/pricing";
 import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
 import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
 import { buildPriceNotes, ListingGrid, priceNoteSetNumbers } from "@widgets/listing-grid";
+import { SearchSetShortcut } from "./search-set-shortcut";
 
 export interface SearchPageProps {
   readonly query?: string | undefined;
@@ -84,6 +86,17 @@ function searchHref(params: SearchListingsParams): string {
   return suffix.length === 0 ? "/search" : `/search?${suffix}`;
 }
 
+/** 검색어가 세트 번호면 그 카탈로그 세트(바로가기용). 번호가 아니거나 카탈로그에 없으면 null — 결과는 그대로 보인다. */
+async function loadQuerySet(query: string | undefined): Promise<LegoSet | null> {
+  const setNumber = query === undefined ? null : setNumberInSearchText(query);
+  if (setNumber === null) return null;
+  try {
+    return await fetchLegoSetForPage(setNumber);
+  } catch {
+    return null;
+  }
+}
+
 export async function SearchPage(props: SearchPageProps) {
   const condition = parseCondition(props.condition);
   const category = parseCategory(props.category);
@@ -100,7 +113,7 @@ export async function SearchPage(props: SearchPageProps) {
     sort,
   };
 
-  const result = await loadListings(params);
+  const [result, querySet] = await Promise.all([loadListings(params), loadQuerySet(props.query)]);
   const { listings } = result;
   const priceNotes = await loadPriceNotes(listings);
   const hasFilters =
@@ -133,6 +146,9 @@ export async function SearchPage(props: SearchPageProps) {
         <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
         </div>
+        {querySet === null || result.status === "failed" ? null : (
+          <SearchSetShortcut set={querySet} listingCount={listings.length} />
+        )}
         {result.status === "failed" ? (
           <EmptyState
             variant="inline"
