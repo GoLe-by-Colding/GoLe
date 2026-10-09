@@ -146,6 +146,12 @@ test.describe("Search & listing detail", () => {
     await page.route("**/api/v1/chat/rooms/listing-room-e2e/stream**", (route) =>
       route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
     );
+    // 상세의 찜 버튼·구매 버튼·채팅 배너가 세션이 필요한 조회(위시리스트·내 가격 제안)를 한다.
+    // 합성 세션에는 쿠키가 없어 실백엔드가 401 INVALID_SESSION 으로 화면 세션을 지우므로 격리한다.
+    await page.route(/\/api\/v1\/users\/[^/]+\/wishlist(?:[/?].*)?$/, (route) =>
+      route.fulfill({ json: [] }),
+    );
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
 
     await page.goto("/search");
     await page.getByTestId("listing-card").first().click();

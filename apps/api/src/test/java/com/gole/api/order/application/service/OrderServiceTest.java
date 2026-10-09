@@ -9,6 +9,7 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.adapter.out.payment.StubPaymentGatewayAdapter;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
+import com.gole.api.order.application.port.out.AcceptedOfferPort;
 import com.gole.api.order.application.port.out.ExecutedPriceRecorderPort;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
@@ -20,6 +21,7 @@ import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerific
 import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
+import com.gole.api.order.domain.exception.OfferNotUsableException;
 import com.gole.api.order.domain.exception.OrderStateException;
 import com.gole.api.order.domain.exception.SelfPurchaseException;
 import com.gole.api.order.domain.model.DisputeReason;
@@ -36,9 +38,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class OrderServiceTest {
@@ -48,6 +52,7 @@ class OrderServiceTest {
     private CountingSettlement settlement;
     private RecordingPublisher events;
     private OrderEventNotifierPort orderEventNotifier;
+    private FakeAcceptedOffers offers;
     private OrderService service;
 
     @BeforeEach
@@ -57,6 +62,7 @@ class OrderServiceTest {
         settlement = new CountingSettlement();
         events = new RecordingPublisher();
         orderEventNotifier = mock(OrderEventNotifierPort.class);
+        offers = new FakeAcceptedOffers();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new OrderService(
                 orders,
@@ -69,7 +75,8 @@ class OrderServiceTest {
                 new SequentialIds(),
                 clock,
                 new OrderPaymentTransitionService(orders, reservation),
-                events);
+                events,
+                offers);
     }
 
     @Test
@@ -79,6 +86,61 @@ class OrderServiceTest {
         Order order = service.getById(id);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
         assertThat(order.getAmount()).isEqualTo(280_000);
+    }
+
+    @Test
+    @DisplayName("수락 제안으로 주문하면 금액이 제안가가 되고 주문에 제안 id가 남는다")
+    void place_withAcceptedOffer_usesOfferPriceAndKeepsOfferId() {
+        offers.accept("offer-1", "listing-1", "buyer-1", 250_000);
+
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1", null, "offer-1"));
+
+        Order order = service.getById(id);
+        assertThat(order.getAmount()).isEqualTo(250_000);
+        assertThat(order.getOfferId()).isEqualTo("offer-1");
+        assertThat(reservation.released).isFalse();
+    }
+
+    @Test
+    @DisplayName("판매자가 그 사이 매물가를 제안가 아래로 내렸으면 더 싼 매물가로 주문한다")
+    void place_withOfferAboveCurrentPrice_usesCheaperListingPrice() {
+        offers.accept("offer-1", "listing-1", "buyer-1", 300_000); // 매물가 280,000보다 비싸다(입찰 수락 등)
+
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1", null, "offer-1"));
+
+        assertThat(service.getById(id).getAmount()).isEqualTo(280_000);
+    }
+
+    @Test
+    @DisplayName("쓸 수 없는 제안이면 예약을 풀고 OFFER_NOT_USABLE로 거부한다")
+    void place_withUnusableOffer_releasesReservationAndRejects() {
+        offers.accept("offer-1", "listing-1", "someone-else", 250_000);
+
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "buyer-1", null, "offer-1")))
+                .isInstanceOf(OfferNotUsableException.class)
+                .hasFieldOrPropertyWithValue("code", "OFFER_NOT_USABLE");
+        assertThat(reservation.released).isTrue();
+        assertThat(orders.store).isEmpty();
+    }
+
+    @Test
+    @DisplayName("제안 확인 자체가 실패해도 예약을 풀고 오류를 그대로 낸다")
+    void place_whenOfferLookupFails_releasesReservation() {
+        offers.failing = true;
+
+        assertThatThrownBy(() -> service.place(new PlaceOrderCommand("listing-1", "buyer-1", null, "offer-1")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(reservation.released).isTrue();
+        assertThat(orders.store).isEmpty();
+    }
+
+    @Test
+    @DisplayName("빈 제안 id는 정가 주문으로 본다")
+    void place_withBlankOfferId_isRegularOrder() {
+        String id = service.place(new PlaceOrderCommand("listing-1", "buyer-1", null, " "));
+
+        assertThat(service.getById(id).getAmount()).isEqualTo(280_000);
+        assertThat(offers.lookups).isZero();
     }
 
     @Test
@@ -178,7 +240,8 @@ class OrderServiceTest {
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),
-                events);
+                events,
+                offers);
 
         String orderId = service.place(new PlaceOrderCommand("listing-1", "buyer-1"));
         service.pay(orderId);
@@ -435,7 +498,8 @@ class OrderServiceTest {
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),
-                events);
+                events,
+                offers);
 
         assertThatThrownBy(() -> service.pay(id)).isInstanceOf(PaymentGatewayUnavailableException.class);
         assertThat(service.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
@@ -518,7 +582,8 @@ class OrderServiceTest {
                 new SequentialIds(),
                 Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC),
                 new OrderPaymentTransitionService(orders, reservation),
-                events);
+                events,
+                offers);
     }
 
     // --- fakes ---
@@ -553,6 +618,32 @@ class OrderServiceTest {
             return store.values().stream()
                     .filter(o -> o.getSellerId().equals(sellerId))
                     .toList();
+        }
+    }
+
+    /** 수락 제안 원장 흉내. 이 매물·이 구매자에게 등록된 제안만 쓸 수 있다. */
+    private static final class FakeAcceptedOffers implements AcceptedOfferPort {
+        private final Map<String, String[]> accepted = new HashMap<>();
+        private final Map<String, Long> prices = new HashMap<>();
+        private boolean failing = false;
+        private int lookups = 0;
+
+        void accept(String offerId, String listingId, String buyerId, long price) {
+            accepted.put(offerId, new String[] {listingId, buyerId});
+            prices.put(offerId, price);
+        }
+
+        @Override
+        public OptionalLong usablePrice(String offerId, String listingId, String buyerId, Instant now) {
+            lookups++;
+            if (failing) {
+                throw new IllegalStateException("offer lookup failed");
+            }
+            String[] owner = accepted.get(offerId);
+            if (owner == null || !owner[0].equals(listingId) || !owner[1].equals(buyerId)) {
+                return OptionalLong.empty();
+            }
+            return OptionalLong.of(prices.get(offerId));
         }
     }
 

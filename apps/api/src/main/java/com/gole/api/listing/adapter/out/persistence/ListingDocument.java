@@ -3,6 +3,7 @@ package com.gole.api.listing.adapter.out.persistence;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -11,8 +12,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * 매핑은 {@link ListingPersistenceAdapter}가 담당한다.
  *
  * <p>금액({@code Money})은 amount/currency 를 가지는 임베디드 값으로 저장한다.
+ *
+ * <p>"최신순"은 {@code createdAt}이 아니라 {@code listedAt}(등록 또는 마지막 끌올) 내림차순이다.
+ * 공개 목록은 늘 {@code status: ACTIVE}로 거르므로 그 둘을 묶은 인덱스를 둔다. (listing-edit-and-bump B5)
  */
 @Document(collection = "listings")
+@CompoundIndex(name = "ix_status_listedAt", def = "{'status': 1, 'listedAt': -1}")
 public class ListingDocument {
 
     @Id
@@ -55,6 +60,16 @@ public class ListingDocument {
     private String status;
 
     private Instant createdAt;
+
+    /** 정렬 키. 끌올 도입 전 문서는 없을 수 있다 — 기동 백필이 {@code createdAt}으로 채운다. */
+    private Instant listedAt;
+
+    private Instant bumpedAt; // nullable
+
+    /** 직전 가격(원). 지금 가격이 직전보다 쌀 때만 있다. */
+    private Long previousPrice;
+
+    private Instant priceChangedAt; // nullable
 
     protected ListingDocument() {
         // MongoDB 매핑용
@@ -121,6 +136,56 @@ public class ListingDocument {
             String interestTag,
             String status,
             Instant createdAt) {
+        this(
+                id,
+                sellerId,
+                title,
+                description,
+                priceAmount,
+                priceCurrency,
+                condition,
+                completeness,
+                hasBox,
+                hasManual,
+                hasMissingParts,
+                missingPartsNote,
+                defectsNote,
+                photoUrls,
+                catalogSetNumber,
+                category,
+                interestTag,
+                status,
+                createdAt,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    public ListingDocument(
+            String id,
+            String sellerId,
+            String title,
+            String description,
+            long priceAmount,
+            String priceCurrency,
+            String condition,
+            String completeness,
+            Boolean hasBox,
+            Boolean hasManual,
+            Boolean hasMissingParts,
+            String missingPartsNote,
+            String defectsNote,
+            List<String> photoUrls,
+            String catalogSetNumber,
+            String category,
+            String interestTag,
+            String status,
+            Instant createdAt,
+            Instant listedAt,
+            Instant bumpedAt,
+            Long previousPrice,
+            Instant priceChangedAt) {
         this.id = id;
         this.sellerId = sellerId;
         this.title = title;
@@ -140,6 +205,10 @@ public class ListingDocument {
         this.interestTag = interestTag;
         this.status = status;
         this.createdAt = createdAt;
+        this.listedAt = listedAt;
+        this.bumpedAt = bumpedAt;
+        this.previousPrice = previousPrice;
+        this.priceChangedAt = priceChangedAt;
     }
 
     public String getId() {
@@ -216,5 +285,21 @@ public class ListingDocument {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getListedAt() {
+        return listedAt;
+    }
+
+    public Instant getBumpedAt() {
+        return bumpedAt;
+    }
+
+    public Long getPreviousPrice() {
+        return previousPrice;
+    }
+
+    public Instant getPriceChangedAt() {
+        return priceChangedAt;
     }
 }

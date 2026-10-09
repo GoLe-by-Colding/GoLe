@@ -85,6 +85,10 @@ test.describe("시세 → 위시 → 컬렉션 콘텐츠 루프", () => {
     await page.route("**/api/v1/collections/loop-user/estimate", (route) =>
       route.fulfill({ json: { ownedEstimatedValue: 0 } }),
     );
+    // 자산 추이 카드도 같은 세션으로 부른다. 실제 백엔드로 새면 401이 합성 세션을 지운다.
+    await page.route("**/api/v1/collections/loop-user/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
 
     await page.goto("/prices");
     const relatedSetLink = page.getByRole("link", { name: "세트·매물 보기" });

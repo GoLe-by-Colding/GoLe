@@ -22,6 +22,12 @@ public interface CollectionRepositoryPort {
     /** 특정 세트를 해당 상태로 등록한 사용자 id 목록. 관심 세트 알림 수신자 해석에 쓴다. */
     List<String> findUserIdsBySetAndStatus(String setNumber, OwnershipStatus status);
 
+    /**
+     * 이 상태의 항목을 하나라도 가진 사용자 id를 {@code afterUserId} 다음부터 오름차순으로 최대 {@code limit}개.
+     * 전체 사용자를 훑는 배치(자산 추이 스냅샷)가 커서로 넘긴다. 첫 페이지는 {@code afterUserId = null}.
+     */
+    List<String> findUserIdsWithStatus(OwnershipStatus status, String afterUserId, int limit);
+
     /** 컬렉션 항목을 삭제한다. */
     void delete(CollectionItem item);
 }

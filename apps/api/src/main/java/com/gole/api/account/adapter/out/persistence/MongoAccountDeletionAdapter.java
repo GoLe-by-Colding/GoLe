@@ -180,11 +180,33 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
                 "notifications",
                 remove("notifications", Criteria.where("recipientId").is(expectedAccountId)));
         counts.put(
+                "notificationPreferences",
+                remove("notification_preferences", Criteria.where("_id").is(expectedAccountId)));
+        counts.put(
                 "wishlistEntries",
                 remove("wishlist_entries", Criteria.where("userId").is(expectedAccountId)));
         counts.put(
                 "collectionItems",
                 remove("collection_items", Criteria.where("userId").is(expectedAccountId)));
+        counts.put(
+                "collectionValueSnapshots",
+                remove("collection_value_snapshots", Criteria.where("userId").is(expectedAccountId)));
+        // 부품 요청은 작성자 개인의 게시물이라 익명화하지 않고 지운다. (wanted-parts W11)
+        counts.put(
+                "partRequests",
+                remove("part_requests", Criteria.where("requesterId").is(expectedAccountId)));
+        // 가격 제안은 두 당사자 사이의 협상 기록이다. 어느 쪽이 탈퇴해도 상대에게 의미가 없으므로 지운다.
+        // 주문에 남은 offerId는 금액 근거 표시용이라 끊어져도 주문 처리에 영향이 없다. (price-offer O22)
+        // 입찰은 입찰자 개인의 구매 의사라 익명화하지 않고 지운다. 체결로 생긴 제안은 위 offers 정리가 맡는다. (buy-bids D11)
+        counts.put("bids", remove("bids", Criteria.where("bidderId").is(expectedAccountId)));
+        counts.put(
+                "offers",
+                remove(
+                        "offers",
+                        new Criteria()
+                                .orOperator(
+                                        Criteria.where("buyerId").is(expectedAccountId),
+                                        Criteria.where("sellerId").is(expectedAccountId))));
         counts.put(
                 "follows",
                 remove(

@@ -13,6 +13,8 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.UnauthorizedException;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -98,5 +100,24 @@ class UserAuthInterceptorTest {
 
         assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
                 .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/offers", "/api/v1/bids/mine", "/api/v1/part-requests/mine"})
+    void sessionScopedCommerceReadsRequireSession(String uri) {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
+        when(sessions.resolve("")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/bids/book/75192", "/api/v1/part-requests", "/api/v1/part-requests/request-1"})
+    void publicCommerceReadsDoNotRequireSession(String uri) {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isTrue();
     }
 }

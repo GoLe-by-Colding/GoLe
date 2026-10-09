@@ -114,6 +114,21 @@ export interface Listing {
   readonly interestTag: ListingInterestTag | null;
   readonly status: ListingStatus;
   readonly createdAt: string;
+  /**
+   * 노출 기준 시각 — 등록 또는 마지막 끌올. "최신순"이 이 값으로 정렬된다.
+   *
+   * <p>아래 필드는 매물 수정·끌올과 함께 추가됐다. 배포 순서가 어긋나 구 API가 응답하는 동안에도
+   * 화면이 깨지지 않도록 모두 선택 필드로 읽는다.
+   */
+  readonly listedAt?: string;
+  readonly bumpedAt?: string | null;
+  /** 다음 끌올이 가능한 시각(`listedAt + 쿨다운`). */
+  readonly bumpAvailableAt?: string;
+  /** 직전 가격. 가격이 내려갔을 때만 채워지고, 다시 오르면 비워진다. */
+  readonly previousPrice?: number | null;
+  readonly priceChangedAt?: string | null;
+  /** 수정 폼이 그대로 다시 제출할 저장 키. `photoUrls`와 같은 순서다. */
+  readonly photoKeys?: readonly string[];
 }
 
 const CONDITION_LABEL: Record<ItemCondition, string> = {

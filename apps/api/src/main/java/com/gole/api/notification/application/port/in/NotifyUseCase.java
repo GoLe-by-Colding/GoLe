@@ -7,6 +7,10 @@ import com.gole.api.notification.domain.model.NotificationType;
  */
 public interface NotifyUseCase {
 
+    /**
+     * @return 알림 id. 수신자가 이 종류의 분류를 꺼뒀으면 저장하지 않고 {@code null}을 돌려준다.
+     *     (notification-preferences P4)
+     */
     String notify(NotifyCommand command);
 
     /**

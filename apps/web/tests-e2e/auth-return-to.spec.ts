@@ -277,6 +277,12 @@ test.describe("컬렉션 로그인 왕복", () => {
             json: { code: "TEMPORARY", message: "컬렉션 서버가 잠시 응답하지 않습니다." },
           }),
     );
+    // 자산 추이는 이 테스트의 관심사가 아니다. 목이 없으면 실제 API로 가서 가짜 토큰이 401을 받고,
+    // 화면이 세션을 지워 오류 화면 대신 로그아웃 화면이 된다. 실패 상태에서도 정상 응답으로 둬서
+    // 추이 차트가 자기 "다시 시도" 버튼을 따로 그리지 않게 한다.
+    await page.route("**/api/v1/collections/acc-1/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/acc-1/estimate", (route) =>
       recovered
         ? route.fulfill({ json: { ownedEstimatedValue: 0 } })
@@ -302,6 +308,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await mockMe(page, "USER");
     await mockSignIn(page, "USER");
     await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/*/estimate", (route) =>
       route.fulfill({ json: { ownedEstimatedValue: 0 } }),
     );
@@ -354,6 +363,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await mockSignIn(page, "USER");
     await mockMe(page, "USER");
     await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/*/estimate", (route) =>
       route.fulfill({ json: { ownedEstimatedValue: 0 } }),
     );

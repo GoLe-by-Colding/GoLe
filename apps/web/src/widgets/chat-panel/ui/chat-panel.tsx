@@ -21,6 +21,16 @@ export interface ChatPanelProps {
   readonly onRoomRead?: (roomId: string) => void;
   /** 운영팀 문의를 제외한 메시지 전송을 제3자 제공 동의 흐름으로 감싼다. */
   readonly runMessageAction?: (action: () => Promise<void>) => Promise<void>;
+  /**
+   * 마지막 메시지 id가 바뀔 때(새 메시지 수신·전송) 알린다. 매물 방의 가격 제안 배너처럼
+   * 방에서 일어난 일을 따라 다시 읽어야 하는 바깥 구획이 쓴다.
+   */
+  readonly onLatestMessageChange?: (messageId: string | null) => void;
+  /**
+   * 입력창에 미리 채울 문장. 부품 요청의 "도와줄게요"처럼 다른 화면에서 대화를 열 때 어떤 일로
+   * 연락하는지 맥락을 남긴다. 보내기 전에 사용자가 고칠 수 있고, 방마다 처음 열 때 한 번만 쓴다.
+   */
+  readonly initialDraft?: string;
 }
 
 /**
@@ -35,6 +45,8 @@ export function ChatPanel({
   onManageSender,
   onRoomRead,
   runMessageAction,
+  onLatestMessageChange,
+  initialDraft,
 }: ChatPanelProps) {
   const { messages, send, loadOlder, retry, hasOlder, loadingOlder, olderError, loading, error } =
     useConversation(roomId);
@@ -45,7 +57,7 @@ export function ChatPanel({
     ...(onRoomRead === undefined ? {} : { onRead: onRoomRead }),
   });
 
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
   const [reportingId, setReportingId] = useState<string | null>(null);
@@ -57,6 +69,15 @@ export function ChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const lastMessageId = messages.at(-1)?.id ?? null;
+  const onLatestMessageChangeRef = useRef(onLatestMessageChange);
+
+  useEffect(() => {
+    onLatestMessageChangeRef.current = onLatestMessageChange;
+  }, [onLatestMessageChange]);
+
+  useEffect(() => {
+    onLatestMessageChangeRef.current?.(lastMessageId);
+  }, [lastMessageId]);
 
   // 새 메시지가 뒤에 붙을 때만 말단으로 이동한다. 이전 이력을 앞에 붙이는 동작은
   // 마지막 ID가 그대로라 현재 읽던 위치를 빼앗지 않는다.
