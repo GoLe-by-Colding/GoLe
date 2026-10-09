@@ -92,6 +92,8 @@ export const BID_ERROR = {
   /** 취소할 입찰이 없을 때(404)와 즉시 판매할 입찰이 없을 때(409)가 같은 코드다. */
   NOT_FOUND: "BID_NOT_FOUND",
   LISTING_ACCESS_DENIED: "LISTING_ACCESS_DENIED",
+  /** 이 매물로 이미 체결한 입찰의 제안이 아직 진행 중이다. 매물 하나는 입찰 하나만 받는다. */
+  LISTING_ALREADY_FILLED: "BID_LISTING_ALREADY_FILLED",
 } as const;
 
 export type BidErrorCode = (typeof BID_ERROR)[keyof typeof BID_ERROR];

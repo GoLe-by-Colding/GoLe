@@ -34,6 +34,8 @@ export function bidErrorMessage(cause: unknown, action: BidAction): string {
       return "이미 끝난 입찰이에요.";
     case BID_ERROR.LISTING_MISMATCH:
       return "판매 중인 이 세트 매물만 입찰가에 팔 수 있어요.";
+    case BID_ERROR.LISTING_ALREADY_FILLED:
+      return "이 매물은 이미 입찰자와 체결돼 진행 중이에요. 그 제안이 끝나면 다음 입찰을 받을 수 있어요.";
     case BID_ERROR.LISTING_ACCESS_DENIED:
       return "내가 등록한 매물만 입찰가에 팔 수 있어요.";
     case BID_ERROR.NOT_FOUND:
