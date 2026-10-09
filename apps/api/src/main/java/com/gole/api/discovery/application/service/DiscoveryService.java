@@ -11,10 +11,10 @@ import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
 import com.gole.api.discovery.domain.exception.DuplicateFollowException;
 import com.gole.api.discovery.domain.exception.DuplicateWishlistException;
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import com.gole.api.discovery.domain.model.Follow;
 import com.gole.api.discovery.domain.model.WishlistEntry;
 import com.gole.api.discovery.domain.model.WishlistTargetType;
-import com.gole.api.listing.domain.model.Listing;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -65,12 +65,12 @@ public class DiscoveryService
     }
 
     @Override
-    public List<Listing> shopListings(String sellerId) {
+    public List<DiscoveredListing> shopListings(String sellerId) {
         return listingQuery.activeBySeller(sellerId);
     }
 
     @Override
-    public List<Listing> feed(String userId, int limit) {
+    public List<DiscoveredListing> feed(String userId, int limit) {
         List<String> sellerIds = followRepository.findSellerIdsByUser(userId);
         if (sellerIds.isEmpty()) {
             return List.of();
