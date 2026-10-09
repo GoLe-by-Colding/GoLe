@@ -119,7 +119,7 @@ com.gole.api.<context>/
 
 | 컬렉션 | 키 필드 | 비고 |
 |---|---|---|
-| `accounts` | `_id`(UUID), `email`(unique idx), status, role, passwordHash, verificationCode, failedAttempts, lockedUntil | 인증/잠금 상태 |
+| `accounts` | `_id`(UUID), `email`(unique idx), status, role, passwordHash, verificationCodeHash, verificationCodeIssuedAt, failedAttempts, lockedUntil | 인증/잠금 상태. 인증 코드는 원문 대신 hash와 발급 시각을 둘 다 둔다 — 한쪽만 남은 문서는 "발급된 코드 없음"으로 읽는다(조회가 500으로 죽지 않게, 2026-10-10) |
 | `lego_sets` | `_id`=setNumber, name, theme, pieceCount, releaseYear, retirementStatus, imageUrl, featured | 카탈로그 |
 | `listings` | `_id`, sellerId(idx), title, description, price, condition, disclosure{...}, photoUrls[], catalogSetNumber, status(idx), createdAt | 매물 |
 | `orders` | `_id`, listingId, buyerId, sellerId, catalogSetNumber, amount, status, history[], `@Version` | 안전거래 |
