@@ -379,6 +379,17 @@ public final class Listing {
         return catalogSetNumber;
     }
 
+    /**
+     * 이 매물이 세트 한 벌을 거래할 때의 카탈로그 세트 번호. 미니피규어·부품·MOC 매물이면 {@code null}.
+     *
+     * <p>미니피규어·부품도 출처 세트 번호를 달 수 있다(검색·식별용). 하지만 그 거래를 세트 한 벌과 같은 것으로 보면
+     * 완료 주문이 세트 체결가로 기록돼 시세가 무너지고, 세트 입찰을 미니피규어로 체결하거나 세트 입찰자에게
+     * 엉뚱한 매칭 알림이 간다. 세트 한 벌로서의 거래가 필요한 곳(체결가·입찰 체결·입찰 매칭)은 이 값을 쓴다.
+     */
+    public String wholeSetNumber() {
+        return category == ListingCategory.SET ? catalogSetNumber : null;
+    }
+
     public ListingCategory getCategory() {
         return category;
     }

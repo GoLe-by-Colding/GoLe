@@ -113,6 +113,8 @@ public class ListingService
         if (saved.getCatalogSetNumber() != null) {
             newListingNotifier.notifySetWatchers(
                     saved.getSellerId(), saved.getId(), saved.getTitle(), saved.getCatalogSetNumber());
+        }
+        if (saved.wholeSetNumber() != null) {
             notifyMatchingBids(saved);
         }
         if (saved.getInterestTag() != null) {
@@ -181,19 +183,22 @@ public class ListingService
         } catch (RuntimeException ignored) {
             // 어댑터가 이미 흡수하지만, 알림 연계 장애가 수정을 되돌리지 않게 포트 경계에서 한 번 더 격리한다.
         }
-        if (listing.getCatalogSetNumber() != null) {
+        if (listing.wholeSetNumber() != null) {
             notifyMatchingBids(listing);
         }
     }
 
-    /** 이 세트·상태에 매물가 이상으로 건 입찰자에게 알린다(buy-bids D8). 등록·인하 공통, 실패는 흡수한다. */
+    /**
+     * 이 세트·상태에 매물가 이상으로 건 입찰자에게 알린다(buy-bids D8). 등록·인하 공통, 실패는 흡수한다.
+     * 세트 한 벌 매물만 대상이다 — 출처 세트 번호를 단 미니피규어·부품으로 세트 입찰자를 부르지 않는다.
+     */
     private void notifyMatchingBids(Listing listing) {
         try {
             bidMatchNotifier.listingAvailable(
                     listing.getId(),
                     listing.getSellerId(),
                     listing.getTitle(),
-                    listing.getCatalogSetNumber(),
+                    listing.wholeSetNumber(),
                     listing.getCondition().key(),
                     listing.getPrice().amount());
         } catch (RuntimeException ignored) {
