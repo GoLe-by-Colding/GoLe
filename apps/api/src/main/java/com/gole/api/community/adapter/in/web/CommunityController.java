@@ -158,7 +158,7 @@ public class CommunityController {
             @Valid @RequestBody ReportCommentRequest request,
             HttpServletRequest http) {
         String reportId = reportCommentUseCase.report(new ReportCommentCommand(
-                AuthenticatedUser.id(http), postId, commentId, request.reason(), request.detail()));
+                AuthenticatedUser.id(http), postId, commentId, request.reason().name(), request.detail()));
         return Map.of("id", reportId);
     }
 
