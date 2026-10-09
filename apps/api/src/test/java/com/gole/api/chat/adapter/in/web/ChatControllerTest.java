@@ -17,8 +17,8 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
@@ -69,10 +69,9 @@ class ChatControllerTest {
     private final ChatReadService reads = mock(ChatReadService.class);
     private final DirectTradeService directTrades = mock(DirectTradeService.class);
     private final SupportTicketRepositoryPort supportTickets = mock(SupportTicketRepositoryPort.class);
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents =
-            mock(ThirdPartyProvisionConsentService.class);
-    private final SellerIdentityVerificationService sellerIdentityVerification =
-            mock(SellerIdentityVerificationService.class);
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents =
+            mock(ManageThirdPartyProvisionConsentUseCase.class);
+    private final VerifySellerIdentityUseCase sellerIdentityVerification = mock(VerifySellerIdentityUseCase.class);
     private final ChatController controller = new ChatController(
             rooms,
             listeners,
@@ -109,7 +108,7 @@ class ChatControllerTest {
         when(listings.getById("listing-1")).thenReturn(listing("seller"));
         when(rooms.findByBuyerIdAndSellerIdAndListingId("legacy-buyer", "seller", "listing-1"))
                 .thenReturn(Optional.empty());
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrent("legacy-buyer");
 
@@ -117,7 +116,7 @@ class ChatControllerTest {
                         new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("legacy-buyer")))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.REQUIRED_CODE);
+                .isEqualTo(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE);
 
         verify(listings, never()).getPublicById("listing-1");
         verify(rooms, never()).save(any());
@@ -147,7 +146,8 @@ class ChatControllerTest {
         when(listings.getById("listing-1")).thenReturn(listing("seller"));
         when(rooms.findByBuyerIdAndSellerIdAndListingId("buyer", "seller", "listing-1"))
                 .thenReturn(Optional.empty());
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+        doThrow(new ForbiddenException(
+                        ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrentSubject("seller");
 
@@ -155,7 +155,7 @@ class ChatControllerTest {
                         new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("buyer")))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
+                .isEqualTo(ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE);
 
         verify(listings, never()).getPublicById("listing-1");
         verify(rooms, never()).save(any());
@@ -328,7 +328,7 @@ class ChatControllerTest {
         SocialChatRoom listingRoom =
                 SocialChatRoom.listing("listing-room", "listing-1", "buyer", "seller", Instant.now());
         when(socialChats.requireReadable("listing-room", "buyer")).thenReturn(listingRoom);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrent("buyer");
 

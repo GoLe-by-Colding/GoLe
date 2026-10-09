@@ -1,7 +1,7 @@
 package com.gole.api.chat.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -41,13 +41,13 @@ public class SocialChatController {
     private final SocialChatService chats;
     private final ChatMessagingService messaging;
     private final SupportTicketRepositoryPort supportTickets;
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents;
 
     public SocialChatController(
             SocialChatService chats,
             ChatMessagingService messaging,
             SupportTicketRepositoryPort supportTickets,
-            ThirdPartyProvisionConsentService thirdPartyProvisionConsents) {
+            ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents) {
         this.chats = chats;
         this.messaging = messaging;
         this.supportTickets = supportTickets;

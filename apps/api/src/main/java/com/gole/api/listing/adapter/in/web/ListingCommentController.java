@@ -1,7 +1,7 @@
 package com.gole.api.listing.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
@@ -36,13 +36,13 @@ public class ListingCommentController {
     private final ListingCommentMongoRepository commentRepository;
     private final GetListingUseCase getListingUseCase;
     private final NotifyUseCase notifyUseCase;
-    private final SellerIdentityVerificationService sellerIdentityVerification;
+    private final VerifySellerIdentityUseCase sellerIdentityVerification;
 
     public ListingCommentController(
             ListingCommentMongoRepository commentRepository,
             GetListingUseCase getListingUseCase,
             NotifyUseCase notifyUseCase,
-            SellerIdentityVerificationService sellerIdentityVerification) {
+            VerifySellerIdentityUseCase sellerIdentityVerification) {
         this.commentRepository = commentRepository;
         this.getListingUseCase = getListingUseCase;
         this.notifyUseCase = notifyUseCase;

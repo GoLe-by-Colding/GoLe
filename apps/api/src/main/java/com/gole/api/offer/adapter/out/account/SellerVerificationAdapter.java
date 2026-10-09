@@ -1,6 +1,6 @@
 package com.gole.api.offer.adapter.out.account;
 
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.offer.application.port.out.SellerVerificationPort;
 import org.springframework.stereotype.Component;
 
@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class SellerVerificationAdapter implements SellerVerificationPort {
 
-    private final SellerIdentityVerificationService sellerIdentityVerification;
+    private final VerifySellerIdentityUseCase sellerIdentityVerification;
 
-    public SellerVerificationAdapter(SellerIdentityVerificationService sellerIdentityVerification) {
+    public SellerVerificationAdapter(VerifySellerIdentityUseCase sellerIdentityVerification) {
         this.sellerIdentityVerification = sellerIdentityVerification;
     }
 

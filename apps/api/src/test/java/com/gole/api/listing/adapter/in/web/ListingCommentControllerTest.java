@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
@@ -46,7 +46,7 @@ class ListingCommentControllerTest {
     private final ListingCommentMongoRepository comments = mock(ListingCommentMongoRepository.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
     private final NotifyUseCase notifications = mock(NotifyUseCase.class);
-    private final SellerIdentityVerificationService sellerIdentity = mock(SellerIdentityVerificationService.class);
+    private final VerifySellerIdentityUseCase sellerIdentity = mock(VerifySellerIdentityUseCase.class);
     private final ListingCommentController controller =
             new ListingCommentController(comments, listings, notifications, sellerIdentity);
 

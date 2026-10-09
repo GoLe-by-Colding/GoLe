@@ -10,7 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.SocialChatService;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -29,8 +29,8 @@ class SocialChatControllerTest {
     private final SocialChatService chats = mock(SocialChatService.class);
     private final ChatMessagingService messaging = mock(ChatMessagingService.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents =
-            mock(ThirdPartyProvisionConsentService.class);
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents =
+            mock(ManageThirdPartyProvisionConsentUseCase.class);
     private final SocialChatController controller =
             new SocialChatController(chats, messaging, tickets, thirdPartyProvisionConsents);
 
@@ -59,7 +59,7 @@ class SocialChatControllerTest {
         SocialChatRoom group =
                 SocialChatRoom.group("room-1", "legacy-user", List.of("member-1", "member-2"), "group", Instant.now());
         when(chats.requireReadable("room-1", "legacy-user")).thenReturn(group);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrent("legacy-user");
 
@@ -94,7 +94,8 @@ class SocialChatControllerTest {
 
     @Test
     void groupCreationAndInviteRequireEveryNewlyExposedSubjectsConsent() {
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+        doThrow(new ForbiddenException(
+                        ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrentSubject("member-2");
 
@@ -103,13 +104,14 @@ class SocialChatControllerTest {
                         authenticated("owner")))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
+                .isEqualTo(ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE);
         verify(chats, never()).createGroup("owner", "group", List.of("member-1", "member-2"));
 
         SocialChatRoom existing =
                 SocialChatRoom.group("room-1", "owner", List.of("member-1", "member-2"), "group", Instant.now());
         when(chats.requireReadable("room-1", "owner")).thenReturn(existing);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+        doThrow(new ForbiddenException(
+                        ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrentSubject("member-1");
 

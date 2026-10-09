@@ -6,7 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -15,7 +15,7 @@ import org.springframework.web.method.HandlerMethod;
 
 class SellerIdentityGuardInterceptorTest {
 
-    private final SellerIdentityVerificationService verification = mock(SellerIdentityVerificationService.class);
+    private final VerifySellerIdentityUseCase verification = mock(VerifySellerIdentityUseCase.class);
     private final SellerIdentityGuardInterceptor interceptor = new SellerIdentityGuardInterceptor(verification);
 
     @Test

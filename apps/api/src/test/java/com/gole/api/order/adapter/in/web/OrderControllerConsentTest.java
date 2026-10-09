@@ -12,8 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -45,11 +45,11 @@ class OrderControllerConsentTest {
 
     private final GetOrderUseCase orders = mock(GetOrderUseCase.class);
     private final GetShipmentUseCase shipments = mock(GetShipmentUseCase.class);
-    private final ThirdPartyProvisionConsentService consents = mock(ThirdPartyProvisionConsentService.class);
+    private final ManageThirdPartyProvisionConsentUseCase consents =
+            mock(ManageThirdPartyProvisionConsentUseCase.class);
     private final PlaceOrderUseCase placeOrders = mock(PlaceOrderUseCase.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
-    private final SellerIdentityVerificationService sellerIdentityVerification =
-            mock(SellerIdentityVerificationService.class);
+    private final VerifySellerIdentityUseCase sellerIdentityVerification = mock(VerifySellerIdentityUseCase.class);
     private OrderController controller;
 
     @BeforeEach
@@ -92,7 +92,7 @@ class OrderControllerConsentTest {
         when(orders.getById("order-1")).thenReturn(order);
         when(shipments.getByOrderId("order-1")).thenReturn(Optional.of(shipment()));
 
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(consents)
                 .requireCurrent("buyer-1");
         assertThatThrownBy(() -> controller.contacts("order-1", authenticated("buyer-1")))
@@ -109,24 +109,26 @@ class OrderControllerConsentTest {
     @Test
     void counterpartContactRequiresThePhoneOwnersCurrentConsentInBothDirections() {
         when(orders.getById("order-1")).thenReturn(order());
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+        doThrow(new ForbiddenException(
+                        ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(consents)
                 .requireCurrentSubject("seller-1");
 
         assertThatThrownBy(() -> controller.contacts("order-1", authenticated("buyer-1")))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
+                .isEqualTo(ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE);
         verify(shipments, never()).getByOrderId("order-1");
 
         org.mockito.Mockito.reset(consents);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
+        doThrow(new ForbiddenException(
+                        ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(consents)
                 .requireCurrentSubject("buyer-1");
         assertThatThrownBy(() -> controller.contacts("order-1", authenticated("seller-1")))
                 .isInstanceOf(ForbiddenException.class)
                 .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
+                .isEqualTo(ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE);
         verify(shipments, never()).getByOrderId("order-1");
 
         org.mockito.Mockito.reset(consents);
@@ -140,7 +142,7 @@ class OrderControllerConsentTest {
     @Test
     void missingConsentHasStableHttpErrorCodeForApiBypassProtection() throws Exception {
         when(orders.getById("order-1")).thenReturn(order());
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(consents)
                 .requireCurrent("buyer-1");
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)
@@ -149,7 +151,7 @@ class OrderControllerConsentTest {
 
         mvc.perform(get("/api/v1/orders/order-1/contacts").requestAttr(UserAuthInterceptor.ATTR_ACCOUNT_ID, "buyer-1"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value(ThirdPartyProvisionConsentService.REQUIRED_CODE));
+                .andExpect(jsonPath("$.code").value(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE));
     }
 
     @Test

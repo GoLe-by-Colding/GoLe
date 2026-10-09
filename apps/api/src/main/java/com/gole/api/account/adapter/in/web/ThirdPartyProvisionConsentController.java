@@ -2,8 +2,8 @@ package com.gole.api.account.adapter.in.web;
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService.ConsentStatus;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase.ConsentStatus;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.SourcePath;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.UnauthorizedException;
@@ -27,12 +27,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/accounts/me")
 public class ThirdPartyProvisionConsentController {
 
-    private final ThirdPartyProvisionConsentService consents;
+    private final ManageThirdPartyProvisionConsentUseCase consents;
     private final GetCurrentSessionUseCase sessions;
     private final SessionCookie sessionCookie;
 
     public ThirdPartyProvisionConsentController(
-            ThirdPartyProvisionConsentService consents,
+            ManageThirdPartyProvisionConsentUseCase consents,
             GetCurrentSessionUseCase sessions,
             SessionCookie sessionCookie) {
         this.consents = consents;

@@ -2,8 +2,8 @@ package com.gole.api.chat.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.ChatMessagingService;
@@ -74,8 +74,8 @@ public class ChatController {
     private final ChatMessagingService messaging;
     private final ChatReadService reads;
     private final SupportTicketRepositoryPort supportTickets;
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
-    private final SellerIdentityVerificationService sellerIdentityVerification;
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents;
+    private final VerifySellerIdentityUseCase sellerIdentityVerification;
 
     public ChatController(
             ChatRoomMongoRepository roomRepo,
@@ -87,8 +87,8 @@ public class ChatController {
             ChatMessagingService messaging,
             ChatReadService reads,
             SupportTicketRepositoryPort supportTickets,
-            ThirdPartyProvisionConsentService thirdPartyProvisionConsents,
-            SellerIdentityVerificationService sellerIdentityVerification) {
+            ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents,
+            VerifySellerIdentityUseCase sellerIdentityVerification) {
         this.roomRepo = roomRepo;
         this.listenerContainer = listenerContainer;
         this.getListingUseCase = getListingUseCase;

@@ -12,8 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService.ConsentStatus;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase.ConsentStatus;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.SourcePath;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -29,12 +29,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ThirdPartyProvisionConsentControllerTest {
 
-    private ThirdPartyProvisionConsentService consents;
+    private ManageThirdPartyProvisionConsentUseCase consents;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        consents = mock(ThirdPartyProvisionConsentService.class);
+        consents = mock(ManageThirdPartyProvisionConsentUseCase.class);
         GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
         when(sessions.resolve("session-token"))
                 .thenReturn(Optional.of(new CurrentSession("account-1", "member@example.test", Role.USER)));

@@ -2,8 +2,8 @@ package com.gole.api.order.adapter.in.web;
 
 import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
@@ -50,9 +50,9 @@ public class OrderController {
     private final OpenDisputeUseCase openDisputeUseCase;
     private final GetShipmentUseCase getShipmentUseCase;
     private final GetSellerSettlementsUseCase sellerSettlements;
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents;
     private final GetListingUseCase getListingUseCase;
-    private final SellerIdentityVerificationService sellerIdentityVerification;
+    private final VerifySellerIdentityUseCase sellerIdentityVerification;
 
     public OrderController(
             PlaceOrderUseCase placeOrderUseCase,
@@ -63,9 +63,9 @@ public class OrderController {
             OpenDisputeUseCase openDisputeUseCase,
             GetShipmentUseCase getShipmentUseCase,
             GetSellerSettlementsUseCase sellerSettlements,
-            ThirdPartyProvisionConsentService thirdPartyProvisionConsents,
+            ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents,
             GetListingUseCase getListingUseCase,
-            SellerIdentityVerificationService sellerIdentityVerification) {
+            VerifySellerIdentityUseCase sellerIdentityVerification) {
         this.placeOrderUseCase = placeOrderUseCase;
         this.payOrderUseCase = payOrderUseCase;
         this.completeOrderUseCase = completeOrderUseCase;
