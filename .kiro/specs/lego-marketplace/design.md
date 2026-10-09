@@ -67,6 +67,9 @@ com.gole.api.<context>/
   - 불변식: 사진 1장 이상 필수(`MissingPhotoException`), `RESERVED` 삭제 거부, `DELETED` 판매 거부, 가격 양수.
   - 값객체 `Money`, `ConditionDisclosure`(완전성/박스/설명서/누락·하자), enum `ItemCondition`, `Completeness`.
 - 검색: `ListingSearchQuery`(query/condition/minPrice/maxPrice/`ListingSortOrder`).
+  - 키워드는 제목·설명 부분 일치(대소문자 무시)다. 키워드가 세트 번호 형태(`75192`·`#75192`·브릭링크식 `10307-1`)면
+    기본 번호로 바꿔 글자를 찾고 카탈로그 세트 번호(`^번호(-\d+)?$`)도 함께 본다(2026-10-09). 판매자가 번호를 전용 칸에만
+    넣고 제목에 쓰지 않아도 번호로 찾혀야 한다. 번호 일부(`1030`)는 세트 번호 칸과 맞춰 보지 않는다.
 - 인바운드 포트: Create/Get/Search/Browse/MarkSold/Delete/**Reserve/Release**(order 연동용).
 
 #### order (안전거래/에스크로)
