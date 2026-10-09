@@ -222,7 +222,8 @@ test.describe("Prices (KREAM-style)", () => {
     await expect(
       page.getByText("실제 체결가나 지금 받을 수 있는 입찰가가 아니에요").first(),
     ).toBeVisible();
-    await expect(page.getByText("미개봉 새상품").first()).toBeVisible();
+    // 데스크톱은 표, 휴대폰은 쌓인 행으로 같은 내용을 그린다(sm 기준). 이 검사는 데스크톱 표를 본다.
+    await expect(page.getByRole("table").getByText("미개봉 새상품").first()).toBeVisible();
   });
 
   test("기간 탭은 고정한 지금 기준으로 그 기간의 체결만 차트에 그린다", async ({ page }) => {
