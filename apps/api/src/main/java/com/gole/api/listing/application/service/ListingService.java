@@ -13,6 +13,7 @@ import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
+import com.gole.api.listing.application.port.out.ListingBidMatchNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
@@ -59,6 +60,7 @@ public class ListingService
     private final NewListingNotifierPort newListingNotifier;
     private final InterestTagListingNotifierPort interestTagListingNotifier;
     private final ListingPriceDropNotifierPort priceDropNotifier;
+    private final ListingBidMatchNotifierPort bidMatchNotifier;
     private final ManageMediaAssetsUseCase mediaAssets;
     private final Clock clock;
     private final Duration bumpCooldown;
@@ -69,6 +71,7 @@ public class ListingService
             NewListingNotifierPort newListingNotifier,
             InterestTagListingNotifierPort interestTagListingNotifier,
             ListingPriceDropNotifierPort priceDropNotifier,
+            ListingBidMatchNotifierPort bidMatchNotifier,
             ManageMediaAssetsUseCase mediaAssets,
             Clock clock,
             @Value("${gole.listing.bump.cooldown:PT24H}") Duration bumpCooldown) {
@@ -80,6 +83,7 @@ public class ListingService
         this.newListingNotifier = newListingNotifier;
         this.interestTagListingNotifier = interestTagListingNotifier;
         this.priceDropNotifier = priceDropNotifier;
+        this.bidMatchNotifier = bidMatchNotifier;
         this.mediaAssets = mediaAssets;
         this.clock = clock;
         this.bumpCooldown = bumpCooldown;
@@ -109,6 +113,7 @@ public class ListingService
         if (saved.getCatalogSetNumber() != null) {
             newListingNotifier.notifySetWatchers(
                     saved.getSellerId(), saved.getId(), saved.getTitle(), saved.getCatalogSetNumber());
+            notifyMatchingBids(saved);
         }
         if (saved.getInterestTag() != null) {
             notifyInterestTagSubscribers(saved);
@@ -175,6 +180,24 @@ public class ListingService
                     priceChange.after().amount());
         } catch (RuntimeException ignored) {
             // 어댑터가 이미 흡수하지만, 알림 연계 장애가 수정을 되돌리지 않게 포트 경계에서 한 번 더 격리한다.
+        }
+        if (listing.getCatalogSetNumber() != null) {
+            notifyMatchingBids(listing);
+        }
+    }
+
+    /** 이 세트·상태에 매물가 이상으로 건 입찰자에게 알린다(buy-bids D8). 등록·인하 공통, 실패는 흡수한다. */
+    private void notifyMatchingBids(Listing listing) {
+        try {
+            bidMatchNotifier.listingAvailable(
+                    listing.getId(),
+                    listing.getSellerId(),
+                    listing.getTitle(),
+                    listing.getCatalogSetNumber(),
+                    listing.getCondition().key(),
+                    listing.getPrice().amount());
+        } catch (RuntimeException ignored) {
+            // 어댑터가 이미 흡수한다. 입찰 연계 장애가 매물 등록·수정을 되돌리지 않게 한 번 더 격리한다.
         }
     }
 

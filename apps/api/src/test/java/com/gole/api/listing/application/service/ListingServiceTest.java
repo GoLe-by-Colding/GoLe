@@ -15,6 +15,7 @@ import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListi
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.ReviseListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.RevisionResult;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
+import com.gole.api.listing.application.port.out.ListingBidMatchNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
@@ -55,6 +56,7 @@ class ListingServiceTest {
     private RecordingNewListingNotifier notifier;
     private RecordingInterestTagListingNotifier interestTagNotifier;
     private RecordingPriceDropNotifier priceDropNotifier;
+    private RecordingBidMatchNotifier bidMatchNotifier;
     private ManageMediaAssetsUseCase mediaAssets;
     private MutableClock clock;
     private ListingService service;
@@ -65,6 +67,7 @@ class ListingServiceTest {
         notifier = new RecordingNewListingNotifier();
         interestTagNotifier = new RecordingInterestTagListingNotifier();
         priceDropNotifier = new RecordingPriceDropNotifier();
+        bidMatchNotifier = new RecordingBidMatchNotifier();
         mediaAssets = mock(ManageMediaAssetsUseCase.class);
         clock = new MutableClock(NOW);
         service = new ListingService(
@@ -73,6 +76,7 @@ class ListingServiceTest {
                 notifier,
                 interestTagNotifier,
                 priceDropNotifier,
+                bidMatchNotifier,
                 mediaAssets,
                 clock,
                 BUMP_COOLDOWN);
@@ -422,6 +426,52 @@ class ListingServiceTest {
         assertThat(priceDropNotifier.notices)
                 .containsExactly(new PriceDropNotice(id, "seller-1", "에펠탑 10307 (가격 조정)", 280_000, 250_000));
         assertThat(service.getById(id).getPreviousPrice().amount()).isEqualTo(280_000);
+    }
+
+    @Test
+    void create_withSetNotifiesMatchingBiddersWithConditionAndPrice() {
+        String id = service.create(validCommand());
+
+        assertThat(bidMatchNotifier.notices)
+                .containsExactly(new BidMatchNotice(id, "seller-1", "에펠탑 10307", "10307", "new_sealed", 280_000));
+    }
+
+    @Test
+    void create_withoutSetDoesNotLookForBids() {
+        service.create(new CreateListingCommand(
+                "seller-1",
+                "브릭 벌크",
+                "섞인 부품",
+                30_000,
+                ItemCondition.USED_GOOD,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                null));
+
+        assertThat(bidMatchNotifier.notices).isEmpty();
+    }
+
+    @Test
+    void create_succeedsWhenBidMatchNotifierFails() {
+        bidMatchNotifier.failure = new IllegalStateException("bid lookup unavailable");
+
+        String id = service.create(validCommand());
+
+        assertThat(service.getById(id).isActive()).isTrue();
+    }
+
+    @Test
+    void revise_priceDropNotifiesMatchingBiddersAtNewPrice_butRaiseDoesNot() {
+        String id = service.create(validCommand());
+        bidMatchNotifier.notices.clear();
+
+        service.revise(revision(id, "seller-1", 250_000));
+        service.revise(revision(id, "seller-1", 260_000));
+
+        assertThat(bidMatchNotifier.notices)
+                .containsExactly(
+                        // 수정 후 상태(like_new) 기준으로 찾는다 — 입찰은 세트·상태별이다.
+                        new BidMatchNotice(id, "seller-1", "에펠탑 10307 (가격 조정)", "10307", "like_new", 250_000));
     }
 
     @Test
@@ -812,6 +862,23 @@ class ListingServiceTest {
                 throw failure;
             }
             notices.add(new PriceDropNotice(listingId, sellerId, title, oldPrice, newPrice));
+        }
+    }
+
+    private record BidMatchNotice(
+            String listingId, String sellerId, String title, String setNumber, String conditionKey, long price) {}
+
+    private static final class RecordingBidMatchNotifier implements ListingBidMatchNotifierPort {
+        private final List<BidMatchNotice> notices = new ArrayList<>();
+        private RuntimeException failure;
+
+        @Override
+        public void listingAvailable(
+                String listingId, String sellerId, String title, String setNumber, String conditionKey, long price) {
+            if (failure != null) {
+                throw failure;
+            }
+            notices.add(new BidMatchNotice(listingId, sellerId, title, setNumber, conditionKey, price));
         }
     }
 
