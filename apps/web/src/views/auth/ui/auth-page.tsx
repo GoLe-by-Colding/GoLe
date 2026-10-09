@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { SignInForm } from "@features/sign-in";
-import { SignUpForm } from "@features/sign-up";
-import { SocialLoginButtons } from "@features/social-login";
+import { SignInForm } from "@features/auth/sign-in";
+import { SignUpForm } from "@features/auth/sign-up";
+import { SocialLoginButtons } from "@features/auth/social-login";
 import { fetchLaunchConfig } from "@entities/launch";
 import {
   fetchCurrentSignupPolicy,
