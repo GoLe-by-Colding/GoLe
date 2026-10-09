@@ -1,5 +1,5 @@
 import type { ConditionValuation, PriceSnapshot, SetCondition } from "./types";
-import { priceEvidenceWarning } from "./types";
+import { priceEvidenceWarning, valuationBasisLabel } from "./types";
 
 /**
  * 매물 판매가를 같은 상태의 추정 시세 옆에 놓기 위한 값.
@@ -53,4 +53,14 @@ export function priceGapLabel(ratio: number, lead = "판매가"): string {
   if (Math.abs(ratio) < SIMILAR_PRICE_RATIO) return "시세와 비슷";
   const percent = Math.round(Math.abs(ratio) * 1000) / 10;
   return `${lead} ${percent.toLocaleString("ko-KR")}% ${ratio > 0 ? "높음" : "낮음"}`;
+}
+
+/**
+ * 비교의 근거 한 줄 — "동일 상태 체결 19건 · 데모 포함". 근거 이름은 시세 영역과 같은 문구를 그대로 쓴다.
+ * 이름 뒤에 "기준"을 덧붙이지 않는다 — 유사 등급 근거는 이미 "유사 등급 N건 기준"이라 "기준 기준"이 된다.
+ */
+export function priceGapBasisCaption(gap: ListingPriceGap): string {
+  return [valuationBasisLabel(gap.basis, gap.sampleCount), gap.evidenceWarning]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
 }
