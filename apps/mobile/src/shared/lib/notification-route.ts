@@ -1,18 +1,27 @@
-/** 알림이 열 수 있는 공개 서비스 경로. API·관리자·외부 URL은 허용하지 않는다. */
-export function notificationWebPath(value: unknown): string | null {
-  if (typeof value !== "string" || !value.startsWith("/") || value.length > 2048) return null;
+/**
+ * 앱 안에서 따라갈 수 있는 상대 경로인지 — 알림 링크와 탭 이동 메시지가 같이 쓴다.
+ * `//host`·백슬래시·제어 문자·공백, 경로의 퍼센트 인코딩과 점 세그먼트처럼 원점·허용 목록을
+ * 우회할 수 있는 모양을 모두 막는다. query/hash는 그대로 보존한다.
+ */
+export function isSafeAppPath(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("/") || value.length > 2048) return false;
   let decoded: string;
   try {
     decoded = decodeURIComponent(value);
   } catch {
-    return null;
+    return false;
   }
   if (decoded.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(decoded) || /\s/.test(value))
-    return null;
+    return false;
   const path = value.split(/[?#]/, 1)[0] ?? "";
-  // 경로의 인코딩·정규화로 허용 목록을 우회하지 못하게 한다. query/hash는 그대로 보존한다.
-  if (path.includes("%")) return null;
-  if (path.split("/").some((segment) => segment === "." || segment === "..")) return null;
+  if (path.includes("%")) return false;
+  return !path.split("/").some((segment) => segment === "." || segment === "..");
+}
+
+/** 알림이 열 수 있는 공개 서비스 경로. API·관리자·외부 URL은 허용하지 않는다. */
+export function notificationWebPath(value: unknown): string | null {
+  if (!isSafeAppPath(value)) return null;
+  const path = value.split(/[?#]/, 1)[0] ?? "";
   const roots = [
     "/",
     "/search",

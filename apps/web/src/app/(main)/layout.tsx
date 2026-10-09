@@ -4,6 +4,7 @@ import { SiteFooter } from "@widgets/site-footer";
 import { AdminBar } from "@widgets/admin-bar";
 import { OnboardingBanner } from "@widgets/onboarding-banner";
 import { AppPushRegistration } from "./app-push-registration";
+import { AppTabLinks } from "./app-tab-links";
 
 // 헤더가 있는 앱 셸. 홈/탐색/시세/커뮤니티 등 메인 화면에 적용.
 export default function MainLayout({ children }: { readonly children: ReactNode }) {
@@ -18,6 +19,8 @@ export default function MainLayout({ children }: { readonly children: ReactNode 
       <AdminBar />
       {/* 앱(WebView) 안에서만 동작한다 — 네이티브가 건넨 푸시 토큰을 로그인 계정으로 등록한다. */}
       <AppPushRegistration />
+      {/* 앱(WebView) 안에서만 동작한다 — 다른 탭의 화면으로 가는 링크를 그 탭으로 넘겨 선택 탭과 화면을 맞춘다. */}
+      <AppTabLinks />
     </>
   );
 }

@@ -13,6 +13,10 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 찍을 때 카메라를 사용합니다.",
+        "NSPhotoLibraryUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 고를 때 사진 보관함을 사용합니다."
       }
     },
     "android": {
