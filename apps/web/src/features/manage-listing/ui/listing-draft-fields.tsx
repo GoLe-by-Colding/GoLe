@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   type Completeness,
   type ItemCondition,
@@ -19,13 +19,15 @@ const COMPLETENESS: readonly Completeness[] = ["full_box", "no_box", "bulk"];
 export interface ListingDraftFieldsProps {
   readonly form: ListingDraftForm;
   readonly paymentsOpen: boolean;
+  /** 가격 입력란 바로 아래에 둘 안내(같은 등급 추정 시세). 세트 번호를 아는 각 폼이 만든다. */
+  readonly priceGuide?: ReactNode;
 }
 
 /**
  * 등록·수정 폼이 공유하는 입력란 — 관심 테마부터 사진까지.
  * 카테고리·세트 번호는 등록에서만 고르므로 각 폼이 이 앞뒤에 따로 둔다.
  */
-export function ListingDraftFields({ form, paymentsOpen }: ListingDraftFieldsProps) {
+export function ListingDraftFields({ form, paymentsOpen, priceGuide }: ListingDraftFieldsProps) {
   const { draft, update, uploading, submitting, maxPhotos } = form;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -84,22 +86,7 @@ export function ListingDraftFields({ form, paymentsOpen }: ListingDraftFieldsPro
           />
         )}
       </Field>
-      <Field label="가격 (원)">
-        {({ inputId, describedBy }) => (
-          <Input
-            id={inputId}
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={draft.price}
-            placeholder="280000"
-            aria-describedby={describedBy}
-            onChange={(e) => update({ price: e.target.value })}
-            required
-          />
-        )}
-      </Field>
-      <SellerFeePanel paymentsOpen={paymentsOpen} price={draft.price} />
+      {/* 상태가 추정 시세의 기준이라 가격보다 먼저 고른다(가격 칸 아래 시세 안내가 이 상태를 따른다). */}
       <Field label="상품 상태">
         {({ inputId }) => (
           <Select
@@ -115,6 +102,23 @@ export function ListingDraftFields({ form, paymentsOpen }: ListingDraftFieldsPro
           </Select>
         )}
       </Field>
+      <Field label="가격 (원)">
+        {({ inputId, describedBy }) => (
+          <Input
+            id={inputId}
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={draft.price}
+            placeholder="280000"
+            aria-describedby={describedBy}
+            onChange={(e) => update({ price: e.target.value })}
+            required
+          />
+        )}
+      </Field>
+      {priceGuide}
+      <SellerFeePanel paymentsOpen={paymentsOpen} price={draft.price} />
       <Field label="구성">
         {({ inputId }) => (
           <Select
