@@ -1,3 +1,0 @@
-Class <com.gole.api.order.adapter.out.payment.E2EPaymentReadinessIndicator> does not reside in a package 'com.gole.api..application.service..' in (E2EPaymentReadinessIndicator.java:0)
-Class <com.gole.api.order.adapter.out.payment.PortOneReadinessIndicator> does not reside in a package 'com.gole.api..application.service..' in (PortOneReadinessIndicator.java:0)
-Class <com.gole.api.order.adapter.out.settlement.MongoSettlementAdapter> does not reside in a package 'com.gole.api..application.service..' in (MongoSettlementAdapter.java:0)

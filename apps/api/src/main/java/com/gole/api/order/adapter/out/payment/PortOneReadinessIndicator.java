@@ -1,11 +1,11 @@
 package com.gole.api.order.adapter.out.payment;
 
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ChannelType;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Problem;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.State;
+import com.gole.api.order.application.port.out.PaymentReadinessProbePort;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Profile("!e2e")
-public class PortOneReadinessIndicator implements GetPaymentReadinessUseCase {
+public class PortOneReadinessIndicator implements PaymentReadinessProbePort {
 
     private final boolean enabled;
     private final String apiSecret;
