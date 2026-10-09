@@ -116,6 +116,27 @@ export async function HomePage() {
       : []),
   ];
 
+  // 히어로 CTA. 넓은 화면은 우측 레일(분수 → 지표 → CTA) 끝에, 모바일은 문구 바로 아래에 같은 것을 둔다.
+  const heroActions = (
+    <div className="flex flex-col gap-3 xl:flex-row">
+      <LinkButton href="/search" variant="accent" size="lg" fullWidth>
+        상품 둘러보기
+      </LinkButton>
+      <LinkButton
+        href={sellerTradingOpen ? (paymentsOpen ? "/prices" : "/chat") : "/community"}
+        variant="inverse"
+        size="lg"
+        fullWidth
+      >
+        {sellerTradingOpen
+          ? paymentsOpen
+            ? "시세 확인하기"
+            : "대화 이어가기"
+          : "커뮤니티 둘러보기"}
+      </LinkButton>
+    </div>
+  );
+
   return (
     <div className="flex flex-col">
       <section className="border-b border-brand-900 bg-brand-950 text-white">
@@ -145,6 +166,9 @@ export async function HomePage() {
               <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
                 가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.
               </p>
+              {/* 한 칸짜리 모바일 레이아웃에서는 우측 레일이 문구 아래로 내려가 CTA가 첫 화면 밖으로
+                  밀린다(402×874에서 폴드보다 109px 아래). 모바일만 CTA를 문구 바로 아래에 둔다. */}
+              <div className="sm:hidden">{heroActions}</div>
             </div>
 
             {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
@@ -190,23 +214,7 @@ export async function HomePage() {
                 </div>
               ) : null}
 
-              <div className="flex flex-col gap-3 xl:flex-row">
-                <LinkButton href="/search" variant="accent" size="lg" fullWidth>
-                  상품 둘러보기
-                </LinkButton>
-                <LinkButton
-                  href={sellerTradingOpen ? (paymentsOpen ? "/prices" : "/chat") : "/community"}
-                  variant="inverse"
-                  size="lg"
-                  fullWidth
-                >
-                  {sellerTradingOpen
-                    ? paymentsOpen
-                      ? "시세 확인하기"
-                      : "대화 이어가기"
-                    : "커뮤니티 둘러보기"}
-                </LinkButton>
-              </div>
+              <div className="max-sm:hidden">{heroActions}</div>
             </div>
           </div>
         </Container>
