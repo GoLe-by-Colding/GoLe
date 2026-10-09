@@ -17,20 +17,25 @@ test.describe("Search & listing detail", () => {
     await expect(page.getByTestId("listing-card").first()).toBeVisible();
   });
 
-  test("세트 번호로 찾으면 결과 위에 그 세트 페이지 바로가기를 둔다", async ({ page }) => {
+  test("세트 번호나 세트 이름으로 찾으면 결과 위에 그 세트 페이지 바로가기를 둔다", async ({
+    page,
+  }) => {
     // 변형 번호(-1)도 같은 세트다. 세트 페이지에는 시세·구매 입찰·그 세트의 모든 매물이 모여 있다.
     await page.goto("/search?query=10307-1");
     const shortcut = page.getByTestId("search-set-shortcut");
     await expect(shortcut).toHaveAttribute("href", "/sets/10307");
     await expect(shortcut).toContainText("세트 #10307");
 
-    // 세트 번호가 아니거나 카탈로그에 없는 번호면 바로가기를 두지 않는다.
-    await page.goto("/search?query=%EC%97%90%ED%8E%A0%ED%83%91");
-    await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
-    await expect(page.getByTestId("search-set-shortcut")).toHaveCount(0);
-    await page.goto("/search?query=9999999");
-    await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
-    await expect(page.getByTestId("search-set-shortcut")).toHaveCount(0);
+    // 이름에 검색어가 든 카탈로그 세트도 바로가기로 보인다.
+    await page.goto(`/search?query=${encodeURIComponent("에펠탑")}`);
+    await expect(page.getByTestId("search-set-shortcut")).toHaveAttribute("href", "/sets/10307");
+
+    // 테마만 맞는 세트(너무 넓음)·카탈로그에 없는 번호·맞는 세트가 없는 말에는 두지 않는다.
+    for (const query of ["Icons", "9999999", "없는세트이름"]) {
+      await page.goto(`/search?query=${encodeURIComponent(query)}`);
+      await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
+      await expect(page.getByTestId("search-set-shortcut"), query).toHaveCount(0);
+    }
   });
 
   test("세트 페이지에서 이 세트로 판매 등록을 시작할 수 있다", async ({ page }) => {
