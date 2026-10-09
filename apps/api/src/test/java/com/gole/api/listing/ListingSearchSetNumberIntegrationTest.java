@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingCategory;
@@ -23,7 +24,7 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** 세트 번호로 찾는 검색. 제목·설명에 번호가 없어도 카탈로그 세트 번호로 찾힌다. */
+/** 세트 번호·관심 테마로 찾는 검색. 제목·설명에 번호나 테마 이름이 없어도 찾힌다. */
 @SpringBootTest
 @Testcontainers
 class ListingSearchSetNumberIntegrationTest {
@@ -60,6 +61,7 @@ class ListingSearchSetNumberIntegrationTest {
         listings.save(listing("variant-field", "에펠탑 설명서 포함", "", "10307-1", 2));
         listings.save(listing("other-prefix", "다른 세트", "", "103070", 3));
         listings.save(listing("falcon", "밀레니엄 팰컨", "", "75192", 4));
+        listings.save(listing("tagged-falcon", "UCS 팰컨 박스 미개봉", "", "75192", 5, InterestTag.STAR_WARS));
     }
 
     @Test
@@ -70,11 +72,20 @@ class ListingSearchSetNumberIntegrationTest {
     }
 
     @Test
+    void koreanThemeNameFindsListingsTaggedWithThatTheme() {
+        // 카탈로그 테마는 영어이고 제목엔 테마 이름이 없다 — 판매자가 고른 관심 테마로 찾힌다.
+        assertThat(ids("스타워즈")).containsExactly("tagged-falcon");
+        assertThat(ids("Star Wars")).containsExactly("tagged-falcon");
+        // 테마 이름의 일부는 관심 테마로 보지 않는다(글자 검색만).
+        assertThat(ids("스타")).isEmpty();
+    }
+
+    @Test
     void partialNumberAndWordsStillSearchTextOnly() {
         // 번호 일부는 세트 번호 칸과 정확히 맞춰 보지 않는다 — 다른 세트(103070)를 끌고 오지 않는다.
         assertThat(ids("1030")).containsExactly("text-only");
         assertThat(ids("에펠탑")).containsExactlyInAnyOrder("field-only", "text-only", "variant-field");
-        assertThat(ids("팰컨")).containsExactly("falcon");
+        assertThat(ids("팰컨")).containsExactlyInAnyOrder("falcon", "tagged-falcon");
     }
 
     private List<String> ids(String text) {
@@ -84,6 +95,11 @@ class ListingSearchSetNumberIntegrationTest {
     }
 
     private static Listing listing(String id, String title, String description, String setNumber, int minutes) {
+        return listing(id, title, description, setNumber, minutes, null);
+    }
+
+    private static Listing listing(
+            String id, String title, String description, String setNumber, int minutes, InterestTag interestTag) {
         return Listing.create(
                 id,
                 "seller-1",
@@ -95,7 +111,7 @@ class ListingSearchSetNumberIntegrationTest {
                 List.of("listing/photo.jpg"),
                 setNumber,
                 ListingCategory.SET,
-                null,
+                interestTag,
                 T0.plusSeconds(minutes * 60L));
     }
 }

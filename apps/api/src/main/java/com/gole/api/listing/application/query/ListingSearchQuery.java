@@ -1,7 +1,9 @@
 package com.gole.api.listing.application.query;
 
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingCategory;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -57,6 +59,33 @@ public record ListingSearchQuery(
         }
         Matcher matcher = SET_NUMBER_TEXT.matcher(text.trim());
         return matcher.matches() ? matcher.group(1) : null;
+    }
+
+    /**
+     * 검색어가 관심 테마 이름이면 그 테마 — "스타워즈"·"스타 워즈"·"Star Wars"·"star-wars"는 모두 {@link InterestTag#STAR_WARS}.
+     * 아니면 {@code null}. 대소문자·띄어쓰기·하이픈은 가리지 않고, 이름의 일부("스타")는 테마로 보지 않는다.
+     *
+     * <p>카탈로그 테마 이름은 영어("Star Wars")이고 한국어 매물 제목에는 테마 이름이 거의 없어, "스타워즈"로 찾으면 0건이었다.
+     * 판매자가 고른 관심 테마로도 찾게 한다.
+     */
+    public InterestTag interestTagInText() {
+        if (text == null) {
+            return null;
+        }
+        String needle = normalizeTagText(text);
+        if (needle.isEmpty()) {
+            return null;
+        }
+        for (InterestTag tag : InterestTag.values()) {
+            if (needle.equals(normalizeTagText(tag.label())) || needle.equals(normalizeTagText(tag.key()))) {
+                return tag;
+            }
+        }
+        return null;
+    }
+
+    private static String normalizeTagText(String value) {
+        return value.replaceAll("[\\s_-]+", "").toLowerCase(Locale.ROOT);
     }
 
     private static final Pattern SET_NUMBER_TEXT = Pattern.compile("#?(\\d{3,7})(?:-\\d{1,2})?");

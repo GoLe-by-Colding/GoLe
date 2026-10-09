@@ -44,7 +44,7 @@ export function ListingDraftFields({ form, paymentsOpen, priceGuide }: ListingDr
     <>
       <Field
         label="관심 테마"
-        hint="이 테마를 관심 태그로 고른 이용자에게 알림톡이 갈 수 있어요 (선택)"
+        hint="고르면 '스타워즈'처럼 테마 이름으로도 검색되고, 이 테마를 관심 태그로 고른 이용자에게 알림톡이 갈 수 있어요 (선택)"
       >
         {({ inputId, describedBy }) => (
           <Select
