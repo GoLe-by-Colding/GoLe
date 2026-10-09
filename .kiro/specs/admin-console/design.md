@@ -286,7 +286,11 @@ src/app/(main)/admin/
 
 `widgets/admin-bar`를 `(main)/layout.tsx`에 배치한다.
 
-- `session.role === "ADMIN"`이 아니면 **아무것도 렌더링하지 않는다**(R1.7).
+- 서버가 ADMIN으로 확인하지 않으면 **아무것도 렌더링하지 않는다**(R1.7). 판정은 콘솔 셸과 같은
+  `entities/user`의 `useAdminAccess`(`GET /api/v1/accounts/me`)로 한다. 로컬 `session.role`은 사용자가
+  바꿀 수 있으므로 "서버에 물어볼지"의 힌트로만 쓴다 — 일반 사용자는 매 화면 `/me`를 부르지 않고,
+  확인 전에는 바도 그리지 않고 관리자 API(미처리 신고 수)도 부르지 않는다. 콘솔(`/admin/**`)
+  안에서는 셸이 같은 확인을 하므로 바는 묻지 않는다.
 - 하단 고정 바에 표시: `ADMIN` 뱃지 · 미처리 신고 수 · 콘솔 바로가기.
 - 현재 경로를 파싱해 컨텍스트 조치를 노출한다.
   - `/listings/{id}` → "이 매물 내리기"

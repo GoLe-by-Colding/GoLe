@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchAdminReports, removeAdminPost, takedownListing } from "@entities/admin";
-import { useSession } from "@entities/user";
+import { useAdminAccess, useSession } from "@entities/user";
 import { ReasonPrompt, useModerationAction } from "@features/admin-moderation";
 import { Badge, Button } from "@shared/ui";
 
@@ -30,12 +30,18 @@ function detectTarget(pathname: string): { kind: "listing" | "post"; id: string 
  * 매물 상세를 보다가 가품이라고 판단하면 그 자리에서 내릴 수 있다.
  *
  * ADMIN이 아니면 아무것도 렌더링하지 않는다 — 일반 사용자에게는 존재 자체가 드러나지 않는다.
+ * ADMIN 여부는 콘솔 셸과 같은 서버 확인(`useAdminAccess`)으로만 정한다. 로컬 role은 사용자가 바꿀 수
+ * 있으므로, 서버가 확인하기 전에는 바를 그리지도 관리자 API(신고 수)를 부르지도 않는다.
  */
 export function AdminBar() {
   const { session } = useSession();
   const pathname = usePathname();
   const router = useRouter();
-  const isAdmin = session?.role === "ADMIN";
+  const inConsole = pathname.startsWith("/admin");
+  // 로컬 role은 서버에 물어볼지의 힌트로만 쓴다 — 일반 사용자는 매 화면 `/me`를 부르지 않는다.
+  // 콘솔 안에서는 셸이 같은 확인을 하므로 겹쳐 묻지 않는다.
+  const { access } = useAdminAccess({ enabled: session?.role === "ADMIN" && !inConsole });
+  const isAdmin = access === "granted";
   const token = session?.sessionToken ?? null;
 
   // 접힘 상태는 첫 렌더에 곧바로 반영해야 깜빡임이 없다. 서버 렌더에는 window가 없으므로 방어한다.
@@ -48,7 +54,7 @@ export function AdminBar() {
   const action = useModerationAction(refresh);
 
   useEffect(() => {
-    if (token === null || !isAdmin || pathname.startsWith("/admin")) {
+    if (token === null || !isAdmin || inConsole) {
       return;
     }
     let active = true;
@@ -62,10 +68,10 @@ export function AdminBar() {
     return () => {
       active = false;
     };
-  }, [token, isAdmin, pathname]);
+  }, [token, isAdmin, inConsole, pathname]);
 
   // 콘솔 안에서는 중복이므로 띄우지 않는다.
-  if (!isAdmin || token === null || pathname.startsWith("/admin")) {
+  if (!isAdmin || token === null || inConsole) {
     return null;
   }
 

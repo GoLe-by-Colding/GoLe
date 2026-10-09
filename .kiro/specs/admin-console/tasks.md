@@ -52,6 +52,8 @@
 - [x] E6. `app/(main)/admin/**` 라우트 + `layout.tsx`(noindex) (R1.5, 2.1)
 - [x] E7. `(main)/layout.tsx`에 `AdminBar` 배치
 - [x] E8. 헤더 관리자 진입점 유지·정리 (R1.1)
+- [x] E9. `admin-bar`가 로컬 role만 보고 렌더·신고 수 요청하던 결함 수정 — 콘솔 셸의 서버 확인을
+      `entities/user`의 `useAdminAccess`로 옮겨 셸·바가 함께 쓴다 (R1.6, 1.7, 2026-10-10)
 
 ## F. 검증
 
@@ -61,6 +63,8 @@
 - [x] F4. E2E `admin-console.spec.ts` — 화면 게이트(비로그인/USER/noindex/어드민바 미노출) 5건 통과.
       API 가드(401/400/`ADMIN_SELF_TARGET`)는 `E2E_WITH_BACKEND=1` + `GOLE_ADMIN_*` 설정 시 실행
 - [x] F5. 레거시 잠금(`lockedUntil=9999`) → `SUSPENDED` 전환 스크립트 (`scripts/migrate-legacy-locks.js`, 설계 §5)
+- [x] F6. E2E — 위조한 로컬 role=ADMIN은 `/me` 응답 전후 모두 바 미노출·신고 미요청, 서버가 ADMIN으로
+      확인한 뒤에만 바 노출·신고 수 요청 (2026-10-10, 옛 판정으로 되돌리면 두 건 모두 실패 확인)
 
 ## H. 로컬 구동 (실제 동작 검증)
 

@@ -266,6 +266,75 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(page.getByText("ADMIN", { exact: true })).toHaveCount(0);
   });
 
+  test("위조한 로컬 role=ADMIN으로는 서버 확인 전후 모두 어드민 바가 뜨지 않는다 (R1.7)", async ({
+    page,
+  }) => {
+    let reportsRequested = false;
+    await page.route("**/api/admin/reports**", async (route) => {
+      reportsRequested = true;
+      await route.fulfill({ status: 403, contentType: "application/json", body: "{}" });
+    });
+    let releaseMe: () => void = () => {};
+    const meHeld = new Promise<void>((resolve) => {
+      releaseMe = resolve;
+    });
+    await page.route("**/api/v1/accounts/me", async (route) => {
+      await meHeld;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ accountId: "forged-1", email: "user@gole.test", role: "USER" }),
+      });
+    });
+    await seedLocalSession(page, { accountId: "forged-1", sessionToken: "", role: "ADMIN" });
+    const meRequested = page.waitForRequest("**/api/v1/accounts/me");
+
+    await page.goto("/");
+    await meRequested;
+    // 서버가 답하기 전 — 로컬 role만으로는 바를 그리지 않는다.
+    await expect(page.getByRole("button", { name: "관리자 바 접기" })).toHaveCount(0);
+
+    const meAnswered = page.waitForResponse("**/api/v1/accounts/me");
+    releaseMe();
+    await meAnswered;
+    await expect(page.getByRole("button", { name: "관리자 바 접기" })).toHaveCount(0);
+    await expect(page.getByText("ADMIN", { exact: true })).toHaveCount(0);
+    expect(reportsRequested).toBe(false);
+  });
+
+  test("서버가 ADMIN으로 확인한 뒤에야 어드민 바가 뜨고 신고 수를 불러온다 (R1.6)", async ({
+    page,
+  }) => {
+    let reportsRequested = false;
+    await page.route("**/api/admin/reports**", async (route) => {
+      reportsRequested = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+    let releaseMe: () => void = () => {};
+    const meHeld = new Promise<void>((resolve) => {
+      releaseMe = resolve;
+    });
+    await page.route("**/api/v1/accounts/me", async (route) => {
+      await meHeld;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" }),
+      });
+    });
+    await seedLocalSession(page, { accountId: "admin-1", sessionToken: "", role: "ADMIN" });
+    const meRequested = page.waitForRequest("**/api/v1/accounts/me");
+
+    await page.goto("/");
+    await meRequested;
+    await expect(page.getByRole("button", { name: "관리자 바 접기" })).toHaveCount(0);
+    expect(reportsRequested).toBe(false);
+
+    releaseMe();
+    await expect(page.getByRole("button", { name: "관리자 바 접기" })).toBeVisible();
+    await expect.poll(() => reportsRequested).toBe(true);
+  });
+
   test("/admin은 색인되지 않는다 (R1.5)", async ({ page }) => {
     await page.goto("/admin");
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
