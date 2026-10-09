@@ -19,6 +19,8 @@ export {
   valuationBasisTone,
 } from "./model/types";
 export { filterPricePointsByPeriod } from "./model/period";
+export { listingPriceGap, priceGapLabel, SIMILAR_PRICE_RATIO } from "./model/price-gap";
+export type { ListingPriceGap } from "./model/price-gap";
 export {
   fetchPriceStatistics,
   fetchPriceStatisticsForPage,
