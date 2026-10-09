@@ -1,7 +1,14 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 // 시세 기간 필터는 웹·앱 공유 코어에 있다(@gole/core). 파사드가 아니라 원본을 직접 가져와
 // 이 단위 검증이 재수출 계층을 거치지 않게 한다.
-import { filterPricePointsByPeriod, type PricePoint, type PriceSnapshot } from "@gole/core/pricing";
+import {
+  filterPricePointsByPeriod,
+  listingPriceGap,
+  priceGapLabel,
+  type ConditionValuation,
+  type PricePoint,
+  type PriceSnapshot,
+} from "@gole/core/pricing";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const HOUR_MS = 60 * 60 * 1000;
@@ -85,6 +92,65 @@ test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않�
 
   expect(filterPricePointsByPeriod(points, 31, now)).toEqual([points[1]]);
   expect(filterPricePointsByPeriod(points, 1, now)).toEqual([]);
+});
+
+test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비교한다", () => {
+  const valuation = (
+    condition: ConditionValuation["condition"],
+    basis: ConditionValuation["basis"],
+    fairPrice: number,
+  ): ConditionValuation => ({
+    condition,
+    basis,
+    depreciationPct: 0,
+    fairPrice,
+    sellPrice: Math.round(fairPrice * 0.96),
+    buyPrice: Math.round(fairPrice * 1.05),
+    sampleCount: basis === "model" ? 0 : 19,
+    basedOnRealData: basis !== "model",
+  });
+  const snapshot = (
+    state: PriceSnapshot["state"],
+    conditions: ConditionValuation[],
+    demo = false,
+  ): PriceSnapshot => ({
+    setNumber: "75192",
+    state,
+    minimumSamples: 3,
+    sampleCount: 31,
+    observations: [],
+    statistics: null,
+    valuation: { setNumber: "75192", hasData: true, marketPrice: 1_313_743, conditions },
+    provenance: { mode: demo ? "DEMO" : "FIRST_PARTY", includedSources: [], demo },
+  });
+  const established = snapshot("ESTABLISHED", [
+    valuation("used_good", "grade", 1_063_651),
+    valuation("like_new", "group", 1_200_017),
+    valuation("damaged", "model", 571_768),
+  ]);
+
+  const higher = listingPriceGap(1_250_000, "used_good", established);
+  expect(higher?.fairPrice).toBe(1_063_651);
+  expect(priceGapLabel(higher!.ratio)).toBe("판매가 17.5% 높음");
+  expect(priceGapLabel(listingPriceGap(1_137_000, "like_new", established)!.ratio)).toBe(
+    "판매가 5.3% 낮음",
+  );
+  expect(priceGapLabel(listingPriceGap(1_080_000, "used_good", established)!.ratio)).toBe(
+    "시세와 비슷",
+  );
+  // 표본 없는 감가 모델·참고 단계·조회 실패·없는 등급과는 비교하지 않는다.
+  expect(listingPriceGap(600_000, "damaged", established)).toBeNull();
+  expect(listingPriceGap(1_250_000, "used_good", snapshot("OBSERVATIONS_ONLY", []))).toBeNull();
+  expect(listingPriceGap(1_250_000, "used_good", null)).toBeNull();
+  expect(listingPriceGap(1_250_000, "new_sealed", established)).toBeNull();
+  // 출처 경고는 비교와 함께 다닌다.
+  expect(
+    listingPriceGap(
+      1_250_000,
+      "used_good",
+      snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_063_651)], true),
+    )?.evidenceWarning,
+  ).toBe("데모 포함");
 });
 
 // 시세 페이지: 차트·기간 탭·상태별(감가/빠른 판매·구매 추정) 테이블·정렬. (데이터가 있는 환경 대상)
