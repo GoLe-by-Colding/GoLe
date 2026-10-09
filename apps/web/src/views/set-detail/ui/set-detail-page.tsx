@@ -8,7 +8,7 @@ import { partRequestsHref } from "@entities/part-request";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
 import { SetBidSection } from "@features/buy-bid";
 import { WishlistButton } from "@features/wishlist-toggle";
-import { ListingGrid } from "@widgets/listing-grid";
+import { buildPriceNotes, ListingGrid } from "@widgets/listing-grid";
 import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
@@ -292,6 +292,7 @@ export function SetDetailPage({
         <div className="mt-4">
           <ListingGrid
             listings={listings}
+            priceNotes={buildPriceNotes(listings, { [set.setNumber]: snapshot })}
             emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
             emptyAction={
               <div className="flex flex-wrap justify-center gap-2">

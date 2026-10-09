@@ -11,6 +11,8 @@ import {
 
 export interface ListingCardProps {
   readonly listing: Listing;
+  /** 같은 등급 추정 시세와의 차이 한 줄(예: "추정 시세보다 5.3% 낮음"). 계산은 상위 레이어가 한다. */
+  readonly priceNote?: string | undefined;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface ListingCardProps {
  * 세트 번호(식별) → 제목(2줄) → 가격(가장 굵게, 줄바꿈 금지) → 상태·고지 배지.
  * 상태 등급·구성·부품 누락·예약중은 구매 판단에 필요한 고지라 폭이 좁아도 숨기지 않고 줄을 바꾼다.
  */
-export function ListingCard({ listing }: ListingCardProps) {
+export function ListingCard({ listing, priceNote }: ListingCardProps) {
   const cover = listing.photoUrls[0];
 
   return (
@@ -49,6 +51,11 @@ export function ListingCard({ listing }: ListingCardProps) {
             <span className="whitespace-nowrap text-xs font-semibold text-success">가격 내림</span>
           ) : null}
         </div>
+        {priceNote === undefined ? null : (
+          <span className="text-[11px] leading-snug break-keep text-neutral-500 sm:text-xs">
+            {priceNote}
+          </span>
+        )}
         <div className="mt-auto flex flex-wrap gap-1 pt-1">
           {listing.status === "reserved" ? <Badge tone="warning">예약중</Badge> : null}
           {listing.category !== "set" ? (

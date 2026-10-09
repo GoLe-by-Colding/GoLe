@@ -11,6 +11,8 @@ export interface ListingGridProps {
   readonly emptyAction?: ReactNode;
   /** 초기 노출 수. 기본 20. */
   readonly pageSize?: number;
+  /** 매물 id → 같은 등급 추정 시세와의 차이 한 줄. 서버에서 `buildPriceNotes`로 만든다. */
+  readonly priceNotes?: Readonly<Record<string, string>> | undefined;
 }
 
 /**
@@ -22,6 +24,7 @@ export function ListingGrid({
   emptyMessage = "표시할 상품이 없습니다.",
   emptyAction,
   pageSize = 20,
+  priceNotes,
 }: ListingGridProps) {
   const [visible, setVisible] = useState(pageSize);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -64,7 +67,7 @@ export function ListingGrid({
       >
         {shown.map((listing) => (
           <Link key={listing.id} href={`/listings/${listing.id}`} className="block h-full">
-            <ListingCard listing={listing} />
+            <ListingCard listing={listing} priceNote={priceNotes?.[listing.id]} />
           </Link>
         ))}
       </div>
