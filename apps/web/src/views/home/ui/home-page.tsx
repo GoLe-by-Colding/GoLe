@@ -84,6 +84,7 @@ function PriceTicker({ items }: { readonly items: readonly TrendingSet[] }) {
             <span className="font-mono font-bold text-brand-700">#{set.setNumber}</span>
             <span className="max-w-[18ch] truncate text-neutral-600">{set.name}</span>
             <span className="font-semibold tabular-nums text-neutral-900">
+              <span className="mr-1 text-xs font-normal text-neutral-500">평균</span>
               {formatKrw(set.averagePrice)}
             </span>
             <span className="text-xs text-neutral-500">
