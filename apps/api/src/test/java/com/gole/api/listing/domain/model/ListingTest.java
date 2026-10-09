@@ -260,7 +260,24 @@ class ListingTest {
                 CREATED);
     }
 
+    @Test
+    void wholeSetNumber_onlyForSetCategoryEvenWhenOthersCarrySourceSet() {
+        assertThat(listingWithSet("75192").wholeSetNumber()).isEqualTo("75192");
+        for (ListingCategory category : List.of(ListingCategory.MINIFIG, ListingCategory.PARTS, ListingCategory.MOC)) {
+            Listing listing = listingWithSet("75192", category);
+
+            assertThat(listing.wholeSetNumber()).as(category.name()).isNull();
+            // 출처 세트 번호 자체는 검색·식별용으로 그대로 남는다.
+            assertThat(listing.getCatalogSetNumber()).as(category.name()).isEqualTo("75192");
+        }
+        assertThat(listingWithSet(null).wholeSetNumber()).isNull();
+    }
+
     private static Listing listingWithSet(String setNumber) {
+        return listingWithSet(setNumber, ListingCategory.SET);
+    }
+
+    private static Listing listingWithSet(String setNumber, ListingCategory category) {
         return Listing.create(
                 "listing-1",
                 "seller-1",
@@ -271,7 +288,7 @@ class ListingTest {
                 ConditionDisclosure.basic(),
                 List.of("listing/photo.jpg"),
                 setNumber,
-                ListingCategory.SET,
+                category,
                 null,
                 CREATED);
     }
