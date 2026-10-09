@@ -146,9 +146,10 @@ export async function HomePage() {
         <Container width="xl">
           <div className="grid gap-10 py-16 min-[960px]:grid-cols-[minmax(0,1.25fr)_minmax(330px,0.75fr)] min-[960px]:items-center min-[960px]:gap-8 xl:gap-12 max-sm:gap-8 max-sm:py-10">
             <div className="flex flex-col gap-7 max-sm:gap-6">
-              {/* 모바일은 레일의 큰 고래가 CTA 아래로 밀리므로, 작은 고래를 첫 줄 오른쪽에 둔다. */}
+              {/* 모바일은 레일의 큰 고래가 CTA 아래로 밀리므로, 작은 고래를 첫 줄 오른쪽에 둔다.
+                  320px 폭에서는 아이브로가 두 줄이 되므로 어절 단위로 고르게 나눠 "브릭" 한 단어만 남지 않게 한다. */}
               <div className="flex items-end justify-between gap-4">
-                <span className="border-l-2 border-brand-500 pl-3 text-sm font-semibold text-brand-700">
+                <span className="border-l-2 border-brand-500 pl-3 text-sm font-semibold text-balance break-keep text-brand-700">
                   깊은 바다에서 건져 올린 브릭
                 </span>
                 <Logo

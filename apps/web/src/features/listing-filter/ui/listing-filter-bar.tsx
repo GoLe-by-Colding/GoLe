@@ -99,7 +99,8 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
                 strokeLinecap="round"
               />
             </svg>
-            필터
+            {/* 320px급 폭에서는 16px 검색창 자리를 위해 아이콘만 보이고 이름은 화면 낭독기에 남긴다. */}
+            <span className="max-[359px]:sr-only">필터</span>
             {activeCount > 0 ? (
               <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-600 text-[11px] font-bold text-white">
                 {activeCount}
