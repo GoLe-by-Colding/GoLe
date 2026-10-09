@@ -183,6 +183,9 @@ export function SetDetailPage({
           ) : snapshot.state === "OBSERVATIONS_ONLY" ? (
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-3">
+                <span className="w-full text-xs font-medium text-neutral-500">
+                  미개봉 최근 체결가
+                </span>
                 <span className="text-2xl font-bold tabular-nums text-neutral-900">
                   {snapshot.observations[0] === undefined
                     ? "—"
@@ -217,9 +220,11 @@ export function SetDetailPage({
             </div>
           ) : snapshot.statistics?.hasData ? (
             <>
+              {/* 스냅샷 통계는 백엔드가 미개봉 체결만 모은 값이다(PricingService.getSnapshot) — 중고 매물 가격처럼
+                  읽히지 않게 이름에 "미개봉"을 붙인다. 등급별 추정 시세는 매물 상세·시세 페이지가 따로 보여 준다. */}
               <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                 <StatCell
-                  label="최근 체결가"
+                  label="미개봉 최근 체결가"
                   value={
                     snapshot.statistics.latestPrice === null
                       ? "—"
@@ -227,7 +232,7 @@ export function SetDetailPage({
                   }
                 />
                 <StatCell
-                  label="최저"
+                  label="미개봉 최저"
                   value={
                     snapshot.statistics.lowestPrice === null
                       ? "—"
@@ -235,19 +240,23 @@ export function SetDetailPage({
                   }
                 />
                 <StatCell
-                  label="최고"
+                  label="미개봉 최고"
                   value={
                     snapshot.statistics.highestPrice === null
                       ? "—"
                       : formatPriceKrw(snapshot.statistics.highestPrice)
                   }
                 />
-                <StatCell label="체결 건수" value={`${snapshot.statistics.transactionCount}건`} />
+                <StatCell
+                  label="미개봉 체결 건수"
+                  value={`${snapshot.statistics.transactionCount}건`}
+                />
               </dl>
               <Text size="sm" tone="muted" className="mt-4">
                 {evidenceWarning === null
-                  ? "GoLe에서 결제하고 구매확정된 거래 기준입니다."
-                  : "데모·테스트 또는 출처 확인 전 체결이 포함된 참고용 시세입니다."}{" "}
+                  ? "GoLe에서 결제하고 구매확정된 미개봉 거래 기준입니다."
+                  : "데모·테스트 또는 출처 확인 전 체결이 포함된 참고용 미개봉 시세입니다."}{" "}
+                중고 등급별 추정 시세는 매물 상세와 시세 페이지에서 볼 수 있어요.{" "}
                 <Link href="/prices" className="text-brand-600 hover:underline">
                   전체 시세 보기
                 </Link>
