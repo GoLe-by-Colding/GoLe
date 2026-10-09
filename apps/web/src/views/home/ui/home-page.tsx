@@ -180,7 +180,7 @@ export async function HomePage() {
                   className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-700 to-transparent"
                 />
                 <Logo
-                  size={286}
+                  size={256}
                   showWordmark={false}
                   spout
                   className="gole-mascot-float drop-shadow-[0_18px_24px_rgba(3,10,35,0.22)] [--gole-mark-body:var(--color-brand-500)]"
