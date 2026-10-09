@@ -1,7 +1,10 @@
 package com.gole.api.admin.adapter.in.web;
 
-import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.domain.model.AdminAction;
+import com.gole.api.admin.domain.model.AdminListingRow;
+import com.gole.api.admin.domain.model.AdminOrderRow;
+import com.gole.api.admin.domain.model.AdminPaymentMethodView;
+import com.gole.api.admin.domain.model.AdminPostRow;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
@@ -16,7 +19,7 @@ import java.util.Map;
  * 관리자 API의 요청/응답 DTO.
  *
  * <p>응답 record는 읽기 모델·유스케이스 결과를 웹 표현으로 옮기기만 한다.
- * 저장소 도큐먼트를 직접 다루지 않는다(그 책임은 {@link AdminReadModelPort} 어댑터에 있다).
+ * 저장소 도큐먼트를 직접 다루지 않는다(그 책임은 읽기 모델 포트의 영속성 어댑터에 있다).
  */
 public final class AdminDtos {
 
@@ -82,7 +85,7 @@ public final class AdminDtos {
             PaymentMethodResponse paymentMethod,
             Instant createdAt) {
 
-        public static OrderRow from(AdminReadModelPort.OrderRow row) {
+        public static OrderRow from(AdminOrderRow row) {
             return new OrderRow(
                     row.id(),
                     row.status(),
@@ -103,7 +106,7 @@ public final class AdminDtos {
      */
     public record PaymentMethodResponse(String type, String provider) {
 
-        public static PaymentMethodResponse from(AdminReadModelPort.PaymentMethodView view) {
+        public static PaymentMethodResponse from(AdminPaymentMethodView view) {
             return view == null ? null : new PaymentMethodResponse(view.type(), view.provider());
         }
     }
@@ -111,7 +114,7 @@ public final class AdminDtos {
     public record ListingRow(
             String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {
 
-        public static ListingRow from(AdminReadModelPort.ListingRow row) {
+        public static ListingRow from(AdminListingRow row) {
             return new ListingRow(
                     row.id(), row.title(), row.sellerId(), row.price(), row.status(), row.category(), row.createdAt());
         }
@@ -119,7 +122,7 @@ public final class AdminDtos {
 
     public record PostRow(String id, String authorId, String content, String type, String status, Instant createdAt) {
 
-        public static PostRow from(AdminReadModelPort.PostRow row) {
+        public static PostRow from(AdminPostRow row) {
             return new PostRow(
                     row.id(), row.authorId(), preview(row.content()), row.type(), row.status(), row.createdAt());
         }

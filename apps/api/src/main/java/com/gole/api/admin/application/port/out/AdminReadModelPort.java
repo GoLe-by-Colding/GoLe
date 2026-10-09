@@ -1,6 +1,9 @@
 package com.gole.api.admin.application.port.out;
 
-import java.time.Instant;
+import com.gole.api.admin.domain.model.AdminListingRow;
+import com.gole.api.admin.domain.model.AdminOrderRow;
+import com.gole.api.admin.domain.model.AdminOrderStats;
+import com.gole.api.admin.domain.model.AdminPostRow;
 import java.util.List;
 import java.util.Map;
 
@@ -19,38 +22,17 @@ public interface AdminReadModelPort {
     Map<String, Long> collectionCounts(List<String> collections);
 
     /** 주문 상태별 건수 + 완료 주문 거래액(GMV). (요구사항 2.2) */
-    OrderStats orderStats();
+    AdminOrderStats orderStats();
 
     /** ACTIVE 매물 수. (요구사항 2.2) */
     long activeListingCount();
 
     /** 최근 주문. status가 null이면 전체. (요구사항 7.1) */
-    List<OrderRow> recentOrders(String status, String query, int limit);
+    List<AdminOrderRow> recentOrders(String status, String query, int limit);
 
     /** 최근 매물 — 일반 검색과 달리 DELETED 포함 전체 상태. (요구사항 4.1) */
-    List<ListingRow> recentListings(String status, String query, int limit);
+    List<AdminListingRow> recentListings(String status, String query, int limit);
 
     /** 최근 게시글 — 전체 상태. (요구사항 5.1) */
-    List<PostRow> recentPosts(String status, String query, int limit);
-
-    record OrderStats(Map<String, Long> countByStatus, long completedGmv) {}
-
-    /** {@code paymentMethod}는 결제 승인 전 주문과 결제수단 도입 이전 주문에서 null이다. */
-    record OrderRow(
-            String id,
-            String status,
-            long amount,
-            String buyerId,
-            String sellerId,
-            String catalogSetNumber,
-            PaymentMethodView paymentMethod,
-            Instant createdAt) {}
-
-    /** 읽기 모델의 결제수단. 도메인 열거형 이름을 그대로 옮긴다. */
-    record PaymentMethodView(String type, String provider) {}
-
-    record ListingRow(
-            String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {}
-
-    record PostRow(String id, String authorId, String content, String type, String status, Instant createdAt) {}
+    List<AdminPostRow> recentPosts(String status, String query, int limit);
 }

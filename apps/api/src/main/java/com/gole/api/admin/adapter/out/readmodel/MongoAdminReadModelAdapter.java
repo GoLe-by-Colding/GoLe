@@ -1,6 +1,11 @@
 package com.gole.api.admin.adapter.out.readmodel;
 
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
+import com.gole.api.admin.domain.model.AdminListingRow;
+import com.gole.api.admin.domain.model.AdminOrderRow;
+import com.gole.api.admin.domain.model.AdminOrderStats;
+import com.gole.api.admin.domain.model.AdminPaymentMethodView;
+import com.gole.api.admin.domain.model.AdminPostRow;
 import java.time.Instant;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -45,7 +50,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public OrderStats orderStats() {
+    public AdminOrderStats orderStats() {
         Map<String, Long> countByStatus = new LinkedHashMap<>();
         long completedGmv = 0L;
         AggregationResults<Document> results = mongoTemplate.aggregate(
@@ -63,7 +68,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
                 completedGmv += toLong(row.get("sum"));
             }
         }
-        return new OrderStats(countByStatus, completedGmv);
+        return new AdminOrderStats(countByStatus, completedGmv);
     }
 
     @Override
@@ -72,7 +77,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<OrderRow> recentOrders(String status, String search, int limit) {
+    public List<AdminOrderRow> recentOrders(String status, String search, int limit) {
         Query query = new Query();
         if (status != null && !status.isBlank()) {
             query.addCriteria(Criteria.where("status").is(status));
@@ -88,7 +93,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
         }
         query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "orders").stream()
-                .map(d -> new OrderRow(
+                .map(d -> new AdminOrderRow(
                         str(d.get("_id")),
                         d.getString("status"),
                         toLong(d.get("amount")),
@@ -101,7 +106,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<ListingRow> recentListings(String status, String search, int limit) {
+    public List<AdminListingRow> recentListings(String status, String search, int limit) {
         Query query = new Query();
         if (status != null && !status.isBlank()) {
             query.addCriteria(Criteria.where("status").is(status));
@@ -117,7 +122,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
         }
         query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "listings").stream()
-                .map(d -> new ListingRow(
+                .map(d -> new AdminListingRow(
                         str(d.get("_id")),
                         d.getString("title"),
                         d.getString("sellerId"),
@@ -129,7 +134,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
     }
 
     @Override
-    public List<PostRow> recentPosts(String status, String search, int limit) {
+    public List<AdminPostRow> recentPosts(String status, String search, int limit) {
         Query query = new Query();
         if (status != null && !status.isBlank()) {
             query.addCriteria(Criteria.where("status").is(status));
@@ -145,7 +150,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
         }
         query.with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit);
         return mongoTemplate.find(query, Document.class, "posts").stream()
-                .map(d -> new PostRow(
+                .map(d -> new AdminPostRow(
                         str(d.get("_id")),
                         d.getString("authorId"),
                         d.getString("content") == null ? "" : d.getString("content"),
@@ -180,7 +185,7 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
      * <p>{@code type}이 없는 문서는 결제수단 행 전체를 비운다 — 사업자만 있고 분류가 없는 값은
      * 화면에서 "카카오페이"로 보이지만 무엇으로 결제됐는지는 말해주지 못한다.
      */
-    private static PaymentMethodView paymentMethod(Object value) {
+    private static AdminPaymentMethodView paymentMethod(Object value) {
         if (!(value instanceof Document method)) {
             return null;
         }
@@ -188,6 +193,6 @@ public class MongoAdminReadModelAdapter implements AdminReadModelPort {
         if (type == null || type.isBlank()) {
             return null;
         }
-        return new PaymentMethodView(type, method.getString("provider"));
+        return new AdminPaymentMethodView(type, method.getString("provider"));
     }
 }
