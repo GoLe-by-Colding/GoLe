@@ -13,9 +13,12 @@ import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ConflictException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +34,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AccountPersistenceAdapter implements AccountRepositoryPort {
+
+    private static final Logger log = LoggerFactory.getLogger(AccountPersistenceAdapter.class);
 
     private final AccountMongoRepository repository;
     private final MongoTemplate mongoTemplate;
@@ -171,10 +176,7 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
     }
 
     private Account toDomain(AccountDocument document) {
-        EmailVerificationChallenge challenge = document.getVerificationCodeHash() == null
-                ? null
-                : new EmailVerificationChallenge(
-                        document.getVerificationCodeHash(), document.getVerificationCodeIssuedAt());
+        EmailVerificationChallenge challenge = verificationChallenge(document);
         return new Account(
                 document.getId(),
                 new Email(document.getEmail()),
@@ -188,6 +190,27 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 document.getLockedUntil(),
                 document.getSuspendedReason(),
                 toOnboardingProfile(document));
+    }
+
+    /**
+     * 인증 코드 hash와 발급 시각이 둘 다 있을 때만 대기 중인 이메일 인증으로 읽는다.
+     *
+     * <p>한쪽만 남은 문서(수동 정리·옛 필드명 {@code verificationCode}로 $unset 등)를 그대로 challenge로 만들면
+     * 생성자 검증이 던져 이 계정을 읽는 모든 경로(로그인·관리자 회원 목록)가 500으로 죽는다. 손상된 대기 상태는
+     * "발급된 코드 없음"으로 읽는다 — 미인증 계정이면 인증 시 {@code VERIFICATION_CODE_MISSING}이 나고 새 코드를
+     * 받으면 된다. 다음 저장에서 두 필드가 함께 비워져 문서도 정리된다.
+     */
+    private static EmailVerificationChallenge verificationChallenge(AccountDocument document) {
+        String hash = document.getVerificationCodeHash();
+        Instant issuedAt = document.getVerificationCodeIssuedAt();
+        if (hash != null && !hash.isBlank() && issuedAt != null) {
+            return new EmailVerificationChallenge(hash, issuedAt);
+        }
+        if (hash != null || issuedAt != null) {
+            // 값은 남기지 않는다 — 어느 계정이 손상됐는지만 운영에서 찾을 수 있으면 된다.
+            log.warn("[account] 인증 코드 상태가 반쪽인 문서를 대기 인증 없음으로 읽음: accountId={}", document.getId());
+        }
+        return null;
     }
 
     private OnboardingProfile toOnboardingProfile(AccountDocument document) {
