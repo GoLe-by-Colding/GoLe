@@ -11,7 +11,7 @@ import {
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { loginHrefForCurrentPage } from "@shared/lib";
-import { Button, HeartIcon } from "@shared/ui";
+import { BellIcon, Button, HeartIcon } from "@shared/ui";
 
 export interface WishlistButtonProps {
   readonly targetType: WishlistTargetType;
@@ -19,15 +19,26 @@ export interface WishlistButtonProps {
 }
 
 /**
- * 대상마다 다른 이름을 쓴다. 매물 상세에는 매물 찜과 세트 위시가 나란히 놓이므로
- * 같은 "위시 담기"로 두면 무엇을 담는지 구분되지 않는다.
+ * 대상마다 이름과 아이콘을 다르게 쓴다. 매물 상세에는 매물 찜과 세트 관심 등록이 나란히 놓이는데,
+ * 둘 다 하트에 "찜하기·위시 담기"로 두었더니 무엇이 다른지 알 수 없었다(2026-10-09 로컬 QA).
+ * 세트 쪽은 실제로 하는 일(새 매물·단종 알림)로 이름 짓고 종 아이콘을 쓴다.
  */
 const LABELS: Record<
   WishlistTargetType,
-  { readonly checking: string; readonly add: string; readonly remove: string }
+  {
+    readonly checking: string;
+    readonly add: string;
+    readonly remove: string;
+    readonly hint?: string;
+  }
 > = {
   listing: { checking: "찜 확인 중", add: "찜하기", remove: "찜 해제" },
-  catalog_set: { checking: "위시 확인 중", add: "위시 담기", remove: "위시 빼기" },
+  catalog_set: {
+    checking: "세트 알림 확인 중",
+    add: "세트 알림 받기",
+    remove: "세트 알림 끄기",
+    hint: "이 세트에 새 매물이 오르거나 단종 소식이 있으면 알려드려요",
+  },
 };
 
 export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
@@ -113,7 +124,11 @@ export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
         setSaved(false);
       } else {
         setSaved(previous);
-        setError("위시리스트를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        setError(
+          targetType === "catalog_set"
+            ? "세트 알림을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요."
+            : "찜을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.",
+        );
       }
     } finally {
       setBusy(false);
@@ -126,9 +141,14 @@ export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
         variant="secondary"
         disabled={busy || loading || checking}
         aria-pressed={saved}
+        title={LABELS[targetType].hint}
         onClick={handleToggle}
       >
-        <HeartIcon className="h-4 w-4" filled={saved} />
+        {targetType === "catalog_set" ? (
+          <BellIcon className="h-4 w-4" filled={saved} />
+        ) : (
+          <HeartIcon className="h-4 w-4" filled={saved} />
+        )}
         {loading || checking
           ? LABELS[targetType].checking
           : busy

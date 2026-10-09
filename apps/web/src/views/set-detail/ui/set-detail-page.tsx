@@ -101,7 +101,7 @@ export function SetDetailPage({
           <div className="flex flex-wrap items-center gap-3">
             <WishlistButton targetType="catalog_set" targetId={set.setNumber} />
             <Text size="sm" tone="muted">
-              관심 세트로 담으면 새 매물·단종 소식을 알려드려요
+              새 매물이 오르거나 단종 소식이 있으면 알려드려요
             </Text>
           </div>
 
