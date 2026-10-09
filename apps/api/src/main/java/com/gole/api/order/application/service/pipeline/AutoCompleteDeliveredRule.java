@@ -3,10 +3,9 @@ package com.gole.api.order.application.service.pipeline;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.application.port.out.PipelineShipmentPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
-import com.gole.api.shipping.domain.model.Shipment;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -22,14 +21,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class AutoCompleteDeliveredRule implements PipelineRule {
 
-    private final GetShipmentUseCase shipments;
+    private final PipelineShipmentPort shipments;
     private final OrderRepositoryPort orders;
     private final CompleteOrderUseCase completeOrder;
     private final OrderEventNotifierPort notifier;
     private final PipelineProperties properties;
 
     public AutoCompleteDeliveredRule(
-            GetShipmentUseCase shipments,
+            PipelineShipmentPort shipments,
             OrderRepositoryPort orders,
             CompleteOrderUseCase completeOrder,
             OrderEventNotifierPort notifier,
@@ -48,9 +47,7 @@ public class AutoCompleteDeliveredRule implements PipelineRule {
 
     @Override
     public List<String> candidates(Instant now) {
-        return shipments.findDeliveredBefore(now.minus(properties.autoCompleteAfter())).stream()
-                .map(Shipment::getOrderId)
-                .toList();
+        return shipments.orderIdsDeliveredBefore(now.minus(properties.autoCompleteAfter()));
     }
 
     @Override

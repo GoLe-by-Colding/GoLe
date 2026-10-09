@@ -7,10 +7,9 @@ import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PipelineMarkerPort;
+import com.gole.api.order.application.port.out.PipelineShipmentPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
-import com.gole.api.shipping.domain.model.Shipment;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -31,14 +30,14 @@ public final class ExceptionQueueAlertRules {
     @Component
     public static class CarrierPickupStallRule implements PipelineRule {
 
-        private final GetShipmentUseCase shipments;
+        private final PipelineShipmentPort shipments;
         private final OrderEventNotifierPort notifier;
         private final PipelineMarkerPort markers;
         private final OperationalEventPublisher operationalEvents;
         private final PipelineProperties properties;
 
         public CarrierPickupStallRule(
-                GetShipmentUseCase shipments,
+                PipelineShipmentPort shipments,
                 OrderEventNotifierPort notifier,
                 PipelineMarkerPort markers,
                 OperationalEventPublisher operationalEvents,
@@ -57,9 +56,7 @@ public final class ExceptionQueueAlertRules {
 
         @Override
         public List<String> candidates(Instant now) {
-            return shipments.findPendingRegisteredBefore(now.minus(properties.carrierPickupTimeout())).stream()
-                    .map(Shipment::getOrderId)
-                    .toList();
+            return shipments.orderIdsAwaitingPickupRegisteredBefore(now.minus(properties.carrierPickupTimeout()));
         }
 
         @Override
@@ -67,17 +64,18 @@ public final class ExceptionQueueAlertRules {
             if (!markers.markOnce(name(), orderId)) {
                 return false;
             }
-            Shipment shipment = shipments.getByOrderId(orderId).orElse(null);
+            PipelineShipmentPort.ShipmentContact shipment =
+                    shipments.contactOf(orderId).orElse(null);
             if (shipment == null) {
                 return false;
             }
-            notifier.shipmentReminder(shipment.getSellerId(), orderId);
+            notifier.shipmentReminder(shipment.sellerId(), orderId);
             operationalEvents.publish(new OperationalEvent(
                     Category.APPLICATION,
                     Level.WARNING,
                     "택배사 미접수",
                     "운송장이 등록됐지만 택배사가 접수하지 않고 있습니다. 예외 큐를 확인하세요.",
-                    Map.of("주문 ID", orderId, "택배사", shipment.getCarrier().label()),
+                    Map.of("주문 ID", orderId, "택배사", shipment.carrierLabel()),
                     now));
             return true;
         }
@@ -87,13 +85,13 @@ public final class ExceptionQueueAlertRules {
     @Component
     public static class TransitStallRule implements PipelineRule {
 
-        private final GetShipmentUseCase shipments;
+        private final PipelineShipmentPort shipments;
         private final PipelineMarkerPort markers;
         private final OperationalEventPublisher operationalEvents;
         private final PipelineProperties properties;
 
         public TransitStallRule(
-                GetShipmentUseCase shipments,
+                PipelineShipmentPort shipments,
                 PipelineMarkerPort markers,
                 OperationalEventPublisher operationalEvents,
                 PipelineProperties properties) {
@@ -110,9 +108,7 @@ public final class ExceptionQueueAlertRules {
 
         @Override
         public List<String> candidates(Instant now) {
-            return shipments.findInTransitStalledSince(now.minus(properties.transitStallAfter())).stream()
-                    .map(Shipment::getOrderId)
-                    .toList();
+            return shipments.orderIdsInTransitStalledSince(now.minus(properties.transitStallAfter()));
         }
 
         @Override
@@ -135,13 +131,13 @@ public final class ExceptionQueueAlertRules {
     @Component
     public static class TrackerUnknownRule implements PipelineRule {
 
-        private final GetShipmentUseCase shipments;
+        private final PipelineShipmentPort shipments;
         private final PipelineMarkerPort markers;
         private final OperationalEventPublisher operationalEvents;
         private final PipelineProperties properties;
 
         public TrackerUnknownRule(
-                GetShipmentUseCase shipments,
+                PipelineShipmentPort shipments,
                 PipelineMarkerPort markers,
                 OperationalEventPublisher operationalEvents,
                 PipelineProperties properties) {
@@ -158,9 +154,7 @@ public final class ExceptionQueueAlertRules {
 
         @Override
         public List<String> candidates(Instant now) {
-            return shipments.findUnknownSince(now.minus(properties.trackerUnknownAfter())).stream()
-                    .map(Shipment::getOrderId)
-                    .toList();
+            return shipments.orderIdsTrackerUnknownSince(now.minus(properties.trackerUnknownAfter()));
         }
 
         @Override
