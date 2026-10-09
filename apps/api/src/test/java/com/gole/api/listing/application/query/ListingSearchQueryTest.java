@@ -2,6 +2,7 @@ package com.gole.api.listing.application.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.gole.api.listing.domain.model.InterestTag;
 import org.junit.jupiter.api.Test;
 
 class ListingSearchQueryTest {
@@ -23,6 +24,25 @@ class ListingSearchQueryTest {
         assertThat(text("12345678").setNumberInText()).isNull();
         assertThat(text("10307-123").setNumberInText()).isNull();
         assertThat(new ListingSearchQuery(null, null, null, null, null).setNumberInText())
+                .isNull();
+    }
+
+    @Test
+    void interestTagInText_readsKoreanLabelsKeysAndSpacing() {
+        assertThat(text("스타워즈").interestTagInText()).isEqualTo(InterestTag.STAR_WARS);
+        assertThat(text(" 스타 워즈 ").interestTagInText()).isEqualTo(InterestTag.STAR_WARS);
+        assertThat(text("Star Wars").interestTagInText()).isEqualTo(InterestTag.STAR_WARS);
+        assertThat(text("star-wars").interestTagInText()).isEqualTo(InterestTag.STAR_WARS);
+        assertThat(text("해리포터").interestTagInText()).isEqualTo(InterestTag.HARRY_POTTER);
+    }
+
+    @Test
+    void interestTagInText_ignoresPartialNamesAndOtherWords() {
+        assertThat(text("스타").interestTagInText()).isNull();
+        assertThat(text("스타워즈 밀레니엄").interestTagInText()).isNull();
+        assertThat(text("75192").interestTagInText()).isNull();
+        assertThat(text("   ").interestTagInText()).isNull();
+        assertThat(new ListingSearchQuery(null, null, null, null, null).interestTagInText())
                 .isNull();
     }
 
