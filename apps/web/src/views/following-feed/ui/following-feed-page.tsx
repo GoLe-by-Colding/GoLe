@@ -10,6 +10,7 @@ import {
   formatPriceKrw,
   priceDropAmount,
 } from "@entities/listing";
+import { fetchPriceSnapshot } from "@entities/pricing";
 import { useSession } from "@entities/user";
 import {
   Badge,
@@ -24,6 +25,7 @@ import {
   Text,
 } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
+import { buildPriceNotes, priceNoteSetNumbers } from "@widgets/listing-grid";
 import { PostCard } from "@widgets/post-card";
 
 type FeedTab = "all" | "listings" | "posts";
@@ -116,6 +118,29 @@ export function FollowingFeedPage() {
     state.suggestedListings,
     state.suggestedPosts,
   ]);
+
+  // 검색·세트 페이지·판매자 샵과 같은 "추정 시세보다 N%" 한 줄. 보이는 매물(새 매물이 없으면 추천 매물)의 세트 시세를 함께 읽는다.
+  const noteListings = state.listings.length > 0 ? state.listings : state.suggestedListings;
+  const [priceNotes, setPriceNotes] = useState<Readonly<Record<string, string>>>({});
+  useEffect(() => {
+    const setNumbers = priceNoteSetNumbers(noteListings);
+    if (setNumbers.length === 0) return;
+    const controller = new AbortController();
+    void Promise.all(
+      setNumbers.map(
+        async (setNumber) =>
+          [
+            setNumber,
+            await fetchPriceSnapshot(setNumber, controller.signal).catch(() => null),
+          ] as const,
+      ),
+    ).then((entries) => {
+      if (!controller.signal.aborted) {
+        setPriceNotes(buildPriceNotes(noteListings, Object.fromEntries(entries)));
+      }
+    });
+    return () => controller.abort();
+  }, [noteListings]);
 
   const visibleState =
     state.accountId === accountId
@@ -297,7 +322,11 @@ export function FollowingFeedPage() {
               >
                 <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
                   {shownListings.map((listing) => (
-                    <FollowingListingCard key={listing.id} listing={listing} />
+                    <FollowingListingCard
+                      key={listing.id}
+                      listing={listing}
+                      priceNote={priceNotes[listing.id]}
+                    />
                   ))}
                 </div>
               </FeedSection>
@@ -395,7 +424,13 @@ function FeedSection({
   );
 }
 
-function FollowingListingCard({ listing }: { readonly listing: ListingSummary }) {
+function FollowingListingCard({
+  listing,
+  priceNote,
+}: {
+  readonly listing: ListingSummary;
+  readonly priceNote: string | undefined;
+}) {
   const cover = listing.photoUrls[0];
   return (
     <Card
@@ -437,6 +472,9 @@ function FollowingListingCard({ listing }: { readonly listing: ListingSummary })
               </strong>
               {priceDropAmount(listing) !== null ? <Badge tone="success">가격 내림</Badge> : null}
             </div>
+            {priceNote === undefined ? null : (
+              <span className="text-xs leading-snug break-keep text-neutral-500">{priceNote}</span>
+            )}
             {/* 끌올하면 노출 기준 시각(listedAt)이 바뀐다. 구 API는 주지 않으므로 등록 시각으로 본다. */}
             <span className="text-xs text-neutral-400">
               {new Date(listing.listedAt ?? listing.createdAt).toLocaleDateString("ko-KR")}
