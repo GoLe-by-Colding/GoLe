@@ -7,12 +7,12 @@ import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.RetentionHold;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatRoomType;
+import com.gole.api.chat.domain.model.SupportPurgeReceipt;
+import com.gole.api.chat.domain.model.SupportRetentionHold;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -98,7 +98,7 @@ public class SupportConversationPrivacyService {
 
         var byKey = privacy.findPurgeReceiptByIdempotencyKeyHash(keyHash);
         if (byKey.isPresent()) {
-            PurgeReceipt receipt = byKey.orElseThrow();
+            SupportPurgeReceipt receipt = byKey.orElseThrow();
             if (!requestFingerprint.equals(receipt.requestFingerprint())) {
                 throw new ConflictException("SUPPORT_PURGE_IDEMPOTENCY_CONFLICT", "같은 멱등 키를 다른 파기 요청에 재사용할 수 없습니다");
             }
@@ -114,7 +114,7 @@ public class SupportConversationPrivacyService {
         if (!room.id().equals(ticket.roomId())) {
             throw new ConflictException("SUPPORT_PURGE_ROOM_MISMATCH", "문의와 대화방 식별자가 일치하지 않습니다");
         }
-        privacy.findRetentionHold(roomId).filter(RetentionHold::active).ifPresent(ignored -> {
+        privacy.findRetentionHold(roomId).filter(SupportRetentionHold::active).ifPresent(ignored -> {
             throw new ConflictException("SUPPORT_PURGE_RETENTION_HOLD", "법정·분쟁 보존 중지는 해제 전까지 우선합니다");
         });
         if (reportSnapshots.existsByRoomId(roomId)) {
@@ -126,7 +126,7 @@ public class SupportConversationPrivacyService {
 
         Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
         assistantPurge.requireAvailable(analyses.hasRemoteCopyPossible(roomId));
-        PurgeReceipt receipt = privacy.purge(new PurgeWrite(
+        SupportPurgeReceipt receipt = privacy.purge(new PurgeWrite(
                 UUID.randomUUID().toString(),
                 roomId,
                 ticket.version(),
@@ -152,17 +152,17 @@ public class SupportConversationPrivacyService {
         }
         requireSupportConversation(roomId);
         var current = privacy.findRetentionHold(roomId);
-        if (current.filter(RetentionHold::active).isPresent()) {
-            RetentionHold hold = current.orElseThrow();
+        if (current.filter(SupportRetentionHold::active).isPresent()) {
+            SupportRetentionHold hold = current.orElseThrow();
             if (!reasonCode.name().equals(hold.reasonCode())) {
                 throw new ConflictException("SUPPORT_RETENTION_HOLD_EXISTS", "다른 사유의 보존 중지가 이미 설정되어 있습니다");
             }
             return new RetentionHoldOutcome(hold, false);
         }
         Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
-        RetentionHold next = new RetentionHold(
+        SupportRetentionHold next = new SupportRetentionHold(
                 roomId,
-                current.map(RetentionHold::holdReference)
+                current.map(SupportRetentionHold::holdReference)
                         .orElseGet(() -> UUID.randomUUID().toString()),
                 true,
                 reasonCode.name(),
@@ -171,7 +171,7 @@ public class SupportConversationPrivacyService {
                 null,
                 null,
                 null,
-                current.map(RetentionHold::version).orElse(0L));
+                current.map(SupportRetentionHold::version).orElse(0L));
         return new RetentionHoldOutcome(privacy.saveRetentionHold(next), true);
     }
 
@@ -184,12 +184,12 @@ public class SupportConversationPrivacyService {
             throw new BadRequestException("SUPPORT_RETENTION_RELEASE_REASON_REQUIRED", "보존 중지 해제 사유 코드를 선택해야 합니다");
         }
         requireSupportConversation(roomId);
-        RetentionHold current = privacy.findRetentionHold(roomId)
+        SupportRetentionHold current = privacy.findRetentionHold(roomId)
                 .orElseThrow(() -> new NotFoundException("SUPPORT_RETENTION_HOLD_NOT_FOUND", "설정된 보존 중지가 없습니다"));
         if (!current.active()) {
             return new RetentionHoldOutcome(current, false);
         }
-        RetentionHold released = new RetentionHold(
+        SupportRetentionHold released = new SupportRetentionHold(
                 current.roomId(),
                 current.holdReference(),
                 false,
@@ -285,7 +285,7 @@ public class SupportConversationPrivacyService {
         PLACED_IN_ERROR
     }
 
-    public record PurgeOutcome(PurgeReceipt receipt, boolean replayed) {}
+    public record PurgeOutcome(SupportPurgeReceipt receipt, boolean replayed) {}
 
-    public record RetentionHoldOutcome(RetentionHold hold, boolean changed) {}
+    public record RetentionHoldOutcome(SupportRetentionHold hold, boolean changed) {}
 }

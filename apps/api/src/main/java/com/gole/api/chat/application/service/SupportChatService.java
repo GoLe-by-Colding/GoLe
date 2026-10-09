@@ -8,6 +8,7 @@ import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportInternalNote;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -147,7 +148,7 @@ public class SupportChatService {
         notes.append(roomId, actorId, note.trim(), Instant.now(clock));
     }
 
-    public List<SupportInternalNotePort.InternalNote> notes(String roomId, String actorId, int limit) {
+    public List<SupportInternalNote> notes(String roomId, String actorId, int limit) {
         requireAssignedTo(roomId, actorId);
         return notes.findByRoom(roomId, limit);
     }

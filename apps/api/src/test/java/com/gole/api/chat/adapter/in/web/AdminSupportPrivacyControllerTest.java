@@ -18,10 +18,10 @@ import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeCounts;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeOutcome;
+import com.gole.api.chat.domain.model.SupportPurgeCounts;
+import com.gole.api.chat.domain.model.SupportPurgeReceipt;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.common.web.auth.SessionCookie;
@@ -56,7 +56,7 @@ class AdminSupportPrivacyControllerTest {
 
     @Test
     void adminPurgeRequiresExplicitHeadersAndProducesStructuredAudit() throws Exception {
-        PurgeReceipt receipt = new PurgeReceipt(
+        SupportPurgeReceipt receipt = new SupportPurgeReceipt(
                 "receipt-1",
                 "admin-1",
                 "DATA_SUBJECT_REQUEST_FULFILLED",
@@ -64,7 +64,7 @@ class AdminSupportPrivacyControllerTest {
                 "fingerprint",
                 NOW.minusSeconds(10),
                 NOW,
-                new PurgeCounts(2, 1, 1, 1, 1, 2, 0, 1));
+                new SupportPurgeCounts(2, 1, 1, 1, 1, 2, 0, 1));
         when(privacy.purge(
                         "room-1",
                         "admin-1",

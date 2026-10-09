@@ -11,10 +11,10 @@ import static org.mockito.Mockito.when;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.Claim;
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.Request;
 import com.gole.api.chat.application.port.out.SupportAssistantWorkSourcePort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import java.time.Clock;
@@ -42,7 +42,7 @@ class SupportAssistantAnalysisServiceTest {
 
     @Test
     void openingIsPersistedAndAnalyzedOnlyAfterCommit() {
-        Analysis result = result();
+        SupportAssistantAnalysis result = result();
         when(analyses.tryClaim("room-1", NOW, LEASE_UNTIL, 5))
                 .thenReturn(Optional.of(new Claim("room-1", LEASE_TOKEN, 1)));
         when(assistant.analyze(any())).thenReturn(Optional.of(result));
@@ -109,7 +109,7 @@ class SupportAssistantAnalysisServiceTest {
     @Test
     void recoveryRebuildsRequestFromExistingRoomAndOpeningMessage() {
         Request persisted = new Request("room-1", SupportCategory.PRODUCT_FEEDBACK, "저장된 제목", "저장된 본문", "ko-KR");
-        Analysis result = result();
+        SupportAssistantAnalysis result = result();
         when(analyses.findRecoverableRoomIds(NOW, 5, 50)).thenReturn(List.of("room-1"));
         when(analyses.tryClaim("room-1", NOW, LEASE_UNTIL, 5))
                 .thenReturn(Optional.of(new Claim("room-1", LEASE_TOKEN, 2)));
@@ -206,10 +206,10 @@ class SupportAssistantAnalysisServiceTest {
         return SupportTicket.opened("room-1", "requester-1", SupportCategory.PRODUCT_FEEDBACK, NOW);
     }
 
-    private static Analysis result() {
-        return new Analysis(
+    private static SupportAssistantAnalysis result() {
+        return new SupportAssistantAnalysis(
                 SupportCategory.PRODUCT_FEEDBACK,
-                Priority.NORMAL,
+                SupportAssistantPriority.NORMAL,
                 "기능 개선 요청입니다.",
                 "의견을 검토하겠습니다.",
                 List.of("MANUAL_REVIEW"),

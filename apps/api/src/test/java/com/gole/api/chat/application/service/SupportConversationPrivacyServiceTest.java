@@ -15,16 +15,16 @@ import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeCounts;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.RetentionHold;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeReasonCode;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionHoldReasonCode;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionReleaseReasonCode;
 import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportPurgeCounts;
+import com.gole.api.chat.domain.model.SupportPurgeReceipt;
+import com.gole.api.chat.domain.model.SupportRetentionHold;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
@@ -73,10 +73,10 @@ class SupportConversationPrivacyServiceTest {
 
     @Test
     void resolvedConversationIsPurgedOnceAndSameIdempotencyRequestReplaysReceipt() {
-        AtomicReference<PurgeReceipt> stored = new AtomicReference<>();
+        AtomicReference<SupportPurgeReceipt> stored = new AtomicReference<>();
         when(privacy.purge(any())).thenAnswer(invocation -> {
             PurgeWrite write = invocation.getArgument(0);
-            PurgeReceipt receipt = receipt(write);
+            SupportPurgeReceipt receipt = receipt(write);
             stored.set(receipt);
             return receipt;
         });
@@ -96,7 +96,7 @@ class SupportConversationPrivacyServiceTest {
 
     @Test
     void sameIdempotencyKeyCannotBeReusedWithDifferentReason() {
-        PurgeReceipt previous = new PurgeReceipt(
+        SupportPurgeReceipt previous = new SupportPurgeReceipt(
                 "receipt-1",
                 "admin-1",
                 PurgeReasonCode.RETENTION_PERIOD_EXPIRED.name(),
@@ -104,7 +104,7 @@ class SupportConversationPrivacyServiceTest {
                 "different-request-fingerprint",
                 NOW.minusSeconds(10),
                 NOW,
-                new PurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
+                new SupportPurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
         when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.of(previous));
 
         assertThatThrownBy(() -> service.purge(
@@ -117,7 +117,7 @@ class SupportConversationPrivacyServiceTest {
 
     @Test
     void sameIdempotencyKeyCannotBeReusedForAnotherConversation() {
-        PurgeReceipt previous = new PurgeReceipt(
+        SupportPurgeReceipt previous = new SupportPurgeReceipt(
                 "receipt-1",
                 "admin-1",
                 PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED.name(),
@@ -125,7 +125,7 @@ class SupportConversationPrivacyServiceTest {
                 "different-request-fingerprint",
                 NOW.minusSeconds(10),
                 NOW,
-                new PurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
+                new SupportPurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
         when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.of(previous));
 
         assertThatThrownBy(() -> service.purge(
@@ -181,7 +181,7 @@ class SupportConversationPrivacyServiceTest {
 
         when(tickets.findByRoomId(ROOM_ID)).thenReturn(Optional.of(resolvedTicket()));
         when(privacy.findRetentionHold(ROOM_ID))
-                .thenReturn(Optional.of(new RetentionHold(
+                .thenReturn(Optional.of(new SupportRetentionHold(
                         ROOM_ID,
                         "hold-1",
                         true,
@@ -210,7 +210,7 @@ class SupportConversationPrivacyServiceTest {
         when(privacy.saveRetentionHold(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var placed = service.placeRetentionHold(ROOM_ID, "admin-1", ROOM_ID, RetentionHoldReasonCode.ACTIVE_DISPUTE);
-        RetentionHold active = placed.hold();
+        SupportRetentionHold active = placed.hold();
         when(privacy.findRetentionHold(ROOM_ID)).thenReturn(Optional.of(active));
         var released =
                 service.releaseRetentionHold(ROOM_ID, "admin-1", ROOM_ID, RetentionReleaseReasonCode.DISPUTE_CLOSED);
@@ -253,8 +253,8 @@ class SupportConversationPrivacyServiceTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    private static PurgeReceipt receipt(PurgeWrite write) {
-        return new PurgeReceipt(
+    private static SupportPurgeReceipt receipt(PurgeWrite write) {
+        return new SupportPurgeReceipt(
                 write.receiptId(),
                 write.actorId(),
                 write.reasonCode(),
@@ -262,6 +262,6 @@ class SupportConversationPrivacyServiceTest {
                 write.requestFingerprint(),
                 write.resolvedAt(),
                 write.purgedAt(),
-                new PurgeCounts(2, 1, 1, 1, 1, 2, 0, 0));
+                new SupportPurgeCounts(2, 1, 1, 1, 1, 2, 0, 0));
     }
 }

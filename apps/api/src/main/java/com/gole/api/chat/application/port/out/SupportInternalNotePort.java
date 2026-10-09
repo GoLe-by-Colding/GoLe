@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.port.out;
 
+import com.gole.api.chat.domain.model.SupportInternalNote;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,7 +15,5 @@ public interface SupportInternalNotePort {
 
     void append(String roomId, String authorId, String note, Instant at);
 
-    List<InternalNote> findByRoom(String roomId, int limit);
-
-    record InternalNote(String id, String roomId, String authorId, String note, Instant createdAt) {}
+    List<SupportInternalNote> findByRoom(String roomId, int limit);
 }

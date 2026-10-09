@@ -4,11 +4,11 @@ import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepository
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.Claim;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.StoredAnalysis;
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.AnalysisPendingException;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.Request;
 import com.gole.api.chat.application.port.out.SupportAssistantWorkSourcePort;
 import com.gole.api.chat.config.SupportAssistantAsyncConfiguration;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportTicket;
 import java.time.Clock;
 import java.time.Duration;
@@ -81,11 +81,11 @@ public class SupportAssistantAnalysisService {
         register.run();
     }
 
-    public Optional<Analysis> findCompleted(String roomId) {
+    public Optional<SupportAssistantAnalysis> findCompleted(String roomId) {
         return analyses.findCompletedByRoomId(roomId).map(StoredAnalysis::analysis);
     }
 
-    public Map<String, Analysis> findCompleted(List<String> roomIds) {
+    public Map<String, SupportAssistantAnalysis> findCompleted(List<String> roomIds) {
         return analyses.findCompletedByRoomIds(roomIds).stream()
                 .collect(Collectors.toUnmodifiableMap(
                         StoredAnalysis::roomId, StoredAnalysis::analysis, firstValueWins()));
@@ -185,7 +185,7 @@ public class SupportAssistantAnalysisService {
                     && !analyses.markRemoteCopyPossible(roomId, claim.leaseToken(), Instant.now(clock))) {
                 return;
             }
-            Optional<Analysis> result = assistant.analyze(request.orElseThrow());
+            Optional<SupportAssistantAnalysis> result = assistant.analyze(request.orElseThrow());
             if (result.isPresent()) {
                 analyses.complete(roomId, claim.leaseToken(), result.orElseThrow(), Instant.now(clock));
             } else {

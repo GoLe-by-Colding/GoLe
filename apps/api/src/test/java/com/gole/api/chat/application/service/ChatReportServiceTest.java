@@ -14,6 +14,7 @@ import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.Snapshot;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import java.time.Clock;
@@ -75,7 +76,7 @@ class ChatReportServiceTest {
         assertThat(snapshot.getValue().reporterId()).isEqualTo("reporter-1");
         assertThat(snapshot.getValue().capturedAt()).isEqualTo(CAPTURED_AT);
         assertThat(snapshot.getValue().messages())
-                .extracting(ChatReportSnapshotPort.SnapshotMessage::messageId)
+                .extracting(ChatReportSnapshotMessage::messageId)
                 .containsExactly(IntStream.rangeClosed(2, 22)
                         .mapToObj(index -> "message-" + index)
                         .toArray(String[]::new));
@@ -109,7 +110,7 @@ class ChatReportServiceTest {
         ArgumentCaptor<Snapshot> snapshot = ArgumentCaptor.forClass(Snapshot.class);
         verify(snapshots).capture(snapshot.capture());
         assertThat(snapshot.getValue().messages())
-                .extracting(ChatReportSnapshotPort.SnapshotMessage::messageId)
+                .extracting(ChatReportSnapshotMessage::messageId)
                 .containsExactly("message-98", "message-99", "message-100", "message-101", "message-102");
     }
 

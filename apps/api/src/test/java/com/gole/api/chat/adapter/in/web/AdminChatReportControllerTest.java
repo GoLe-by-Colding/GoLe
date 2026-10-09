@@ -19,8 +19,8 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdm
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.SnapshotMessage;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.StoredSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.common.web.auth.SessionCookie;
@@ -62,7 +62,7 @@ class AdminChatReportControllerTest {
 
     @Test
     void adminCanReadOnlyTheFixedSnapshotAndViewIsAudited() throws Exception {
-        StoredSnapshot stored = snapshot();
+        ChatReportSnapshot stored = snapshot();
         when(reports.get("report-1")).thenReturn(report(ReportTargetType.CHAT_MESSAGE));
         when(snapshots.findByReportId("report-1")).thenReturn(Optional.of(stored));
 
@@ -135,14 +135,14 @@ class AdminChatReportControllerTest {
                 NOW);
     }
 
-    private static StoredSnapshot snapshot() {
-        return new StoredSnapshot(
+    private static ChatReportSnapshot snapshot() {
+        return new ChatReportSnapshot(
                 "snapshot-1",
                 "report-1",
                 "room-1",
                 "message-1",
                 "reporter-1",
-                List.of(new SnapshotMessage("message-1", "sender-1", "서버에 고정된 문맥", NOW.minusSeconds(60))),
+                List.of(new ChatReportSnapshotMessage("message-1", "sender-1", "서버에 고정된 문맥", NOW.minusSeconds(60))),
                 NOW);
     }
 }

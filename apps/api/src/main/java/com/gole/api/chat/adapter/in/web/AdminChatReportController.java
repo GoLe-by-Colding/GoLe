@@ -5,7 +5,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdm
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.StoredSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshot;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.common.web.auth.AdminActor;
@@ -34,12 +34,12 @@ public class AdminChatReportController {
     }
 
     @GetMapping("/{reportId}/chat-snapshot")
-    public StoredSnapshot snapshot(@PathVariable String reportId, HttpServletRequest http) {
+    public ChatReportSnapshot snapshot(@PathVariable String reportId, HttpServletRequest http) {
         var report = reports.get(reportId);
         if (report.getTargetType() != ReportTargetType.CHAT_MESSAGE) {
             throw new BadRequestException("REPORT_NOT_CHAT_MESSAGE", "채팅 메시지 신고가 아닙니다");
         }
-        StoredSnapshot snapshot = snapshots
+        ChatReportSnapshot snapshot = snapshots
                 .findByReportId(reportId)
                 .orElseThrow(() -> new NotFoundException("CHAT_REPORT_SNAPSHOT_NOT_FOUND", "신고 스냅샷을 찾을 수 없습니다"));
         AdminActor actor = AdminActor.of(http);

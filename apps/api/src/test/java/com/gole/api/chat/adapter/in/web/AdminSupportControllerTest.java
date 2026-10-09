@@ -19,14 +19,14 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
 import com.gole.api.chat.application.service.ChatMessagingService;
 import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.application.service.SupportAssistantAnalysisService;
 import com.gole.api.chat.application.service.SupportChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -122,9 +122,9 @@ class AdminSupportControllerTest {
         SupportTicket ticket = SupportTicket.opened("room-ai", "user-1", NOW).assignTo("admin-2", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-ai", "user-1", "일반 문의", NOW).withSupportAgent(null, "admin-2");
-        Analysis analysis = new Analysis(
+        SupportAssistantAnalysis analysis = new SupportAssistantAnalysis(
                 SupportCategory.TRADE,
-                Priority.HIGH,
+                SupportAssistantPriority.HIGH,
                 "거래 조건을 확인해야 합니다.",
                 "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
                 List.of("ESCROW_REVIEW"),

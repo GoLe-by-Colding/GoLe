@@ -4,14 +4,14 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.service.ChatMessagingService;
 import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.application.service.SupportAssistantAnalysisService;
 import com.gole.api.chat.application.service.SupportChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportInternalNote;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.web.auth.AdminActor;
@@ -72,7 +72,7 @@ public class AdminSupportController {
                 .filter(ticket -> actor.id().equals(ticket.assigneeId()))
                 .map(SupportTicket::roomId)
                 .toList();
-        Map<String, Analysis> analysisByRoom = supportAssistant.findCompleted(ownedRoomIds);
+        Map<String, SupportAssistantAnalysis> analysisByRoom = supportAssistant.findCompleted(ownedRoomIds);
         return tickets.stream()
                 .map(ticket -> response(ticket, analysisByRoom.get(ticket.roomId())))
                 .toList();
@@ -179,7 +179,7 @@ public class AdminSupportController {
         return ResponseEntity.noContent().build();
     }
 
-    private TicketResponse response(SupportTicket ticket, Analysis analysis) {
+    private TicketResponse response(SupportTicket ticket, SupportAssistantAnalysis analysis) {
         return TicketResponse.from(ticket, rooms.requireRoom(ticket.roomId()).title(), analysis);
     }
 
@@ -188,7 +188,7 @@ public class AdminSupportController {
     }
 
     private TicketResponse response(SupportTicket ticket, String actorId, String title) {
-        Analysis analysis = actorId.equals(ticket.assigneeId())
+        SupportAssistantAnalysis analysis = actorId.equals(ticket.assigneeId())
                 ? supportAssistant.findCompleted(ticket.roomId()).orElse(null)
                 : null;
         return TicketResponse.from(ticket, title, analysis);
@@ -223,7 +223,7 @@ public class AdminSupportController {
             String responseDueAt,
             AssistantAnalysisResponse assistantAnalysis) {
 
-        static TicketResponse from(SupportTicket ticket, String title, Analysis analysis) {
+        static TicketResponse from(SupportTicket ticket, String title, SupportAssistantAnalysis analysis) {
             return new TicketResponse(
                     ticket.roomId(),
                     ticket.requesterId(),
@@ -253,7 +253,7 @@ public class AdminSupportController {
             boolean externalModel,
             String engine) {
 
-        static AssistantAnalysisResponse from(Analysis analysis) {
+        static AssistantAnalysisResponse from(SupportAssistantAnalysis analysis) {
             if (analysis == null) {
                 return null;
             }
@@ -271,7 +271,7 @@ public class AdminSupportController {
 
     public record NoteResponse(String id, String authorId, String note, String createdAt) {
 
-        static NoteResponse from(SupportInternalNotePort.InternalNote note) {
+        static NoteResponse from(SupportInternalNote note) {
             return new NoteResponse(
                     note.id(), note.authorId(), note.note(), note.createdAt().toString());
         }

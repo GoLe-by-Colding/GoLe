@@ -1,6 +1,7 @@
 package com.gole.api.chat.adapter.out.persistence;
 
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
+import com.gole.api.chat.domain.model.SupportInternalNote;
 import com.gole.api.common.exception.ConflictException;
 import java.time.Instant;
 import java.util.List;
@@ -39,10 +40,10 @@ public class MongoSupportInternalNoteAdapter implements SupportInternalNotePort 
     }
 
     @Override
-    public List<InternalNote> findByRoom(String roomId, int limit) {
+    public List<SupportInternalNote> findByRoom(String roomId, int limit) {
         var page = PageRequest.of(0, Math.clamp(limit, 1, 100), Sort.by(Sort.Direction.DESC, "createdAt"));
         return notes.findByRoomId(roomId, page).stream()
-                .map(row -> new InternalNote(
+                .map(row -> new SupportInternalNote(
                         row.getId(), row.getRoomId(), row.getAuthorId(), row.getNote(), row.getCreatedAt()))
                 .toList();
     }

@@ -4,8 +4,8 @@ import com.gole.api.chat.application.port.out.ChatMessageReportPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.Snapshot;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.SnapshotMessage;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import com.gole.api.common.exception.NotFoundException;
 import java.time.Clock;
 import java.time.Instant;
@@ -54,7 +54,7 @@ public class ChatReportService {
         return reportId;
     }
 
-    private List<SnapshotMessage> contextAround(ChatMessage reported) {
+    private List<ChatReportSnapshotMessage> contextAround(ChatMessage reported) {
         List<ChatMessage> before = new ArrayList<>(
                 messages.findBefore(reported.roomId(), reported.sentAt(), reported.id(), CONTEXT_BEFORE));
         // 저장소는 가까운 메시지부터 역순으로 반환하므로 스냅샷은 다시 시간순으로 만든다.
@@ -65,8 +65,8 @@ public class ChatReportService {
         chronological.addAll(messages.findAfter(reported.roomId(), reported.sentAt(), reported.id(), CONTEXT_AFTER));
 
         return chronological.stream()
-                .map(message ->
-                        new SnapshotMessage(message.id(), message.senderId(), message.content(), message.sentAt()))
+                .map(message -> new ChatReportSnapshotMessage(
+                        message.id(), message.senderId(), message.content(), message.sentAt()))
                 .toList();
     }
 }
