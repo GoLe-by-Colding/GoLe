@@ -15,8 +15,8 @@ import {
   CONDITION_LABEL,
   fetchPriceSnapshotForPage,
   listingPriceGap,
+  priceGapBasisCaption,
   priceGapLabel,
-  valuationBasisLabel,
   type ListingPriceGap,
 } from "@entities/pricing";
 import { OfficialLegoLink } from "@entities/lego-set";
@@ -62,13 +62,7 @@ async function loadPriceGap(listing: Listing): Promise<ListingPriceGap | null> {
 /** 판매가 바로 아래의 시세 비교 카드. 누르면 아래 시세 근거로 내려간다. */
 function PriceGapCard({ gap }: { readonly gap: ListingPriceGap }) {
   const label = priceGapLabel(gap.ratio);
-  const caption = [
-    `${valuationBasisLabel(gap.basis, gap.sampleCount)} 기준 추정`,
-    gap.evidenceWarning,
-    "시세 근거 보기",
-  ]
-    .filter((part): part is string => part !== null)
-    .join(" · ");
+  const caption = `${priceGapBasisCaption(gap)} · 시세 근거 보기`;
   return (
     <a
       href="#price-insight"
