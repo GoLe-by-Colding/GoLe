@@ -46,7 +46,9 @@ interface BookRow {
  */
 export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   const router = useRouter();
-  const setNumber = listing.catalogSetNumber;
+  // 세트 입찰은 세트 한 벌로만 체결한다(서버 `Listing.wholeSetNumber`와 같은 규칙). 출처 세트 번호를 단
+  // 미니피규어·부품 매물에는 이 구획을 보이지 않는다 — 서버도 "맞지 않는 매물"로 거절한다.
+  const setNumber = listing.category === "set" ? listing.catalogSetNumber : null;
   const sellable = setNumber !== null && listing.status === "active";
   const bookKey = `${setNumber ?? ""}:${listing.condition}`;
   const [book, setBook] = useState<BookRow | null>(null);
