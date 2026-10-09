@@ -3,8 +3,9 @@
  * 브랜드 아이콘 생성기.
  *
  * 정본 마크는 `apps/web/src/shared/ui/logo/mark.svg` 하나다. 이 스크립트는 거기서 색과 배치만
- * 바꾼 플랫폼 변형(웹 favicon·apple-icon, 모바일 아이콘·스플래시)을 찍어내고, Logo 컴포넌트와
- * OG 이미지에 복사된 경로가 정본과 같은지 검사한다. Next에 설치된 sharp로 PNG를 만든다.
+ * 바꾼 플랫폼 변형(웹 favicon·apple-icon, 모바일 아이콘·스플래시·Android 알림 아이콘, 카카오 앱
+ * 아이콘)을 찍어내고, Logo 컴포넌트와 OG 이미지에 복사된 경로가 정본과 같은지 검사한다.
+ * Next에 설치된 sharp로 PNG를 만든다.
  *
  * 사용: node scripts/build-brand-icons.mjs          # 생성 + 검사
  *       node scripts/build-brand-icons.mjs --check  # 생성 없이 경로 동기화만 검사
@@ -127,6 +128,15 @@ function variants(mark) {
       size: 512,
       svg: svgDoc(256, placed(mark, { canvas: 256, width: 200, ...color })),
     },
+    // Android 상태 표시줄 알림 아이콘. 시스템이 알파만 보고 단색으로 칠하므로 흰 실루엣 + 투명 배경이다.
+    // 24dp 중 가장자리 1dp를 비우는 규격이라 96px(xxxhdpi) 캔버스에 폭 88px로 앉힌다.
+    // app.json의 expo-notifications `icon`이 읽는다. 지정하지 않으면 Android 8+에서 아이콘이 비어 보인다.
+    {
+      out: "apps/mobile/assets/brand/notification-icon.svg",
+      png: "apps/mobile/assets/images/notification-icon.png",
+      size: 96,
+      svg: svgDoc(96, placed(mark, { canvas: 96, width: 88, ...mono })),
+    },
   ];
 }
 
@@ -234,4 +244,14 @@ await sharp(Buffer.from(appleSvg))
   .png()
   .toFile(join(ROOT, "apps/web/src/app/apple-icon.png"));
 console.log("  icon.svg · favicon.ico(16/32/48) · apple-icon.png(180px · 무알파)");
+
+// 카카오 디벨로퍼스 앱 아이콘(외부 콘솔에 손으로 올리는 파일). iOS 아이콘과 같은 그림을 128²·무알파로 줄인다.
+// 카카오가 모서리를 따로 마스킹하므로 자체 라운딩·글자를 넣지 않는다(`.kiro/specs/brand-icon/design.md`).
+await sharp(Buffer.from(appleSvg))
+  .resize(128, 128)
+  .flatten({ background: BRAND })
+  .removeAlpha()
+  .png()
+  .toFile(join(ROOT, ".kiro/specs/brand-icon/kakao-app-128.png"));
+console.log("  kakao-app-128.png(128px · 무알파, 카카오 디벨로퍼스 업로드용)");
 console.log("웹·모바일 브랜드 아이콘 생성 완료.");
