@@ -286,9 +286,15 @@ export function SetDetailPage({
       </section>
 
       <section className="pb-16" aria-labelledby="set-listings-heading">
-        <Heading level={2} id="set-listings-heading">
-          {set.name} 중고 매물
-        </Heading>
+        {/* 시세를 본 판매자가 바로 이 세트로 등록을 시작한다(세트 번호가 채워지고 같은 상태 추정 시세가 뜬다). */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <Heading level={2} id="set-listings-heading">
+            {set.name} 중고 매물
+          </Heading>
+          <LinkButton href={sellSetHref(set.setNumber)} size="sm" variant="secondary">
+            이 세트 팔기
+          </LinkButton>
+        </div>
         <div className="mt-4">
           <ListingGrid
             listings={listings}
@@ -296,15 +302,11 @@ export function SetDetailPage({
             emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
             emptyAction={
               <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href="/community" size="sm">
-                  브릭 이야기 보기
+                <LinkButton href={sellSetHref(set.setNumber)} size="sm">
+                  이 세트 팔기
                 </LinkButton>
-                <LinkButton
-                  href="/chat?compose=support&category=PRODUCT_FEEDBACK"
-                  size="sm"
-                  variant="ghost"
-                >
-                  등록 준비 문의
+                <LinkButton href="/community" size="sm" variant="ghost">
+                  브릭 이야기 보기
                 </LinkButton>
               </div>
             }
@@ -313,4 +315,9 @@ export function SetDetailPage({
       </section>
     </Container>
   );
+}
+
+/** 이 세트로 판매 등록을 시작하는 주소. 판매 화면이 세트 번호를 채우고 판매자 확인 단계를 그대로 안내한다. */
+function sellSetHref(setNumber: string): string {
+  return `/sell?setNumber=${encodeURIComponent(setNumber)}`;
 }
