@@ -3,7 +3,7 @@ package com.gole.api.shipping.adapter.in.web;
 import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.shipping.application.port.in.ManageTrackerUseCase;
 import com.gole.api.shipping.application.port.in.ManageTrackerUseCase.Sample;
-import com.gole.api.shipping.application.port.out.DeliveryTrackerPort.Diagnostics;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,12 +22,12 @@ public class TrackerAdminController {
     }
 
     @GetMapping
-    public Diagnostics status() {
+    public TrackerDiagnostics status() {
         return tracker.status();
     }
 
     @PostMapping("/verify")
-    public Diagnostics verify(HttpServletRequest http) {
+    public TrackerDiagnostics verify(HttpServletRequest http) {
         return tracker.verify(AdminActor.of(http).id());
     }
 
