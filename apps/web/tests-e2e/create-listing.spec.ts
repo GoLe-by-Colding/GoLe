@@ -216,3 +216,138 @@ test.describe("Create listing", () => {
     await expect(detailResponse.json()).resolves.toMatchObject({ interestTag: "technic" });
   });
 });
+
+// 판매 등록 화면의 같은 상태 추정 시세. 시세 응답만 가로채므로 실제 체결 데이터와 무관하게 규칙을 본다.
+test.describe("판매 등록 — 같은 상태 추정 시세", () => {
+  const valuation = (
+    condition: string,
+    basis: "grade" | "group" | "model",
+    fairPrice: number,
+    sampleCount: number,
+  ) => ({
+    condition,
+    basis,
+    depreciationPct: 0,
+    fairPrice,
+    sellPrice: Math.round(fairPrice * 0.96),
+    buyPrice: Math.round(fairPrice * 1.05),
+    sampleCount,
+    basedOnRealData: basis !== "model",
+  });
+  const snapshotFor = (setNumber: string) =>
+    setNumber === "75192"
+      ? {
+          setNumber,
+          state: "ESTABLISHED",
+          minimumSamples: 3,
+          sampleCount: 31,
+          observations: [],
+          statistics: null,
+          valuation: {
+            setNumber,
+            hasData: true,
+            marketPrice: 1_313_743,
+            conditions: [
+              valuation("new_sealed", "grade", 1_313_743, 31),
+              valuation("used_good", "grade", 1_063_651, 19),
+              valuation("damaged", "model", 571_768, 0),
+            ],
+          },
+          provenance: { mode: "FIRST_PARTY", includedSources: ["platform_payment"], demo: false },
+        }
+      : {
+          setNumber,
+          state: "EMPTY",
+          minimumSamples: 3,
+          sampleCount: 0,
+          observations: [],
+          statistics: null,
+          valuation: null,
+          provenance: { mode: "NONE", includedSources: [], demo: false },
+        };
+
+  test.beforeEach(async ({ page }) => {
+    await signInAs(page, E2E_SELLER);
+    await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { unreadCount: 0 } }),
+    );
+    await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+      route.fulfill({
+        json: {
+          required: false,
+          legacyExempt: true,
+          nicknameCompleted: true,
+          nickname: "e2e",
+          phoneVerificationRequired: true,
+          phoneCompleted: true,
+          maskedPhoneNumber: "010-****-0000",
+          interestTagsCompleted: true,
+          interestTags: [],
+          privacyConsented: true,
+          marketingConsented: false,
+        },
+      }),
+    );
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: true,
+          updatedAt: null,
+        },
+      }),
+    );
+  });
+
+  test("세트 번호·상태·가격에 따라 같은 상태 추정 시세와 차이를 보이고 세트가 아니면 숨긴다", async ({
+    page,
+  }) => {
+    const requested: string[] = [];
+    await page.route("**/api/v1/pricing/sets/*/snapshot", (route) => {
+      const setNumber = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+      requested.push(setNumber);
+      return route.fulfill({ json: snapshotFor(setNumber) });
+    });
+
+    await page.goto("/sell");
+    const guide = page.getByTestId("sell-price-guide");
+    await expect(page.getByRole("button", { name: "상품 등록" })).toBeVisible();
+    await expect(guide).toHaveCount(0);
+
+    await page.getByLabel("브릭 세트 번호 (선택)").fill("75192");
+    await expect(guide).toContainText("미개봉 새상품 추정 시세");
+    await expect(guide).toContainText("₩1,313,743");
+    await expect(guide).toContainText("동일 상태 체결 31건");
+
+    await page.getByLabel("상품 상태").selectOption("used_good");
+    await page.getByLabel("가격 (원)").fill("1250000");
+    await expect(guide).toContainText("중고 · 양호 추정 시세");
+    await expect(guide).toContainText("₩1,063,651");
+    await expect(guide).toContainText("추정 시세보다 17.5% 높음");
+
+    // 감가 모델로만 낸 추정과는 견주지 않는다.
+    await page.getByLabel("상품 상태").selectOption("damaged");
+    await expect(guide).toContainText("하자 있음 상태는 체결 표본이 부족해");
+    await expect(guide).not.toContainText("추정 시세보다");
+
+    // 미니피규어·부품은 출처 세트 번호가 있어도 세트 한 벌 시세를 보이지 않는다.
+    await page.getByLabel("카테고리").selectOption("minifig");
+    await expect(guide).toHaveCount(0);
+    await page.getByLabel("카테고리").selectOption("set");
+    await expect(guide).toContainText("하자 있음 상태는 체결 표본이 부족해");
+
+    // 상태·가격·카테고리를 바꿔도 같은 세트 시세를 다시 읽지 않는다(디바운스 시간이 지나도).
+    await page.waitForTimeout(800);
+    expect(requested).toEqual(["75192"]);
+
+    await page.getByLabel("브릭 세트 번호 (선택)").fill("10276");
+    await expect(guide).toContainText("아직 이 세트의 GoLe 체결 기록이 없어");
+    // 한 번 읽은 세트로 돌아오면 다시 묻지 않고 바로 보인다.
+    await page.getByLabel("브릭 세트 번호 (선택)").fill("75192");
+    await expect(guide).toContainText("하자 있음 상태는 체결 표본이 부족해");
+    await page.waitForTimeout(800);
+    expect(requested).toEqual(["75192", "10276"]);
+  });
+});
