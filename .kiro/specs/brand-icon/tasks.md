@@ -7,8 +7,12 @@
 - [x] 정본 `mark.svg`를 두고 `logo.tsx`·OG·생성 스크립트가 그 경로를 쓰게 한다(`--check`로 동기화 검사).
 - [x] 웹 icon·apple-icon·favicon, 모바일 아이콘 5종을 다시 생성하고 `app.json` 배경을 brand-600으로 맞춘다.
 - [x] 참조 0건인 `public/gole-whale.svg`를 지운다.
-- [ ] 실기기·시뮬레이터에서 런처 아이콘·스플래시를 본다. — EAS 빌드 필요
-- [ ] 카카오 디벨로퍼스 앱 아이콘을 새 마크로 교체한다. — 외부 콘솔 작업
+- [x] iOS 시뮬레이터에 실제로 빌드해 홈 화면 아이콘·스플래시를 본다(`expo run:ios`, iPhone 17 Pro).
+- [x] Android 어댑티브 아이콘 리소스가 새 자산으로 연결되는지 `expo prebuild`로 본다.
+- [x] Android 알림 아이콘(흰 실루엣 96²)을 생성기에 더하고 `expo-notifications` `icon`으로 지정한다.
+- [x] 카카오 업로드용 128² 파일을 생성기가 찍게 한다(`kakao-app-128.png`).
+- [ ] 실기기(TestFlight·Android 기기)에서 런처 아이콘·스플래시·알림 아이콘을 본다. — EAS 빌드 필요
+- [ ] 카카오 디벨로퍼스 앱 아이콘을 `kakao-app-128.png`로 교체한다. — 외부 콘솔, 카카오 계정 로그인 필요
 
 
 ## 카카오 등록 (2026-09-23)
