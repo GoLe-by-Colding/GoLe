@@ -22,7 +22,7 @@ const COPIES = ["apps/web/src/shared/ui/logo/logo.tsx", "apps/web/src/app/opengr
 /** 브랜드 단색. 그라데이션은 `brand-identity.md`에서 금지한다. */
 const BRAND = "#1D4ED8"; // brand-600
 const WHITE = "#FFFFFF";
-/** 파란 면 위 골드는 한 단계 밝은 accent-400이 흰 스터드 사이에서 같은 무게로 읽힌다. */
+/** 파란 면 위 골드는 한 단계 밝은 accent-400이 흰 머리 위에서 같은 무게로 읽힌다. */
 const GOLD_ON_BRAND = "#FACC15";
 
 // ── 정본 읽기 ──
@@ -52,13 +52,16 @@ function checkCopies(mark) {
 
 // ── 배치 ──
 /**
- * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 몸통이 오른쪽 아래에 무겁고 꼬리는 왼쪽 위로 가벼우므로
- * 경계 상자 중심에 두면 눈에는 오른쪽 아래로 처져 보인다. 그래서 마크 너비 기준 2%만 왼쪽 위로 당긴다.
+ * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 머리가 아래에 무겁고(무게중심 높이 61%) 꼬리가 왼쪽
+ * 위로 뻗어(무게중심 너비 46%) 경계 상자 중심에 두면 눈에는 왼쪽 아래로 처져 보인다. 그래서 마크
+ * 너비의 1.8%만큼 오른쪽, 높이의 5.5%만큼 위로 옮긴다 — 무게중심과 상자 중심 차이의 절반이다.
  */
+const NUDGE_X = 0.018;
+const NUDGE_Y = -0.055;
 function placed(mark, { canvas, width, body, gold }) {
   const s = width / mark.w;
-  const tx = canvas / 2 - (mark.w / 2) * s - width * 0.02;
-  const ty = canvas / 2 - (mark.h / 2) * s - width * 0.02;
+  const tx = canvas / 2 - (mark.w / 2) * s + mark.w * s * NUDGE_X;
+  const ty = canvas / 2 - (mark.h / 2) * s + mark.h * s * NUDGE_Y;
   return `  <g transform="translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${s.toFixed(5)})">
     <path d="${mark.gold}" fill="${gold}"/>
     <path d="${mark.body}" fill="${body}"/>
@@ -75,9 +78,10 @@ const solid = (canvas, fill) => `  <rect width="${canvas}" height="${canvas}" fi
 
 /**
  * Android 어댑티브는 108dp 캔버스 중 지름 66dp 원만 어떤 마스크에서도 남는다.
- * 마크 폭 56dp에서 가장 먼 점(꼬리 끝)이 중심에서 약 32dp다 — 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
+ * 마크가 정사각형에 가깝고 가장 먼 점(지느러미 끝)이 모서리 쪽이라, 폭 50dp에서 최원점이 약 32dp다
+ * (51dp면 32.8dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
  */
-const FG_WIDTH = 56;
+const FG_WIDTH = 50;
 
 function variants(mark) {
   const color = { body: WHITE, gold: GOLD_ON_BRAND };
@@ -91,7 +95,7 @@ function variants(mark) {
       flatten: true,
       svg: svgDoc(
         1024,
-        `${solid(1024, BRAND)}\n${placed(mark, { canvas: 1024, width: 680, ...color })}`,
+        `${solid(1024, BRAND)}\n${placed(mark, { canvas: 1024, width: 640, ...color })}`,
       ),
     },
     {
@@ -107,7 +111,8 @@ function variants(mark) {
       size: 512,
       svg: svgDoc(108, solid(108, BRAND)),
     },
-    // 런처가 알파로 테마 색을 입힌다. 골드 스터드도 흰 실루엣에 합쳐지고 눈은 구멍으로 남는다.
+    // 런처가 알파로 테마 색을 입힌다. 골드 스터드는 흰 실루엣에 합쳐져 미니피규어 머리 윤곽이 되고,
+    // 눈·입은 구멍으로 남아 테마 아이콘에서도 얼굴이 보인다.
     {
       out: "apps/mobile/assets/brand/android-icon-monochrome.svg",
       png: "apps/mobile/assets/images/android-icon-monochrome.png",
@@ -120,7 +125,7 @@ function variants(mark) {
       out: "apps/mobile/assets/brand/splash-icon.svg",
       png: "apps/mobile/assets/images/splash-icon.png",
       size: 512,
-      svg: svgDoc(256, placed(mark, { canvas: 256, width: 208, ...color })),
+      svg: svgDoc(256, placed(mark, { canvas: 256, width: 200, ...color })),
     },
   ];
 }
@@ -129,7 +134,7 @@ function variants(mark) {
 function faviconSvg(mark) {
   return svgDoc(
     64,
-    `  <rect width="64" height="64" rx="14" fill="${BRAND}"/>\n${placed(mark, { canvas: 64, width: 54, body: WHITE, gold: GOLD_ON_BRAND })}`,
+    `  <rect width="64" height="64" rx="14" fill="${BRAND}"/>\n${placed(mark, { canvas: 64, width: 52, body: WHITE, gold: GOLD_ON_BRAND })}`,
   );
 }
 
