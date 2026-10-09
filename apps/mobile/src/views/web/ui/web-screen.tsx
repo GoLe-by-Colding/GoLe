@@ -30,6 +30,12 @@ import {
 
 const colors = themes.light;
 
+/** 이 탭이 옮겨야 할 목적지. `sentIn`은 주입한 문서 번호 — 같은 문서에 두 번 보내지 않는다. */
+interface PendingTarget {
+  readonly path: string;
+  readonly sentIn: number | null;
+}
+
 /**
  * RN은 탭과 기기 기능, 웹은 서비스 화면과 인증을 소유한다.
  *
@@ -71,7 +77,7 @@ export function WebScreen({
   // 탭 화면은 처음 연 경로를 그대로 둔다 — 다시 그릴 때마다 source가 바뀌면 작성 중인 화면이 새로 고쳐진다.
   // 처음 열 때 넘겨받은 목적지가 있으면 그것으로 시작하고, 이후 목적지는 아래 pending이 옮긴다.
   // 탭이 아닌 화면(알림 상세 `web?path=`)은 경로 인자가 바뀌면 그 경로를 연다.
-  const [tabStartPath] = useState(() => validTarget ?? path);
+  const [tabStartPath, setTabStartPath] = useState(() => validTarget ?? path);
   const startPath = tab === undefined ? path : tabStartPath;
   const source = useMemo(() => ({ uri: origin + startPath }), [origin, startPath]);
   const currentPath = useRef(startPath);
@@ -81,20 +87,29 @@ export function WebScreen({
   // 로드 중인 페이지에 넣은 스크립트는 사라질 수 있어 목적지는 둘 다 만족할 때만 옮긴다.
   const loaded = useRef(false);
   const loading = useRef(true);
-  // 아직 옮기지 못한 목적지. 로드가 끝나면(onLoad) 적용하고, 실패·다시 시도 사이에도 지킨다.
-  const pending = useRef<string | null>(null);
+  // 실제 문서 로드가 시작될 때마다 1씩 는다. 목적지를 보낸 뒤 새 문서가 끝까지 열렸는지 가리는 데 쓴다.
+  const documentId = useRef(0);
+  // 아직 도착을 확인하지 못한 목적지. 그 목적지의 문서가 성공적으로 열릴 때까지 지우지 않는다 —
+  // 로드 전·로드 중이면 기다렸다 보내고, 보낸 로드가 실패하면 다시 시도가 이 목적지를 연다.
+  const pending = useRef<PendingTarget | null>(null);
   const pushToken = useDevicePushToken();
   const pushScript = pushToken === null ? null : webPushTokenScript(pushToken);
   const injected = `${appTabScript(tab ?? null)}${pushScript ?? ""}`;
 
   const openTab = useCallback(
     (request: TabRequest) => {
-      router.navigate({
+      const href = {
         pathname: TAB_ROUTE[request.tab],
         params: { to: request.path, at: String(Date.now()) },
-      });
+      };
+      // 탭 화면에서는 탭 내비게이터 안에서 옮기면 된다. 탭이 아닌 화면(알림 상세 `web`)은 루트 Stack에서 `(tabs)`
+      // 위에 쌓여 있는데, Expo Router 57의 Stack은 navigate로 아래 `(tabs)`에 돌아가지 않고 새 `(tabs)`를 쌓는다
+      // ([기존 tabs, web, 새 tabs] — 작성 중 폼·필터가 처음부터 열린다). dismissTo(POP_TO)는 기존 `(tabs)`까지
+      // 내려가 그 키와 중첩 상태를 그대로 두고 params만 바꾸며, 탭 내비게이터가 그 params로 목적지 탭을 연다.
+      if (tab === undefined) router.dismissTo(href);
+      else router.navigate(href);
     },
-    [router],
+    [router, tab],
   );
 
   const moveHere = useCallback(
@@ -107,35 +122,85 @@ export function WebScreen({
     [origin],
   );
 
-  /** 로드가 끝난 WebView에만 대기 중 목적지를 옮긴다. 판단은 적용 시점의 실제 위치로 한다. */
+  /** WebView가 지금 보여 주는 같은 원점 경로(경로 + query + hash)를 기록한다. */
+  const track = useCallback(
+    (url: string) => {
+      if (navigationTarget(url, origin) !== "internal") return;
+      const parsed = new URL(url);
+      currentPath.current = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    },
+    [origin],
+  );
+
+  /**
+   * 로드가 끝나 쉬고 있는 WebView에만 대기 목적지를 보낸다. 한 목적지는 한 번만 보내고 결과를 기다린다.
+   * 판단은 보내는 시점의 실제 위치로 한다 — 뿌리만 가리키는 요청은 작성 중인 폼을 지우지 않고 그대로 끝낸다.
+   */
   const applyPending = useCallback(() => {
-    const next = pending.current;
-    if (tab === undefined || next === null || !loaded.current || loading.current) return;
-    pending.current = null;
-    if (shouldMoveTab(next, currentPath.current, tab)) moveHere(next);
+    const request = pending.current;
+    if (tab === undefined || request === null || !loaded.current || loading.current) return;
+    if (request.sentIn !== null) return;
+    if (!shouldMoveTab(request.path, currentPath.current, tab)) {
+      pending.current = null;
+      return;
+    }
+    pending.current = { path: request.path, sentIn: documentId.current };
+    moveHere(request.path);
   }, [moveHere, tab]);
 
+  /** 새 목적지를 받는다. 이전 목적지가 아직 대기·진행 중이어도 새 요청이 대신한다. */
+  const requestPath = useCallback(
+    (nextPath: string) => {
+      pending.current = { path: nextPath, sentIn: null };
+      applyPending();
+    },
+    [applyPending],
+  );
+
   // 다른 화면이 이 탭으로 목적지를 넘겼을 때. 첫 화면은 startPath가 이미 그 목적지다.
-  // 아직 로드 전이면 pending에 남겨 두고 onLoad에서 적용한다 — 주입이 사라져도 목적지는 남는다.
   useEffect(() => {
     if (tab === undefined || validTarget === null || handledKey.current === targetKey) return;
     handledKey.current = targetKey;
-    pending.current = validTarget;
-    applyPending();
-  }, [applyPending, tab, targetKey, validTarget]);
+    requestPath(validTarget);
+  }, [requestPath, tab, targetKey, validTarget]);
 
-  /** WebView가 사라지는 실패 화면으로 바꾼다. 다시 시도하면 새 WebView라 로드 상태도 처음부터다. */
+  /**
+   * WebView가 사라지는 실패 화면으로 바꾼다. 다시 시도하면 새 WebView라 로드 상태도 처음부터다.
+   * 보낸 목적지는 지우지 않고 '보내지 않음'으로 되돌려, 다시 시도가 그 목적지를 연다.
+   */
   const fail = useCallback(() => {
     loaded.current = false;
     loading.current = true;
+    const request = pending.current;
+    if (request !== null) pending.current = { path: request.path, sentIn: null };
     setError(true);
   }, []);
 
-  /** 로드가 끝났다(완료·실패·취소). 이미 문서가 있는 WebView면 대기 중 목적지를 옮긴다. */
+  /** 로드가 멈췄다(완료·취소). 이미 문서가 있는 WebView면 대기 중 목적지를 보낸다. */
   const settle = useCallback(() => {
     loading.current = false;
     applyPending();
   }, [applyPending]);
+
+  /**
+   * 문서 하나가 성공적으로 열렸다. 대기 목적지에 닿았거나, 목적지를 보낸 뒤 새 문서가 끝까지 열렸으면
+   * (웹이 로그인 등으로 다른 곳에 보낸 경우 포함) 그 목적지는 끝난 것이다. 보내지도 닿지도 않았으면 이제 보낸다.
+   */
+  const finishLoad = useCallback(
+    (url: string) => {
+      loaded.current = true;
+      track(url);
+      const request = pending.current;
+      if (
+        request !== null &&
+        (currentPath.current === request.path ||
+          (request.sentIn !== null && documentId.current > request.sentIn))
+      )
+        pending.current = null;
+      settle();
+    },
+    [settle, track],
+  );
 
   // 토큰이 페이지를 띄운 뒤에 오면 지금 페이지에 바로 건넨다. 다음 탐색부터는 아래 주입이 맡는다.
   useEffect(() => {
@@ -196,6 +261,17 @@ export function WebScreen({
               canGoBack.current = false;
               loaded.current = false;
               loading.current = true;
+              if (tab !== undefined) {
+                // 실패한 곳을 다시 연다 — 대기 목적지가 있으면 그것을, 없으면 실패한 위치를. 뿌리만 가리키는 요청은
+                // 실패한 위치가 이미 그 탭 안이면 그 위치를 다시 연다(폼 보존 원칙과 같다).
+                const request = pending.current;
+                const retryPath =
+                  request !== null && shouldMoveTab(request.path, currentPath.current, tab)
+                    ? request.path
+                    : currentPath.current;
+                if (request !== null && retryPath !== request.path) pending.current = null;
+                setTabStartPath(retryPath);
+              }
               setGeneration((value) => value + 1);
             }}
             style={styles.retry}
@@ -233,10 +309,8 @@ export function WebScreen({
             // ① 웹 링크가 부탁한 탭 이동. 정확한 원점과 고정된 모양이 아니면 버린다.
             const request = appNavigationMessage(nativeEvent.data, nativeEvent.url, origin);
             if (request === null) return;
-            if (request.tab === tab) {
-              if (shouldMoveTab(request.path, currentPath.current, request.tab))
-                moveHere(request.path);
-            } else openTab(request);
+            if (request.tab === tab) requestPath(request.path);
+            else openTab(request);
           }}
           onOpenWindow={({ nativeEvent }) => {
             if (navigationTarget(nativeEvent.targetUrl, origin) === "internal") {
@@ -249,10 +323,7 @@ export function WebScreen({
           onNavigationStateChange={(state) => {
             canGoBack.current = state.canGoBack;
             const here = tabRequest(state.url, origin);
-            if (navigationTarget(state.url, origin) === "internal") {
-              const url = new URL(state.url);
-              currentPath.current = `${url.pathname}${url.search}${url.hash}`;
-            }
+            track(state.url);
             // ③ 웹의 프로그램 이동으로 이미 다른 탭 화면이 됐다. 그 탭으로 넘기고 이 탭은 한 단계 되돌린다.
             if (tab === undefined || here === null || here.tab === tab) {
               redirectedUrl.current = null;
@@ -271,20 +342,26 @@ export function WebScreen({
           onLoadStart={({ nativeEvent }) => {
             // 실제 문서 로드가 시작될 때만 로드 중으로 본다. Android는 SPA 주소 변화(doUpdateVisitedHistory)도
             // 이 이벤트로 보내지만 진행률이 100이라 loading=false로 온다.
-            if (nativeEvent.loading) loading.current = true;
+            if (!nativeEvent.loading) return;
+            loading.current = true;
+            documentId.current += 1;
           }}
           onLoadProgress={({ nativeEvent }) => {
             // 진행률 1은 로드가 멈췄다는 뜻이다 — 완료뿐 아니라 이 화면이 다른 탭으로 넘기며 막은 이동처럼
             // 취소된 로드(iOS -999는 오류 이벤트가 없다)도 여기서 끝난다.
             if (nativeEvent.progress >= 1) settle();
           }}
-          onLoad={() => {
-            loaded.current = true;
-            settle();
-          }}
+          onLoad={({ nativeEvent }) => finishLoad(nativeEvent.url)}
           onError={fail}
           onHttpError={({ nativeEvent }) => {
-            if (nativeEvent.statusCode >= 500 && nativeEvent.url === source.uri) fail();
+            // 첫 화면이나 지금 보내 둔 목적지가 서버 오류면 실패 화면으로 바꿔 다시 시도할 수 있게 한다.
+            const request = pending.current;
+            const sentUrl = request?.sentIn == null ? null : origin + request.path;
+            if (
+              nativeEvent.statusCode >= 500 &&
+              (nativeEvent.url === source.uri || nativeEvent.url === sentUrl)
+            )
+              fail();
           }}
           onContentProcessDidTerminate={fail}
           onRenderProcessGone={fail}
