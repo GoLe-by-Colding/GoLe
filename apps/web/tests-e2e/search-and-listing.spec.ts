@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+// 세트 번호 판별은 웹·앱 공유 코어 규칙이다(서버 매물 검색과 같은 규칙). 원본을 직접 가져와 단위 검사한다.
+import { setNumberInSearchText } from "@gole/core/lego-set";
 
 const externalBaseUrl = process.env.E2E_BASE_URL;
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8090";
@@ -13,6 +15,30 @@ test.describe("Search & listing detail", () => {
     await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
     await expect(page.getByLabel("카테고리")).toBeVisible();
     await expect(page.getByTestId("listing-card").first()).toBeVisible();
+  });
+
+  test("세트 번호로 찾으면 결과 위에 그 세트 페이지 바로가기를 둔다", async ({ page }) => {
+    // 변형 번호(-1)도 같은 세트다. 세트 페이지에는 시세·구매 입찰·그 세트의 모든 매물이 모여 있다.
+    await page.goto("/search?query=10307-1");
+    const shortcut = page.getByTestId("search-set-shortcut");
+    await expect(shortcut).toHaveAttribute("href", "/sets/10307");
+    await expect(shortcut).toContainText("세트 #10307");
+
+    // 세트 번호가 아니거나 카탈로그에 없는 번호면 바로가기를 두지 않는다.
+    await page.goto("/search?query=%EC%97%90%ED%8E%A0%ED%83%91");
+    await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
+    await expect(page.getByTestId("search-set-shortcut")).toHaveCount(0);
+    await page.goto("/search?query=9999999");
+    await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
+    await expect(page.getByTestId("search-set-shortcut")).toHaveCount(0);
+  });
+
+  test("세트 페이지에서 이 세트로 판매 등록을 시작할 수 있다", async ({ page }) => {
+    await page.goto("/sets/10307");
+    await expect(page.getByRole("link", { name: "이 세트 팔기" }).first()).toHaveAttribute(
+      "href",
+      "/sell?setNumber=10307",
+    );
   });
 
   test("카테고리로 필터링한다", async ({ page }) => {
@@ -164,4 +190,14 @@ test.describe("Search & listing detail", () => {
       "/chat?room=listing-room-e2e&source=listing",
     );
   });
+});
+
+test("검색어에서 세트 번호를 읽는 규칙은 서버 매물 검색과 같다", () => {
+  expect(setNumberInSearchText("75192")).toBe("75192");
+  expect(setNumberInSearchText(" #75192 ")).toBe("75192");
+  expect(setNumberInSearchText("10307-1")).toBe("10307");
+  expect(setNumberInSearchText("910")).toBe("910");
+  for (const text of ["밀레니엄", "UCS 75192", "12", "12345678", "10307-123", ""]) {
+    expect(setNumberInSearchText(text), text).toBeNull();
+  }
 });

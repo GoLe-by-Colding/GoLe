@@ -301,6 +301,26 @@ test.describe("판매 등록 — 같은 상태 추정 시세", () => {
     );
   });
 
+  test("세트 페이지에서 넘어온 세트 번호로 등록을 시작하고 번호 형태만 받는다", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/pricing/sets/*/snapshot", (route) => {
+      const setNumber = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+      return route.fulfill({ json: snapshotFor(setNumber) });
+    });
+
+    await page.goto("/sell?setNumber=75192");
+    await expect(page.getByLabel("브릭 세트 번호 (선택)")).toHaveValue("75192");
+    await expect(page.getByTestId("sell-price-guide")).toContainText("미개봉 새상품 추정 시세");
+
+    // 변형 번호는 기본 번호로, 세트 번호 형태가 아니면 빈 칸으로 시작한다.
+    await page.goto("/sell?setNumber=10307-1");
+    await expect(page.getByLabel("브릭 세트 번호 (선택)")).toHaveValue("10307");
+    await page.goto("/sell?setNumber=%3Cb%3E75192%3C%2Fb%3E");
+    await expect(page.getByRole("button", { name: "상품 등록" })).toBeVisible();
+    await expect(page.getByLabel("브릭 세트 번호 (선택)")).toHaveValue("");
+  });
+
   test("세트 번호·상태·가격에 따라 같은 상태 추정 시세와 차이를 보이고 세트가 아니면 숨긴다", async ({
     page,
   }) => {

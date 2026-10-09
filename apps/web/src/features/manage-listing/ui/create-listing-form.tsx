@@ -12,13 +12,20 @@ import { SellPriceGuide } from "./sell-price-guide";
 export interface CreateListingFormProps {
   readonly sellerId: string;
   readonly paymentsOpen: boolean;
+  /** 처음 채워 둘 세트 번호(세트 페이지의 "이 세트 팔기"). 판매자가 지우거나 바꿀 수 있다. */
+  readonly initialSetNumber?: string | null;
   readonly onCreated: (listingId: string) => void;
 }
 
-export function CreateListingForm({ sellerId, paymentsOpen, onCreated }: CreateListingFormProps) {
+export function CreateListingForm({
+  sellerId,
+  paymentsOpen,
+  initialSetNumber = null,
+  onCreated,
+}: CreateListingFormProps) {
   const form = useListingDraftForm(EMPTY_LISTING_DRAFT, MAX_LISTING_PHOTOS);
   const [category, setCategory] = useState<ListingCategory>("set");
-  const [catalogSetNumber, setCatalogSetNumber] = useState("");
+  const [catalogSetNumber, setCatalogSetNumber] = useState(initialSetNumber ?? "");
   const setNumber = catalogSetNumber.trim().length > 0 ? catalogSetNumber.trim() : null;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
