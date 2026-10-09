@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # 프론트엔드(pnpm workspace)
+  # 프론트엔드(pnpm workspace) — apps/web · packages/*
   - package-ecosystem: npm
     directory: "/"
     # 모든 PR 은 dev 로 간다. main 으로 가는 길은 dev -> main 릴리스 하나뿐이다.
@@ -11,6 +11,17 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # 모바일은 dependabot 이 올리지 않는다. Expo SDK 가 react · react-native · expo-* · RN 네이티브
+    # 라이브러리의 버전을 `expo/bundledNativeModules.json` 에 정확히 고정하는데, dependabot 은 그 표를 모른다.
+    # 실제로 2026-10-09 에 web 묶음(#188)이 apps/mobile 의 react 를 19.3 으로, reanimated·worklets 를
+    # 아직 베타(`next` 태그)인 SDK 58 쪽 버전으로 끌고 왔고, expo-* 는 모듈 하나씩 58 로 올리는 PR(#189~#192)이
+    # 왔다. RN 렌더러는 react 와 버전이 정확히 같아야 해서 이대로 받으면 앱이 기동하다 죽는데, 모바일 CI 는
+    # typecheck·lint 만 봐서 초록으로 보인다.
+    # 모바일은 `cd apps/mobile && npx expo install --check`(SDK 안 패치) 와 SDK 업그레이드
+    # (`npx expo install expo@^<N> --fix`)로만 올린다.
+    # 주의: dependabot 은 이 파일을 기본 브랜치(main)에서 읽는다. dev 에만 있으면 아직 적용되지 않는다.
+    exclude-paths:
+      - "apps/mobile/**"
     groups:
       web-minor-patch:
         update-types: [minor, patch]
@@ -28,13 +39,10 @@ updates:
       # typescript 7 은 @typescript-eslint 가 아직 지원하지 않는다. 지원되면 푼다.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # react-native 0.87.x 의 metro 가 image-size 를 끌고 오는데 high 2건
-      # (GHSA-w3rx-r6r6-pgpr · GHSA-5p2g-fcmc-qvqq)에 패치 버전이 없다 — npm 최신 배포가
-      # 2.0.2 이고 취약 범위(<=2.0.2)가 배포된 전부라 overrides 로도 못 막는다.
-      # 받으면 CI 의 `pnpm audit --audit-level high` 가 막힌다.
-      # 0.88 이 나오거나 image-size 가 패치되면 이 줄을 지운다.
-      - dependency-name: "react-native"
-        versions: ["0.87.x"]
+      # (2026-10-09 지움) react-native 0.87.x 차단. metro 0.87.0 이 끌고 오던 image-size 의 high 2건
+      # (GHSA-w3rx-r6r6-pgpr · GHSA-5p2g-fcmc-qvqq)이 image-size 2.0.3 에서 패치됐고, metro 0.87.1 부터는
+      # image-size 를 아예 쓰지 않는다. 게다가 모바일이 위 exclude-paths 로 빠져 이 규칙이 걸릴 곳이 없다.
+      # RN 은 SDK 업그레이드 때 `pnpm audit --audit-level high` 로 다시 확인한다.
 
   # 백엔드(Gradle)
   - package-ecosystem: gradle
