@@ -1,8 +1,10 @@
 package com.gole.api.parts.adapter.out.catalog;
 
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
+import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.parts.application.port.out.PartsCatalogPort;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,11 +24,16 @@ public class CatalogPartsCatalogAdapter implements PartsCatalogPort {
     }
 
     @Override
-    public boolean setExists(String setNumber) {
+    public Optional<String> setName(String setNumber) {
         try {
-            return findLegoSet.findBySetNumber(setNumber) != null;
+            LegoSet set = findLegoSet.findBySetNumber(setNumber);
+            if (set == null) {
+                return Optional.empty();
+            }
+            String name = set.getName();
+            return Optional.of(name == null || name.isBlank() ? setNumber : name);
         } catch (NotFoundException notFound) {
-            return false;
+            return Optional.empty();
         }
     }
 }

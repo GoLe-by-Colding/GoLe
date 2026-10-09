@@ -26,12 +26,12 @@ public class NotificationPartRequestHolderNotifierAdapter implements PartRequest
     }
 
     @Override
-    public void notifyOwner(String recipientId, String requestId, String setNumber) {
+    public void notifyOwner(String recipientId, String requestId, String setLabel) {
         try {
             notifications.notify(new NotifyCommand(
                     recipientId,
                     NotificationType.PART_REQUEST_FOR_OWNED_SET,
-                    "보유한 " + setNumber + " 세트의 부품을 찾는 요청이 있어요",
+                    "보유한 " + setLabel + " 세트의 부품을 찾는 요청이 있어요",
                     "/parts/" + requestId,
                     "part-request:" + requestId));
         } catch (RuntimeException exception) {

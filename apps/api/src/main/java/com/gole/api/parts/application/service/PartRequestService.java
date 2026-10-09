@@ -80,8 +80,14 @@ public class PartRequestService
                 command.note(),
                 clock.instant());
 
-        if (request.hasSet() && !catalog.setExists(request.getSetNumber())) {
-            throw new NotFoundException("PART_REQUEST_SET_NOT_FOUND", "카탈로그에 없는 세트입니다: " + request.getSetNumber());
+        // 세트 이름은 보유자 알림 문구에 쓴다("보유한 에펠탑(10307) 세트의…"). 번호만으로는 무슨 세트인지 바로 안 읽힌다.
+        String setLabel = null;
+        if (request.hasSet()) {
+            String setNumber = request.getSetNumber();
+            setLabel = catalog.setName(setNumber)
+                    .map(name -> name + "(" + setNumber + ")")
+                    .orElseThrow(
+                            () -> new NotFoundException("PART_REQUEST_SET_NOT_FOUND", "카탈로그에 없는 세트입니다: " + setNumber));
         }
         if (repository.countOpenByRequester(request.getRequesterId()) >= MAX_OPEN_PER_REQUESTER) {
             throw new ConflictException(
@@ -90,7 +96,7 @@ public class PartRequestService
         }
 
         PartRequest saved = repository.save(request);
-        notifyOwners(saved);
+        notifyOwners(saved, setLabel);
         return saved;
     }
 
@@ -156,7 +162,7 @@ public class PartRequestService
     }
 
     /** 세트 보유자 알림(W8). 실패해도 요청은 이미 저장됐으므로 등록 응답을 바꾸지 않는다. */
-    private void notifyOwners(PartRequest request) {
+    private void notifyOwners(PartRequest request, String setLabel) {
         if (!request.hasSet()) {
             return;
         }
@@ -178,7 +184,7 @@ public class PartRequestService
             return;
         }
         for (String recipientId : recipients) {
-            notifier.notifyOwner(recipientId, request.getId(), request.getSetNumber());
+            notifier.notifyOwner(recipientId, request.getId(), setLabel);
         }
     }
 }

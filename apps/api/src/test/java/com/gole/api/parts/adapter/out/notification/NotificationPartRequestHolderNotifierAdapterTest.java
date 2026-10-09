@@ -22,7 +22,8 @@ class NotificationPartRequestHolderNotifierAdapterTest {
     void notifyOwner_sendsSpecifiedCommand() {
         NotifyUseCase notifications = Mockito.mock(NotifyUseCase.class);
 
-        new NotificationPartRequestHolderNotifierAdapter(notifications).notifyOwner("owner-1", "pr-1", "10305");
+        new NotificationPartRequestHolderNotifierAdapter(notifications)
+                .notifyOwner("owner-1", "pr-1", "다운타운 다이너(10305)");
 
         ArgumentCaptor<NotifyCommand> command = ArgumentCaptor.forClass(NotifyCommand.class);
         verify(notifications).notify(command.capture());
@@ -30,7 +31,7 @@ class NotificationPartRequestHolderNotifierAdapterTest {
                 .isEqualTo(new NotifyCommand(
                         "owner-1",
                         NotificationType.PART_REQUEST_FOR_OWNED_SET,
-                        "보유한 10305 세트의 부품을 찾는 요청이 있어요",
+                        "보유한 다운타운 다이너(10305) 세트의 부품을 찾는 요청이 있어요",
                         "/parts/pr-1",
                         "part-request:pr-1"));
         // 수신 설정은 notification이 종류의 분류로 판정한다 — 커뮤니티 소식이어야 한다(W8).

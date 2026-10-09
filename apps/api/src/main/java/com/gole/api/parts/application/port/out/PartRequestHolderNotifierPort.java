@@ -8,5 +8,6 @@ package com.gole.api.parts.application.port.out;
  */
 public interface PartRequestHolderNotifierPort {
 
-    void notifyOwner(String recipientId, String requestId, String setNumber);
+    /** @param setLabel 알림 문구에 쓰는 세트 표시(예: "에펠탑(10307)") */
+    void notifyOwner(String recipientId, String requestId, String setLabel);
 }

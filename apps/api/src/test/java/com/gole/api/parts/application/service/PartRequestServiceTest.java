@@ -69,7 +69,9 @@ class PartRequestServiceTest {
         service = new PartRequestService(
                 repository,
                 () -> "pr-" + sequence.incrementAndGet(),
-                setNumber -> catalogSets.contains(setNumber),
+                setNumber -> catalogSets.contains(setNumber)
+                        ? Optional.of(setNumber.equals("10305") ? "다운타운 다이너" : "밀레니엄 팰컨")
+                        : Optional.empty(),
                 ownerQuery,
                 notifier,
                 Clock.fixed(NOW, ZoneOffset.UTC));
@@ -172,7 +174,8 @@ class PartRequestServiceTest {
 
         assertThat(notifier.sent)
                 .containsExactly(
-                        new Sent("owner-1", created.getId(), "10305"), new Sent("owner-2", created.getId(), "10305"));
+                        new Sent("owner-1", created.getId(), "다운타운 다이너(10305)"),
+                        new Sent("owner-2", created.getId(), "다운타운 다이너(10305)"));
     }
 
     @Test
@@ -300,14 +303,14 @@ class PartRequestServiceTest {
                 .isInstanceOf(PartRequestNotFoundException.class);
     }
 
-    private record Sent(String recipientId, String requestId, String setNumber) {}
+    private record Sent(String recipientId, String requestId, String setLabel) {}
 
     private static final class RecordingNotifier implements PartRequestHolderNotifierPort {
         final List<Sent> sent = new ArrayList<>();
 
         @Override
-        public void notifyOwner(String recipientId, String requestId, String setNumber) {
-            sent.add(new Sent(recipientId, requestId, setNumber));
+        public void notifyOwner(String recipientId, String requestId, String setLabel) {
+            sent.add(new Sent(recipientId, requestId, setLabel));
         }
     }
 
