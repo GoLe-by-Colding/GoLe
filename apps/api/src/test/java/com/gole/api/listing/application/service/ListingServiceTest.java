@@ -452,6 +452,37 @@ class ListingServiceTest {
     }
 
     @Test
+    void create_minifigWithSourceSetNotifiesSetWatchersButNotSetBidders() {
+        String id = service.create(minifigCommand());
+
+        // 세트 입찰은 세트 한 벌을 사려는 것이다 — 출처 세트 번호를 단 미니피규어로 입찰자를 부르지 않는다.
+        assertThat(bidMatchNotifier.notices).isEmpty();
+        assertThat(notifier.setWatcherNotices).containsExactly(new SetWatcherNotice("seller-1", id, "75192"));
+    }
+
+    @Test
+    void revise_minifigPriceDropDoesNotNotifySetBidders() {
+        String id = service.create(minifigCommand());
+
+        service.revise(revision(id, "seller-1", 20_000));
+
+        assertThat(bidMatchNotifier.notices).isEmpty();
+    }
+
+    private CreateListingCommand minifigCommand() {
+        return new CreateListingCommand(
+                "seller-1",
+                "한 솔로 미니피규어",
+                "75192 구성품",
+                30_000,
+                ItemCondition.USED_GOOD,
+                ConditionDisclosure.basic(),
+                List.of("photo-1.jpg"),
+                "75192",
+                ListingCategory.MINIFIG);
+    }
+
+    @Test
     void create_succeedsWhenBidMatchNotifierFails() {
         bidMatchNotifier.failure = new IllegalStateException("bid lookup unavailable");
 
