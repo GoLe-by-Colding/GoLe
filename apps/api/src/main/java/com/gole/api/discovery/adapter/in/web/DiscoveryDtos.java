@@ -29,8 +29,15 @@ public final class DiscoveryDtos {
             String category,
             String status,
             List<String> photoUrls,
-            Instant createdAt) {
+            Instant createdAt,
+            Instant listedAt,
+            Long previousPrice) {
 
+        /**
+         * @see com.gole.api.listing.adapter.in.web.ListingResponse 같은 의미의 필드.
+         *     {@code listedAt}은 정렬 키(등록 또는 마지막 끌올), {@code previousPrice}는 지금 가격이
+         *     직전보다 쌀 때만 있는 직전가다. (listing-edit-and-bump R2)
+         */
         public static ListingSummaryResponse from(Listing l) {
             return new ListingSummaryResponse(
                     l.getId(),
@@ -44,7 +51,9 @@ public final class DiscoveryDtos {
                     l.getPhotoUrls().stream()
                             .flatMap(value -> MediaKey.safePublicPath(value).stream())
                             .toList(),
-                    l.getCreatedAt());
+                    l.getCreatedAt(),
+                    l.getListedAt(),
+                    l.getPreviousPrice() == null ? null : l.getPreviousPrice().amount());
         }
     }
 
