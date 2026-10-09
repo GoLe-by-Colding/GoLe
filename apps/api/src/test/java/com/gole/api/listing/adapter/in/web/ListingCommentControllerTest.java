@@ -1,152 +1,84 @@
 package com.gole.api.listing.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
-import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
-import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
-import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
-import com.gole.api.listing.application.port.in.GetListingUseCase;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.listing.application.port.in.ListListingCommentsUseCase;
+import com.gole.api.listing.application.port.in.PostListingCommentUseCase;
+import com.gole.api.listing.application.port.in.PostListingCommentUseCase.PostListingCommentCommand;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
-import com.gole.api.listing.domain.model.ConditionDisclosure;
-import com.gole.api.listing.domain.model.ItemCondition;
-import com.gole.api.listing.domain.model.Listing;
-import com.gole.api.listing.domain.model.ListingCategory;
-import com.gole.api.listing.domain.model.ListingStatus;
-import com.gole.api.listing.domain.model.Money;
-import com.gole.api.notification.application.port.in.NotifyUseCase;
-import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
-import com.gole.api.notification.domain.model.NotificationType;
+import com.gole.api.listing.domain.model.ListingComment;
 import java.time.Instant;
-import java.util.List;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ListingCommentControllerTest {
 
-    private final ListingCommentMongoRepository comments = mock(ListingCommentMongoRepository.class);
-    private final GetListingUseCase listings = mock(GetListingUseCase.class);
-    private final NotifyUseCase notifications = mock(NotifyUseCase.class);
-    private final VerifySellerIdentityUseCase sellerIdentity = mock(VerifySellerIdentityUseCase.class);
-    private final ListingCommentController controller =
-            new ListingCommentController(comments, listings, notifications, sellerIdentity);
+    private final ListListingCommentsUseCase listComments = mock(ListListingCommentsUseCase.class);
+    private final PostListingCommentUseCase postComment = mock(PostListingCommentUseCase.class);
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new ListingCommentController(listComments, postComment))
+            .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
+            .build();
 
     @Test
-    void listDoesNotReadCommentsWhenListingIsHidden() {
-        when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
-
-        assertThatThrownBy(() -> controller.list("deleted-listing")).isInstanceOf(ListingNotFoundException.class);
-        verifyNoInteractions(comments);
-    }
-
-    @Test
-    void createDoesNotSaveOrNotifyWhenListingIsHidden() {
-        when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
-
-        assertThatThrownBy(() -> controller.create(
-                        "deleted-listing",
-                        new ListingCommentController.CreateCommentRequest("forged-author", "구매 가능한가요?"),
-                        authenticated("buyer-1")))
-                .isInstanceOf(ListingNotFoundException.class);
-        verify(comments, never()).save(any());
-        verifyNoInteractions(notifications);
-    }
-
-    @Test
-    void hiddenListingCommentsReturnNotFoundAtHttpBoundaryWithoutWrites() throws Exception {
-        when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
-                .build();
+    @DisplayName("숨김 매물의 댓글 조회·작성은 HTTP 경계에서 404 다")
+    void hiddenListingComments_returnNotFoundAtHttpBoundary() throws Exception {
+        when(listComments.list("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
+        when(postComment.post(any())).thenThrow(new ListingNotFoundException("deleted-listing"));
 
         mvc.perform(get("/api/v1/listings/deleted-listing/comments"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
         mvc.perform(post("/api/v1/listings/deleted-listing/comments")
-                        .requestAttr(UserAuthInterceptor.ATTR_ACCOUNT_ID, "buyer-1")
+                        .requestAttr(AuthenticatedUser.ATTRIBUTE, "buyer-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"구매 가능한가요?\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
-
-        verify(comments, never()).save(any());
-        verifyNoInteractions(notifications);
     }
 
     @Test
-    void createUsesAuthenticatedAuthorAndNotifiesVisibleListingSeller() {
-        when(listings.getPublicById("listing-1")).thenReturn(listing("seller-1"));
-        when(comments.save(any(ListingCommentDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    @DisplayName("작성자는 세션 계정이고 본문의 authorId 는 무시한다")
+    void create_usesAuthenticatedAuthorNotRequestBody() throws Exception {
+        when(postComment.post(any()))
+                .thenReturn(ListingComment.post(
+                        "c-1", "listing-1", "buyer-1", "구매 가능한가요?", Instant.parse("2026-10-10T00:00:00Z")));
 
-        var response = controller.create(
-                "listing-1",
-                new ListingCommentController.CreateCommentRequest("forged-author", "구매 가능한가요?"),
-                authenticated("buyer-1"));
+        mvc.perform(post("/api/v1/listings/listing-1/comments")
+                        .requestAttr(AuthenticatedUser.ATTRIBUTE, "buyer-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorId\":\"forged-author\",\"content\":\"구매 가능한가요?\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.authorId").value("buyer-1"));
 
-        assertThat(response.authorId()).isEqualTo("buyer-1");
-        verify(sellerIdentity).requireVerifiedSeller("seller-1");
-        ArgumentCaptor<NotifyCommand> command = ArgumentCaptor.forClass(NotifyCommand.class);
-        verify(notifications).notify(command.capture());
-        assertThat(command.getValue())
-                .isEqualTo(new NotifyCommand(
-                        "seller-1", NotificationType.COMMENT, "매물 '에펠탑 10307'에 문의가 달렸어요.", "/listings/listing-1"));
+        ArgumentCaptor<PostListingCommentCommand> command = ArgumentCaptor.forClass(PostListingCommentCommand.class);
+        verify(postComment).post(command.capture());
+        assertThat(command.getValue()).isEqualTo(new PostListingCommentCommand("listing-1", "buyer-1", "구매 가능한가요?"));
     }
 
     @Test
-    void createFailsClosedBeforeWriteWhenListingSellerIdentityIsNotReady() {
-        when(listings.getPublicById("listing-1")).thenReturn(listing("seller-1"));
-        doThrow(new ServiceUnavailableException("SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "판매자 신원확인 준비 중"))
-                .when(sellerIdentity)
-                .requireVerifiedSeller("seller-1");
-
-        assertThatThrownBy(() -> controller.create(
-                        "listing-1",
-                        new ListingCommentController.CreateCommentRequest("forged-author", "구매 가능한가요?"),
-                        authenticated("buyer-1")))
-                .isInstanceOf(ServiceUnavailableException.class);
-
-        verify(comments, never()).save(any());
-        verifyNoInteractions(notifications);
-    }
-
-    private static Listing listing(String sellerId) {
-        return new Listing(
-                "listing-1",
-                sellerId,
-                "에펠탑 10307",
-                "미개봉",
-                Money.won(280_000),
-                ItemCondition.NEW_SEALED,
-                ConditionDisclosure.basic(),
-                List.of("photo.jpg"),
-                "10307",
-                ListingCategory.SET,
-                ListingStatus.ACTIVE,
-                Instant.parse("2026-08-30T00:00:00Z"));
-    }
-
-    private static MockHttpServletRequest authenticated(String accountId) {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setAttribute(UserAuthInterceptor.ATTR_ACCOUNT_ID, accountId);
-        return request;
+    @DisplayName("빈 본문은 유스케이스까지 가지 않고 400 이다")
+    void create_rejectsBlankContent() throws Exception {
+        mvc.perform(post("/api/v1/listings/listing-1/comments")
+                        .requestAttr(AuthenticatedUser.ATTRIBUTE, "buyer-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        verify(postComment, never()).post(any());
     }
 }

@@ -8,6 +8,4 @@ public interface ListingCommentMongoRepository extends MongoRepository<ListingCo
 
     /** 삭제되지 않은 댓글. 정렬·상한은 {@link Pageable} 로 받는다(어댑터가 createdAt 오름차순으로 건다). */
     List<ListingCommentDocument> findByListingIdAndDeletedFalse(String listingId, Pageable pageable);
-
-    List<ListingCommentDocument> findTop200ByListingIdAndDeletedFalseOrderByCreatedAtAsc(String listingId);
 }

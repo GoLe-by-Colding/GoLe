@@ -1,21 +1,17 @@
 package com.gole.api.listing.adapter.in.web;
 
-import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.common.web.auth.AuthenticatedUser;
-import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
-import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
-import com.gole.api.listing.application.port.in.GetListingUseCase;
-import com.gole.api.listing.domain.model.Listing;
-import com.gole.api.notification.application.port.in.NotifyUseCase;
-import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
-import com.gole.api.notification.domain.model.NotificationType;
+import com.gole.api.listing.application.port.in.ListListingCommentsUseCase;
+import com.gole.api.listing.application.port.in.PostListingCommentUseCase;
+import com.gole.api.listing.application.port.in.PostListingCommentUseCase.PostListingCommentCommand;
+import com.gole.api.listing.domain.model.ListingComment;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,79 +21,44 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 매물 문의 댓글(Q&A). 댓글 저장 후 매물 판매자에게 알림을 전송한다(본인 제외, best-effort).
- */
+/** 매물 문의 댓글(Q&A) 조회·작성. 규칙(공개 매물만·판매자 신원확인·판매자 알림)은 {@code ListingCommentService} 에 있다. */
 @Tag(name = "Listing Q&A", description = "매물 문의 댓글 조회·작성")
 @RestController
 @RequestMapping("/api/v1/listings/{listingId}/comments")
 public class ListingCommentController {
 
-    private final ListingCommentMongoRepository commentRepository;
-    private final GetListingUseCase getListingUseCase;
-    private final NotifyUseCase notifyUseCase;
-    private final VerifySellerIdentityUseCase sellerIdentityVerification;
+    private final ListListingCommentsUseCase listComments;
+    private final PostListingCommentUseCase postComment;
 
-    public ListingCommentController(
-            ListingCommentMongoRepository commentRepository,
-            GetListingUseCase getListingUseCase,
-            NotifyUseCase notifyUseCase,
-            VerifySellerIdentityUseCase sellerIdentityVerification) {
-        this.commentRepository = commentRepository;
-        this.getListingUseCase = getListingUseCase;
-        this.notifyUseCase = notifyUseCase;
-        this.sellerIdentityVerification = sellerIdentityVerification;
+    public ListingCommentController(ListListingCommentsUseCase listComments, PostListingCommentUseCase postComment) {
+        this.listComments = listComments;
+        this.postComment = postComment;
     }
 
     @GetMapping
     public List<CommentResponse> list(@PathVariable String listingId) {
-        getListingUseCase.getPublicById(listingId);
-        return commentRepository.findTop200ByListingIdAndDeletedFalseOrderByCreatedAtAsc(listingId).stream()
-                .map(CommentResponse::from)
-                .toList();
+        return listComments.list(listingId).stream().map(CommentResponse::from).toList();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse create(
             @PathVariable String listingId, @Valid @RequestBody CreateCommentRequest req, HttpServletRequest http) {
-        String authorId = AuthenticatedUser.id(http);
-        Listing listing = getListingUseCase.getPublicById(listingId);
-        sellerIdentityVerification.requireVerifiedSeller(listing.getSellerId());
-        ListingCommentDocument doc = new ListingCommentDocument(
-                UUID.randomUUID().toString(), listingId, authorId, req.content(), false, Instant.now());
-        CommentResponse saved = CommentResponse.from(commentRepository.save(doc));
-
-        // 판매자에게 Q&A 알림(본인 댓글 제외, best-effort).
-        if (!listing.getSellerId().equals(authorId)) {
-            try {
-                notifyUseCase.notify(new NotifyCommand(
-                        listing.getSellerId(),
-                        NotificationType.COMMENT,
-                        "매물 '" + truncate(listing.getTitle(), 20) + "'에 문의가 달렸어요.",
-                        "/listings/" + listingId));
-            } catch (RuntimeException ignored) {
-                // 알림 실패는 댓글 저장을 막지 않는다.
-            }
-        }
-
-        return saved;
-    }
-
-    private static String truncate(String s, int max) {
-        return s != null && s.length() > max ? s.substring(0, max) + "…" : s;
+        // 작성자는 세션이 정한다 — 요청 본문의 authorId 는 쓰지 않는다(구 클라이언트 호환으로 필드만 남김).
+        return CommentResponse.from(
+                postComment.post(new PostListingCommentCommand(listingId, AuthenticatedUser.id(http), req.content())));
     }
 
     public record CreateCommentRequest(
             String authorId,
 
-            @NotBlank @jakarta.validation.constraints.Size(max = 1000)
+            @NotBlank @Size(max = ListingComment.MAX_CONTENT_LENGTH)
             String content) {}
 
     public record CommentResponse(String id, String authorId, String content, Instant createdAt) {
 
-        public static CommentResponse from(ListingCommentDocument d) {
-            return new CommentResponse(d.getId(), d.getAuthorId(), d.getContent(), d.getCreatedAt());
+        public static CommentResponse from(ListingComment comment) {
+            return new CommentResponse(comment.id(), comment.authorId(), comment.content(), comment.createdAt());
         }
     }
 }

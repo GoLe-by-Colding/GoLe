@@ -5,10 +5,9 @@ import com.gole.api.offer.application.port.out.SellerVerificationPort;
 import org.springframework.stereotype.Component;
 
 /**
- * 계정 컨텍스트 통합 어댑터. 판매자 신원확인 판정을 주문·채팅방 생성과 같은 서비스에 맡긴다.
+ * 계정 컨텍스트 통합 어댑터. 판매자 신원확인 판정을 account 의 인바운드 포트에 맡긴다.
  *
- * <p>계정 컨텍스트에는 이 판정의 인바운드 포트가 따로 없고, 주문·채팅 웹 어댑터도 같은 서비스를 직접
- * 쓴다. 판정 규칙이 갈라지지 않게 여기서도 그 서비스 하나를 쓴다.
+ * <p>주문·채팅방 생성·매물 문의도 같은 포트({@code VerifySellerIdentityUseCase})를 써서 판정 규칙이 갈라지지 않는다.
  */
 @Component
 public class SellerVerificationAdapter implements SellerVerificationPort {
