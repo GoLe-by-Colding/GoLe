@@ -257,6 +257,8 @@ async function mockChatDeepLinkApis(
   await page.route("**/api/v1/chat/rooms/*/stream**", (route) =>
     route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
   );
+  // 매물 방을 열면 가격 제안 배너가 제안을 읽는다(세션 필요). 실백엔드 401이 합성 세션을 지우지 않도록 격리한다.
+  await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
   return {
     requestedMessageRoomIds,
     roomResolveAttempts: () => roomResolveAttempts,
