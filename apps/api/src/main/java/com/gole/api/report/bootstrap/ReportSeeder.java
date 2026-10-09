@@ -5,10 +5,10 @@ import static com.gole.api.common.bootstrap.DemoContentActors.USER_COLLECTOR;
 import static com.gole.api.common.bootstrap.DemoContentActors.USER_MOC;
 import static com.gole.api.common.bootstrap.DemoContentActors.USER_NEWBIE;
 
-import com.gole.api.community.adapter.out.persistence.PostDocument;
-import com.gole.api.community.adapter.out.persistence.PostMongoRepository;
-import com.gole.api.listing.adapter.out.persistence.ListingDocument;
-import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
+import com.gole.api.community.application.port.in.GetFeedUseCase;
+import com.gole.api.community.domain.model.Post;
+import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
+import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.report.adapter.out.persistence.ReportMongoRepository;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
 import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
@@ -41,18 +41,18 @@ public class ReportSeeder implements CommandLineRunner {
 
     private final SubmitReportUseCase submitReport;
     private final ReportMongoRepository reportRepository;
-    private final ListingMongoRepository listingRepository;
-    private final PostMongoRepository postRepository;
+    private final BrowseListingsUseCase listings;
+    private final GetFeedUseCase posts;
 
     public ReportSeeder(
             SubmitReportUseCase submitReport,
             ReportMongoRepository reportRepository,
-            ListingMongoRepository listingRepository,
-            PostMongoRepository postRepository) {
+            BrowseListingsUseCase listings,
+            GetFeedUseCase posts) {
         this.submitReport = submitReport;
         this.reportRepository = reportRepository;
-        this.listingRepository = listingRepository;
-        this.postRepository = postRepository;
+        this.listings = listings;
+        this.posts = posts;
     }
 
     @Override
@@ -61,8 +61,9 @@ public class ReportSeeder implements CommandLineRunner {
             return;
         }
 
-        List<ListingDocument> listings = listingRepository.findAll();
-        List<PostDocument> posts = postRepository.findAll();
+        // 다른 컨텍스트의 저장소가 아니라 각자의 인바운드 포트로 시드된 대상을 읽는다.
+        List<Listing> listings = this.listings.newestActive(3);
+        List<Post> posts = this.posts.feed(1);
         if (listings.isEmpty() && posts.isEmpty()) {
             return; // 대상이 없으면 신고도 만들지 않는다.
         }
