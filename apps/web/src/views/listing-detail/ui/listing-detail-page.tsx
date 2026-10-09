@@ -11,8 +11,17 @@ import {
   type Listing,
 } from "@entities/listing";
 import { fetchLaunchConfig } from "@entities/launch";
+import {
+  CONDITION_LABEL,
+  fetchPriceSnapshotForPage,
+  listingPriceGap,
+  priceGapLabel,
+  valuationBasisLabel,
+  type ListingPriceGap,
+} from "@entities/pricing";
 import { OfficialLegoLink } from "@entities/lego-set";
 import { ApiError } from "@shared/api";
+import { formatKrw } from "@shared/lib";
 import { Badge, Container, Heading, LinkButton } from "@shared/ui";
 import { isPurchaseOpen, PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
@@ -35,6 +44,53 @@ async function loadListing(id: string): Promise<Listing> {
   }
 }
 
+/**
+ * 판매가 옆에 놓을 같은 등급 추정 시세. 판매 중·예약 중인 세트 매물만 본다. 시세 조회가 실패하거나
+ * 근거가 약하면(체결 전·참고 단계·감가 모델) 아무것도 보이지 않는다 — 아래 시세 영역이 자세한 상태를 따로 알린다.
+ */
+async function loadPriceGap(listing: Listing): Promise<ListingPriceGap | null> {
+  if (listing.catalogSetNumber === null) return null;
+  if (listing.status !== "active" && listing.status !== "reserved") return null;
+  try {
+    const snapshot = await fetchPriceSnapshotForPage(listing.catalogSetNumber);
+    return listingPriceGap(listing.price, listing.condition, snapshot);
+  } catch {
+    return null;
+  }
+}
+
+/** 판매가 바로 아래의 시세 비교 카드. 누르면 아래 시세 근거로 내려간다. */
+function PriceGapCard({ gap }: { readonly gap: ListingPriceGap }) {
+  const label = priceGapLabel(gap.ratio);
+  const caption = [
+    `${valuationBasisLabel(gap.basis, gap.sampleCount)} 기준 추정`,
+    gap.evidenceWarning,
+    "시세 근거 보기",
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+  return (
+    <a
+      href="#price-insight"
+      aria-label={`${CONDITION_LABEL[gap.condition]} 추정 시세 ${formatKrw(gap.fairPrice)}, ${label}. 시세 근거 보기`}
+      className="flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 transition-colors hover:border-brand-200 hover:bg-brand-50/60"
+    >
+      <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex flex-wrap items-baseline gap-x-1.5 text-sm text-neutral-600">
+          <span>{CONDITION_LABEL[gap.condition]} 추정 시세</span>
+          <span className="font-semibold tabular-nums text-neutral-900">
+            {formatKrw(gap.fairPrice)}
+          </span>
+        </span>
+        <span className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-xs font-semibold text-neutral-800">
+          {label}
+        </span>
+      </span>
+      <span className="text-xs text-neutral-500">{caption}</span>
+    </a>
+  );
+}
+
 export interface ListingDetailPageProps {
   readonly listingId: string;
   readonly openChat?: boolean;
@@ -46,6 +102,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
   const paymentsOpen = isPurchaseOpen(launch);
   const priceDrop = priceDropAmount(listing);
+  const priceGap = await loadPriceGap(listing);
 
   return (
     <Container width="lg">
@@ -77,6 +134,8 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               </>
             ) : null}
           </div>
+          {/* 판매가가 적당한지 바로 판단하도록 같은 등급의 추정 시세를 옆에 둔다. 자세한 근거는 아래 시세 영역에 있다. */}
+          {priceGap === null ? null : <PriceGapCard gap={priceGap} />}
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-neutral-800">상품 설명</span>
             <p className="whitespace-pre-wrap leading-relaxed text-neutral-600">
@@ -190,7 +249,10 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
       </div>
 
       {listing.catalogSetNumber !== null ? (
-        <section className="mt-12 flex flex-col gap-4 border-t border-neutral-200 pt-10">
+        <section
+          id="price-insight"
+          className="mt-12 flex scroll-mt-20 flex-col gap-4 border-t border-neutral-200 pt-10"
+        >
           <Heading level={2}>시세</Heading>
           <SetPriceInsight setNumber={listing.catalogSetNumber} highlight={listing.condition} />
         </section>
