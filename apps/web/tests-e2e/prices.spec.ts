@@ -4,6 +4,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import {
   filterPricePointsByPeriod,
   listingPriceGap,
+  priceGapBasisCaption,
   priceGapLabel,
   type ConditionValuation,
   type PricePoint,
@@ -158,6 +159,20 @@ test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비
     )?.evidenceWarning,
   ).toBe("데모 포함");
   expect(priceGapLabel(higher!.ratio, "추정 시세보다")).toBe("추정 시세보다 17.5% 높음");
+  // 근거 한 줄은 시세 영역과 같은 이름을 쓴다. 유사 등급 근거에 "기준"이 겹치지 않는다.
+  expect(priceGapBasisCaption(higher!)).toBe("동일 상태 체결 19건");
+  expect(priceGapBasisCaption(listingPriceGap(1_137_000, "like_new", established)!)).toBe(
+    "유사 등급 19건 기준",
+  );
+  expect(
+    priceGapBasisCaption(
+      listingPriceGap(
+        1_250_000,
+        "used_good",
+        snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_063_651)], true),
+      )!,
+    ),
+  ).toBe("동일 상태 체결 19건 · 데모 포함");
 
   // 목록 카드: 판매 중·예약 중 세트 매물만, 출처 경고가 있으면 "참고용"을 붙인다.
   const listing = (id: string, status: Listing["status"], setNumber: string | null) =>
