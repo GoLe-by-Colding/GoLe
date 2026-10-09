@@ -1,8 +1,8 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.catalog.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.gole.api.admin.adapter.in.web.AdminDtos.CreateSetRequest;
+import com.gole.api.catalog.adapter.in.web.AdminCatalogDtos.CreateSetRequest;
 import com.gole.api.catalog.domain.model.RetirementStatus;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;

@@ -1,4 +1,4 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.promotion.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,9 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.admin.adapter.in.web.AdminPromotionRunController.CallRequest;
-import com.gole.api.admin.adapter.in.web.AdminPromotionRunController.RecordRunRequest;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.promotion.adapter.in.web.AdminPromotionRunController.CallRequest;
+import com.gole.api.promotion.adapter.in.web.AdminPromotionRunController.RecordRunRequest;
 import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.RecordedRun;
 import com.gole.api.promotion.domain.model.PromotionCategory;

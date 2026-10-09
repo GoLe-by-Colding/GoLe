@@ -1,4 +1,4 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.account.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -6,14 +6,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.adapter.in.web.AdminAccountDeletionController.CompletionRequest;
 import com.gole.api.account.application.port.in.ManageAccountDeletionRequestsUseCase;
 import com.gole.api.account.application.port.in.ManageAccountDeletionRequestsUseCase.Result;
 import com.gole.api.account.domain.model.AccountDeletionStatus;
-import com.gole.api.admin.adapter.in.web.AdminAccountDeletionController.CompletionRequest;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.web.auth.AdminActor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +30,8 @@ class AdminAccountDeletionControllerTest {
         RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
         AdminAccountDeletionController controller = new AdminAccountDeletionController(deletions, audit);
         MockHttpServletRequest http = new MockHttpServletRequest();
-        http.setAttribute(AdminAuthInterceptor.ATTR_ACCOUNT_ID, "admin-1");
-        http.setAttribute(AdminAuthInterceptor.ATTR_ACCOUNT_EMAIL, "admin@gole.test");
+        http.setAttribute(AdminActor.ATTR_ACCOUNT_ID, "admin-1");
+        http.setAttribute(AdminActor.ATTR_ACCOUNT_EMAIL, "admin@gole.test");
         when(deletions.complete(any()))
                 .thenReturn(new Result(
                         "request-opaque",

@@ -1,4 +1,4 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.promotion.adapter.in.web;
 
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;

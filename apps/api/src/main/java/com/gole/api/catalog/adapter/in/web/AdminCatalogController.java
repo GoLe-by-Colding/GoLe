@@ -1,13 +1,13 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.catalog.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminDtos.CreateSetRequest;
-import com.gole.api.admin.adapter.in.web.AdminDtos.FeaturedRequest;
-import com.gole.api.admin.adapter.in.web.AdminDtos.LegoSetResponse;
-import com.gole.api.admin.adapter.in.web.AdminDtos.UpdateSetRequest;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.catalog.adapter.in.web.AdminCatalogDtos.CreateSetRequest;
+import com.gole.api.catalog.adapter.in.web.AdminCatalogDtos.FeaturedRequest;
+import com.gole.api.catalog.adapter.in.web.AdminCatalogDtos.LegoSetResponse;
+import com.gole.api.catalog.adapter.in.web.AdminCatalogDtos.UpdateSetRequest;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase.CreateLegoSetCommand;
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;

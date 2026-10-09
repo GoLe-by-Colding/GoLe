@@ -1,4 +1,4 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.account.adapter.in.web;
 
 import com.gole.api.account.application.port.in.ManageAccountDeletionRequestsUseCase;
 import com.gole.api.account.application.port.in.ManageAccountDeletionRequestsUseCase.Command;

@@ -1,9 +1,9 @@
-package com.gole.api.admin.adapter.in.web;
+package com.gole.api.account.adapter.in.web;
 
+import com.gole.api.account.adapter.in.web.AdminAccountDtos.AccountRow;
+import com.gole.api.account.adapter.in.web.AdminAccountDtos.ChangeRoleRequest;
+import com.gole.api.account.adapter.in.web.AdminAccountDtos.ReasonRequest;
 import com.gole.api.account.application.port.in.ManageAccountsUseCase;
-import com.gole.api.admin.adapter.in.web.AdminDtos.AccountRow;
-import com.gole.api.admin.adapter.in.web.AdminDtos.ChangeRoleRequest;
-import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
