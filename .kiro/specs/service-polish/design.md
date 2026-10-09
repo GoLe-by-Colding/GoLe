@@ -138,3 +138,66 @@
 - `returnTo=/profile`로 로그인에 들어오면 "로그인하면 이전 화면 화면으로 돌아갑니다."가 떴다(root iOS 관찰). 안내 문장이 이미
   "{이름} 화면으로"인데 모르는 경로의 이름이 "이전 화면"이라 겹쳤다. 이름에는 "화면"을 붙이지 않고(`이전`), `/profile(/…)`은 "내 정보"로
   부른다. `auth-return-to.spec.ts`가 문장 전체를 비교해 겹침이 다시 생기면 실패한다.
+
+## PR #199 최종 리뷰 수정 (2026-10-09)
+
+### 알림 상세에서 탭으로 갈 때 기존 탭 스택으로 복귀
+
+- 결함(Codex 리뷰 P2): 탭이 아닌 화면(`web?path=` 알림 상세)은 루트 Stack에서 `(tabs)` 위에 쌓인다. 여기서
+  `router.navigate({ pathname: "/sell", params })`를 부르면 Expo Router 57의 `stackRouterOverride`는 NAVIGATE가 현재 화면과
+  이름이 다르고 `pop`이 없으면 아래 `(tabs)`를 찾지 않고 새 키로 `(tabs)`를 쌓는다 — `[기존 tabs, web, 새 tabs]`. 새 탭 상태라
+  작성 중이던 판매 폼·검색 필터 대신 처음 화면이 열렸다.
+- 수정: 비탭 화면만 `router.dismissTo(href)`를 쓴다. `dismissTo`는 POP_TO 액션이고, override는 POP_TO를 기본 StackRouter에 넘긴다.
+  StackRouter는 현재 위치 아래에서 같은 이름의 `(tabs)`를 찾아 그 위를 걷어 내고, 그 route를 `{ ...route, params }`로 두어 키와
+  중첩 `state`(탭 상태)를 유지한다. 탭 내비게이터는 바뀐 params의 `screen`·`params`를 받아 그 탭으로 navigate한다
+  (react-navigation `useNavigationBuilder`). 탭 화면 안에서는 기존대로 `router.navigate`가 탭 내비게이터를 겨눈다.
+- 근거는 설치된 코드의 실제 상태 전이다. `web-screen-lifecycle.test.cjs` 라우터 절은 앱의 실제 라우트 파일로 `getRoutes`·
+  `getReactNavigationConfig`·`getStateFromPath`를 돌리고, `getNavigateAction`(push·navigate·dismissTo가 만드는 액션)을 StackClient의
+  `StackRouter`(기본 + override)와 TabRouter에 그대로 적용한다. 화면 렌더러 모듈만 가짜로 꽂는다. 확인한 것:
+  - push 뒤 `[(tabs), web]`이 되고, navigate는 `[(tabs), web, (tabs)]`로 리뷰의 재현과 같다.
+  - dismissTo는 POP_TO로 `[(tabs)]`가 되며, 같은 키와 같은 중첩 상태 객체를 유지한다.
+  - params `screen=sell`·`to=/sell?draft=1#top`(query·hash)이 전달되고, 판매·검색 탭의 키와 params가 그대로다.
+  - 탭 안 navigate는 탭 내비게이터를 겨눈다.
+
+### 목적지 로드 실패 뒤 다시 시도
+
+- 결함(Codex 리뷰 P2): 직전 구현은 목적지를 주입하자마자 `pending`을 지웠다. 이미 열린 채팅 탭에 `/chat?room=r2`를 보내고 그 로드가
+  네트워크 오류로 실패하면, 다시 시도가 고정된 첫 source(`/chat`)나 이전 방을 열었다. `targetKey`도 소비돼 r2를 잃었다.
+- 수정: 대기 목적지를 `{ path, sentIn }`으로 두고 도착을 확인할 때까지 지우지 않는다.
+  - `sentIn`은 주입한 문서 번호다(실제 문서 로드 시작마다 1씩 는다). 같은 문서에는 다시 보내지 않아 중복 주입·루프가 없다.
+  - 목적지 주소에 닿았거나, 보낸 뒤 새 문서가 `onLoad`까지 끝났으면(웹이 로그인 등으로 다른 곳에 보낸 경우 포함) 끝난 것으로 본다.
+    `onLoad`의 `nativeEvent.url`로 위치를 갱신한다. react-native-webview가 `onNavigationStateChange`를 `onLoad`보다 늦게 부르기 때문이다(`WebViewShared` `onLoadingFinish`).
+  - 실패(`onError`, 보낸 목적지나 첫 화면의 5xx, 프로세스 종료)는 목적지를 지우지 않고 '보내지 않음'으로 되돌린다. 다시 시도는 새
+    WebView의 source를 그 목적지로 열어 한 번에 간다(주입 없음).
+  - 대기 목적지가 없으면 다시 시도는 실패한 위치를 연다. 뿌리만 가리키는 요청이 실패한 작성 위치(`/sell?step=2`)를 덮지 않는 폼 보존
+    원칙은 다시 시도에도 같다.
+  - 실패 화면에 있는 동안 온 새 요청은 이전 요청을 대신한다.
+- 회귀: 컴포넌트 절 21개 시나리오와 라우터 절을 합쳐 61건이다. 보낸 목적지 실패→다시 시도, 주소 보고 전 실패(예비 탐색 실패),
+  재실패, 새 요청 대체, 같은 문서 중복 주입 없음·도착 뒤 루프 없음, 목적지 5xx, 실패 뒤 뿌리 요청의 폼 보존을 담았다. 일부러 되돌린
+  네 변형은 모두 해당 검사에서 실패했다.
+
+  | 되돌린 변형 | 실패한 검사 |
+  |---|---|
+  | 비탭도 navigate | "비탭은 dismissTo" |
+  | 주입 직후 pending 삭제 | "보낸 목적지는 실패한 위치보다 앞선다" |
+  | sentIn 중복 방지 제거 | "중복 주입 없음" |
+  | 다시 시도가 첫 경로 | "다시 시도는 대기 목적지를 연다" |
+
+### 시세 E2E 빈 기간 검사의 첫 시도 실패(flaky)
+
+- 현상: CI run 37924434438(head f54bdf0f)에서 `prices.spec.ts:118` 빈 기간 검사가 "1개월" 클릭 뒤 "1개월 체결 없음"을 찾지 못해
+  실패했고, 재시도에서 통과했다.
+- 원인: 하이드레이션 전 클릭이다. `openPrices`는 서버 렌더 HTML(세트 이름·"6개월" 눌림)을 준비 신호로 썼는데, 이것은 React가 이벤트를
+  붙이기 전에도 보인다. CPU를 6배 늦추면 같은 위치에서 10/10 실패한다. 클릭 시점에 버튼에 React 속성(`__reactProps$…`)이 없었고,
+  클릭 뒤에도 `aria-pressed=false`였다(6/6).
+- 수정: 기간 버튼(그리고 홈→시세 검사의 세트 목록 버튼)에 React 이벤트 속성이 붙은 뒤에 시계를 고정하고 누른다. 기대값·건너뛰기·
+  재시도 횟수·DB는 바꾸지 않았다. 느린 환경을 다시 재현할 수 있게 `E2E_CPU_THROTTLE`(chromium, 기본 꺼짐)을 둔다.
+- 증명(retries 0, 웹 3000·API 8090 읽기 전용):
+
+  | 대상 | CPU | 반복 | 결과 |
+  |---|---|---|---|
+  | 수정 전 사본(하이드레이션 대기만 뺌) | 6배 | 5회 | 5 실패 |
+  | 수정 후 실제 파일 6개 검사 | 6배 | 10회 | 60 통과 |
+  | 수정 후 실제 파일 6개 검사 | 정상 | 10회 | 60 통과 |
+  | 수정 후 실제 파일 6개 검사 | 정상 | 1회 | 6 통과 |
+
