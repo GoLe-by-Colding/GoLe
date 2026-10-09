@@ -10,20 +10,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.chat.application.port.out.DirectTradeGatePort;
+import com.gole.api.chat.application.port.out.DirectTradeListingPort;
 import com.gole.api.chat.application.port.out.DirectTradeNotifierPort;
 import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.RetryingTransactionPort;
 import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
-import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
-import com.gole.api.launch.domain.model.LaunchConfig;
-import com.gole.api.launch.domain.model.LaunchStage;
-import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
@@ -34,8 +31,8 @@ class DirectTradeServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-29T10:00:00Z");
 
     private final ListingChatRoomRepositoryPort rooms = mock(ListingChatRoomRepositoryPort.class);
-    private final MarkListingSoldUseCase markSold = mock(MarkListingSoldUseCase.class);
-    private final GetLaunchConfigUseCase launch = mock(GetLaunchConfigUseCase.class);
+    private final DirectTradeListingPort markSold = mock(DirectTradeListingPort.class);
+    private final DirectTradeGatePort gate = mock(DirectTradeGatePort.class);
     private final DirectTradeNotifierPort notifier = mock(DirectTradeNotifierPort.class);
     /** 재시도·트랜잭션 경계는 어댑터 테스트(MongoRetryingTransactionAdapterTest)가 본다. 여기서는 본문을 그대로 실행한다. */
     private final RetryingTransactionPort transactions = new RetryingTransactionPort() {
@@ -48,9 +45,9 @@ class DirectTradeServiceTest {
     private final DirectTradeService service;
 
     DirectTradeServiceTest() {
-        when(launch.current()).thenReturn(new LaunchConfig(LaunchStage.PREPARING, Map.of(), NOW, "admin"));
-        service = new DirectTradeService(
-                rooms, transactions, markSold, launch, notifier, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(gate.directTradeOpen()).thenReturn(true);
+        service =
+                new DirectTradeService(rooms, transactions, markSold, gate, notifier, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -64,7 +61,7 @@ class DirectTradeServiceTest {
 
         assertThat(result).isSameAs(buyerConfirmed);
         verify(notifier).confirmationRequested("seller-1", "room-1");
-        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verify(markSold, never()).markSoldIfActive(any());
     }
 
     @Test
@@ -77,7 +74,7 @@ class DirectTradeServiceTest {
         service.confirm("room-1", "buyer-1");
 
         verifyNoInteractions(notifier);
-        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verify(markSold, never()).markSoldIfActive(any());
     }
 
     @Test
@@ -89,12 +86,12 @@ class DirectTradeServiceTest {
                 .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
         when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
-        when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(true);
+        when(markSold.markSoldIfActive("listing-1")).thenReturn(true);
 
         ChatRoom result = service.confirm("room-1", "seller-1");
 
         assertThat(result.directTradeCompletedAt()).isEqualTo(NOW);
-        verify(markSold).markDirectTradeSoldIfActive("listing-1");
+        verify(markSold).markSoldIfActive("listing-1");
         verify(notifier).tradeCompleted("buyer-1", "room-1");
         verify(notifier, never()).confirmationRequested(any(), any());
     }
@@ -108,7 +105,7 @@ class DirectTradeServiceTest {
                 .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(false);
         when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
-        when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(true);
+        when(markSold.markSoldIfActive("listing-1")).thenReturn(true);
 
         service.confirm("room-1", "buyer-1");
 
@@ -130,7 +127,7 @@ class DirectTradeServiceTest {
         when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.empty());
 
         assertThat(service.confirm("room-1", "seller-1")).isSameAs(completedByOther);
-        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verify(markSold, never()).markSoldIfActive(any());
         verifyNoInteractions(notifier);
     }
 
@@ -144,7 +141,7 @@ class DirectTradeServiceTest {
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
         when(rooms.completeIfBothConfirmed("room-1", NOW))
                 .thenReturn(Optional.of(room(NOW.minusSeconds(30), NOW, NOW)));
-        when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(false);
+        when(markSold.markSoldIfActive("listing-1")).thenReturn(false);
 
         assertThatThrownBy(() -> service.confirm("room-1", "seller-1"))
                 .isInstanceOf(ConflictException.class)
@@ -160,19 +157,19 @@ class DirectTradeServiceTest {
 
         assertThatThrownBy(() -> service.confirm("room-1", "stranger")).isInstanceOf(ForbiddenException.class);
         verify(rooms, never()).recordConfirmation(anyString(), any(), any());
-        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verify(markSold, never()).markSoldIfActive(any());
         verifyNoInteractions(notifier);
     }
 
     @Test
     @DisplayName("결제 거래 단계가 열리면 새 직거래 완료 확인을 받지 않는다")
     void confirm_rejectsNewDirectCompletionAfterPaymentStageOpens() {
-        when(launch.current()).thenReturn(new LaunchConfig(LaunchStage.TRADING, Map.of(), NOW, "admin"));
+        when(gate.directTradeOpen()).thenReturn(false);
 
         assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isInstanceOf(ConflictException.class);
 
         verify(rooms, never()).findById(any());
-        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verify(markSold, never()).markSoldIfActive(any());
         verifyNoInteractions(notifier);
     }
 

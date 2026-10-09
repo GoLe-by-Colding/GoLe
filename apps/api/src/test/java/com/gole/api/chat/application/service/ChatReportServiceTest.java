@@ -9,16 +9,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.chat.application.port.out.ChatMessageReportPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.Snapshot;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.report.application.port.in.SubmitReportUseCase;
-import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
-import com.gole.api.report.domain.model.ReportReason;
-import com.gole.api.report.domain.model.ReportTargetType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -38,7 +35,7 @@ class ChatReportServiceTest {
 
     private final ChatMessageRepositoryPort messages = mock(ChatMessageRepositoryPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
-    private final SubmitReportUseCase reports = mock(SubmitReportUseCase.class);
+    private final ChatMessageReportPort reports = mock(ChatMessageReportPort.class);
     private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
     private final ChatReportService service =
             new ChatReportService(messages, socialChats, reports, snapshots, Clock.fixed(CAPTURED_AT, ZoneOffset.UTC));
@@ -61,22 +58,14 @@ class ChatReportServiceTest {
                         ArgumentMatchers.eq("message-12"),
                         ArgumentMatchers.anyInt()))
                 .thenReturn(roomMessages.subList(13, 23));
-        when(reports.submit(any())).thenReturn("report-1");
+        when(reports.submit(any(), any(), any(), any())).thenReturn("report-1");
 
-        String reportId = service.report("reporter-1", "message-12", ReportReason.INAPPROPRIATE, "욕설 메시지");
+        String reportId = service.report("reporter-1", "message-12", "INAPPROPRIATE", "욕설 메시지");
 
         assertThat(reportId).isEqualTo("report-1");
         verify(socialChats).requireReadable("room-1", "reporter-1");
 
-        ArgumentCaptor<SubmitReportCommand> reportCommand = ArgumentCaptor.forClass(SubmitReportCommand.class);
-        verify(reports).submit(reportCommand.capture());
-        assertThat(reportCommand.getValue())
-                .isEqualTo(new SubmitReportCommand(
-                        "reporter-1",
-                        ReportTargetType.CHAT_MESSAGE,
-                        "message-12",
-                        ReportReason.INAPPROPRIATE,
-                        "욕설 메시지"));
+        verify(reports).submit("reporter-1", "message-12", "INAPPROPRIATE", "욕설 메시지");
 
         ArgumentCaptor<Snapshot> snapshot = ArgumentCaptor.forClass(Snapshot.class);
         verify(snapshots).capture(snapshot.capture());
@@ -93,7 +82,7 @@ class ChatReportServiceTest {
         assertThat(snapshot.getValue().messages().get(10).content()).isEqualTo("server-content-12");
 
         InOrder persistedInOrder = inOrder(reports, snapshots);
-        persistedInOrder.verify(reports).submit(any());
+        persistedInOrder.verify(reports).submit(any(), any(), any(), any());
         persistedInOrder.verify(snapshots).capture(any());
     }
 
@@ -113,9 +102,9 @@ class ChatReportServiceTest {
                         ArgumentMatchers.eq("message-100"),
                         ArgumentMatchers.anyInt()))
                 .thenReturn(List.of(message(101), message(102)));
-        when(reports.submit(any())).thenReturn("report-2");
+        when(reports.submit(any(), any(), any(), any())).thenReturn("report-2");
 
-        service.report("reporter-1", "message-100", ReportReason.OTHER, null);
+        service.report("reporter-1", "message-100", "OTHER", null);
 
         ArgumentCaptor<Snapshot> snapshot = ArgumentCaptor.forClass(Snapshot.class);
         verify(snapshots).capture(snapshot.capture());
@@ -131,10 +120,10 @@ class ChatReportServiceTest {
         when(socialChats.requireReadable("room-1", "outsider"))
                 .thenThrow(new ForbiddenException("CHAT_ROOM_ACCESS_DENIED", "채팅방 멤버만 접근할 수 있습니다"));
 
-        assertThatThrownBy(() -> service.report("outsider", "message-4", ReportReason.INAPPROPRIATE, "신고"))
+        assertThatThrownBy(() -> service.report("outsider", "message-4", "INAPPROPRIATE", "신고"))
                 .isInstanceOf(ForbiddenException.class);
 
-        verify(reports, never()).submit(any());
+        verify(reports, never()).submit(any(), any(), any(), any());
         verify(messages, never()).findBefore(any(), any(), any(), ArgumentMatchers.anyInt());
         verify(messages, never()).findAfter(any(), any(), any(), ArgumentMatchers.anyInt());
         verify(snapshots, never()).capture(any());
@@ -144,11 +133,11 @@ class ChatReportServiceTest {
     void missingMessageCannotCreateAnUnboundReport() {
         when(messages.findById("missing-message")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.report("reporter-1", "missing-message", ReportReason.FRAUD, "삭제된 메시지"))
+        assertThatThrownBy(() -> service.report("reporter-1", "missing-message", "FRAUD", "삭제된 메시지"))
                 .isInstanceOf(NotFoundException.class);
 
         verify(socialChats, never()).requireReadable(any(), any());
-        verify(reports, never()).submit(any());
+        verify(reports, never()).submit(any(), any(), any(), any());
         verify(snapshots, never()).capture(any());
     }
 

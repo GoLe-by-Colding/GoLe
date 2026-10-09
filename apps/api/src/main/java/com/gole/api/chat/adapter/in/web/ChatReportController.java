@@ -30,7 +30,8 @@ public class ChatReportController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, String> report(
             @PathVariable String messageId, @Valid @RequestBody ReportMessageRequest request, HttpServletRequest http) {
-        String reportId = reports.report(AuthenticatedUser.id(http), messageId, request.reason(), request.detail());
+        String reportId = reports.report(
+                AuthenticatedUser.id(http), messageId, request.reason().name(), request.detail());
         return Map.of("id", reportId);
     }
 

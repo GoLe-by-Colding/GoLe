@@ -1,15 +1,12 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.out.ChatMessageReportPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.Snapshot;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.SnapshotMessage;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.report.application.port.in.SubmitReportUseCase;
-import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
-import com.gole.api.report.domain.model.ReportReason;
-import com.gole.api.report.domain.model.ReportTargetType;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,14 +24,14 @@ public class ChatReportService {
 
     private final ChatMessageRepositoryPort messages;
     private final SocialChatService socialChats;
-    private final SubmitReportUseCase reports;
+    private final ChatMessageReportPort reports;
     private final ChatReportSnapshotPort snapshots;
     private final Clock clock;
 
     public ChatReportService(
             ChatMessageRepositoryPort messages,
             SocialChatService socialChats,
-            SubmitReportUseCase reports,
+            ChatMessageReportPort reports,
             ChatReportSnapshotPort snapshots,
             Clock clock) {
         this.messages = messages;
@@ -44,14 +41,14 @@ public class ChatReportService {
         this.clock = clock;
     }
 
+    /** @param reasonCode 신고 사유 코드(웹 경계에서 신고 컨텍스트의 사유로 검증된 값) */
     @Transactional
-    public String report(String reporterId, String messageId, ReportReason reason, String detail) {
+    public String report(String reporterId, String messageId, String reasonCode, String detail) {
         ChatMessage reported = messages.findById(messageId)
                 .orElseThrow(() -> new NotFoundException("CHAT_MESSAGE_NOT_FOUND", "신고할 메시지를 찾을 수 없습니다"));
         socialChats.requireReadable(reported.roomId(), reporterId);
 
-        String reportId = reports.submit(
-                new SubmitReportCommand(reporterId, ReportTargetType.CHAT_MESSAGE, messageId, reason, detail));
+        String reportId = reports.submit(reporterId, messageId, reasonCode, detail);
         snapshots.capture(new Snapshot(
                 reportId, reported.roomId(), messageId, reporterId, contextAround(reported), Instant.now(clock)));
         return reportId;

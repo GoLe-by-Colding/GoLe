@@ -1,7 +1,7 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
+import com.gole.api.chat.application.port.out.ChatOrderEvidencePort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
@@ -11,6 +11,7 @@ import com.gole.api.chat.application.port.out.SupportConversationPrivacyReposito
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.RetentionHold;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -18,9 +19,6 @@ import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.order.application.port.out.OrderRepositoryPort;
-import com.gole.api.order.domain.model.Order;
-import com.gole.api.order.domain.model.OrderStatus;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,10 +26,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Service;
@@ -48,29 +44,23 @@ public class SupportConversationPrivacyService {
 
     private static final Pattern IDEMPOTENCY_KEY =
             Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
-    private static final Set<OrderStatus> ACTIVE_OR_EVIDENTIARY_ORDER_STATUSES = Set.of(
-            OrderStatus.PAYMENT_PENDING,
-            OrderStatus.PAYMENT_REVIEW,
-            OrderStatus.FUNDS_HELD,
-            OrderStatus.DISPUTED,
-            OrderStatus.REFUND_PENDING);
 
-    private final AccountRepositoryPort accounts;
+    private final ChatAccountPort accounts;
     private final SupportTicketRepositoryPort tickets;
     private final SocialChatRoomRepositoryPort rooms;
     private final ChatReportSnapshotPort reportSnapshots;
-    private final OrderRepositoryPort orders;
+    private final ChatOrderEvidencePort orderEvidence;
     private final SupportConversationPrivacyRepositoryPort privacy;
     private final Clock clock;
     private final SupportAssistantPurgePort assistantPurge;
     private final SupportAssistantAnalysisRepositoryPort analyses;
 
     public SupportConversationPrivacyService(
-            AccountRepositoryPort accounts,
+            ChatAccountPort accounts,
             SupportTicketRepositoryPort tickets,
             SocialChatRoomRepositoryPort rooms,
             ChatReportSnapshotPort reportSnapshots,
-            OrderRepositoryPort orders,
+            ChatOrderEvidencePort orderEvidence,
             SupportConversationPrivacyRepositoryPort privacy,
             Clock clock,
             SupportAssistantPurgePort assistantPurge,
@@ -79,7 +69,7 @@ public class SupportConversationPrivacyService {
         this.tickets = tickets;
         this.rooms = rooms;
         this.reportSnapshots = reportSnapshots;
-        this.orders = orders;
+        this.orderEvidence = orderEvidence;
         this.privacy = privacy;
         this.clock = clock;
         this.assistantPurge = assistantPurge;
@@ -227,13 +217,12 @@ public class SupportConversationPrivacyService {
     }
 
     private boolean hasActiveOrEvidentiaryOrder(String accountId) {
-        return Stream.concat(orders.findByBuyerId(accountId).stream(), orders.findBySellerId(accountId).stream())
-                .map(Order::getStatus)
-                .anyMatch(ACTIVE_OR_EVIDENTIARY_ORDER_STATUSES::contains);
+        // 종결되지 않은 주문(결제·자금 보유·분쟁·환불 진행)이 있으면 대화가 분쟁 증거일 수 있다.
+        return orderEvidence.hasUnsettledOrder(accountId);
     }
 
-    private Account requireAdmin(String accountId) {
-        Account account = accounts.findById(accountId)
+    private ChatAccount requireAdmin(String accountId) {
+        ChatAccount account = accounts.findById(accountId)
                 .orElseThrow(() -> new NotFoundException("SUPPORT_ADMIN_NOT_FOUND", "관리자 계정을 찾을 수 없습니다"));
         if (!account.isAdmin() || account.isSuspended()) {
             throw new ForbiddenException("ADMIN_ONLY", "관리자 권한이 필요합니다");

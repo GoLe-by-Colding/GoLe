@@ -1,11 +1,11 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatBlock;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
@@ -35,7 +35,7 @@ public class SocialChatService {
     private final SocialChatRoomRepositoryPort rooms;
     private final ChatBlockRepositoryPort blocks;
     private final SupportTicketRepositoryPort supportTickets;
-    private final AccountRepositoryPort accounts;
+    private final ChatAccountPort accounts;
     private final ChatReadStatePort readStates;
     private final Clock clock;
 
@@ -43,7 +43,7 @@ public class SocialChatService {
             SocialChatRoomRepositoryPort rooms,
             ChatBlockRepositoryPort blocks,
             SupportTicketRepositoryPort supportTickets,
-            AccountRepositoryPort accounts,
+            ChatAccountPort accounts,
             ChatReadStatePort readStates,
             Clock clock) {
         this.rooms = rooms;
@@ -218,7 +218,7 @@ public class SocialChatService {
         SocialChatRoom room = requireRoom(roomId);
         requireReadable(roomId, actorId);
         room.requireCanSend(actorId);
-        Account actor = requireAccount(actorId);
+        ChatAccount actor = requireAccount(actorId);
         if (room.type() == ChatRoomType.SUPPORT) {
             SupportTicket ticket = requireSupportTicket(room.id());
             if (actorId.equals(ticket.requesterId())) {
@@ -252,7 +252,7 @@ public class SocialChatService {
         if (room.type() != ChatRoomType.SUPPORT) {
             throw new BadRequestException("CHAT_NOT_SUPPORT_ROOM", "운영팀 문의방이 아닙니다");
         }
-        Account admin = requireAccount(adminId);
+        ChatAccount admin = requireAccount(adminId);
         if (!admin.isAdmin() || admin.isSuspended()) {
             throw new ForbiddenException("ADMIN_ONLY", "관리자 권한이 필요합니다");
         }
@@ -308,13 +308,13 @@ public class SocialChatService {
         return ticket != null && (actorId.equals(ticket.requesterId()) || actorId.equals(ticket.assigneeId()));
     }
 
-    private Account requireAccount(String accountId) {
+    private ChatAccount requireAccount(String accountId) {
         return accounts.findById(accountId)
                 .orElseThrow(() -> new NotFoundException("CHAT_ACCOUNT_NOT_FOUND", "대화 상대를 찾을 수 없습니다"));
     }
 
-    private Account requireRegularAccount(String accountId) {
-        Account account = requireAccount(accountId);
+    private ChatAccount requireRegularAccount(String accountId) {
+        ChatAccount account = requireAccount(accountId);
         if (account.isAdmin()) {
             throw new BadRequestException("CHAT_ADMIN_PRIVATE_ROOM_NOT_ALLOWED", "운영자에게는 운영팀 문의로 연락해 주세요");
         }

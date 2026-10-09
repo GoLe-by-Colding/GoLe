@@ -10,15 +10,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
-import com.gole.api.account.domain.model.Email;
-import com.gole.api.account.domain.model.PasswordHash;
-import com.gole.api.account.domain.model.Role;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -38,19 +35,19 @@ class SocialChatServiceTest {
     private final SocialChatRoomRepositoryPort rooms = mock(SocialChatRoomRepositoryPort.class);
     private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
-    private final AccountRepositoryPort accounts = mock(AccountRepositoryPort.class);
+    private final ChatAccountPort accounts = mock(ChatAccountPort.class);
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
     private final SocialChatService service =
             new SocialChatService(rooms, blocks, tickets, accounts, readStates, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void accounts() {
-        when(accounts.findById("user-1")).thenReturn(Optional.of(account("user-1", Role.USER)));
-        when(accounts.findById("user-2")).thenReturn(Optional.of(account("user-2", Role.USER)));
-        when(accounts.findById("user-3")).thenReturn(Optional.of(account("user-3", Role.USER)));
-        when(accounts.findById("user-4")).thenReturn(Optional.of(account("user-4", Role.USER)));
-        when(accounts.findById("admin-1")).thenReturn(Optional.of(account("admin-1", Role.ADMIN)));
-        when(accounts.findById("admin-2")).thenReturn(Optional.of(account("admin-2", Role.ADMIN)));
+        when(accounts.findById("user-1")).thenReturn(Optional.of(user("user-1")));
+        when(accounts.findById("user-2")).thenReturn(Optional.of(user("user-2")));
+        when(accounts.findById("user-3")).thenReturn(Optional.of(user("user-3")));
+        when(accounts.findById("user-4")).thenReturn(Optional.of(user("user-4")));
+        when(accounts.findById("admin-1")).thenReturn(Optional.of(admin("admin-1")));
+        when(accounts.findById("admin-2")).thenReturn(Optional.of(admin("admin-2")));
         when(tickets.findByParticipant(anyString(), anyInt())).thenReturn(List.of());
     }
 
@@ -264,7 +261,11 @@ class SocialChatServiceTest {
         verify(blocks).blockedTargets("user-1");
     }
 
-    private static Account account(String id, Role role) {
-        return Account.provisioned(id, new Email(id + "@gole.test"), new PasswordHash("hash"), role);
+    private static ChatAccount user(String id) {
+        return new ChatAccount(id, false, true, false);
+    }
+
+    private static ChatAccount admin(String id) {
+        return new ChatAccount(id, true, true, false);
     }
 }

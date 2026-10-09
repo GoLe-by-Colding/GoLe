@@ -9,14 +9,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
-import com.gole.api.account.domain.model.Email;
-import com.gole.api.account.domain.model.PasswordHash;
-import com.gole.api.account.domain.model.Role;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -37,7 +34,7 @@ class SupportChatServiceTest {
     private final SocialChatRoomRepositoryPort rooms = mock(SocialChatRoomRepositoryPort.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
     private final SupportInternalNotePort notes = mock(SupportInternalNotePort.class);
-    private final AccountRepositoryPort accounts = mock(AccountRepositoryPort.class);
+    private final ChatAccountPort accounts = mock(ChatAccountPort.class);
     private final SupportChatService service =
             new SupportChatService(rooms, tickets, notes, accounts, Clock.fixed(NOW, ZoneOffset.UTC));
 
@@ -227,9 +224,8 @@ class SupportChatServiceTest {
 
     @Test
     void suspendedAdminCannotTakeOverTicket() {
-        Account suspended = admin("admin-suspended");
-        suspended.suspend("퇴사");
-        when(accounts.findById("admin-suspended")).thenReturn(Optional.of(suspended));
+        when(accounts.findById("admin-suspended"))
+                .thenReturn(Optional.of(new ChatAccount("admin-suspended", true, false, true)));
 
         assertThatThrownBy(() -> service.takeOver("room-1", "admin-suspended", "기존 담당자 부재"))
                 .isInstanceOf(ForbiddenException.class);
@@ -238,7 +234,7 @@ class SupportChatServiceTest {
         verify(tickets, never()).save(any());
     }
 
-    private static Account admin(String id) {
-        return Account.provisioned(id, new Email(id + "@gole.test"), new PasswordHash("hash"), Role.ADMIN);
+    private static ChatAccount admin(String id) {
+        return new ChatAccount(id, true, true, false);
     }
 }

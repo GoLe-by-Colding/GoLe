@@ -8,11 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
-import com.gole.api.account.domain.model.Email;
-import com.gole.api.account.domain.model.PasswordHash;
-import com.gole.api.account.domain.model.Role;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
+import com.gole.api.chat.application.port.out.ChatOrderEvidencePort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
@@ -26,18 +23,15 @@ import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeReasonCode;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionHoldReasonCode;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionReleaseReasonCode;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
-import com.gole.api.order.application.port.out.OrderRepositoryPort;
-import com.gole.api.order.domain.model.Order;
-import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,11 +43,11 @@ class SupportConversationPrivacyServiceTest {
     private static final String ROOM_ID = "support-room-1";
     private static final String KEY = "550e8400-e29b-41d4-a716-446655440001";
 
-    private final AccountRepositoryPort accounts = mock(AccountRepositoryPort.class);
+    private final ChatAccountPort accounts = mock(ChatAccountPort.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
     private final SocialChatRoomRepositoryPort rooms = mock(SocialChatRoomRepositoryPort.class);
     private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
-    private final OrderRepositoryPort orders = mock(OrderRepositoryPort.class);
+    private final ChatOrderEvidencePort orders = mock(ChatOrderEvidencePort.class);
     private final SupportConversationPrivacyRepositoryPort privacy =
             mock(SupportConversationPrivacyRepositoryPort.class);
     private final SupportAssistantPurgePort assistantPurge = mock(SupportAssistantPurgePort.class);
@@ -73,8 +67,7 @@ class SupportConversationPrivacyServiceTest {
         when(accounts.findById("admin-1")).thenReturn(Optional.of(admin()));
         when(tickets.findByRoomId(ROOM_ID)).thenReturn(Optional.of(resolvedTicket()));
         when(rooms.findById(ROOM_ID)).thenReturn(Optional.of(SocialChatRoom.support(ROOM_ID, "user-1", "문의", NOW)));
-        when(orders.findByBuyerId("user-1")).thenReturn(List.of());
-        when(orders.findBySellerId("user-1")).thenReturn(List.of());
+        when(orders.hasUnsettledOrder("user-1")).thenReturn(false);
         when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.empty());
     }
 
@@ -151,12 +144,9 @@ class SupportConversationPrivacyServiceTest {
 
     @Test
     void nonAdminOrSuspendedAdminIsRejectedBeforeConversationLookup() {
-        when(accounts.findById("user-1"))
-                .thenReturn(Optional.of(Account.provisioned(
-                        "user-1", new Email("user@gole.test"), new PasswordHash("hash"), Role.USER)));
-        Account suspendedAdmin = admin();
-        suspendedAdmin.suspend("보안 검토");
-        when(accounts.findById("suspended-admin")).thenReturn(Optional.of(suspendedAdmin));
+        when(accounts.findById("user-1")).thenReturn(Optional.of(new ChatAccount("user-1", false, true, false)));
+        when(accounts.findById("suspended-admin"))
+                .thenReturn(Optional.of(new ChatAccount("suspended-admin", true, false, true)));
 
         assertThatThrownBy(() -> service.purge(
                         ROOM_ID, "user-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
@@ -209,9 +199,7 @@ class SupportConversationPrivacyServiceTest {
         assertBlocked("신고 증거");
 
         when(snapshots.existsByRoomId(ROOM_ID)).thenReturn(false);
-        Order disputed = mock(Order.class);
-        when(disputed.getStatus()).thenReturn(OrderStatus.DISPUTED);
-        when(orders.findByBuyerId("user-1")).thenReturn(List.of(disputed));
+        when(orders.hasUnsettledOrder("user-1")).thenReturn(true);
         assertBlocked("거래 또는 분쟁");
 
         verify(privacy, never()).purge(any());
@@ -243,8 +231,8 @@ class SupportConversationPrivacyServiceTest {
                 .hasMessageContaining(message);
     }
 
-    private static Account admin() {
-        return Account.provisioned("admin-1", new Email("admin@gole.test"), new PasswordHash("hash"), Role.ADMIN);
+    private static ChatAccount admin() {
+        return new ChatAccount("admin-1", true, true, false);
     }
 
     private static SupportTicket resolvedTicket() {

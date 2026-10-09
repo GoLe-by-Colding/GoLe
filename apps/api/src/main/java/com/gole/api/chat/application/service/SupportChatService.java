@@ -1,10 +1,10 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.account.application.port.out.AccountRepositoryPort;
-import com.gole.api.account.domain.model.Account;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
@@ -29,14 +29,14 @@ public class SupportChatService {
     private final SocialChatRoomRepositoryPort rooms;
     private final SupportTicketRepositoryPort tickets;
     private final SupportInternalNotePort notes;
-    private final AccountRepositoryPort accounts;
+    private final ChatAccountPort accounts;
     private final Clock clock;
 
     public SupportChatService(
             SocialChatRoomRepositoryPort rooms,
             SupportTicketRepositoryPort tickets,
             SupportInternalNotePort notes,
-            AccountRepositoryPort accounts,
+            ChatAccountPort accounts,
             Clock clock) {
         this.rooms = rooms;
         this.tickets = tickets;
@@ -175,8 +175,8 @@ public class SupportChatService {
         return room;
     }
 
-    private Account requireAdmin(String accountId) {
-        Account account = accounts.findById(accountId)
+    private ChatAccount requireAdmin(String accountId) {
+        ChatAccount account = accounts.findById(accountId)
                 .orElseThrow(() -> new NotFoundException("SUPPORT_ADMIN_NOT_FOUND", "관리자 계정을 찾을 수 없습니다"));
         if (!account.isAdmin() || account.isSuspended()) {
             throw new ForbiddenException("ADMIN_ONLY", "관리자 권한이 필요합니다");

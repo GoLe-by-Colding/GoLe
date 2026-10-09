@@ -1,5 +1,7 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.out.DirectTradeGatePort;
+import com.gole.api.chat.application.port.out.DirectTradeListingPort;
 import com.gole.api.chat.application.port.out.DirectTradeNotifierPort;
 import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.RetryingTransactionPort;
@@ -7,9 +9,6 @@ import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
-import com.gole.api.launch.domain.model.TradeMode;
-import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -26,22 +25,22 @@ public class DirectTradeService {
 
     private final ListingChatRoomRepositoryPort rooms;
     private final RetryingTransactionPort transactions;
-    private final MarkListingSoldUseCase markListingSold;
-    private final GetLaunchConfigUseCase launchConfig;
+    private final DirectTradeListingPort listings;
+    private final DirectTradeGatePort gate;
     private final DirectTradeNotifierPort notifier;
     private final Clock clock;
 
     public DirectTradeService(
             ListingChatRoomRepositoryPort rooms,
             RetryingTransactionPort transactions,
-            MarkListingSoldUseCase markListingSold,
-            GetLaunchConfigUseCase launchConfig,
+            DirectTradeListingPort listings,
+            DirectTradeGatePort gate,
             DirectTradeNotifierPort notifier,
             Clock clock) {
         this.rooms = rooms;
         this.transactions = transactions;
-        this.markListingSold = markListingSold;
-        this.launchConfig = launchConfig;
+        this.listings = listings;
+        this.gate = gate;
         this.notifier = notifier;
         this.clock = clock;
     }
@@ -56,7 +55,7 @@ public class DirectTradeService {
     }
 
     private ChatRoom confirmOnce(String roomId, String actorId) {
-        if (launchConfig.current().tradeMode() != TradeMode.DIRECT_CHAT) {
+        if (!gate.directTradeOpen()) {
             throw new ConflictException("DIRECT_TRADE_MODE_CLOSED", "현재는 플랫폼 결제 거래 단계라 직거래 완료를 새로 확인할 수 없습니다");
         }
         ChatRoom room = requireParticipant(roomId, actorId);
@@ -79,7 +78,7 @@ public class DirectTradeService {
         Optional<ChatRoom> completed = rooms.completeIfBothConfirmed(roomId, Instant.now(clock));
         if (completed.isPresent()) {
             ChatRoom done = completed.get();
-            if (!markListingSold.markDirectTradeSoldIfActive(done.listingId())) {
+            if (!listings.markSoldIfActive(done.listingId())) {
                 throw new ConflictException("DIRECT_TRADE_LISTING_UNAVAILABLE", "이미 주문되었거나 판매 완료된 매물입니다");
             }
             notifyFirstConfirmer(done);
