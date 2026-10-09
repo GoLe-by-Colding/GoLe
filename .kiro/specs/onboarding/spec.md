@@ -45,9 +45,13 @@ Redis에 별도로 저장한다(`RedisOAuthStateStoreAdapter`의 TTL 패턴 재�
 
 ### D3. OTP 발송 채널은 카카오 알림톡 전용(MVP)
 
-기존 `AlimtalkSenderPort.send(SendAlimtalkCommand(to, templateId, variables))`를 그대로
-호출한다 — 신규 발송 포트를 만들지 않는다. 신규 인증코드 템플릿만 카카오에 승인받으면 된다
-(코드 밖 운영 과제, 리드타임 있음).
+account 의 `PhoneOtpSenderPort` 어댑터가 notification 의 `SendAlimtalkUseCase`(알림톡 단건
+발송)에 위임한다. 발송 어댑터 자체(`AlimtalkSenderPort`)는 notification 안에서만 쓴다. 신규 인증코드
+템플릿만 카카오에 승인받으면 된다(코드 밖 운영 과제, 리드타임 있음).
+
+> 2026-10-10 변경: 처음에는 "신규 포트 없이 `AlimtalkSenderPort`를 그대로 호출"했으나, 다른 컨텍스트의
+> 아웃바운드 포트를 직접 쓰는 것이라 헥사고날 경계 규칙(`HexagonalArchitectureTest`)에 맞춰 위 경로로 바꿨다.
+> 발송 경로가 없거나 접수가 거절되면 전과 같이 `PhoneVerificationUnavailableException`으로 닫힌다.
 
 **알려진 제약**: `CoolsmsAlimtalkAdapter`는 SMS/LMS 대체발송이 꺼져 있어(`disableSms=true`,
 `coolsms-alimtalk` 스펙 R1.4) 카카오톡 미가입자는 이번 스코프에서 전화번호 인증을 완료할 수
@@ -167,5 +171,5 @@ local/dev/test/e2e에서만 동작하며 OTP 원문은 별도 로컬 옵트인 �
 ## 관련
 
 - `card-payment` — 계정 이름 필드 부재 문제, 이 스펙의 R1(nickname)이 함께 해소
-- `coolsms-alimtalk` — D3가 재사용하는 알림톡 발송 포트
+- `coolsms-alimtalk` — D3가 notification 의 `SendAlimtalkUseCase`를 거쳐 재사용하는 알림톡 발송 경로
 - `social-login` — D7이 확장하는 `SocialLoginResult`
