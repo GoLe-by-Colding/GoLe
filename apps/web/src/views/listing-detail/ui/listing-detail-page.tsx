@@ -15,6 +15,7 @@ import {
   CONDITION_LABEL,
   fetchPriceSnapshotForPage,
   listingPriceGap,
+  priceComparableSetNumber,
   priceGapBasisCaption,
   priceGapLabel,
   type ListingPriceGap,
@@ -45,14 +46,15 @@ async function loadListing(id: string): Promise<Listing> {
 }
 
 /**
- * 판매가 옆에 놓을 같은 등급 추정 시세. 판매 중·예약 중인 세트 매물만 본다. 시세 조회가 실패하거나
- * 근거가 약하면(체결 전·참고 단계·감가 모델) 아무것도 보이지 않는다 — 아래 시세 영역이 자세한 상태를 따로 알린다.
+ * 판매가 옆에 놓을 같은 등급 추정 시세. 판매 중·예약 중인 세트 한 벌 매물만 본다(미니피규어·부품은 세트 시세와
+ * 견주지 않는다). 시세 조회가 실패하거나 근거가 약하면(체결 전·참고 단계·감가 모델) 아무것도 보이지 않는다 —
+ * 아래 시세 영역이 자세한 상태를 따로 알린다.
  */
 async function loadPriceGap(listing: Listing): Promise<ListingPriceGap | null> {
-  if (listing.catalogSetNumber === null) return null;
-  if (listing.status !== "active" && listing.status !== "reserved") return null;
+  const setNumber = priceComparableSetNumber(listing);
+  if (setNumber === null) return null;
   try {
-    const snapshot = await fetchPriceSnapshotForPage(listing.catalogSetNumber);
+    const snapshot = await fetchPriceSnapshotForPage(setNumber);
     return listingPriceGap(listing.price, listing.condition, snapshot);
   } catch {
     return null;

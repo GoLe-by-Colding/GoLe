@@ -1,19 +1,21 @@
 import type { Listing } from "@entities/listing";
-import { listingPriceGap, priceGapLabel, type PriceSnapshot } from "@entities/pricing";
+import {
+  listingPriceGap,
+  priceComparableSetNumber,
+  priceGapLabel,
+  type PriceSnapshot,
+} from "@entities/pricing";
 
 /** 한 화면에서 시세를 함께 조회할 세트 수 상한. 목록이 길어도 시세 조회가 화면을 붙잡지 않게 한다. */
 export const PRICE_NOTE_SET_LIMIT = 24;
 
-function isOnSale(listing: Listing): boolean {
-  return listing.status === "active" || listing.status === "reserved";
-}
-
-/** 목록의 세트 번호를 앞에서부터 겹치지 않게 모은다(판매 중·예약 중 매물만). */
+/** 목록의 세트 번호를 앞에서부터 겹치지 않게 모은다(판매 중·예약 중인 세트 한 벌 매물만). */
 export function priceNoteSetNumbers(listings: readonly Listing[]): string[] {
   const sets = new Set<string>();
   for (const listing of listings) {
     if (sets.size >= PRICE_NOTE_SET_LIMIT) break;
-    if (listing.catalogSetNumber !== null && isOnSale(listing)) sets.add(listing.catalogSetNumber);
+    const setNumber = priceComparableSetNumber(listing);
+    if (setNumber !== null) sets.add(setNumber);
   }
   return [...sets];
 }
@@ -28,12 +30,9 @@ export function buildPriceNotes(
 ): Record<string, string> {
   const notes: Record<string, string> = {};
   for (const listing of listings) {
-    if (listing.catalogSetNumber === null || !isOnSale(listing)) continue;
-    const gap = listingPriceGap(
-      listing.price,
-      listing.condition,
-      snapshots[listing.catalogSetNumber] ?? null,
-    );
+    const setNumber = priceComparableSetNumber(listing);
+    if (setNumber === null) continue;
+    const gap = listingPriceGap(listing.price, listing.condition, snapshots[setNumber] ?? null);
     if (gap === null) continue;
     const label = priceGapLabel(gap.ratio, "추정 시세보다");
     notes[listing.id] = gap.evidenceWarning === null ? label : `${label} · 참고용`;
