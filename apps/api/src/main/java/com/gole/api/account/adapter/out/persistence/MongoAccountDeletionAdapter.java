@@ -197,6 +197,8 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
                 remove("part_requests", Criteria.where("requesterId").is(expectedAccountId)));
         // 가격 제안은 두 당사자 사이의 협상 기록이다. 어느 쪽이 탈퇴해도 상대에게 의미가 없으므로 지운다.
         // 주문에 남은 offerId는 금액 근거 표시용이라 끊어져도 주문 처리에 영향이 없다. (price-offer O22)
+        // 입찰은 입찰자 개인의 구매 의사라 익명화하지 않고 지운다. 체결로 생긴 제안은 위 offers 정리가 맡는다. (buy-bids D11)
+        counts.put("bids", remove("bids", Criteria.where("bidderId").is(expectedAccountId)));
         counts.put(
                 "offers",
                 remove(
