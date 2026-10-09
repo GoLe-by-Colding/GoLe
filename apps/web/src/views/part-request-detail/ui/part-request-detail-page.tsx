@@ -157,7 +157,12 @@ export function PartRequestDetailPage({ requestId }: PartRequestDetailPageProps)
           </section>
         ) : request.status === "open" ? (
           <div className="flex flex-col gap-2">
-            <HelpPartRequestButton requestId={request.id} requesterId={request.requesterId} />
+            <HelpPartRequestButton
+              requestId={request.id}
+              requesterId={request.requesterId}
+              requestTitle={partRequestTitle(request)}
+              setNumber={request.setNumber}
+            />
             <Text size="sm" tone="muted">
               요청자와 1:1 대화가 열려요. 거래 방법과 가격은 대화에서 정해 주세요.
             </Text>

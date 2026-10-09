@@ -26,6 +26,11 @@ export interface ChatPanelProps {
    * 방에서 일어난 일을 따라 다시 읽어야 하는 바깥 구획이 쓴다.
    */
   readonly onLatestMessageChange?: (messageId: string | null) => void;
+  /**
+   * 입력창에 미리 채울 문장. 부품 요청의 "도와줄게요"처럼 다른 화면에서 대화를 열 때 어떤 일로
+   * 연락하는지 맥락을 남긴다. 보내기 전에 사용자가 고칠 수 있고, 방마다 처음 열 때 한 번만 쓴다.
+   */
+  readonly initialDraft?: string;
 }
 
 /**
@@ -41,6 +46,7 @@ export function ChatPanel({
   onRoomRead,
   runMessageAction,
   onLatestMessageChange,
+  initialDraft,
 }: ChatPanelProps) {
   const { messages, send, loadOlder, retry, hasOlder, loadingOlder, olderError, loading, error } =
     useConversation(roomId);
@@ -51,7 +57,7 @@ export function ChatPanel({
     ...(onRoomRead === undefined ? {} : { onRead: onRoomRead }),
   });
 
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
   const [reportingId, setReportingId] = useState<string | null>(null);

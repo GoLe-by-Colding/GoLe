@@ -85,6 +85,11 @@ export function ChatListPage() {
   const requestedComposer = searchParams.get("compose")?.trim().toLowerCase() ?? "";
   const requestedSupportCategory = supportCategory(searchParams.get("category"));
   const requestedRoomId = searchParams.get("room")?.trim() ?? "";
+  // 다른 화면에서 대화를 열며 넘긴 입력창 초안. 그 방에만 쓰도록 들어올 때의 방 id와 묶어 둔다.
+  const [roomDraft] = useState(() => ({
+    roomId: searchParams.get("room")?.trim() ?? "",
+    text: (searchParams.get("draft") ?? "").trim().slice(0, 500),
+  }));
   const [listingRooms, setListingRooms] = useState<readonly ChatRoom[] | null>(null);
   const [socialRooms, setSocialRooms] = useState<readonly SocialChatRoom[] | null>(null);
   const [roomsOwnerId, setRoomsOwnerId] = useState<string | null>(null);
@@ -352,6 +357,7 @@ export function ChatListPage() {
     const consumeRoomQuery = () => {
       const nextSearchParams = new URLSearchParams(searchParamsString);
       nextSearchParams.delete("room");
+      nextSearchParams.delete("draft");
       const nextQuery = nextSearchParams.toString();
       router.replace(`/chat${nextQuery.length > 0 ? `?${nextQuery}` : ""}`, { scroll: false });
     };
@@ -1000,6 +1006,9 @@ export function ChatListPage() {
                       myId={myId}
                       onRoomRead={handleRoomRead}
                       onLatestMessageChange={setLatestMessageId}
+                      {...(roomDraft.text.length > 0 && roomDraft.roomId === selected.room.id
+                        ? { initialDraft: roomDraft.text }
+                        : {})}
                       hiddenSenderIds={blockedAccountIds}
                       showSenderIdentity={
                         selected.kind === "SOCIAL" && selected.room.type === "GROUP"

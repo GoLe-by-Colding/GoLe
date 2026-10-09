@@ -274,10 +274,14 @@ test.describe("부품 요청 상세", () => {
     await expect(page.getByRole("button", { name: "마감", exact: true })).toHaveCount(0);
 
     // 채팅 화면이 방 쿼리를 소비하며 주소를 바꾸므로, 이동을 먼저 기다려 둔다.
-    const openedChat = page.waitForURL(/\/chat\?room=room-part-1$/);
+    const openedChat = page.waitForURL(/\/chat\?room=room-part-1&draft=/);
     await page.getByRole("button", { name: "도와줄게요" }).click();
     await openedChat;
     expect(directBody).toEqual({ peerId: REQUESTER_ID });
+    // 1:1 대화는 맥락 없이 열리므로 어떤 요청을 보고 연락하는지 입력창 초안으로 넘긴다.
+    expect(new URL(page.url()).searchParams.get("draft")).toBe(
+      "부품 요청 「3062b 검정 4개 외 1종」(#10307) 보고 연락드려요. 이 부품 가지고 있어요.",
+    );
   });
 
   test("비로그인 방문자는 로그인하고 도와줄 수 있다", async ({ page }) => {
