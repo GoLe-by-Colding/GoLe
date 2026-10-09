@@ -31,7 +31,7 @@ const SETTINGS_PATH = "/profile/notifications";
  */
 const CATEGORY_DESCRIPTION: Partial<Record<NotificationPreferenceKey, string>> = {
   trade: "주문·결제·배송·분쟁 등 거래가 진행되는 소식",
-  offer: "내 매물에 들어온 가격 제안, 제안 수락·거절, 입찰 체결 소식",
+  offer: "가격 제안과 수락·거절, 입찰 체결, 입찰가 이하로 올라온 매물 소식",
   watch: "팔로우한 셀러의 새 매물, 찜한 매물 가격 인하, 관심 세트 새 매물·단종 소식",
   community: "댓글·좋아요·팔로우, 내가 가진 세트의 부품을 찾는 요청",
 };
