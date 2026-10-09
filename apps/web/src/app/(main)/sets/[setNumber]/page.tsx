@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { fetchBidBookForPage, type BidBook } from "@entities/bid";
 import { fetchLegoSetForPage, type LegoSet } from "@entities/lego-set";
 import { fetchListingsBySet, type Listing } from "@entities/listing";
 import { fetchPartRequestsForPage } from "@entities/part-request";
@@ -124,8 +125,8 @@ export default async function Page({ params }: PageParams) {
     notFound();
   }
 
-  // 매물·시세·부품 요청 건수는 실패해도 페이지를 살린다(부분 실패 허용).
-  const [listings, snapshot, openPartRequests] = await Promise.all([
+  // 매물·시세·부품 요청 건수·호가창은 실패해도 페이지를 살린다(부분 실패 허용).
+  const [listings, snapshot, openPartRequests, bidBook] = await Promise.all([
     fetchListingsBySet(set.setNumber).catch((): readonly Listing[] => []),
     fetchPriceSnapshotForPage(set.setNumber).catch((): PriceSnapshot | null => null),
     fetchPartRequestsForPage({
@@ -135,6 +136,7 @@ export default async function Page({ params }: PageParams) {
     })
       .then((requests) => requests.length)
       .catch((): number | null => null),
+    fetchBidBookForPage(set.setNumber).catch((): BidBook | null => null),
   ]);
 
   return (
@@ -145,6 +147,7 @@ export default async function Page({ params }: PageParams) {
         snapshot={snapshot}
         openPartRequestCount={openPartRequests}
         openPartRequestLimit={OPEN_PART_REQUEST_LIMIT}
+        bidBook={bidBook}
       />
       <JsonLd data={setJsonLd(set, listings, snapshot)} />
       <JsonLd

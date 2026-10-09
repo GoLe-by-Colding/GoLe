@@ -1,10 +1,12 @@
 import Link from "next/link";
+import type { BidBook } from "@entities/bid";
 import type { LegoSet } from "@entities/lego-set";
 import { isRetired, isRetiringSoon } from "@entities/lego-set";
 import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
 import { partRequestsHref } from "@entities/part-request";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
+import { SetBidSection } from "@features/buy-bid";
 import { WishlistButton } from "@features/wishlist-toggle";
 import { ListingGrid } from "@widgets/listing-grid";
 import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
@@ -18,6 +20,8 @@ export interface SetDetailPageProps {
   readonly openPartRequestCount?: number | null;
   /** 건수를 센 상한. 이만큼 왔으면 "n건 이상"으로 쓴다. */
   readonly openPartRequestLimit?: number;
+  /** 구매 호가창(1분 재검증). 조회에 실패했으면 `null`이고 브라우저에서 다시 읽는다. */
+  readonly bidBook?: BidBook | null;
 }
 
 function StatCell({ label, value }: { readonly label: string; readonly value: string }) {
@@ -41,6 +45,7 @@ export function SetDetailPage({
   snapshot,
   openPartRequestCount = null,
   openPartRequestLimit = 50,
+  bidBook = null,
 }: SetDetailPageProps) {
   const activeCount = listings.length;
   const partRequestLabel =
@@ -254,6 +259,21 @@ export function SetDetailPage({
             </Text>
           )}
         </Card>
+      </section>
+
+      <section className="pb-10" aria-labelledby="set-bids-heading">
+        <div className="flex flex-col gap-1">
+          <Heading level={2} id="set-bids-heading">
+            구매 입찰
+          </Heading>
+          <Text size="sm" tone="muted">
+            상태별 최고 입찰가가 곧 판매자가 지금 팔면 받는 값이에요. 실제 대기 수요라 체결 시세와는
+            따로 보여요.
+          </Text>
+        </div>
+        <div className="mt-4">
+          <SetBidSection key={set.setNumber} setNumber={set.setNumber} initialBook={bidBook} />
+        </div>
       </section>
 
       <section className="pb-16" aria-labelledby="set-listings-heading">
