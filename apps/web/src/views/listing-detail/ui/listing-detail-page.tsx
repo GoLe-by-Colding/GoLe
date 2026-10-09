@@ -13,11 +13,10 @@ import {
 import { fetchLaunchConfig } from "@entities/launch";
 import { OfficialLegoLink } from "@entities/lego-set";
 import { ApiError } from "@shared/api";
-import { isPaymentRuntimeAvailable } from "@shared/config";
 import { Badge, Container, Heading, LinkButton } from "@shared/ui";
-import { PurchaseButton } from "@features/purchase";
+import { isPurchaseOpen, PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
-import { ListingSellerPanel } from "@features/manage-listing";
+import { ListingSellerPanel, SellerOfferSections } from "@features/manage-listing";
 import { ChatButton } from "@features/chat-listing";
 import { ReportButton } from "@features/report-content";
 import { SetPriceInsight } from "@widgets/set-price-insight";
@@ -45,11 +44,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
   const [listing, launch] = await Promise.all([loadListing(listingId), fetchLaunchConfig()]);
   const isAvailable = listing.status === "active";
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
-  const paymentsOpen =
-    sellerTradingOpen &&
-    launch.features.payments &&
-    launch.stage >= 2 &&
-    isPaymentRuntimeAvailable();
+  const paymentsOpen = isPurchaseOpen(launch);
   const priceDrop = priceDropAmount(listing);
 
   return (
@@ -117,7 +112,11 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
           </div>
           <ListingViewerSwitch
             sellerId={listing.sellerId}
-            seller={<ListingSellerPanel listing={listing} />}
+            seller={
+              <ListingSellerPanel listing={listing}>
+                <SellerOfferSections listing={listing} paymentsOpen={paymentsOpen} />
+              </ListingSellerPanel>
+            }
           />
           <div className="mt-2 flex gap-3">
             {!sellerTradingOpen ? (
@@ -142,6 +141,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               <PurchaseButton
                 listingId={listing.id}
                 sellerId={listing.sellerId}
+                listingPrice={listing.price}
                 available={isAvailable}
               />
             ) : (
@@ -163,6 +163,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               available={isAvailable}
               label={paymentsOpen ? "판매자와 채팅하기" : "거래 문의하기"}
               directTradeEnabled={launch.tradeMode === "DIRECT_CHAT"}
+              paymentsOpen={paymentsOpen}
               initialOpen={openChat}
             />
           ) : null}

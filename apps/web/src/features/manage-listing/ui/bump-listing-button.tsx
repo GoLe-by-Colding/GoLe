@@ -11,7 +11,7 @@ import {
 } from "@entities/listing";
 import { ApiError } from "@shared/api";
 import { Button, type ButtonSize } from "@shared/ui";
-import { useClock } from "../model/use-clock";
+import { useClock } from "@shared/lib";
 
 export interface BumpListingButtonProps {
   readonly listing: Pick<Listing, "id" | "bumpAvailableAt">;

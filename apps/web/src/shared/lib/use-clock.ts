@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-/** 쿨다운 표시는 분 단위라 15초마다 갱신하면 충분하다. */
+/** 쿨다운·만료까지 남은 시간은 분 단위로 보여 주므로 15초마다 갱신하면 충분하다. */
 const TICK_MS = 15_000;
 
 function subscribe(onTick: () => void): () => void {

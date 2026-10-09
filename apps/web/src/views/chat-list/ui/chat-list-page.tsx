@@ -32,7 +32,8 @@ import {
   useSession,
   useThirdPartyProvisionConsent,
 } from "@entities/user";
-import { DirectTradeConfirmation } from "@features/chat-listing";
+import { DirectTradeConfirmation, ListingOfferPanel } from "@features/chat-listing";
+import { isPurchaseOpen } from "@features/purchase";
 import { ChatPanel } from "@widgets/chat-panel";
 import {
   Badge,
@@ -101,6 +102,9 @@ export function ChatListPage() {
   const [roomResolveRetryNonce, setRoomResolveRetryNonce] = useState(0);
   const [tradeBusy, setTradeBusy] = useState(false);
   const [directTradeOpen, setDirectTradeOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  // 열린 대화의 마지막 메시지. 가격 제안 배너가 이 값이 바뀔 때 제안을 다시 읽는다.
+  const [latestMessageId, setLatestMessageId] = useState<string | null>(null);
   const [blockedAccountIds, setBlockedAccountIds] = useState<readonly string[] | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<ChatUnreadCounts | null>(null);
   const [unreadOwnerId, setUnreadOwnerId] = useState<string | null>(null);
@@ -228,6 +232,8 @@ export function ChatListPage() {
             launchResult.value.sellerIdentityVerificationReady &&
             launchResult.value.tradeMode === "DIRECT_CHAT",
         );
+        // 매물 상세의 구매 버튼과 같은 판정이다. 설정을 못 읽으면 결제를 추측해서 열지 않는다.
+        setPaymentsOpen(launchResult.status === "fulfilled" && isPurchaseOpen(launchResult.value));
 
         const availableIds = new Set([
           ...nextSocial.map((room) => room.id),
@@ -952,6 +958,22 @@ export function ChatListPage() {
                     onToggle={() => void toggleDirectTradeConfirmation()}
                   />
                 ) : null}
+                {selected.kind === "LISTING" &&
+                blockedAccountIds !== null &&
+                !selectedTargetBlocked &&
+                selected.room.directTradeCompletedAt === null ? (
+                  <ListingOfferPanel
+                    key={`offer:${selected.room.id}`}
+                    roomId={selected.room.id}
+                    listingId={selected.room.listingId}
+                    buyerId={selected.room.buyerId}
+                    sellerId={selected.room.sellerId}
+                    myId={myId}
+                    paymentsOpen={paymentsOpen}
+                    refreshKey={latestMessageId}
+                    runWithConsent={runWithConsent}
+                  />
+                ) : null}
                 <div className="min-h-0 flex-1">
                   {blockedAccountIds === null ? (
                     <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -977,6 +999,7 @@ export function ChatListPage() {
                       roomId={selected.room.id}
                       myId={myId}
                       onRoomRead={handleRoomRead}
+                      onLatestMessageChange={setLatestMessageId}
                       hiddenSenderIds={blockedAccountIds}
                       showSenderIdentity={
                         selected.kind === "SOCIAL" && selected.room.type === "GROUP"
