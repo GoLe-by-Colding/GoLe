@@ -9,6 +9,12 @@ import {
   type PricePoint,
   type PriceSnapshot,
 } from "@gole/core/pricing";
+import type { Listing } from "@gole/core/listing";
+// 목록 카드 문구 규칙은 웹 위젯 모델에 있다(화면 컴포넌트가 아니라 순수 함수만 가져온다).
+import {
+  buildPriceNotes,
+  priceNoteSetNumbers,
+} from "../src/widgets/listing-grid/model/price-notes";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const HOUR_MS = 60 * 60 * 1000;
@@ -151,6 +157,35 @@ test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비
       snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_063_651)], true),
     )?.evidenceWarning,
   ).toBe("데모 포함");
+  expect(priceGapLabel(higher!.ratio, "추정 시세보다")).toBe("추정 시세보다 17.5% 높음");
+
+  // 목록 카드: 판매 중·예약 중 세트 매물만, 출처 경고가 있으면 "참고용"을 붙인다.
+  const listing = (id: string, status: Listing["status"], setNumber: string | null) =>
+    ({
+      id,
+      status,
+      price: 1_250_000,
+      condition: "used_good",
+      catalogSetNumber: setNumber,
+    }) as Listing;
+  const listings = [
+    listing("a", "active", "75192"),
+    listing("b", "reserved", "75192"),
+    listing("c", "sold", "75192"),
+    listing("d", "active", null),
+    listing("e", "active", "10276"),
+  ];
+  expect(priceNoteSetNumbers(listings)).toEqual(["75192", "10276"]);
+  expect(
+    buildPriceNotes(listings, {
+      "75192": established,
+      "10276": snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_000_000)], true),
+    }),
+  ).toEqual({
+    a: "추정 시세보다 17.5% 높음",
+    b: "추정 시세보다 17.5% 높음",
+    e: "추정 시세보다 25% 높음 · 참고용",
+  });
 });
 
 // 시세 페이지: 차트·기간 탭·상태별(감가/빠른 판매·구매 추정) 테이블·정렬. (데이터가 있는 환경 대상)
