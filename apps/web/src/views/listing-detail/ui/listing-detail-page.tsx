@@ -249,8 +249,29 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
           id="price-insight"
           className="mt-12 flex scroll-mt-20 flex-col gap-4 border-t border-neutral-200 pt-10"
         >
-          <Heading level={2}>시세</Heading>
-          <SetPriceInsight setNumber={listing.catalogSetNumber} highlight={listing.condition} />
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Heading level={2}>{listing.category === "set" ? "시세" : "출처 세트 시세"}</Heading>
+            {/* 같은 세트의 다른 매물·구매 입찰·전체 체결 이력은 세트 페이지에 모여 있다. */}
+            <LinkButton
+              href={`/sets/${encodeURIComponent(listing.catalogSetNumber)}`}
+              size="sm"
+              variant="secondary"
+            >
+              세트 페이지 보기
+            </LinkButton>
+          </div>
+          {listing.category === "set" ? (
+            <SetPriceInsight setNumber={listing.catalogSetNumber} highlight={listing.condition} />
+          ) : (
+            <>
+              {/* 미니피규어·부품·MOC는 출처 세트 번호만 달았을 뿐 세트 한 벌이 아니다. 세트 시세를 "이 상품 상태 추정
+                  시세"로 강조하지 않고 출처 세트의 시세임을 밝힌다(판매가 비교도 하지 않는다 — priceComparableSetNumber). */}
+              <p className="text-sm leading-relaxed break-keep text-neutral-600">
+                {`이 ${LISTING_CATEGORY_LABEL[listing.category]} 매물은 출처 세트(#${listing.catalogSetNumber})의 시세를 참고로 보여 드려요. 세트 한 벌의 시세라 이 상품 가격과 바로 비교하지 않아요.`}
+              </p>
+              <SetPriceInsight setNumber={listing.catalogSetNumber} />
+            </>
+          )}
         </section>
       ) : null}
 
