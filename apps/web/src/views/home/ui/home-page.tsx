@@ -272,7 +272,8 @@ export async function HomePage() {
               }
             />
             {featured.length > 0 ? (
-              <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+              // 휴대폰은 검색 목록과 같이 360px부터 2열로 나란히 본다(1열은 카드 한 장이 화면을 다 차지했다).
+              <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,minmax(240px,1fr))] sm:gap-5">
                 {featured.map((set) => (
                   <LegoSetCard key={set.setNumber} set={set} />
                 ))}
