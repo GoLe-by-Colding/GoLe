@@ -29,6 +29,11 @@
 응답은 `sampleCount`, `minimumSamples`, 최신순 `observations`, nullable `statistics`·`valuation`,
 `provenance`를 함께 주어 프론트가 서로 다른 API의 표본 수를 추측하지 않게 한다.
 
+- **체결가는 세트 한 벌(`set` 카테고리) 주문에서만 기록한다(2026-10-09).** 출처 세트 번호를 단 미니피규어·부품·MOC
+  주문은 세트 시세 표본이 아니다. 주문 선점 어댑터가 세트 번호를 `Listing.wholeSetNumber`로 환원하므로 그런 주문은
+  세트 번호 없이 저장되고 완료돼도 체결가를 남기지 않는다. 화면의 판매가·추정 시세 비교도 같은 규칙
+  (`@gole/core/pricing` `priceComparableSetNumber`)으로 대상을 고른다.
+
 ## 운영 안전
 
 - production/staging은 데모·레거시 증빙 포함 플래그가 켜지면 기동을 거부한다.

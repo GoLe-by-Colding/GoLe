@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /**
- * 모바일 브랜드 아이콘 생성기.
+ * 브랜드 아이콘 생성기.
  *
- * 정본 마크는 웹 Logo 컴포넌트다. Next에 설치된 sharp로 PNG를 생성한다.
- * 사용: node scripts/build-brand-icons.mjs
+ * 정본 마크는 `apps/web/src/shared/ui/logo/mark.svg` 하나다. 이 스크립트는 거기서 색과 배치만
+ * 바꾼 플랫폼 변형(웹 favicon·apple-icon, 모바일 아이콘·스플래시·Android 알림 아이콘, 카카오 앱
+ * 아이콘)을 찍어내고, Logo 컴포넌트와 OG 이미지에 복사된 경로가 정본과 같은지 검사한다.
+ * Next에 설치된 sharp로 PNG를 만든다.
+ *
+ * 사용: node scripts/build-brand-icons.mjs          # 생성 + 검사
+ *       node scripts/build-brand-icons.mjs --check  # 생성 없이 경로 동기화만 검사
  */
 import { createRequire } from "node:module";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,79 +16,260 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const webRequire = createRequire(join(ROOT, "apps/web/package.json"));
-const sharp = createRequire(webRequire.resolve("next/package.json"))("sharp");
-const SRC_DIR = join(ROOT, "apps/mobile/assets/brand");
-const OUT_DIR = join(ROOT, "apps/mobile/assets/images");
+const MARK_PATH = "apps/web/src/shared/ui/logo/mark.svg";
+/** 정본 경로를 그대로 복사해 쓰는 파일. 마크를 고치면 여기도 같이 고쳐야 한다. */
+const COPIES = ["apps/web/src/shared/ui/logo/logo.tsx", "apps/web/src/app/opengraph-image.tsx"];
 
 /** 브랜드 단색. 그라데이션은 `brand-identity.md`에서 금지한다. */
-const BRAND = "#EFF3FF";
+const BRAND = "#1D4ED8"; // brand-600
+const WHITE = "#FFFFFF";
+/** 파란 면 위 골드는 한 단계 밝은 accent-400이 흰 몸 위에서 같은 무게로 읽힌다. */
+const GOLD_ON_BRAND = "#FACC15";
+/** 눈·미소. 흰 고래 위에서도 웹 로고와 같은 brand-950이다. */
+const FACE = "#131E4F";
+/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`logo.tsx`와 같다). */
+const PARTS = ["gold", "body", "top", "face", "glint"];
 
-/** 마크의 원본 좌표계 경계 — 배치 계산의 기준이다. */
-const BOX = { x: 8, y: -5, w: 260, h: 151 };
-const CENTER = { x: BOX.x + BOX.w / 2, y: BOX.y + BOX.h / 2 };
-
-/** 웹의 현재 고래 도형을 정본으로 사용한다. 분수는 히어로 전용이므로 제외한다. */
-function currentMark(mono) {
-  const source = readFileSync(join(ROOT, "apps/web/src/shared/ui/logo/logo.tsx"), "utf8");
-  const start = source.indexOf('<polygon points="204,74');
-  const end = source.indexOf("</svg>", start);
-  if (start < 0 || end < 0) throw new Error("Logo 정적 도형 경계를 확인해야 함");
-  const mark = source.slice(start, end)
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .replaceAll("strokeWidth", "stroke-width")
-    .replaceAll("strokeLinecap", "stroke-linecap")
-    .replace(/[ \t]+$/gm, "");
-  if (/[{}]/.test(mark)) throw new Error("동적 JSX 도형은 직접 변환할 수 없음");
-  return mono ? mark.replace(/(fill|stroke)="#[0-9a-f]+"/gi, '$1="#ffffff"') : mark;
+// ── 정본 읽기 ──
+function readMark() {
+  const svg = readFileSync(join(ROOT, MARK_PATH), "utf8");
+  const vb = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+  const paths = Object.fromEntries(
+    [...svg.matchAll(/<path id="gole-([a-z]+)" d="([^"]+)"/g)].map((m) => [m[1], m[2]]),
+  );
+  const missing = PARTS.filter((part) => !paths[part]);
+  if (!vb || missing.length > 0)
+    throw new Error(`${MARK_PATH}: viewBox 또는 gole-${missing.join("·gole-")}를 찾지 못함`);
+  return { w: Number(vb[1]), h: Number(vb[2]), ...paths };
 }
 
-/** 캔버스 한가운데에 목표 너비로 마크를 앉힌다. */
-function placedMark({ canvas, targetWidth, mono = false }) {
-  const scale = targetWidth / BOX.w;
-  const tx = canvas / 2 - CENTER.x * scale;
-  const ty = canvas / 2 - CENTER.y * scale;
-  const body = currentMark(mono);
-  return `  <g transform="translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${scale.toFixed(4)})">${body}
+function checkCopies(mark) {
+  const stale = COPIES.filter((file) => {
+    const src = readFileSync(join(ROOT, file), "utf8");
+    return PARTS.some((part) => !src.includes(mark[part]));
+  });
+  if (stale.length > 0) {
+    throw new Error(
+      `정본(${MARK_PATH})과 경로가 다른 파일: ${stale.join(", ")} — 경로 문자열을 다시 복사해야 함`,
+    );
+  }
+  console.log(`  경로 동기화 확인: ${COPIES.length}개 파일이 정본과 같음`);
+}
+
+// ── 배치 ──
+/**
+ * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 옆모습 브릭 고래는 머리·몸이 왼쪽에 무겁고 꼬리 플레이트가
+ * 가늘어(무게중심 너비 45.1%), 스터드 줄이 위에 있어(높이 46.8%) 경계 상자 중심에 두면 눈에는 왼쪽 위로
+ * 쏠려 보인다. 그래서 마크 너비의 2.4%만큼 오른쪽, 높이의 1.6%만큼 아래로 옮긴다 — 무게중심과 상자 중심
+ * 차이의 절반이다(2026-10-09 옆모습 마크 실측).
+ */
+const NUDGE_X = 0.024;
+const NUDGE_Y = 0.016;
+/**
+ * `colors`는 경로별 색이다. `mono`면 런처·시스템이 알파만 보는 단색 실루엣이라, 골드도 같은 색으로 합치고
+ * 몸 경로 뒤에 반대 방향으로 감긴 face(눈·미소)를 이어 붙여 얼굴을 구멍으로 남긴다.
+ */
+function placed(mark, { canvas, width, colors, mono = false }) {
+  const s = width / mark.w;
+  const tx = canvas / 2 - (mark.w / 2) * s + mark.w * s * NUDGE_X;
+  const ty = canvas / 2 - (mark.h / 2) * s + mark.h * s * NUDGE_Y;
+  const paths = mono
+    ? [
+        `<path d="${mark.gold}" fill="${colors.body}"/>`,
+        `<path d="${mark.body}${mark.face}" fill="${colors.body}"/>`,
+      ]
+    : PARTS.map((part) => `<path d="${mark[part]}" fill="${colors[part]}"/>`);
+  return `  <g transform="translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${s.toFixed(5)})">
+${paths.map((path) => `    ${path}`).join("\n")}
   </g>`;
 }
 
-function svg({ canvas, background, targetWidth, mono = false }) {
-  const bg = background === null ? "" : `  <rect width="${canvas}" height="${canvas}" fill="${background}"/>\n`;
+function svgDoc(canvas, inner) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvas} ${canvas}" width="${canvas}" height="${canvas}" fill="none">
-${bg}${placedMark({ canvas, targetWidth, mono })}
+${inner}
 </svg>
 `;
 }
+const solid = (canvas, fill) => `  <rect width="${canvas}" height="${canvas}" fill="${fill}"/>`;
 
 /**
- * Android 어댑티브는 108dp 캔버스 중 가운데 72dp만 보장된다. 마크를 60dp로 잡아
- * 원형 마스크에서도 잘리지 않게 한다.
+ * Android 어댑티브는 108dp 캔버스 중 지름 66dp 원만 어떤 마스크에서도 남는다.
+ * 옆모습 마크는 가로로 길어(235.8:132.2) 가장 먼 점이 V 꼬리 플레이트 끝이다. 폭 58dp에서 최원점이
+ * 약 31.3dp로 세이프존 안이다(60dp면 32.4dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
  */
-const VARIANTS = [
-  { name: "icon", canvas: 1024, background: BRAND, targetWidth: 635, png: 1024, flatten: true },
-  { name: "android-icon-foreground", canvas: 108, background: null, targetWidth: 60, png: 512 },
-  { name: "android-icon-background", canvas: 108, background: BRAND, targetWidth: 0, png: 512 },
-  { name: "android-icon-monochrome", canvas: 108, background: null, targetWidth: 60, png: 432, mono: true },
-  { name: "splash-icon", canvas: 256, background: null, targetWidth: 150, png: 512 },
-];
+const FG_WIDTH = 58;
+/** iOS 1024² 캔버스에서 마크 폭. 가로로 긴 마크라 정면 마크(640)보다 넓혀 시각 무게를 맞춘다. */
+const IOS_WIDTH = 700;
 
-mkdirSync(SRC_DIR, { recursive: true });
-mkdirSync(OUT_DIR, { recursive: true });
-
-for (const v of VARIANTS) {
-  const body =
-    v.targetWidth === 0
-      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${v.canvas} ${v.canvas}" width="${v.canvas}" height="${v.canvas}"><rect width="${v.canvas}" height="${v.canvas}" fill="${v.background}"/></svg>\n`
-      : svg(v);
-  const svgPath = join(SRC_DIR, `${v.name}.svg`);
-  const pngPath = join(OUT_DIR, `${v.name}.png`);
-  writeFileSync(svgPath, body, "utf8");
-
-  let raster = sharp(Buffer.from(body)).resize(v.png, v.png);
-  if (v.flatten) raster = raster.flatten({ background: BRAND }).removeAlpha();
-  await raster.png().toFile(pngPath);
-  console.log(`  ${v.name}.svg → ${v.name}.png (${v.png}px)`);
+function variants(mark) {
+  const color = { colors: { gold: GOLD_ON_BRAND, body: WHITE, top: WHITE, face: FACE, glint: WHITE } };
+  const mono = { colors: { body: WHITE }, mono: true };
+  return [
+    // iOS: 1024² 무알파, 자체 라운딩 없음 — 모서리는 OS가 마스크한다.
+    {
+      out: "apps/mobile/assets/brand/icon.svg",
+      png: "apps/mobile/assets/images/icon.png",
+      size: 1024,
+      flatten: true,
+      svg: svgDoc(
+        1024,
+        `${solid(1024, BRAND)}\n${placed(mark, { canvas: 1024, width: IOS_WIDTH, ...color })}`,
+      ),
+    },
+    {
+      out: "apps/mobile/assets/brand/android-icon-foreground.svg",
+      png: "apps/mobile/assets/images/android-icon-foreground.png",
+      size: 512,
+      safeZone: true,
+      svg: svgDoc(108, placed(mark, { canvas: 108, width: FG_WIDTH, ...color })),
+    },
+    {
+      out: "apps/mobile/assets/brand/android-icon-background.svg",
+      png: "apps/mobile/assets/images/android-icon-background.png",
+      size: 512,
+      svg: svgDoc(108, solid(108, BRAND)),
+    },
+    // 런처가 알파로 테마 색을 입힌다. 골드 스터드는 흰 실루엣에 합쳐져 스터드 줄이 되고,
+    // 눈·미소·힌지 핀 고리는 구멍으로 남아 테마 아이콘에서도 얼굴과 조립 결이 보인다.
+    {
+      out: "apps/mobile/assets/brand/android-icon-monochrome.svg",
+      png: "apps/mobile/assets/images/android-icon-monochrome.png",
+      size: 432,
+      safeZone: true,
+      svg: svgDoc(108, placed(mark, { canvas: 108, width: FG_WIDTH, ...mono })),
+    },
+    // 배경색은 app.json(expo-splash-screen)이 brand-600으로 따로 준다. 그래서 흰 고래다.
+    {
+      out: "apps/mobile/assets/brand/splash-icon.svg",
+      png: "apps/mobile/assets/images/splash-icon.png",
+      size: 512,
+      svg: svgDoc(256, placed(mark, { canvas: 256, width: 200, ...color })),
+    },
+    // Android 상태 표시줄 알림 아이콘. 시스템이 알파만 보고 단색으로 칠하므로 흰 실루엣 + 투명 배경이다.
+    // 24dp 중 가장자리 1dp를 비우는 규격이라 96px(xxxhdpi) 캔버스에 폭 88px로 앉힌다.
+    // app.json의 expo-notifications `icon`이 읽는다. 지정하지 않으면 Android 8+에서 아이콘이 비어 보인다.
+    {
+      out: "apps/mobile/assets/brand/notification-icon.svg",
+      png: "apps/mobile/assets/images/notification-icon.png",
+      size: 96,
+      svg: svgDoc(96, placed(mark, { canvas: 96, width: 88, ...mono })),
+    },
+  ];
 }
-writeFileSync(join(ROOT, "apps/web/src/app/icon.svg"), svg({ canvas: 64, background: BRAND, targetWidth: 52 }), "utf8");
-console.log("웹 favicon까지 생성 완료.");
+
+/** 브라우저 탭용 favicon. 탭 바 색에 묻히지 않게 둥근 브랜드 타일 위에 흰 고래를 올린다. */
+function faviconSvg(mark) {
+  const colors = { gold: GOLD_ON_BRAND, body: WHITE, top: WHITE, face: FACE, glint: WHITE };
+  return svgDoc(
+    64,
+    `  <rect width="64" height="64" rx="14" fill="${BRAND}"/>\n${placed(mark, { canvas: 64, width: 52, colors })}`,
+  );
+}
+
+// ── PNG ──
+function loadSharp() {
+  const webRequire = createRequire(join(ROOT, "apps/web/package.json"));
+  return createRequire(webRequire.resolve("next/package.json"))("sharp");
+}
+
+/** 불투명 픽셀 중 캔버스 중심에서 가장 먼 거리(dp, 108dp 기준). */
+async function farthestDp(sharp, pngPath) {
+  const { data, info } = await sharp(pngPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const c = info.width / 2;
+  let max = 0;
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * 4 + 3] > 8)
+        max = Math.max(max, Math.hypot(x + 0.5 - c, y + 0.5 - c));
+    }
+  }
+  return (max / info.width) * 108;
+}
+
+/** PNG 여러 장을 담은 ICO. 2007년 이후 브라우저·OS는 PNG 페이로드를 그대로 읽는다. */
+function ico(pngs) {
+  const header = Buffer.alloc(6 + pngs.length * 16);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(pngs.length, 4);
+  let offset = header.length;
+  pngs.forEach(({ size, data }, i) => {
+    const e = 6 + i * 16;
+    header.writeUInt8(size >= 256 ? 0 : size, e);
+    header.writeUInt8(size >= 256 ? 0 : size, e + 1);
+    header.writeUInt16LE(1, e + 4); // 색 평면
+    header.writeUInt16LE(32, e + 6); // 픽셀당 비트
+    header.writeUInt32LE(data.length, e + 8);
+    header.writeUInt32LE(offset, e + 12);
+    offset += data.length;
+  });
+  return Buffer.concat([header, ...pngs.map((p) => p.data)]);
+}
+
+// ── 실행 ──
+const mark = readMark();
+checkCopies(mark);
+if (process.argv.includes("--check")) process.exit(0);
+
+const sharp = loadSharp();
+for (const dir of ["apps/mobile/assets/brand", "apps/mobile/assets/images", "apps/web/src/app"]) {
+  mkdirSync(join(ROOT, dir), { recursive: true });
+}
+
+for (const v of variants(mark)) {
+  writeFileSync(join(ROOT, v.out), v.svg, "utf8");
+  let raster = sharp(Buffer.from(v.svg), {
+    density: 72 * (v.size / Number(v.svg.match(/width="(\d+)"/)[1])),
+  }).resize(v.size, v.size);
+  if (v.flatten) raster = raster.flatten({ background: BRAND }).removeAlpha();
+  await raster.png().toFile(join(ROOT, v.png));
+  let note = "";
+  if (v.flatten) {
+    const meta = await sharp(join(ROOT, v.png)).metadata();
+    if (meta.hasAlpha) throw new Error(`${v.png}: 알파 채널이 남아 있음`);
+    note = " · 무알파";
+  }
+  if (v.safeZone) {
+    const dp = await farthestDp(sharp, join(ROOT, v.png));
+    if (dp > 33)
+      throw new Error(`${v.png}: 중심에서 ${dp.toFixed(1)}dp — 세이프존(반지름 33dp)을 벗어남`);
+    note = ` · 최원점 ${dp.toFixed(1)}dp/33dp`;
+  }
+  console.log(`  ${v.out.split("/").pop()} → ${v.png.split("/").pop()} (${v.size}px${note})`);
+}
+
+// 웹: favicon(SVG + ICO)과 홈 화면용 apple-icon(무알파 180²)
+const favicon = faviconSvg(mark);
+writeFileSync(join(ROOT, "apps/web/src/app/icon.svg"), favicon, "utf8");
+const icoPngs = await Promise.all(
+  [16, 32, 48].map(async (size) => ({
+    size,
+    data: await sharp(Buffer.from(favicon), { density: 72 * (size / 64) * 4 })
+      .resize(size, size)
+      .png()
+      .toBuffer(),
+  })),
+);
+writeFileSync(join(ROOT, "apps/web/src/app/favicon.ico"), ico(icoPngs));
+const appleSvg = variants(mark)[0].svg;
+await sharp(Buffer.from(appleSvg))
+  .resize(180, 180)
+  .flatten({ background: BRAND })
+  .removeAlpha()
+  .png()
+  .toFile(join(ROOT, "apps/web/src/app/apple-icon.png"));
+console.log("  icon.svg · favicon.ico(16/32/48) · apple-icon.png(180px · 무알파)");
+
+// 카카오 디벨로퍼스 앱 아이콘(외부 콘솔에 손으로 올리는 파일). iOS 아이콘과 같은 그림을 128²·무알파로 줄인다.
+// 카카오가 모서리를 따로 마스킹하므로 자체 라운딩·글자를 넣지 않는다(`.kiro/specs/brand-icon/design.md`).
+await sharp(Buffer.from(appleSvg))
+  .resize(128, 128)
+  .flatten({ background: BRAND })
+  .removeAlpha()
+  .png()
+  .toFile(join(ROOT, ".kiro/specs/brand-icon/kakao-app-128.png"));
+console.log("  kakao-app-128.png(128px · 무알파, 카카오 디벨로퍼스 업로드용)");
+console.log("웹·모바일 브랜드 아이콘 생성 완료.");

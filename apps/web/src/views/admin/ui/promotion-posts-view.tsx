@@ -1,12 +1,13 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   approveAdminPromotionPost,
   createAdminPromotionPost,
   fetchAdminPromotionPosts,
   publishAdminPromotionPost,
   rejectAdminPromotionPost,
+  publishNextAdminPromotionPost,
   submitAdminPromotionPost,
   type AdminPromotionPost,
   type PromotionPostStatus,
@@ -34,6 +35,8 @@ import {
   shortId,
 } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
+import { PromotionEvaluationForm } from "./promotion-evaluation-form";
+import { PromotionReviewPanel } from "./promotion-review-panel";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -53,9 +56,28 @@ export function AdminPromotionPostsView() {
   const token = session?.sessionToken ?? null;
   const accountId = session?.accountId ?? null;
 
+  return <PromotionWorkspace key={`${accountId}:${token}`} token={token} accountId={accountId} />;
+}
+
+function PromotionWorkspace({
+  token,
+  accountId,
+}: {
+  readonly token: string | null;
+  readonly accountId: string | null;
+}) {
   const [status, setStatus] = useState<StatusFilter>("PENDING_REVIEW");
   const [rows, setRows] = useState<readonly AdminPromotionPost[] | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [listError, setListError] = useState<string | undefined>(undefined);
+  const [notice, setNotice] = useState("");
+  const [recoveryId, setRecoveryId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
+  const mutationInFlight = useRef(false);
+  const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [publishNextBusy, setPublishNextBusy] = useState(false);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -67,22 +89,41 @@ export function AdminPromotionPostsView() {
     if (token === null) {
       return;
     }
+    const generation = ++requestGeneration.current;
+    let active = true;
     void fetchAdminPromotionPosts(token, 50, status === "ALL" ? undefined : status)
-      .then(setRows)
+      .then((next) => {
+        if (active && generation === requestGeneration.current) {
+          setRows(next);
+          setListError(undefined);
+        }
+      })
       .catch((cause: unknown) => {
+        if (!active || generation !== requestGeneration.current) return;
         setRows([]);
-        setError(
+        setListError(
           cause instanceof ApiError ? cause.message : "홍보 게시 목록을 불러오지 못했습니다.",
         );
       });
+    return () => {
+      active = false;
+    };
   }, [token, status]);
 
   useEffect(load, [load]);
-  const reviewAction = useModerationAction(load);
+  const reload = useCallback(() => {
+    setRows(null);
+    setListError(undefined);
+    load();
+  }, [load]);
+  const reviewAction = useModerationAction(reload);
+  const busy = creating || uploading || actionId !== null || reviewAction.pending !== null;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
     const selected = Array.from(event.target.files ?? []);
-    if (selected.length === 0) {
+    input.value = "";
+    if (selected.length === 0 || mutationInFlight.current) {
       return;
     }
     setCreateError(undefined);
@@ -91,6 +132,7 @@ export function AdminPromotionPostsView() {
       setCreateError(`이미지는 최대 ${MAX_MEDIA_COUNT}장까지 첨부할 수 있어요.`);
       return;
     }
+    mutationInFlight.current = true;
     setUploading(true);
     try {
       const uploaded = await uploadImages(selected.slice(0, remaining));
@@ -99,7 +141,7 @@ export function AdminPromotionPostsView() {
       setCreateError(cause instanceof ApiError ? cause.message : "이미지 업로드에 실패했습니다.");
     } finally {
       setUploading(false);
-      event.target.value = "";
+      mutationInFlight.current = false;
     }
   }
 
@@ -108,60 +150,120 @@ export function AdminPromotionPostsView() {
   }
 
   async function handleCreate(submitNow: boolean) {
-    if (token === null || caption.trim().length === 0) {
+    if (token === null || caption.trim().length === 0 || mutationInFlight.current) {
       return;
     }
+    mutationInFlight.current = true;
     setCreating(true);
     setCreateError(undefined);
+    setNotice("");
+    let savedId: string | null = null;
     try {
       const { id } = await createAdminPromotionPost(token, {
         channel: "THREADS",
         caption: caption.trim(),
         mediaKeys: images.map((image) => image.key),
       });
-      if (submitNow) {
-        await submitAdminPromotionPost(token, id);
-      }
+      savedId = id;
+      // 생성 성공은 제출 성공과 별개다. 제출 오류 후 같은 내용을 다시 생성하지 않는다.
       setCaption("");
       setImages([]);
-      load();
+      setRecoveryId(submitNow ? id : null);
+      if (submitNow) {
+        await submitAdminPromotionPost(token, id);
+        setRecoveryId(null);
+      }
+      setNotice(submitNow ? "초안을 저장하고 검토를 요청했습니다." : "초안을 저장했습니다.");
+      const nextStatus = submitNow ? "PENDING_REVIEW" : "DRAFT";
+      if (status === nextStatus) reload();
+      else setStatus(nextStatus);
     } catch (cause) {
-      setCreateError(cause instanceof ApiError ? cause.message : "홍보 게시 등록에 실패했습니다.");
+      if (savedId !== null) {
+        setCreateError(
+          "초안은 저장됐지만 검토 요청 응답을 확인하지 못했습니다. 저장한 초안으로 다시 요청해 주세요.",
+        );
+        if (status === "DRAFT") reload();
+        else setStatus("DRAFT");
+      } else {
+        setCreateError(
+          cause instanceof ApiError ? cause.message : "홍보 게시 등록에 실패했습니다.",
+        );
+      }
     } finally {
       setCreating(false);
+      mutationInFlight.current = false;
+    }
+  }
+
+  // 규칙에 따른 발행 거절은 장애가 아니라 예상된 결과라, 연결 오류 배너가 아닌 안내로 보여준다.
+  const PUBLISH_MESSAGES: Readonly<Record<string, string>> = {
+    PROMOTION_NO_APPROVED_POSTS: "발행할 승인된 글이 없습니다. 먼저 검토 대기 글을 승인해 주세요.",
+    PROMOTION_PUBLISH_TOO_SOON: "직전 발행 후 6시간이 지나야 다음 글을 올릴 수 있습니다.",
+  };
+
+  async function handlePublishNext() {
+    if (token === null || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setPublishNextBusy(true);
+    setError(undefined);
+    setNotice("");
+    try {
+      const published = await publishNextAdminPromotionPost(token);
+      setNotice(`승인된 글 중 가장 먼저 승인된 글(${shortId(published.id)})을 발행했습니다.`);
+      reload();
+    } catch (cause) {
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "발행하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
+    } finally {
+      setPublishNextBusy(false);
+      mutationInFlight.current = false;
+    }
+  }
+
+  async function act(
+    id: string,
+    operation: (token: string, id: string) => Promise<unknown>,
+    message: string,
+  ) {
+    if (token === null || mutationInFlight.current) return false;
+    mutationInFlight.current = true;
+    setActionId(id);
+    setError(undefined);
+    setNotice("");
+    try {
+      await operation(token, id);
+      setNotice(message);
+      reload();
+      return true;
+    } catch (cause) {
+      // 행별 발행도 6시간 간격을 지키므로 같은 안내를 띄운다.
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "처리하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
+      return false;
+    } finally {
+      mutationInFlight.current = false;
+      setActionId(null);
     }
   }
 
   async function handleSubmit(id: string) {
-    if (token === null) return;
-    setError(undefined);
-    try {
-      await submitAdminPromotionPost(token, id);
-      load();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "검토 요청에 실패했습니다.");
-    }
-  }
-
-  async function handleApprove(id: string) {
-    if (token === null) return;
-    setError(undefined);
-    try {
-      await approveAdminPromotionPost(token, id);
-      load();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "승인에 실패했습니다.");
-    }
-  }
-
-  async function handlePublish(id: string) {
-    if (token === null) return;
-    setError(undefined);
-    try {
-      await publishAdminPromotionPost(token, id);
-      load();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "발행에 실패했습니다.");
+    if (await act(id, submitAdminPromotionPost, "검토를 요청했습니다.")) {
+      if (recoveryId === id) {
+        setRecoveryId(null);
+        setCreateError(undefined);
+      }
     }
   }
 
@@ -171,7 +273,15 @@ export function AdminPromotionPostsView() {
         <Heading level={2}>홍보 게시 검토</Heading>
         <label className="flex items-center gap-2 text-sm text-neutral-600">
           상태
-          <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+          <Select
+            value={status}
+            disabled={busy}
+            onChange={(e) => {
+              ++requestGeneration.current;
+              setRows(null);
+              setStatus(e.target.value as StatusFilter);
+            }}
+          >
             <option value="PENDING_REVIEW">검토대기</option>
             <option value="DRAFT">초안</option>
             <option value="APPROVED">승인됨</option>
@@ -194,6 +304,7 @@ export function AdminPromotionPostsView() {
             rows={3}
             maxLength={CAPTION_MAX_LENGTH}
             value={caption}
+            disabled={busy}
             placeholder="예: GoLe에 OO 기능이 추가됐어요! ..."
             onChange={(e) => setCaption(e.target.value)}
           />
@@ -214,7 +325,7 @@ export function AdminPromotionPostsView() {
                 multiple
                 aria-describedby={describedBy}
                 onChange={(e) => void handleFileChange(e)}
-                disabled={uploading || creating || images.length >= MAX_MEDIA_COUNT}
+                disabled={busy || images.length >= MAX_MEDIA_COUNT}
                 className="text-sm text-neutral-700 file:mr-3 file:rounded-md file:border file:border-neutral-200 file:bg-neutral-50 file:px-3 file:py-1.5 file:text-sm"
               />
               {uploading ? <p className="text-sm text-neutral-500">업로드 중...</p> : null}
@@ -230,6 +341,7 @@ export function AdminPromotionPostsView() {
                       <button
                         type="button"
                         onClick={() => removeImage(image.key)}
+                        disabled={busy}
                         aria-label={`첨부 이미지 ${index + 1} 삭제`}
                         className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900/80 text-sm text-white"
                       >
@@ -242,17 +354,33 @@ export function AdminPromotionPostsView() {
             </div>
           )}
         </Field>
-        {createError !== undefined ? <p className="text-sm text-danger">{createError}</p> : null}
+        {createError !== undefined ? (
+          <p role="alert" className="text-sm text-danger">
+            {createError}
+          </p>
+        ) : null}
+        {recoveryId !== null ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3">
+            <Text size="sm">저장한 초안 · {shortId(recoveryId)}</Text>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void handleSubmit(recoveryId)}
+            >
+              저장한 초안 검토 요청
+            </Button>
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"
-            disabled={creating || uploading || caption.trim().length === 0}
+            disabled={busy || caption.trim().length === 0}
             onClick={() => void handleCreate(false)}
           >
             초안 저장
           </Button>
           <Button
-            disabled={creating || uploading || caption.trim().length === 0}
+            disabled={busy || caption.trim().length === 0}
             onClick={() => void handleCreate(true)}
           >
             저장 후 검토 요청
@@ -260,7 +388,31 @@ export function AdminPromotionPostsView() {
         </div>
       </Card>
 
-      <AdminStatus error={error} loading={rows === null} />
+      {notice ? (
+        <p role="status" className="text-sm text-brand-700">
+          {notice}
+        </p>
+      ) : null}
+      <div className="flex items-center justify-between gap-3">
+        <AdminStatus error={listError ?? error} loading={rows === null} />
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={busy || rows === null} onClick={reload}>
+            목록 새로고침
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || publishNextBusy}
+            onClick={() => void handlePublishNext()}
+          >
+            다음 차례 발행
+          </Button>
+        </div>
+      </div>
+      {actionId !== null ? (
+        <p role="status" className="text-sm text-neutral-600">
+          처리 중입니다.
+        </p>
+      ) : null}
 
       <AdminTable
         caption="홍보 게시 검토 목록"
@@ -329,7 +481,12 @@ export function AdminPromotionPostsView() {
               </td>
               <td className="px-3 py-2.5 text-right">
                 {p.status === "DRAFT" ? (
-                  <Button size="sm" variant="secondary" onClick={() => void handleSubmit(p.id)}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void handleSubmit(p.id)}
+                  >
                     검토 요청
                   </Button>
                 ) : null}
@@ -337,16 +494,18 @@ export function AdminPromotionPostsView() {
                   <span className="inline-flex gap-1">
                     <Button
                       size="sm"
-                      disabled={isAuthor}
+                      disabled={isAuthor || busy}
                       title={isAuthor ? "작성자 본인은 승인할 수 없습니다" : undefined}
-                      onClick={() => void handleApprove(p.id)}
+                      onClick={() =>
+                        void act(p.id, approveAdminPromotionPost, "홍보 초안을 승인했습니다.")
+                      }
                     >
                       승인
                     </Button>
                     <Button
                       size="sm"
                       variant="danger"
-                      disabled={isAuthor}
+                      disabled={isAuthor || busy}
                       title={isAuthor ? "작성자 본인은 반려할 수 없습니다" : undefined}
                       onClick={() =>
                         reviewAction.ask({
@@ -364,13 +523,40 @@ export function AdminPromotionPostsView() {
                   </span>
                 ) : null}
                 {p.status === "APPROVED" ? (
-                  <Button size="sm" onClick={() => void handlePublish(p.id)}>
-                    발행(Threads 업로드)
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(
+                        p.id,
+                        publishAdminPromotionPost,
+                        "모의 발행을 완료했습니다. 실제 Threads에는 게시되지 않습니다.",
+                      )
+                    }
+                  >
+                    모의 발행
                   </Button>
                 ) : null}
                 {p.status === "PUBLISHED" ? (
                   <span className="text-xs text-neutral-400">완료됨</span>
                 ) : null}
+                <Button
+                  className="ml-1"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setReviewingId(p.id)}
+                >
+                  검토 자료
+                </Button>
+                <Button
+                  className="ml-1"
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => setEvaluatingId(p.id)}
+                >
+                  평가
+                </Button>
               </td>
             </tr>
           );
@@ -386,6 +572,31 @@ export function AdminPromotionPostsView() {
           error={reviewAction.error}
           onConfirm={reviewAction.confirm}
           onCancel={reviewAction.cancel}
+        />
+      ) : null}
+
+      {(() => {
+        const reviewing = (rows ?? []).find((row) => row.id === reviewingId);
+        return reviewing !== undefined ? (
+          <PromotionReviewPanel
+            key={reviewing.id}
+            post={reviewing}
+            onClose={() => setReviewingId(null)}
+          />
+        ) : null;
+      })()}
+
+      {evaluatingId !== null ? (
+        <PromotionEvaluationForm
+          promotionPostId={evaluatingId}
+          target={(() => {
+            const target = (rows ?? []).find((row) => row.id === evaluatingId);
+            return target
+              ? `${PROMOTION_CHANNEL_LABEL[target.channel] ?? target.channel} · ${shortId(target.id)}`
+              : shortId(evaluatingId);
+          })()}
+          onSaved={() => setEvaluatingId(null)}
+          onCancel={() => setEvaluatingId(null)}
         />
       ) : null}
     </div>

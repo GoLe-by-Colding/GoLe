@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchSellerShop, type ListingSummary } from "@entities/discovery";
+import { priceDropAmount } from "@entities/listing";
 import {
   fetchSellerRating,
   fetchSellerReviews,
@@ -110,7 +111,10 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                   <span className="text-sm font-semibold text-neutral-900 line-clamp-1">
                     {l.title}
                   </span>
-                  <span className="text-lg font-bold">{formatKrw(l.price)}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-lg font-bold">{formatKrw(l.price)}</span>
+                    {priceDropAmount(l) !== null ? <Badge tone="success">가격 내림</Badge> : null}
+                  </span>
                   {l.catalogSetNumber !== null ? (
                     <span className="font-mono text-xs text-neutral-500">
                       #{l.catalogSetNumber}

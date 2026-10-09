@@ -303,7 +303,9 @@ test.describe("내 정보", () => {
     await page.getByLabel("새 비밀번호 확인").fill("new-password");
     await page.getByRole("button", { name: "비밀번호 변경" }).click();
 
-    expect(changeBody).toEqual({ currentPassword: "old-password", newPassword: "new-password" });
+    await expect
+      .poll(() => changeBody)
+      .toEqual({ currentPassword: "old-password", newPassword: "new-password" });
     await expect(page).toHaveURL(/\/login\?passwordChanged=1&returnTo=%2Fprofile/);
     await expect
       .poll(() => page.evaluate(() => window.localStorage.getItem("gole.session")))

@@ -10,12 +10,19 @@
     "ios": {
       "bundleIdentifier": "kr.gole.app",
       "supportsTablet": false,
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 찍을 때 카메라를 사용합니다.",
+        "NSPhotoLibraryUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 고를 때 사진 보관함을 사용합니다."
+      }
     },
     "android": {
       "package": "kr.gole.app",
       "adaptiveIcon": {
-        "backgroundColor": "#EFF3FF",
+        "backgroundColor": "#1D4ED8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -24,24 +31,30 @@
       "googleServicesFile": "./google-services.json"
     },
     "plugins": [
-      "@react-native-firebase/app",
+      ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
       "@react-native-firebase/messaging",
       ["expo-build-properties", { "ios": { "useFrameworks": "static" } }],
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#EFF3FF",
+          "backgroundColor": "#1D4ED8",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "coldings-team",
+    "extra": {
+      "eas": {
+        "projectId": "c6cfe908-e355-413c-9bf6-5780b8d2d6a7"
+      }
     }
   }
 }

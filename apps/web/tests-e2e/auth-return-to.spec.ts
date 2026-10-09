@@ -100,8 +100,14 @@ test.describe("returnTo 허용목록", () => {
   test("알 수 없는 경로 문자열은 로그인 안내에 그대로 노출하지 않는다", async ({ page }) => {
     const injected = "/무료-쿠폰을-받으세요";
     await page.goto(`/login?returnTo=${encodeURIComponent(injected)}`);
-    await expect(notice(page)).toContainText("이전 화면");
+    // 문장 전체를 본다 — 예전에는 이름("이전 화면")과 문장의 "화면"이 겹쳐 "이전 화면 화면으로"가 됐다.
+    await expect(notice(page)).toHaveText("로그인하면 이전 화면으로 돌아갑니다.");
     await expect(notice(page)).not.toContainText(injected);
+  });
+
+  test("내 정보에서 들어온 로그인은 내 정보로 돌아간다고 알린다", async ({ page }) => {
+    await page.goto(`/login?returnTo=${encodeURIComponent("/profile")}`);
+    await expect(notice(page)).toHaveText("로그인하면 내 정보 화면으로 돌아갑니다.");
   });
 });
 
@@ -219,7 +225,7 @@ test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
     await page.goto(`/login?returnTo=${encodeURIComponent("/admin/reports")}`);
     await page.getByLabel("이메일").fill("user@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/$/);
   });
@@ -236,7 +242,7 @@ test.describe("관리자 복귀 경로는 ADMIN에게만", () => {
     await page.goto(`/login?returnTo=${encodeURIComponent("/admin/reports")}`);
     await page.getByLabel("이메일").fill("admin@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/admin\/reports$/);
   });
@@ -277,6 +283,12 @@ test.describe("컬렉션 로그인 왕복", () => {
             json: { code: "TEMPORARY", message: "컬렉션 서버가 잠시 응답하지 않습니다." },
           }),
     );
+    // 자산 추이는 이 테스트의 관심사가 아니다. 목이 없으면 실제 API로 가서 가짜 토큰이 401을 받고,
+    // 화면이 세션을 지워 오류 화면 대신 로그아웃 화면이 된다. 실패 상태에서도 정상 응답으로 둬서
+    // 추이 차트가 자기 "다시 시도" 버튼을 따로 그리지 않게 한다.
+    await page.route("**/api/v1/collections/acc-1/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/acc-1/estimate", (route) =>
       recovered
         ? route.fulfill({ json: { ownedEstimatedValue: 0 } })
@@ -302,6 +314,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await mockMe(page, "USER");
     await mockSignIn(page, "USER");
     await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/*/estimate", (route) =>
       route.fulfill({ json: { ownedEstimatedValue: 0 } }),
     );
@@ -313,7 +328,7 @@ test.describe("컬렉션 로그인 왕복", () => {
 
     await page.getByLabel("이메일").fill("user@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page).toHaveURL(/\/collection$/);
 
@@ -354,6 +369,9 @@ test.describe("컬렉션 로그인 왕복", () => {
     await mockSignIn(page, "USER");
     await mockMe(page, "USER");
     await page.route("**/api/v1/collections/*/items", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/collections/*/value-history**", (route) =>
+      route.fulfill({ json: { points: [] } }),
+    );
     await page.route("**/api/v1/collections/*/estimate", (route) =>
       route.fulfill({ json: { ownedEstimatedValue: 0 } }),
     );
@@ -374,7 +392,7 @@ test.describe("컬렉션 로그인 왕복", () => {
 
     await page.getByLabel("이메일").fill("new@gole.test");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
     await expect(page).toHaveURL(/\/collection$/);
   });
 });

@@ -33,7 +33,6 @@ PRODUCTION_SECRET_NAME="gole-production-env"
 PRODUCTION_COMPOSE_FILE="$APP_ROOT/infra/gcp/docker-compose.yml"
 PRODUCTION_COMPOSE_VALIDATOR="/usr/local/libexec/gole/validate-production-compose.py"
 PRODUCTION_ENV_VALIDATOR="/usr/local/libexec/gole/validate-production-env.py"
-PROMOTION_AGENT_ENV_FILE="/etc/gole/promotion-agent.env"
 CERTIFICATE_ISSUER="/usr/local/libexec/gole/issue-certificate.sh"
 
 die() {
@@ -225,83 +224,6 @@ install_discord_environment_from_stdin() {
   [ "$size" -le 16384 ] || die "Discord environment request is too large"
   validate_discord_environment "$candidate"
   atomic_install "$candidate" "$DISCORD_ENV_FILE" 0600 root
-  rm -f -- "$candidate"
-  forget_temp_file "$candidate"
-}
-
-validate_promotion_agent_environment() {
-  local path="${1:-$PROMOTION_AGENT_ENV_FILE}" key line value size
-  local -A seen=()
-  # gole-promotion-agent.service 는 이 파일을 '-' 접두사 없이 EnvironmentFile 로 잡는다.
-  # 없으면 유닛이 즉시 실패하므로 부트스트랩이 빈 파일부터 만들어 두고 값은 나중에 온다.
-  # 그래서 Discord 오버레이와 달리 "키가 전부 있어야 한다"를 요구하지 않는다 — 대신
-  # 모르는 키는 거부한다. 이 파일은 루트 docker compose 의 보간 원본이라 임의의 키가
-  # 들어오면 홍보 프로필 밖의 설정까지 흔들 수 있다.
-  if [ ! -f "$path" ] || [ -L "$path" ] ||
-    [ "$(stat -c '%U:%G:%a' "$path")" != "root:root:600" ]; then
-    die "promotion agent environment file is missing or invalid"
-  fi
-  size="$(stat -c '%s' "$path")"
-  if [ "$size" -gt 16384 ]; then
-    die "promotion agent environment file size is invalid"
-  fi
-  while IFS= read -r line || [ -n "$line" ]; do
-    [[ "$line" != *$'\r'* ]] ||
-      die "promotion agent environment contains invalid line endings"
-    [[ "$line" =~ ^([A-Z][A-Z0-9_]*)=(.*)$ ]] ||
-      die "promotion agent environment contains invalid syntax"
-    key="${BASH_REMATCH[1]}"
-    value="${BASH_REMATCH[2]}"
-    [ "${seen[$key]:-0}" -eq 0 ] ||
-      die "promotion agent environment contains a duplicate key"
-    seen[$key]=1
-    [[ "$value" =~ ^[[:print:]]*$ ]] ||
-      die "promotion agent environment contains an invalid value"
-    # 값은 어떤 실패 메시지에도 넣지 않는다. 키 이름까지만 말한다.
-    case "$key" in
-      PROMOTION_AGENT_ANTHROPIC_ENABLED | PROMOTION_AGENT_DRY_RUN)
-        [[ "$value" =~ ^(true|false)$ ]] ||
-          die "promotion agent environment flag is invalid: $key"
-        ;;
-      ANTHROPIC_API_KEY)
-        [[ "$value" =~ ^[A-Za-z0-9_-]{20,256}$ ]] ||
-          die "promotion agent environment value is invalid: $key"
-        ;;
-      PROMOTION_AGENT_MODEL)
-        [[ "$value" =~ ^[a-z0-9][a-z0-9.-]{2,63}$ ]] ||
-          die "promotion agent environment value is invalid: $key"
-        ;;
-      PROMOTION_AGENT_ADMIN_EMAIL)
-        [[ "$value" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}$ ]] ||
-          die "promotion agent environment value is invalid: $key"
-        ;;
-      PROMOTION_AGENT_ADMIN_PASSWORD)
-        [[ "$value" =~ ^[[:graph:]]{12,256}$ ]] ||
-          die "promotion agent environment value is invalid: $key"
-        ;;
-      PROMOTION_AGENT_SITE_URL | PROMOTION_AGENT_API_URL)
-        [[ "$value" =~ ^https://[A-Za-z0-9.-]{1,253}(/[A-Za-z0-9._~/-]{0,200})?$ ]] ||
-          die "promotion agent environment value is invalid: $key"
-        ;;
-      *) die "promotion agent environment contains an unknown key" ;;
-    esac
-  done < "$path"
-}
-
-install_promotion_agent_environment_from_stdin() {
-  local candidate size
-  # Discord 오버레이와 같은 경로다. 러너는 경로도 argv 도 고를 수 없고, 루트가 짧은
-  # 원자적 교체 동안만 rollout lock 을 잡는다.
-  exec 8>>/run/lock/gole-production-rollout.lock
-  flock -n 8 || die "another production rollout is active"
-  candidate="$(mktemp /etc/gole/.promotion-agent.env.request.XXXXXX)"
-  register_temp_file "$candidate"
-  chmod 0600 "$candidate"
-  head -c 16385 > "$candidate"
-  size="$(stat -c '%s' "$candidate")"
-  [ "$size" -le 16384 ] || die "promotion agent environment request is too large"
-  validate_promotion_agent_environment "$candidate"
-  atomic_install "$candidate" "$PROMOTION_AGENT_ENV_FILE" 0600 root
   rm -f -- "$candidate"
   forget_temp_file "$candidate"
 }
@@ -1506,6 +1428,36 @@ verify_compose_container_identity() {
   [ "$labels" = "gole|$service" ] || die "Compose container ownership is invalid: $service"
 }
 
+resolve_container_image_identity() {
+  local container="$1" image_ref="$2" mode="$3" image_id resolved_id descriptor manifest platform
+  image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+    die "could not inspect container image: $container"
+  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || die "container image identity is invalid"
+  if resolved_id="$(docker image inspect --format '{{.Id}}' "$image_id" 2>/dev/null)"; then
+    [ "$resolved_id" = "$image_id" ] || die "container image identity changed"
+    printf '%s\n' "$image_id"
+    return
+  fi
+  [ "$mode" = legacy-adoption ] || die "container image is missing outside legacy adoption"
+
+  # 저장소 이전으로 사라진 과거 ID는 실행 manifest를 증명할 때만 정규화한다.
+  descriptor="$(docker inspect --format \
+    '{{with .ImageManifestDescriptor}}{{.digest}}|{{with .platform}}{{.os}}/{{.architecture}}{{with index . "variant"}}/{{.}}{{end}}{{end}}{{end}}' \
+    "$container")" || die "legacy container image manifest is unavailable"
+  IFS='|' read -r manifest platform <<<"$descriptor"
+  [[ "$manifest" =~ ^sha256:[0-9a-f]{64}$ ]] &&
+    [[ "$platform" =~ ^linux/(amd64|arm64)(/v[0-9]+)?$ ]] ||
+    die "legacy container image manifest or platform is invalid"
+
+  # mutable 참조는 먼저 불변 ID로 고정하고, 그 ID의 실제 플랫폼 manifest를 대조한다.
+  resolved_id="$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null)" ||
+    die "legacy container image reference is unavailable"
+  [[ "$resolved_id" =~ ^sha256:[0-9a-f]{64}$ ]] || die "legacy image reference identity is invalid"
+  [ "$(docker image inspect --platform "$platform" --format '{{.Id}}' "$resolved_id" 2>/dev/null)" = "$manifest" ] ||
+    die "legacy container image manifest does not match the preserved image"
+  printf '%s\n' "$resolved_id"
+}
+
 resolve_snapshot_service_image() {
   local container_id container_ids image_id image_ref model="$1" mode="$2" service="$3" state
   if ! compose_model_has_service "$model" "$service"; then
@@ -1536,7 +1488,7 @@ resolve_snapshot_service_image() {
         die "could not inspect initializer state: $service"
       [ "$state" = exited:0 ] || die "historical initializer did not complete successfully: $service"
     fi
-    image_id="$(docker inspect --format '{{.Image}}' "$container_id")" ||
+    image_id="$(resolve_container_image_identity "$container_id" "$image_ref" "$mode")" ||
       die "could not inspect deployment service image: $service"
   else
     if deployment_long_running_service "$service"; then
@@ -2213,7 +2165,7 @@ verify_restored_deployment_images() {
     if deployment_long_running_service "$service"; then
       container="$(deployment_container_name "$service")"
       verify_compose_container_identity "$container" "$service"
-      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+      image_id="$(resolve_container_image_identity "$container" "$expected_id" "$SNAPSHOT_MODE")" ||
         die "could not inspect restored service: $service"
       [ "$image_id" = "$expected_id" ] || die "restored service image does not match: $service"
       state="$(docker inspect --format \
@@ -2230,7 +2182,7 @@ verify_restored_deployment_images() {
         die "restored initializer provenance is missing: $service"
       container="$container_ids"
       verify_compose_container_identity "$container" "$service"
-      image_id="$(docker inspect --format '{{.Image}}' "$container")" ||
+      image_id="$(resolve_container_image_identity "$container" "$expected_id" "$SNAPSHOT_MODE")" ||
         die "could not inspect restored initializer: $service"
       [ "$image_id" = "$expected_id" ] ||
         die "restored initializer image does not match: $service"
@@ -2321,13 +2273,19 @@ verify_pre_snapshot_lkg_runtime() {
     verify_metadata_full_policy
     verify_broker_native_budget_relay
   else
+    read_metadata_migration_marker && [ "$METADATA_MIGRATION_LEGACY_SHA" = "$expected_sha" ] ||
+      die "pre-snapshot legacy release does not match the migration marker"
     verify_metadata_pending_policy
   fi
   for container in gole-backend gole-frontend gole-budget-relay gole-nginx; do
     state="$(docker inspect --format \
       '{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
       "$container" 2>/dev/null || true)"
-    [ "$state" = running:healthy ] || die "pre-snapshot LKG container is not healthy"
+    # 채택한 이전 Nginx만 healthcheck가 없다. 다른 컨테이너와 strict 모드는 계속 강제한다.
+    case "$container:$mode:$state" in
+      gole-nginx:legacy-adoption:running:missing | *:*:running:healthy) ;;
+      *) die "pre-snapshot LKG container is not healthy: $container" ;;
+    esac
   done
   if [ "$mode" = strict ]; then
     state="$(docker inspect --format \
@@ -2335,7 +2293,16 @@ verify_pre_snapshot_lkg_runtime() {
       gole-support-agent 2>/dev/null || true)"
     [ "$state" = running:healthy ] || die "pre-snapshot support agent is not healthy"
   fi
-  verify_public_transport_runtime
+  if [ "$mode" = legacy-adoption ]; then
+    # 전환 전 원장 복구에서는 정확한 이전 설정과 전송 계약을 검증한다.
+    verify_legacy_adopted_transport_runtime
+    curl -fsS --max-time 15 http://127.0.0.1:8080/actuator/health/readiness >/dev/null ||
+      die "backend readiness check failed"
+    curl -fsS --max-time 15 http://127.0.0.1:3000/icon.svg >/dev/null ||
+      die "frontend readiness check failed"
+  else
+    verify_public_transport_runtime
+  fi
   systemctl is-active --quiet gole-cost-guard-watchdog.timer ||
     die "cost guard watchdog timer is not active"
 }
@@ -2678,6 +2645,39 @@ expected_runtime_resource_limits() {
   esac
 }
 
+runtime_network_names() {
+  # Docker의 println 템플릿은 CLI 개행과 겹친다. 원본 JSON 키만 비교한다.
+  python3 -c 'import json,sys
+networks=json.load(sys.stdin)
+if not isinstance(networks,dict) or not networks: raise SystemExit(1)
+if any(not name or not isinstance(value,dict) for name,value in networks.items()):
+    raise SystemExit(1)
+print(",".join(sorted(networks)))'
+}
+
+runtime_data_mounts() {
+  # 승인된 Mongo 이미지가 선언한 보조 익명 볼륨만 별도로 인정한다.
+  # 주 데이터 볼륨의 이름·대상·쓰기 계약과 다른 서비스의 검증은 유지한다.
+  python3 -c 'import json,re,sys
+mounts=json.load(sys.stdin)
+if not isinstance(mounts,list): raise SystemExit(1)
+rows=[]
+config_count=0
+for mount in mounts:
+    if not isinstance(mount,dict) or not isinstance(mount.get("RW"),bool):
+        raise SystemExit(1)
+    if sys.argv[1] == "mongo" and mount.get("Destination") == "/data/configdb":
+        config_count += 1
+        if (config_count != 1 or mount.get("Type") != "volume"
+                or mount.get("Driver") != "local" or mount["RW"] is not True
+                or not re.fullmatch(r"[0-9a-f]{64}", mount.get("Name", ""))):
+            raise SystemExit(1)
+        continue
+    rows.append("%s|%s|%s|%s" % (mount.get("Type",""),mount.get("Name",""),
+                mount.get("Destination",""),str(mount["RW"]).lower()))
+print(",".join(sorted(rows)))' "$1"
+}
+
 verify_strict_live_compose_runtime() {
   local actual_image actual_mounts actual_networks actual_ports container container_ids
   local actual_resources expected_image expected_mounts expected_networks expected_ports
@@ -2695,9 +2695,8 @@ verify_strict_live_compose_runtime() {
     actual_image="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
     [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ ]] && [ "$actual_image" = "$expected_image" ] ||
       die "strict runtime image identity changed: $service"
-    actual_networks="$(docker inspect --format \
-      '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
-      "$container" | LC_ALL=C sort | paste -sd, -)" ||
+    actual_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' \
+      "$container" | runtime_network_names)" ||
       die "strict runtime networks could not be inspected: $service"
     case "$service" in
       backend) expected_networks=gole_agent,gole_data,gole_edge ;;
@@ -2719,13 +2718,7 @@ verify_strict_live_compose_runtime() {
     [ "$actual_ports" = "$expected_ports" ] || die "strict runtime published ports changed: $service"
     if [ "$service" = mongo ] || [ "$service" = redis ] || [ "$service" = minio ]; then
       actual_mounts="$(docker inspect --format '{{json .Mounts}}' "$container" |
-        python3 -c 'import json,sys
-m=json.load(sys.stdin) or []
-rows=[]
-for x in m:
-    if not isinstance(x,dict): raise SystemExit(1)
-    rows.append("%s|%s|%s|%s" % (x.get("Type",""),x.get("Name",""),x.get("Destination",""),str(bool(x.get("RW"))).lower()))
-print(",".join(sorted(rows)))')" || die "strict runtime mounts could not be inspected: $service"
+        runtime_data_mounts "$service")" || die "strict runtime mounts could not be inspected: $service"
       case "$service" in
         mongo) expected_mounts='volume|gole_mongo-data|/data/db|true' ;;
         redis) expected_mounts='volume|gole_redis-data|/data|true' ;;
@@ -5063,14 +5056,6 @@ case "$hostctl_command" in
   discord-overlay-verify)
     require_argument_count 0 "$@"
     validate_discord_environment
-    ;;
-  promotion-agent-overlay-install)
-    require_argument_count 0 "$@"
-    install_promotion_agent_environment_from_stdin
-    ;;
-  promotion-agent-overlay-verify)
-    require_argument_count 0 "$@"
-    validate_promotion_agent_environment
     ;;
   secret-sync)
     require_argument_count 2 "$@"

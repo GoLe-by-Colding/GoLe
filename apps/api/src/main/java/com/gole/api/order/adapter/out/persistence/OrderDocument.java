@@ -76,6 +76,9 @@ public class OrderDocument {
     /** LIVE/TEST/UNVERIFIED. 필드 도입 전 주문은 null이며 공개 시세에서 fail-closed 처리한다. */
     private String paymentEvidenceKind;
 
+    /** 금액을 정한 수락 제안. 정가 주문·필드 도입 전 주문은 null. (price-offer O18) */
+    private String offerId;
+
     @Version
     private Long version;
 
@@ -147,6 +150,53 @@ public class OrderDocument {
             PaymentMethodDocument paymentMethod,
             String paymentEvidenceKind,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                createdAt,
+                statusChangedAt,
+                buyerPhone,
+                disputeReason,
+                disputeDetail,
+                disputeOpenedAt,
+                shipmentRegisteredAt,
+                statusHistory,
+                settlement,
+                paymentMethod,
+                paymentEvidenceKind,
+                null,
+                version);
+    }
+
+    public OrderDocument(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            String status,
+            Instant createdAt,
+            Instant statusChangedAt,
+            String buyerPhone,
+            String disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
+            List<StatusChangeDocument> statusHistory,
+            SettlementDocument settlement,
+            PaymentMethodDocument paymentMethod,
+            String paymentEvidenceKind,
+            String offerId,
+            Long version) {
+        this.offerId = offerId;
         this.statusChangedAt = statusChangedAt;
         this.buyerPhone = buyerPhone;
         this.disputeReason = disputeReason;
@@ -243,6 +293,10 @@ public class OrderDocument {
 
     public String getPaymentEvidenceKind() {
         return paymentEvidenceKind;
+    }
+
+    public String getOfferId() {
+        return offerId;
     }
 
     public Long getVersion() {

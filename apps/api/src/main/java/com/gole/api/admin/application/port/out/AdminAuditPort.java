@@ -1,6 +1,7 @@
 package com.gole.api.admin.application.port.out;
 
 import com.gole.api.admin.domain.model.AdminAction;
+import com.gole.api.admin.domain.model.AdminActionType;
 import java.util.List;
 
 /**
@@ -15,4 +16,7 @@ public interface AdminAuditPort {
 
     /** 최근 발생순 목록. */
     List<AdminAction> findRecent(int limit);
+
+    /** 조치 유형별 누적 건수. */
+    long countByType(AdminActionType type);
 }

@@ -35,6 +35,7 @@ drift_id="$(image_id 9)"
 install -d -m 0755 /etc/gole /usr/local/libexec/gole /usr/local/sbin /test-bin \
   /var/backups/gole-images "$release/infra/gcp"
 touch "$release/infra/gcp/docker-compose.yml"
+printf 'server_name __DOMAIN__;\n' > "$release/infra/gcp/nginx-https.conf.template"
 printf '%s\n' "$previous_sha" > "$release/.gole-source-sha"
 chown -R root:root /var/lib/gole
 chmod -R go-w /var/lib/gole
@@ -107,6 +108,9 @@ ref_file() {
 
 resolve_ref() {
   local file ref="$1"
+  if [ -f "$state_root/missing-image" ] && [ "$ref" = "$(cat "$state_root/missing-image")" ]; then
+    return 1
+  fi
   if [[ "$ref" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     printf '%s\n' "$ref"
     return
@@ -230,7 +234,12 @@ case "${1:-}" in
     case "${2:-}" in
       inspect)
         printf 'resolve-%s\n' "${@: -1}" >> "$state_root/transaction.events"
-        resolve_ref "${@: -1}"
+        if [[ " $* " == *' --platform '* ]]; then
+          resolve_ref "${@: -1}" >/dev/null
+          cat "$state_root/platform-image"
+        else
+          resolve_ref "${@: -1}"
+        fi
         ;;
       tag) store_ref "$4" "$(resolve_ref "$3")" ;;
       rm)
@@ -257,6 +266,7 @@ case "${1:-}" in
     done
     case "$format" in
       *com.docker.compose.project*) cat "$state_root/services/$service/labels" ;;
+      *ImageManifestDescriptor*) cat "$state_root/services/$service/manifest" ;;
       *'.State.ExitCode'*)
         [ "$service" != minio-init ] ||
           printf 'verify-minio-init\n' >> "$state_root/transaction.events"
@@ -296,15 +306,22 @@ EOF
 cat > /test-bin/curl <<'EOF'
 #!/bin/sh
 case "$*" in
+  *'http://gole.co.kr/__gole-legacy-transport-check?source=adoption'*)
+    printf '301|https://gole.co.kr/__gole-legacy-transport-check?source=adoption'
+    ;;
+  *'http://www.gole.co.kr/__gole-legacy-transport-check?source=adoption'*)
+    printf '301|https://www.gole.co.kr/__gole-legacy-transport-check?source=adoption'
+    ;;
   *'http://www.gole.co.kr/__gole-canonical-check?source=runtime'*)
     printf '301|https://gole.co.kr/__gole-canonical-check?source=runtime'
     ;;
   *'https://www.gole.co.kr/__gole-canonical-check?source=runtime'*)
     printf '301|https://gole.co.kr/__gole-canonical-check?source=runtime'
     ;;
-  *'https://gole.co.kr/'*)
+  *'-fsSI '*'https://gole.co.kr/'*|*'-fsSI '*'https://www.gole.co.kr/'*)
     printf 'HTTP/2 200\r\nStrict-Transport-Security: max-age=31536000\r\n\r\n'
     ;;
+  *'https://gole.co.kr/'*|*'https://www.gole.co.kr/'*) printf '200|' ;;
 esac
 exit 0
 EOF
@@ -458,6 +475,9 @@ EOF
     printf 'state=pending\nlegacy_sha=%s\n' "$previous_sha" > /etc/gole/metadata-migration.pending
     chmod 0644 /etc/gole/metadata-migration.pending
   fi
+  sed 's/__DOMAIN__/gole.co.kr/g' "$release/infra/gcp/nginx-https.conf.template" \
+    > /etc/gole/nginx.conf
+  chmod 0644 /etc/gole/nginx.conf
   write_model "$mode"
   seed_lkg_runtime "$mode"
 }
@@ -523,6 +543,99 @@ dump_failure_context() {
   exit "$status"
 }
 trap dump_failure_context ERR
+
+# 과거 ID가 저장소에서 사라졌어도 실행 manifest가 같으면 불변 ID로 백업한다.
+setup_snapshot legacy
+printf '%s\n' "$conflict_id" > "$state_root/services/budget-relay/image"
+printf '%s\n' "$conflict_id" > "$state_root/missing-image"
+printf '%s|linux/amd64\n' "$candidate_id" > "$state_root/services/budget-relay/manifest"
+printf '%s\n' "$candidate_id" > "$state_root/platform-image"
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id"
+assert_manifest_line "image.budget-relay=$budget_id" \
+  "/var/backups/gole-images/images.$compact_request_id"
+grep -Fq "image inspect --platform linux/amd64 --format {{.Id}} $budget_id" "$state_root/docker.calls"
+# 빌드가 canonical 태그를 바꾼 뒤 실패해도 스냅샷 ID로 같은 실행 manifest를 검증한다.
+set_ref gole/budget-relay:local "$drift_id"
+sed -i 's/^state=snapshotted$/state=built/' /etc/gole/deployment.transaction
+SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$request_id"
+[ "$(cat "$state_root/services/budget-relay/image")" = "$conflict_id" ]
+assert_ref gole/budget-relay:local "$budget_id"
+[ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /tmp/poweroff-requested ]
+! grep -Eq '^(stop|up|rm|pull)(-|$)' "$state_root/transaction.events"
+
+for invalid_proof in mismatch missing-manifest invalid-platform strict; do
+  mode=legacy
+  [ "$invalid_proof" != strict ] || mode=strict
+  setup_snapshot "$mode"
+  printf '%s\n' "$conflict_id" > "$state_root/services/budget-relay/image"
+  printf '%s\n' "$conflict_id" > "$state_root/missing-image"
+  printf '%s|linux/amd64\n' "$candidate_id" > "$state_root/services/budget-relay/manifest"
+  printf '%s\n' "$candidate_id" > "$state_root/platform-image"
+  case "$invalid_proof" in
+    mismatch) printf '%s\n' "$drift_id" > "$state_root/platform-image" ;;
+    missing-manifest) rm "$state_root/services/budget-relay/manifest" ;;
+    invalid-platform) printf '%s|linux/amd64/invalid\n' "$candidate_id" > "$state_root/services/budget-relay/manifest" ;;
+  esac
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-snapshot all "$request_id" \
+    > /tmp/legacy-manifest-rejection.out 2>&1; then
+    echo "snapshot accepted invalid legacy manifest proof: $invalid_proof" >&2
+    exit 1
+  fi
+  grep -q '^state=prepared$' /etc/gole/deployment.transaction
+  [ ! -e "/var/backups/gole-images/images.$compact_request_id" ]
+  ! grep -Eq '^(stop|up|rm|pull)(-|$)' "$state_root/transaction.events"
+done
+
+# 이전 Nginx에는 healthcheck가 없으며 prepared 복구가 이를 장애로 오인하면 안 된다.
+setup_snapshot legacy
+printf 'missing\n' > "$state_root/services/nginx/health"
+legacy_env_hash="$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)"
+recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
+[ "$recovery" = RECOVERED ]
+[ ! -e /etc/gole/deployment.transaction ]
+[ ! -e /tmp/poweroff-requested ]
+[ "$(cat /etc/gole/deployed.sha)" = "$previous_sha" ]
+[ "$(cat /etc/gole/gole.env.version)" = 5 ]
+[ "$(sha256sum /etc/gole/gole.env | cut -d' ' -f1)" = "$legacy_env_hash" ]
+if grep -Eq 'action=(up|run) service=' "$state_root/compose.calls" ||
+  grep -Eq '^(stop|rm) ' "$state_root/docker.calls"; then
+  echo 'prepared recovery mutated the existing runtime' >&2
+  exit 1
+fi
+
+# 예외는 legacy Nginx의 healthcheck 부재에만 적용한다.
+for broken_service in nginx backend frontend budget-relay; do
+  setup_snapshot legacy
+  health=missing
+  [ "$broken_service" != nginx ] || health=unhealthy
+  printf '%s\n' "$health" > "$state_root/services/$broken_service/health"
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover \
+    >/tmp/prepared-unhealthy.out 2>&1; then
+    echo "prepared recovery accepted unhealthy service: $broken_service" >&2
+    exit 1
+  fi
+  grep -q 'pre-snapshot LKG container is not healthy' /tmp/prepared-unhealthy.out
+  grep -qx 'state=prepared' /etc/gole/deployment.transaction
+  [ -e /tmp/poweroff-requested ]
+done
+
+# 같은 legacy 모드여도 채택 SHA나 실제 Nginx 설정이 달라지면 복구 원장을 보존한다.
+for drift in marker nginx; do
+  setup_snapshot legacy
+  if [ "$drift" = marker ]; then
+    sed -i "s/legacy_sha=$previous_sha/legacy_sha=$new_sha/" /etc/gole/metadata-migration.pending
+  else
+    printf '# drift\n' >> /etc/gole/nginx.conf
+  fi
+  if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover \
+    >/tmp/prepared-drift.out 2>&1; then
+    echo "prepared recovery accepted legacy drift: $drift" >&2
+    exit 1
+  fi
+  grep -q 'does not match' /tmp/prepared-drift.out
+  grep -qx 'state=prepared' /etc/gole/deployment.transaction
+done
 
 # The first strict main CD starts from the exact legacy-adoption snapshot mode.
 # It must replace every data service/initializer before every application

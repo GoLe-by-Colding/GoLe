@@ -1,10 +1,14 @@
 import Link from "next/link";
+import type { BidBook } from "@entities/bid";
 import type { LegoSet } from "@entities/lego-set";
-import { isRetired } from "@entities/lego-set";
+import { isRetired, isRetiringSoon } from "@entities/lego-set";
 import type { Listing } from "@entities/listing";
 import { formatPriceKrw } from "@entities/listing";
+import { partRequestsHref } from "@entities/part-request";
 import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@entities/pricing";
-import { ListingGrid } from "@widgets/listing-grid";
+import { SetBidSection } from "@features/buy-bid";
+import { WishlistButton } from "@features/wishlist-toggle";
+import { buildPriceNotes, ListingGrid } from "@widgets/listing-grid";
 import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
@@ -12,6 +16,12 @@ export interface SetDetailPageProps {
   readonly set: LegoSet;
   readonly listings: readonly Listing[];
   readonly snapshot: PriceSnapshot | null;
+  /** 이 세트의 열린 부품 요청 수. 조회에 실패했으면 `null`이고 건수 없이 링크만 보여 준다. */
+  readonly openPartRequestCount?: number | null;
+  /** 건수를 센 상한. 이만큼 왔으면 "n건 이상"으로 쓴다. */
+  readonly openPartRequestLimit?: number;
+  /** 구매 호가창(1분 재검증). 조회에 실패했으면 `null`이고 브라우저에서 다시 읽는다. */
+  readonly bidBook?: BidBook | null;
 }
 
 function StatCell({ label, value }: { readonly label: string; readonly value: string }) {
@@ -29,8 +39,21 @@ function StatCell({ label, value }: { readonly label: string; readonly value: st
  * 서버 컴포넌트로 유지한다. 크롤러가 보는 첫 HTML에 세트 정보·시세·매물이 모두 들어 있어야
  * 색인 가치가 생긴다(클라이언트 로딩이면 빈 페이지가 색인된다).
  */
-export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
+export function SetDetailPage({
+  set,
+  listings,
+  snapshot,
+  openPartRequestCount = null,
+  openPartRequestLimit = 50,
+  bidBook = null,
+}: SetDetailPageProps) {
   const activeCount = listings.length;
+  const partRequestLabel =
+    openPartRequestCount === null
+      ? "부품 요청 보기"
+      : openPartRequestCount >= openPartRequestLimit
+        ? `부품 요청 ${openPartRequestLimit}건 이상`
+        : `부품 요청 ${openPartRequestCount}건`;
   const evidenceWarning = snapshot === null ? null : priceEvidenceWarning(snapshot.provenance);
 
   return (
@@ -64,6 +87,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{set.theme}</Badge>
             {isRetired(set) ? <Badge tone="danger">단종</Badge> : null}
+            {isRetiringSoon(set) ? <Badge tone="warning">단종 임박</Badge> : null}
           </div>
 
           <Heading level={1}>
@@ -74,12 +98,42 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
             {set.name} 중고 매물과 실제 체결가 기반 시세를 한눈에 확인하세요.
           </Text>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <WishlistButton targetType="catalog_set" targetId={set.setNumber} />
+            <Text size="sm" tone="muted">
+              새 매물이 오르거나 단종 소식이 있으면 알려드려요
+            </Text>
+          </div>
+
           <dl className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCell label="세트번호" value={set.setNumber} />
             <StatCell label="부품 수" value={`${set.pieceCount.toLocaleString()}피스`} />
             <StatCell label="출시" value={`${set.releaseYear}년`} />
             <StatCell label="판매 중" value={`${activeCount}건`} />
           </dl>
+
+          <div
+            className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2"
+            data-testid="set-part-requests"
+          >
+            <Text size="sm" tone="secondary" className="mr-auto">
+              조립하다 모자란 부품이 있나요?
+            </Text>
+            <LinkButton
+              href={partRequestsHref({ setNumber: set.setNumber })}
+              size="sm"
+              variant="ghost"
+            >
+              {partRequestLabel}
+            </LinkButton>
+            <LinkButton
+              href={partRequestsHref({ setNumber: set.setNumber, compose: true })}
+              size="sm"
+              variant="secondary"
+            >
+              부품 요청하기
+            </LinkButton>
+          </div>
 
           <a
             href={`https://www.lego.com/ko-kr/search?q=${encodeURIComponent(set.setNumber)}`}
@@ -129,6 +183,9 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
           ) : snapshot.state === "OBSERVATIONS_ONLY" ? (
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-center gap-3">
+                <span className="w-full text-xs font-medium text-neutral-500">
+                  미개봉 최근 체결가
+                </span>
                 <span className="text-2xl font-bold tabular-nums text-neutral-900">
                   {snapshot.observations[0] === undefined
                     ? "—"
@@ -163,9 +220,11 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
             </div>
           ) : snapshot.statistics?.hasData ? (
             <>
+              {/* 스냅샷 통계는 백엔드가 미개봉 체결만 모은 값이다(PricingService.getSnapshot) — 중고 매물 가격처럼
+                  읽히지 않게 이름에 "미개봉"을 붙인다. 등급별 추정 시세는 매물 상세·시세 페이지가 따로 보여 준다. */}
               <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                 <StatCell
-                  label="최근 체결가"
+                  label="미개봉 최근 체결가"
                   value={
                     snapshot.statistics.latestPrice === null
                       ? "—"
@@ -173,7 +232,7 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
                   }
                 />
                 <StatCell
-                  label="최저"
+                  label="미개봉 최저"
                   value={
                     snapshot.statistics.lowestPrice === null
                       ? "—"
@@ -181,19 +240,23 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
                   }
                 />
                 <StatCell
-                  label="최고"
+                  label="미개봉 최고"
                   value={
                     snapshot.statistics.highestPrice === null
                       ? "—"
                       : formatPriceKrw(snapshot.statistics.highestPrice)
                   }
                 />
-                <StatCell label="체결 건수" value={`${snapshot.statistics.transactionCount}건`} />
+                <StatCell
+                  label="미개봉 체결 건수"
+                  value={`${snapshot.statistics.transactionCount}건`}
+                />
               </dl>
               <Text size="sm" tone="muted" className="mt-4">
                 {evidenceWarning === null
-                  ? "GoLe에서 결제하고 구매확정된 거래 기준입니다."
-                  : "데모·테스트 또는 출처 확인 전 체결이 포함된 참고용 시세입니다."}{" "}
+                  ? "GoLe에서 결제하고 구매확정된 미개봉 거래 기준입니다."
+                  : "데모·테스트 또는 출처 확인 전 체결이 포함된 참고용 미개봉 시세입니다."}{" "}
+                중고 등급별 추정 시세는 매물 상세와 시세 페이지에서 볼 수 있어요.{" "}
                 <Link href="/prices" className="text-brand-600 hover:underline">
                   전체 시세 보기
                 </Link>
@@ -207,25 +270,43 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
         </Card>
       </section>
 
+      <section className="pb-10" aria-labelledby="set-bids-heading">
+        <div className="flex flex-col gap-1">
+          <Heading level={2} id="set-bids-heading">
+            구매 입찰
+          </Heading>
+          <Text size="sm" tone="muted">
+            상태별 최고 입찰가가 곧 판매자가 지금 팔면 받는 값이에요. 실제 대기 수요라 체결 시세와는
+            따로 보여요.
+          </Text>
+        </div>
+        <div className="mt-4">
+          <SetBidSection key={set.setNumber} setNumber={set.setNumber} initialBook={bidBook} />
+        </div>
+      </section>
+
       <section className="pb-16" aria-labelledby="set-listings-heading">
-        <Heading level={2} id="set-listings-heading">
-          {set.name} 중고 매물
-        </Heading>
+        {/* 시세를 본 판매자가 바로 이 세트로 등록을 시작한다(세트 번호가 채워지고 같은 상태 추정 시세가 뜬다). */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <Heading level={2} id="set-listings-heading">
+            {set.name} 중고 매물
+          </Heading>
+          <LinkButton href={sellSetHref(set.setNumber)} size="sm" variant="secondary">
+            이 세트 팔기
+          </LinkButton>
+        </div>
         <div className="mt-4">
           <ListingGrid
             listings={listings}
+            priceNotes={buildPriceNotes(listings, { [set.setNumber]: snapshot })}
             emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
             emptyAction={
               <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href="/community" size="sm">
-                  브릭 이야기 보기
+                <LinkButton href={sellSetHref(set.setNumber)} size="sm">
+                  이 세트 팔기
                 </LinkButton>
-                <LinkButton
-                  href="/chat?compose=support&category=PRODUCT_FEEDBACK"
-                  size="sm"
-                  variant="ghost"
-                >
-                  등록 준비 문의
+                <LinkButton href="/community" size="sm" variant="ghost">
+                  브릭 이야기 보기
                 </LinkButton>
               </div>
             }
@@ -234,4 +315,9 @@ export function SetDetailPage({ set, listings, snapshot }: SetDetailPageProps) {
       </section>
     </Container>
   );
+}
+
+/** 이 세트로 판매 등록을 시작하는 주소. 판매 화면이 세트 번호를 채우고 판매자 확인 단계를 그대로 안내한다. */
+function sellSetHref(setNumber: string): string {
+  return `/sell?setNumber=${encodeURIComponent(setNumber)}`;
 }

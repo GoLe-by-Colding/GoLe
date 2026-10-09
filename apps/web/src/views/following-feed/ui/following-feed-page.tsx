@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { fetchFeed, fetchFollowingFeed, type Post } from "@entities/community";
 import { fetchFollowing, fetchPersonalizedFeed, type ListingSummary } from "@entities/discovery";
-import { conditionLabel, fetchActiveListings, formatPriceKrw } from "@entities/listing";
+import {
+  conditionLabel,
+  fetchActiveListings,
+  formatPriceKrw,
+  priceDropAmount,
+} from "@entities/listing";
 import { useSession } from "@entities/user";
 import {
   Badge,
@@ -426,11 +431,15 @@ function FollowingListingCard({ listing }: { readonly listing: ListingSummary })
         </Link>
         <div className="mt-auto flex items-end justify-between gap-3 border-t border-neutral-100 pt-3">
           <div className="flex flex-col gap-0.5">
-            <strong className="text-lg font-extrabold tracking-tight text-neutral-900">
-              {formatPriceKrw(listing.price)}
-            </strong>
+            <div className="flex items-center gap-2">
+              <strong className="text-lg font-extrabold tracking-tight text-neutral-900">
+                {formatPriceKrw(listing.price)}
+              </strong>
+              {priceDropAmount(listing) !== null ? <Badge tone="success">가격 내림</Badge> : null}
+            </div>
+            {/* 끌올하면 노출 기준 시각(listedAt)이 바뀐다. 구 API는 주지 않으므로 등록 시각으로 본다. */}
             <span className="text-xs text-neutral-400">
-              {new Date(listing.createdAt).toLocaleDateString("ko-KR")}
+              {new Date(listing.listedAt ?? listing.createdAt).toLocaleDateString("ko-KR")}
             </span>
           </div>
           <Link

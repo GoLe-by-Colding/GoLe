@@ -4,6 +4,7 @@ import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.out.AdminAuditPort;
 import com.gole.api.admin.domain.model.AdminAction;
+import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
@@ -96,11 +97,16 @@ public class AdminAuditService implements RecordAdminActionUseCase, ListAdminAct
         return auditPort.findRecent(Math.max(1, Math.min(limit, MAX_LIMIT)));
     }
 
+    @Override
+    public long countByType(AdminActionType type) {
+        return auditPort.countByType(type);
+    }
+
     private static String normalize(String reason) {
         return reason == null || reason.isBlank() ? null : reason.trim();
     }
 
-    private static Level levelFor(com.gole.api.admin.domain.model.AdminActionType type) {
+    private static Level levelFor(AdminActionType type) {
         return switch (type) {
             case LISTING_TAKEDOWN, POST_REMOVE, ACCOUNT_SUSPEND -> Level.WARNING;
             default -> Level.INFO;

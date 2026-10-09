@@ -973,13 +973,17 @@ env -i HOME=/root PATH=/usr/bin:/bin PYTHONNOUSERSITE=1 python3 - "$reviewed_sha
 import json, sys, urllib.request
 request = urllib.request.Request(
     "https://api.github.com/repos/GoLe-by-Colding/GoLe/actions/workflows/ci.yml/runs"
-    "?branch=main&event=push&status=completed&per_page=20",
+    f"?branch=main&event=push&head_sha={sys.argv[1]}&per_page=20",
     headers={"Accept":"application/vnd.github+json", "User-Agent":"GoLe-Root-Bootstrap/1.0"},
 )
 with urllib.request.urlopen(request, timeout=15) as response:
     runs = json.load(response).get("workflow_runs", [])
-if not any(r.get("head_sha") == sys.argv[1] and r.get("conclusion") == "success"
-           for r in runs if isinstance(r, dict)):
+if not isinstance(runs, list) or not any(
+    isinstance(r, dict) and r.get("head_sha") == sys.argv[1]
+    and r.get("head_branch") == "main" and r.get("event") == "push"
+    and r.get("status") == "completed" and r.get("conclusion") == "success"
+    for r in runs
+):
     raise SystemExit("reviewed SHA has no successful main push CI")
 PY
 trusted_git --no-replace-objects --git-dir="$repo" archive --format=tar "$reviewed_sha" |

@@ -2,6 +2,8 @@ package com.gole.api.promotion.application.port.out;
 
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,4 +28,35 @@ public interface PromotionPostRepositoryPort {
     long countBySourceCommitSha(String sourceCommitSha);
 
     List<PromotionPost> findRecentFirst(PromotionPostStatus status, int limit);
+
+    long countByStatus(PromotionPostStatus status);
+
+    /** 발행 차례 — 승인된 글 중 가장 먼저 승인된 것. */
+    Optional<PromotionPost> findOldestApproved();
+
+    /**
+     * 발행 슬롯을 원자적으로 잡는다 — 직전 발행 후 {@code interval}이 지났을 때만 {@code now}로 갱신한다.
+     *
+     * <p>간격은 글 여러 개에 걸친 규칙이라 글 문서 하나의 조건부 갱신으로는 못 막는다. 경합 지점을
+     * 문서 하나로 모아, 동시에 눌러도 한 요청만 통과하게 한다(D24).
+     *
+     * @return 잡기 전 값. 외부 발행이 실패하면 {@link #releasePublishSlot}에 그대로 넘긴다.
+     * @throws com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException 간격이 안 지났을 때
+     */
+    Instant claimPublishSlot(Instant now, Duration interval);
+
+    /** 내가 잡은 슬롯({@code claimedAt})일 때만 {@code previous}로 되돌린다. 남이 다시 잡았으면 아무것도 안 한다. */
+    void releasePublishSlot(Instant claimedAt, Instant previous);
+
+    /**
+     * 검토 소요시간 집계용 — 제출·검토 시각이 <b>둘 다 있는</b> 게시물의 그 두 값만 읽는다.
+     *
+     * <p>지표가 쓰는 것이 이 두 필드뿐이라 전량 조회({@code findAll})를 이것으로 좁혔다. 예전
+     * 구현은 caption·mediaUrls까지 끌고 와 도큐먼트와 도메인 객체를 컬렉션 크기만큼 동시에
+     * 힙에 올렸는데, 보존 정책이 없어 단조 증가하는 컬렉션에 그 비용을 걸어 둘 이유가 없다.
+     */
+    List<ReviewTimestamps> findReviewTimestamps();
+
+    /** 제출~검토 완료 구간. 둘 다 non-null인 것만 담긴다 — 소요시간 계산은 호출자 몫이다. */
+    record ReviewTimestamps(Instant submittedAt, Instant reviewedAt) {}
 }

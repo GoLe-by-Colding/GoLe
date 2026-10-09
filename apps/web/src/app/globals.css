@@ -236,6 +236,13 @@
     scrollbar-gutter: stable;
   }
 
+  /* 모션을 줄인 사용자에게는 앵커 이동도 즉시 한다. 애니메이션 클래스만 끄고 이것을 빠뜨렸었다. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
   body {
     min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
@@ -273,5 +280,19 @@
   :focus-visible {
     outline: 2px solid var(--color-brand-400);
     outline-offset: 2px;
+  }
+}
+
+/*
+ * iOS(WebKit)는 글자가 16px보다 작은 입력란에 초점이 가면 화면을 확대하고, 입력을 마쳐도 되돌리지 않는다.
+ * 앱 WebView에서 검색창(text-sm)을 누르면 약 1.15배 확대되어 우측 버튼·카드가 잘린 채 남았다.
+ * 손가락으로 입력하는 기기와 휴대폰 폭(sm 미만)에서 작은 글자(text-sm·text-xs)를 쓴 입력·선택·여러 줄 입력을
+ * 16px로 올린다. 폭 조건은 포인터 정보를 주지 않는 에뮬레이터·WebView에서도 휴대폰 화면을 놓치지 않게 한다.
+ * viewport의 확대 금지(maximum-scale)는 사용자의 손가락 확대까지 막으므로 쓰지 않는다.
+ * 레이어 밖에 두어 utilities 레이어의 text-sm·text-xs보다 항상 우선한다. 넓은 데스크톱(정밀 포인터)은 그대로다.
+ */
+@media (pointer: coarse), (max-width: 639.98px) {
+  :is(input, select, textarea):is(.text-sm, .text-xs) {
+    font-size: 16px;
   }
 }

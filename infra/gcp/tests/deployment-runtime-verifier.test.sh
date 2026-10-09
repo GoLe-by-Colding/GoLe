@@ -94,11 +94,15 @@ case "$1" in
         printf 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
         ;;
       *'NetworkSettings.Networks'*)
+        if [ "${FAKE_NETWORK_DRIFT:-0}" = 1 ] && [ "$service" = mongo ]; then
+          printf '%s\n' '{"gole_data":{},"gole_edge":{}}'
+          exit 0
+        fi
         case "$service" in
-          backend) printf 'gole_edge\ngole_agent\ngole_data\n' ;;
-          mongo|redis|minio) printf 'gole_data\n' ;;
-          support-agent) printf 'gole_agent\n' ;;
-          frontend|nginx|budget-relay) printf 'gole_edge\n' ;;
+          backend) printf '%s\n' '{"gole_edge":{},"gole_agent":{},"gole_data":{}}' ;;
+          mongo|redis|minio) printf '%s\n' '{"gole_data":{}}' ;;
+          support-agent) printf '%s\n' '{"gole_agent":{}}' ;;
+          frontend|nginx|budget-relay) printf '%s\n' '{"gole_edge":{}}' ;;
         esac
         ;;
       *'HostConfig.PortBindings'*)
@@ -115,7 +119,7 @@ case "$1" in
             if [ "${FAKE_VOLUME_DRIFT:-0}" = 1 ]; then
               printf '%s\n' '[{"Type":"volume","Name":"gole_mongo-data-v2","Destination":"/data/db","RW":true}]'
             else
-              printf '%s\n' '[{"Type":"volume","Name":"gole_mongo-data","Destination":"/data/db","RW":true}]'
+              printf '%s\n' '[{"Type":"volume","Name":"gole_mongo-data","Destination":"/data/db","RW":true},{"Type":"volume","Name":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Destination":"/data/configdb","Driver":"local","RW":true}]'
             fi
             ;;
           redis) printf '%s\n' '[{"Type":"volume","Name":"gole_redis-data","Destination":"/data","RW":true}]' ;;
@@ -248,6 +252,12 @@ if FAKE_VOLUME_DRIFT=1 SUDO_USER=root /usr/local/sbin/gole-hostctl \
   exit 1
 fi
 grep -q 'strict runtime persistent volume changed: mongo' /tmp/volume-drift.out
+if FAKE_NETWORK_DRIFT=1 SUDO_USER=root /usr/local/sbin/gole-hostctl \
+  deployment-verify-runtime "$expected_sha" >/tmp/network-drift.out 2>&1; then
+  echo 'runtime verifier accepted Mongo on the edge network' >&2
+  exit 1
+fi
+grep -q 'strict runtime network boundary changed: mongo' /tmp/network-drift.out
 if FAKE_RESOURCE_DRIFT=1 SUDO_USER=root /usr/local/sbin/gole-hostctl \
   deployment-verify-runtime "$expected_sha" >/tmp/resource-drift.out 2>&1; then
   echo 'runtime verifier accepted missing backend resource limits' >&2

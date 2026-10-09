@@ -59,6 +59,26 @@ public class PromotionPostDocument {
     private Instant publishedAt;
     private String externalPostId;
 
+    /** 없으면(예전 문서·사람이 쓴 글) FEATURE 로 읽는다. */
+    private String category;
+
+    /** 스크린샷 설명표 — mediaUrls 와 같은 순서. 게시물과 생사를 같이 하므로 문서 안에 둔다. */
+    private List<CaptureDocument> captures;
+
+    private ProvenanceDocument provenance;
+
+    /** originalUrl·edit 는 AI 로 다듬은 사진에만 있다. 예전 문서는 둘 다 null 이다. */
+    public record CaptureDocument(
+            String label,
+            String route,
+            String actions,
+            String dataSource,
+            Instant capturedAt,
+            String originalUrl,
+            String edit) {}
+
+    public record ProvenanceDocument(String releaseTitle, String rationale, String runUrl) {}
+
     protected PromotionPostDocument() {}
 
     public PromotionPostDocument(
@@ -92,6 +112,24 @@ public class PromotionPostDocument {
         this.rejectionReason = rejectionReason;
         this.publishedAt = publishedAt;
         this.externalPostId = externalPostId;
+    }
+
+    void setContext(String category, List<CaptureDocument> captures, ProvenanceDocument provenance) {
+        this.category = category;
+        this.captures = captures;
+        this.provenance = provenance;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public List<CaptureDocument> getCaptures() {
+        return captures;
+    }
+
+    public ProvenanceDocument getProvenance() {
+        return provenance;
     }
 
     public String getId() {

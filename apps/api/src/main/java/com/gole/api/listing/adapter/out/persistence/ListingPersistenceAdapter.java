@@ -11,6 +11,8 @@ import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingCategory;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.listing.domain.model.Money;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -53,18 +55,30 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
         return repository.findById(listingId).map(this::toDomain);
     }
 
+    /**
+     * 제목·설명 글자 검색. 검색어가 세트 번호처럼 생겼으면 카탈로그 세트 번호(변형 번호 접미사 포함)도 함께 본다 —
+     * 제목에 번호를 쓰지 않은 매물도 번호로 찾히게 한다. "10307-1"·"#10307"은 기본 번호 "10307"로 글자도 찾는다.
+     */
+    private static Criteria textCriteria(ListingSearchQuery query) {
+        String setNumber = query.setNumberInText();
+        String text = setNumber == null ? query.text().trim() : setNumber;
+        String escaped = Pattern.quote(text);
+        List<Criteria> any = new ArrayList<>();
+        any.add(Criteria.where("title").regex(escaped, "i"));
+        any.add(Criteria.where("description").regex(escaped, "i"));
+        if (setNumber != null) {
+            any.add(Criteria.where("catalogSetNumber").regex("^" + Pattern.quote(setNumber) + "(-\\d+)?$"));
+        }
+        return new Criteria().orOperator(any.toArray(Criteria[]::new));
+    }
+
     @Override
     public List<Listing> search(ListingSearchQuery query) {
         // 검색은 항상 활성(ACTIVE) 리스팅만 대상으로 한다. (ListingSearchQuery 규약)
         Criteria criteria = Criteria.where("status").is(ListingStatus.ACTIVE.name());
 
         if (query.text() != null && !query.text().isBlank()) {
-            String escaped = Pattern.quote(query.text().trim());
-            Criteria textCriteria = new Criteria()
-                    .orOperator(
-                            Criteria.where("title").regex(escaped, "i"),
-                            Criteria.where("description").regex(escaped, "i"));
-            criteria = new Criteria().andOperator(criteria, textCriteria);
+            criteria = new Criteria().andOperator(criteria, textCriteria(query));
         }
 
         if (query.condition() != null) {
@@ -119,8 +133,67 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     }
 
     @Override
+    public boolean updateIfActive(Listing listing) {
+        // 판매 중일 때만 수정 필드를 바꾼다. save()처럼 문서를 통째로 덮어쓰면 그 사이 잡힌 주문
+        // 예약(RESERVED)을 ACTIVE로 되돌린다. (E4)
+        ConditionDisclosure d = listing.getDisclosure();
+        Update update = new Update()
+                .set("title", listing.getTitle())
+                .set("description", listing.getDescription())
+                .set("priceAmount", listing.getPrice().amount())
+                .set("priceCurrency", DEFAULT_CURRENCY)
+                .set("condition", listing.getCondition().name())
+                .set("completeness", d.completeness().name())
+                .set("hasBox", d.hasBox())
+                .set("hasManual", d.hasManual())
+                .set("hasMissingParts", d.hasMissingParts())
+                .set("missingPartsNote", d.missingPartsNote())
+                .set("defectsNote", d.defectsNote())
+                .set("photoUrls", listing.getPhotoUrls());
+        setOrUnset(
+                update,
+                "interestTag",
+                listing.getInterestTag() == null
+                        ? null
+                        : listing.getInterestTag().key());
+        setOrUnset(
+                update,
+                "previousPrice",
+                listing.getPreviousPrice() == null
+                        ? null
+                        : listing.getPreviousPrice().amount());
+        setOrUnset(update, "priceChangedAt", listing.getPriceChangedAt());
+        // 변경 없는 수정(같은 값 재제출)도 성공이다 — modified가 아니라 matched를 본다.
+        return mongoTemplate
+                        .updateFirst(activeById(listing.getId()), update, ListingDocument.class)
+                        .getMatchedCount()
+                == 1;
+    }
+
+    @Override
+    public boolean bumpIfActive(String listingId, Instant bumpedAt) {
+        Update update = new Update().set("listedAt", bumpedAt).set("bumpedAt", bumpedAt);
+        return mongoTemplate
+                        .updateFirst(activeById(listingId), update, ListingDocument.class)
+                        .getMatchedCount()
+                == 1;
+    }
+
+    private static Query activeById(String listingId) {
+        return new Query(Criteria.where("_id").is(listingId).and("status").is(ListingStatus.ACTIVE.name()));
+    }
+
+    private static void setOrUnset(Update update, String field, Object value) {
+        if (value == null) {
+            update.unset(field);
+        } else {
+            update.set(field, value);
+        }
+    }
+
+    @Override
     public List<Listing> findActiveBySeller(String sellerId) {
-        return repository.findBySellerIdAndStatus(sellerId, ListingStatus.ACTIVE.name()).stream()
+        return repository.findBySellerIdAndStatusOrderByListedAtDesc(sellerId, ListingStatus.ACTIVE.name()).stream()
                 .map(this::toDomain)
                 .toList();
     }
@@ -128,9 +201,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     @Override
     public List<Listing> findBySeller(String sellerId) {
         // 삭제한 매물은 뺀다. 본인이 내린 것이 목록에 계속 남으면 시간이 갈수록 쓰레기만 쌓인다.
-        return repository
-                .findBySellerIdAndStatusNotOrderByCreatedAtDesc(sellerId, ListingStatus.DELETED.name())
-                .stream()
+        return repository.findBySellerIdAndStatusNotOrderByListedAtDesc(sellerId, ListingStatus.DELETED.name()).stream()
                 .map(this::toDomain)
                 .toList();
     }
@@ -142,7 +213,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
         }
         int boundedLimit = Math.max(1, Math.min(limit, 100));
         return repository
-                .findBySellerIdInAndStatusOrderByCreatedAtDesc(
+                .findBySellerIdInAndStatusOrderByListedAtDesc(
                         sellerIds, ListingStatus.ACTIVE.name(), PageRequest.of(0, boundedLimit))
                 .stream()
                 .map(this::toDomain)
@@ -156,7 +227,8 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
 
     private Sort toSort(ListingSortOrder order) {
         return switch (order) {
-            case NEWEST -> Sort.by(Sort.Direction.DESC, "createdAt");
+            // 최신순 = 등록 또는 마지막 끌올 시각. createdAt으로 두면 끌올이 아무 효과가 없다. (B5)
+            case NEWEST -> Sort.by(Sort.Direction.DESC, "listedAt");
             case PRICE_ASC -> Sort.by(Sort.Direction.ASC, "priceAmount");
             case PRICE_DESC -> Sort.by(Sort.Direction.DESC, "priceAmount");
         };
@@ -185,7 +257,13 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                         ? null
                         : listing.getInterestTag().key(),
                 listing.getStatus().name(),
-                listing.getCreatedAt());
+                listing.getCreatedAt(),
+                listing.getListedAt(),
+                listing.getBumpedAt(),
+                listing.getPreviousPrice() == null
+                        ? null
+                        : listing.getPreviousPrice().amount(),
+                listing.getPriceChangedAt());
     }
 
     private Listing toDomain(ListingDocument document) {
@@ -203,7 +281,12 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
                 ListingCategory.fromKey(document.getCategory()),
                 toInterestTag(document.getInterestTag()),
                 ListingStatus.valueOf(document.getStatus()),
-                document.getCreatedAt());
+                document.getCreatedAt(),
+                // 백필 전 레거시 문서는 listedAt이 없다 — 도메인이 createdAt으로 본다. (B6)
+                document.getListedAt(),
+                document.getBumpedAt(),
+                document.getPreviousPrice() == null ? null : Money.won(document.getPreviousPrice()),
+                document.getPriceChangedAt());
     }
 
     /** 레거시/비정상 저장값 하나 때문에 매물 조회 전체가 실패하지 않도록 null로 흡수한다. */

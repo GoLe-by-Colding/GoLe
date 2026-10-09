@@ -134,6 +134,11 @@ class AdminAuditServiceTest {
             lastLimit = limit;
             return List.copyOf(appended);
         }
+
+        @Override
+        public long countByType(AdminActionType type) {
+            return appended.stream().filter(action -> action.getType() == type).count();
+        }
     }
 
     private static final class FailingPort implements AdminAuditPort {
@@ -145,6 +150,11 @@ class AdminAuditServiceTest {
         @Override
         public List<AdminAction> findRecent(int limit) {
             return List.of();
+        }
+
+        @Override
+        public long countByType(AdminActionType type) {
+            return 0;
         }
     }
 

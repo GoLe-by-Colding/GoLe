@@ -70,13 +70,13 @@ export function OAuthCallbackPage({ provider }: OAuthCallbackPageProps) {
         }
         router.replace(target);
       } catch (cause) {
-        // 미가입 Google 계정은 여기서 처음 걸러진다 — signup 동의가 state에 없었기 때문에
+        // 미가입 소셜 계정은 여기서 처음 걸러진다 — signup 동의가 state에 없었기 때문에
         // 서버가 회원가입 자체를 거부한 것이지, 로그인 정보가 틀린 게 아니다. 같은 /login으로
         // 돌려보내면 사용자가 이 화면을 영원히 반복하게 되므로 /signup으로 갈라야 한다.
         if (cause instanceof ApiError && cause.code === "POLICY_ACCEPTANCE_REQUIRED") {
           setErrorCode(cause.code);
           setError(
-            "이 Google 계정은 아직 가입되어 있지 않아요. 가입하려면 이용약관 확인, 개인정보처리방침 확인, 만 14세 이상 확인에 먼저 동의해야 해요.",
+            "이 소셜 계정은 아직 가입되어 있지 않아요. 가입하려면 이용약관 확인, 개인정보처리방침 확인, 만 14세 이상 확인에 먼저 동의해야 해요.",
           );
           return;
         }

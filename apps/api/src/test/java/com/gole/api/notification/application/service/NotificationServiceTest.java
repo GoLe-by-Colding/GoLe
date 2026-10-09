@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.gole.api.notification.application.port.in.NotifyUseCase.NotifyCommand;
 import com.gole.api.notification.application.port.out.NotificationIdGeneratorPort;
 import com.gole.api.notification.application.port.out.NotificationRepositoryPort;
+import com.gole.api.notification.domain.model.DevicePlatform;
+import com.gole.api.notification.domain.model.DeviceToken;
 import com.gole.api.notification.domain.model.Notification;
+import com.gole.api.notification.domain.model.NotificationCategory;
 import com.gole.api.notification.domain.model.NotificationType;
 import java.time.Clock;
 import java.time.Instant;
@@ -25,6 +28,7 @@ class NotificationServiceTest {
     private InMemoryRepo repo;
     private RecordingPushSender pushSender;
     private InMemoryDeviceTokens deviceTokens;
+    private InMemoryNotificationPreferences preferences;
     private NotificationService service;
 
     @BeforeEach
@@ -35,7 +39,9 @@ class NotificationServiceTest {
         deviceTokens = new InMemoryDeviceTokens();
         // 실행기를 동기로 준다. 발송이 다른 스레드에서 일어나면 단정이 경합에 흔들린다.
         PushDispatcher dispatcher = new PushDispatcher(deviceTokens, pushSender, Runnable::run);
-        service = new NotificationService(repo, new SequentialIds(), dispatcher, clock);
+        preferences = new InMemoryNotificationPreferences();
+        service = new NotificationService(
+                repo, new SequentialIds(), dispatcher, new NotificationPreferenceGate(preferences), clock);
     }
 
     @Test
@@ -87,6 +93,68 @@ class NotificationServiceTest {
 
         assertThat(service.unreadCount("u1")).isZero();
         assertThat(service.unreadCount("u2")).isEqualTo(1); // 다른 사용자는 영향 없음
+    }
+
+    @Test
+    void notify_suppressedCategoryIsNeitherStoredNorPushed() {
+        deviceTokens.upsert(new DeviceToken("token-1", "u1", DevicePlatform.ANDROID, Instant.EPOCH));
+        preferences.disable("u1", NotificationCategory.COMMUNITY);
+
+        String id = service.notify(new NotifyCommand("u1", NotificationType.COMMENT, "새 댓글", "/community/p1"));
+
+        assertThat(id).isNull();
+        assertThat(service.list("u1")).isEmpty();
+        assertThat(pushSender.sent).isEmpty();
+    }
+
+    @Test
+    void notify_otherCategoriesStillDeliveredWhenOneIsSuppressed() {
+        deviceTokens.upsert(new DeviceToken("token-1", "u1", DevicePlatform.ANDROID, Instant.EPOCH));
+        preferences.disable("u1", NotificationCategory.COMMUNITY);
+
+        String id = service.notify(new NotifyCommand("u1", NotificationType.OFFER_RECEIVED, "가격 제안", "/offers"));
+
+        assertThat(id).isNotNull();
+        assertThat(service.list("u1")).hasSize(1);
+        assertThat(pushSender.sent).hasSize(1);
+    }
+
+    @Test
+    void notify_suppressionAppliesOnlyToTheRecipientWhoOptedOut() {
+        preferences.disable("u1", NotificationCategory.WATCH);
+
+        service.notify(new NotifyCommand("u1", NotificationType.WATCHED_SET_LISTING, "새 매물", "/listings/l1"));
+        service.notify(new NotifyCommand("u2", NotificationType.WATCHED_SET_LISTING, "새 매물", "/listings/l1"));
+
+        assertThat(service.list("u1")).isEmpty();
+        assertThat(service.list("u2")).hasSize(1);
+    }
+
+    @Test
+    void notify_mandatoryTradeCategoryIsAlwaysDeliveredWithoutLookup() {
+        deviceTokens.upsert(new DeviceToken("token-1", "u1", DevicePlatform.IOS, Instant.EPOCH));
+        // 저장소에 어떻게든 TRADE가 꺼진 값이 들어와 있어도 도메인이 무시한다.
+        preferences.disable("u1", NotificationCategory.TRADE, NotificationCategory.OFFER);
+
+        String id = service.notify(new NotifyCommand("u1", NotificationType.ORDER_PAID, "결제 완료", "/orders/o1"));
+
+        assertThat(id).isNotNull();
+        assertThat(service.list("u1")).hasSize(1);
+        assertThat(pushSender.sent).hasSize(1);
+        assertThat(preferences.findCalls).isZero();
+    }
+
+    @Test
+    void notify_preferenceLookupFailureFailsOpen() {
+        deviceTokens.upsert(new DeviceToken("token-1", "u1", DevicePlatform.ANDROID, Instant.EPOCH));
+        preferences.disable("u1", NotificationCategory.COMMUNITY);
+        preferences.failWith(new IllegalStateException("mongo down"));
+
+        String id = service.notify(new NotifyCommand("u1", NotificationType.COMMENT, "새 댓글", "/community/p1"));
+
+        assertThat(id).isNotNull();
+        assertThat(service.list("u1")).hasSize(1);
+        assertThat(pushSender.sent).hasSize(1);
     }
 
     private static final class InMemoryRepo implements NotificationRepositoryPort {

@@ -7,9 +7,12 @@ import {
   type ListingSort,
   type SearchListingsParams,
 } from "@entities/listing";
+import { fetchLegoSetForPage, setNumberInSearchText, type LegoSet } from "@entities/lego-set";
+import { fetchPriceSnapshotForPage } from "@entities/pricing";
 import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
 import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
-import { ListingGrid } from "@widgets/listing-grid";
+import { buildPriceNotes, ListingGrid, priceNoteSetNumbers } from "@widgets/listing-grid";
+import { SearchSetShortcut } from "./search-set-shortcut";
 
 export interface SearchPageProps {
   readonly query?: string | undefined;
@@ -55,6 +58,22 @@ async function loadListings(params: SearchListingsParams): Promise<ListingLoadRe
   }
 }
 
+/**
+ * 목록 카드의 "추정 시세보다 N% 낮음/높음". 세트별 시세는 캐시된 조회(5분)로 함께 읽고, 실패한 세트는 문구 없이 둔다.
+ * 시세가 늦거나 없어도 목록 자체는 그대로 보인다.
+ */
+async function loadPriceNotes(listings: readonly Listing[]): Promise<Record<string, string>> {
+  const sets = priceNoteSetNumbers(listings);
+  if (sets.length === 0) return {};
+  const entries = await Promise.all(
+    sets.map(
+      async (setNumber) =>
+        [setNumber, await fetchPriceSnapshotForPage(setNumber).catch(() => null)] as const,
+    ),
+  );
+  return buildPriceNotes(listings, Object.fromEntries(entries));
+}
+
 function searchHref(params: SearchListingsParams): string {
   const query = new URLSearchParams();
   if (params.query) query.set("query", params.query);
@@ -65,6 +84,17 @@ function searchHref(params: SearchListingsParams): string {
   if (params.sort !== undefined && params.sort !== "newest") query.set("sort", params.sort);
   const suffix = query.toString();
   return suffix.length === 0 ? "/search" : `/search?${suffix}`;
+}
+
+/** 검색어가 세트 번호면 그 카탈로그 세트(바로가기용). 번호가 아니거나 카탈로그에 없으면 null — 결과는 그대로 보인다. */
+async function loadQuerySet(query: string | undefined): Promise<LegoSet | null> {
+  const setNumber = query === undefined ? null : setNumberInSearchText(query);
+  if (setNumber === null) return null;
+  try {
+    return await fetchLegoSetForPage(setNumber);
+  } catch {
+    return null;
+  }
 }
 
 export async function SearchPage(props: SearchPageProps) {
@@ -83,8 +113,9 @@ export async function SearchPage(props: SearchPageProps) {
     sort,
   };
 
-  const result = await loadListings(params);
+  const [result, querySet] = await Promise.all([loadListings(params), loadQuerySet(props.query)]);
   const { listings } = result;
+  const priceNotes = await loadPriceNotes(listings);
   const hasFilters =
     (props.query?.trim().length ?? 0) > 0 ||
     condition !== undefined ||
@@ -115,6 +146,9 @@ export async function SearchPage(props: SearchPageProps) {
         <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
         </div>
+        {querySet === null || result.status === "failed" ? null : (
+          <SearchSetShortcut set={querySet} listingCount={listings.length} />
+        )}
         {result.status === "failed" ? (
           <EmptyState
             variant="inline"
@@ -158,7 +192,7 @@ export async function SearchPage(props: SearchPageProps) {
             }
           />
         ) : (
-          <ListingGrid key={JSON.stringify(params)} listings={listings} />
+          <ListingGrid key={JSON.stringify(params)} listings={listings} priceNotes={priceNotes} />
         )}
       </div>
     </Container>

@@ -257,6 +257,8 @@ async function mockChatDeepLinkApis(
   await page.route("**/api/v1/chat/rooms/*/stream**", (route) =>
     route.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
   );
+  // 매물 방을 열면 가격 제안 배너가 제안을 읽는다(세션 필요). 실백엔드 401이 합성 세션을 지우지 않도록 격리한다.
+  await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
   return {
     requestedMessageRoomIds,
     roomResolveAttempts: () => roomResolveAttempts,
@@ -450,6 +452,19 @@ test.describe("채팅 UX", () => {
 
     await expect.poll(mock.tradeConfirmations).toBe(1);
     await expect(page.getByRole("status")).toContainText("양쪽이 확인해 거래가 완료됐어요");
+  });
+
+  test("다른 화면이 넘긴 초안을 그 방 입력창에 한 번만 채우고 주소에서 지운다", async ({
+    page,
+  }) => {
+    await mockChatDeepLinkApis(page, {});
+    const draft =
+      "부품 요청 「3001 밝은 회색 4개」(#10307) 보고 연락드려요. 이 부품 가지고 있어요.";
+    await page.goto(`/chat?room=room-listing&draft=${encodeURIComponent(draft)}`);
+
+    await expect(page.getByPlaceholder(/메시지 입력/)).toHaveValue(draft);
+    // 방 쿼리와 함께 초안도 소비해 새로고침하면 다시 채우지 않는다.
+    await expect(page).toHaveURL(/\/chat$/);
   });
 
   test("단건 방 조회가 일시 실패하면 딥링크를 보존하고 복구 뒤 자동으로 연다", async ({ page }) => {

@@ -21,7 +21,7 @@ test.describe("Auth navigation", () => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
     // 로컬 폼
-    await expect(page.getByRole("button", { name: "로그인" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
     // 소셜(미설정이면 '준비 중'으로 비활성이지만 버튼 자체는 노출)
     await expect(page.getByRole("button", { name: /Google/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /카카오/ })).toBeVisible();
@@ -87,17 +87,19 @@ test.describe("Auth navigation", () => {
     await expect(submit).toBeEnabled();
     await submit.click();
 
-    expect(registerBody).toEqual({
-      email: "policy@gole.test",
-      password: "password1",
-      termsVersion: "2026-09-04",
-      privacyVersion: "2026-09-05",
-      thirdPartyProvisionVersion: "2026-09-04",
-      termsAccepted: true,
-      privacyAcknowledged: true,
-      thirdPartyProvisionAccepted: false,
-      minimumAgeConfirmed: true,
-    });
+    await expect
+      .poll(() => registerBody)
+      .toEqual({
+        email: "policy@gole.test",
+        password: "password1",
+        termsVersion: "2026-09-04",
+        privacyVersion: "2026-09-05",
+        thirdPartyProvisionVersion: "2026-09-04",
+        termsAccepted: true,
+        privacyAcknowledged: true,
+        thirdPartyProvisionAccepted: false,
+        minimumAgeConfirmed: true,
+      });
     await expect(page).toHaveURL(/\/verify\?returnTo=%2Fcollection/);
     await expect
       .poll(() =>
@@ -208,7 +210,7 @@ test.describe("Auth navigation", () => {
     await page.goto("/login");
     await page.getByLabel("이메일").fill("pending@gole.com");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     // 오류 상자에 머무르지 않고 다음 단계로 넘어간다.
     await expect(page).toHaveURL("/verify");
@@ -325,7 +327,7 @@ test.describe("Auth navigation", () => {
     await page.goto("/login");
     await page.getByLabel("이메일").fill("pending@gole.com");
     await page.getByLabel("비밀번호").fill("password1");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(
       page.getByRole("alert").filter({ hasText: "이메일 인증을 완료해 주세요" }),
@@ -406,7 +408,7 @@ test.describe("Auth navigation", () => {
 
     await page.getByLabel("이메일").fill("member@gole.com");
     await page.getByLabel("비밀번호").fill("wrong-password");
-    await page.getByRole("button", { name: "로그인" }).click();
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
 
     await expect(page.getByRole("alert").filter({ hasText: "올바르지 않습니다" })).toBeVisible();
     await expect

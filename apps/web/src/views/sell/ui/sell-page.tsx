@@ -2,14 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreateListingForm } from "@features/create-listing";
+import { CreateListingForm } from "@features/manage-listing";
 import { fetchLaunchConfig, type LaunchConfig } from "@entities/launch";
 import { fetchOnboardingStatus, useSession } from "@entities/user";
 import { isPaymentRuntimeAvailable } from "@shared/config";
 import { loginHrefWithReturnTo } from "@shared/lib";
 import { Container, Heading, LinkButton, Text } from "@shared/ui";
 
-export function SellPage() {
+export interface SellPageProps {
+  /** 세트 페이지에서 넘어온 세트 번호(검증된 기본 번호). 없으면 빈 칸으로 시작한다. */
+  readonly initialSetNumber?: string | null;
+}
+
+export function SellPage({ initialSetNumber = null }: SellPageProps) {
   const router = useRouter();
   const { session } = useSession();
   const [launch, setLaunch] = useState<LaunchConfig | null>(null);
@@ -135,6 +140,7 @@ export function SellPage() {
           <CreateListingForm
             sellerId={session.accountId}
             paymentsOpen={paymentsOpen}
+            initialSetNumber={initialSetNumber}
             onCreated={(id) => router.push(`/listings/${id}`)}
           />
         )}

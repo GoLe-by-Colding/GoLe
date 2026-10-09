@@ -60,7 +60,8 @@ jobs:
           esac
 
           # ── 영역 ────────────────────────────────────────────────────────────
-          files="$(gh pr diff "$PR" --repo "$REPO" --name-only)"
+          # diff 응답은 300개 파일에서 거부되므로 파일 목록 API를 끝까지 읽는다.
+          files="$(gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" --jq '.[].filename')"
           grep -q '^apps/api/'        <<<"$files" && labels+=("백엔드")   || true
           grep -q '^apps/web/'        <<<"$files" && labels+=("프론트")   || true
           grep -q '^apps/mobile/'     <<<"$files" && labels+=("모바일")   || true

@@ -48,13 +48,17 @@ def verify(sha: str, *, historical_main: bool = False) -> None:
             raise ValueError("candidate is not in current main history")
     elif current_main != sha:
         raise ValueError("candidate is not the current main SHA")
+    # GitHub 상태 필터의 검색 반영은 늦을 수 있으므로 정확한 SHA 응답을 직접 판정한다.
     runs = get_json(
         f"https://api.github.com/repos/{encoded_repo}/actions/workflows/ci.yml/runs"
-        f"?branch=main&event=push&status=completed&head_sha={sha}&per_page=20"
+        f"?branch=main&event=push&head_sha={sha}&per_page=20"
     ).get("workflow_runs", [])
     if not isinstance(runs, list) or not any(
         isinstance(run, dict)
         and run.get("head_sha") == sha
+        and run.get("head_branch") == "main"
+        and run.get("event") == "push"
+        and run.get("status") == "completed"
         and run.get("conclusion") == "success"
         for run in runs
     ):

@@ -153,10 +153,10 @@ case "$1" in
       *'NetworkSettings.Networks'*)
         printf 'networks:%s\n' "$service" >> /tmp/provenance-trace
         case "$service" in
-          backend) printf 'gole_agent\ngole_data\ngole_edge\n' ;;
-          support-agent) printf 'gole_agent\n' ;;
-          mongo|redis|minio) printf 'gole_data\n' ;;
-          frontend|nginx|budget-relay) printf 'gole_edge\n' ;;
+          backend) printf '%s\n' '{"gole_agent":{},"gole_data":{},"gole_edge":{}}' ;;
+          support-agent) printf '%s\n' '{"gole_agent":{}}' ;;
+          mongo|redis|minio) printf '%s\n' '{"gole_data":{}}' ;;
+          frontend|nginx|budget-relay) printf '%s\n' '{"gole_edge":{}}' ;;
           *) exit 100 ;;
         esac
         ;;

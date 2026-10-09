@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 RUN pip install --no-cache-dir uv==0.10.2
 COPY apps/support-agent/pyproject.toml apps/support-agent/uv.lock ./
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev --compile-bytecode
 
 COPY apps/api/src/main/proto /contracts
 RUN mkdir -p /app/generated && \
@@ -21,12 +21,13 @@ RUN mkdir -p /app/generated && \
 
 COPY apps/support-agent/src ./src
 ENV PYTHONPATH="/app/src:/app/generated"
+RUN python -m compileall -q /app/src /app/generated
 
 RUN useradd --system --uid 10002 --create-home support-agent && \
     chown -R support-agent:support-agent /app
 USER support-agent
 
 EXPOSE 50051
-HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=10s \
+HEALTHCHECK --interval=10s --timeout=10s --retries=12 --start-period=30s \
   CMD ["python", "-m", "gole_support_agent.healthcheck"]
 ENTRYPOINT ["python", "-m", "gole_support_agent.server"]

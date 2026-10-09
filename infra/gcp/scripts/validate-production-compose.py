@@ -249,10 +249,10 @@ EXPECTED_HEALTHCHECKS = {
             "-m",
             "gole_support_agent.healthcheck",
         ],
-        "timeout": "3s",
+        "timeout": "10s",
         "interval": "10s",
         "retries": 12,
-        "start_period": "10s",
+        "start_period": "30s",
     },
 }
 
@@ -581,6 +581,11 @@ def validate(
         expected_healthcheck = EXPECTED_HEALTHCHECKS.get(name)
         if allow_legacy_adoption and name == "nginx":
             expected_healthcheck = None
+        if allow_lkg_image_pins and name == "support-agent":
+            # 이전에 검증된 릴리스의 복구에만 과거 검사 예산을 허용한다.
+            previous_healthcheck = dict(expected_healthcheck, timeout="3s", start_period="10s")
+            if service.get("healthcheck") == previous_healthcheck:
+                expected_healthcheck = previous_healthcheck
         reject(
             service.get("healthcheck") != expected_healthcheck,
             f"service {name} healthcheck changed",

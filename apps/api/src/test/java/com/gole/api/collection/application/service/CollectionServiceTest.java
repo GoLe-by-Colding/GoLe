@@ -5,16 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.collection.application.port.in.ManageCollectionUseCase.AddCommand;
 import com.gole.api.collection.application.port.out.CollectionIdGeneratorPort;
-import com.gole.api.collection.application.port.out.CollectionRepositoryPort;
 import com.gole.api.collection.application.port.out.LatestPriceProviderPort;
-import com.gole.api.collection.domain.model.CollectionItem;
+import com.gole.api.collection.domain.model.CollectionValuation;
 import com.gole.api.collection.domain.model.OwnershipStatus;
 import com.gole.api.common.exception.ForbiddenException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,12 +20,12 @@ import org.junit.jupiter.api.Test;
 
 class CollectionServiceTest {
 
-    private InMemoryRepo repo;
+    private InMemoryCollectionRepository repo;
     private CollectionService service;
 
     @BeforeEach
     void setUp() {
-        repo = new InMemoryRepo();
+        repo = new InMemoryCollectionRepository();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         // 10307 -> 280000, 75313 -> 600000, 그 외 없음
         LatestPriceProviderPort prices = setNumber ->
@@ -59,29 +56,23 @@ class CollectionServiceTest {
         assertThat(service.estimateOwnedValue("u1")).isEqualTo(880_000L);
     }
 
-    private static final class InMemoryRepo implements CollectionRepositoryPort {
-        private final List<CollectionItem> store = new ArrayList<>();
+    @Test
+    void valuate_countsOwnedAndPricedItemsAndMatchesEstimate() {
+        service.add(new AddCommand("u1", "10307", OwnershipStatus.OWNED)); // 280000
+        service.add(new AddCommand("u1", "10307", OwnershipStatus.OWNED)); // 같은 세트 두 개 — 둘 다 센다
+        service.add(new AddCommand("u1", "99999", OwnershipStatus.OWNED)); // 시세 없음
+        service.add(new AddCommand("u1", "75313", OwnershipStatus.WANTED)); // 보유 아님
+        service.add(new AddCommand("u1", "75313", OwnershipStatus.SOLD)); // 보유 아님
 
-        @Override
-        public CollectionItem save(CollectionItem item) {
-            store.add(item);
-            return item;
-        }
+        CollectionValuation valuation = service.valuate("u1");
 
-        @Override
-        public Optional<CollectionItem> findById(String itemId) {
-            return store.stream().filter(i -> i.id().equals(itemId)).findFirst();
-        }
+        assertThat(valuation).isEqualTo(new CollectionValuation(560_000L, 3, 2));
+        assertThat(service.estimateOwnedValue("u1")).isEqualTo(valuation.ownedValue());
+    }
 
-        @Override
-        public List<CollectionItem> findByUser(String userId) {
-            return store.stream().filter(i -> i.userId().equals(userId)).toList();
-        }
-
-        @Override
-        public void delete(CollectionItem item) {
-            store.removeIf(i -> i.id().equals(item.id()));
-        }
+    @Test
+    void valuate_emptyCollectionIsZero() {
+        assertThat(service.valuate("nobody")).isEqualTo(CollectionValuation.EMPTY);
     }
 
     private static final class SeqIds implements CollectionIdGeneratorPort {

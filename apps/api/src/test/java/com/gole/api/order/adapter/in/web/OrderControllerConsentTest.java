@@ -79,7 +79,7 @@ class OrderControllerConsentTest {
                 .requireVerifiedSeller("seller-1");
 
         assertThatThrownBy(() -> controller.place(
-                        new OrderRequests.PlaceOrderRequest("listing-1", null, "01011112222"),
+                        new OrderRequests.PlaceOrderRequest("listing-1", null, "01011112222", null),
                         authenticated("buyer-1")))
                 .isInstanceOf(ServiceUnavailableException.class);
 

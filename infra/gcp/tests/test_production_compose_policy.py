@@ -158,6 +158,19 @@ class ProductionComposePolicyTest(unittest.TestCase):
         with self.assertRaises(self.validator.ComposePolicyError):
             self.validator.validate(model)
 
+    def test_previous_agent_probe_budget_is_only_valid_for_rollback(self) -> None:
+        model = copy.deepcopy(self.model)
+        probe = model["services"]["support-agent"]["healthcheck"]
+        probe.update(timeout="3s", start_period="10s")
+        self.validator.validate(model, allow_lkg_image_pins=True)
+        with self.assertRaises(self.validator.ComposePolicyError):
+            self.validator.validate(model)
+        for changed in ({"timeout": "30s"}, {"test": ["CMD", "true"]}):
+            invalid = copy.deepcopy(model)
+            invalid["services"]["support-agent"]["healthcheck"].update(changed)
+            with self.assertRaises(self.validator.ComposePolicyError):
+                self.validator.validate(invalid, allow_lkg_image_pins=True)
+
     def test_sentry_render_routes_public_build_and_server_only_token(self) -> None:
         global ENV_FIXTURE
         previous = ENV_FIXTURE

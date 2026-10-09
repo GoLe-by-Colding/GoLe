@@ -171,10 +171,10 @@ if [ "$1" = inspect ]; then
       ;;
     *'NetworkSettings.Networks'*)
       case "$service" in
-        backend) printf 'gole_edge\ngole_agent\ngole_data\n' ;;
-        mongo|redis|minio) printf 'gole_data\n' ;;
-        support-agent) printf 'gole_agent\n' ;;
-        frontend|nginx|budget-relay) printf 'gole_edge\n' ;;
+        backend) printf '%s\n' '{"gole_edge":{},"gole_agent":{},"gole_data":{}}' ;;
+        mongo|redis|minio) printf '%s\n' '{"gole_data":{}}' ;;
+        support-agent) printf '%s\n' '{"gole_agent":{}}' ;;
+        frontend|nginx|budget-relay) printf '%s\n' '{"gole_edge":{}}' ;;
       esac
       ;;
     *'HostConfig.PortBindings'*)

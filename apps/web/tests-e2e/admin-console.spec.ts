@@ -86,6 +86,141 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test.describe("홍보 Agent 검토 복구", () => {
+  const draft = {
+    id: "promotion-1",
+    channel: "THREADS",
+    caption: "검토할 홍보 초안",
+    mediaUrls: [],
+    authorId: "agent-author",
+    sourceCommitSha: "0123456789abcdef0123456789abcdef01234567",
+    status: "DRAFT",
+    createdAt: "2026-09-23T00:00:00Z",
+    submittedAt: null,
+    publishedAt: null,
+    externalPostId: null,
+    rejectionReason: null,
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await seedLocalSession(page, {
+      accountId: "admin-1",
+      sessionToken: "admin-test-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, {
+      status: 200,
+      body: { accountId: "admin-1", email: "admin@gole.test", role: "ADMIN" },
+    });
+  });
+
+  test("필터 변경 전의 늦은 응답이 현재 목록을 덮어쓰지 않는다", async ({ page }) => {
+    let releasePending: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      releasePending = resolve;
+    });
+    let requested = false;
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, async (route) => {
+      const status = new URL(route.request().url()).searchParams.get("status");
+      if (status === "PENDING_REVIEW") {
+        requested = true;
+        await pending;
+        await route.fulfill({ json: [{ ...draft, status, caption: "늦게 도착한 검토대기" }] });
+      } else {
+        await route.fulfill({ json: [draft] });
+      }
+    });
+    await page.goto("/admin/promotion");
+    await expect.poll(() => requested).toBe(true);
+    await page.getByRole("combobox", { name: "상태", exact: true }).selectOption("DRAFT");
+    await expect(page.getByText(draft.caption, { exact: true })).toBeVisible();
+    const response = page.waitForResponse(
+      (r) => r.url().includes("promotion-posts") && r.url().includes("PENDING_REVIEW"),
+    );
+    releasePending();
+    await response;
+    await expect(page.getByText(draft.caption, { exact: true })).toBeVisible();
+    await expect(page.getByText("늦게 도착한 검토대기", { exact: true })).toHaveCount(0);
+  });
+
+  test("저장 후 검토 요청 실패는 초안을 다시 만들지 않고 재시도한다", async ({ page }) => {
+    let creates = 0;
+    let submits = 0;
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "POST") {
+        creates += 1;
+        await route.fulfill({ json: { id: draft.id } });
+      } else {
+        await route.fulfill({ json: creates > 0 ? [draft] : [] });
+      }
+    });
+    await page.route(`**/api/admin/promotion-posts/${draft.id}/submit`, (route) => {
+      submits += 1;
+      return route.fulfill(
+        submits === 1
+          ? { status: 503, json: { code: "UNAVAILABLE", message: "잠시 후 다시 요청해 주세요" } }
+          : { json: { ...draft, status: "PENDING_REVIEW" } },
+      );
+    });
+    await page.goto("/admin/promotion");
+    const caption = page.getByRole("textbox", { name: /^캡션/ });
+    await caption.fill("새 기능을 소개합니다.");
+    await page.getByRole("button", { name: "저장 후 검토 요청" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "초안은 저장됐지만" })).toBeVisible();
+    await expect(caption).toHaveValue("");
+    await page.getByRole("button", { name: "저장한 초안 검토 요청" }).click();
+    await expect(page.getByText("검토를 요청했습니다.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "저장한 초안 검토 요청" })).toHaveCount(0);
+    expect(creates).toBe(1);
+    expect(submits).toBe(2);
+  });
+
+  test("동일한 승인 버튼을 연달아 눌러도 조치를 한 번만 전송한다", async ({ page }) => {
+    let release: () => void = () => {};
+    const approval = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let approves = 0;
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: approves > 0 ? [] : [{ ...draft, status: "PENDING_REVIEW" }] }),
+    );
+    await page.route(`**/api/admin/promotion-posts/${draft.id}/approve`, async (route) => {
+      approves += 1;
+      await approval;
+      await route.fulfill({ json: { ...draft, status: "APPROVED" } });
+    });
+    await page.goto("/admin/promotion");
+    const button = page.getByRole("button", { name: "승인", exact: true });
+    await expect(button).toBeEnabled();
+    await button.evaluate((element: HTMLButtonElement) => {
+      element.click();
+      element.click();
+    });
+    await expect.poll(() => approves).toBe(1);
+    await expect(button).toBeDisabled();
+    release();
+    await expect(page.getByText("홍보 초안을 승인했습니다.", { exact: true })).toBeVisible();
+    expect(approves).toBe(1);
+  });
+
+  test("목록 실패 후 새로고침에 성공하면 오류를 해제한다", async ({ page }) => {
+    let recovered = false;
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, (route) => {
+      return route.fulfill(
+        !recovered
+          ? { status: 503, json: { code: "UNAVAILABLE", message: "목록 조회 실패" } }
+          : { json: [{ ...draft, status: "PENDING_REVIEW" }] },
+      );
+    });
+    await page.goto("/admin/promotion");
+    await expect(page.getByRole("alert").filter({ hasText: "목록 조회 실패" })).toBeVisible();
+    recovered = true;
+    await page.getByRole("button", { name: "목록 새로고침" }).click();
+    await expect(page.getByText(draft.caption, { exact: true })).toBeVisible();
+    await expect(page.getByText("목록 조회 실패", { exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("운영자 콘솔 — 화면 게이트", () => {
   test("비로그인 사용자에게 /admin은 로그인 안내를 보여준다 (R1.3)", async ({ page }) => {
     await page.goto("/admin");
@@ -376,6 +511,17 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(page.getByPlaceholder("사용자에게 보낼 답변")).toHaveValue(
       "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
     );
+    expect(replyPosts).toBe(0);
+
+    const reply = page.getByPlaceholder("사용자에게 보낼 답변");
+    await reply.fill("직접 확인해서 작성 중인 답변");
+    await assistant.getByRole("button", { name: "초안을 답변에 넣기" }).click();
+    await expect(reply).toHaveValue("직접 확인해서 작성 중인 답변");
+    await assistant.getByRole("button", { name: "작성한 답변 유지" }).click();
+    await expect(reply).toHaveValue("직접 확인해서 작성 중인 답변");
+    await assistant.getByRole("button", { name: "초안을 답변에 넣기" }).click();
+    await assistant.getByRole("button", { name: "AI 초안으로 바꾸기" }).click();
+    await expect(reply).toHaveValue("안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.");
     expect(replyPosts).toBe(0);
   });
 

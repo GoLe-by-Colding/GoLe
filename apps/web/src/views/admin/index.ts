@@ -12,3 +12,4 @@ export { AdminAuditView } from "./ui/audit-view";
 export { AdminSupportView } from "./ui/support-view";
 export { AdminLaunchView } from "./ui/launch-view";
 export { AdminPromotionPostsView } from "./ui/promotion-posts-view";
+export { AdminPromotionMetricsView } from "./ui/promotion-metrics-view";

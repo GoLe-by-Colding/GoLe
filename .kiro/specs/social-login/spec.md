@@ -65,6 +65,29 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 `GOLE_OAUTH_ALLOWED_REDIRECT_URIS`로 apex 콜백 3종만 주입해야 한다(그 외 값이면 기동 실패).
 
 ## Tasks
+
+### 구글 실연동 (2026-09-24)
+
+- 기존 Google 코드·온보딩은 유지하고 GoLe 운영 GCP 프로젝트에 외부 사용자용 OAuth 웹 클라이언트를 구성한다.
+- 브랜드는 GoLe, 지원 연락처는 서비스 공개 연락처를 사용한다. 홈페이지·약관·개인정보처리방침은 운영 도메인으로 연결한다.
+- 인증 범위는 계정 식별과 검증된 이메일에 필요한 `openid email`로 제한한다.
+- 웹 클라이언트에는 운영 apex와 개발 localhost 3000·3001·3010의 정확한 `/auth/callback/google` URI를 등록한다.
+- `GOOGLE_OAUTH_CLIENT_ID`·`GOOGLE_OAUTH_CLIENT_SECRET`·`GOOGLE_OAUTH_SCOPE`는 로컬 gitignore 환경 파일과 Control GoLe 운영 대상에만 반영한다. 값은 출력·문서·커밋에 남기지 않는다.
+- Control 최신 버전에 해당 키만 병합하고 백업·Secret Sync·호스트 검증을 통해 반영한다. 카카오·네이버 설정과 로컬 서비스 포트를 보존한다.
+- 개발과 운영에서 Google 실제 인증 코드 교환·서버 세션·로그아웃·재로그인을 확인한다. 신규 계정이면 정책 동의와 Google 온보딩까지 확인하고, 기존 계정이면 신규 가입 검증으로 보고하지 않는다.
+- Google 외부 사용자 공개와 브랜드 검증 상태, 네이버 일반 공개 검수 상태를 각각 기록한다.
+
+### 카카오 실연동 (2026-09-24)
+
+- GoLe 카카오 앱의 비즈앱·로그인 활성화·`account_email` 필수 동의와 수집을 확인한다.
+- 운영 콜백은 `https://gole.co.kr/auth/callback/kakao`, 개발은 localhost 3000·3001·3010의 같은 경로로 등록한다.
+- `KAKAO_OAUTH_CLIENT_ID`·`KAKAO_OAUTH_CLIENT_SECRET`은 로컬 gitignore 환경 파일과 control.kscold.com의 GoLe 운영 대상에만 반영한다. 값은 문서·출력·커밋에 남기지 않는다.
+- 개발 CORS·리다이렉트 허용목록에 실제 실행 중인 3001을 포함하고, 운영 허용목록은 기존 apex 콜백 3종을 유지한다.
+- 기존 가입 정책을 그대로 검증하며, 미가입 카카오 계정을 Google 계정으로 잘못 안내하지 않는다.
+- 운영 호스트의 metadata migration pending은 정식 첫 CD로 완료한 뒤 Secret Sync를 실행한다(`infra/gcp/README.md`).
+- 실제 인증 코드 교환·프로필 조회·신규 가입·다음 로그인과 운영 배포 상태를 구분해 기록한다.
+
+### 구현
 - [x] B1 AuthProvider, SocialLoginUseCase, SocialIdentityProviderPort, SocialProfile
 - [x] B2 SocialAuthService (find-or-create + 세션 발급)
 - [x] B3 OAuthProperties + RestClientSocialIdentityProviderAdapter + application.yml
@@ -73,7 +96,17 @@ authorization-uri/token-uri/user-info-uri/scope는 provider별 기본값을 두�
 - [x] F1 entities/user social API
 - [x] F2 features/social-login 버튼
 - [x] F3 views/oauth-callback + app route + sign-in 연동
-- [ ] D1 빌드·배포·스모크
+- [x] D1 빌드·배포·스모크 — Google·카카오·네이버의 개발·운영 로그인·재로그인 및 서버 세션 확인. Google 신규 가입·온보딩 완료까지 확인했으며, 제공자별 실제 검증 범위와 외부 심사 상태는 같은 디렉터리의 `*-verification.md`에 기록함.
+
+### 요청 관측의 비동기 검증
+
+main CI #35898208316에서 회원가입 요청 본문 검사가 클릭 직후 `undefined`를 읽어
+1회 재시도했다. 브라우저 클릭 완료와 route 핸들러의 요청 관측은 같은 시점이 아니므로,
+정책 버전과 동의 본문은 관측값을 기다리는 assertion으로 검사한다. 요청 본문 계약과
+가입 후 이동·세션 저장 검증은 유지하며 고정 sleep으로 대체하지 않는다.
+
+후속 main CI #35902221560에서 비밀번호 변경 요청에도 같은 관측 경쟁이 확인됐다.
+프로필 E2E의 요청 본문도 실제 관측값을 기다리되, 모든 세션 정리와 재로그인 이동 검증은 유지한다.
 
 ## 보안/후속
 - state는 서버가 발급·Redis 저장·콜백 1회 소비로 검증하고(CSRF), `gole_oauth_transaction` HttpOnly
