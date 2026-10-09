@@ -18,6 +18,18 @@ export interface WishlistButtonProps {
   readonly targetId: string;
 }
 
+/**
+ * 대상마다 다른 이름을 쓴다. 매물 상세에는 매물 찜과 세트 위시가 나란히 놓이므로
+ * 같은 "위시 담기"로 두면 무엇을 담는지 구분되지 않는다.
+ */
+const LABELS: Record<
+  WishlistTargetType,
+  { readonly checking: string; readonly add: string; readonly remove: string }
+> = {
+  listing: { checking: "찜 확인 중", add: "찜하기", remove: "찜 해제" },
+  catalog_set: { checking: "위시 확인 중", add: "위시 담기", remove: "위시 빼기" },
+};
+
 export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
   const router = useRouter();
   const { session } = useSession();
@@ -118,12 +130,12 @@ export function WishlistButton({ targetType, targetId }: WishlistButtonProps) {
       >
         <HeartIcon className="h-4 w-4" filled={saved} />
         {loading || checking
-          ? "위시 확인 중"
+          ? LABELS[targetType].checking
           : busy
             ? "처리 중"
             : saved
-              ? "위시 빼기"
-              : "위시 담기"}
+              ? LABELS[targetType].remove
+              : LABELS[targetType].add}
       </Button>
       {error ? (
         <span className="text-sm text-danger" role="alert">

@@ -14,6 +14,7 @@ import {
 import { deleteListing, fetchMyListings, type Listing } from "@entities/listing";
 import { fetchLaunchConfig, SAFE_LAUNCH_CONFIG, type LaunchConfig } from "@entities/launch";
 import { fetchMe, useSession, type Me } from "@entities/user";
+import { BumpListingButton, EditListingLink } from "@features/manage-listing";
 import { formatKrw } from "@shared/lib";
 import { ApiError } from "@shared/api";
 import {
@@ -222,6 +223,18 @@ export function ProfilePage() {
     } finally {
       setStoppingListing(null);
     }
+  }
+
+  /** 끌올한 매물은 "최신순" 맨 앞으로 오므로 목록에서도 앞으로 옮긴다. */
+  function handleListingBumped(updated: Listing) {
+    setListings((current) =>
+      current.status === "ready"
+        ? {
+            status: "ready",
+            data: [updated, ...current.data.filter((listing) => listing.id !== updated.id)],
+          }
+        : current,
+    );
   }
 
   function tabClass(t: Tab) {
@@ -598,18 +611,23 @@ export function ProfilePage() {
                             </div>
                           </div>
                         ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setPendingListingStop(l.id);
-                              setListingStopError(null);
-                              setListingNotice(null);
-                            }}
-                          >
-                            판매 중지
-                          </Button>
+                          <div className="flex flex-wrap items-start gap-2">
+                            <EditListingLink listingId={l.id} />
+                            <BumpListingButton listing={l} onBumped={handleListingBumped} />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto"
+                              onClick={() => {
+                                setPendingListingStop(l.id);
+                                setListingStopError(null);
+                                setListingNotice(null);
+                              }}
+                            >
+                              판매 중지
+                            </Button>
+                          </div>
                         )}
                         {stopError ? (
                           <p role="alert" className="mt-2 text-sm text-danger">

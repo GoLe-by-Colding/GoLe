@@ -4,8 +4,10 @@ import {
   conditionLabel,
   fetchListingById,
   formatPriceKrw,
+  formatWon,
   ListingGallery,
   LISTING_CATEGORY_LABEL,
+  priceDropAmount,
   type Listing,
 } from "@entities/listing";
 import { fetchLaunchConfig } from "@entities/launch";
@@ -15,11 +17,13 @@ import { isPaymentRuntimeAvailable } from "@shared/config";
 import { Badge, Container, Heading, LinkButton } from "@shared/ui";
 import { PurchaseButton } from "@features/purchase";
 import { WishlistButton } from "@features/wishlist-toggle";
+import { ListingSellerPanel } from "@features/manage-listing";
 import { ChatButton } from "@features/chat-listing";
 import { ReportButton } from "@features/report-content";
 import { SetPriceInsight } from "@widgets/set-price-insight";
 import { ListingQna } from "@widgets/listing-qna";
 import { SellerMiniCard } from "@widgets/seller-mini-card";
+import { ListingViewerSwitch } from "./listing-viewer-switch";
 
 async function loadListing(id: string): Promise<Listing> {
   try {
@@ -46,6 +50,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
     launch.features.payments &&
     launch.stage >= 2 &&
     isPaymentRuntimeAvailable();
+  const priceDrop = priceDropAmount(listing);
 
   return (
     <Container width="lg">
@@ -63,7 +68,20 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
             {!isAvailable ? <Badge tone="danger">거래완료</Badge> : null}
           </div>
           <Heading level={1}>{listing.title}</Heading>
-          <span className="text-3xl font-bold tracking-tight">{formatPriceKrw(listing.price)}</span>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-3xl font-bold tracking-tight">
+              {formatPriceKrw(listing.price)}
+            </span>
+            {priceDrop !== null ? (
+              <>
+                <s className="text-base tabular-nums text-neutral-400">
+                  <span className="sr-only">이전 가격 </span>
+                  {formatPriceKrw(listing.price + priceDrop)}
+                </s>
+                <Badge tone="success">{formatWon(priceDrop)} 내림</Badge>
+              </>
+            ) : null}
+          </div>
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-neutral-800">상품 설명</span>
             <p className="whitespace-pre-wrap leading-relaxed text-neutral-600">
@@ -97,6 +115,10 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               />
             ) : null}
           </div>
+          <ListingViewerSwitch
+            sellerId={listing.sellerId}
+            seller={<ListingSellerPanel listing={listing} />}
+          />
           <div className="mt-2 flex gap-3">
             {!sellerTradingOpen ? (
               <div className="flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
@@ -144,9 +166,19 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               initialOpen={openChat}
             />
           ) : null}
-          {listing.catalogSetNumber !== null ? (
-            <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
-          ) : null}
+          <div className="flex flex-wrap items-start gap-2">
+            <ListingViewerSwitch
+              sellerId={listing.sellerId}
+              visitor={
+                listing.status === "active" || listing.status === "reserved" ? (
+                  <WishlistButton targetType="listing" targetId={listing.id} />
+                ) : null
+              }
+            />
+            {listing.catalogSetNumber !== null ? (
+              <WishlistButton targetType="catalog_set" targetId={listing.catalogSetNumber} />
+            ) : null}
+          </div>
           <div className="mt-1 flex flex-col gap-2 border-t border-neutral-200 pt-4">
             <SellerMiniCard sellerId={listing.sellerId} reviewsOpen={launch.features.reviews} />
             <div className="flex justify-end">
