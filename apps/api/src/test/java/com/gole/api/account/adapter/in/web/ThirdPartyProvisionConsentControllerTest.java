@@ -18,6 +18,7 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.SourcePath;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;

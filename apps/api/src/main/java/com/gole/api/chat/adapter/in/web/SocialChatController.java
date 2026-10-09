@@ -1,6 +1,5 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.chat.application.ChatMessagingService;
 import com.gole.api.chat.application.SocialChatService;
@@ -9,6 +8,7 @@ import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

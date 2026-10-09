@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
+import com.gole.api.common.web.auth.RequiresVerifiedSellerIdentity;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;

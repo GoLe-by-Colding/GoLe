@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
@@ -24,6 +23,7 @@ import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.SnapshotMes
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.StoredSnapshot;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.Report;
 import com.gole.api.report.domain.model.ReportReason;

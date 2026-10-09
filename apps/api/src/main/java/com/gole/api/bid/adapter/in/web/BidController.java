@@ -1,8 +1,5 @@
 package com.gole.api.bid.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.adapter.in.web.RequiresVerifiedSellerIdentity;
 import com.gole.api.bid.adapter.in.web.BidDtos.BidBookResponse;
 import com.gole.api.bid.adapter.in.web.BidDtos.BidResponse;
 import com.gole.api.bid.adapter.in.web.BidDtos.FillBidRequest;
@@ -16,6 +13,9 @@ import com.gole.api.bid.application.port.in.PlaceBidUseCase;
 import com.gole.api.bid.application.port.in.PlaceBidUseCase.PlaceBidCommand;
 import com.gole.api.bid.domain.exception.BidErrors;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
+import com.gole.api.common.web.auth.RequiresVerifiedSellerIdentity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

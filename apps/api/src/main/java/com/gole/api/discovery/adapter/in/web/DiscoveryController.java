@@ -1,6 +1,6 @@
 package com.gole.api.discovery.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.FollowRequest;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.ListingSummaryResponse;
 import com.gole.api.discovery.adapter.in.web.DiscoveryDtos.WishlistEntryResponse;

@@ -1,7 +1,7 @@
 package com.gole.api.listing.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentDocument;
 import com.gole.api.listing.adapter.out.persistence.ListingCommentMongoRepository;
 import com.gole.api.listing.application.port.in.GetListingUseCase;

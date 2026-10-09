@@ -1,7 +1,5 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
@@ -17,6 +15,8 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

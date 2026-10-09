@@ -1,11 +1,11 @@
 package com.gole.api.order.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.order.adapter.in.web.OrderRequests.OpenDisputeRequest;
 import com.gole.api.order.adapter.in.web.OrderRequests.PlaceOrderRequest;

@@ -1,12 +1,12 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.SupportNotificationOutboxAdminService;
 import com.gole.api.chat.application.SupportNotificationOutboxAdminService.RequeueReasonCode;
+import com.gole.api.common.web.auth.AdminActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

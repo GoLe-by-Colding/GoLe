@@ -1,6 +1,5 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
@@ -9,6 +8,7 @@ import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.StoredSnapshot;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportTargetType;
 import jakarta.servlet.http.HttpServletRequest;

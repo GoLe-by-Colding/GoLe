@@ -1,12 +1,12 @@
 package com.gole.api.launch.adapter.in.web;
 
 import com.gole.api.account.config.EmailAuthenticationAvailability;
-import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.AdminLaunchConfigResponse;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ChangeStageRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.FeatureOverrideRequest;

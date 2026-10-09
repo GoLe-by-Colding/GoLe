@@ -1,4 +1,4 @@
-package com.gole.api.account.adapter.in.web;
+package com.gole.api.common.web.auth;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

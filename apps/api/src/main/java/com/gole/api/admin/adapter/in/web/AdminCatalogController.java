@@ -14,6 +14,7 @@ import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.UpdateLegoSetUseCase.UpdateLegoSetCommand;
+import com.gole.api.common.web.auth.AdminActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

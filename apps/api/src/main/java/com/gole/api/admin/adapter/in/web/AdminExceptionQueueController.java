@@ -6,6 +6,7 @@ import com.gole.api.admin.application.service.ExceptionQueueService;
 import com.gole.api.admin.application.service.ExceptionQueueService.ExceptionEntry;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.ResolveDisputeUseCase;
 import com.gole.api.order.application.port.in.ResolveDisputeUseCase.Resolution;

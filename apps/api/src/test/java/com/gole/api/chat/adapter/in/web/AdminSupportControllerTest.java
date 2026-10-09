@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
@@ -33,6 +32,7 @@ import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;

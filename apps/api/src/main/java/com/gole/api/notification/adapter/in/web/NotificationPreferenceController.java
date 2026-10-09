@@ -1,7 +1,7 @@
 package com.gole.api.notification.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.notification.application.port.in.ManageNotificationPreferencesUseCase;
 import com.gole.api.notification.domain.model.NotificationCategory;
 import com.gole.api.notification.domain.model.NotificationPreferences;

@@ -1,6 +1,6 @@
 package com.gole.api.community.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.community.adapter.in.web.CommunityDtos.PostResponse;
 import com.gole.api.community.application.port.in.GetFollowingPostFeedUseCase;
 import io.swagger.v3.oas.annotations.Operation;

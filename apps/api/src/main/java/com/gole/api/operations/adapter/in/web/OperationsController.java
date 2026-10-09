@@ -1,6 +1,6 @@
 package com.gole.api.operations.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.operations.application.service.OperationsService;
 import com.gole.api.operations.domain.OperationRun;
 import jakarta.servlet.http.HttpServletRequest;

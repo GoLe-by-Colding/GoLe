@@ -13,12 +13,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import com.gole.api.parts.application.port.in.ClosePartRequestUseCase;
 import com.gole.api.parts.application.port.in.CreatePartRequestUseCase;
 import com.gole.api.parts.application.port.in.CreatePartRequestUseCase.CreatePartRequestCommand;

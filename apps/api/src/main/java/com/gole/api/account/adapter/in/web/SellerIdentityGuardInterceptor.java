@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.in.web;
 
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
+import com.gole.api.common.web.auth.RequiresVerifiedSellerIdentity;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;

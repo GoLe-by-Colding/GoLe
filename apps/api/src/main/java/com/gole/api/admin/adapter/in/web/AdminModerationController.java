@@ -15,6 +15,7 @@ import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.service.ResolveReportTargetService;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;

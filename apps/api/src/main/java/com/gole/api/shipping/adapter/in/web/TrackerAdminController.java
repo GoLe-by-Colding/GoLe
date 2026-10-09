@@ -1,6 +1,6 @@
 package com.gole.api.shipping.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.shipping.application.port.in.ManageTrackerUseCase;
 import com.gole.api.shipping.application.port.in.ManageTrackerUseCase.Sample;
 import com.gole.api.shipping.application.port.out.DeliveryTrackerPort.Diagnostics;

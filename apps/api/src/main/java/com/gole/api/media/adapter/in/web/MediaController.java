@@ -1,6 +1,6 @@
 package com.gole.api.media.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.media.application.port.in.AcquireMediaUploadQuotaUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase;
 import com.gole.api.media.application.port.in.LoadImageUseCase.LoadedImage;

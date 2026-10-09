@@ -7,6 +7,7 @@ import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsent
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.SourcePath;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.SessionCookie;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

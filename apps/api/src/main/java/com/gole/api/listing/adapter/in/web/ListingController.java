@@ -1,9 +1,9 @@
 package com.gole.api.listing.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.adapter.in.web.RequiresVerifiedSellerIdentity;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
+import com.gole.api.common.web.auth.RequiresVerifiedSellerIdentity;
 import com.gole.api.listing.adapter.in.web.ListingRequests.CreateListingRequest;
 import com.gole.api.listing.adapter.in.web.ListingRequests.UpdateListingRequest;
 import com.gole.api.listing.application.port.in.BrowseListingsUseCase;

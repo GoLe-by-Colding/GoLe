@@ -1,4 +1,4 @@
-package com.gole.api.account.adapter.in.web;
+package com.gole.api.common.web.auth;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
