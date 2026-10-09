@@ -1,7 +1,21 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 // 시세 기간 필터는 웹·앱 공유 코어에 있다(@gole/core). 파사드가 아니라 원본을 직접 가져와
 // 이 단위 검증이 재수출 계층을 거치지 않게 한다.
-import { filterPricePointsByPeriod, type PricePoint, type PriceSnapshot } from "@gole/core/pricing";
+import {
+  filterPricePointsByPeriod,
+  listingPriceGap,
+  priceGapBasisCaption,
+  priceGapLabel,
+  type ConditionValuation,
+  type PricePoint,
+  type PriceSnapshot,
+} from "@gole/core/pricing";
+import type { Listing } from "@gole/core/listing";
+// 목록 카드 문구 규칙은 웹 위젯 모델에 있다(화면 컴포넌트가 아니라 순수 함수만 가져온다).
+import {
+  buildPriceNotes,
+  priceNoteSetNumbers,
+} from "../src/widgets/listing-grid/model/price-notes";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const HOUR_MS = 60 * 60 * 1000;
@@ -87,6 +101,117 @@ test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않�
   expect(filterPricePointsByPeriod(points, 1, now)).toEqual([]);
 });
 
+test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비교한다", () => {
+  const valuation = (
+    condition: ConditionValuation["condition"],
+    basis: ConditionValuation["basis"],
+    fairPrice: number,
+  ): ConditionValuation => ({
+    condition,
+    basis,
+    depreciationPct: 0,
+    fairPrice,
+    sellPrice: Math.round(fairPrice * 0.96),
+    buyPrice: Math.round(fairPrice * 1.05),
+    sampleCount: basis === "model" ? 0 : 19,
+    basedOnRealData: basis !== "model",
+  });
+  const snapshot = (
+    state: PriceSnapshot["state"],
+    conditions: ConditionValuation[],
+    demo = false,
+  ): PriceSnapshot => ({
+    setNumber: "75192",
+    state,
+    minimumSamples: 3,
+    sampleCount: 31,
+    observations: [],
+    statistics: null,
+    valuation: { setNumber: "75192", hasData: true, marketPrice: 1_313_743, conditions },
+    provenance: { mode: demo ? "DEMO" : "FIRST_PARTY", includedSources: [], demo },
+  });
+  const established = snapshot("ESTABLISHED", [
+    valuation("used_good", "grade", 1_063_651),
+    valuation("like_new", "group", 1_200_017),
+    valuation("damaged", "model", 571_768),
+  ]);
+
+  const higher = listingPriceGap(1_250_000, "used_good", established);
+  expect(higher?.fairPrice).toBe(1_063_651);
+  expect(priceGapLabel(higher!.ratio)).toBe("판매가 17.5% 높음");
+  expect(priceGapLabel(listingPriceGap(1_137_000, "like_new", established)!.ratio)).toBe(
+    "판매가 5.3% 낮음",
+  );
+  expect(priceGapLabel(listingPriceGap(1_080_000, "used_good", established)!.ratio)).toBe(
+    "시세와 비슷",
+  );
+  // 표본 없는 감가 모델·참고 단계·조회 실패·없는 등급과는 비교하지 않는다.
+  expect(listingPriceGap(600_000, "damaged", established)).toBeNull();
+  expect(listingPriceGap(1_250_000, "used_good", snapshot("OBSERVATIONS_ONLY", []))).toBeNull();
+  expect(listingPriceGap(1_250_000, "used_good", null)).toBeNull();
+  expect(listingPriceGap(1_250_000, "new_sealed", established)).toBeNull();
+  // 출처 경고는 비교와 함께 다닌다.
+  expect(
+    listingPriceGap(
+      1_250_000,
+      "used_good",
+      snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_063_651)], true),
+    )?.evidenceWarning,
+  ).toBe("데모 포함");
+  expect(priceGapLabel(higher!.ratio, "추정 시세보다")).toBe("추정 시세보다 17.5% 높음");
+  // 근거 한 줄은 시세 영역과 같은 이름을 쓴다. 유사 등급 근거에 "기준"이 겹치지 않는다.
+  expect(priceGapBasisCaption(higher!)).toBe("동일 상태 체결 19건");
+  expect(priceGapBasisCaption(listingPriceGap(1_137_000, "like_new", established)!)).toBe(
+    "유사 등급 19건 기준",
+  );
+  expect(
+    priceGapBasisCaption(
+      listingPriceGap(
+        1_250_000,
+        "used_good",
+        snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_063_651)], true),
+      )!,
+    ),
+  ).toBe("동일 상태 체결 19건 · 데모 포함");
+
+  // 목록 카드: 판매 중·예약 중인 세트 한 벌 매물만, 출처 경고가 있으면 "참고용"을 붙인다.
+  // 미니피규어·부품은 출처 세트 번호가 있어도 세트 한 벌 시세와 견주지 않는다.
+  const listing = (
+    id: string,
+    status: Listing["status"],
+    setNumber: string | null,
+    category: Listing["category"] = "set",
+  ) =>
+    ({
+      id,
+      status,
+      category,
+      price: 1_250_000,
+      condition: "used_good",
+      catalogSetNumber: setNumber,
+    }) as Listing;
+  const listings = [
+    listing("a", "active", "75192"),
+    listing("b", "reserved", "75192"),
+    listing("c", "sold", "75192"),
+    listing("d", "active", null),
+    listing("m", "active", "10300", "minifig"),
+    listing("e", "active", "10276"),
+    listing("p", "active", "75192", "parts"),
+  ];
+  expect(priceNoteSetNumbers(listings)).toEqual(["75192", "10276"]);
+  expect(
+    buildPriceNotes(listings, {
+      "75192": established,
+      "10276": snapshot("ESTABLISHED", [valuation("used_good", "grade", 1_000_000)], true),
+    }),
+  ).toEqual({
+    a: "추정 시세보다 17.5% 높음",
+    b: "추정 시세보다 17.5% 높음",
+    e: "추정 시세보다 25% 높음 · 참고용",
+  });
+});
+
 // 시세 페이지: 차트·기간 탭·상태별(감가/빠른 판매·구매 추정) 테이블·정렬. (데이터가 있는 환경 대상)
 test.describe("Prices (KREAM-style)", () => {
   // 느린 기기·CI의 하이드레이션 지연을 재현하는 손잡이. 기본은 꺼져 있다(예: E2E_CPU_THROTTLE=6, chromium만).
@@ -121,7 +246,8 @@ test.describe("Prices (KREAM-style)", () => {
     await expect(
       page.getByText("실제 체결가나 지금 받을 수 있는 입찰가가 아니에요").first(),
     ).toBeVisible();
-    await expect(page.getByText("미개봉 새상품").first()).toBeVisible();
+    // 데스크톱은 표, 휴대폰은 쌓인 행으로 같은 내용을 그린다(sm 기준). 이 검사는 데스크톱 표를 본다.
+    await expect(page.getByRole("table").getByText("미개봉 새상품").first()).toBeVisible();
   });
 
   test("기간 탭은 고정한 지금 기준으로 그 기간의 체결만 차트에 그린다", async ({ page }) => {

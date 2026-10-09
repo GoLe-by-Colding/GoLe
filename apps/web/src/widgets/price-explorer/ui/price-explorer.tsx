@@ -383,7 +383,41 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                       : "참고용 체결가 기준 추정"}
                   </span>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                {/* 휴대폰은 다섯 칸 표가 520px라 빠른 판매·구매가 가로 스크롤 밖으로 숨었다. 상세 시세와 같이 행마다 쌓는다. */}
+                <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 sm:hidden">
+                  {snapshot.valuation.conditions.map((condition) => (
+                    <li
+                      key={condition.condition}
+                      className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm"
+                    >
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="font-medium text-neutral-900">
+                          {CONDITION_LABEL[condition.condition]}
+                          {condition.depreciationPct === 0 ? null : (
+                            <span className="ml-1 text-[11px] font-normal text-neutral-400">
+                              -{condition.depreciationPct}%
+                            </span>
+                          )}
+                        </span>
+                        <span className={`text-[11px] ${valuationBasisTone(condition.basis)}`}>
+                          {valuationBasisLabel(condition.basis, condition.sampleCount)}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+                        <span className="font-semibold whitespace-nowrap tabular-nums text-neutral-900">
+                          {formatKrw(condition.fairPrice)}
+                        </span>
+                        <span className="text-[11px] whitespace-nowrap tabular-nums text-neutral-500">
+                          빠른 판매 {formatKrw(condition.sellPrice)}
+                        </span>
+                        <span className="text-[11px] whitespace-nowrap tabular-nums text-neutral-500">
+                          빠른 구매 {formatKrw(condition.buyPrice)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="overflow-x-auto rounded-lg border border-neutral-200 max-sm:hidden">
                   <table className="w-full min-w-[520px] border-collapse text-sm">
                     <thead>
                       <tr className="bg-neutral-50 text-xs text-neutral-500">

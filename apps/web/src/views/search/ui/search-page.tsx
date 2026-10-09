@@ -7,9 +7,10 @@ import {
   type ListingSort,
   type SearchListingsParams,
 } from "@entities/listing";
+import { fetchPriceSnapshotForPage } from "@entities/pricing";
 import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
 import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
-import { ListingGrid } from "@widgets/listing-grid";
+import { buildPriceNotes, ListingGrid, priceNoteSetNumbers } from "@widgets/listing-grid";
 
 export interface SearchPageProps {
   readonly query?: string | undefined;
@@ -55,6 +56,22 @@ async function loadListings(params: SearchListingsParams): Promise<ListingLoadRe
   }
 }
 
+/**
+ * 목록 카드의 "추정 시세보다 N% 낮음/높음". 세트별 시세는 캐시된 조회(5분)로 함께 읽고, 실패한 세트는 문구 없이 둔다.
+ * 시세가 늦거나 없어도 목록 자체는 그대로 보인다.
+ */
+async function loadPriceNotes(listings: readonly Listing[]): Promise<Record<string, string>> {
+  const sets = priceNoteSetNumbers(listings);
+  if (sets.length === 0) return {};
+  const entries = await Promise.all(
+    sets.map(
+      async (setNumber) =>
+        [setNumber, await fetchPriceSnapshotForPage(setNumber).catch(() => null)] as const,
+    ),
+  );
+  return buildPriceNotes(listings, Object.fromEntries(entries));
+}
+
 function searchHref(params: SearchListingsParams): string {
   const query = new URLSearchParams();
   if (params.query) query.set("query", params.query);
@@ -85,6 +102,7 @@ export async function SearchPage(props: SearchPageProps) {
 
   const result = await loadListings(params);
   const { listings } = result;
+  const priceNotes = await loadPriceNotes(listings);
   const hasFilters =
     (props.query?.trim().length ?? 0) > 0 ||
     condition !== undefined ||
@@ -158,7 +176,7 @@ export async function SearchPage(props: SearchPageProps) {
             }
           />
         ) : (
-          <ListingGrid key={JSON.stringify(params)} listings={listings} />
+          <ListingGrid key={JSON.stringify(params)} listings={listings} priceNotes={priceNotes} />
         )}
       </div>
     </Container>
