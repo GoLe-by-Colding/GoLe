@@ -1,6 +1,6 @@
 package com.gole.api.launch.adapter.in.web;
 
-import com.gole.api.account.config.EmailAuthenticationAvailability;
+import com.gole.api.account.application.port.in.GetEmailAuthenticationAvailabilityUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
@@ -13,13 +13,13 @@ import com.gole.api.launch.adapter.in.web.LaunchDtos.FeatureOverrideRequest;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchChangeRow;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.ReadinessCheckRequest;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
+import com.gole.api.launch.application.port.in.GetLaunchSettlementStatusUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ReadinessChangeResult;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetReadinessCheckCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchReadinessCheck;
@@ -51,21 +51,21 @@ public class AdminLaunchController {
     private final GetLaunchConfigUseCase getLaunchConfig;
     private final ManageLaunchConfigUseCase manageLaunchConfig;
     private final RecordAdminActionUseCase audit;
-    private final LaunchSettlementModePort settlementMode;
+    private final GetLaunchSettlementStatusUseCase settlementStatus;
     private final SellerIdentityVerificationProperties sellerIdentityVerification;
-    private final EmailAuthenticationAvailability emailAuthentication;
+    private final GetEmailAuthenticationAvailabilityUseCase emailAuthentication;
 
     public AdminLaunchController(
             GetLaunchConfigUseCase getLaunchConfig,
             ManageLaunchConfigUseCase manageLaunchConfig,
             RecordAdminActionUseCase audit,
-            LaunchSettlementModePort settlementMode,
+            GetLaunchSettlementStatusUseCase settlementStatus,
             SellerIdentityVerificationProperties sellerIdentityVerification,
-            EmailAuthenticationAvailability emailAuthentication) {
+            GetEmailAuthenticationAvailabilityUseCase emailAuthentication) {
         this.getLaunchConfig = getLaunchConfig;
         this.manageLaunchConfig = manageLaunchConfig;
         this.audit = audit;
-        this.settlementMode = settlementMode;
+        this.settlementStatus = settlementStatus;
         this.sellerIdentityVerification = sellerIdentityVerification;
         this.emailAuthentication = emailAuthentication;
     }
@@ -148,8 +148,8 @@ public class AdminLaunchController {
         return AdminLaunchConfigResponse.from(
                 effective,
                 requested,
-                settlementMode.currentMode(),
-                settlementMode.payoutContractVerified(),
+                settlementStatus.current().mode(),
+                settlementStatus.current().payoutContractVerified(),
                 sellerIdentityVerification.verificationReady(),
                 emailAuthentication.available());
     }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.application.service.EmailAuthenticationAvailabilityService;
 import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchConfigResponse;
@@ -24,7 +25,9 @@ class LaunchConfigControllerTest {
     private final SellerIdentityVerificationProperties sellerIdentityVerification =
             new SellerIdentityVerificationProperties();
     private final LaunchConfigController controller = new LaunchConfigController(
-            launchConfig, sellerIdentityVerification, new EmailAuthenticationAvailability("test", false));
+            launchConfig,
+            sellerIdentityVerification,
+            new EmailAuthenticationAvailabilityService(new EmailAuthenticationAvailability("test", false)));
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
