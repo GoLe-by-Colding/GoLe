@@ -1,6 +1,6 @@
 "use client";
 
-import type { ItemCondition } from "@entities/listing";
+import { type ItemCondition, type ListingCategory, LISTING_CATEGORIES } from "@entities/listing";
 import {
   CONDITION_LABEL,
   priceGapBasisCaption,
@@ -13,8 +13,10 @@ import { parseDraftPrice } from "../model/listing-draft";
 import { useSellPriceSnapshot } from "../model/use-sell-price-snapshot";
 
 export interface SellPriceGuideProps {
-  /** 세트 한 벌로 파는 매물의 세트 번호. 미니피규어·부품이거나 번호가 없으면 `null` — 아무것도 보이지 않는다. */
+  /** 입력한 세트 번호. 번호가 없으면 `null` — 아무것도 보이지 않는다. */
   readonly setNumber: string | null;
+  /** 매물 카테고리. 세트 한 벌(`set`)만 세트 시세와 견준다. */
+  readonly category: ListingCategory;
   readonly condition: ItemCondition;
   /** 입력 중인 판매가(입력란 문자열 그대로). */
   readonly price: string;
@@ -24,9 +26,25 @@ export interface SellPriceGuideProps {
  * 판매가 입력란 아래의 같은 등급 추정 시세. 판매자가 가격을 정하기 전에 시세를 보고, 넣은 가격이 시세와 얼마나
  * 다른지 바로 알게 한다. 가격을 대신 채우지 않는다 — 박스·설명서·부품 상태는 판매자가 가장 잘 안다.
  * 비교 규칙은 매물 상세·목록과 같다(`sameGradeEstimate`: 확정 시세 + 실제 체결 표본 근거일 때만).
+ *
+ * 미니피규어·부품·MOC는 출처 세트 번호를 달아도 세트 한 벌 시세와 견주지 않는다(`priceComparableSetNumber`).
+ * 이때 안내가 말없이 사라지면 판매자는 시세가 없는지·고장인지 알 수 없으므로 견주지 않는 이유를 한 줄 둔다.
  */
-export function SellPriceGuide({ setNumber, condition, price }: SellPriceGuideProps) {
-  const state = useSellPriceSnapshot(setNumber);
+export function SellPriceGuide({ setNumber, category, condition, price }: SellPriceGuideProps) {
+  const wholeSet = category === "set";
+  const state = useSellPriceSnapshot(wholeSet ? setNumber : null);
+  if (setNumber !== null && !wholeSet) {
+    return (
+      <p
+        aria-live="polite"
+        data-testid="sell-price-guide"
+        className="text-xs leading-relaxed break-keep text-neutral-500"
+      >
+        {categoryName(category)} 매물은 세트 한 벌의 시세와 견주지 않아요. 세트 시세는 세트 한 벌이
+        통째로 거래된 가격이에요.
+      </p>
+    );
+  }
   if (state.status === "idle") return null;
   return (
     <div aria-live="polite" data-testid="sell-price-guide">
@@ -95,4 +113,8 @@ function noEstimateReason(snapshot: PriceSnapshot, condition: ItemCondition): st
     case "ESTABLISHED":
       return `${CONDITION_LABEL[condition]} 상태는 체결 표본이 부족해 추정 시세를 보여 드리지 못해요.`;
   }
+}
+
+function categoryName(category: ListingCategory): string {
+  return LISTING_CATEGORIES.find((item) => item.key === category)?.label ?? "세트가 아닌";
 }

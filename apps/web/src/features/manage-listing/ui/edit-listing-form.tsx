@@ -85,7 +85,8 @@ export function EditListingForm({ listing, paymentsOpen, onSaved }: EditListingF
         paymentsOpen={paymentsOpen}
         priceGuide={
           <SellPriceGuide
-            setNumber={listing.category === "set" ? listing.catalogSetNumber : null}
+            setNumber={listing.catalogSetNumber}
+            category={listing.category}
             condition={form.draft.condition}
             price={form.draft.price}
           />

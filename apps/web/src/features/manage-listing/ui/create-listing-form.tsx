@@ -87,7 +87,8 @@ export function CreateListingForm({
         paymentsOpen={paymentsOpen}
         priceGuide={
           <SellPriceGuide
-            setNumber={category === "set" ? setNumber : null}
+            setNumber={setNumber}
+            category={category}
             condition={form.draft.condition}
             price={form.draft.price}
           />
