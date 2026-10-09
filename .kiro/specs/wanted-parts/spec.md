@@ -64,9 +64,9 @@
 
 ## Tasks
 
-- [ ] B1 domain·검증 + 테스트
-- [ ] B2 port·service·persistence·web
-- [ ] B3 보유자 알림 어댑터 + 테스트(작성자 제외·상한·장애 흡수)
-- [ ] B4 계정 삭제 정리
-- [ ] F1 core, `/parts` 3화면, 세트 상세·컬렉션 진입, 알림 링크 허용
+- [x] B1 domain·검증 + 테스트
+- [x] B2 port·service·persistence·web
+- [x] B3 보유자 알림 어댑터 + 테스트(작성자 제외·상한·장애 흡수)
+- [x] B4 계정 삭제 정리
+- [x] F1 core, `/parts` 3화면, 세트 상세·컬렉션 진입, 알림 링크 허용
 - [ ] V1 로컬 실검증: 보유자 계정에 알림 도착, 돕기 → 1:1 대화 열림

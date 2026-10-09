@@ -97,12 +97,12 @@
 
 ## Tasks
 
-- [ ] B1 domain 필드·`revise`·`bump` + 도메인 테스트
-- [ ] B2 port-in/out, `ListingService` 수정·끌올, discovery `ListListingWishersUseCase`
-- [ ] B3 persistence 원자 갱신·정렬 키·인덱스·백필
-- [ ] B4 web `PUT`·`POST /bump`, 응답 필드, 가격 인하 알림 어댑터
-- [ ] B5 단위 테스트(상태별 거부, 원자 갱신 실패 매핑, 쿨다운 경계, 인하 알림 수신자·멱등 키·장애 흡수)
-- [ ] B6 통합 테스트(레거시 문서 `listedAt` 백필·정렬, 예약 경합 시 수정이 짐)
-- [ ] F1 core 타입·API
-- [ ] F2 수정 화면, 매물 상세 판매자 패널·찜 버튼·인하 표시, 프로필 내 매물 버튼
+- [x] B1 domain 필드·`revise`·`bump` + 도메인 테스트
+- [x] B2 port-in/out, `ListingService` 수정·끌올, discovery `ListListingWishersUseCase`
+- [x] B3 persistence 원자 갱신·정렬 키·인덱스·백필
+- [x] B4 web `PUT`·`POST /bump`, 응답 필드, 가격 인하 알림 어댑터
+- [x] B5 단위 테스트(상태별 거부, 원자 갱신 실패 매핑, 쿨다운 경계, 인하 알림 수신자·멱등 키·장애 흡수)
+- [x] B6 통합 테스트(레거시 문서 `listedAt` 백필·정렬, 예약 경합 시 수정이 짐)
+- [x] F1 core 타입·API
+- [x] F2 수정 화면, 매물 상세 판매자 패널·찜 버튼·인하 표시, 프로필 내 매물 버튼
 - [ ] V1 로컬 실검증: 수정 → 찜한 계정 알림 도착, 끌올 → 최신순 맨 위, 쿨다운 429

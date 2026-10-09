@@ -124,11 +124,11 @@
 
 ## Tasks
 
-- [ ] B1 domain + 상태 전이·만료 테스트
-- [ ] B2 chat 인바운드 포트 2개
-- [ ] B3 offer port·service·persistence·web + 단위 테스트
-- [ ] B4 order `offerId` 연결 + `OrderServiceTest` 보강(금액 min, 거부 시 예약 해제)
-- [ ] B5 통합 테스트(동시 수락·철회 하나만 성공, 대기 제안 유일성)
+- [x] B1 domain + 상태 전이·만료 테스트
+- [x] B2 chat 인바운드 포트 2개
+- [x] B3 offer port·service·persistence·web + 단위 테스트
+- [x] B4 order `offerId` 연결 + `OrderServiceTest` 보강(금액 min, 거부 시 예약 해제)
+- [x] B5 통합 테스트(동시 수락·철회 하나만 성공, 대기 제안 유일성)
 - [ ] F1 core offer·order
 - [ ] F2 채팅 제안 배너, 구매 버튼 제안가, 판매자 받은 제안
 - [ ] V1 로컬 실검증: 제안 → 수락 → 제안가 주문 → 결제·구매확정 → 시세에 합의가

@@ -58,9 +58,9 @@
 
 ## Tasks
 
-- [ ] B1 domain·`valuate`·port
-- [ ] B2 persistence(upsert·범위 조회·사용자 커서 쿼리·인덱스)
-- [ ] B3 스케줄러 + 조회 API(오늘 갱신 포함) + 단위 테스트
-- [ ] B4 계정 삭제 정리, 통합 테스트(upsert 멱등·범위)
-- [ ] F1 core API·타입, 컬렉션 차트
+- [x] B1 domain·`valuate`·port
+- [x] B2 persistence(upsert·범위 조회·사용자 커서 쿼리·인덱스)
+- [x] B3 스케줄러 + 조회 API(오늘 갱신 포함) + 단위 테스트
+- [x] B4 계정 삭제 정리, 통합 테스트(upsert 멱등·범위)
+- [x] F1 core API·타입, 컬렉션 차트
 - [ ] V1 로컬 실검증: 보유 추가 → 조회 시 오늘 점 생성, 스케줄러 수동 실행

@@ -52,9 +52,9 @@
 
 ## Tasks
 
-- [ ] B1 `NotificationCategory`·`NotificationType.category()` (공유 계약으로 먼저 커밋됨)
-- [ ] B2 domain·port·service·persistence·web + 단위 테스트
-- [ ] B3 `NotificationService.notify` 집행 + 알림톡 팬아웃·발송 재확인
-- [ ] B4 계정 삭제 정리
-- [ ] F1 core API·타입, 설정 화면, 진입 링크
+- [x] B1 `NotificationCategory`·`NotificationType.category()` (공유 계약으로 먼저 커밋됨)
+- [x] B2 domain·port·service·persistence·web + 단위 테스트
+- [x] B3 `NotificationService.notify` 집행 + 알림톡 팬아웃·발송 재확인
+- [x] B4 계정 삭제 정리
+- [x] F1 core API·타입, 설정 화면, 진입 링크
 - [ ] V1 로컬 실검증: 커뮤니티 끔 → 댓글 알림 미생성, 거래 진행 끔 요청 400
