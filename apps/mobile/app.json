@@ -18,7 +18,7 @@
     "android": {
       "package": "kr.gole.app",
       "adaptiveIcon": {
-        "backgroundColor": "#EFF3FF",
+        "backgroundColor": "#1D4ED8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -34,7 +34,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#EFF3FF",
+          "backgroundColor": "#1D4ED8",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
