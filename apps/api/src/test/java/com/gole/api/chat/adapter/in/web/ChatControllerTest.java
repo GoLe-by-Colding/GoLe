@@ -19,14 +19,14 @@ import ch.qos.logback.core.read.ListAppender;
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
+import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.application.service.ChatMessagingService;
 import com.gole.api.chat.application.service.ChatReadService;
 import com.gole.api.chat.application.service.DirectTradeService;
 import com.gole.api.chat.application.service.SocialChatService;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -49,7 +49,6 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -61,7 +60,7 @@ import tools.jackson.databind.ObjectMapper;
 
 class ChatControllerTest {
 
-    private final ChatRoomMongoRepository rooms = mock(ChatRoomMongoRepository.class);
+    private final ListingChatRoomRepositoryPort rooms = mock(ListingChatRoomRepositoryPort.class);
     private final GetListingUseCase listings = mock(GetListingUseCase.class);
     private final RedisMessageListenerContainer listeners = mock(RedisMessageListenerContainer.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
@@ -89,9 +88,8 @@ class ChatControllerTest {
     void createRoom_usesAuthenticatedBuyerAndListingSeller() {
         when(listings.getById("listing-1")).thenReturn(listing("real-seller"));
         when(listings.getPublicById("listing-1")).thenReturn(listing("real-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1"))
-                .thenReturn(Optional.empty());
-        when(rooms.save(any(ChatRoomDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(rooms.findByParticipants("real-buyer", "real-seller", "listing-1")).thenReturn(Optional.empty());
+        when(rooms.createOrGetExisting(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         MockHttpServletRequest request = authenticated("real-buyer");
         var response = controller.createOrGetRoom(
@@ -99,15 +97,14 @@ class ChatControllerTest {
 
         assertThat(response.buyerId()).isEqualTo("real-buyer");
         assertThat(response.sellerId()).isEqualTo("real-seller");
-        verify(rooms).findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1");
+        verify(rooms).findByParticipants("real-buyer", "real-seller", "listing-1");
         verify(sellerIdentityVerification).requireVerifiedSeller("real-seller");
     }
 
     @Test
     void createRoom_requiresCurrentProvisionConsentBeforeCreatingRoom() {
         when(listings.getById("listing-1")).thenReturn(listing("seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("legacy-buyer", "seller", "listing-1"))
-                .thenReturn(Optional.empty());
+        when(rooms.findByParticipants("legacy-buyer", "seller", "listing-1")).thenReturn(Optional.empty());
         doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(thirdPartyProvisionConsents)
                 .requireCurrent("legacy-buyer");
@@ -119,13 +116,13 @@ class ChatControllerTest {
                 .isEqualTo(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE);
 
         verify(listings, never()).getPublicById("listing-1");
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
     void createRoom_requiresVerifiedListingSellerBeforeCreatingANewRoom() {
         when(listings.getById("listing-1")).thenReturn(listing("unverified-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("buyer", "unverified-seller", "listing-1"))
+        when(rooms.findByParticipants("buyer", "unverified-seller", "listing-1"))
                 .thenReturn(Optional.empty());
         doThrow(new ServiceUnavailableException(
                         "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "seller verification unavailable"))
@@ -138,14 +135,13 @@ class ChatControllerTest {
                 .hasFieldOrPropertyWithValue("code", "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE");
 
         verifyNoInteractions(thirdPartyProvisionConsents);
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
     void createRoom_requiresSellersConsentBeforeProvidingTheirIdentityToANewRoom() {
         when(listings.getById("listing-1")).thenReturn(listing("seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("buyer", "seller", "listing-1"))
-                .thenReturn(Optional.empty());
+        when(rooms.findByParticipants("buyer", "seller", "listing-1")).thenReturn(Optional.empty());
         doThrow(new ForbiddenException(
                         ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE, "subject consent"))
                 .when(thirdPartyProvisionConsents)
@@ -158,7 +154,7 @@ class ChatControllerTest {
                 .isEqualTo(ManageThirdPartyProvisionConsentUseCase.SUBJECT_REQUIRED_CODE);
 
         verify(listings, never()).getPublicById("listing-1");
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
@@ -173,7 +169,7 @@ class ChatControllerTest {
     @Test
     void createRoom_doesNotCreateRoomForHiddenListing() {
         when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+        when(rooms.findByParticipants("real-buyer", "real-seller", "deleted-listing"))
                 .thenReturn(Optional.empty());
         when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
 
@@ -181,13 +177,13 @@ class ChatControllerTest {
                         new ChatController.CreateRoomRequest("deleted-listing", null, null),
                         authenticated("real-buyer")))
                 .isInstanceOf(ListingNotFoundException.class);
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
     void hiddenListingNewRoomReturnsNotFoundAtHttpBoundary() throws Exception {
         when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+        when(rooms.findByParticipants("real-buyer", "real-seller", "deleted-listing"))
                 .thenReturn(Optional.empty());
         when(listings.getPublicById("deleted-listing")).thenThrow(new ListingNotFoundException("deleted-listing"));
         var mvc = MockMvcBuilders.standaloneSetup(controller)
@@ -200,15 +196,14 @@ class ChatControllerTest {
                         .content("{\"listingId\":\"deleted-listing\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
     void createRoom_returnsExistingRoomAfterListingWasHidden() {
-        ChatRoomDocument existing =
-                new ChatRoomDocument("room-1", "deleted-listing", "real-buyer", "real-seller", Instant.now());
+        ChatRoom existing = ChatRoom.open("room-1", "deleted-listing", "real-buyer", "real-seller", Instant.now());
         when(listings.getById("deleted-listing")).thenReturn(listing("real-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "deleted-listing"))
+        when(rooms.findByParticipants("real-buyer", "real-seller", "deleted-listing"))
                 .thenReturn(Optional.of(existing));
 
         var response = controller.createOrGetRoom(
@@ -218,18 +213,17 @@ class ChatControllerTest {
         verifyNoInteractions(thirdPartyProvisionConsents);
         verifyNoInteractions(sellerIdentityVerification);
         verify(listings, never()).getPublicById("deleted-listing");
-        verify(rooms, never()).save(any());
+        verify(rooms, never()).createOrGetExisting(any());
     }
 
     @Test
     void createRoom_returnsConcurrentWinnerWhenUniqueIndexWinsRace() {
-        ChatRoomDocument winner =
-                new ChatRoomDocument("winner", "listing-1", "real-buyer", "real-seller", Instant.now());
+        ChatRoom winner = ChatRoom.open("winner", "listing-1", "real-buyer", "real-seller", Instant.now());
         when(listings.getById("listing-1")).thenReturn(listing("real-seller"));
         when(listings.getPublicById("listing-1")).thenReturn(listing("real-seller"));
-        when(rooms.findByBuyerIdAndSellerIdAndListingId("real-buyer", "real-seller", "listing-1"))
-                .thenReturn(Optional.empty(), Optional.of(winner));
-        when(rooms.save(any(ChatRoomDocument.class))).thenThrow(new DuplicateKeyException("duplicate"));
+        when(rooms.findByParticipants("real-buyer", "real-seller", "listing-1")).thenReturn(Optional.empty());
+        // 유니크 인덱스 경합에서 먼저 저장된 방을 돌려주는 것은 저장소 어댑터의 계약이다(MongoListingChatRoomAdapterTest).
+        when(rooms.createOrGetExisting(any())).thenReturn(winner);
 
         var response = controller.createOrGetRoom(
                 new ChatController.CreateRoomRequest("listing-1", null, null), authenticated("real-buyer"));
@@ -240,7 +234,7 @@ class ChatControllerTest {
     @Test
     void directTradeConfirmationRequiresTheListingSellersVerifiedIdentity() {
         Instant now = Instant.parse("2026-09-04T00:00:00Z");
-        ChatRoomDocument listingRoom = new ChatRoomDocument("room-1", "listing-1", "buyer-1", "seller-1", now);
+        ChatRoom listingRoom = ChatRoom.open("room-1", "listing-1", "buyer-1", "seller-1", now);
         when(socialChats.requireReadable("room-1", "buyer-1"))
                 .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer-1", "seller-1", now));
         when(rooms.findById("room-1")).thenReturn(Optional.of(listingRoom));
@@ -257,18 +251,17 @@ class ChatControllerTest {
 
     @Test
     void myRooms_usesAuthenticatedUserAndAppliesRepositoryLimit() {
-        when(rooms.findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1"))
-                .thenReturn(List.of());
+        when(rooms.findRecentByParticipant("account-1", 100)).thenReturn(List.of());
 
         assertThat(controller.myRooms(authenticated("account-1"))).isEmpty();
 
-        verify(rooms).findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc("account-1", "account-1");
+        verify(rooms).findRecentByParticipant("account-1", 100);
     }
 
     @Test
     void roomResolvesListingOutsideTheRecentRoomWindowAfterPermissionCheck() {
         Instant now = Instant.parse("2026-08-30T00:00:00Z");
-        ChatRoomDocument listing = new ChatRoomDocument("room-old", "listing-1", "account-1", "seller-1", now);
+        ChatRoom listing = ChatRoom.open("room-old", "listing-1", "account-1", "seller-1", now);
         when(socialChats.requireReadable("room-old", "account-1"))
                 .thenReturn(SocialChatRoom.listing("room-old", "listing-1", "account-1", "seller-1", now));
         when(rooms.findById("room-old")).thenReturn(Optional.of(listing));

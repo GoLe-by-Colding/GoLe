@@ -6,11 +6,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.common.exception.BadRequestException;
@@ -27,7 +27,7 @@ class ChatReadServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-08-30T00:00:00Z");
 
-    private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
+    private final ChatMessageRepositoryPort messages = mock(ChatMessageRepositoryPort.class);
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
     private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
@@ -90,7 +90,7 @@ class ChatReadServiceTest {
         Instant sentAt = NOW.minusSeconds(10);
         when(socialChats.requireReadable("direct", "me")).thenReturn(direct);
         when(messages.findById("message-1"))
-                .thenReturn(Optional.of(new ChatMessageDocument("message-1", "direct", "peer", "hello", sentAt)));
+                .thenReturn(Optional.of(new ChatMessage("message-1", "direct", "peer", "hello", sentAt)));
 
         service.markRead("direct", "me", "message-1");
 
@@ -105,7 +105,7 @@ class ChatReadServiceTest {
         Instant sentAt = NOW.minusSeconds(10);
         when(socialChats.requireReadable("support", "me")).thenReturn(support);
         when(messages.findById("message-1"))
-                .thenReturn(Optional.of(new ChatMessageDocument("message-1", "support", "me", "문의", sentAt)));
+                .thenReturn(Optional.of(new ChatMessage("message-1", "support", "me", "문의", sentAt)));
 
         service.markRead("support", "me", "message-1");
 
@@ -116,7 +116,7 @@ class ChatReadServiceTest {
     @Test
     void markRead_rejectsMessageFromAnotherRoom() {
         when(messages.findById("foreign"))
-                .thenReturn(Optional.of(new ChatMessageDocument("foreign", "another", "peer", "secret", NOW)));
+                .thenReturn(Optional.of(new ChatMessage("foreign", "another", "peer", "secret", NOW)));
 
         assertThatThrownBy(() -> service.markRead("direct", "me", "foreign"))
                 .isInstanceOf(BadRequestException.class)

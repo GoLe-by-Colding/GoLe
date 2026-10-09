@@ -262,7 +262,7 @@ adapter/out/persistence → adapter/in/web.
 `apps/api/src/test/resources/archunit_store`에 얼려 두었다 — 새 위반만 실패하고, 고친 위반은 저장소에서 빠진다.
 
 - domain 은 Spring·Mongo·Jackson 과 자기 application·adapter 를 모른다.
-- application 은 adapter 와 Mongo·Redis·Web 을 모른다.
+- application 은 adapter 와 Mongo·Redis(드라이버 `com.mongodb`·`org.bson` 포함)·Web 을 모른다.
 - **domain·application 은 다른 컨텍스트를 모른다.** 연동은 "내 아웃바운드 포트를 상대 UseCase 로
   위임하는 어댑터"로만 한다 — `order/adapter/out/listing/ListingReservationAdapter.java`가 표준
   예시다(상대 도메인 객체를 내 컨텍스트가 필요한 최소 데이터로 환원해 결합을 끊는다).

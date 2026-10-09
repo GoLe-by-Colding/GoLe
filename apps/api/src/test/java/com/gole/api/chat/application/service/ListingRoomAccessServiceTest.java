@@ -7,10 +7,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.port.in.ListingRoomAccessUseCase.ListingRoomParticipants;
+import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
+import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.common.exception.ForbiddenException;
 import java.time.Instant;
@@ -23,16 +23,16 @@ class ListingRoomAccessServiceTest {
     private static final Instant T0 = Instant.parse("2026-10-01T00:00:00Z");
 
     private final SocialChatService socialChats = mock(SocialChatService.class);
-    private final ChatRoomMongoRepository listingRooms = mock(ChatRoomMongoRepository.class);
+    private final ListingChatRoomRepositoryPort listingRooms = mock(ListingChatRoomRepositoryPort.class);
     private final ListingRoomAccessService service = new ListingRoomAccessService(socialChats, listingRooms);
 
     @Test
-    @DisplayName("전송 검사를 통과한 매물 방이면 chat_rooms의 구매자·판매자를 돌려준다")
+    @DisplayName("전송 검사를 통과한 매물 방이면 매물 방 저장소의 구매자·판매자를 돌려준다")
     void requireSendableListingRoom_returnsParticipantsFromListingRoomDocument() {
         when(socialChats.requireSendable("room-1", "buyer-1"))
                 .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer-1", "seller-1", T0));
         when(listingRooms.findById("room-1"))
-                .thenReturn(Optional.of(new ChatRoomDocument("room-1", "listing-1", "buyer-1", "seller-1", T0)));
+                .thenReturn(Optional.of(ChatRoom.open("room-1", "listing-1", "buyer-1", "seller-1", T0)));
 
         assertThat(service.requireSendableListingRoom("room-1", "buyer-1"))
                 .contains(new ListingRoomParticipants("room-1", "listing-1", "buyer-1", "seller-1"));

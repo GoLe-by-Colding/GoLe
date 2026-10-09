@@ -10,6 +10,4 @@ public interface ChatRoomMongoRepository extends MongoRepository<ChatRoomDocumen
     Optional<ChatRoomDocument> findByBuyerIdAndSellerIdAndListingId(String buyerId, String sellerId, String listingId);
 
     List<ChatRoomDocument> findByBuyerIdOrSellerId(String buyerId, String sellerId, Pageable pageable);
-
-    List<ChatRoomDocument> findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc(String buyerId, String sellerId);
 }

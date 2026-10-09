@@ -66,7 +66,7 @@ class HexagonalArchitectureTest {
     }
 
     @Test
-    @DisplayName("application 은 어댑터와 저장소·웹 프레임워크를 모른다")
+    @DisplayName("application 은 어댑터와 저장소(Mongo·Redis 드라이버 포함)·웹 프레임워크를 모른다")
     void application_doesNotKnowAdaptersOrInfrastructure() {
         check(noClasses()
                 .that()
@@ -77,6 +77,8 @@ class HexagonalArchitectureTest {
                         "com.gole.api..adapter..",
                         "org.springframework.data.mongodb..",
                         "org.springframework.data.redis..",
+                        "com.mongodb..",
+                        "org.bson..",
                         "org.springframework.web..",
                         "org.springframework.http..",
                         "jakarta.servlet.."));

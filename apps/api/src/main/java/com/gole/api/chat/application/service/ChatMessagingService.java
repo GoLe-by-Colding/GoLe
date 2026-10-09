@@ -1,8 +1,7 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
-import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
+import com.gole.api.chat.application.port.out.ChatMessagePublisherPort;
+import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
@@ -15,8 +14,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -26,16 +23,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 public class ChatMessagingService {
 
-    private final ChatMessageMongoRepository messages;
-    private final ChatRedisPublisher publisher;
+    private final ChatMessageRepositoryPort messages;
+    private final ChatMessagePublisherPort publisher;
     private final SocialChatService socialChats;
     private final SupportOperationalEventNotifier supportEvents;
     private final SupportAssistantAnalysisService supportAnalysis;
     private final Clock clock;
 
     public ChatMessagingService(
-            ChatMessageMongoRepository messages,
-            ChatRedisPublisher publisher,
+            ChatMessageRepositoryPort messages,
+            ChatMessagePublisherPort publisher,
             SocialChatService socialChats,
             SupportOperationalEventNotifier supportEvents,
             SupportAssistantAnalysisService supportAnalysis,
@@ -62,13 +59,13 @@ public class ChatMessagingService {
         if (hasTime != hasId) {
             throw new BadRequestException("CHAT_CURSOR_INVALID", "메시지 커서가 올바르지 않습니다");
         }
-        PageRequest page = PageRequest.of(0, limit, Sort.by(Sort.Order.desc("sentAt"), Sort.Order.desc("id")));
-        List<ChatMessageDocument> rows = new ArrayList<>(
+        // 저장소는 커서에 가까운(최신) 것부터 주므로 화면 순서(오래된 순)로 뒤집는다.
+        List<ChatMessage> rows = new ArrayList<>(
                 hasTime
-                        ? messages.findContextBefore(roomId, beforeSentAt, beforeId, page)
-                        : messages.findByRoomId(roomId, page));
+                        ? messages.findBefore(roomId, beforeSentAt, beforeId, limit)
+                        : messages.findLatest(roomId, limit));
         Collections.reverse(rows);
-        return rows.stream().map(ChatMessagingService::toDomain).toList();
+        return List.copyOf(rows);
     }
 
     /** SSE 재연결 시 마지막으로 받은 이벤트 다음 메시지를 Mongo 이력에서 재생한다. */
@@ -77,14 +74,11 @@ public class ChatMessagingService {
         if (afterId == null || afterId.isBlank()) {
             return List.of();
         }
-        ChatMessageDocument cursor = messages.findById(afterId)
-                .filter(message -> roomId.equals(message.getRoomId()))
+        ChatMessage cursor = messages.findById(afterId)
+                .filter(message -> roomId.equals(message.roomId()))
                 .orElseThrow(() -> new BadRequestException("CHAT_CURSOR_INVALID", "메시지 커서가 올바르지 않습니다"));
         int limit = Math.clamp(requestedLimit, 1, 200);
-        PageRequest page = PageRequest.of(0, limit, Sort.by(Sort.Order.asc("sentAt"), Sort.Order.asc("id")));
-        return messages.findContextAfter(roomId, cursor.getSentAt(), cursor.getId(), page).stream()
-                .map(ChatMessagingService::toDomain)
-                .toList();
+        return messages.findAfter(roomId, cursor.sentAt(), cursor.id(), limit);
     }
 
     @Transactional
@@ -105,9 +99,8 @@ public class ChatMessagingService {
             throw new BadRequestException("CHAT_NOT_SUPPORT_ROOM", "운영팀 문의방이 아닙니다");
         }
         Instant now = Instant.now(clock);
-        ChatMessageDocument saved =
-                messages.save(new ChatMessageDocument(UUID.randomUUID().toString(), roomId, actorId, content, now));
-        ChatMessage message = toDomain(saved);
+        ChatMessage message =
+                messages.save(new ChatMessage(UUID.randomUUID().toString(), roomId, actorId, content, now));
         Optional<SupportTicket> supportTicket = socialChats.onMessageSent(room, actorId);
         socialChats.touchActivity(roomId, now);
         publishAfterCommit(message);
@@ -128,9 +121,8 @@ public class ChatMessagingService {
         String content = normalizeContent(rawContent);
         SocialChatRoom room = socialChats.requireAdminSupportSendable(roomId, adminId);
         Instant now = Instant.now(clock);
-        ChatMessageDocument saved =
-                messages.save(new ChatMessageDocument(UUID.randomUUID().toString(), roomId, adminId, content, now));
-        ChatMessage message = toDomain(saved);
+        ChatMessage message =
+                messages.save(new ChatMessage(UUID.randomUUID().toString(), roomId, adminId, content, now));
         socialChats.onMessageSent(room, adminId);
         socialChats.touchActivity(roomId, now);
         publishAfterCommit(message);
@@ -159,14 +151,5 @@ public class ChatMessagingService {
             throw new BadRequestException("CHAT_MESSAGE_TOO_LONG", "메시지는 2,000자까지 입력할 수 있습니다");
         }
         return normalized;
-    }
-
-    private static ChatMessage toDomain(ChatMessageDocument document) {
-        return new ChatMessage(
-                document.getId(),
-                document.getRoomId(),
-                document.getSenderId(),
-                document.getContent(),
-                document.getSentAt());
     }
 }

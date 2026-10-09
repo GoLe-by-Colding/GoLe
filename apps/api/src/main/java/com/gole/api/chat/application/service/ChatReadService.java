@@ -1,10 +1,10 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.common.exception.BadRequestException;
 import java.time.Clock;
@@ -22,7 +22,7 @@ public class ChatReadService {
 
     private static final int MAX_ROOMS = 100;
 
-    private final ChatMessageMongoRepository messages;
+    private final ChatMessageRepositoryPort messages;
     private final ChatReadStatePort readStates;
     private final ChatBlockRepositoryPort blocks;
     private final SocialChatService socialChats;
@@ -30,7 +30,7 @@ public class ChatReadService {
     private final Clock clock;
 
     public ChatReadService(
-            ChatMessageMongoRepository messages,
+            ChatMessageRepositoryPort messages,
             ChatReadStatePort readStates,
             ChatBlockRepositoryPort blocks,
             SocialChatService socialChats,
@@ -61,13 +61,13 @@ public class ChatReadService {
     @Transactional
     public void markRead(String roomId, String actorId, String lastMessageId) {
         var room = socialChats.requireReadable(roomId, actorId);
-        ChatMessageDocument cursor = messages.findById(lastMessageId)
-                .filter(message -> roomId.equals(message.getRoomId()))
+        ChatMessage cursor = messages.findById(lastMessageId)
+                .filter(message -> roomId.equals(message.roomId()))
                 .orElseThrow(() -> new BadRequestException("CHAT_READ_CURSOR_INVALID", "읽음 위치가 올바르지 않습니다"));
         Instant now = Instant.now(clock);
         if (room.type() == ChatRoomType.SUPPORT) {
             supportPrivacy.fenceSupportConversation(roomId, now);
         }
-        readStates.advance(roomId, actorId, cursor.getId(), cursor.getSentAt(), now);
+        readStates.advance(roomId, actorId, cursor.id(), cursor.sentAt(), now);
     }
 }

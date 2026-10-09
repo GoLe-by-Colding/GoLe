@@ -3,15 +3,14 @@ package com.gole.api.chat.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
-import com.gole.api.chat.adapter.out.pubsub.ChatRedisPublisher;
+import com.gole.api.chat.application.port.out.ChatMessagePublisherPort;
+import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -22,12 +21,11 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.Pageable;
 
 class ChatMessagingServiceTest {
 
-    private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
-    private final ChatRedisPublisher publisher = mock(ChatRedisPublisher.class);
+    private final ChatMessageRepositoryPort messages = mock(ChatMessageRepositoryPort.class);
+    private final ChatMessagePublisherPort publisher = mock(ChatMessagePublisherPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final SupportOperationalEventNotifier supportEvents = mock(SupportOperationalEventNotifier.class);
     private final SupportAssistantAnalysisService supportAnalysis = mock(SupportAssistantAnalysisService.class);
@@ -42,10 +40,9 @@ class ChatMessagingServiceTest {
     @Test
     void history_returnsOlderPageInChronologicalOrder() {
         Instant cursorTime = Instant.parse("2026-08-30T00:03:00Z");
-        ChatMessageDocument older = message("m1", "2026-08-30T00:01:00Z");
-        ChatMessageDocument newer = message("m2", "2026-08-30T00:02:00Z");
-        when(messages.findContextBefore(eq("room-1"), eq(cursorTime), eq("m3"), any(Pageable.class)))
-                .thenReturn(List.of(newer, older));
+        ChatMessage older = message("m1", "2026-08-30T00:01:00Z");
+        ChatMessage newer = message("m2", "2026-08-30T00:02:00Z");
+        when(messages.findBefore("room-1", cursorTime, "m3", 60)).thenReturn(List.of(newer, older));
 
         var page = service.history("room-1", "account-1", cursorTime, "m3", 60);
 
@@ -62,11 +59,10 @@ class ChatMessagingServiceTest {
 
     @Test
     void after_replaysOnlyMessagesFromCursorRoom() {
-        ChatMessageDocument cursor = message("m1", "2026-08-30T00:01:00Z");
-        ChatMessageDocument next = message("m2", "2026-08-30T00:02:00Z");
+        ChatMessage cursor = message("m1", "2026-08-30T00:01:00Z");
+        ChatMessage next = message("m2", "2026-08-30T00:02:00Z");
         when(messages.findById("m1")).thenReturn(Optional.of(cursor));
-        when(messages.findContextAfter(eq("room-1"), eq(cursor.getSentAt()), eq("m1"), any(Pageable.class)))
-                .thenReturn(List.of(next));
+        when(messages.findAfter("room-1", cursor.sentAt(), "m1", 200)).thenReturn(List.of(next));
 
         var replay = service.after("room-1", "account-1", "m1", 200);
 
@@ -76,7 +72,7 @@ class ChatMessagingServiceTest {
     @Test
     void after_rejectsCursorFromAnotherRoom() {
         when(messages.findById("foreign"))
-                .thenReturn(Optional.of(new ChatMessageDocument(
+                .thenReturn(Optional.of(new ChatMessage(
                         "foreign", "room-2", "account-2", "foreign", Instant.parse("2026-08-30T00:01:00Z"))));
 
         assertThatThrownBy(() -> service.after("room-1", "account-1", "foreign", 200))
@@ -115,7 +111,7 @@ class ChatMessagingServiceTest {
         verify(supportAnalysis, never()).analyzeOpeningAfterCommit(any(), any(), any(), any());
     }
 
-    private static ChatMessageDocument message(String id, String sentAt) {
-        return new ChatMessageDocument(id, "room-1", "account-1", id, Instant.parse(sentAt));
+    private static ChatMessage message(String id, String sentAt) {
+        return new ChatMessage(id, "room-1", "account-1", id, Instant.parse(sentAt));
     }
 }

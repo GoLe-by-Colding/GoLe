@@ -9,10 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.adapter.out.persistence.ChatMessageDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatMessageMongoRepository;
+import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.Snapshot;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
@@ -36,7 +36,7 @@ class ChatReportServiceTest {
     private static final Instant START = Instant.parse("2026-08-29T10:00:00Z");
     private static final Instant CAPTURED_AT = Instant.parse("2026-08-29T12:00:00Z");
 
-    private final ChatMessageMongoRepository messages = mock(ChatMessageMongoRepository.class);
+    private final ChatMessageRepositoryPort messages = mock(ChatMessageRepositoryPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
     private final SubmitReportUseCase reports = mock(SubmitReportUseCase.class);
     private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
@@ -45,21 +45,21 @@ class ChatReportServiceTest {
 
     @Test
     void capturesServerSideChronologicalContextAndBindsItToCreatedReport() {
-        List<ChatMessageDocument> roomMessages =
+        List<ChatMessage> roomMessages =
                 IntStream.range(0, 25).mapToObj(this::message).toList();
-        ChatMessageDocument reported = roomMessages.get(12);
+        ChatMessage reported = roomMessages.get(12);
         when(messages.findById("message-12")).thenReturn(Optional.of(reported));
-        when(messages.findContextBefore(
+        when(messages.findBefore(
                         ArgumentMatchers.eq("room-1"),
-                        ArgumentMatchers.eq(reported.getSentAt()),
+                        ArgumentMatchers.eq(reported.sentAt()),
                         ArgumentMatchers.eq("message-12"),
-                        any()))
+                        ArgumentMatchers.anyInt()))
                 .thenReturn(roomMessages.subList(2, 12).reversed());
-        when(messages.findContextAfter(
+        when(messages.findAfter(
                         ArgumentMatchers.eq("room-1"),
-                        ArgumentMatchers.eq(reported.getSentAt()),
+                        ArgumentMatchers.eq(reported.sentAt()),
                         ArgumentMatchers.eq("message-12"),
-                        any()))
+                        ArgumentMatchers.anyInt()))
                 .thenReturn(roomMessages.subList(13, 23));
         when(reports.submit(any())).thenReturn("report-1");
 
@@ -99,19 +99,19 @@ class ChatReportServiceTest {
 
     @Test
     void oldReportedMessageOnlyCapturesItsActualNeighbours() {
-        ChatMessageDocument reported = message(100);
+        ChatMessage reported = message(100);
         when(messages.findById("message-100")).thenReturn(Optional.of(reported));
-        when(messages.findContextBefore(
+        when(messages.findBefore(
                         ArgumentMatchers.eq("room-1"),
-                        ArgumentMatchers.eq(reported.getSentAt()),
+                        ArgumentMatchers.eq(reported.sentAt()),
                         ArgumentMatchers.eq("message-100"),
-                        any()))
+                        ArgumentMatchers.anyInt()))
                 .thenReturn(List.of(message(99), message(98)));
-        when(messages.findContextAfter(
+        when(messages.findAfter(
                         ArgumentMatchers.eq("room-1"),
-                        ArgumentMatchers.eq(reported.getSentAt()),
+                        ArgumentMatchers.eq(reported.sentAt()),
                         ArgumentMatchers.eq("message-100"),
-                        any()))
+                        ArgumentMatchers.anyInt()))
                 .thenReturn(List.of(message(101), message(102)));
         when(reports.submit(any())).thenReturn("report-2");
 
@@ -126,7 +126,7 @@ class ChatReportServiceTest {
 
     @Test
     void rejectsReporterWithoutRoomAccessBeforeCreatingReportOrSnapshot() {
-        ChatMessageDocument reported = message(4);
+        ChatMessage reported = message(4);
         when(messages.findById("message-4")).thenReturn(Optional.of(reported));
         when(socialChats.requireReadable("room-1", "outsider"))
                 .thenThrow(new ForbiddenException("CHAT_ROOM_ACCESS_DENIED", "채팅방 멤버만 접근할 수 있습니다"));
@@ -135,8 +135,8 @@ class ChatReportServiceTest {
                 .isInstanceOf(ForbiddenException.class);
 
         verify(reports, never()).submit(any());
-        verify(messages, never()).findContextBefore(any(), any(), any(), any());
-        verify(messages, never()).findContextAfter(any(), any(), any(), any());
+        verify(messages, never()).findBefore(any(), any(), any(), ArgumentMatchers.anyInt());
+        verify(messages, never()).findAfter(any(), any(), any(), ArgumentMatchers.anyInt());
         verify(snapshots, never()).capture(any());
     }
 
@@ -152,8 +152,8 @@ class ChatReportServiceTest {
         verify(snapshots, never()).capture(any());
     }
 
-    private ChatMessageDocument message(int index) {
-        return new ChatMessageDocument(
+    private ChatMessage message(int index) {
+        return new ChatMessage(
                 "message-" + index,
                 "room-1",
                 "sender-" + index,

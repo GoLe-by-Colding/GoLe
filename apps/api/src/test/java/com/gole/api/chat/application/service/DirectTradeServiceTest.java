@@ -3,77 +3,76 @@ package com.gole.api.chat.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.port.out.DirectTradeNotifierPort;
+import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
+import com.gole.api.chat.application.port.out.RetryingTransactionPort;
+import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchStage;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
-import com.mongodb.MongoException;
-import com.mongodb.client.result.UpdateResult;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionSystemException;
-import org.springframework.transaction.support.SimpleTransactionStatus;
 
 class DirectTradeServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-08-29T10:00:00Z");
 
-    private final ChatRoomMongoRepository rooms = mock(ChatRoomMongoRepository.class);
-    private final MongoTemplate mongo = mock(MongoTemplate.class);
+    private final ListingChatRoomRepositoryPort rooms = mock(ListingChatRoomRepositoryPort.class);
     private final MarkListingSoldUseCase markSold = mock(MarkListingSoldUseCase.class);
     private final GetLaunchConfigUseCase launch = mock(GetLaunchConfigUseCase.class);
     private final DirectTradeNotifierPort notifier = mock(DirectTradeNotifierPort.class);
-    private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
+    /** 재시도·트랜잭션 경계는 어댑터 테스트(MongoRetryingTransactionAdapterTest)가 본다. 여기서는 본문을 그대로 실행한다. */
+    private final RetryingTransactionPort transactions = new RetryingTransactionPort() {
+        @Override
+        public <T> T inNewTransaction(String operation, String key, Supplier<T> work) {
+            return work.get();
+        }
+    };
+
     private final DirectTradeService service;
 
     DirectTradeServiceTest() {
         when(launch.current()).thenReturn(new LaunchConfig(LaunchStage.PREPARING, Map.of(), NOW, "admin"));
-        when(transactions.getTransaction(any())).thenAnswer(ignored -> new SimpleTransactionStatus());
         service = new DirectTradeService(
-                rooms, mongo, markSold, launch, notifier, transactions, Clock.fixed(NOW, ZoneOffset.UTC));
+                rooms, transactions, markSold, launch, notifier, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
+    @DisplayName("한쪽만 확인하면 상대에게 확인 요청을 알리고 판매 완료로 바꾸지 않는다")
     void confirm_waitsUntilBothParticipantsConfirm() {
-        ChatRoomDocument room = room();
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
+        ChatRoom buyerConfirmed = room(NOW, null, null);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(null, null, null)), Optional.of(buyerConfirmed));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(true);
 
-        ChatRoomDocument result = service.confirm("room-1", "buyer-1");
+        ChatRoom result = service.confirm("room-1", "buyer-1");
 
-        assertThat(result).isSameAs(room);
+        assertThat(result).isSameAs(buyerConfirmed);
         verify(notifier).confirmationRequested("seller-1", "room-1");
         verify(markSold, never()).markDirectTradeSoldIfActive(any());
     }
 
     @Test
+    @DisplayName("이미 확인한 쪽이 다시 확인해도 알림을 또 보내지 않는다")
     void repeatedConfirmationDoesNotSendDuplicateNotification() {
-        ChatRoomDocument alreadyConfirmed = room();
-        ReflectionTestUtils.setField(alreadyConfirmed, "buyerConfirmedAt", NOW.minusSeconds(30));
+        ChatRoom alreadyConfirmed = room(NOW.minusSeconds(30), null, null);
         when(rooms.findById("room-1")).thenReturn(Optional.of(alreadyConfirmed));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(UpdateResult.acknowledged(1L, 0L, null));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(false);
 
         service.confirm("room-1", "buyer-1");
 
@@ -82,46 +81,33 @@ class DirectTradeServiceTest {
     }
 
     @Test
+    @DisplayName("두 번째 확인이면 완료하고 매물을 판매 완료로 바꾸며 먼저 확인한 쪽에 알린다")
     void confirm_marksListingSoldWhenSecondParticipantConfirms() {
-        ChatRoomDocument before = room();
-        ChatRoomDocument bothConfirmed = room();
-        ReflectionTestUtils.setField(bothConfirmed, "buyerConfirmedAt", NOW.minusSeconds(30));
-        ReflectionTestUtils.setField(bothConfirmed, "sellerConfirmedAt", NOW);
-        ChatRoomDocument completed = room();
-        ReflectionTestUtils.setField(completed, "buyerConfirmedAt", NOW.minusSeconds(30));
-        ReflectionTestUtils.setField(completed, "sellerConfirmedAt", NOW);
-        ReflectionTestUtils.setField(completed, "directTradeCompletedAt", NOW);
-        when(rooms.findById("room-1")).thenReturn(Optional.of(before), Optional.of(bothConfirmed));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
-        when(mongo.findAndModify(any(), any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(completed);
+        ChatRoom bothConfirmed = room(NOW.minusSeconds(30), NOW, null);
+        ChatRoom completed = room(NOW.minusSeconds(30), NOW, NOW);
+        when(rooms.findById("room-1"))
+                .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
+        when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
         when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(true);
 
-        ChatRoomDocument result = service.confirm("room-1", "seller-1");
+        ChatRoom result = service.confirm("room-1", "seller-1");
 
-        assertThat(result.getDirectTradeCompletedAt()).isEqualTo(NOW);
+        assertThat(result.directTradeCompletedAt()).isEqualTo(NOW);
         verify(markSold).markDirectTradeSoldIfActive("listing-1");
         verify(notifier).tradeCompleted("buyer-1", "room-1");
         verify(notifier, never()).confirmationRequested(any(), any());
     }
 
     @Test
+    @DisplayName("중복 요청이 완료 경합에서 이겨도 실제로 먼저 확인한 쪽에만 알린다")
     void duplicateRequestThatWinsCompletionStillNotifiesTheActualFirstConfirmer() {
-        ChatRoomDocument firstConfirmed = room();
-        ReflectionTestUtils.setField(firstConfirmed, "buyerConfirmedAt", NOW.minusSeconds(30));
-        ChatRoomDocument bothConfirmed = room();
-        ReflectionTestUtils.setField(bothConfirmed, "buyerConfirmedAt", NOW.minusSeconds(30));
-        ReflectionTestUtils.setField(bothConfirmed, "sellerConfirmedAt", NOW);
-        ChatRoomDocument completed = room();
-        ReflectionTestUtils.setField(completed, "buyerConfirmedAt", NOW.minusSeconds(30));
-        ReflectionTestUtils.setField(completed, "sellerConfirmedAt", NOW);
-        ReflectionTestUtils.setField(completed, "directTradeCompletedAt", NOW);
-        when(rooms.findById("room-1")).thenReturn(Optional.of(firstConfirmed), Optional.of(bothConfirmed));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(UpdateResult.acknowledged(1L, 0L, null));
-        when(mongo.findAndModify(any(), any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(completed);
+        ChatRoom bothConfirmed = room(NOW.minusSeconds(30), NOW, null);
+        ChatRoom completed = room(NOW.minusSeconds(30), NOW, NOW);
+        when(rooms.findById("room-1"))
+                .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(false);
+        when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
         when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(true);
 
         service.confirm("room-1", "buyer-1");
@@ -131,15 +117,55 @@ class DirectTradeServiceTest {
     }
 
     @Test
-    void confirm_rejectsNonParticipant() {
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
+    @DisplayName("완료 경합에서 지면 갱신된 방을 다시 읽어 돌려준다")
+    void confirm_returnsReloadedRoomWhenAnotherRequestCompleted() {
+        ChatRoom bothConfirmed = room(NOW.minusSeconds(30), NOW, null);
+        ChatRoom completedByOther = room(NOW.minusSeconds(30), NOW, NOW);
+        when(rooms.findById("room-1"))
+                .thenReturn(
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(bothConfirmed),
+                        Optional.of(completedByOther));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
+        when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.confirm("room-1", "stranger")).isInstanceOf(ForbiddenException.class);
+        assertThat(service.confirm("room-1", "seller-1")).isSameAs(completedByOther);
         verify(markSold, never()).markDirectTradeSoldIfActive(any());
         verifyNoInteractions(notifier);
     }
 
     @Test
+    @DisplayName("매물이 이미 팔렸으면 완료를 되돌리도록 충돌로 끝낸다")
+    void confirm_rejectsWhenListingIsNoLongerAvailable() {
+        when(rooms.findById("room-1"))
+                .thenReturn(
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(room(NOW.minusSeconds(30), NOW, null)));
+        when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
+        when(rooms.completeIfBothConfirmed("room-1", NOW))
+                .thenReturn(Optional.of(room(NOW.minusSeconds(30), NOW, NOW)));
+        when(markSold.markDirectTradeSoldIfActive("listing-1")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.confirm("room-1", "seller-1"))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("DIRECT_TRADE_LISTING_UNAVAILABLE");
+        verifyNoInteractions(notifier);
+    }
+
+    @Test
+    @DisplayName("참여자가 아니면 거부한다")
+    void confirm_rejectsNonParticipant() {
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(null, null, null)));
+
+        assertThatThrownBy(() -> service.confirm("room-1", "stranger")).isInstanceOf(ForbiddenException.class);
+        verify(rooms, never()).recordConfirmation(anyString(), any(), any());
+        verify(markSold, never()).markDirectTradeSoldIfActive(any());
+        verifyNoInteractions(notifier);
+    }
+
+    @Test
+    @DisplayName("결제 거래 단계가 열리면 새 직거래 완료 확인을 받지 않는다")
     void confirm_rejectsNewDirectCompletionAfterPaymentStageOpens() {
         when(launch.current()).thenReturn(new LaunchConfig(LaunchStage.TRADING, Map.of(), NOW, "admin"));
 
@@ -151,90 +177,50 @@ class DirectTradeServiceTest {
     }
 
     @Test
-    void confirm_retriesWriteConflictCode112AndThenSucceeds() {
-        MongoException writeConflict = new MongoException(112, "WriteConflict");
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenThrow(writeConflict)
-                .thenThrow(writeConflict)
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
+    @DisplayName("매물이 없는 레거시 방에서는 직거래를 완료하지 않는다")
+    void confirm_rejectsRoomWithoutListing() {
+        ChatRoom legacy = new ChatRoom("room-1", null, "buyer-1", "seller-1", NOW, NOW, null, null, null);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(legacy));
 
-        ChatRoomDocument result = service.confirm("room-1", "buyer-1");
-
-        assertThat(result.getId()).isEqualTo("room-1");
-        verify(mongo, times(3)).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
+        assertThatThrownBy(() -> service.confirm("room-1", "buyer-1"))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("DIRECT_TRADE_LISTING_ROOM_REQUIRED");
     }
 
     @Test
-    void confirm_retriesWrappedTransientTransactionLabel() {
-        MongoException transientFailure = new MongoException(251, "transaction aborted");
-        transientFailure.addLabel(MongoException.TRANSIENT_TRANSACTION_ERROR_LABEL);
-        RuntimeException translated = new IllegalStateException("translated", transientFailure);
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenThrow(translated)
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
+    @DisplayName("확인 취소는 그 쪽 확인만 지운다")
+    void cancel_clearsActorsConfirmation() {
+        ChatRoom cleared = room(null, null, null);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(NOW, null, null)), Optional.of(cleared));
 
-        service.confirm("room-1", "buyer-1");
-
-        verify(mongo, times(2)).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
+        assertThat(service.cancelConfirmation("room-1", "buyer-1")).isSameAs(cleared);
+        verify(rooms).clearConfirmation("room-1", ChatRoom.Party.BUYER);
     }
 
     @Test
-    void confirm_stopsAfterThreeTransientRetries() {
-        MongoException writeConflict = new MongoException(112, "WriteConflict");
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenThrow(writeConflict);
+    @DisplayName("완료된 거래는 확인을 취소할 수 없다")
+    void cancel_rejectsCompletedTrade() {
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(NOW, NOW, NOW)));
 
-        assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isSameAs(writeConflict);
-
-        verify(mongo, times(4)).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
+        assertThatThrownBy(() -> service.cancelConfirmation("room-1", "buyer-1"))
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("DIRECT_TRADE_ALREADY_COMPLETED");
+        verify(rooms, never()).clearConfirmation(anyString(), any());
     }
 
-    @Test
-    void confirm_doesNotRetryNonTransientMongoFailure() {
-        MongoException duplicateKey = new MongoException(11000, "duplicate key");
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenThrow(duplicateKey);
-
-        assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isSameAs(duplicateKey);
-
-        verify(mongo).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
-    }
-
-    @Test
-    void cancel_retriesWriteConflictCode112AndThenSucceeds() {
-        MongoException writeConflict = new MongoException(112, "WriteConflict");
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenThrow(writeConflict)
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
-
-        ChatRoomDocument result = service.cancelConfirmation("room-1", "buyer-1");
-
-        assertThat(result.getId()).isEqualTo("room-1");
-        verify(mongo, times(2)).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
-    }
-
-    @Test
-    void confirm_doesNotRerunTheTransactionBodyWhenCommitResultIsUnknown() {
-        MongoException unknownResult = new MongoException(91, "commit result was lost");
-        unknownResult.addLabel(MongoException.UNKNOWN_TRANSACTION_COMMIT_RESULT_LABEL);
-        TransactionSystemException commitFailure =
-                new TransactionSystemException("could not confirm commit", unknownResult);
-        doThrow(commitFailure).when(transactions).commit(any());
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room()));
-        when(mongo.updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class)))
-                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
-
-        assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isSameAs(commitFailure);
-
-        verify(mongo).updateFirst(any(), any(), org.mockito.ArgumentMatchers.eq(ChatRoomDocument.class));
-    }
-
-    private ChatRoomDocument room() {
-        return new ChatRoomDocument("room-1", "listing-1", "buyer-1", "seller-1", NOW.minusSeconds(60));
+    private static ChatRoom room(Instant buyerConfirmedAt, Instant sellerConfirmedAt, Instant completedAt) {
+        Instant created = NOW.minusSeconds(60);
+        return new ChatRoom(
+                "room-1",
+                "listing-1",
+                "buyer-1",
+                "seller-1",
+                created,
+                created,
+                buyerConfirmedAt,
+                sellerConfirmedAt,
+                completedAt);
     }
 }

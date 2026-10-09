@@ -1,8 +1,8 @@
 package com.gole.api.chat.application.service;
 
-import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
 import com.gole.api.chat.application.port.in.ListingRoomAccessUseCase;
+import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
+import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import java.util.Optional;
@@ -10,15 +10,15 @@ import org.springframework.stereotype.Service;
 
 /**
  * 매물 방 접근 검사. 권한 판단은 {@link SocialChatService}에 맡기고, 구매자·판매자 구분은
- * {@code chat_rooms} 문서에서 읽는다({@link DirectTradeService}와 같은 출처).
+ * 매물 방 저장소에서 읽는다({@link DirectTradeService}와 같은 출처).
  */
 @Service
 public class ListingRoomAccessService implements ListingRoomAccessUseCase {
 
     private final SocialChatService socialChats;
-    private final ChatRoomMongoRepository listingRooms;
+    private final ListingChatRoomRepositoryPort listingRooms;
 
-    public ListingRoomAccessService(SocialChatService socialChats, ChatRoomMongoRepository listingRooms) {
+    public ListingRoomAccessService(SocialChatService socialChats, ListingChatRoomRepositoryPort listingRooms) {
         this.socialChats = socialChats;
         this.listingRooms = listingRooms;
     }
@@ -39,12 +39,11 @@ public class ListingRoomAccessService implements ListingRoomAccessUseCase {
         }
         return listingRooms
                 .findById(room.id())
-                .filter(document -> document.getListingId() != null)
+                .filter(ChatRoom::hasListing)
                 .map(ListingRoomAccessService::toParticipants);
     }
 
-    private static ListingRoomParticipants toParticipants(ChatRoomDocument document) {
-        return new ListingRoomParticipants(
-                document.getId(), document.getListingId(), document.getBuyerId(), document.getSellerId());
+    private static ListingRoomParticipants toParticipants(ChatRoom room) {
+        return new ListingRoomParticipants(room.id(), room.listingId(), room.buyerId(), room.sellerId());
     }
 }
