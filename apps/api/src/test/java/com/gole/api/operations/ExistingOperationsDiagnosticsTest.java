@@ -3,7 +3,7 @@ package com.gole.api.operations;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.gole.api.admin.application.service.ExceptionQueueService;
+import com.gole.api.admin.application.port.in.ListExceptionQueueUseCase;
 import com.gole.api.common.operations.DiscordOperationsProperties;
 import com.gole.api.operations.adapter.out.diagnostics.ExistingOperationsDiagnostics;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
@@ -14,7 +14,7 @@ import org.springframework.mock.env.MockEnvironment;
 class ExistingOperationsDiagnosticsTest {
     @Test
     void invokesExistingReadOnlyUseCasesAndNeverReturnsWebhook() {
-        var queue = mock(ExceptionQueueService.class);
+        var queue = mock(ListExceptionQueueUseCase.class);
         var payment = mock(GetPaymentReadinessUseCase.class);
         var discord = new DiscordOperationsProperties();
         discord.setOperationsWebhookUrl("https://discord.com/api/webhooks/123/SECRET");
@@ -43,7 +43,7 @@ class ExistingOperationsDiagnosticsTest {
     void sentryReadiness_distinguishesDisabledMissingAndUnverified() {
         var env = new MockEnvironment();
         var diagnostics = new ExistingOperationsDiagnostics(
-                mock(ExceptionQueueService.class),
+                mock(ListExceptionQueueUseCase.class),
                 mock(GetPaymentReadinessUseCase.class),
                 new DiscordOperationsProperties(),
                 env);

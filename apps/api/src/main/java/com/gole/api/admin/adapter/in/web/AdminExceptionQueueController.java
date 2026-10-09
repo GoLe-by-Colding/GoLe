@@ -1,9 +1,9 @@
 package com.gole.api.admin.adapter.in.web;
 
+import com.gole.api.admin.application.port.in.ListExceptionQueueUseCase;
+import com.gole.api.admin.application.port.in.ListExceptionQueueUseCase.ExceptionEntry;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
-import com.gole.api.admin.application.service.ExceptionQueueService;
-import com.gole.api.admin.application.service.ExceptionQueueService.ExceptionEntry;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.common.web.auth.AdminActor;
@@ -40,14 +40,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 public class AdminExceptionQueueController {
 
-    private final ExceptionQueueService exceptionQueue;
+    private final ListExceptionQueueUseCase exceptionQueue;
     private final ResolveDisputeUseCase resolveDispute;
     private final GetOrderUseCase getOrder;
     private final GetShipmentUseCase getShipment;
     private final RecordAdminActionUseCase audit;
 
     public AdminExceptionQueueController(
-            ExceptionQueueService exceptionQueue,
+            ListExceptionQueueUseCase exceptionQueue,
             ResolveDisputeUseCase resolveDispute,
             GetOrderUseCase getOrder,
             GetShipmentUseCase getShipment,
