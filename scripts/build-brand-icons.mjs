@@ -23,25 +23,30 @@ const COPIES = ["apps/web/src/shared/ui/logo/logo.tsx", "apps/web/src/app/opengr
 /** 브랜드 단색. 그라데이션은 `brand-identity.md`에서 금지한다. */
 const BRAND = "#1D4ED8"; // brand-600
 const WHITE = "#FFFFFF";
-/** 파란 면 위 골드는 한 단계 밝은 accent-400이 흰 머리 위에서 같은 무게로 읽힌다. */
+/** 파란 면 위 골드는 한 단계 밝은 accent-400이 흰 몸 위에서 같은 무게로 읽힌다. */
 const GOLD_ON_BRAND = "#FACC15";
+/** 눈·미소. 흰 고래 위에서도 웹 로고와 같은 brand-950이다. */
+const FACE = "#131E4F";
+/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`logo.tsx`와 같다). */
+const PARTS = ["gold", "body", "top", "face", "glint"];
 
 // ── 정본 읽기 ──
 function readMark() {
   const svg = readFileSync(join(ROOT, MARK_PATH), "utf8");
   const vb = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
   const paths = Object.fromEntries(
-    [...svg.matchAll(/<path id="gole-(gold|body)" d="([^"]+)"/g)].map((m) => [m[1], m[2]]),
+    [...svg.matchAll(/<path id="gole-([a-z]+)" d="([^"]+)"/g)].map((m) => [m[1], m[2]]),
   );
-  if (!vb || !paths.gold || !paths.body)
-    throw new Error(`${MARK_PATH}: viewBox·gole-gold·gole-body를 찾지 못함`);
+  const missing = PARTS.filter((part) => !paths[part]);
+  if (!vb || missing.length > 0)
+    throw new Error(`${MARK_PATH}: viewBox 또는 gole-${missing.join("·gole-")}를 찾지 못함`);
   return { w: Number(vb[1]), h: Number(vb[2]), ...paths };
 }
 
 function checkCopies(mark) {
   const stale = COPIES.filter((file) => {
     const src = readFileSync(join(ROOT, file), "utf8");
-    return !src.includes(mark.body) || !src.includes(mark.gold);
+    return PARTS.some((part) => !src.includes(mark[part]));
   });
   if (stale.length > 0) {
     throw new Error(
@@ -53,19 +58,29 @@ function checkCopies(mark) {
 
 // ── 배치 ──
 /**
- * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 머리가 아래에 무겁고(무게중심 높이 61%) 꼬리가 왼쪽
- * 위로 뻗어(무게중심 너비 46%) 경계 상자 중심에 두면 눈에는 왼쪽 아래로 처져 보인다. 그래서 마크
- * 너비의 1.8%만큼 오른쪽, 높이의 5.5%만큼 위로 옮긴다 — 무게중심과 상자 중심 차이의 절반이다.
+ * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 옆모습 브릭 고래는 머리·몸이 왼쪽에 무겁고 꼬리 플레이트가
+ * 가늘어(무게중심 너비 45.1%), 스터드 줄이 위에 있어(높이 46.8%) 경계 상자 중심에 두면 눈에는 왼쪽 위로
+ * 쏠려 보인다. 그래서 마크 너비의 2.4%만큼 오른쪽, 높이의 1.6%만큼 아래로 옮긴다 — 무게중심과 상자 중심
+ * 차이의 절반이다(2026-10-09 옆모습 마크 실측).
  */
-const NUDGE_X = 0.018;
-const NUDGE_Y = -0.055;
-function placed(mark, { canvas, width, body, gold }) {
+const NUDGE_X = 0.024;
+const NUDGE_Y = 0.016;
+/**
+ * `colors`는 경로별 색이다. `mono`면 런처·시스템이 알파만 보는 단색 실루엣이라, 골드도 같은 색으로 합치고
+ * 몸 경로 뒤에 반대 방향으로 감긴 face(눈·미소)를 이어 붙여 얼굴을 구멍으로 남긴다.
+ */
+function placed(mark, { canvas, width, colors, mono = false }) {
   const s = width / mark.w;
   const tx = canvas / 2 - (mark.w / 2) * s + mark.w * s * NUDGE_X;
   const ty = canvas / 2 - (mark.h / 2) * s + mark.h * s * NUDGE_Y;
+  const paths = mono
+    ? [
+        `<path d="${mark.gold}" fill="${colors.body}"/>`,
+        `<path d="${mark.body}${mark.face}" fill="${colors.body}"/>`,
+      ]
+    : PARTS.map((part) => `<path d="${mark[part]}" fill="${colors[part]}"/>`);
   return `  <g transform="translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${s.toFixed(5)})">
-    <path d="${mark.gold}" fill="${gold}"/>
-    <path d="${mark.body}" fill="${body}"/>
+${paths.map((path) => `    ${path}`).join("\n")}
   </g>`;
 }
 
@@ -79,14 +94,16 @@ const solid = (canvas, fill) => `  <rect width="${canvas}" height="${canvas}" fi
 
 /**
  * Android 어댑티브는 108dp 캔버스 중 지름 66dp 원만 어떤 마스크에서도 남는다.
- * 마크가 정사각형에 가깝고 가장 먼 점(지느러미 끝)이 모서리 쪽이라, 폭 50dp에서 최원점이 약 32dp다
- * (51dp면 32.8dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
+ * 옆모습 마크는 가로로 길어(235.8:132.2) 가장 먼 점이 V 꼬리 플레이트 끝이다. 폭 58dp에서 최원점이
+ * 약 31.3dp로 세이프존 안이다(60dp면 32.4dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
  */
-const FG_WIDTH = 50;
+const FG_WIDTH = 58;
+/** iOS 1024² 캔버스에서 마크 폭. 가로로 긴 마크라 정면 마크(640)보다 넓혀 시각 무게를 맞춘다. */
+const IOS_WIDTH = 700;
 
 function variants(mark) {
-  const color = { body: WHITE, gold: GOLD_ON_BRAND };
-  const mono = { body: WHITE, gold: WHITE };
+  const color = { colors: { gold: GOLD_ON_BRAND, body: WHITE, top: WHITE, face: FACE, glint: WHITE } };
+  const mono = { colors: { body: WHITE }, mono: true };
   return [
     // iOS: 1024² 무알파, 자체 라운딩 없음 — 모서리는 OS가 마스크한다.
     {
@@ -96,7 +113,7 @@ function variants(mark) {
       flatten: true,
       svg: svgDoc(
         1024,
-        `${solid(1024, BRAND)}\n${placed(mark, { canvas: 1024, width: 640, ...color })}`,
+        `${solid(1024, BRAND)}\n${placed(mark, { canvas: 1024, width: IOS_WIDTH, ...color })}`,
       ),
     },
     {
@@ -112,8 +129,8 @@ function variants(mark) {
       size: 512,
       svg: svgDoc(108, solid(108, BRAND)),
     },
-    // 런처가 알파로 테마 색을 입힌다. 골드 스터드는 흰 실루엣에 합쳐져 미니피규어 머리 윤곽이 되고,
-    // 눈·입은 구멍으로 남아 테마 아이콘에서도 얼굴이 보인다.
+    // 런처가 알파로 테마 색을 입힌다. 골드 스터드는 흰 실루엣에 합쳐져 스터드 줄이 되고,
+    // 눈·미소·힌지 핀 고리는 구멍으로 남아 테마 아이콘에서도 얼굴과 조립 결이 보인다.
     {
       out: "apps/mobile/assets/brand/android-icon-monochrome.svg",
       png: "apps/mobile/assets/images/android-icon-monochrome.png",
@@ -142,9 +159,10 @@ function variants(mark) {
 
 /** 브라우저 탭용 favicon. 탭 바 색에 묻히지 않게 둥근 브랜드 타일 위에 흰 고래를 올린다. */
 function faviconSvg(mark) {
+  const colors = { gold: GOLD_ON_BRAND, body: WHITE, top: WHITE, face: FACE, glint: WHITE };
   return svgDoc(
     64,
-    `  <rect width="64" height="64" rx="14" fill="${BRAND}"/>\n${placed(mark, { canvas: 64, width: 52, body: WHITE, gold: GOLD_ON_BRAND })}`,
+    `  <rect width="64" height="64" rx="14" fill="${BRAND}"/>\n${placed(mark, { canvas: 64, width: 52, colors })}`,
   );
 }
 

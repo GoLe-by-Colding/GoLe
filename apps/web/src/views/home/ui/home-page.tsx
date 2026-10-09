@@ -7,7 +7,7 @@ import { fetchLaunchConfig } from "@entities/launch";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
-import { formatKrw } from "@shared/lib";
+import { cn, formatKrw } from "@shared/lib";
 import { env, isPaymentRuntimeAvailable } from "@shared/config";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
 
@@ -53,12 +53,12 @@ async function loadStats(): Promise<{ listings: number; txCount: number }> {
   }
 }
 
-/** 절제된 골드 라인과 제목으로 구성한 섹션 헤더. */
+/** 짧은 브랜드 라인과 제목으로 구성한 섹션 헤더. 골드는 히어로 제목과 고래 스터드에만 남긴다. */
 function SectionHeader({ title, aside }: { readonly title: string; readonly aside?: ReactNode }) {
   return (
     <div className="flex items-end justify-between gap-4">
       <div className="flex flex-col gap-2">
-        <span aria-hidden="true" className="h-0.5 w-8 bg-accent-400" />
+        <span aria-hidden="true" className="h-0.5 w-8 bg-brand-500" />
         <Heading level={2}>{title}</Heading>
       </div>
       {aside}
@@ -117,43 +117,63 @@ export async function HomePage() {
   ];
 
   // 히어로 CTA. 넓은 화면은 우측 레일(분수 → 지표 → CTA) 끝에, 모바일은 문구 바로 아래에 같은 것을 둔다.
+  // 처음 온 사람에게도 참이어야 하므로 보조 CTA는 로그인·대화 이력과 무관한 공개 화면으로만 보낸다
+  // ("대화 이어가기"는 대화가 없는 신규 방문자에게 거짓이었다).
   const heroActions = (
     <div className="flex flex-col gap-3 xl:flex-row">
-      <LinkButton href="/search" variant="accent" size="lg" fullWidth>
+      <LinkButton href="/search" variant="primary" size="lg" fullWidth>
         상품 둘러보기
       </LinkButton>
       <LinkButton
-        href={sellerTradingOpen ? (paymentsOpen ? "/prices" : "/chat") : "/community"}
-        variant="inverse"
+        href={sellerTradingOpen ? "/prices" : "/community"}
+        variant="secondary"
         size="lg"
         fullWidth
       >
-        {sellerTradingOpen
-          ? paymentsOpen
-            ? "시세 확인하기"
-            : "대화 이어가기"
-          : "커뮤니티 둘러보기"}
+        {sellerTradingOpen ? "시세 확인하기" : "커뮤니티 둘러보기"}
       </LinkButton>
     </div>
   );
 
   return (
     <div className="flex flex-col">
-      <section className="border-b border-brand-900 bg-brand-950 text-white">
+      {/*
+        밝은 히어로 — 흰 바탕에 연한 블루 레일, 코발트 CTA, 골드는 제목 밑줄과 고래 스터드 두 곳뿐이다
+        (brand-identity: 흰색 기반·accent 화면당 1~2곳). 짙은 남색 히어로는 무겁고, 그 위의 brand-500
+        고래는 대비가 3:1이라 캐릭터가 묻혔다. 연한 레일 위 기본 brand-600 고래는 약 6:1이다.
+      */}
+      <section className="bg-white">
         <Container width="xl">
-          <div className="grid gap-10 py-16 min-[960px]:grid-cols-[minmax(0,1.25fr)_minmax(330px,0.75fr)] min-[960px]:items-center min-[960px]:gap-8 xl:gap-12 max-sm:py-14">
-            <div className="flex flex-col gap-7">
-              <span className="self-start border-l-2 border-accent-400 pl-3 text-sm font-semibold text-accent-300">
-                깊은 바다에서 건져 올린 브릭
-              </span>
-              <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white">
-                브릭을 <span className="inline-block text-accent-300">가장 합리적으로</span>
+          <div className="grid gap-10 py-16 min-[960px]:grid-cols-[minmax(0,1.25fr)_minmax(330px,0.75fr)] min-[960px]:items-center min-[960px]:gap-8 xl:gap-12 max-sm:gap-8 max-sm:py-10">
+            <div className="flex flex-col gap-7 max-sm:gap-6">
+              {/* 모바일은 레일의 큰 고래가 CTA 아래로 밀리므로, 작은 고래를 첫 줄 오른쪽에 둔다.
+                  320px 폭에서는 아이브로가 두 줄이 되므로 어절 단위로 고르게 나눠 "브릭" 한 단어만 남지 않게 한다. */}
+              <div className="flex items-end justify-between gap-4">
+                <span className="border-l-2 border-brand-500 pl-3 text-sm font-semibold text-balance break-keep text-brand-700">
+                  깊은 바다에서 건져 올린 브릭
+                </span>
+                <Logo
+                  size={104}
+                  showWordmark={false}
+                  spout
+                  className="gole-mascot-float shrink-0 sm:hidden"
+                />
+              </div>
+              <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-neutral-900">
+                브릭을{" "}
+                <span className="relative isolate inline-block text-brand-700">
+                  가장 합리적으로
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-0 bottom-[0.04em] -z-10 h-[0.3em] rounded-sm bg-accent-300"
+                  />
+                </span>
               </h1>
               {/*
                 두 문장을 block으로 두어 넓은 화면에서만 줄을 나눈다. `<br>`를 숨기는 방식은
                 모바일에서 공백까지 함께 사라져 "컬렉션.흩어져"로 붙어버린다.
               */}
-              <p className="max-w-[44ch] text-lg leading-relaxed text-brand-100">
+              <p className="max-w-[44ch] text-lg leading-relaxed text-neutral-600">
                 <span className="block max-sm:inline">
                   {paymentsOpen
                     ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
@@ -163,54 +183,58 @@ export async function HomePage() {
                 </span>{" "}
                 <span className="block max-sm:inline">흩어져 있던 브릭 거래를 한곳에서.</span>
               </p>
-              <p className="max-w-[40ch] text-sm leading-relaxed text-brand-200/90">
-                가격은 감이 아니라 체결 기록에서 나옵니다. 오른쪽 숫자가 지금 이 순간의 GoLe입니다.
-              </p>
               {/* 한 칸짜리 모바일 레이아웃에서는 우측 레일이 문구 아래로 내려가 CTA가 첫 화면 밖으로
                   밀린다(402×874에서 폴드보다 109px 아래). 모바일만 CTA를 문구 바로 아래에 둔다. */}
               <div className="sm:hidden">{heroActions}</div>
             </div>
 
             {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
-                CTA(그래서 무엇을 하는가) 순으로 한 줄기 시선을 만든다. */}
-            <div className="gole-hero-flow flex min-w-0 flex-col gap-5 rounded-[1.75rem] border border-white/10 bg-white/[0.035] p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6">
-              <div className="relative flex min-h-48 items-center justify-center sm:max-[959px]:row-span-2 max-sm:min-h-40">
+                CTA(그래서 무엇을 하는가) 순으로 한 줄기 시선을 만든다. 모바일에서는 고래·CTA가 문구 쪽에
+                있으므로 지표만 남고, 지표도 없으면 빈 상자가 되지 않게 레일을 숨긴다. */}
+            <div
+              className={cn(
+                "gole-hero-flow flex min-w-0 flex-col gap-5 rounded-[1.75rem] border border-brand-100 bg-brand-50 p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6",
+                liveStats.length === 0 && "max-sm:hidden",
+              )}
+            >
+              <div className="relative flex min-h-48 items-center justify-center sm:max-[959px]:row-span-2 max-sm:hidden">
                 <span
                   aria-hidden="true"
-                  className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-700 to-transparent"
+                  className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent"
                 />
-                <Logo
-                  size={256}
-                  showWordmark={false}
-                  spout
-                  className="gole-mascot-float drop-shadow-[0_18px_24px_rgba(3,10,35,0.22)] [--gole-mark-body:var(--color-brand-500)]"
-                />
+                <Logo size={256} showWordmark={false} spout className="gole-mascot-float" />
               </div>
 
               {liveStats.length > 0 ? (
-                <div
-                  aria-label={sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
-                  className="divide-y divide-white/15 border-y border-white/20"
-                >
-                  <div className="flex items-center gap-2 py-2.5">
-                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent-300" />
-                    <span className="text-xs font-semibold tracking-wide text-accent-300">
-                      {sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
-                    </span>
-                  </div>
-                  {liveStats.map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="flex items-baseline justify-between gap-4 py-3"
-                    >
-                      <span className="text-xs font-medium uppercase tracking-wide text-brand-200">
-                        {stat.label}
-                      </span>
-                      <span className="text-base font-bold tracking-tight text-white">
-                        {stat.value}
+                <div className="flex flex-col gap-3">
+                  <div
+                    aria-label={sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
+                    className="divide-y divide-brand-100 border-y border-brand-100"
+                  >
+                    <div className="flex items-center gap-2 py-2.5">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+                      <span className="text-xs font-semibold tracking-wide text-brand-700">
+                        {sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
                       </span>
                     </div>
-                  ))}
+                    {liveStats.map((stat) => (
+                      <div
+                        key={stat.label}
+                        className="flex items-baseline justify-between gap-4 py-3"
+                      >
+                        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                          {stat.label}
+                        </span>
+                        <span className="text-base font-bold tracking-tight text-neutral-900">
+                          {stat.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* 지표 바로 아래에 붙여, 어느 레이아웃에서도 "어느 숫자"인지 위치어 없이 읽힌다. */}
+                  <p className="text-sm leading-relaxed text-neutral-600">
+                    가격은 감이 아니라 체결 기록에서 나옵니다.
+                  </p>
                 </div>
               ) : null}
 

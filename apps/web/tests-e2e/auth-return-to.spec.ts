@@ -100,8 +100,14 @@ test.describe("returnTo 허용목록", () => {
   test("알 수 없는 경로 문자열은 로그인 안내에 그대로 노출하지 않는다", async ({ page }) => {
     const injected = "/무료-쿠폰을-받으세요";
     await page.goto(`/login?returnTo=${encodeURIComponent(injected)}`);
-    await expect(notice(page)).toContainText("이전 화면");
+    // 문장 전체를 본다 — 예전에는 이름("이전 화면")과 문장의 "화면"이 겹쳐 "이전 화면 화면으로"가 됐다.
+    await expect(notice(page)).toHaveText("로그인하면 이전 화면으로 돌아갑니다.");
     await expect(notice(page)).not.toContainText(injected);
+  });
+
+  test("내 정보에서 들어온 로그인은 내 정보로 돌아간다고 알린다", async ({ page }) => {
+    await page.goto(`/login?returnTo=${encodeURIComponent("/profile")}`);
+    await expect(notice(page)).toHaveText("로그인하면 내 정보 화면으로 돌아갑니다.");
   });
 });
 

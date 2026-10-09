@@ -300,8 +300,11 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                   diff={series[series.length - 1]!.price - series[0]!.price}
                 />
               ) : null}
+              {/* 스냅샷 헤드라인·차트는 백엔드가 미개봉 체결만 모은 값이다(PricingService.getSnapshot). */}
               <span className="text-xs text-neutral-400">
-                {series.length >= 2 ? `${periodLabel} 기준` : "최근 전체 체결가"}
+                {series.length >= 2
+                  ? `미개봉 최근 체결가 · ${periodLabel} 변동`
+                  : "미개봉 최근 체결가"}
               </span>
             </div>
 
@@ -325,7 +328,7 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold text-neutral-900">체결가 추이</span>
+                <span className="text-sm font-semibold text-neutral-900">미개봉 체결가 추이</span>
                 <span className="text-xs text-neutral-400">
                   {current.points === null
                     ? "차트 조회 실패"
@@ -373,7 +376,7 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
             {snapshot.valuation?.hasData ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-neutral-900">상태별 시세</span>
+                  <span className="text-sm font-bold text-neutral-900">상태별 추정 시세</span>
                   <span className="text-xs text-neutral-400">
                     {evidenceWarning === null
                       ? "검증된 체결가 기준 추정"
@@ -386,9 +389,9 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                       <tr className="bg-neutral-50 text-xs text-neutral-500">
                         <th className="px-3 py-2 text-left font-medium">상태</th>
                         <th className="px-3 py-2 text-right font-medium">감가</th>
-                        <th className="px-3 py-2 text-right font-medium">시세</th>
-                        <th className="px-3 py-2 text-right font-medium">즉시판매</th>
-                        <th className="px-3 py-2 text-right font-medium">즉시구매</th>
+                        <th className="px-3 py-2 text-right font-medium">추정 시세</th>
+                        <th className="px-3 py-2 text-right font-medium">빠른 판매 추정</th>
+                        <th className="px-3 py-2 text-right font-medium">빠른 구매 추정</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -428,9 +431,12 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
                     </tbody>
                   </table>
                 </div>
+                {/* 추정 시세 × 고정 스프레드(0.96·1.05, 백엔드 PriceValuation)라 호가·체결이 아니다.
+                    구매 입찰의 실제 "즉시 판매" 기능과 이름이 겹치지 않게 "빠른 판매·구매 추정"이라 부른다. */}
                 <p className="text-xs leading-relaxed text-neutral-400">
-                  즉시판매는 판매자가 빠르게 거래할 때, 즉시구매는 구매자가 빠르게 구할 때의 참고
-                  가격이에요. 실제 거래 조건에 따라 달라질 수 있어요.
+                  빠른 판매 추정은 판매자가 빨리 팔 때, 빠른 구매 추정은 구매자가 빨리 구할 때를
+                  가정해 추정 시세에서 계산한 참고값이에요. 실제 체결가나 지금 받을 수 있는 입찰가가
+                  아니에요.
                 </p>
               </div>
             ) : (

@@ -56,12 +56,14 @@ export function ListingGrid({
 
   return (
     <div>
+      {/* 360px 이상 휴대폰은 2열로 나란히 비교한다(390px에서 한 화면에 카드 1장뿐이던 1열을 바꿈).
+          320px급 좁은 폭은 카드가 130px 아래로 줄어 긴 금액이 넘치므로 1열을 유지한다. */}
       <div
-        className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
+        className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))] sm:gap-5"
         data-testid="listing-grid"
       >
         {shown.map((listing) => (
-          <Link key={listing.id} href={`/listings/${listing.id}`}>
+          <Link key={listing.id} href={`/listings/${listing.id}`} className="block h-full">
             <ListingCard listing={listing} />
           </Link>
         ))}
