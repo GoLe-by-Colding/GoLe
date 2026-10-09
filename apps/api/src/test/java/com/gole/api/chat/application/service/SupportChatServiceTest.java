@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
@@ -92,7 +93,7 @@ class SupportChatServiceTest {
         when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(ticket));
         when(rooms.findById("room-1")).thenReturn(Optional.of(room));
 
-        SupportChatService.SupportConversation result = service.assignToSelf("room-1", "admin-1");
+        SupportConsoleUseCase.SupportConversation result = service.assignToSelf("room-1", "admin-1");
 
         assertThat(result.changed()).isFalse();
         assertThat(result.ticket()).isSameAs(ticket);
@@ -117,8 +118,8 @@ class SupportChatServiceTest {
         SupportTicket resolved = assigned.resolve(NOW);
         when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(resolved), Optional.of(assigned));
 
-        SupportChatService.SupportTransition resolveResult = service.resolve("room-1", "admin-1");
-        SupportChatService.SupportTransition reopenResult = service.reopen("room-1", "admin-1");
+        SupportConsoleUseCase.SupportTransition resolveResult = service.resolve("room-1", "admin-1");
+        SupportConsoleUseCase.SupportTransition reopenResult = service.reopen("room-1", "admin-1");
 
         assertThat(resolveResult.changed()).isFalse();
         assertThat(resolveResult.ticket()).isSameAs(resolved);
@@ -133,7 +134,7 @@ class SupportChatServiceTest {
         when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(assigned));
         when(tickets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupportChatService.SupportTransition result = service.resolve("room-1", "admin-1");
+        SupportConsoleUseCase.SupportTransition result = service.resolve("room-1", "admin-1");
 
         assertThat(result.changed()).isTrue();
         assertThat(result.ticket().status()).isEqualTo(SupportStatus.RESOLVED);
@@ -150,7 +151,7 @@ class SupportChatServiceTest {
         when(tickets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(rooms.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupportChatService.SupportTakeover result = service.takeOver("room-1", "admin-2", "  기존 담당자 계정 정지  ");
+        SupportConsoleUseCase.SupportTakeover result = service.takeOver("room-1", "admin-2", "  기존 담당자 계정 정지  ");
 
         assertThat(result.previousAssigneeId()).isEqualTo("admin-1");
         assertThat(result.reason()).isEqualTo("기존 담당자 계정 정지");

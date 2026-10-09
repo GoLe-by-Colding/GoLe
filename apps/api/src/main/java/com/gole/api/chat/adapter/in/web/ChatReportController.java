@@ -1,6 +1,6 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.chat.application.service.ChatReportService;
+import com.gole.api.chat.application.port.in.ReportChatMessageUseCase;
 import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.report.domain.model.ReportReason;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,9 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/chat/messages")
 public class ChatReportController {
 
-    private final ChatReportService reports;
+    private final ReportChatMessageUseCase reports;
 
-    public ChatReportController(ChatReportService reports) {
+    public ChatReportController(ReportChatMessageUseCase reports) {
         this.reports = reports;
     }
 

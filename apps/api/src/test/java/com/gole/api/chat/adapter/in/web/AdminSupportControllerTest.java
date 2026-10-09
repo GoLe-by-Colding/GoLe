@@ -19,10 +19,10 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.service.ChatMessagingService;
-import com.gole.api.chat.application.service.SocialChatService;
-import com.gole.api.chat.application.service.SupportAssistantAnalysisService;
-import com.gole.api.chat.application.service.SupportChatService;
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
+import com.gole.api.chat.application.port.in.GetSupportAssistantAnalysisUseCase;
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
@@ -47,10 +47,10 @@ class AdminSupportControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-08-30T09:00:00Z");
 
-    private final SupportChatService support = mock(SupportChatService.class);
-    private final SocialChatService rooms = mock(SocialChatService.class);
-    private final ChatMessagingService messaging = mock(ChatMessagingService.class);
-    private final SupportAssistantAnalysisService supportAssistant = mock(SupportAssistantAnalysisService.class);
+    private final SupportConsoleUseCase support = mock(SupportConsoleUseCase.class);
+    private final SocialChatUseCase rooms = mock(SocialChatUseCase.class);
+    private final ChatMessagingUseCase messaging = mock(ChatMessagingUseCase.class);
+    private final GetSupportAssistantAnalysisUseCase supportAssistant = mock(GetSupportAssistantAnalysisUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
@@ -76,7 +76,7 @@ class AdminSupportControllerTest {
         SupportTicket taken = ticket.transferTo("admin-2", NOW.plusSeconds(10));
         SocialChatRoom takenRoom = room.withSupportAgent("admin-1", "admin-2");
         when(support.takeOver("room-1", "admin-2", "기존 담당자 계정 정지"))
-                .thenReturn(new SupportChatService.SupportTakeover(takenRoom, taken, "admin-1", "기존 담당자 계정 정지"));
+                .thenReturn(new SupportConsoleUseCase.SupportTakeover(takenRoom, taken, "admin-1", "기존 담당자 계정 정지"));
 
         mvc.perform(post("/api/admin/support/room-1/takeover")
                         .header("Authorization", "Bearer admin-token")
@@ -209,7 +209,7 @@ class AdminSupportControllerTest {
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
         when(support.assignToSelf("room-1", "admin-2"))
-                .thenReturn(new SupportChatService.SupportConversation(room, ticket, false));
+                .thenReturn(new SupportConsoleUseCase.SupportConversation(room, ticket, false));
 
         mvc.perform(post("/api/admin/support/room-1/assign").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
@@ -223,7 +223,8 @@ class AdminSupportControllerTest {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-2", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
-        when(support.reopen("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, false));
+        when(support.reopen("room-1", "admin-2"))
+                .thenReturn(new SupportConsoleUseCase.SupportTransition(ticket, false));
         when(rooms.requireRoom("room-1")).thenReturn(room);
 
         mvc.perform(post("/api/admin/support/room-1/reopen").header("Authorization", "Bearer admin-token"))
@@ -240,7 +241,8 @@ class AdminSupportControllerTest {
                 .resolve(NOW.plusSeconds(10));
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
-        when(support.resolve("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, true));
+        when(support.resolve("room-1", "admin-2"))
+                .thenReturn(new SupportConsoleUseCase.SupportTransition(ticket, true));
         when(rooms.requireRoom("room-1")).thenReturn(room);
 
         mvc.perform(post("/api/admin/support/room-1/resolve").header("Authorization", "Bearer admin-token"))

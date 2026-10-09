@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.ChatReadStateUseCase;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 모든 채팅 유형의 읽음 커서와 방별 안 읽음 수를 한 계약으로 제공한다. */
 @Service
-public class ChatReadService {
+public class ChatReadService implements ChatReadStateUseCase {
 
     private static final int MAX_ROOMS = 100;
 
@@ -44,6 +45,7 @@ public class ChatReadService {
         this.clock = clock;
     }
 
+    @Override
     public Map<String, Long> unreadCounts(String actorId) {
         List<String> readableRoomIds = socialChats.myReadableRooms(actorId, MAX_ROOMS).stream()
                 .map(room -> room.id())
@@ -58,6 +60,7 @@ public class ChatReadService {
         return Collections.unmodifiableMap(response);
     }
 
+    @Override
     @Transactional
     public void markRead(String roomId, String actorId, String lastMessageId) {
         var room = socialChats.requireReadable(roomId, actorId);

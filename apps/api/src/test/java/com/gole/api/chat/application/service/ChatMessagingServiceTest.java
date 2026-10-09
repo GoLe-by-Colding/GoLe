@@ -3,11 +3,14 @@ package com.gole.api.chat.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatMessagePublisherPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
@@ -15,11 +18,13 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ForbiddenException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class ChatMessagingServiceTest {
@@ -27,12 +32,14 @@ class ChatMessagingServiceTest {
     private final ChatMessageRepositoryPort messages = mock(ChatMessageRepositoryPort.class);
     private final ChatMessagePublisherPort publisher = mock(ChatMessagePublisherPort.class);
     private final SocialChatService socialChats = mock(SocialChatService.class);
+    private final ChatConsentPort consents = mock(ChatConsentPort.class);
     private final SupportOperationalEventNotifier supportEvents = mock(SupportOperationalEventNotifier.class);
     private final SupportAssistantAnalysisService supportAnalysis = mock(SupportAssistantAnalysisService.class);
     private final ChatMessagingService service = new ChatMessagingService(
             messages,
             publisher,
             socialChats,
+            consents,
             supportEvents,
             supportAnalysis,
             Clock.fixed(Instant.parse("2026-08-30T00:00:00Z"), ZoneOffset.UTC));
@@ -109,6 +116,35 @@ class ChatMessagingServiceTest {
         verify(supportEvents).requesterReplied(ticket);
         verify(supportEvents, never()).opened(any());
         verify(supportAnalysis, never()).analyzeOpeningAfterCommit(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("매물·1:1 방에 보내는 사용자 메시지는 보내는 사람의 현재 동의가 없으면 저장하지 않는다")
+    void sendFromUser_requiresConsentOutsideSupportRooms() {
+        SocialChatRoom listingRoom = SocialChatRoom.listing(
+                "listing-room", "listing-1", "buyer", "seller", Instant.parse("2026-08-30T00:00:00Z"));
+        when(socialChats.requireReadable("listing-room", "buyer")).thenReturn(listingRoom);
+        doThrow(new ForbiddenException("THIRD_PARTY_PROVISION_CONSENT_REQUIRED", "consent required"))
+                .when(consents)
+                .requireCurrent("buyer");
+
+        assertThatThrownBy(() -> service.sendFromUser("listing-room", "buyer", "new message"))
+                .isInstanceOf(ForbiddenException.class);
+        verify(messages, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("운영팀 문의방 메시지는 동의를 묻지 않는다")
+    void sendFromUser_skipsConsentInSupportRoom() {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        SocialChatRoom supportRoom = SocialChatRoom.support("support-room", "buyer", "privacy request", now);
+        when(socialChats.requireReadable("support-room", "buyer")).thenReturn(supportRoom);
+        when(socialChats.requireSendable("support-room", "buyer")).thenReturn(supportRoom);
+        when(messages.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.sendFromUser("support-room", "buyer", "help").content())
+                .isEqualTo("help");
+        verifyNoInteractions(consents);
     }
 
     private static ChatMessage message(String id, String sentAt) {

@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase;
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatOrderEvidencePort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
@@ -40,7 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 보존 필요성을 검토했음을 확인한 단건 요청만 처리한다.
  */
 @Service
-public class SupportConversationPrivacyService {
+public class SupportConversationPrivacyService implements ManageSupportConversationPrivacyUseCase {
 
     private static final Pattern IDEMPOTENCY_KEY =
             Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
@@ -77,6 +78,7 @@ public class SupportConversationPrivacyService {
     }
 
     @Transactional
+    @Override
     public PurgeOutcome purge(
             String roomId,
             String actorId,
@@ -143,6 +145,7 @@ public class SupportConversationPrivacyService {
     }
 
     @Transactional
+    @Override
     public RetentionHoldOutcome placeRetentionHold(
             String roomId, String actorId, String confirmation, RetentionHoldReasonCode reasonCode) {
         requireAdmin(actorId);
@@ -176,6 +179,7 @@ public class SupportConversationPrivacyService {
     }
 
     @Transactional
+    @Override
     public RetentionHoldOutcome releaseRetentionHold(
             String roomId, String actorId, String confirmation, RetentionReleaseReasonCode reasonCode) {
         requireAdmin(actorId);
@@ -261,31 +265,4 @@ public class SupportConversationPrivacyService {
             throw new IllegalStateException("SHA-256 is unavailable", impossible);
         }
     }
-
-    public enum PurgeReasonCode {
-        DATA_SUBJECT_REQUEST_FULFILLED,
-        RETENTION_PERIOD_EXPIRED,
-        DUPLICATE_OR_TEST_CONVERSATION,
-        UNNECESSARY_DATA_REMOVED
-    }
-
-    public enum RetentionHoldReasonCode {
-        ACTIVE_TRANSACTION,
-        ACTIVE_DISPUTE,
-        LEGAL_OBLIGATION,
-        REGULATORY_REQUEST,
-        SECURITY_INCIDENT
-    }
-
-    public enum RetentionReleaseReasonCode {
-        TRANSACTION_CLOSED,
-        DISPUTE_CLOSED,
-        LEGAL_RELEASE_APPROVED,
-        REGULATORY_REQUEST_CLOSED,
-        PLACED_IN_ERROR
-    }
-
-    public record PurgeOutcome(SupportPurgeReceipt receipt, boolean replayed) {}
-
-    public record RetentionHoldOutcome(SupportRetentionHold hold, boolean changed) {}
 }

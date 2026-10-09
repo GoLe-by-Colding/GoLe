@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
@@ -23,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 운영팀 문의 인박스의 배정·이관·상태·내부 메모를 담당한다. */
 @Service
-public class SupportChatService {
+public class SupportChatService implements SupportConsoleUseCase {
 
     private static final int TAKEOVER_REASON_MAX_LENGTH = 500;
 
@@ -50,16 +51,19 @@ public class SupportChatService {
         return inbox(adminId, status, null, limit);
     }
 
+    @Override
     public List<SupportTicket> inbox(String adminId, SupportStatus status, SupportCategory category, int limit) {
         requireAdmin(adminId);
         return tickets.findByStatusAndCategory(status, category, limit);
     }
 
+    @Override
     public long countUnassigned() {
         return tickets.countByStatus(SupportStatus.UNASSIGNED);
     }
 
     @Transactional
+    @Override
     public SupportConversation assignToSelf(String roomId, String adminId) {
         requireAdmin(adminId);
         SupportTicket ticket = requireTicket(roomId);
@@ -80,6 +84,7 @@ public class SupportChatService {
     }
 
     @Transactional
+    @Override
     public SupportConversation transfer(String roomId, String actorId, String targetAdminId) {
         requireAdmin(actorId);
         requireAdmin(targetAdminId);
@@ -101,6 +106,7 @@ public class SupportChatService {
      * 만큼 타인에게 이미 배정된 미해결 문의와 명시적인 사유가 모두 있어야 한다.
      */
     @Transactional
+    @Override
     public SupportTakeover takeOver(String roomId, String actorId, String rawReason) {
         requireAdmin(actorId);
         String reason = normalizeTakeoverReason(rawReason);
@@ -123,6 +129,7 @@ public class SupportChatService {
     }
 
     @Transactional
+    @Override
     public SupportTransition resolve(String roomId, String actorId) {
         SupportTicket current = requireAssignedTo(roomId, actorId);
         SupportTicket next = current.resolve(Instant.now(clock));
@@ -132,6 +139,7 @@ public class SupportChatService {
     }
 
     @Transactional
+    @Override
     public SupportTransition reopen(String roomId, String actorId) {
         requireAdmin(actorId);
         SupportTicket ticket = requireTicket(roomId);
@@ -143,16 +151,19 @@ public class SupportChatService {
     }
 
     @Transactional
+    @Override
     public void addNote(String roomId, String actorId, String note) {
         requireAssignedTo(roomId, actorId);
         notes.append(roomId, actorId, note.trim(), Instant.now(clock));
     }
 
+    @Override
     public List<SupportInternalNote> notes(String roomId, String actorId, int limit) {
         requireAssignedTo(roomId, actorId);
         return notes.findByRoom(roomId, limit);
     }
 
+    @Override
     public SupportTicket requireAssignedTo(String roomId, String actorId) {
         requireAdmin(actorId);
         SupportTicket ticket = requireTicket(roomId);
@@ -196,11 +207,4 @@ public class SupportChatService {
         }
         return reason;
     }
-
-    public record SupportConversation(SocialChatRoom room, SupportTicket ticket, boolean changed) {}
-
-    public record SupportTransition(SupportTicket ticket, boolean changed) {}
-
-    public record SupportTakeover(
-            SocialChatRoom room, SupportTicket ticket, String previousAssigneeId, String reason) {}
 }

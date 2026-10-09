@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -36,9 +37,10 @@ class SocialChatServiceTest {
     private final ChatBlockRepositoryPort blocks = mock(ChatBlockRepositoryPort.class);
     private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
     private final ChatAccountPort accounts = mock(ChatAccountPort.class);
+    private final ChatConsentPort consents = mock(ChatConsentPort.class);
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
-    private final SocialChatService service =
-            new SocialChatService(rooms, blocks, tickets, accounts, readStates, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final SocialChatService service = new SocialChatService(
+            rooms, blocks, tickets, accounts, consents, readStates, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void accounts() {

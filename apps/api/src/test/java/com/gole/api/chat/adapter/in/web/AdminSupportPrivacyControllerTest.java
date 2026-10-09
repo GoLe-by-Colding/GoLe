@@ -18,8 +18,8 @@ import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeOutcome;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.PurgeOutcome;
 import com.gole.api.chat.domain.model.SupportPurgeCounts;
 import com.gole.api.chat.domain.model.SupportPurgeReceipt;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -38,7 +38,7 @@ class AdminSupportPrivacyControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-09-04T12:00:00Z");
 
-    private final SupportConversationPrivacyService privacy = mock(SupportConversationPrivacyService.class);
+    private final ManageSupportConversationPrivacyUseCase privacy = mock(ManageSupportConversationPrivacyUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new AdminSupportPrivacyController(privacy, audit))
@@ -69,7 +69,7 @@ class AdminSupportPrivacyControllerTest {
                         "room-1",
                         "admin-1",
                         "room-1",
-                        SupportConversationPrivacyService.PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED,
+                        ManageSupportConversationPrivacyUseCase.PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED,
                         true,
                         "550e8400-e29b-41d4-a716-446655440001"))
                 .thenReturn(new PurgeOutcome(receipt, false));

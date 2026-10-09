@@ -4,20 +4,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.chat.application.port.out.ChatSellerVerificationPort;
 import com.gole.api.chat.application.port.out.DirectTradeGatePort;
 import com.gole.api.chat.application.port.out.DirectTradeListingPort;
 import com.gole.api.chat.application.port.out.DirectTradeNotifierPort;
 import com.gole.api.chat.application.port.out.ListingChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.RetryingTransactionPort;
 import com.gole.api.chat.domain.model.ChatRoom;
+import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.exception.ServiceUnavailableException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -34,6 +39,8 @@ class DirectTradeServiceTest {
     private final DirectTradeListingPort markSold = mock(DirectTradeListingPort.class);
     private final DirectTradeGatePort gate = mock(DirectTradeGatePort.class);
     private final DirectTradeNotifierPort notifier = mock(DirectTradeNotifierPort.class);
+    private final SocialChatService socialChats = mock(SocialChatService.class);
+    private final ChatSellerVerificationPort sellerVerification = mock(ChatSellerVerificationPort.class);
     /** 재시도·트랜잭션 경계는 어댑터 테스트(MongoRetryingTransactionAdapterTest)가 본다. 여기서는 본문을 그대로 실행한다. */
     private final RetryingTransactionPort transactions = new RetryingTransactionPort() {
         @Override
@@ -46,15 +53,28 @@ class DirectTradeServiceTest {
 
     DirectTradeServiceTest() {
         when(gate.directTradeOpen()).thenReturn(true);
-        service =
-                new DirectTradeService(rooms, transactions, markSold, gate, notifier, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(socialChats.requireReadable(anyString(), anyString()))
+                .thenReturn(SocialChatRoom.listing("room-1", "listing-1", "buyer-1", "seller-1", NOW));
+        service = new DirectTradeService(
+                rooms,
+                transactions,
+                markSold,
+                gate,
+                notifier,
+                socialChats,
+                sellerVerification,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
     @DisplayName("한쪽만 확인하면 상대에게 확인 요청을 알리고 판매 완료로 바꾸지 않는다")
     void confirm_waitsUntilBothParticipantsConfirm() {
         ChatRoom buyerConfirmed = room(NOW, null, null);
-        when(rooms.findById("room-1")).thenReturn(Optional.of(room(null, null, null)), Optional.of(buyerConfirmed));
+        when(rooms.findById("room-1"))
+                .thenReturn(
+                        Optional.of(room(null, null, null)),
+                        Optional.of(room(null, null, null)),
+                        Optional.of(buyerConfirmed));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(true);
 
         ChatRoom result = service.confirm("room-1", "buyer-1");
@@ -83,7 +103,10 @@ class DirectTradeServiceTest {
         ChatRoom bothConfirmed = room(NOW.minusSeconds(30), NOW, null);
         ChatRoom completed = room(NOW.minusSeconds(30), NOW, NOW);
         when(rooms.findById("room-1"))
-                .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
+                .thenReturn(
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(bothConfirmed));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
         when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
         when(markSold.markSoldIfActive("listing-1")).thenReturn(true);
@@ -102,7 +125,10 @@ class DirectTradeServiceTest {
         ChatRoom bothConfirmed = room(NOW.minusSeconds(30), NOW, null);
         ChatRoom completed = room(NOW.minusSeconds(30), NOW, NOW);
         when(rooms.findById("room-1"))
-                .thenReturn(Optional.of(room(NOW.minusSeconds(30), null, null)), Optional.of(bothConfirmed));
+                .thenReturn(
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(bothConfirmed));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.BUYER, NOW)).thenReturn(false);
         when(rooms.completeIfBothConfirmed("room-1", NOW)).thenReturn(Optional.of(completed));
         when(markSold.markSoldIfActive("listing-1")).thenReturn(true);
@@ -121,6 +147,7 @@ class DirectTradeServiceTest {
         when(rooms.findById("room-1"))
                 .thenReturn(
                         Optional.of(room(NOW.minusSeconds(30), null, null)),
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
                         Optional.of(bothConfirmed),
                         Optional.of(completedByOther));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
@@ -136,6 +163,7 @@ class DirectTradeServiceTest {
     void confirm_rejectsWhenListingIsNoLongerAvailable() {
         when(rooms.findById("room-1"))
                 .thenReturn(
+                        Optional.of(room(NOW.minusSeconds(30), null, null)),
                         Optional.of(room(NOW.minusSeconds(30), null, null)),
                         Optional.of(room(NOW.minusSeconds(30), NOW, null)));
         when(rooms.recordConfirmation("room-1", ChatRoom.Party.SELLER, NOW)).thenReturn(true);
@@ -165,10 +193,11 @@ class DirectTradeServiceTest {
     @DisplayName("결제 거래 단계가 열리면 새 직거래 완료 확인을 받지 않는다")
     void confirm_rejectsNewDirectCompletionAfterPaymentStageOpens() {
         when(gate.directTradeOpen()).thenReturn(false);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(null, null, null)));
 
         assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isInstanceOf(ConflictException.class);
 
-        verify(rooms, never()).findById(any());
+        verify(rooms, never()).recordConfirmation(anyString(), any(), any());
         verify(markSold, never()).markSoldIfActive(any());
         verifyNoInteractions(notifier);
     }
@@ -205,6 +234,32 @@ class DirectTradeServiceTest {
                 .extracting("code")
                 .isEqualTo("DIRECT_TRADE_ALREADY_COMPLETED");
         verify(rooms, never()).clearConfirmation(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("판매자 신원확인이 안 되면 확인을 기록하지 않는다")
+    void confirm_requiresListingSellersVerifiedIdentity() {
+        when(rooms.findById("room-1")).thenReturn(Optional.of(room(null, null, null)));
+        doThrow(new ServiceUnavailableException(
+                        "SELLER_IDENTITY_VERIFICATION_UNAVAILABLE", "seller verification unavailable"))
+                .when(sellerVerification)
+                .requireVerifiedSeller("seller-1");
+
+        assertThatThrownBy(() -> service.confirm("room-1", "buyer-1")).isInstanceOf(ServiceUnavailableException.class);
+
+        verify(rooms, never()).recordConfirmation(anyString(), any(), any());
+        verifyNoInteractions(notifier);
+    }
+
+    @Test
+    @DisplayName("매물 대화방이 아니면 직거래 확인·취소를 거부한다")
+    void confirmAndCancel_rejectNonListingRoom() {
+        when(socialChats.requireReadable("dm-1", "buyer-1"))
+                .thenReturn(SocialChatRoom.direct("dm-1", "buyer-1", "seller-1", NOW));
+
+        assertThatThrownBy(() -> service.confirm("dm-1", "buyer-1")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.cancelConfirmation("dm-1", "buyer-1")).isInstanceOf(BadRequestException.class);
+        verify(rooms, never()).findById("dm-1");
     }
 
     private static ChatRoom room(Instant buyerConfirmedAt, Instant sellerConfirmedAt, Instant completedAt) {

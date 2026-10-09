@@ -17,8 +17,8 @@ import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.chat.application.service.SupportNotificationOutboxAdminService;
-import com.gole.api.chat.application.service.SupportNotificationOutboxAdminService.RequeueOutcome;
+import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase;
+import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase.RequeueOutcome;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.EventType;
@@ -41,8 +41,7 @@ class AdminSupportNotificationControllerTest {
     private static final String EVENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final Instant NOW = Instant.parse("2026-09-04T12:00:00Z");
 
-    private final SupportNotificationOutboxAdminService notifications =
-            mock(SupportNotificationOutboxAdminService.class);
+    private final RequeueSupportNotificationUseCase notifications = mock(RequeueSupportNotificationUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
@@ -78,7 +77,7 @@ class AdminSupportNotificationControllerTest {
         when(notifications.requeue(
                         EVENT_ID,
                         "REQUEUE:" + EVENT_ID,
-                        SupportNotificationOutboxAdminService.RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED))
+                        RequeueSupportNotificationUseCase.RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED))
                 .thenReturn(new RequeueOutcome(pending, true));
 
         mvc.perform(post("/api/admin/support-notifications/{eventId}/requeue", EVENT_ID)

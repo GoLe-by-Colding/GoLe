@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.ReportChatMessageUseCase;
 import com.gole.api.chat.application.port.out.ChatMessageReportPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
@@ -17,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 메시지 신고와 최소 문맥 스냅샷을 한 트랜잭션으로 고정한다. */
 @Service
-public class ChatReportService {
+public class ChatReportService implements ReportChatMessageUseCase {
 
     private static final int CONTEXT_BEFORE = 10;
     private static final int CONTEXT_AFTER = 10;
@@ -41,7 +42,7 @@ public class ChatReportService {
         this.clock = clock;
     }
 
-    /** @param reasonCode 신고 사유 코드(웹 경계에서 신고 컨텍스트의 사유로 검증된 값) */
+    @Override
     @Transactional
     public String report(String reporterId, String messageId, String reasonCode, String detail) {
         ChatMessage reported = messages.findById(messageId)

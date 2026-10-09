@@ -1,5 +1,7 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
+import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatMessagePublisherPort;
 import com.gole.api.chat.application.port.out.ChatMessageRepositoryPort;
 import com.gole.api.chat.domain.model.ChatMessage;
@@ -21,11 +23,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** 모든 방 유형이 공유하는 메시지 이력·전송 유스케이스. */
 @Service
-public class ChatMessagingService {
+public class ChatMessagingService implements ChatMessagingUseCase {
 
     private final ChatMessageRepositoryPort messages;
     private final ChatMessagePublisherPort publisher;
     private final SocialChatService socialChats;
+    private final ChatConsentPort consents;
     private final SupportOperationalEventNotifier supportEvents;
     private final SupportAssistantAnalysisService supportAnalysis;
     private final Clock clock;
@@ -34,12 +37,14 @@ public class ChatMessagingService {
             ChatMessageRepositoryPort messages,
             ChatMessagePublisherPort publisher,
             SocialChatService socialChats,
+            ChatConsentPort consents,
             SupportOperationalEventNotifier supportEvents,
             SupportAssistantAnalysisService supportAnalysis,
             Clock clock) {
         this.messages = messages;
         this.publisher = publisher;
         this.socialChats = socialChats;
+        this.consents = consents;
         this.supportEvents = supportEvents;
         this.supportAnalysis = supportAnalysis;
         this.clock = clock;
@@ -50,6 +55,7 @@ public class ChatMessagingService {
     }
 
     /** 가장 오래 본 메시지 앞쪽을 안정적인 {@code sentAt + _id} 커서로 가져온다. */
+    @Override
     public List<ChatMessage> history(
             String roomId, String actorId, Instant beforeSentAt, String beforeId, int requestedLimit) {
         socialChats.requireReadable(roomId, actorId);
@@ -69,6 +75,7 @@ public class ChatMessagingService {
     }
 
     /** SSE 재연결 시 마지막으로 받은 이벤트 다음 메시지를 Mongo 이력에서 재생한다. */
+    @Override
     public List<ChatMessage> after(String roomId, String actorId, String afterId, int requestedLimit) {
         socialChats.requireReadable(roomId, actorId);
         if (afterId == null || afterId.isBlank()) {
@@ -79,6 +86,17 @@ public class ChatMessagingService {
                 .orElseThrow(() -> new BadRequestException("CHAT_CURSOR_INVALID", "메시지 커서가 올바르지 않습니다"));
         int limit = Math.clamp(requestedLimit, 1, 200);
         return messages.findAfter(roomId, cursor.sentAt(), cursor.id(), limit);
+    }
+
+    @Override
+    @Transactional
+    public ChatMessage sendFromUser(String roomId, String actorId, String rawContent) {
+        SocialChatRoom room = socialChats.requireReadable(roomId, actorId);
+        if (room.type() != ChatRoomType.SUPPORT) {
+            // 운영팀 문의는 운영 목적의 대화라 제3자 제공 동의 없이도 보낸다.
+            consents.requireCurrent(actorId);
+        }
+        return send(roomId, actorId, rawContent);
     }
 
     @Transactional
@@ -117,6 +135,7 @@ public class ChatMessagingService {
 
     /** 관리자 SUPPORT 답변. 일반 사용자 메시지 경로와 분리해 감사 우회를 막는다. */
     @Transactional
+    @Override
     public ChatMessage sendAdminSupport(String roomId, String adminId, String rawContent) {
         String content = normalizeContent(rawContent);
         SocialChatRoom room = socialChats.requireAdminSupportSendable(roomId, adminId);

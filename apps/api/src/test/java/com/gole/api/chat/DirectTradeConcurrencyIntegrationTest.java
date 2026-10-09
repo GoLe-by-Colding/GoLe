@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
+import com.gole.api.chat.application.port.out.ChatSellerVerificationPort;
 import com.gole.api.chat.application.service.DirectTradeService;
 import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.common.exception.ConflictException;
@@ -32,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -56,6 +58,10 @@ class DirectTradeConcurrencyIntegrationTest {
 
     @Autowired
     DirectTradeService directTrades;
+
+    /** 이 테스트는 확인·완료 경합을 본다. 판매자 신원확인 관문은 서비스 테스트가 본다. */
+    @MockitoBean
+    ChatSellerVerificationPort sellerVerification;
 
     @Autowired
     CreateListingUseCase createListing;

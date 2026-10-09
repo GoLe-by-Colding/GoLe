@@ -4,10 +4,10 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.service.ChatMessagingService;
-import com.gole.api.chat.application.service.SocialChatService;
-import com.gole.api.chat.application.service.SupportAssistantAnalysisService;
-import com.gole.api.chat.application.service.SupportChatService;
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
+import com.gole.api.chat.application.port.in.GetSupportAssistantAnalysisUseCase;
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportCategory;
@@ -40,17 +40,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/support")
 public class AdminSupportController {
 
-    private final SupportChatService support;
-    private final SocialChatService rooms;
-    private final ChatMessagingService messaging;
-    private final SupportAssistantAnalysisService supportAssistant;
+    private final SupportConsoleUseCase support;
+    private final SocialChatUseCase rooms;
+    private final ChatMessagingUseCase messaging;
+    private final GetSupportAssistantAnalysisUseCase supportAssistant;
     private final RecordAdminActionUseCase audit;
 
     public AdminSupportController(
-            SupportChatService support,
-            SocialChatService rooms,
-            ChatMessagingService messaging,
-            SupportAssistantAnalysisService supportAssistant,
+            SupportConsoleUseCase support,
+            SocialChatUseCase rooms,
+            ChatMessagingUseCase messaging,
+            GetSupportAssistantAnalysisUseCase supportAssistant,
             RecordAdminActionUseCase audit) {
         this.support = support;
         this.rooms = rooms;

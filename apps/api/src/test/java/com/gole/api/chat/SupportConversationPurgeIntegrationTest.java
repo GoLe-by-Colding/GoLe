@@ -18,6 +18,9 @@ import com.gole.api.chat.adapter.out.persistence.SupportConversationPurgeReceipt
 import com.gole.api.chat.adapter.out.persistence.SupportConversationRetentionHoldMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.SupportInternalNoteMongoRepository;
 import com.gole.api.chat.adapter.out.persistence.SupportTicketMongoRepository;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.PurgeReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionHoldReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionReleaseReasonCode;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
@@ -27,9 +30,6 @@ import com.gole.api.chat.application.port.out.SupportConversationPrivacyReposito
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeReasonCode;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionHoldReasonCode;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionReleaseReasonCode;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportTicket;
 import java.nio.charset.StandardCharsets;

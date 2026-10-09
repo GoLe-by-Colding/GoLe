@@ -4,7 +4,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
+import com.gole.api.chat.application.port.in.GetChatReportSnapshotUseCase;
 import com.gole.api.chat.domain.model.ChatReportSnapshot;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.NotFoundException;
@@ -23,11 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminChatReportController {
 
     private final ManageReportsUseCase reports;
-    private final ChatReportSnapshotPort snapshots;
+    private final GetChatReportSnapshotUseCase snapshots;
     private final RecordAdminActionUseCase audit;
 
     public AdminChatReportController(
-            ManageReportsUseCase reports, ChatReportSnapshotPort snapshots, RecordAdminActionUseCase audit) {
+            ManageReportsUseCase reports, GetChatReportSnapshotUseCase snapshots, RecordAdminActionUseCase audit) {
         this.reports = reports;
         this.snapshots = snapshots;
         this.audit = audit;

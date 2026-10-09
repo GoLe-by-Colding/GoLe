@@ -4,10 +4,10 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.PurgeReasonCode;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionHoldReasonCode;
-import com.gole.api.chat.application.service.SupportConversationPrivacyService.RetentionReleaseReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.PurgeReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionHoldReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionReleaseReasonCode;
 import com.gole.api.chat.domain.model.SupportPurgeCounts;
 import com.gole.api.chat.domain.model.SupportPurgeReceipt;
 import com.gole.api.chat.domain.model.SupportRetentionHold;
@@ -36,10 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/support-privacy")
 public class AdminSupportPrivacyController {
 
-    private final SupportConversationPrivacyService privacy;
+    private final ManageSupportConversationPrivacyUseCase privacy;
     private final RecordAdminActionUseCase audit;
 
-    public AdminSupportPrivacyController(SupportConversationPrivacyService privacy, RecordAdminActionUseCase audit) {
+    public AdminSupportPrivacyController(
+            ManageSupportConversationPrivacyUseCase privacy, RecordAdminActionUseCase audit) {
         this.privacy = privacy;
         this.audit = audit;
     }

@@ -5,7 +5,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
-import com.gole.api.chat.application.service.SupportChatService;
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
@@ -36,7 +36,7 @@ public class AdminDashboardController {
     private final AdminReadModelPort readModel;
     private final ListAdminActionsUseCase listAdminActions;
     private final ManageReportsUseCase manageReports;
-    private final SupportChatService support;
+    private final SupportConsoleUseCase support;
     private final ManageSettlementsUseCase manageSettlements;
     private final GetPaymentReadinessUseCase paymentReadiness;
 
@@ -44,7 +44,7 @@ public class AdminDashboardController {
             AdminReadModelPort readModel,
             ListAdminActionsUseCase listAdminActions,
             ManageReportsUseCase manageReports,
-            SupportChatService support,
+            SupportConsoleUseCase support,
             ManageSettlementsUseCase manageSettlements,
             GetPaymentReadinessUseCase paymentReadiness) {
         this.readModel = readModel;

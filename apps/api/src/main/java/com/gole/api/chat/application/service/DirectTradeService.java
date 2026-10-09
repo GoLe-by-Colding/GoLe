@@ -1,5 +1,7 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.DirectTradeUseCase;
+import com.gole.api.chat.application.port.out.ChatSellerVerificationPort;
 import com.gole.api.chat.application.port.out.DirectTradeGatePort;
 import com.gole.api.chat.application.port.out.DirectTradeListingPort;
 import com.gole.api.chat.application.port.out.DirectTradeNotifierPort;
@@ -21,13 +23,15 @@ import org.springframework.stereotype.Service;
  * 시각은 저장소가 조건부로만 기록하므로 동시 요청이 겹쳐도 알림과 판매 완료 전환은 한 번이다.
  */
 @Service
-public class DirectTradeService {
+public class DirectTradeService implements DirectTradeUseCase {
 
     private final ListingChatRoomRepositoryPort rooms;
     private final RetryingTransactionPort transactions;
     private final DirectTradeListingPort listings;
     private final DirectTradeGatePort gate;
     private final DirectTradeNotifierPort notifier;
+    private final SocialChatService socialChats;
+    private final ChatSellerVerificationPort sellerVerification;
     private final Clock clock;
 
     public DirectTradeService(
@@ -36,20 +40,32 @@ public class DirectTradeService {
             DirectTradeListingPort listings,
             DirectTradeGatePort gate,
             DirectTradeNotifierPort notifier,
+            SocialChatService socialChats,
+            ChatSellerVerificationPort sellerVerification,
             Clock clock) {
         this.rooms = rooms;
         this.transactions = transactions;
         this.listings = listings;
         this.gate = gate;
         this.notifier = notifier;
+        this.socialChats = socialChats;
+        this.sellerVerification = sellerVerification;
         this.clock = clock;
     }
 
+    @Override
     public ChatRoom confirm(String roomId, String actorId) {
+        socialChats.requireReadable(roomId, actorId).requireDirectTradeAllowed();
+        ChatRoom room = rooms.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
+        // 직거래 완료는 매물을 판매 완료로 바꾸는 새 판매 행동이라 주문·제안과 같은 판매자 신원확인을 건다.
+        sellerVerification.requireVerifiedSeller(room.sellerId());
         return transactions.inNewTransaction("direct-trade-confirm", roomId, () -> confirmOnce(roomId, actorId));
     }
 
+    @Override
     public ChatRoom cancelConfirmation(String roomId, String actorId) {
+        socialChats.requireReadable(roomId, actorId).requireDirectTradeAllowed();
         return transactions.inNewTransaction(
                 "direct-trade-cancel", roomId, () -> cancelConfirmationOnce(roomId, actorId));
     }

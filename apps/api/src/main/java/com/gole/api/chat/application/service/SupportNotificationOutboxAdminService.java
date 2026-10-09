@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase;
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.State;
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Service;
 
 /** 자동 재시도 한도를 소진한 비식별 문의 알림을 운영자 확인 뒤 한 번 더 큐잉한다. */
 @Service
-public class SupportNotificationOutboxAdminService {
+public class SupportNotificationOutboxAdminService implements RequeueSupportNotificationUseCase {
 
     private static final String CONFIRMATION_PREFIX = "REQUEUE:";
 
@@ -28,6 +29,7 @@ public class SupportNotificationOutboxAdminService {
         this.clock = clock;
     }
 
+    @Override
     public RequeueOutcome requeue(String eventId, String confirmation, RequeueReasonCode reasonCode) {
         Objects.requireNonNull(reasonCode, "reasonCode");
         if (!expectedConfirmation(eventId).equals(confirmation)) {
@@ -60,12 +62,4 @@ public class SupportNotificationOutboxAdminService {
     public static String expectedConfirmation(String eventId) {
         return CONFIRMATION_PREFIX + eventId;
     }
-
-    public enum RequeueReasonCode {
-        WEBHOOK_CONFIGURATION_RESTORED,
-        DISCORD_INCIDENT_RESOLVED,
-        MANUAL_DELIVERY_RETRY_APPROVED
-    }
-
-    public record RequeueOutcome(SupportNotificationEvent event, boolean changed) {}
 }

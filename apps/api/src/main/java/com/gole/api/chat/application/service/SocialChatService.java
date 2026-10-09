@@ -1,7 +1,10 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
+import com.gole.api.chat.application.port.in.StartSupportConversationUseCase.SupportConversation;
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
+import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
@@ -22,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -30,12 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 매물과 독립된 DIRECT·GROUP·SUPPORT 방의 생성과 접근 규칙을 담당한다. */
 @Service
-public class SocialChatService {
+public class SocialChatService implements SocialChatUseCase {
 
     private final SocialChatRoomRepositoryPort rooms;
     private final ChatBlockRepositoryPort blocks;
     private final SupportTicketRepositoryPort supportTickets;
     private final ChatAccountPort accounts;
+    private final ChatConsentPort consents;
     private final ChatReadStatePort readStates;
     private final Clock clock;
 
@@ -44,16 +49,19 @@ public class SocialChatService {
             ChatBlockRepositoryPort blocks,
             SupportTicketRepositoryPort supportTickets,
             ChatAccountPort accounts,
+            ChatConsentPort consents,
             ChatReadStatePort readStates,
             Clock clock) {
         this.rooms = rooms;
         this.blocks = blocks;
         this.supportTickets = supportTickets;
         this.accounts = accounts;
+        this.consents = consents;
         this.readStates = readStates;
         this.clock = clock;
     }
 
+    @Override
     public List<SocialChatRoom> mySocialRooms(String actorId, int limit) {
         requireAccount(actorId);
         return readableRooms(actorId, limit, rooms.findSocialByMember(actorId, limit));
@@ -96,6 +104,52 @@ public class SocialChatService {
                 .sorted(java.util.Comparator.comparing(SocialChatRoom::lastMessageAt)
                         .reversed())
                 .toList();
+    }
+
+    @Override
+    public SocialChatRoom startDirect(String actorId, String peerId) {
+        Optional<SocialChatRoom> existing = findExistingDirect(actorId, peerId);
+        if (existing.isPresent()) {
+            // 철회 뒤에도 이미 있는 1:1 방과 과거 대화는 계속 열 수 있다.
+            return existing.get();
+        }
+        consents.requireCurrent(actorId);
+        consents.requireCurrentSubject(peerId);
+        return createDirect(actorId, peerId);
+    }
+
+    @Override
+    public SocialChatRoom startGroup(String actorId, String title, List<String> memberIds) {
+        consents.requireCurrent(actorId);
+        Set<String> participants = new LinkedHashSet<>(memberIds == null ? List.of() : memberIds);
+        participants.remove(actorId);
+        participants.forEach(consents::requireCurrentSubject);
+        return createGroup(actorId, title, memberIds);
+    }
+
+    @Override
+    public SocialChatRoom inviteMember(String roomId, String actorId, String inviteeId) {
+        SocialChatRoom room = requireReadable(roomId, actorId);
+        if (room.isMember(inviteeId)) {
+            return room;
+        }
+        // 초대는 기존 멤버 모두를 새 사람에게, 새 사람을 기존 멤버에게 내보인다.
+        consents.requireCurrent(actorId);
+        room.memberIds().stream()
+                .filter(memberId -> !memberId.equals(actorId))
+                .forEach(consents::requireCurrentSubject);
+        consents.requireCurrentSubject(inviteeId);
+        return invite(roomId, actorId, inviteeId);
+    }
+
+    @Override
+    public Optional<SupportTicket> supportTicketOf(String roomId) {
+        return supportTickets.findByRoomId(roomId);
+    }
+
+    @Override
+    public List<SupportTicket> supportTicketsOf(List<String> roomIds) {
+        return supportTickets.findByRoomIds(roomIds);
     }
 
     public SocialChatRoom createDirect(String actorId, String peerId) {
@@ -171,6 +225,7 @@ public class SocialChatService {
         return updated;
     }
 
+    @Override
     public SocialChatRoom leave(String roomId, String actorId) {
         SocialChatRoom room = requireRoom(roomId);
         if (room.type() != ChatRoomType.GROUP) {
@@ -179,6 +234,7 @@ public class SocialChatService {
         return rooms.save(room.leave(actorId, Instant.now(clock)));
     }
 
+    @Override
     public void block(String actorId, String targetId, String reason) {
         requireRegularAccount(actorId);
         requireRegularAccount(targetId);
@@ -188,16 +244,19 @@ public class SocialChatService {
         blocks.save(new ChatBlock(actorId, targetId, normalizeReason(reason), Instant.now(clock)));
     }
 
+    @Override
     public void unblock(String actorId, String targetId) {
         requireAccount(actorId);
         blocks.delete(actorId, targetId);
     }
 
+    @Override
     public List<String> myBlockedAccountIds(String actorId) {
         requireAccount(actorId);
         return blocks.blockedTargets(actorId);
     }
 
+    @Override
     public SocialChatRoom requireReadable(String roomId, String actorId) {
         SocialChatRoom room = requireRoom(roomId);
         if (room.type() != ChatRoomType.SUPPORT) {
@@ -287,6 +346,7 @@ public class SocialChatService {
         rooms.touchActivity(roomId, occurredAt);
     }
 
+    @Override
     public SocialChatRoom requireRoom(String roomId) {
         return rooms.findById(roomId).orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
     }
@@ -342,6 +402,4 @@ public class SocialChatService {
         }
         return reason.trim().substring(0, Math.min(reason.trim().length(), 200));
     }
-
-    public record SupportConversation(SocialChatRoom room, SupportTicket ticket) {}
 }

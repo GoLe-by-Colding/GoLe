@@ -1,5 +1,6 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.GetSupportAssistantAnalysisUseCase;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.Claim;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort.StoredAnalysis;
@@ -29,7 +30,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** 문의 원문은 기존 메시지를 단일 원본으로 두고, 방 ID 기반 영속 작업으로 관리자 초안을 만든다. */
 @Service
-public class SupportAssistantAnalysisService {
+public class SupportAssistantAnalysisService implements GetSupportAssistantAnalysisUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(SupportAssistantAnalysisService.class);
     private static final int MAX_ATTEMPTS = 5;
@@ -81,10 +82,12 @@ public class SupportAssistantAnalysisService {
         register.run();
     }
 
+    @Override
     public Optional<SupportAssistantAnalysis> findCompleted(String roomId) {
         return analyses.findCompletedByRoomId(roomId).map(StoredAnalysis::analysis);
     }
 
+    @Override
     public Map<String, SupportAssistantAnalysis> findCompleted(List<String> roomIds) {
         return analyses.findCompletedByRoomIds(roomIds).stream()
                 .collect(Collectors.toUnmodifiableMap(

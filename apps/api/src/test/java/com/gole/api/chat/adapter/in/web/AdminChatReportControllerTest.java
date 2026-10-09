@@ -18,7 +18,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
+import com.gole.api.chat.application.port.in.GetChatReportSnapshotUseCase;
 import com.gole.api.chat.domain.model.ChatReportSnapshot;
 import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import com.gole.api.common.operations.OperationalEventPublisher;
@@ -42,7 +42,7 @@ class AdminChatReportControllerTest {
     private static final Instant NOW = Instant.parse("2026-08-29T12:00:00Z");
 
     private final ManageReportsUseCase reports = mock(ManageReportsUseCase.class);
-    private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
+    private final GetChatReportSnapshotUseCase snapshots = mock(GetChatReportSnapshotUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
