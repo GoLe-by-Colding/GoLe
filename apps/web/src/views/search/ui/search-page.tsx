@@ -7,7 +7,12 @@ import {
   type ListingSort,
   type SearchListingsParams,
 } from "@entities/listing";
-import { fetchLegoSetForPage, setNumberInSearchText, type LegoSet } from "@entities/lego-set";
+import {
+  fetchLegoSetForPage,
+  searchLegoSetsForPage,
+  setNumberInSearchText,
+  type LegoSet,
+} from "@entities/lego-set";
 import { fetchPriceSnapshotForPage } from "@entities/pricing";
 import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
 import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
@@ -86,14 +91,27 @@ function searchHref(params: SearchListingsParams): string {
   return suffix.length === 0 ? "/search" : `/search?${suffix}`;
 }
 
-/** 검색어가 세트 번호면 그 카탈로그 세트(바로가기용). 번호가 아니거나 카탈로그에 없으면 null — 결과는 그대로 보인다. */
-async function loadQuerySet(query: string | undefined): Promise<LegoSet | null> {
-  const setNumber = query === undefined ? null : setNumberInSearchText(query);
-  if (setNumber === null) return null;
+/** 바로가기로 보일 세트 수. 결과 목록을 밀어내지 않게 적게 둔다. */
+const MAX_QUERY_SETS = 3;
+
+/**
+ * 검색어에 맞는 카탈로그 세트(바로가기용). 세트 번호면 그 세트 하나, 아니면 이름에 검색어가 든 세트를 최대 3개.
+ * 테마만 맞는 세트는 너무 넓어(예: "Icons") 넣지 않는다. 조회가 실패하면 빈 목록 — 매물 결과는 그대로 보인다.
+ */
+async function loadQuerySets(query: string | undefined): Promise<readonly LegoSet[]> {
+  const text = query?.trim() ?? "";
+  if (text.length === 0) return [];
+  const setNumber = setNumberInSearchText(text);
   try {
-    return await fetchLegoSetForPage(setNumber);
+    if (setNumber !== null) return [await fetchLegoSetForPage(setNumber)];
+    if (text.length < 2) return [];
+    const needle = text.toLocaleLowerCase("ko-KR");
+    const sets = await searchLegoSetsForPage(text);
+    return sets
+      .filter((set) => set.name.toLocaleLowerCase("ko-KR").includes(needle))
+      .slice(0, MAX_QUERY_SETS);
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -113,7 +131,7 @@ export async function SearchPage(props: SearchPageProps) {
     sort,
   };
 
-  const [result, querySet] = await Promise.all([loadListings(params), loadQuerySet(props.query)]);
+  const [result, querySets] = await Promise.all([loadListings(params), loadQuerySets(props.query)]);
   const { listings } = result;
   const priceNotes = await loadPriceNotes(listings);
   const hasFilters =
@@ -146,8 +164,8 @@ export async function SearchPage(props: SearchPageProps) {
         <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
         </div>
-        {querySet === null || result.status === "failed" ? null : (
-          <SearchSetShortcut set={querySet} listingCount={listings.length} />
+        {result.status === "failed" ? null : (
+          <SearchSetShortcut sets={querySets} listingCount={listings.length} />
         )}
         {result.status === "failed" ? (
           <EmptyState
