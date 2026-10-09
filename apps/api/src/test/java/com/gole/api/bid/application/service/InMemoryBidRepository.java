@@ -109,6 +109,13 @@ class InMemoryBidRepository implements BidRepositoryPort {
     }
 
     @Override
+    public List<Bid> findFilledForListing(String listingId) {
+        return store.values().stream()
+                .filter(bid -> bid.status() == BidStatus.FILLED && listingId.equals(bid.filledListingId()))
+                .toList();
+    }
+
+    @Override
     public List<Bid> findByBidder(String bidderId, int limit) {
         return store.values().stream()
                 .filter(bid -> bid.bidderId().equals(bidderId))

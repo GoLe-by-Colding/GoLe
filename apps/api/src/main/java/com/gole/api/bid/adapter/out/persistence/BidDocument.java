@@ -27,6 +27,10 @@ import org.springframework.data.mongodb.core.mapping.Document;
             def = "{'setNumber': 1, 'condition': 1, 'status': 1, 'price': -1, 'placedAt': 1}"),
     @CompoundIndex(name = "bid_bidder_created_idx", def = "{'bidderId': 1, 'createdAt': -1}"),
     @CompoundIndex(
+            name = "bid_filled_listing_idx",
+            def = "{'filledListingId': 1}",
+            partialFilter = "{'status': 'FILLED'}"),
+    @CompoundIndex(
             name = "uq_bid_active_bidder_set_condition",
             def = "{'bidderId': 1, 'setNumber': 1, 'condition': 1}",
             unique = true,

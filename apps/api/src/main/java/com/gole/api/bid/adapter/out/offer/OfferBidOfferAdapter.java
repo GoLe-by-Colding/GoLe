@@ -2,7 +2,9 @@ package com.gole.api.bid.adapter.out.offer;
 
 import com.gole.api.bid.application.port.out.BidOfferPort;
 import com.gole.api.offer.application.port.in.CreateAcceptedOfferUseCase;
+import com.gole.api.offer.application.port.in.ResolveAcceptedOfferUseCase;
 import com.gole.api.offer.domain.model.OfferOrigin;
+import java.time.Instant;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,9 +15,12 @@ import org.springframework.stereotype.Component;
 public class OfferBidOfferAdapter implements BidOfferPort {
 
     private final CreateAcceptedOfferUseCase createAcceptedOffer;
+    private final ResolveAcceptedOfferUseCase resolveAcceptedOffer;
 
-    public OfferBidOfferAdapter(CreateAcceptedOfferUseCase createAcceptedOffer) {
+    public OfferBidOfferAdapter(
+            CreateAcceptedOfferUseCase createAcceptedOffer, ResolveAcceptedOfferUseCase resolveAcceptedOffer) {
         this.createAcceptedOffer = createAcceptedOffer;
+        this.resolveAcceptedOffer = resolveAcceptedOffer;
     }
 
     @Override
@@ -23,5 +28,12 @@ public class OfferBidOfferAdapter implements BidOfferPort {
         return createAcceptedOffer
                 .createAccepted(listingId, sellerId, bidderId, price, OfferOrigin.BID)
                 .id();
+    }
+
+    @Override
+    public boolean isStillUsable(String offerId, String listingId, String bidderId, Instant now) {
+        return resolveAcceptedOffer
+                .usablePrice(offerId, listingId, bidderId, now)
+                .isPresent();
     }
 }

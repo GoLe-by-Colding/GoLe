@@ -303,8 +303,10 @@ class BidServiceTest {
         bids.loseNextTransitions(1, bid -> bid.status() == BidStatus.ACTIVE);
         assertThat(service.fill("10307", "listing-1", "seller-1").bidPrice()).isEqualTo(260_000);
 
+        // 매물 하나는 입찰 하나만 받으므로 두 번째 시도는 같은 판매자의 다른 매물로 한다.
+        sellerListing("listing-2", "seller-1", "10307", "new_sealed", true);
         bids.loseNextTransitions(3, bid -> bid.status() == BidStatus.ACTIVE);
-        assertThat(codeOf(() -> service.fill("10307", "listing-1", "seller-1"))).isEqualTo(BidErrors.NOT_FOUND);
+        assertThat(codeOf(() -> service.fill("10307", "listing-2", "seller-1"))).isEqualTo(BidErrors.NOT_FOUND);
         assertThat(bids.store.values().stream().filter(b -> b.status() == BidStatus.ACTIVE))
                 .hasSize(3);
     }
@@ -324,6 +326,23 @@ class BidServiceTest {
         assertThat(stored.status()).isEqualTo(BidStatus.ACTIVE);
         assertThat(stored.filledListingId()).isNull();
         assertThat(notifier.filled).isEmpty();
+    }
+
+    @Test
+    @DisplayName("매물 하나는 입찰 하나만 받는다 — 그 제안이 끝나면 다음 입찰을 받을 수 있다")
+    void fill_oneOpenFillPerListing() {
+        place("buyer-1", "new_sealed", 270_000);
+        place("buyer-2", "new_sealed", 260_000);
+        sellerListing("listing-1", "seller-1", "10307", "new_sealed", true);
+
+        FillResult first = service.fill("10307", "listing-1", "seller-1");
+        assertThat(codeOf(() -> service.fill("10307", "listing-1", "seller-1")))
+                .isEqualTo(BidErrors.LISTING_ALREADY_FILLED);
+        assertThat(offers.calls).hasSize(1);
+
+        offers.closed.add(first.offerId()); // 입찰자가 72시간 안에 진행하지 않았다
+        FillResult second = service.fill("10307", "listing-1", "seller-1");
+        assertThat(second.bidPrice()).isEqualTo(260_000);
     }
 
     @Test
@@ -352,7 +371,15 @@ class BidServiceTest {
 
     private static final class RecordingOffers implements BidOfferPort {
         private final List<String> calls = new ArrayList<>();
+        private final Set<String> closed = new HashSet<>();
         private RuntimeException failure;
+
+        @Override
+        public boolean isStillUsable(String offerId, String listingId, String bidderId, Instant now) {
+            return calls.stream()
+                            .anyMatch(call -> call.startsWith(listingId + "|") && call.contains("|" + bidderId + "|"))
+                    && !closed.contains(offerId);
+        }
 
         @Override
         public String createAccepted(String listingId, String sellerId, String bidderId, long price) {

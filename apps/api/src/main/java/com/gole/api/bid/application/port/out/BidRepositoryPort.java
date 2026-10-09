@@ -46,6 +46,9 @@ public interface BidRepositoryPort {
      */
     Optional<Bid> replaceIfActive(Bid replaced, Instant now);
 
+    /** 이 매물로 체결된 입찰. 매물 하나에 열린 체결이 겹치지 않게 확인할 때 쓴다. */
+    List<Bid> findFilledForListing(String listingId);
+
     /** 내 입찰. 최신순. */
     List<Bid> findByBidder(String bidderId, int limit);
 

@@ -132,6 +132,18 @@ public class BidPersistenceAdapter implements BidRepositoryPort {
     }
 
     @Override
+    public List<Bid> findFilledForListing(String listingId) {
+        Query query = Query.query(Criteria.where("filledListingId")
+                        .is(listingId)
+                        .and("status")
+                        .is(BidStatus.FILLED.name()))
+                .with(NEWEST_FIRST);
+        return mongo.find(query, BidDocument.class).stream()
+                .map(BidPersistenceAdapter::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Bid> findByBidder(String bidderId, int limit) {
         Query query = Query.query(Criteria.where("bidderId").is(bidderId))
                 .with(NEWEST_FIRST)

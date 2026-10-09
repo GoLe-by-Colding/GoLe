@@ -168,6 +168,7 @@ public class BidService
         BidCondition condition = BidCondition.fromKey(listing.conditionKey()).orElseThrow(BidErrors::listingMismatch);
 
         Instant now = Instant.now(clock);
+        requireNoOpenFill(listing.listingId(), now);
         for (Bid candidate : bids.findFillCandidates(setNumber, condition, sellerId, now, MAX_FILL_ATTEMPTS)) {
             Optional<Bid> won = bids.transition(candidate, candidate.fill(listingId, now));
             if (won.isEmpty()) {
@@ -180,6 +181,21 @@ public class BidService
             return new FillResult(filled.id(), filled.price(), offerId, listingId);
         }
         throw BidErrors.noMatchingBid();
+    }
+
+    /**
+     * 매물 하나는 입찰 하나만 받는다. 이 매물로 체결한 입찰의 수락 제안이 아직 쓸 수 있으면 막는다 — 겹쳐 체결하면
+     * 먼저 주문한 입찰자만 사고 나머지 입찰은 물건 없이 소진된다. 그 제안이 만료·철회·거절되면 다음 입찰을 받는다.
+     *
+     * <p>같은 판매자가 같은 매물로 동시에 두 번 누르는 경합까지는 막지 않는다. 화면이 성공 뒤 버튼을 숨기고, 둘 다
+     * 체결돼도 매물 예약이 이중 구매를 막는다.
+     */
+    private void requireNoOpenFill(String listingId, Instant now) {
+        for (Bid filled : bids.findFilledForListing(listingId)) {
+            if (filled.offerId() != null && offers.isStillUsable(filled.offerId(), listingId, filled.bidderId(), now)) {
+                throw BidErrors.listingAlreadyFilled();
+            }
+        }
     }
 
     private String createOfferOrReopen(Bid filled, BidListing listing, String sellerId) {
