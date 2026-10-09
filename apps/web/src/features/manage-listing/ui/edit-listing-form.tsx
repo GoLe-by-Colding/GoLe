@@ -17,6 +17,7 @@ import {
 } from "../model/listing-draft";
 import { useListingDraftForm } from "../model/use-listing-draft-form";
 import { ListingDraftFields } from "./listing-draft-fields";
+import { SellPriceGuide } from "./sell-price-guide";
 
 export interface EditListingFormProps {
   /** 수정할 매물. 판매 중(`active`)이고 본인 매물인지는 화면(view)이 먼저 거른다. */
@@ -79,7 +80,17 @@ export function EditListingForm({ listing, paymentsOpen, onSaved }: EditListingF
           기존 사진 {missingPhotoCount}장을 불러오지 못했어요. 필요하면 다시 올려 주세요.
         </p>
       ) : null}
-      <ListingDraftFields form={form} paymentsOpen={paymentsOpen} />
+      <ListingDraftFields
+        form={form}
+        paymentsOpen={paymentsOpen}
+        priceGuide={
+          <SellPriceGuide
+            setNumber={listing.category === "set" ? listing.catalogSetNumber : null}
+            condition={form.draft.condition}
+            price={form.draft.price}
+          />
+        }
+      />
       {lowering ? (
         <p className="rounded-md bg-brand-50 p-3 text-sm text-brand-800">
           {formatWon(listing.price - nextPrice)} 내려요. 이 매물을 찜한 분들께 가격 인하 알림이
