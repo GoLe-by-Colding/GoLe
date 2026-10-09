@@ -1,5 +1,9 @@
 package com.gole.api.promotion.application.service;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEvent.Category;
+import com.gole.api.common.operations.OperationalEvent.Level;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaKey;
 import com.gole.api.media.domain.model.MediaTargetType;
@@ -14,10 +18,10 @@ import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
 import com.gole.api.promotion.domain.exception.NoApprovedPromotionPostsException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
-import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionCapture;
+import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -25,7 +29,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
@@ -49,13 +55,16 @@ public class PromotionPostService
      */
     private static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
 
-    /** 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 한다. */
+    /** 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 한다. 개별 발행과 다음 차례 발행 모두 지킨다(D24). */
     static final Duration MIN_PUBLISH_INTERVAL = Duration.ofHours(6);
+
+    private static final String ADMIN_PATH = "/admin/promotion";
 
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
     private final SocialPublishPort publishPort;
     private final ManageMediaAssetsUseCase mediaAssets;
+    private final OperationalEventPublisher operationalEvents;
     private final Clock clock;
 
     public PromotionPostService(
@@ -63,11 +72,13 @@ public class PromotionPostService
             PromotionPostIdGeneratorPort idGenerator,
             SocialPublishPort publishPort,
             ManageMediaAssetsUseCase mediaAssets,
+            OperationalEventPublisher operationalEvents,
             Clock clock) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.publishPort = publishPort;
         this.mediaAssets = mediaAssets;
+        this.operationalEvents = operationalEvents;
         this.clock = clock;
     }
 
@@ -144,8 +155,32 @@ public class PromotionPostService
                 && repository.existsBySourceCommitSha(promotionPost.getSourceCommitSha())) {
             throw new SourceCommitAlreadyPromotedException(promotionPost.getSourceCommitSha());
         }
-        promotionPost.submitForReview(Instant.now(clock));
-        return repository.save(promotionPost);
+        Instant now = Instant.now(clock);
+        promotionPost.submitForReview(now);
+        PromotionPost saved = repository.save(promotionPost);
+        notifyPendingReview(saved, now);
+        return saved;
+    }
+
+    /**
+     * 검토 대기가 쌓이면 에이전트가 QUEUE_FULL 로 멈추므로 사람에게 바로 알린다. 캡션은 검토 전 글이라 싣지 않는다.
+     * 위의 재시도 분기는 여기까지 오지 않아 같은 초안을 두 번 알리지 않는다.
+     */
+    private void notifyPendingReview(PromotionPost post, Instant now) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("초안 ID", post.getId());
+        fields.put("분류", post.getCategory() == PromotionCategory.SERVICE ? "서비스 소개" : "기능 홍보");
+        if (post.getSourceCommitSha() != null) {
+            fields.put("릴리스", post.getSourceCommitSha().substring(0, 7));
+        }
+        fields.put("관리자 경로", ADMIN_PATH);
+        operationalEvents.publish(new OperationalEvent(
+                Category.ADMIN,
+                Level.INFO,
+                "홍보 초안 검토 대기",
+                "새 홍보 초안이 검토 큐에 들어왔습니다. 관리자 화면에서 승인하거나 반려하세요.",
+                fields,
+                now));
     }
 
     @Override
@@ -185,20 +220,24 @@ public class PromotionPostService
             throw new InvalidPromotionPostStateException(
                     promotionPostId, PromotionPostStatus.APPROVED, promotionPost.getStatus());
         }
-        SocialPublishPort.PublishResult result = publishPort.publish(promotionPost);
-        promotionPost.markPublished(result.externalPostId(), Instant.now(clock));
+        // 간격 판정과 갱신을 한 번에 한다 — 동시에 눌러도 한 요청만 여기를 지난다(D24).
+        Instant now = Instant.now(clock);
+        Instant previous = repository.claimPublishSlot(now, MIN_PUBLISH_INTERVAL);
+        SocialPublishPort.PublishResult result;
+        try {
+            result = publishPort.publish(promotionPost);
+        } catch (RuntimeException failure) {
+            // 외부에 안 나갔으니 슬롯을 돌려줘 바로 다시 시도할 수 있게 한다. 아래 저장 실패는
+            // 이미 나간 뒤라 돌려주지 않는다 — 돌려주면 같은 글이 또 나간다.
+            repository.releasePublishSlot(now, previous);
+            throw failure;
+        }
+        promotionPost.markPublished(result.externalPostId(), now);
         return repository.save(promotionPost);
     }
 
     @Override
     public PromotionPost publishNext() {
-        Instant now = Instant.now(clock);
-        repository.findLatestPublishedAt().ifPresent(latest -> {
-            Instant availableAt = latest.plus(MIN_PUBLISH_INTERVAL);
-            if (now.isBefore(availableAt)) {
-                throw new PromotionPublishTooSoonException(availableAt);
-            }
-        });
         PromotionPost next = repository.findOldestApproved().orElseThrow(NoApprovedPromotionPostsException::new);
         return publish(next.getId());
     }

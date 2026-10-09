@@ -10,6 +10,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.common.operations.OperationalEvent;
+import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
@@ -50,9 +52,10 @@ class PromotionPostServiceTest {
     private final PromotionPostIdGeneratorPort idGenerator = mock(PromotionPostIdGeneratorPort.class);
     private final SocialPublishPort publishPort = mock(SocialPublishPort.class);
     private final ManageMediaAssetsUseCase mediaAssets = mock(ManageMediaAssetsUseCase.class);
+    private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
     private final PromotionPostService service =
-            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, clock);
+            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
 
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -108,13 +111,14 @@ class PromotionPostServiceTest {
                     .min(java.util.Comparator.comparing(PromotionPost::getReviewedAt));
         }
 
+        // 간격 판정은 실제 Mongo 로 PromotionRecoveryIntegrationTest 가 본다. 페이크는 늘 통과시킨다.
         @Override
-        public Optional<Instant> findLatestPublishedAt() {
-            return store.values().stream()
-                    .map(PromotionPost::getPublishedAt)
-                    .filter(java.util.Objects::nonNull)
-                    .max(Instant::compareTo);
+        public Instant claimPublishSlot(Instant now, java.time.Duration interval) {
+            return Instant.EPOCH;
         }
+
+        @Override
+        public void releasePublishSlot(Instant claimedAt, Instant previous) {}
 
         // 실제 어댑터는 이 필터를 쿼리(NotNull)로 내리므로, 페이크도 같은 것만 돌려줘야 한다.
         @Override
@@ -127,7 +131,7 @@ class PromotionPostServiceTest {
     }
 
     private PromotionPostService serviceOver(InMemoryRepo repo) {
-        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, clock);
+        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
     }
 
     /** 같은 릴리스로 초안 하나를 만들고 검토 요청까지 올린다 — 그 릴리스를 점유한 상태. */
@@ -342,6 +346,27 @@ class PromotionPostServiceTest {
         assertThatThrownBy(() -> service.publish("promo-1")).isInstanceOf(InvalidPromotionPostStateException.class);
 
         verify(publishPort, never()).publish(any());
+        // 잘못된 상태 요청이 6시간 슬롯을 태우지 않는다.
+        verify(repository, never()).claimPublishSlot(any(), any());
+    }
+
+    @Test
+    @DisplayName("검토 요청이 들어가면 캡션 없이 운영 채널에 한 번만 알리고, 재시도 제출은 다시 알리지 않는다")
+    void submit_notifiesOperationsOnceWithoutCaption() {
+        PromotionPostService target = serviceOver(new InMemoryRepo());
+        when(idGenerator.newId()).thenReturn("promo-1");
+        String id = createAndSubmit(target, SHA);
+
+        target.submit(id);
+
+        ArgumentCaptor<OperationalEvent> event = ArgumentCaptor.forClass(OperationalEvent.class);
+        verify(operationalEvents, times(1)).publish(event.capture());
+        assertThat(event.getValue().category()).isEqualTo(OperationalEvent.Category.ADMIN);
+        assertThat(event.getValue().fields())
+                .containsEntry("초안 ID", "promo-1")
+                .containsEntry("릴리스", SHA.substring(0, 7))
+                .containsEntry("관리자 경로", "/admin/promotion")
+                .doesNotContainValue("캡션");
     }
 
     @Test
@@ -421,7 +446,6 @@ class PromotionPostServiceTest {
     @DisplayName("다음 차례 발행은 가장 먼저 승인된 글을 올린다")
     void publishNext_publishesOldestApproved() {
         PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
-        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
         when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
         when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
         when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
@@ -435,7 +459,6 @@ class PromotionPostServiceTest {
     @Test
     @DisplayName("승인된 글이 없으면 외부 발행을 부르지 않고 거절한다")
     void publishNext_rejectsWhenNothingApproved() {
-        when(repository.findLatestPublishedAt()).thenReturn(Optional.empty());
         when(repository.findOldestApproved()).thenReturn(Optional.empty());
 
         assertThatThrownBy(service::publishNext).isInstanceOf(NoApprovedPromotionPostsException.class);
@@ -443,27 +466,43 @@ class PromotionPostServiceTest {
     }
 
     @Test
-    @DisplayName("직전 발행 후 6시간이 안 지났으면 거절한다")
-    void publishNext_rejectsWithinInterval() {
-        // clock 은 EPOCH 고정 — 1시간 전에 발행한 것으로 둔다.
-        when(repository.findLatestPublishedAt()).thenReturn(Optional.of(Instant.EPOCH.minusSeconds(3600)));
+    @DisplayName("개별 발행도 6시간 슬롯을 못 잡으면 외부 발행을 부르지 않는다")
+    void publish_rejectsWhenSlotTaken() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(repository.claimPublishSlot(Instant.EPOCH, PromotionPostService.MIN_PUBLISH_INTERVAL))
+                .thenThrow(new PromotionPublishTooSoonException(Instant.EPOCH.plusSeconds(3600)));
 
-        assertThatThrownBy(service::publishNext).isInstanceOf(PromotionPublishTooSoonException.class);
+        assertThatThrownBy(() -> service.publish("promo-1")).isInstanceOf(PromotionPublishTooSoonException.class);
         verify(publishPort, never()).publish(any());
+        verify(repository, never()).save(any());
     }
 
     @Test
-    @DisplayName("직전 발행 후 6시간이 지났으면 발행한다")
-    void publishNext_allowsAfterInterval() {
+    @DisplayName("외부 발행이 실패하면 잡은 슬롯을 돌려줘 바로 다시 시도할 수 있다")
+    void publish_releasesSlotWhenExternalPublishFails() {
         PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
-        when(repository.findLatestPublishedAt())
-                .thenReturn(Optional.of(Instant.EPOCH.minus(PromotionPostService.MIN_PUBLISH_INTERVAL)));
-        when(repository.findOldestApproved()).thenReturn(Optional.of(approved));
+        Instant previous = Instant.EPOCH.minusSeconds(86_400);
+        when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
+        when(repository.claimPublishSlot(Instant.EPOCH, PromotionPostService.MIN_PUBLISH_INTERVAL))
+                .thenReturn(previous);
+        when(publishPort.publish(approved)).thenThrow(new IllegalStateException("threads down"));
+
+        assertThatThrownBy(() -> service.publish("promo-1")).isInstanceOf(IllegalStateException.class);
+        verify(repository).releasePublishSlot(Instant.EPOCH, previous);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("외부에 나간 뒤 저장이 실패하면 슬롯을 돌려주지 않는다 — 같은 글이 또 나가지 않게")
+    void publish_keepsSlotWhenSaveFailsAfterExternalPublish() {
+        PromotionPost approved = saved(PromotionPostStatus.APPROVED, "author-1");
         when(repository.findById("promo-1")).thenReturn(Optional.of(approved));
         when(publishPort.publish(approved)).thenReturn(new PublishResult("stub-post-1"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any())).thenThrow(new IllegalStateException("mongo down"));
 
-        assertThat(service.publishNext().getStatus()).isEqualTo(PromotionPostStatus.PUBLISHED);
+        assertThatThrownBy(() -> service.publish("promo-1")).isInstanceOf(IllegalStateException.class);
+        verify(repository, never()).releasePublishSlot(any(), any());
     }
 
     @Test

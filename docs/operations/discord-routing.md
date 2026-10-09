@@ -11,7 +11,7 @@ GoLe 운영 Discord는 비밀 URL을 코드에 저장하지 않고 root-owned
 | 채널 | 발신자 | 환경변수 | 사건 |
 | --- | --- | --- | --- |
 | `github-활동` | GitHub 공식 앱 + CI webhook | `DISCORD_CI_WEBHOOK_URL` | push, PR, issue, Actions 결과 |
-| `배포-장애` | 배포/헬스체크 + 애플리케이션 | `DISCORD_DEPLOY_WEBHOOK_URL`, `DISCORD_OPERATIONS_WEBHOOK_URL` | 배포 시작·완료·실패, readiness 장애, 서버 오류, 관리자 조치 |
+| `배포-장애` | 배포/헬스체크 + 애플리케이션 | `DISCORD_DEPLOY_WEBHOOK_URL`, `DISCORD_OPERATIONS_WEBHOOK_URL` | 배포 시작·완료·실패, readiness 장애, 서버 오류, 관리자 조치, 홍보 초안 검토 대기·홍보 실행 실패·게이트웨이 배포 실패 |
 | `가입-알림` | 애플리케이션 | `DISCORD_ACCOUNT_WEBHOOK_URL` | 신규 일반·소셜 가입 |
 | `결제-알림` | 애플리케이션 | `DISCORD_PAYMENT_WEBHOOK_URL` | 결제 승인·실패·검토, 환불 접수·완료, PortOne 웹훅·재조정 오류 |
 | `문의-알림` | 애플리케이션 | `DISCORD_SUPPORT_WEBHOOK_URL` | 신규 운영 문의, 문의자의 후속 답변(본문·사용자 식별자 제외) |

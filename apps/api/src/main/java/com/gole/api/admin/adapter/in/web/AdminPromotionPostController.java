@@ -182,7 +182,9 @@ public class AdminPromotionPostController {
         return rejected;
     }
 
-    @Operation(summary = "발행", description = "APPROVED → PUBLISHED. 지금은 스텁 어댑터가 처리해 실제 외부에 올라가지 않는다.")
+    @Operation(
+            summary = "발행",
+            description = "APPROVED → PUBLISHED. 직전 발행 후 6시간이 지나야 한다. 지금은 스텁 어댑터가 처리해 실제 외부에 올라가지 않는다.")
     @PostMapping("/{id}/publish")
     public PromotionPost publish(@PathVariable String id, HttpServletRequest http) {
         PromotionPost published = managePromotionPosts.publish(id);
