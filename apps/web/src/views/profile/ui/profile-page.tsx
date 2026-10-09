@@ -14,6 +14,8 @@ import {
 import { deleteListing, fetchMyListings, type Listing } from "@entities/listing";
 import { fetchLaunchConfig, SAFE_LAUNCH_CONFIG, type LaunchConfig } from "@entities/launch";
 import { fetchMe, useSession, type Me } from "@entities/user";
+import { MyBidsPanel } from "@features/buy-bid";
+import { BumpListingButton, EditListingLink } from "@features/manage-listing";
 import { formatKrw } from "@shared/lib";
 import { ApiError } from "@shared/api";
 import {
@@ -40,14 +42,17 @@ function formatSettlementDate(iso: string | null): string {
     : `${at.getFullYear()}.${String(at.getMonth() + 1).padStart(2, "0")}.${String(at.getDate()).padStart(2, "0")}`;
 }
 
-type Tab = "info" | "orders" | "sales" | "listings";
+type Tab = "info" | "orders" | "sales" | "listings" | "bids";
 
 const TAB_LABEL: Record<Tab, string> = {
   info: "내 정보",
   orders: "구매 내역",
   sales: "판매 관리",
   listings: "내 매물",
+  bids: "입찰",
 };
+
+const TABS: readonly Tab[] = ["info", "orders", "sales", "listings", "bids"];
 
 /**
  * 조회 상태. 실패를 빈 값으로 뭉개지 않는다 — "없음"과 "못 불러옴"은 사용자가 할 행동이
@@ -224,8 +229,20 @@ export function ProfilePage() {
     }
   }
 
+  /** 끌올한 매물은 "최신순" 맨 앞으로 오므로 목록에서도 앞으로 옮긴다. */
+  function handleListingBumped(updated: Listing) {
+    setListings((current) =>
+      current.status === "ready"
+        ? {
+            status: "ready",
+            data: [updated, ...current.data.filter((listing) => listing.id !== updated.id)],
+          }
+        : current,
+    );
+  }
+
   function tabClass(t: Tab) {
-    return `flex-1 border-b-2 py-2.5 text-sm font-semibold transition-colors ${
+    return `min-w-0 flex-1 break-keep border-b-2 px-1 py-2.5 text-sm font-semibold transition-colors ${
       tab === t
         ? "border-brand-600 text-brand-700"
         : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
@@ -258,8 +275,8 @@ export function ProfilePage() {
         </div>
 
         {/* 탭 */}
-        <div className="grid grid-cols-4 border-b border-neutral-200">
-          {(["info", "orders", "sales", "listings"] as Tab[]).map((t) => (
+        <div className="grid grid-cols-5 border-b border-neutral-200">
+          {TABS.map((t) => (
             <button key={t} type="button" className={tabClass(t)} onClick={() => setTab(t)}>
               {TAB_LABEL[t]}
             </button>
@@ -324,6 +341,15 @@ export function ProfilePage() {
                   className="font-semibold text-brand-700 underline-offset-4 hover:underline"
                 >
                   비밀번호 변경
+                </Link>
+              </InfoRow>
+
+              <InfoRow label="알림 설정">
+                <Link
+                  href="/profile/notifications"
+                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                >
+                  받을 알림 고르기
                 </Link>
               </InfoRow>
 
@@ -589,18 +615,23 @@ export function ProfilePage() {
                             </div>
                           </div>
                         ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setPendingListingStop(l.id);
-                              setListingStopError(null);
-                              setListingNotice(null);
-                            }}
-                          >
-                            판매 중지
-                          </Button>
+                          <div className="flex flex-wrap items-start gap-2">
+                            <EditListingLink listingId={l.id} />
+                            <BumpListingButton listing={l} onBumped={handleListingBumped} />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto"
+                              onClick={() => {
+                                setPendingListingStop(l.id);
+                                setListingStopError(null);
+                                setListingNotice(null);
+                              }}
+                            >
+                              판매 중지
+                            </Button>
+                          </div>
                         )}
                         {stopError ? (
                           <p role="alert" className="mt-2 text-sm text-danger">
@@ -615,6 +646,9 @@ export function ProfilePage() {
             )}
           </div>
         )}
+
+        {/* 입찰 — 탭을 열 때 처음 읽는다. */}
+        {tab === "bids" && <MyBidsPanel />}
       </div>
     </Container>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchLaunchConfig } from "@entities/launch";
-import { VerifyEmailForm } from "@features/verify-email";
+import { VerifyEmailForm } from "@features/auth/verify-email";
 import { AuthCard } from "@widgets/auth-layout";
 import {
   clearPendingVerificationEmail,

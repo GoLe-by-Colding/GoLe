@@ -1,15 +1,18 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-export type BellIconProps = Omit<ComponentPropsWithoutRef<"svg">, "children">;
+export type BellIconProps = Omit<ComponentPropsWithoutRef<"svg">, "children"> & {
+  /** 켜진 상태(구독 중)를 채운 종으로 보인다. */
+  readonly filled?: boolean;
+};
 
 /** 알림을 나타내는 장식용 선형 아이콘. */
-export function BellIcon({ className, ...props }: BellIconProps) {
+export function BellIcon({ className, filled = false, ...props }: BellIconProps) {
   return (
     <svg
       aria-hidden="true"
       focusable="false"
       viewBox="0 0 24 24"
-      fill="none"
+      fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth="1.8"
       strokeLinecap="round"

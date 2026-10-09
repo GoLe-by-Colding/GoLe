@@ -28,3 +28,4 @@ export type { PendingVerificationOrigin } from "./pending-verification-email";
 export type { BreadcrumbItem } from "./seo";
 export { APP_PUSH_TOKEN_EVENT, readAppPushToken, subscribeAppPushToken } from "./app-push-token";
 export type { AppPushToken } from "./app-push-token";
+export { useClock } from "./use-clock";

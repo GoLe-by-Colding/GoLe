@@ -11,14 +11,25 @@ export async function fetchSellerFeePolicy(signal?: AbortSignal): Promise<Seller
   return parseSellerFeePolicy(payload);
 }
 
+/**
+ * 주문을 만든다. `offerId`를 주면 그 수락 제안의 가격으로 주문한다(price-offer O16) — 금액은 서버가
+ * `min(제안가, 매물가)`로 정한다. 이 매물·이 구매자의 유효한 수락 제안이 아니면 409 `OFFER_NOT_USABLE`이고
+ * 예약은 풀린다. 그때는 `offerId` 없이 다시 부르면 정가 주문이다.
+ */
 export function placeOrder(
   listingId: string,
   buyerId: string,
   buyerPhone?: string,
+  offerId?: string,
 ): Promise<Order> {
   return apiRequest<Order>("/api/v1/orders", {
     method: "POST",
-    body: { listingId, buyerId, ...(buyerPhone ? { buyerPhone } : {}) },
+    body: {
+      listingId,
+      buyerId,
+      ...(buyerPhone ? { buyerPhone } : {}),
+      ...(offerId ? { offerId } : {}),
+    },
   });
 }
 

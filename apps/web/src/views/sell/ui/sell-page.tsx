@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreateListingForm } from "@features/create-listing";
+import { CreateListingForm } from "@features/manage-listing";
 import { fetchLaunchConfig, type LaunchConfig } from "@entities/launch";
 import { fetchOnboardingStatus, useSession } from "@entities/user";
 import { isPaymentRuntimeAvailable } from "@shared/config";

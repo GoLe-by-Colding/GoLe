@@ -6,6 +6,7 @@ import {
   conditionLabel,
   formatPriceKrw,
   LISTING_CATEGORY_LABEL,
+  priceDropAmount,
 } from "@gole/core/listing";
 
 export interface ListingCardProps {
@@ -35,6 +36,7 @@ export function ListingCard({ listing }: ListingCardProps) {
           <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
           {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
           {listing.status === "reserved" ? <Badge tone="warning">예약중</Badge> : null}
+          {priceDropAmount(listing) !== null ? <Badge tone="success">가격 내림</Badge> : null}
         </div>
         <span className="text-[15px] font-semibold leading-snug text-neutral-900 line-clamp-1">
           {listing.title}

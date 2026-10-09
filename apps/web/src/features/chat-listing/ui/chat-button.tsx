@@ -12,6 +12,7 @@ import {
 import { Button, LinkButton, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 import { DirectTradeConfirmation } from "./direct-trade-confirmation";
+import { ListingOfferPanel } from "./listing-offer-panel";
 
 export interface ChatButtonProps {
   readonly listingId: string;
@@ -19,6 +20,8 @@ export interface ChatButtonProps {
   readonly available: boolean;
   readonly label?: string;
   readonly directTradeEnabled?: boolean;
+  /** 플랫폼 결제가 열려 있는지. 가격 제안 배너가 수락된 제안의 다음 행동을 고르는 데 쓴다. */
+  readonly paymentsOpen?: boolean;
   readonly initialOpen?: boolean;
 }
 
@@ -32,6 +35,7 @@ export function ChatButton({
   available,
   label = "채팅하기",
   directTradeEnabled = true,
+  paymentsOpen = false,
   initialOpen = false,
 }: ChatButtonProps) {
   const { session } = useSession();
@@ -70,6 +74,7 @@ export function ChatButton({
               myId={session.accountId}
               sellerId={sellerId}
               directTradeEnabled={directTradeEnabled}
+              paymentsOpen={paymentsOpen}
               runWithConsent={runWithConsent}
             />
           </div>
@@ -87,6 +92,7 @@ interface InlineChatPanelProps {
   readonly myId: string;
   readonly sellerId: string;
   readonly directTradeEnabled: boolean;
+  readonly paymentsOpen: boolean;
   readonly runWithConsent: ConsentRunner;
 }
 
@@ -95,6 +101,7 @@ function InlineChatPanel({
   myId,
   sellerId,
   directTradeEnabled,
+  paymentsOpen,
   runWithConsent,
 }: InlineChatPanelProps) {
   const runCreate = useCallback(
@@ -198,6 +205,20 @@ function InlineChatPanel({
           />
         )
       ) : null}
+      {room === null || room.directTradeCompletedAt !== null ? null : (
+        <ListingOfferPanel
+          key={`offer:${room.id}`}
+          roomId={room.id}
+          listingId={room.listingId}
+          buyerId={room.buyerId}
+          sellerId={room.sellerId}
+          myId={myId}
+          paymentsOpen={paymentsOpen}
+          purchaseLink={false}
+          refreshKey={messages.at(-1)?.id ?? null}
+          runWithConsent={runWithConsent}
+        />
+      )}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-center text-sm text-neutral-400">
