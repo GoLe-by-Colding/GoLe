@@ -21,11 +21,11 @@
     "@portone/browser-sdk": "^0.1.13",
     "@sentry/nextjs": "10.74.0",
     "next": "16.3.8",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@feature-sliced/steiger-plugin": "^0.7.0",
+    "@feature-sliced/steiger-plugin": "^0.8.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
@@ -34,8 +34,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "eslint-plugin-boundaries": "^7.2.0",
-    "prettier": "^3.9.6",
-    "steiger": "^0.6.0",
+    "prettier": "^3.9.9",
+    "steiger": "^0.7.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5"
   }
