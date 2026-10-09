@@ -1,4 +1,4 @@
-package com.gole.api.order.adapter.out.settlement;
+package com.gole.api.order.config;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;

@@ -10,6 +10,7 @@ import com.gole.api.order.application.port.out.AutomaticSettlementPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.SettlementLedgerPort;
 import com.gole.api.order.application.port.out.SettlementPort;
+import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.Settlement;
