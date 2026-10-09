@@ -41,6 +41,30 @@ test.describe("Search & listing detail", () => {
     );
   });
 
+  test("매물 상세의 세트 번호 배지와 시세 영역이 세트 페이지로 잇는다", async ({ page }) => {
+    test.skip(targetsRemoteHost, "로컬 API의 매물 목록으로 대상을 고르는 회귀 테스트");
+
+    const response = await page.request.get(`${apiBaseUrl}/api/v1/listings`);
+    expect(response.ok()).toBeTruthy();
+    const listings = (await response.json()) as Array<{
+      id: string;
+      category: string;
+      catalogSetNumber: string | null;
+    }>;
+    const listing = listings.find((item) => item.category === "set" && item.catalogSetNumber);
+    expect(listing, "세트 번호가 있는 세트 매물이 하나 이상 필요합니다").toBeTruthy();
+    const setNumber = listing?.catalogSetNumber ?? "";
+
+    await page.goto(`/listings/${listing?.id ?? ""}`);
+    await expect(page.getByRole("link", { name: `#${setNumber} 세트 페이지` })).toHaveAttribute(
+      "href",
+      `/sets/${setNumber}`,
+    );
+    await expect(
+      page.locator("#price-insight").getByRole("link", { name: "세트 페이지 보기" }),
+    ).toHaveAttribute("href", `/sets/${setNumber}`);
+  });
+
   test("카테고리로 필터링한다", async ({ page }) => {
     await page.goto("/search");
     await page.getByLabel("카테고리").selectOption("parts");
