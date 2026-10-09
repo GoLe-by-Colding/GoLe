@@ -352,9 +352,12 @@ test.describe("판매 등록 — 같은 상태 추정 시세", () => {
     await expect(guide).toContainText("하자 있음 상태는 체결 표본이 부족해");
     await expect(guide).not.toContainText("추정 시세보다");
 
-    // 미니피규어·부품은 출처 세트 번호가 있어도 세트 한 벌 시세를 보이지 않는다.
+    // 미니피규어·부품은 출처 세트 번호가 있어도 세트 한 벌 시세를 보이지 않는다. 말없이 사라지지 않고 이유를 둔다.
     await page.getByLabel("카테고리").selectOption("minifig");
-    await expect(guide).toHaveCount(0);
+    await expect(guide).toContainText("미니피그 매물은 세트 한 벌의 시세와 견주지 않아요");
+    await expect(guide).not.toContainText("추정 시세");
+    await page.getByLabel("카테고리").selectOption("parts");
+    await expect(guide).toContainText("부품 매물은 세트 한 벌의 시세와 견주지 않아요");
     await page.getByLabel("카테고리").selectOption("set");
     await expect(guide).toContainText("하자 있음 상태는 체결 표본이 부족해");
 
