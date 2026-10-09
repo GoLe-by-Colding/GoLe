@@ -103,7 +103,7 @@ public class ListingController {
     @Operation(
             summary = "매물 검색",
             description = "활성 매물을 검색합니다. 파라미터 없으면 최신순 전체 반환.\n\n"
-                    + "- `query`: 제목·설명 텍스트 검색\n"
+                    + "- `query`: 제목·설명 텍스트 검색. 세트 번호 형태(`75192`·`#75192`·`10307-1`)면 카탈로그 세트 번호도 찾는다\n"
                     + "- `condition`: new_sealed | like_new | used_good | used_fair | damaged\n"
                     + "  (레거시 used_complete → used_good, used_incomplete → used_fair 로 매핑)\n"
                     + "- `category`: set | parts | minifig | moc\n"
