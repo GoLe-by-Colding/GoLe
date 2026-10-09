@@ -174,11 +174,18 @@ test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비
     ),
   ).toBe("동일 상태 체결 19건 · 데모 포함");
 
-  // 목록 카드: 판매 중·예약 중 세트 매물만, 출처 경고가 있으면 "참고용"을 붙인다.
-  const listing = (id: string, status: Listing["status"], setNumber: string | null) =>
+  // 목록 카드: 판매 중·예약 중인 세트 한 벌 매물만, 출처 경고가 있으면 "참고용"을 붙인다.
+  // 미니피규어·부품은 출처 세트 번호가 있어도 세트 한 벌 시세와 견주지 않는다.
+  const listing = (
+    id: string,
+    status: Listing["status"],
+    setNumber: string | null,
+    category: Listing["category"] = "set",
+  ) =>
     ({
       id,
       status,
+      category,
       price: 1_250_000,
       condition: "used_good",
       catalogSetNumber: setNumber,
@@ -188,7 +195,9 @@ test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비
     listing("b", "reserved", "75192"),
     listing("c", "sold", "75192"),
     listing("d", "active", null),
+    listing("m", "active", "10300", "minifig"),
     listing("e", "active", "10276"),
+    listing("p", "active", "75192", "parts"),
   ];
   expect(priceNoteSetNumbers(listings)).toEqual(["75192", "10276"]);
   expect(
