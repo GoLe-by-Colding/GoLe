@@ -11,13 +11,15 @@ const LEVEL: Record<HeadingLevel, string> = {
 
 export interface HeadingProps extends HTMLAttributes<HTMLHeadingElement> {
   readonly level?: HeadingLevel;
+  /** 보이는 크기. 문서 구조(level)와 다를 때만 준다 — 예: 카드 안 페이지 제목은 h1이지만 h2 크기. */
+  readonly size?: HeadingLevel;
   readonly children: ReactNode;
 }
 
-export function Heading({ level = 2, className, children, ...rest }: HeadingProps) {
+export function Heading({ level = 2, size, className, children, ...rest }: HeadingProps) {
   const Tag = `h${level}` as const;
   return (
-    <Tag className={cn(LEVEL[level], className)} {...rest}>
+    <Tag className={cn(LEVEL[size ?? level], className)} {...rest}>
       {children}
     </Tag>
   );
