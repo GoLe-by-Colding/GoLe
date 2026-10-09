@@ -1,6 +1,7 @@
 package com.gole.api.account.application.service;
 
 import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.out.ConsentEventIdGeneratorPort;
 import com.gole.api.account.application.port.out.ThirdPartyProvisionConsentRepositoryPort;
 import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
@@ -13,7 +14,6 @@ import com.gole.api.common.exception.ForbiddenException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
-import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
 /**
@@ -27,12 +27,17 @@ public class ThirdPartyProvisionConsentService implements ManageThirdPartyProvis
 
     private final ThirdPartyProvisionConsentRepositoryPort repository;
     private final SignupPolicyProperties properties;
+    private final ConsentEventIdGeneratorPort ids;
     private final Clock clock;
 
     public ThirdPartyProvisionConsentService(
-            ThirdPartyProvisionConsentRepositoryPort repository, SignupPolicyProperties properties, Clock clock) {
+            ThirdPartyProvisionConsentRepositoryPort repository,
+            SignupPolicyProperties properties,
+            ConsentEventIdGeneratorPort ids,
+            Clock clock) {
         this.repository = repository;
         this.properties = properties;
+        this.ids = ids;
         this.clock = clock;
     }
 
@@ -106,13 +111,7 @@ public class ThirdPartyProvisionConsentService implements ManageThirdPartyProvis
             throw new BadRequestException("CONSENT_REQUEST_ID_INVALID", "동의 요청 식별자를 확인해 주세요");
         }
         ThirdPartyProvisionConsentEvent requested = new ThirdPartyProvisionConsentEvent(
-                new ObjectId().toHexString(),
-                validatedAccountId,
-                version,
-                decision,
-                path,
-                requestId,
-                Instant.now(clock));
+                ids.newConsentEventId(), validatedAccountId, version, decision, path, requestId, Instant.now(clock));
         ThirdPartyProvisionConsentEvent stored = repository.appendOnce(requested);
         if (!sameDecision(requested, stored)) {
             throw new ConflictException("CONSENT_REQUEST_ID_REUSED", "이미 다른 동의 결정에 사용된 요청 식별자입니다");
