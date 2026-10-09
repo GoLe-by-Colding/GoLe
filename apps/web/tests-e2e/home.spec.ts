@@ -18,6 +18,18 @@ test.describe("Home", () => {
     await expect(page.getByRole("heading", { name: "브릭을 가장 합리적으로" })).toBeVisible();
   });
 
+  test("지금 뜨는 세트의 평균이 모든 상태의 체결가 평균임을 밝힌다", async ({ page }) => {
+    await page.goto("/");
+
+    const trending = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "지금 뜨는 세트" }) });
+    // 인기 집계 평균은 상태를 가리지 않는다 — 세트 상세의 미개봉 체결가·매물의 같은 상태 추정 시세와 다른 값이다.
+    await expect(
+      trending.getByText("미개봉·중고를 합친 모든 상태의 체결가 평균", { exact: false }),
+    ).toBeVisible();
+  });
+
   test("추천 세트가 렌더된다", async ({ page }) => {
     await page.goto("/");
 
