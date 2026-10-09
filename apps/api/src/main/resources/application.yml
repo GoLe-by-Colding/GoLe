@@ -212,6 +212,9 @@ gole:
     seed-on-empty: ${GOLE_CATALOG_SEED:false}
   listing:
     seed-on-empty: ${GOLE_LISTING_SEED:false}
+    bump:
+      # 끌올 쿨다운. listedAt(등록 또는 마지막 끌올) 기준이며 ISO-8601 기간이다. (listing-edit-and-bump B2)
+      cooldown: ${GOLE_LISTING_BUMP_COOLDOWN:PT24H}
   pricing:
     seed-on-empty: ${GOLE_PRICING_SEED:false}
     evidence:
