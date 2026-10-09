@@ -215,6 +215,11 @@ gole:
     bump:
       # 끌올 쿨다운. listedAt(등록 또는 마지막 끌올) 기준이며 ISO-8601 기간이다. (listing-edit-and-bump B2)
       cooldown: ${GOLE_LISTING_BUMP_COOLDOWN:PT24H}
+  # 가격 제안(price-offer O5, O7, O12). 기간은 ISO-8601이다. 만료는 스케줄러 없이 읽을 때 계산한다.
+  offer:
+    pending-ttl: ${GOLE_OFFER_PENDING_TTL:PT48H}
+    accepted-ttl: ${GOLE_OFFER_ACCEPTED_TTL:PT72H}
+    max-per-listing-per-day: ${GOLE_OFFER_MAX_PER_LISTING_PER_DAY:5}
   pricing:
     seed-on-empty: ${GOLE_PRICING_SEED:false}
     evidence:
