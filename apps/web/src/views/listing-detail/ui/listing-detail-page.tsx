@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   completenessLabel,
@@ -110,7 +111,17 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
             <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
             <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
             {listing.catalogSetNumber !== null ? (
-              <Badge tone="neutral">#{listing.catalogSetNumber}</Badge>
+              // 세트 번호 배지는 세트 페이지(같은 세트의 다른 매물·구매 입찰·전체 시세)로 가는 첫 입구다.
+              <Link
+                href={`/sets/${encodeURIComponent(listing.catalogSetNumber)}`}
+                aria-label={`#${listing.catalogSetNumber} 세트 페이지`}
+                className="rounded-full transition-opacity hover:opacity-80"
+              >
+                <Badge tone="neutral">
+                  #{listing.catalogSetNumber}
+                  <span aria-hidden="true">›</span>
+                </Badge>
+              </Link>
             ) : null}
             {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
             {!isAvailable ? <Badge tone="danger">거래완료</Badge> : null}
