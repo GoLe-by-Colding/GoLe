@@ -2,6 +2,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   Linking,
   Platform,
@@ -19,7 +20,13 @@ import { navigationTarget, resolveWebOrigin } from "../model/navigation";
 const colors = themes.light;
 
 /** RN은 탭과 기기 기능, 웹은 서비스 화면과 인증을 소유한다. */
-export function WebScreen({ path = "/" }: { path?: string }) {
+export function WebScreen({
+  path = "/",
+  nativeHeader = false,
+}: {
+  path?: string;
+  nativeHeader?: boolean;
+}) {
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
   const [error, setError] = useState(false);
@@ -41,12 +48,23 @@ export function WebScreen({ path = "/" }: { path?: string }) {
 
   useFocusEffect(
     useCallback(() => {
+      // 별도 WebView 탭에서 로그인/로그아웃한 뒤 기존 웹 세션 구독을 깨운다.
+      // 입력 중인 폼을 보존하고, 인증 토큰은 읽거나 주입하지 않는다.
+      const notifyFocus = () =>
+        web.current?.injectJavaScript('window.dispatchEvent(new Event("focus"));true;');
+      notifyFocus();
+      const appStateListener = AppState.addEventListener("change", (state) => {
+        if (state === "active") notifyFocus();
+      });
       const listener = BackHandler.addEventListener("hardwareBackPress", () => {
         if (!canGoBack.current) return false;
         web.current?.goBack();
         return true;
       });
-      return () => listener.remove();
+      return () => {
+        listener.remove();
+        appStateListener.remove();
+      };
     }, []),
   );
 
@@ -56,7 +74,10 @@ export function WebScreen({ path = "/" }: { path?: string }) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+    <SafeAreaView
+      style={styles.container}
+      edges={nativeHeader ? ["left", "right", "bottom"] : ["top", "left", "right"]}
+    >
       {linkError ? (
         <Pressable
           accessibilityRole="button"
