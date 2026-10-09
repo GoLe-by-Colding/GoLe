@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
 import { fetchFeed, type Post } from "@entities/community";
@@ -7,9 +6,10 @@ import { fetchLaunchConfig } from "@entities/launch";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
-import { cn, formatKrw } from "@shared/lib";
+import { cn } from "@shared/lib";
 import { env, isPaymentRuntimeAvailable } from "@shared/config";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
+import { PriceTicker } from "./price-ticker";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
@@ -62,37 +62,6 @@ function SectionHeader({ title, aside }: { readonly title: string; readonly asid
         <Heading level={2}>{title}</Heading>
       </div>
       {aside}
-    </div>
-  );
-}
-
-/** 트렌딩 세트의 평균 체결가를 연속해서 보여주는 시세 티커. */
-function PriceTicker({ items }: { readonly items: readonly TrendingSet[] }) {
-  if (items.length === 0) return null;
-  const doubled = [...items, ...items];
-  return (
-    <div className="group overflow-hidden border-y border-neutral-200 bg-neutral-50 py-3">
-      <div className="flex w-max animate-market-ticker items-center gap-10 pl-10 group-hover:[animation-play-state:paused] motion-reduce:animate-none">
-        {doubled.map((set, index) => (
-          <Link
-            key={`${set.setNumber}-${index}`}
-            href={`/prices?set=${encodeURIComponent(set.setNumber)}`}
-            aria-hidden={index >= items.length ? "true" : undefined}
-            tabIndex={index >= items.length ? -1 : undefined}
-            className="flex items-center gap-2.5 whitespace-nowrap text-sm hover:text-brand-700"
-          >
-            <span className="font-mono font-bold text-brand-700">#{set.setNumber}</span>
-            <span className="max-w-[18ch] truncate text-neutral-600">{set.name}</span>
-            <span className="font-semibold tabular-nums text-neutral-900">
-              <span className="mr-1 text-xs font-normal text-neutral-500">평균</span>
-              {formatKrw(set.averagePrice)}
-            </span>
-            <span className="text-xs text-neutral-500">
-              {set.tradeCount.toLocaleString("ko-KR")}건 체결
-            </span>
-          </Link>
-        ))}
-      </div>
     </div>
   );
 }
