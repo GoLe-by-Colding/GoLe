@@ -58,6 +58,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
     /**
      * 제목·설명 글자 검색. 검색어가 세트 번호처럼 생겼으면 카탈로그 세트 번호(변형 번호 접미사 포함)도 함께 본다 —
      * 제목에 번호를 쓰지 않은 매물도 번호로 찾히게 한다. "10307-1"·"#10307"은 기본 번호 "10307"로 글자도 찾는다.
+     * 검색어가 관심 테마 이름("스타워즈")이면 그 관심 테마를 단 매물도 찾는다.
      */
     private static Criteria textCriteria(ListingSearchQuery query) {
         String setNumber = query.setNumberInText();
@@ -68,6 +69,10 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
         any.add(Criteria.where("description").regex(escaped, "i"));
         if (setNumber != null) {
             any.add(Criteria.where("catalogSetNumber").regex("^" + Pattern.quote(setNumber) + "(-\\d+)?$"));
+        }
+        InterestTag interestTag = query.interestTagInText();
+        if (interestTag != null) {
+            any.add(Criteria.where("interestTag").is(interestTag.key()));
         }
         return new Criteria().orOperator(any.toArray(Criteria[]::new));
     }
