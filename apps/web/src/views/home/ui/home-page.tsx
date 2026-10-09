@@ -159,7 +159,7 @@ export async function HomePage() {
                   size={286}
                   showWordmark={false}
                   spout
-                  className="gole-mascot-float drop-shadow-[0_18px_24px_rgba(3,10,35,0.22)]"
+                  className="gole-mascot-float drop-shadow-[0_18px_24px_rgba(3,10,35,0.22)] [--gole-mark-body:var(--color-brand-500)]"
                 />
               </div>
 

@@ -1,7 +1,7 @@
 import { cn } from "@shared/lib";
 
 export interface LogoProps {
-  /** 고래 마크가 들어가는 정사각형 영역의 픽셀 크기. */
+  /** 고래 마크의 가로 픽셀 크기. 세로는 마크 비율(269:198.3)로 정해진다. */
   readonly size?: number;
   readonly showWordmark?: boolean;
   readonly className?: string;
@@ -10,22 +10,46 @@ export interface LogoProps {
   readonly spout?: boolean;
 }
 
+/*
+ * 정본은 같은 폴더의 `mark.svg`다. 아래 두 경로는 그 파일에서 그대로 복사했고,
+ * `scripts/build-brand-icons.mjs`가 문자열이 같은지 검사한다. 마크를 고치면 mark.svg를 먼저 고친다.
+ *
+ * viewBox는 그림 경계에 딱 맞춘다(꼬리 끝 y=0 ~ 배 y=198.3). 높이도 같은 비율로 계산하므로
+ * preserveAspectRatio 레터박스로 빈 띠가 생기지 않는다. 분수 브릭도 이 상자 안(꼬리 끝보다 아래)에
+ * 앉혀 spout 변형이 같은 viewBox를 쓴다 — 애니메이션 중 잠깐 위로 솟는 8단위만 overflow로 보인다.
+ */
+const MARK_W = 269;
+const MARK_H = 198.3;
+/** 고래 실루엣 + 파란 스터드 2개. 눈은 반대 방향으로 감은 원이라 nonzero 규칙에서 구멍이 된다. */
+const BODY_D =
+  "M80.2 57.2C86.7 73.5 89 88.3 116.5 88.3L214 88.3C244.4 88.3 269 112.9 269 143.3C269 173.6 244.4 198.3 214 198.3L159 198.3C109 198.3 71.5 180.8 62.8 145.8C59 133.3 59.4 92.6 50 69.4C44.9 56.7 16.2 46.7 5.8 46.5C3.2 46.4 1 44.7 0.4 42.3C-0.3 39.9 0.7 37.3 2.8 35.9C17.4 26.5 35.8 23.8 55.7 40.1C58.7 14.6 73.8 3.7 90.9 0.3C93.3 -0.2 95.9 1 97.1 3.2C98.2 5.5 97.9 8.2 96.1 10C88.7 17.4 75 44.6 80.2 57.2ZM119 90.8V78.5A6.5 6.5 0 0 1 125.5 72H137.5A6.5 6.5 0 0 1 144 78.5V90.8ZM189 90.8V78.5A6.5 6.5 0 0 1 195.5 72H207.5A6.5 6.5 0 0 1 214 78.5V90.8ZM216.5 135.8A12.5 12.5 0 1 0 241.5 135.8A12.5 12.5 0 1 0 216.5 135.8Z";
+/** 가운데 골드 스터드. 몸보다 먼저 그려 아랫단을 몸 속에 묻는다. */
+const GOLD_D = "M154 90.8V78.5A6.5 6.5 0 0 1 160.5 72H172.5A6.5 6.5 0 0 1 179 78.5V90.8Z";
+
+/** 1×2 브릭 한 개 — 몸 34×17 위에 스터드 두 개. 분수 그룹 안의 좌표다. */
+function SpoutBrick({ x, y, className }: { x: number; y: number; className: string }) {
+  return (
+    <g className={cn("gole-spout-brick", className)}>
+      <rect x={x} y={y} width="34" height="17" rx="3" />
+      <rect x={x + 6} y={y - 5} width="9" height="6" rx="2" />
+      <rect x={x + 19} y={y - 5} width="9" height="6" rx="2" />
+    </g>
+  );
+}
+
 /**
- * GoLe 브릭 고래 — 실제로 조립된 장난감처럼 읽히는 독자 마스코트.
+ * GoLe 브릭 고래 — 꼬리를 든 고래 한 마리, 평평한 등에서 솟은 스터드 셋, 가운데만 골드.
  *
- * <p>설계 원칙: 매끈한 고래 실루엣 위에 스터드를 "얹지" 않는다. 그렇게 하면 스터드가
- * 스티커처럼 보여서 조립품이 아니라 장식이 된다. 대신 몸을 세 장의 큰 브릭 면으로 쌓고,
- * 등 스터드는 스파인 플레이트의 윤곽선 자체가 위로 솟아오른 형태로 그린다(한 개의 path).
+ * <p>설계 원칙: 16px에서도 고래로 읽혀야 하므로 면광·힌지·입 같은 디테일 없이 단색 실루엣
+ * 하나로 그린다. 고래다움은 들어 올린 꼬리(플루크)와 반원 머리가, 브릭다움은 수평인 등과
+ * 그 윤곽에서 솟은 스터드가 맡는다. 스터드는 몸과 같은 path에 합쳐 스티커처럼 떠 보이지 않게 한다.
  *
- * <p>실루엣은 유기적 곡선이 아니라 기하학이다. 위·중간 면을 같은 폭(x8~196)으로 맞춰
- * 한 덩어리 브릭 로프처럼 보이게 하고, 고래다움은 이마 쪽 큰 모서리 반경과
- * 배 면의 taper, 꼬리 단차로만 만든다. 면을 울퉁불퉁 겹치면 유충처럼 징그러워진다.
+ * <p>색은 두 가지 + 골드 한 점이다. 몸·골드는 테마 토큰(brand-600·accent-500)을 따르고,
+ * 어두운 배경에서는 호출부가 `[--gole-mark-body:...]`로 몸 색만 바꿀 수 있다(예: 푸터의 흰 고래).
+ * 눈은 구멍이라 배경색이 그대로 비친다.
  *
- * <p>면광은 3단이다 — 윗면(밝음) / 정면(기본) / 아랫면(그늘). 사출 장난감은 곡면 그라데이션이
- * 아니라 면 단위로 빛을 받으므로, 면마다 단일 색을 주는 편이 실제 브릭에 가깝다.
- *
- * <p>지느러미와 꼬리는 힌지 핀으로 몸에 물린다. 핀을 그려 두면 "붙였다"가 아니라
- * "끼웠다"로 읽혀서 조립 완구의 인상이 생긴다.
+ * <p>고래는 워드마크 쪽(오른쪽)을 본다. 분수공은 머리 꼭대기이고, 브릭은 등 너머 꼬리 쪽으로
+ * 떨어져야 하므로 분수 그룹을 분수공 축(x=224)으로 뒤집어 `gole-spout-*` 키프레임을 그대로 쓴다.
  */
 export function Logo({
   size = 32,
@@ -40,90 +64,38 @@ export function Logo({
     >
       <svg
         width={size}
-        height={Math.round(size * (spout ? 194 / 274 : 146 / 274))}
-        viewBox={spout ? "0 -48 274 194" : "0 0 274 146"}
+        height={Math.round((size * MARK_H) / MARK_W)}
+        viewBox={`0 0 ${MARK_W} ${MARK_H}`}
         fill="none"
         aria-hidden="true"
         className="shrink-0 overflow-visible"
       >
         {spout ? (
-          <g aria-hidden="true">
-            {/* 물줄기 — 가운데 스터드 뒤에서 시작해 위로 뻗으며 브릭이 솟는 경로를 안내한다. */}
+          // 몸보다 먼저 그려, 떨어지는 브릭이 등 뒤로 사라지게 한다.
+          <g transform="matrix(-1 0 0 1 448 0)">
             <path
-              d="M96 10C90-6 84-14 75-21M100 8C102-9 108-21 118-29M104 11C116-2 130-8 144-8"
-              stroke="#93AEFB"
+              d="M220 81C214 65 208 57 199 50M224 79C226 62 232 50 242 42M228 82C240 69 254 63 268 63"
               strokeWidth="4"
               strokeLinecap="round"
               opacity="0.75"
-              transform="translate(0 -7)"
-              className="gole-spout-stream"
+              className="gole-spout-stream stroke-brand-300"
             />
-            {/* 1x2 브릭 세 개. 스터드 두 개가 얹힌 폭이 곧 1x2다. */}
-            <g className="gole-spout-brick gole-spout-brick-a">
-              <rect x="60" y="-30" width="34" height="17" rx="3" fill="#F7BE2C" />
-              <rect x="66" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
-              <rect x="79" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
-            </g>
-            <g className="gole-spout-brick gole-spout-brick-b">
-              <rect x="114" y="-42" width="34" height="17" rx="3" fill="#FF7A72" />
-              <rect x="120" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
-              <rect x="133" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
-            </g>
-            <g className="gole-spout-brick gole-spout-brick-c">
-              <rect x="154" y="-20" width="34" height="17" rx="3" fill="#6082F7" />
-              <rect x="160" y="-25" width="9" height="6" rx="2" fill="#6082F7" />
-              <rect x="173" y="-25" width="9" height="6" rx="2" fill="#6082F7" />
-            </g>
+            <SpoutBrick x={184} y={21} className="gole-spout-brick-a fill-accent-500" />
+            <SpoutBrick x={238} y={9} className="gole-spout-brick-b fill-brand-400" />
+            <SpoutBrick x={278} y={31} className="gole-spout-brick-c fill-brand-300" />
           </g>
         ) : null}
-
-        {/* ── 꼬리: 몸 뒤로 빠져나온 꼬리자루에 힌지 핀으로 물린 두 장의 플레이트 ── */}
-        <polygon points="204,74 252,38 268,56 222,88" fill="#1D4ED8" />
-        <polygon points="204,90 262,102 254,126 214,102" fill="#1D4ED8" />
-        <path d="M188 66h18a5 5 0 0 1 5 5v22a5 5 0 0 1-5 5h-18V66Z" fill="#3B5CF2" />
-        <circle cx="206" cy="82" r="8.5" fill="#1A3FC0" />
-        <circle cx="206" cy="82" r="3.4" fill="#6082F7" />
-
-        {/* ── 스파인 플레이트: 몸통 뒤에 먼저 그려 베이스는 감추고 스터드만
-            등 표면 위로 솟게 한다. 분수 물줄기는 가운데 스터드 뒤에서 시작한다. ── */}
+        {/* fill 속성은 CSS가 없을 때의 대비값이다. 클래스(토큰 + 변수)가 항상 이긴다. */}
         <path
-          d="M54 28V18a6 6 0 0 1 6-6h6V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h12V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h12V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h6a6 6 0 0 1 6 6v10H54Z"
-          fill="#93AEFB"
-          transform="translate(0 -7)"
-        />
-
-        {/* ── 몸통: 같은 폭(x8~196)으로 쌓인 큰 브릭 면 세 장(3단 면광) ── */}
-        {/* 윗면 — 위로 확장해 스파인 베이스를 덮고, 스터드가 몸에서 난 것처럼 연결한다. */}
-        <path d="M8 64V48C8 28 21 16 40 16H180C189 16 196 23 196 32V64H8Z" fill="#6082F7" />
-        {/* 정면 — 눈과 입이 놓이는 기본 면. 곧은 사각이어야 브릭으로 읽힌다. */}
-        <path d="M8 64h188v36H8V64Z" fill="#3B5CF2" />
-        {/* 아랫면 — 그늘진 배. 바닥 모서리만 굴려 몸이 아래로 좁아진다. */}
-        <path d="M8 100h188v6c0 11-9 18-20 18H30c-13 0-22-9-22-20v-4Z" fill="#1D4ED8" />
-        {/* 몰드 사출 하이라이트 — 이마 모서리의 짧은 광택과 면 경계선만. */}
-        <path
-          d="M16 44C17 33 25 25 36 23"
-          stroke="#FFFFFF"
-          strokeWidth="3"
-          strokeLinecap="round"
-          opacity="0.14"
+          d={GOLD_D}
+          fill="#EAB308"
+          className="fill-[var(--gole-mark-accent,var(--color-accent-500))]"
         />
         <path
-          d="M14 65h174"
-          stroke="#FFFFFF"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          opacity="0.08"
+          d={BODY_D}
+          fill="#1D4ED8"
+          className="fill-[var(--gole-mark-body,var(--color-brand-600))]"
         />
-
-        {/* ── 가슴지느러미: 배 밑에 힌지 핀으로 물린 플레이트 한 장 ── */}
-        <polygon points="100,126 148,132 142,146 98,138" fill="#1D4ED8" />
-        <circle cx="107" cy="128" r="7" fill="#1A3FC0" />
-        <circle cx="107" cy="128" r="3" fill="#6082F7" />
-
-        {/* ── 얼굴: 작은 눈 하나와 짧은 입 ── */}
-        <circle cx="40" cy="76" r="5.6" fill="#091A3A" />
-        <circle cx="42" cy="73.6" r="1.6" fill="#FFFFFF" />
-        <path d="M22 90c5 4 11 4.6 17 2" stroke="#091A3A" strokeWidth="2.4" strokeLinecap="round" />
       </svg>
       {showWordmark ? (
         <span>
