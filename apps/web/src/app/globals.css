@@ -236,6 +236,13 @@
     scrollbar-gutter: stable;
   }
 
+  /* 모션을 줄인 사용자에게는 앵커 이동도 즉시 한다. 애니메이션 클래스만 끄고 이것을 빠뜨렸었다. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
   body {
     min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
