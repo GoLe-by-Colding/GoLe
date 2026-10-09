@@ -409,10 +409,11 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
     await expect(usedGood.getByRole("list", { name: "중고-양호 호가" })).toContainText("250,000원");
   });
 
-  test("판매자는 그 세트·상태의 최고 입찰가에 확인 후 바로 판다", async ({ page }) => {
+  /** 판매자 화면을 띄우고 그 세트·상태에 `highest` 입찰이 걸린 호가창과 체결·수정 요청을 가로챈다. */
+  async function openSellerListingWithBid(page: Page, bidOverAsk: number) {
     const listing = await findSeedListing(page);
     const setNumber = listing.catalogSetNumber ?? "";
-    const highest = listing.price + 20000;
+    const highest = listing.price + bidOverAsk;
     await page.addInitScript((id) => {
       window.localStorage.setItem(
         "gole.session",
@@ -438,36 +439,88 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
         },
       });
     });
-    const fills: unknown[] = [];
+    const calls: string[] = [];
+    const revisions: Array<{ price: number }> = [];
+    await page.route(`**/api/v1/listings/${listing.id}`, async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      calls.push("PUT");
+      const body = route.request().postDataJSON() as { price: number };
+      revisions.push({ price: body.price });
+      await route.fulfill({ json: { ...listing, price: body.price } });
+    });
     await page.route(`**/api/v1/bids/book/${setNumber}/fill`, async (route) => {
-      fills.push(route.request().postDataJSON());
+      calls.push("FILL");
       await route.fulfill({
         json: { bidPrice: highest, offerId: "offer-from-fill", listingId: listing.id },
       });
     });
-
     await page.goto(`/listings/${listing.id}`);
-    const section = page.getByTestId("sell-to-bid");
-    const highestLabel = `${highest.toLocaleString("ko-KR")}원`;
-    await expect(section).toContainText(`입찰 3건 · 최고 입찰가 ${highestLabel}`);
-    await expect(section.getByText("입찰가가 판매가보다 높아도", { exact: false })).toBeVisible();
+    return { listing, highest, calls, revisions, section: page.getByTestId("sell-to-bid") };
+  }
 
-    // 확인 대화상자에서 물러나면 팔지 않는다.
+  test("입찰가가 판매가보다 높으면 판매가를 입찰가로 올린 뒤 판다", async ({ page }) => {
+    const { listing, highest, calls, revisions, section } = await openSellerListingWithBid(
+      page,
+      20000,
+    );
+    const highestLabel = `${highest.toLocaleString("ko-KR")}원`;
+    const askLabel = `${listing.price.toLocaleString("ko-KR")}원`;
+    await expect(section).toContainText(`입찰 3건 · 최고 입찰가 ${highestLabel}`);
+    // 주문 금액은 min(입찰가, 판매가)라서 "입찰가에 판매"만 쓰면 판매자가 입찰가를 받는다고 오해한다.
+    await expect(section).toContainText(`지금 판매가 ${askLabel}보다 20,000원 높아요`);
+    const raise = section.getByRole("button", {
+      name: `판매가를 ${highestLabel}으로 올리고 바로 판매`,
+    });
+
+    // 확인 대화상자에서 물러나면 가격도 바꾸지 않고 팔지도 않는다.
     page.once("dialog", (dialog) => void dialog.dismiss());
-    await section.getByRole("button", { name: `최고 입찰가 ${highestLabel}에 바로 판매` }).click();
-    expect(fills).toEqual([]);
+    await raise.click();
+    expect(calls).toEqual([]);
 
     page.once("dialog", (dialog) => {
-      expect(dialog.message()).toContain(`최고 입찰가 ${highestLabel}`);
+      expect(dialog.message()).toContain(`판매가를 ${highestLabel}으로 올리고`);
+      expect(dialog.message()).toContain(`주문 금액은 ${highestLabel}`);
       void dialog.accept();
     });
-    await section.getByRole("button", { name: `최고 입찰가 ${highestLabel}에 바로 판매` }).click();
+    await raise.click();
 
-    await expect.poll(() => fills).toEqual([{ listingId: listing.id }]);
+    await expect.poll(() => calls).toEqual(["PUT", "FILL"]);
+    expect(revisions).toEqual([{ price: highest }]);
     await expect(
       section.getByText(`입찰가 ${highestLabel}에 판매를 수락했어요.`, { exact: false }),
     ).toBeVisible();
-    await expect(section.getByRole("button", { name: /바로 판매/ })).toHaveCount(0);
+    await expect(section.getByRole("button", { name: /바로 판매|그대로 판매/ })).toHaveCount(0);
+  });
+
+  test("입찰가가 판매가보다 높아도 지금 판매가 그대로 팔 수 있다", async ({ page }) => {
+    const { listing, highest, calls, section } = await openSellerListingWithBid(page, 20000);
+    const askLabel = `${listing.price.toLocaleString("ko-KR")}원`;
+
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain(`주문 금액은 지금 판매가 ${askLabel}`);
+      void dialog.accept();
+    });
+    await section.getByRole("button", { name: `판매가 ${askLabel} 그대로 판매` }).click();
+
+    await expect.poll(() => calls).toEqual(["FILL"]);
+    await expect(
+      section.getByText(`주문 금액은 판매가 ${askLabel}이에요.`, { exact: false }),
+    ).toBeVisible();
+    expect(highest).toBeGreaterThan(listing.price);
+  });
+
+  test("입찰가가 판매가 이하면 최고 입찰가에 바로 판다", async ({ page }) => {
+    const { highest, calls, section } = await openSellerListingWithBid(page, -10000);
+    const highestLabel = `${highest.toLocaleString("ko-KR")}원`;
+
+    await expect(section.getByRole("button", { name: /올리고/ })).toHaveCount(0);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await section.getByRole("button", { name: `최고 입찰가 ${highestLabel}에 바로 판매` }).click();
+
+    await expect.poll(() => calls).toEqual(["FILL"]);
+    await expect(
+      section.getByText(`입찰가 ${highestLabel}에 판매를 수락했어요.`, { exact: false }),
+    ).toBeVisible();
   });
 
   test("받을 입찰이 없으면 즉시 판매 실패 이유를 알려 준다", async ({ page }) => {
@@ -569,13 +622,14 @@ test.describe("구매 입찰 — 세트 상세 입찰부터 판매자 즉시 판
     const listingId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
 
     const sellToBid = page.getByTestId("sell-to-bid");
+    // 입찰가가 판매가(12,345원)보다 높으니 판매가를 입찰가로 올린 뒤 판다(실제 PUT → 체결).
     page.once("dialog", (dialog) => void dialog.accept());
-    await sellToBid.getByRole("button", { name: `최고 입찰가 ${bidLabel}에 바로 판매` }).click();
+    await sellToBid
+      .getByRole("button", { name: `판매가를 ${bidLabel}으로 올리고 바로 판매` })
+      .click();
     await expect(sellToBid.getByText(`입찰가 ${bidLabel}에 판매를 수락했어요`)).toBeVisible();
-    // 판매가보다 높은 입찰이라 주문 금액은 판매가를 넘지 않는다는 안내가 붙는다.
-    await expect(
-      sellToBid.getByText("주문 금액은 판매가 12,345원을 넘지 않아요.", { exact: false }),
-    ).toBeVisible();
+    // 판매가를 입찰가로 올렸으니 주문 금액 상한 안내는 붙지 않는다.
+    await expect(sellToBid.getByText("주문 금액은 판매가", { exact: false })).toHaveCount(0);
     await expect(page.getByTestId("received-offers")).toContainText("구매 입찰");
 
     // 구매자의 입찰은 체결되어 그 매물로 이어진다.

@@ -6,7 +6,8 @@ import { ReceivedOffersSection } from "./received-offers-section";
 import { SellToBidSection } from "./sell-to-bid-section";
 
 export interface SellerOfferSectionsProps {
-  readonly listing: Pick<Listing, "id" | "status" | "price" | "condition" | "catalogSetNumber">;
+  /** 입찰가에 맞춰 판매가를 올려 팔 때 수정 본문을 다시 만들어야 해서 매물 전체를 받는다. */
+  readonly listing: Listing;
   readonly paymentsOpen: boolean;
 }
 

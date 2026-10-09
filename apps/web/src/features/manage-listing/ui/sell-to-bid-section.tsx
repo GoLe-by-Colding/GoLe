@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   bidBookCondition,
   bidErrorMessage,
@@ -9,11 +10,19 @@ import {
   type BidBookCondition,
   type FillBidResult,
 } from "@entities/bid";
-import { conditionLabel, formatWon, type Listing } from "@entities/listing";
+import {
+  conditionLabel,
+  formatWon,
+  listingMutationErrorMessage,
+  updateListing,
+  type Listing,
+} from "@entities/listing";
 import { Button } from "@shared/ui";
+import { draftFromListing, draftToInput } from "../model/listing-draft";
 
 export interface SellToBidSectionProps {
-  readonly listing: Pick<Listing, "id" | "status" | "price" | "condition" | "catalogSetNumber">;
+  /** 입찰가에 맞춰 판매가를 올릴 때 수정 본문(제목·사진 등)을 그대로 다시 보내야 해서 전체를 받는다. */
+  readonly listing: Listing;
   /** 판매에 성공하면 부른다. 받은 제안 목록이 새 수락 제안을 바로 보이게 한다. */
   readonly onFilled?: (result: FillBidResult) => void;
 }
@@ -30,8 +39,13 @@ interface BookRow {
  * 판매하면 입찰자에게 72시간 유효한 수락 제안이 생기고, 구매자가 그 가격으로 주문한다(결제 단계)
  * 또는 그 가격으로 직거래한다. 호가창은 공개 조회라 본인 입찰도 섞여 있지만 서버는 본인 입찰을
  * 빼고 고르므로, 실제 판매가는 응답의 `bidPrice`로 안내한다.
+ *
+ * 주문 금액은 `min(입찰가, 판매가)`다(price-offer O17). 그래서 입찰가가 판매가보다 높으면 "입찰가에
+ * 판매"라고만 쓰면 판매자는 입찰가를 받는다고 오해한다(2026-10-09 로컬 QA). 이때는 판매가를 입찰가로
+ * 올린 뒤 체결하는 것을 주 동작으로, 지금 판매가 그대로 체결하는 것을 보조 동작으로 둔다.
  */
 export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
+  const router = useRouter();
   const setNumber = listing.catalogSetNumber;
   const sellable = setNumber !== null && listing.status === "active";
   const bookKey = `${setNumber ?? ""}:${listing.condition}`;
@@ -39,6 +53,8 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<FillBidResult | null>(null);
+  /** 입찰가에 맞춰 올린 판매가. 올리지 않고 팔았으면 null. */
+  const [raisedPrice, setRaisedPrice] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,27 +79,60 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
 
   const highest = row?.highestPrice ?? null;
 
-  async function handleFill() {
+  const bidAboveAsk = highest !== null && highest > listing.price;
+
+  /**
+   * @param raiseTo 체결 전에 판매가를 이 값으로 올린다. null이면 지금 판매가 그대로 체결한다.
+   */
+  async function handleFill(raiseTo: number | null) {
     if (busy || setNumber === null || highest === null) return;
     const confirmed = window.confirm(
-      `최고 입찰가 ${formatWon(highest)}에 이 매물을 판매할까요?\n\n` +
-        "입찰자에게 72시간 유효한 수락 제안이 생기고, 구매자가 그 가격으로 거래를 진행해요. " +
-        "내가 건 입찰은 제외돼요.",
+      raiseTo !== null
+        ? `판매가를 ${formatWon(raiseTo)}으로 올리고 최고 입찰가에 판매할까요?\n\n` +
+            `입찰자에게 72시간 유효한 수락 제안이 생기고, 주문 금액은 ${formatWon(raiseTo)}이에요. ` +
+            "내가 건 입찰은 제외돼요."
+        : `최고 입찰가 ${formatWon(highest)}에 이 매물을 판매할까요?\n\n` +
+            "입찰자에게 72시간 유효한 수락 제안이 생기고, 구매자가 그 가격으로 거래를 진행해요. " +
+            (highest > listing.price
+              ? `주문 금액은 지금 판매가 ${formatWon(listing.price)}이에요. `
+              : "") +
+            "내가 건 입찰은 제외돼요.",
     );
     if (!confirmed) return;
     setBusy(true);
     setError(null);
+    if (raiseTo !== null) {
+      try {
+        await updateListing(
+          listing.id,
+          draftToInput({ ...draftFromListing(listing), price: String(raiseTo) }),
+        );
+        setRaisedPrice(raiseTo);
+      } catch (cause) {
+        setError(listingMutationErrorMessage(cause, "edit"));
+        setBusy(false);
+        return;
+      }
+    }
     try {
       const filled = await fillBid(setNumber, listing.id);
       setResult(filled);
       onFilled?.(filled);
     } catch (cause) {
-      setError(bidErrorMessage(cause, "fill"));
+      setError(
+        raiseTo !== null
+          ? `판매가는 ${formatWon(raiseTo)}으로 올렸지만 판매하지 못했어요. ${bidErrorMessage(cause, "fill")}`
+          : bidErrorMessage(cause, "fill"),
+      );
       setNonce((current) => current + 1);
     } finally {
       setBusy(false);
+      // 올린 판매가를 상단 가격·패널에 반영한다(서버 렌더 매물 정보).
+      if (raiseTo !== null) router.refresh();
     }
   }
+
+  const soldAt = raisedPrice ?? listing.price;
 
   return (
     <section
@@ -103,9 +152,7 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
         <p role="status" className="rounded-md bg-success-soft px-3 py-2 text-sm text-success">
           입찰가 {formatWon(result.bidPrice)}에 판매를 수락했어요. 입찰자에게 72시간 유효한 수락
           제안이 생겼어요.
-          {result.bidPrice > listing.price
-            ? ` 주문 금액은 판매가 ${formatWon(listing.price)}을 넘지 않아요.`
-            : ""}
+          {result.bidPrice > soldAt ? ` 주문 금액은 판매가 ${formatWon(soldAt)}이에요.` : ""}
         </p>
       ) : row !== null && highest !== null ? (
         <div className="flex flex-col items-start gap-2">
@@ -115,15 +162,30 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
               {formatWon(highest)}
             </span>
           </p>
-          <Button size="sm" disabled={busy} onClick={() => void handleFill()}>
-            {busy ? "판매 중…" : `최고 입찰가 ${formatWon(highest)}에 바로 판매`}
-          </Button>
-          {highest > listing.price ? (
-            <p className="text-xs text-neutral-500">
-              입찰가가 판매가보다 높아도 주문 금액은 판매가 {formatWon(listing.price)}을 넘지
-              않아요.
-            </p>
-          ) : null}
+          {bidAboveAsk ? (
+            <>
+              <p className="text-xs leading-relaxed text-neutral-600">
+                최고 입찰가가 지금 판매가 {formatWon(listing.price)}보다{" "}
+                {formatWon(highest - listing.price)} 높아요. 주문 금액은 판매가를 넘지 않으니,
+                판매가를 입찰가로 올려 파는 편이 유리해요.
+              </p>
+              <Button size="sm" disabled={busy} onClick={() => void handleFill(highest)}>
+                {busy ? "판매 중…" : `판매가를 ${formatWon(highest)}으로 올리고 바로 판매`}
+              </Button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleFill(null)}
+                className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-700 disabled:opacity-50"
+              >
+                판매가 {formatWon(listing.price)} 그대로 판매
+              </button>
+            </>
+          ) : (
+            <Button size="sm" disabled={busy} onClick={() => void handleFill(null)}>
+              {busy ? "판매 중…" : `최고 입찰가 ${formatWon(highest)}에 바로 판매`}
+            </Button>
+          )}
         </div>
       ) : (
         <p className="text-sm text-neutral-500">
