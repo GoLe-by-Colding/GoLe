@@ -7,6 +7,7 @@ import com.gole.api.collection.application.port.out.CollectionRepositoryPort;
 import com.gole.api.collection.application.port.out.LatestPriceProviderPort;
 import com.gole.api.collection.domain.exception.CollectionItemNotFoundException;
 import com.gole.api.collection.domain.model.CollectionItem;
+import com.gole.api.collection.domain.model.CollectionValuation;
 import com.gole.api.common.exception.ForbiddenException;
 import java.time.Clock;
 import java.time.Instant;
@@ -59,11 +60,12 @@ public class CollectionService implements ManageCollectionUseCase, EstimateColle
 
     @Override
     public long estimateOwnedValue(String userId) {
+        return valuate(userId).ownedValue();
+    }
+
+    @Override
+    public CollectionValuation valuate(String userId) {
         // 요구사항 11.5: 보유 항목의 최근 체결가 합산(가격 없는 세트는 0).
-        return repository.findByUser(userId).stream()
-                .filter(CollectionItem::isOwned)
-                .mapToLong(item ->
-                        latestPriceProvider.latestPrice(item.setNumber()).orElse(0L))
-                .sum();
+        return CollectionValuation.of(repository.findByUser(userId), latestPriceProvider::latestPrice);
     }
 }
