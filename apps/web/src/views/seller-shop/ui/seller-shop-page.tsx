@@ -14,7 +14,7 @@ import {
 } from "@entities/review";
 import { FollowButton } from "@features/follow-seller";
 import { ReportButton } from "@features/report-content";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { buildPriceNotes, priceNoteSetNumbers } from "@widgets/listing-grid";
 import { fetchLaunchConfig } from "@entities/launch";
 import { formatKrw, thumbnailUrl } from "@shared/lib";
@@ -41,6 +41,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [reviews, setReviews] = useState<readonly Review[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const nameOf = useDisplayNames([sellerId, ...reviews.map((review) => review.reviewerId)]);
   const [priceNotes, setPriceNotes] = useState<Readonly<Record<string, string>>>({});
 
   // 검색·세트 페이지와 같은 "추정 시세보다 N%" 한 줄. 세트 한 벌 매물의 세트만(최대 24개) 함께 읽고, 조회가 실패한 세트는 문구만 빠진다.
@@ -92,7 +93,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-col gap-1">
-            <Heading level={1}>{sellerId.slice(0, 8)} 님의 샵</Heading>
+            <Heading level={1}>{nameOf(sellerId)} 님의 샵</Heading>
             <div className="flex items-center gap-3">
               <Text tone="secondary">판매 중인 상품 {listings.length}개</Text>
               {reviewsOpen && rating !== null && rating.count > 0 ? (
@@ -177,7 +178,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                       <Text>{r.content}</Text>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-mono text-xs text-neutral-400">
-                          {r.reviewerId.slice(0, 8)}
+                          {nameOf(r.reviewerId)}
                         </span>
                         {session?.accountId !== r.reviewerId ? (
                           <ReportButton targetType="REVIEW" targetId={r.id} />
