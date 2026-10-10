@@ -19,8 +19,8 @@ import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
+import com.gole.api.order.domain.model.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportStatus;
 import com.gole.api.report.domain.model.ReportTargetType;
@@ -271,7 +271,7 @@ public class AdminModerationController {
     @Operation(summary = "수수료 집계", description = "정산 원장 기준 수수료 총액·건수(R5.6). status 미지정 시 전체.")
     @GetMapping("/settlements/summary")
     public ManageSettlementsUseCase.FeeTotals settlementTotals(
-            @RequestParam(required = false) ManageSettlementsUseCase.SettlementStatus status) {
+            @RequestParam(required = false) SettlementStatus status) {
         return manageSettlements.totals(status);
     }
 

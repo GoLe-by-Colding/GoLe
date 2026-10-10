@@ -4,7 +4,7 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase.SellerSettlementSummary;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.FeeTotals;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
+import com.gole.api.order.domain.model.SettlementStatus;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
