@@ -254,7 +254,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
                 value={values.minPrice}
                 onChange={(e) => update("minPrice", e.target.value)}
                 placeholder="0"
-                className="h-9 w-full rounded-md border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+                className="h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 outline-none transition-colors hover:border-neutral-400 focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-50"
               />
             </div>
             <div className="flex flex-1 flex-col gap-1">
@@ -268,7 +268,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
                 value={values.maxPrice}
                 onChange={(e) => update("maxPrice", e.target.value)}
                 placeholder="∞"
-                className="h-9 w-full rounded-md border border-neutral-200 bg-white px-2 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+                className="h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base text-neutral-900 outline-none transition-colors hover:border-neutral-400 focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-50"
               />
             </div>
           </div>
