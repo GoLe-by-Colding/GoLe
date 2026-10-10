@@ -110,8 +110,11 @@ export function FollowingFeedPage() {
     const posts = state.posts.length > 0 ? state.posts : state.suggestedPosts;
     listings.forEach((listing) => ids.add(listing.sellerId));
     posts.forEach((post) => ids.add(post.authorId));
+    // 내 매물·글도 추천 목록에 섞여 오므로, 만나볼 사람에서 나를 뺀다.
+    if (state.accountId !== null) ids.delete(state.accountId);
     return [...ids].slice(0, 12);
   }, [
+    state.accountId,
     state.followedSellerIds,
     state.listings,
     state.posts,
@@ -196,7 +199,7 @@ export function FollowingFeedPage() {
 
         {people.length > 0 ? (
           <section className="flex flex-col gap-3" aria-labelledby="following-people-title">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <Heading level={2} id="following-people-title" className="text-xl">
                 {visibleState.followedSellerIds.length > 0
                   ? "이어지는 사람들"

@@ -27,7 +27,7 @@ export function PostCard({ post }: PostCardProps) {
       {cover !== undefined ? (
         <Link href={`/community/${post.id}`} className="relative block overflow-hidden">
           <MediaImage
-            className="aspect-square w-full bg-neutral-100 object-cover"
+            className="aspect-[4/3] w-full bg-neutral-100 object-cover"
             src={thumbnailUrl(cover, 480)}
             alt=""
             loading="lazy"

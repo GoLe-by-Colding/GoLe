@@ -161,10 +161,10 @@ export function PartsBoardPage({
               placeholder="세트 번호 (예: 10307)"
               autoComplete="off"
               maxLength={PART_REQUEST_RULES.maxSetNumberLength}
-              className="h-10 min-w-0 flex-1 sm:max-w-xs"
+              className="min-w-0 flex-1 sm:max-w-xs"
               onChange={(event) => setSetDraft(event.target.value)}
             />
-            <Button type="submit" variant="secondary" size="sm">
+            <Button type="submit" variant="secondary">
               찾기
             </Button>
             {setNumber.length > 0 ? (

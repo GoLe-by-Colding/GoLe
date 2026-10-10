@@ -271,7 +271,7 @@ function Editor() {
           <label className="block space-y-2 text-sm">
             <span>PNG/JPEG/HEIF · 4MB 이하 · 1200만 화소 이하</span>
             <input
-              className="block w-full rounded-lg border border-neutral-300 p-3"
+              className="block w-full cursor-pointer rounded-lg border border-neutral-300 p-2 text-sm text-neutral-600 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
               type="file"
               accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"
               disabled={pending}
@@ -405,12 +405,14 @@ function Editor() {
               같은 요청 다시 전송
             </button>
           )}
-          <Link
-            className="block text-sm text-brand-700 underline"
-            href="/login?returnTo=%2Fbrick-filter"
-          >
-            로그인 다시 하기
-          </Link>
+          {authExpired ? (
+            <Link
+              className="block text-sm text-brand-700 underline"
+              href="/login?returnTo=%2Fbrick-filter"
+            >
+              로그인 다시 하기
+            </Link>
+          ) : null}
         </section>
       </div>
       {recent.length > 0 && (
