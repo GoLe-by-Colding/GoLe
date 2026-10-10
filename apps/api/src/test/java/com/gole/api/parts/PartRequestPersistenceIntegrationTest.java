@@ -6,6 +6,7 @@ import com.gole.api.account.adapter.out.persistence.AccountDeletionRequestMongoR
 import com.gole.api.account.adapter.out.persistence.MongoAccountDeletionAdapter;
 import com.gole.api.account.domain.model.AccountDeletionRequest;
 import com.gole.api.account.domain.model.AccountDeletionStatus;
+import com.gole.api.account.support.AccountLinkedRecordsWiring;
 import com.gole.api.parts.adapter.out.persistence.MongoPartRequestAdapter;
 import com.gole.api.parts.adapter.out.persistence.PartRequestDocument;
 import com.gole.api.parts.domain.model.PartRequest;
@@ -199,7 +200,9 @@ class PartRequestPersistenceIntegrationTest {
         adapter.save(request("theirs", "someone-else", "10305", 2));
 
         var deletions = new MongoAccountDeletionAdapter(
-                new MongoRepositoryFactory(mongo).getRepository(AccountDeletionRequestMongoRepository.class), mongo);
+                new MongoRepositoryFactory(mongo).getRepository(AccountDeletionRequestMongoRepository.class),
+                mongo,
+                AccountLinkedRecordsWiring.realParticipants(mongo));
         deletions.save(AccountDeletionRequest.requested(
                 requestId, accountId, "key-hash", "fingerprint", List.of(), T0.minusSeconds(60)));
 
