@@ -5,6 +5,7 @@ import type {
   InterestTag,
   Me,
   OnboardingStatus,
+  PublicProfile,
   RegisterResult,
   Session,
   SignupPolicyAcceptance,
@@ -185,6 +186,21 @@ export function logout(sessionToken: string): Promise<void> {
 }
 
 /** 현재 로그인 사용자 정보(이메일/권한)를 조회한다. */
+/** 서버가 한 번에 받는 계정 수. 넘는 ID는 호출하는 쪽에서 나눠 묻는다. */
+export const PUBLIC_PROFILE_BATCH_MAX = 50;
+
+/** 계정 ID 목록의 공개 표시 이름. 로그인 없이 읽는다(public-display-name R3). */
+export function fetchPublicProfiles(
+  accountIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<readonly PublicProfile[]> {
+  const params = new URLSearchParams({ ids: accountIds.join(",") });
+  return apiRequest<readonly PublicProfile[]>(
+    `/api/v1/accounts/public-profiles?${params.toString()}`,
+    signal === undefined ? {} : { signal },
+  );
+}
+
 export function fetchMe(sessionToken: string): Promise<Me> {
   return apiRequest<Me>("/api/v1/accounts/me", {
     cache: "no-store",
