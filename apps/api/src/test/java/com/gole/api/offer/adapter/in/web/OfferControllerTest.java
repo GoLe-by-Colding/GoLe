@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.offer.application.port.in.ListOffersUseCase;
@@ -41,7 +41,8 @@ class OfferControllerTest {
     private final MakeOfferUseCase makeOffer = mock(MakeOfferUseCase.class);
     private final RespondToOfferUseCase respond = mock(RespondToOfferUseCase.class);
     private final ListOffersUseCase list = mock(ListOffersUseCase.class);
-    private final ThirdPartyProvisionConsentService consents = mock(ThirdPartyProvisionConsentService.class);
+    private final ManageThirdPartyProvisionConsentUseCase consents =
+            mock(ManageThirdPartyProvisionConsentUseCase.class);
     private MockMvc mvc;
 
     @BeforeEach
@@ -84,7 +85,7 @@ class OfferControllerTest {
     @Test
     @DisplayName("제3자 제공 동의가 없으면 제안을 만들지 않는다")
     void make_requiresCurrentThirdPartyConsent() throws Exception {
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
+        doThrow(new ForbiddenException(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE, "consent required"))
                 .when(consents)
                 .requireCurrent("buyer-1");
 
@@ -93,7 +94,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"roomId\":\"room-1\",\"price\":250000}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value(ThirdPartyProvisionConsentService.REQUIRED_CODE));
+                .andExpect(jsonPath("$.code").value(ManageThirdPartyProvisionConsentUseCase.REQUIRED_CODE));
         verify(makeOffer, never()).make(any());
     }
 

@@ -1,7 +1,7 @@
 package com.gole.api.community.adapter.out.discovery;
 
 import com.gole.api.community.application.port.out.FollowingAuthorQueryPort;
-import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
+import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -9,14 +9,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class DiscoveryFollowingAuthorQueryAdapter implements FollowingAuthorQueryPort {
 
-    private final FollowRepositoryPort follows;
+    private final FollowSellerUseCase follows;
 
-    public DiscoveryFollowingAuthorQueryAdapter(FollowRepositoryPort follows) {
+    public DiscoveryFollowingAuthorQueryAdapter(FollowSellerUseCase follows) {
         this.follows = follows;
     }
 
     @Override
     public List<String> findFollowingAuthorIds(String accountId) {
-        return follows.findSellerIdsByUser(accountId);
+        return follows.following(accountId);
     }
 }

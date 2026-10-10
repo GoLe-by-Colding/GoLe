@@ -3,7 +3,7 @@ package com.gole.api.chat.config;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.gole.api.chat.application.SupportNotificationOutboxProperties;
+import com.gole.api.chat.application.service.SupportNotificationOutboxProperties;
 import com.gole.api.common.operations.DiscordOperationsProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;

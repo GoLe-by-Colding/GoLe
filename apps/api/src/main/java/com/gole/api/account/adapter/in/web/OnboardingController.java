@@ -23,6 +23,7 @@ import com.gole.api.account.application.port.in.SetNicknameUseCase.SetNicknameCo
 import com.gole.api.account.application.port.in.SubmitOnboardingConsentUseCase;
 import com.gole.api.account.application.port.in.SubmitOnboardingConsentUseCase.SubmitConsentCommand;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.SessionCookie;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

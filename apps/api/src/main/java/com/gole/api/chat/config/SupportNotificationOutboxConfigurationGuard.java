@@ -1,6 +1,6 @@
 package com.gole.api.chat.config;
 
-import com.gole.api.chat.application.SupportNotificationOutboxProperties;
+import com.gole.api.chat.application.service.SupportNotificationOutboxProperties;
 import com.gole.api.common.operations.DiscordOperationsProperties;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;

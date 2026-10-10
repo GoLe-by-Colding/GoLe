@@ -5,6 +5,7 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdm
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.community.application.port.in.ModerateCommentUseCase;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;

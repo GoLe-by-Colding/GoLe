@@ -3,9 +3,9 @@ package com.gole.api.order.application.service.pipeline;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PipelineMarkerPort;
+import com.gole.api.order.application.port.out.PipelineShipmentPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -20,14 +20,14 @@ import org.springframework.stereotype.Component;
 public class UnshippedReminderRule implements PipelineRule {
 
     private final OrderRepositoryPort orders;
-    private final GetShipmentUseCase shipments;
+    private final PipelineShipmentPort shipments;
     private final OrderEventNotifierPort notifier;
     private final PipelineMarkerPort markers;
     private final PipelineProperties properties;
 
     public UnshippedReminderRule(
             OrderRepositoryPort orders,
-            GetShipmentUseCase shipments,
+            PipelineShipmentPort shipments,
             OrderEventNotifierPort notifier,
             PipelineMarkerPort markers,
             PipelineProperties properties) {
@@ -54,7 +54,7 @@ public class UnshippedReminderRule implements PipelineRule {
 
     @Override
     public boolean apply(String orderId, Instant now) {
-        if (shipments.getByOrderId(orderId).isPresent()) {
+        if (shipments.hasShipment(orderId)) {
             return false; // 이미 발송됨
         }
         if (!markers.markOnce(name(), orderId)) {

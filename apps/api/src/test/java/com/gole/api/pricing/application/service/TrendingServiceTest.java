@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.pricing.adapter.out.catalog.CatalogTrendingSetAdapter;
 import com.gole.api.pricing.application.port.in.GetTrendingSetsUseCase.TrendingSet;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
@@ -41,8 +42,8 @@ class TrendingServiceTest {
             }
             throw new RuntimeException("not found");
         };
-        TrendingService service =
-                new TrendingService(repo, cache, catalog, CLOCK, new MarketEvidencePolicy(false, false));
+        TrendingService service = new TrendingService(
+                repo, cache, new CatalogTrendingSetAdapter(catalog), CLOCK, new MarketEvidencePolicy(false, false));
 
         List<TrendingSet> result = service.getTrending(8);
 

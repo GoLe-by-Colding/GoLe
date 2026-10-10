@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.out.persistence;
 
 import com.gole.api.account.application.port.out.AccountDeletionRepositoryPort;
+import com.gole.api.account.application.port.out.AccountLinkedRecordsPort;
 import com.gole.api.account.domain.model.AccountDeletionBlocker;
 import com.gole.api.account.domain.model.AccountDeletionHoldReason;
 import com.gole.api.account.domain.model.AccountDeletionRequest;
@@ -8,7 +9,6 @@ import com.gole.api.account.domain.model.AccountDeletionStatus;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
 import com.mongodb.client.result.DeleteResult;
-import com.mongodb.client.result.UpdateResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,7 +21,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,15 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPort {
 
-    private static final List<String> ACTIVE_ORDER_STATUSES =
-            List.of("PAYMENT_PENDING", "PAYMENT_REVIEW", "FUNDS_HELD", "DISPUTED", "REFUND_PENDING");
-
     private final AccountDeletionRequestMongoRepository requests;
     private final MongoTemplate mongo;
+    private final AccountLinkedRecordsPort linkedRecords;
 
-    public MongoAccountDeletionAdapter(AccountDeletionRequestMongoRepository requests, MongoTemplate mongo) {
+    public MongoAccountDeletionAdapter(
+            AccountDeletionRequestMongoRepository requests,
+            MongoTemplate mongo,
+            AccountLinkedRecordsPort linkedRecords) {
         this.requests = requests;
         this.mongo = mongo;
+        this.linkedRecords = linkedRecords;
     }
 
     @Override
@@ -71,65 +72,10 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
                 .toList();
     }
 
+    /** 다른 컨텍스트에 남은 기록의 차단 사유는 각 소유 컨텍스트가 판정한다(account-deletion-participants D1). */
     @Override
     public List<AccountDeletionBlocker> evaluateBlockers(String accountId, boolean explicitHold) {
-        List<AccountDeletionBlocker> blockers = new ArrayList<>();
-        Criteria party = new Criteria()
-                .orOperator(
-                        Criteria.where("buyerId").is(accountId),
-                        Criteria.where("sellerId").is(accountId));
-        if (exists(
-                "orders",
-                new Criteria().andOperator(party, Criteria.where("status").in(ACTIVE_ORDER_STATUSES)))) {
-            blockers.add(AccountDeletionBlocker.ACTIVE_ORDER);
-        }
-        if (exists(
-                "settlements",
-                Criteria.where("sellerId").is(accountId).and("status").ne("PAID"))) {
-            blockers.add(AccountDeletionBlocker.UNSETTLED_PAYOUT);
-        }
-        Criteria pendingReport = new Criteria()
-                .andOperator(
-                        Criteria.where("status").is("PENDING"),
-                        new Criteria()
-                                .orOperator(
-                                        Criteria.where("reporterId").is(accountId),
-                                        new Criteria()
-                                                .andOperator(
-                                                        Criteria.where("targetType")
-                                                                .is("ACCOUNT"),
-                                                        Criteria.where("targetId")
-                                                                .is(accountId))));
-        if (exists("reports", pendingReport)) {
-            blockers.add(AccountDeletionBlocker.PENDING_REPORT);
-        }
-        if (exists("support_tickets", Criteria.where("requesterId").is(accountId))) {
-            blockers.add(AccountDeletionBlocker.SUPPORT_RECORDS_REQUIRE_PURGE);
-        }
-        Criteria activeListing =
-                Criteria.where("sellerId").is(accountId).and("status").in("ACTIVE", "RESERVED");
-        Criteria activePost =
-                Criteria.where("authorId").is(accountId).and("status").ne("DELETED");
-        Criteria visibleComment =
-                Criteria.where("authorId").is(accountId).and("hiddenAt").is(null);
-        Criteria visibleListingComment =
-                Criteria.where("authorId").is(accountId).and("deleted").is(false);
-        if (exists("listings", activeListing)
-                || exists("posts", activePost)
-                || exists("comments", visibleComment)
-                || exists("listing_comments", visibleListingComment)) {
-            blockers.add(AccountDeletionBlocker.PUBLIC_CONTENT_REQUIRES_LIFECYCLE_REVIEW);
-        }
-        if (exists(
-                "media_assets",
-                Criteria.where("ownerId").is(accountId).and("status").ne("REVOKED"))) {
-            blockers.add(AccountDeletionBlocker.MEDIA_REQUIRES_LIFECYCLE_REVIEW);
-        }
-        if (exists(
-                "social_chat_rooms",
-                Criteria.where("ownerId").is(accountId).and("closedAt").is(null))) {
-            blockers.add(AccountDeletionBlocker.OWNED_GROUP_REQUIRES_TRANSFER);
-        }
+        List<AccountDeletionBlocker> blockers = new ArrayList<>(linkedRecords.blockers(accountId));
         if (explicitHold) {
             blockers.add(AccountDeletionBlocker.EXPLICIT_RETENTION_HOLD);
         }
@@ -174,182 +120,9 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
         }
 
         String anonymousSubject = "withdrawn-" + UUID.randomUUID();
-        Map<String, Long> counts = new LinkedHashMap<>();
-
-        counts.put(
-                "notifications",
-                remove("notifications", Criteria.where("recipientId").is(expectedAccountId)));
-        counts.put(
-                "notificationPreferences",
-                remove("notification_preferences", Criteria.where("_id").is(expectedAccountId)));
-        counts.put(
-                "wishlistEntries",
-                remove("wishlist_entries", Criteria.where("userId").is(expectedAccountId)));
-        counts.put(
-                "collectionItems",
-                remove("collection_items", Criteria.where("userId").is(expectedAccountId)));
-        counts.put(
-                "collectionValueSnapshots",
-                remove("collection_value_snapshots", Criteria.where("userId").is(expectedAccountId)));
-        // 부품 요청은 작성자 개인의 게시물이라 익명화하지 않고 지운다. (wanted-parts W11)
-        counts.put(
-                "partRequests",
-                remove("part_requests", Criteria.where("requesterId").is(expectedAccountId)));
-        // 가격 제안은 두 당사자 사이의 협상 기록이다. 어느 쪽이 탈퇴해도 상대에게 의미가 없으므로 지운다.
-        // 주문에 남은 offerId는 금액 근거 표시용이라 끊어져도 주문 처리에 영향이 없다. (price-offer O22)
-        // 입찰은 입찰자 개인의 구매 의사라 익명화하지 않고 지운다. 체결로 생긴 제안은 위 offers 정리가 맡는다. (buy-bids D11)
-        counts.put("bids", remove("bids", Criteria.where("bidderId").is(expectedAccountId)));
-        counts.put(
-                "offers",
-                remove(
-                        "offers",
-                        new Criteria()
-                                .orOperator(
-                                        Criteria.where("buyerId").is(expectedAccountId),
-                                        Criteria.where("sellerId").is(expectedAccountId))));
-        counts.put(
-                "follows",
-                remove(
-                        "follows",
-                        new Criteria()
-                                .orOperator(
-                                        Criteria.where("userId").is(expectedAccountId),
-                                        Criteria.where("sellerId").is(expectedAccountId))));
-        counts.put(
-                "chatReadCursors",
-                remove("chat_read_cursors", Criteria.where("accountId").is(expectedAccountId)));
-        counts.put(
-                "chatBlocks",
-                remove(
-                        "chat_blocks",
-                        new Criteria()
-                                .orOperator(
-                                        Criteria.where("blockerId").is(expectedAccountId),
-                                        Criteria.where("blockedId").is(expectedAccountId))));
-        counts.put(
-                "chatMessages",
-                remove("chat_messages", Criteria.where("senderId").is(expectedAccountId)));
-
-        counts.put(
-                "marketChatRooms",
-                update(
-                                "chat_rooms",
-                                Criteria.where("buyerId").is(expectedAccountId),
-                                new Update().set("buyerId", anonymousSubject))
-                        + update(
-                                "chat_rooms",
-                                Criteria.where("sellerId").is(expectedAccountId),
-                                new Update().set("sellerId", anonymousSubject)));
-        counts.put(
-                "socialChatRooms",
-                update(
-                                "social_chat_rooms",
-                                Criteria.where("memberIds").is(expectedAccountId),
-                                new Update()
-                                        .pull("memberIds", expectedAccountId)
-                                        .unset("dedupeKey"))
-                        + update(
-                                "social_chat_rooms",
-                                Criteria.where("ownerId").is(expectedAccountId),
-                                new Update().set("ownerId", anonymousSubject).unset("dedupeKey")));
-
-        counts.put(
-                "reviews",
-                update(
-                                "reviews",
-                                Criteria.where("reviewerId").is(expectedAccountId),
-                                new Update()
-                                        .set("reviewerId", anonymousSubject)
-                                        .set("content", "")
-                                        .unset("reply"))
-                        + update(
-                                "reviews",
-                                Criteria.where("revieweeId").is(expectedAccountId),
-                                new Update().set("revieweeId", anonymousSubject).unset("reply")));
-        counts.put(
-                "reports",
-                update(
-                                "reports",
-                                Criteria.where("reporterId").is(expectedAccountId),
-                                new Update().set("reporterId", anonymousSubject).unset("detail"))
-                        + update(
-                                "reports",
-                                Criteria.where("targetType")
-                                        .is("ACCOUNT")
-                                        .and("targetId")
-                                        .is(expectedAccountId),
-                                new Update().set("targetId", anonymousSubject).unset("detail")));
-        counts.put(
-                "chatReportSnapshots",
-                update(
-                                "chat_report_snapshots",
-                                Criteria.where("reporterId").is(expectedAccountId),
-                                new Update().set("reporterId", anonymousSubject))
-                        + updateSnapshotSenders(expectedAccountId, anonymousSubject));
-
-        counts.put(
-                "retiredListings",
-                update(
-                        "listings",
-                        Criteria.where("sellerId")
-                                .is(expectedAccountId)
-                                .and("status")
-                                .in("SOLD", "DELETED"),
-                        new Update()
-                                .set("sellerId", anonymousSubject)
-                                .set("title", "탈퇴한 사용자의 매물")
-                                .set("description", "")
-                                .set("photoUrls", List.of())));
-        counts.put(
-                "deletedPosts",
-                update(
-                        "posts",
-                        Criteria.where("authorId")
-                                .is(expectedAccountId)
-                                .and("status")
-                                .is("DELETED"),
-                        new Update()
-                                .set("authorId", anonymousSubject)
-                                .set("content", "")
-                                .set("imageUrls", List.of())
-                                .set("likedBy", java.util.Set.of())));
-        counts.put(
-                "hiddenComments",
-                update(
-                        "comments",
-                        Criteria.where("authorId")
-                                .is(expectedAccountId)
-                                .and("hiddenAt")
-                                .ne(null),
-                        new Update().set("authorId", anonymousSubject).set("content", "")));
-        counts.put(
-                "deletedListingComments",
-                update(
-                        "listing_comments",
-                        Criteria.where("authorId")
-                                .is(expectedAccountId)
-                                .and("deleted")
-                                .is(true),
-                        new Update().set("authorId", anonymousSubject).set("content", "")));
-        counts.put(
-                "revokedMediaAssets",
-                update(
-                        "media_assets",
-                        Criteria.where("ownerId")
-                                .is(expectedAccountId)
-                                .and("status")
-                                .is("REVOKED"),
-                        new Update().set("ownerId", anonymousSubject)));
-
-        counts.put(
-                "adminAuditTargets",
-                update(
-                        "admin_actions",
-                        Criteria.where("targetType")
-                                .is("ACCOUNT")
-                                .and("targetId")
-                                .is(expectedAccountId),
-                        new Update().set("targetId", requestId).unset("reason")));
+        // 다른 컨텍스트의 기록은 각 소유 컨텍스트가 지우거나 익명화한다. 같은 트랜잭션에 묶여 함께 되돌려진다.
+        Map<String, Long> counts =
+                new LinkedHashMap<>(linkedRecords.erase(expectedAccountId, anonymousSubject, requestId));
         counts.put(
                 "policyAcceptances",
                 remove("policy_acceptances", Criteria.where("accountId").is(expectedAccountId)));
@@ -367,26 +140,9 @@ public class MongoAccountDeletionAdapter implements AccountDeletionRepositoryPor
         return save(request);
     }
 
-    private boolean exists(String collection, Criteria criteria) {
-        return mongo.exists(Query.query(criteria), collection);
-    }
-
     private long remove(String collection, Criteria criteria) {
         DeleteResult result = mongo.remove(Query.query(criteria), collection);
         return result.getDeletedCount();
-    }
-
-    private long update(String collection, Criteria criteria, Update update) {
-        UpdateResult result = mongo.updateMulti(Query.query(criteria), update, collection);
-        return result.getModifiedCount();
-    }
-
-    private long updateSnapshotSenders(String accountId, String anonymousSubject) {
-        Update update = new Update()
-                .set("messages.$[message].senderId", anonymousSubject)
-                .filterArray(Criteria.where("message.senderId").is(accountId));
-        return update(
-                "chat_report_snapshots", Criteria.where("messages.senderId").is(accountId), update);
     }
 
     private static AccountDeletionRequestDocument toDocument(AccountDeletionRequest request) {

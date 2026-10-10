@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
 import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
-import com.gole.api.chat.application.DirectTradeService;
+import com.gole.api.chat.application.port.out.ChatSellerVerificationPort;
+import com.gole.api.chat.application.service.DirectTradeService;
+import com.gole.api.chat.domain.model.ChatRoom;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.listing.adapter.out.persistence.ListingMongoRepository;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
@@ -31,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -55,6 +58,10 @@ class DirectTradeConcurrencyIntegrationTest {
 
     @Autowired
     DirectTradeService directTrades;
+
+    /** 이 테스트는 확인·완료 경합을 본다. 판매자 신원확인 관문은 서비스 테스트가 본다. */
+    @MockitoBean
+    ChatSellerVerificationPort sellerVerification;
 
     @Autowired
     CreateListingUseCase createListing;
@@ -98,8 +105,8 @@ class DirectTradeConcurrencyIntegrationTest {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<ChatRoomDocument> buyer = pool.submit(() -> confirmAfter(start, roomId, "buyer-1"));
-            Future<ChatRoomDocument> seller = pool.submit(() -> confirmAfter(start, roomId, "seller-1"));
+            Future<ChatRoom> buyer = pool.submit(() -> confirmAfter(start, roomId, "buyer-1"));
+            Future<ChatRoom> seller = pool.submit(() -> confirmAfter(start, roomId, "seller-1"));
 
             start.countDown();
             buyer.get(30, TimeUnit.SECONDS);
@@ -140,8 +147,8 @@ class DirectTradeConcurrencyIntegrationTest {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            Future<ChatRoomDocument> finalConfirmation = pool.submit(() -> confirmAfter(start, roomId, "seller-1"));
-            Future<ChatRoomDocument> cancellation = pool.submit(() -> cancelAfter(start, roomId, "buyer-1"));
+            Future<ChatRoom> finalConfirmation = pool.submit(() -> confirmAfter(start, roomId, "seller-1"));
+            Future<ChatRoom> cancellation = pool.submit(() -> cancelAfter(start, roomId, "buyer-1"));
 
             start.countDown();
             Outcome confirmOutcome = await(finalConfirmation);
@@ -163,12 +170,12 @@ class DirectTradeConcurrencyIntegrationTest {
         }
     }
 
-    private ChatRoomDocument confirmAfter(CountDownLatch start, String roomId, String actorId) throws Exception {
+    private ChatRoom confirmAfter(CountDownLatch start, String roomId, String actorId) throws Exception {
         start.await(20, TimeUnit.SECONDS);
         return directTrades.confirm(roomId, actorId);
     }
 
-    private ChatRoomDocument cancelAfter(CountDownLatch start, String roomId, String actorId) throws Exception {
+    private ChatRoom cancelAfter(CountDownLatch start, String roomId, String actorId) throws Exception {
         start.await(20, TimeUnit.SECONDS);
         return directTrades.cancelConfirmation(roomId, actorId);
     }
@@ -179,7 +186,7 @@ class DirectTradeConcurrencyIntegrationTest {
         return key;
     }
 
-    private static Outcome await(Future<ChatRoomDocument> future) throws Exception {
+    private static Outcome await(Future<ChatRoom> future) throws Exception {
         try {
             return new Outcome(future.get(30, TimeUnit.SECONDS), null);
         } catch (ExecutionException failure) {
@@ -187,5 +194,5 @@ class DirectTradeConcurrencyIntegrationTest {
         }
     }
 
-    private record Outcome(ChatRoomDocument result, Throwable failure) {}
+    private record Outcome(ChatRoom result, Throwable failure) {}
 }

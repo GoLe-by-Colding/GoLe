@@ -162,7 +162,7 @@ com.gole.api.admin/
 │   │   └── AdminDtos.java
 │   └── out/
 │       ├── persistence/AdminActionDocument / MongoRepository / AuditPersistenceAdapter
-│       └── readmodel/MongoAdminReadModelAdapter.java
+│       └── readmodel/CrossContextAdminReadModelAdapter.java   # 2026-10-10: 소유 컨텍스트 조회 포트로 위임
 └── config/AdminWebConfig.java
 ```
 
@@ -186,7 +186,7 @@ com.gole.api.admin/
 
 ```java
 interface AdminReadModelPort {
-    Map<String, Long> collectionCounts(List<String> collections);
+    AdminVolumeCounts volumeCounts();                     // 2026-10-10: 컬렉션 이름 목록 → 이름 있는 필드
     OrderStats orderStats();                              // 상태별 건수 + 완료 GMV
     long activeListingCount();
     List<OrderRow> recentOrders(String status, int limit);
@@ -195,7 +195,9 @@ interface AdminReadModelPort {
 }
 ```
 
-- 구현 `MongoAdminReadModelAdapter`가 유일하게 `MongoTemplate`을 안다. 컨트롤러는 DB를 모른다. (R9.2)
+- 컨트롤러는 DB를 모른다(R9.2). 2026-10-10부터 구현 `CrossContextAdminReadModelAdapter`도 다른 컨텍스트 컬렉션을 직접 읽지 않고
+  order·listing·community 의 `Monitor*UseCase`와 account·catalog·review·pricing 의 `Count*UseCase`로 위임한다(PR #226).
+  처음 구현이던 `MongoAdminReadModelAdapter`는 지웠다.
 - 반환 타입은 admin 컨텍스트 소유의 얇은 record(read model). 타 컨텍스트 도메인 객체를 재사용하지 않는다.
 
 #### AdminActor (조치자 식별)

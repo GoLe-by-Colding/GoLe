@@ -14,6 +14,7 @@ import com.gole.api.account.application.port.in.RequestPasswordResetUseCase.Requ
 import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

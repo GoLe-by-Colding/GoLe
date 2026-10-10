@@ -15,7 +15,7 @@ import {
   requesterLabel,
   type PartRequest,
 } from "@entities/part-request";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { isApiNotFoundError } from "@shared/api";
 import { Button, Container, Heading, LinkButton, Skeleton, Text } from "@shared/ui";
 
@@ -40,6 +40,7 @@ export function PartRequestDetailPage({ requestId }: PartRequestDetailPageProps)
   const { session } = useSession();
   const [load, setLoad] = useState<DetailLoad>({ status: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
+  const nameOf = useDisplayNames(load.status === "ready" ? [load.request.requesterId] : []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,8 +108,10 @@ export function PartRequestDetailPage({ requestId }: PartRequestDetailPageProps)
             {partRequestTitle(request)}
           </Heading>
           <Text size="sm" tone="muted">
-            {isOwner ? "내 요청" : `요청자 ${requesterLabel(request.requesterId)}`} ·{" "}
-            <RequestedAgo iso={request.createdAt} />
+            {isOwner
+              ? "내 요청"
+              : `요청자 ${nameOf(request.requesterId, requesterLabel(request.requesterId))}`}{" "}
+            · <RequestedAgo iso={request.createdAt} />
             {request.closedAt !== null ? (
               <>
                 {" "}

@@ -1,7 +1,7 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.chat.application.ChatReportService;
+import com.gole.api.chat.application.port.in.ReportChatMessageUseCase;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.report.domain.model.ReportReason;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -20,9 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/chat/messages")
 public class ChatReportController {
 
-    private final ChatReportService reports;
+    private final ReportChatMessageUseCase reports;
 
-    public ChatReportController(ChatReportService reports) {
+    public ChatReportController(ReportChatMessageUseCase reports) {
         this.reports = reports;
     }
 
@@ -30,7 +30,8 @@ public class ChatReportController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, String> report(
             @PathVariable String messageId, @Valid @RequestBody ReportMessageRequest request, HttpServletRequest http) {
-        String reportId = reports.report(AuthenticatedUser.id(http), messageId, request.reason(), request.detail());
+        String reportId = reports.report(
+                AuthenticatedUser.id(http), messageId, request.reason().name(), request.detail());
         return Map.of("id", reportId);
     }
 

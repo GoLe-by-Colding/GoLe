@@ -30,7 +30,7 @@
 - [x] C4. 아웃바운드 포트 `AdminReadModelPort` + 읽기 모델 record (R9.2)
 - [x] C5. `AdminAuditService` — 기록 실패 삼킴(R8.5)
 - [x] C6. `AdminActionDocument` + `AdminActionMongoRepository` + `AdminAuditPersistenceAdapter`
-- [x] C7. `MongoAdminReadModelAdapter` — 컨트롤러의 `MongoTemplate` 의존 제거 (R9.2)
+- [x] C7. `MongoAdminReadModelAdapter` — 컨트롤러의 `MongoTemplate` 의존 제거 (R9.2). 2026-10-10 `CrossContextAdminReadModelAdapter`로 대체(#226)
 
 ## D. admin — 웹 어댑터 재구성 (R1~R7)
 

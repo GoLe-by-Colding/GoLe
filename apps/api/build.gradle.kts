@@ -87,6 +87,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:mongodb")
+    // 헥사고날 경계 검사(HexagonalArchitectureTest). 프론트의 boundaries·steiger 에 해당한다.
+    testImplementation("com.tngtech.archunit:archunit:1.5.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

@@ -30,6 +30,7 @@ import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
 import java.util.Optional;

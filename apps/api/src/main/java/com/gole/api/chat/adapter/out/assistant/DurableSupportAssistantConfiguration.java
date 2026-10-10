@@ -1,6 +1,7 @@
 package com.gole.api.chat.adapter.out.assistant;
 
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,7 +14,7 @@ public class DurableSupportAssistantConfiguration {
     SupportAssistantPort durableSupportAssistantPort(DurableSupportAssistantAdapter adapter) {
         return new SupportAssistantPort() {
             @Override
-            public java.util.Optional<Analysis> analyze(Request request) {
+            public java.util.Optional<SupportAssistantAnalysis> analyze(Request request) {
                 return adapter.analyze(request);
             }
 

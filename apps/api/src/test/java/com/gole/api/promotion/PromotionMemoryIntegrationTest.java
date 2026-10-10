@@ -5,9 +5,9 @@ import static org.mockito.Mockito.*;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.operations.OperationalEventPublisher;
-import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.promotion.adapter.out.persistence.*;
 import com.gole.api.promotion.application.port.in.ManagePromotionMemoryUseCase.*;
+import com.gole.api.promotion.application.port.out.PromotionMediaPort;
 import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.application.service.PromotionMemoryService;
@@ -99,7 +99,7 @@ class PromotionMemoryIntegrationTest {
                 postRepo,
                 () -> UUID.randomUUID().toString(),
                 mock(SocialPublishPort.class),
-                mock(ManageMediaAssetsUseCase.class),
+                mock(PromotionMediaPort.class),
                 mock(OperationalEventPublisher.class),
                 CLOCK,
                 feedbackRepo,

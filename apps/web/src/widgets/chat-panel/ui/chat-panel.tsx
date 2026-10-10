@@ -7,7 +7,7 @@ import {
   useRoomReadReceipt,
   type ChatReportReason,
 } from "@entities/chat";
-import { isThirdPartyProvisionConsentCancelledError } from "@entities/user";
+import { isThirdPartyProvisionConsentCancelledError, useDisplayNames } from "@entities/user";
 import { Button, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 
@@ -66,7 +66,8 @@ export function ChatPanel({
   const [reportBusy, setReportBusy] = useState(false);
   const [reportNotice, setReportNotice] = useState<string | undefined>();
   const messageInputId = useId();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  const nameOf = useDisplayNames(showSenderIdentity ? messages.map((m) => m.senderId) : []);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const lastMessageId = messages.at(-1)?.id ?? null;
   const onLatestMessageChangeRef = useRef(onLatestMessageChange);
@@ -80,12 +81,14 @@ export function ChatPanel({
   }, [lastMessageId]);
 
   // 새 메시지가 뒤에 붙을 때만 말단으로 이동한다. 이전 이력을 앞에 붙이는 동작은
-  // 마지막 ID가 그대로라 현재 읽던 위치를 빼앗지 않는다.
+  // 마지막 ID가 그대로라 현재 읽던 위치를 빼앗지 않는다. scrollIntoView는 창까지 스크롤해
+  // 방을 열자마자 머리글과 메시지가 화면 위로 밀려나므로, 메시지 영역만 움직인다.
   useEffect(() => {
     const previous = previousLastMessageIdRef.current;
     previousLastMessageIdRef.current = lastMessageId;
-    if (lastMessageId !== null && lastMessageId !== previous) {
-      bottomRef.current?.scrollIntoView({ behavior: previous === null ? "auto" : "smooth" });
+    const log = logRef.current;
+    if (log !== null && lastMessageId !== null && lastMessageId !== previous) {
+      log.scrollTo({ top: log.scrollHeight, behavior: previous === null ? "auto" : "smooth" });
     }
   }, [lastMessageId]);
 
@@ -148,11 +151,12 @@ export function ChatPanel({
     <div className="flex h-full flex-col">
       {/* 메시지 영역 */}
       <div
+        ref={logRef}
         role="log"
         aria-label="대화 메시지"
         aria-live="polite"
         aria-relevant="additions text"
-        className="flex flex-1 flex-col gap-2 overflow-y-auto p-4"
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4"
       >
         {hasOlder && messages.length > 0 ? (
           <Button
@@ -185,7 +189,9 @@ export function ChatPanel({
               <div key={m.id} className="group flex justify-start">
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2">
                   <p className="text-xs text-neutral-500">
-                    {showSenderIdentity ? `${senderLabel(m.senderId)}의 ` : "차단한 사용자의 "}
+                    {showSenderIdentity
+                      ? `${nameOf(m.senderId, senderLabel(m.senderId))}의 `
+                      : "차단한 사용자의 "}
                     메시지를 숨겼습니다.
                   </p>
                   <button
@@ -222,10 +228,10 @@ export function ChatPanel({
                 {showSenderIdentity && !mine ? (
                   <div className="flex min-h-7 items-center gap-1.5 px-1">
                     <span
-                      className="max-w-48 truncate font-mono text-[11px] font-semibold text-neutral-500"
+                      className="max-w-48 truncate text-[11px] font-semibold text-neutral-500"
                       title={m.senderId}
                     >
-                      {senderLabel(m.senderId)}
+                      {nameOf(m.senderId, senderLabel(m.senderId))}
                     </span>
                     {onManageSender ? (
                       <button
@@ -238,28 +244,31 @@ export function ChatPanel({
                     ) : null}
                   </div>
                 ) : null}
-                <div
-                  className={cn(
-                    "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words",
-                    mine
-                      ? "rounded-br-sm bg-brand-600 text-white"
-                      : "rounded-bl-sm bg-neutral-100 text-neutral-900",
-                  )}
-                >
-                  {m.content}
-                </div>
-                {!mine ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReportingId(m.id);
-                      setReportNotice(undefined);
-                    }}
-                    className="min-h-9 min-w-11 px-2 text-xs text-neutral-400 transition-colors hover:text-danger sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                {/* 신고 버튼은 말풍선 옆에 둔다. 아래에 두면 데스크톱에서 숨겨도 높이가 남아 말풍선 사이가 벌어진다. */}
+                <div className="flex max-w-full items-end gap-1">
+                  <div
+                    className={cn(
+                      "min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words",
+                      mine
+                        ? "rounded-br-sm bg-brand-600 text-white"
+                        : "rounded-bl-sm bg-neutral-100 text-neutral-900",
+                    )}
                   >
-                    신고
-                  </button>
-                ) : null}
+                    {m.content}
+                  </div>
+                  {!mine ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportingId(m.id);
+                        setReportNotice(undefined);
+                      }}
+                      className="min-h-9 min-w-11 shrink-0 px-2 text-xs text-neutral-400 transition-colors hover:text-danger sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                    >
+                      신고
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           );
@@ -305,7 +314,6 @@ export function ChatPanel({
             </Button>
           </div>
         ) : null}
-        <div ref={bottomRef} />
       </div>
 
       {/* 입력 영역 */}
@@ -322,7 +330,9 @@ export function ChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              // 한글 등 입력기로 글자를 조합하는 중의 Enter 는 조합을 확정하는 키다. 여기서 보내면 메시지가
+              // 두 번 가거나 마지막 글자가 입력칸에 남는다.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 e.currentTarget.form?.requestSubmit();
               }

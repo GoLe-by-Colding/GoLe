@@ -29,8 +29,8 @@ export function partRequestTitle(request: Pick<PartRequest, "items">): string {
 }
 
 /**
- * 요청자 표시. 닉네임을 계정 ID로 풀어 주는 공개 API가 아직 없어 커뮤니티 글과 같은 방식으로
- * 계정 ID 앞 8자를 쓴다(`widgets/post-card`).
+ * 요청자에게 닉네임이 없을 때의 표시. 닉네임은 화면이 `useDisplayNames`(`entities/user`)로 풀고,
+ * 없으면 커뮤니티 글과 같은 방식으로 계정 ID 앞 8자를 쓴다(public-display-name D3).
  */
 export function requesterLabel(requesterId: string): string {
   return requesterId.slice(0, 8);

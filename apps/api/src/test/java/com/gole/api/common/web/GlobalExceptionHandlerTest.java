@@ -13,7 +13,6 @@ import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.exception.TooManyRequestsException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
-import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
@@ -93,22 +92,6 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("DUPLICATE_KEY_CONFLICT");
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    void unavailableObjectStorageIsAServiceDependencyFailure() {
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        org.mockito.Mockito.when(request.getRequestURI()).thenReturn("/api/v1/media/images/example.png");
-
-        var response = handler.handleObjectStorageUnavailable(
-                new ObjectStorageUnavailableException(new IllegalStateException("offline")), request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-        assertThat(response.getBody().code()).isEqualTo("MEDIA_STORAGE_UNAVAILABLE");
-        assertThat(response.getBody().message()).contains("참조:");
-        ArgumentCaptor<OperationalEvent> event = ArgumentCaptor.forClass(OperationalEvent.class);
-        verify(events).publish(event.capture());
-        assertThat(event.getValue().fields()).containsKeys("오류 참조", "요청 경로", "예외 종류");
     }
 
     @Test

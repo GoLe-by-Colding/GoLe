@@ -50,6 +50,15 @@ export interface ThirdPartyProvisionConsentStatus {
   readonly lastDecisionAt: string | null;
 }
 
+/**
+ * 다른 사람에게 보여 줄 공개 표시 이름(public-display-name D1). 닉네임이 없거나 탈퇴로 계정이 파기됐으면
+ * `nickname`이 null이다.
+ */
+export interface PublicProfile {
+  readonly accountId: string;
+  readonly nickname: string | null;
+}
+
 /** GET /me 응답: 현재 로그인 사용자 정보. */
 export interface Me {
   readonly accountId: string;

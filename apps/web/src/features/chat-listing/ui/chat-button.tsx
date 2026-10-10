@@ -120,11 +120,13 @@ function InlineChatPanel({
   const [sending, setSending] = useState(false);
   const [tradeBusy, setTradeBusy] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   useRoomReadReceipt({ roomId: room?.id ?? null, myId, messages });
 
+  // 메시지 영역만 말단으로 옮긴다. scrollIntoView는 매물 화면 전체를 끌어내린다.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const log = logRef.current;
+    if (log !== null) log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -219,7 +221,7 @@ function InlineChatPanel({
           runWithConsent={runWithConsent}
         />
       )}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+      <div ref={logRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-center text-sm text-neutral-400">
             첫 메시지를 보내 대화를 시작해보세요!
@@ -242,7 +244,6 @@ function InlineChatPanel({
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
       <form
         onSubmit={handleSubmit}
@@ -252,7 +253,9 @@ function InlineChatPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // 한글 등 입력기로 글자를 조합하는 중의 Enter 는 조합을 확정하는 키다. 여기서 보내면 메시지가
+            // 두 번 가거나 마지막 글자가 입력칸에 남는다.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               e.currentTarget.form?.requestSubmit();
             }

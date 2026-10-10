@@ -1,6 +1,6 @@
 package com.gole.api.notification.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.notification.application.port.in.GetNotificationsUseCase;
 import com.gole.api.notification.domain.model.Notification;
 import io.swagger.v3.oas.annotations.tags.Tag;

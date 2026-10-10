@@ -1,6 +1,6 @@
 package com.gole.api.notification.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.notification.application.port.in.RegisterDeviceTokenUseCase;
 import com.gole.api.notification.application.port.in.RegisterDeviceTokenUseCase.RegisterDeviceTokenCommand;
 import com.gole.api.notification.domain.model.DevicePlatform;

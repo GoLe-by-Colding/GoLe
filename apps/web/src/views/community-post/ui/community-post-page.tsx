@@ -14,7 +14,7 @@ import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
 import { PostAuthorActions } from "@features/manage-post";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import {
   Badge,
@@ -82,6 +82,10 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
       window.clearTimeout(timer);
     };
   }, [postId, postAttempt, loadComments]);
+
+  const nameOf = useDisplayNames(
+    post === null ? [] : [post.authorId, ...comments.map((comment) => comment.authorId)],
+  );
 
   if (postStatus === "missing") {
     return (
@@ -159,7 +163,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
       <div className="flex flex-col gap-5 pt-8 pb-16">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Heading level={2}>{post.authorId.slice(0, 8)}</Heading>
+            <Heading level={2}>{nameOf(post.authorId)}</Heading>
             {session?.accountId !== post.authorId ? (
               <LinkButton
                 href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
@@ -209,7 +213,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
                 className="flex items-start justify-between gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-50"
               >
                 <p className="min-w-0 leading-relaxed">
-                  <span className="font-semibold text-neutral-900">{c.authorId.slice(0, 8)}</span>{" "}
+                  <span className="font-semibold text-neutral-900">{nameOf(c.authorId)}</span>{" "}
                   <span className="break-words text-neutral-700">{c.content}</span>
                 </p>
                 <div className="flex shrink-0 items-center gap-2">

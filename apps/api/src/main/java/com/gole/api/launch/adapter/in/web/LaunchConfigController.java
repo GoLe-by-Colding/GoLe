@@ -1,6 +1,6 @@
 package com.gole.api.launch.adapter.in.web;
 
-import com.gole.api.account.config.EmailAuthenticationAvailability;
+import com.gole.api.account.application.port.in.GetEmailAuthenticationAvailabilityUseCase;
 import com.gole.api.common.config.SellerIdentityVerificationProperties;
 import com.gole.api.launch.adapter.in.web.LaunchDtos.LaunchConfigResponse;
 import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
@@ -23,12 +23,12 @@ public class LaunchConfigController {
 
     private final GetLaunchConfigUseCase launchConfig;
     private final SellerIdentityVerificationProperties sellerIdentityVerification;
-    private final EmailAuthenticationAvailability emailAuthentication;
+    private final GetEmailAuthenticationAvailabilityUseCase emailAuthentication;
 
     public LaunchConfigController(
             GetLaunchConfigUseCase launchConfig,
             SellerIdentityVerificationProperties sellerIdentityVerification,
-            EmailAuthenticationAvailability emailAuthentication) {
+            GetEmailAuthenticationAvailabilityUseCase emailAuthentication) {
         this.launchConfig = launchConfig;
         this.sellerIdentityVerification = sellerIdentityVerification;
         this.emailAuthentication = emailAuthentication;

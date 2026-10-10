@@ -1,6 +1,5 @@
 package com.gole.api.chat.adapter.in.web;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,34 +10,30 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
-import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.SocialChatService;
-import com.gole.api.chat.application.SupportAssistantAnalysisService;
-import com.gole.api.chat.application.SupportChatService;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
+import com.gole.api.chat.application.port.in.GetSupportAssistantAnalysisUseCase;
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -46,15 +41,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class AdminSupportControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-08-30T09:00:00Z");
+    /** 세션에서 읽은 운영자. 감사 기록은 서비스가 같은 트랜잭션에서 남기므로 컨트롤러는 운영자를 그대로 넘기기만 한다. */
+    private static final SupportOperator OPERATOR = new SupportOperator("admin-2", "admin2@gole.test");
 
-    private final SupportChatService support = mock(SupportChatService.class);
-    private final SocialChatService rooms = mock(SocialChatService.class);
-    private final ChatMessagingService messaging = mock(ChatMessagingService.class);
-    private final SupportAssistantAnalysisService supportAssistant = mock(SupportAssistantAnalysisService.class);
-    private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
+    private final SupportConsoleUseCase support = mock(SupportConsoleUseCase.class);
+    private final SocialChatUseCase rooms = mock(SocialChatUseCase.class);
+    private final ChatMessagingUseCase messaging = mock(ChatMessagingUseCase.class);
+    private final GetSupportAssistantAnalysisUseCase supportAssistant = mock(GetSupportAssistantAnalysisUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                    new AdminSupportController(support, rooms, messaging, supportAssistant, audit))
+                    new AdminSupportController(support, rooms, messaging, supportAssistant))
             .addInterceptors(new AdminAuthInterceptor(sessions, new SessionCookie("false")))
             .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
             .build();
@@ -69,14 +65,14 @@ class AdminSupportControllerTest {
     }
 
     @Test
-    void adminCanTakeOverAssignedTicketAndReasonIsAudited() throws Exception {
+    void adminCanTakeOverAssignedTicketAsSessionOperator() throws Exception {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "결제 문의", NOW).withSupportAgent(null, "admin-1");
         SupportTicket taken = ticket.transferTo("admin-2", NOW.plusSeconds(10));
         SocialChatRoom takenRoom = room.withSupportAgent("admin-1", "admin-2");
-        when(support.takeOver("room-1", "admin-2", "기존 담당자 계정 정지"))
-                .thenReturn(new SupportChatService.SupportTakeover(takenRoom, taken, "admin-1", "기존 담당자 계정 정지"));
+        when(support.takeOver("room-1", OPERATOR, "기존 담당자 계정 정지"))
+                .thenReturn(new SupportConsoleUseCase.SupportTakeover(takenRoom, taken, "admin-1", "기존 담당자 계정 정지"));
 
         mvc.perform(post("/api/admin/support/room-1/takeover")
                         .header("Authorization", "Bearer admin-token")
@@ -87,16 +83,7 @@ class AdminSupportControllerTest {
                 .andExpect(jsonPath("$.assigneeId").value("admin-2"))
                 .andExpect(jsonPath("$.title").value("결제 문의"));
 
-        ArgumentCaptor<RecordAdminActionCommand> command = ArgumentCaptor.forClass(RecordAdminActionCommand.class);
-        verify(audit).record(command.capture());
-        assertThat(command.getValue())
-                .isEqualTo(new RecordAdminActionCommand(
-                        "admin-2",
-                        "admin2@gole.test",
-                        AdminActionType.SUPPORT_TAKEOVER,
-                        AdminTargetType.SUPPORT_TICKET,
-                        "room-1",
-                        "previousAssignee=admin-1; reason=기존 담당자 계정 정지"));
+        verify(support).takeOver("room-1", OPERATOR, "기존 담당자 계정 정지");
     }
 
     @Test
@@ -122,9 +109,9 @@ class AdminSupportControllerTest {
         SupportTicket ticket = SupportTicket.opened("room-ai", "user-1", NOW).assignTo("admin-2", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-ai", "user-1", "일반 문의", NOW).withSupportAgent(null, "admin-2");
-        Analysis analysis = new Analysis(
+        SupportAssistantAnalysis analysis = new SupportAssistantAnalysis(
                 SupportCategory.TRADE,
-                Priority.HIGH,
+                SupportAssistantPriority.HIGH,
                 "거래 조건을 확인해야 합니다.",
                 "안녕하세요. 거래 조건을 확인한 뒤 안내드리겠습니다.",
                 List.of("ESCROW_REVIEW"),
@@ -172,12 +159,11 @@ class AdminSupportControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(support, never()).takeOver(any(), any(), any());
-        verify(audit, never()).record(any());
     }
 
     @Test
-    void rejectedTakeoverDoesNotProduceFalseAuditEvidence() throws Exception {
-        when(support.takeOver("room-1", "admin-2", "완료된 문의"))
+    void rejectedTakeoverReturnsServiceError() throws Exception {
+        when(support.takeOver("room-1", OPERATOR, "완료된 문의"))
                 .thenThrow(new BadRequestException("SUPPORT_ALREADY_RESOLVED", "완료된 문의입니다"));
 
         mvc.perform(post("/api/admin/support/room-1/takeover")
@@ -186,8 +172,6 @@ class AdminSupportControllerTest {
                         .content("{\"reason\":\"완료된 문의\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("SUPPORT_ALREADY_RESOLVED"));
-
-        verify(audit, never()).record(any());
     }
 
     @Test
@@ -200,56 +184,64 @@ class AdminSupportControllerTest {
                 .andExpect(jsonPath("$.code").value("ADMIN_ONLY"));
 
         verify(support, never()).takeOver(any(), any(), any());
-        verify(audit, never()).record(any());
     }
 
     @Test
-    void repeatedAssignmentReturnsCurrentTicketWithoutFalseAudit() throws Exception {
+    void repeatedAssignmentReturnsCurrentTicket() throws Exception {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-2", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
-        when(support.assignToSelf("room-1", "admin-2"))
-                .thenReturn(new SupportChatService.SupportConversation(room, ticket, false));
+        when(support.assignToSelf("room-1", OPERATOR))
+                .thenReturn(new SupportConsoleUseCase.SupportConversation(room, ticket, false));
 
         mvc.perform(post("/api/admin/support/room-1/assign").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
-
-        verify(audit, never()).record(any());
     }
 
     @Test
-    void repeatedReopenReturnsCurrentTicketWithoutFalseAudit() throws Exception {
+    void repeatedReopenReturnsCurrentTicket() throws Exception {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-2", NOW);
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
-        when(support.reopen("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, false));
+        when(support.reopen("room-1", OPERATOR)).thenReturn(new SupportConsoleUseCase.SupportTransition(ticket, false));
         when(rooms.requireRoom("room-1")).thenReturn(room);
 
         mvc.perform(post("/api/admin/support/room-1/reopen").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
-
-        verify(audit, never()).record(any());
     }
 
     @Test
-    void realResolveStateChangeProducesOneAuditRecord() throws Exception {
+    void resolvePassesSessionOperator() throws Exception {
         SupportTicket ticket = SupportTicket.opened("room-1", "user-1", NOW)
                 .assignTo("admin-2", NOW)
                 .resolve(NOW.plusSeconds(10));
         SocialChatRoom room =
                 SocialChatRoom.support("room-1", "user-1", "문의", NOW).withSupportAgent(null, "admin-2");
-        when(support.resolve("room-1", "admin-2")).thenReturn(new SupportChatService.SupportTransition(ticket, true));
+        when(support.resolve("room-1", OPERATOR)).thenReturn(new SupportConsoleUseCase.SupportTransition(ticket, true));
         when(rooms.requireRoom("room-1")).thenReturn(room);
 
         mvc.perform(post("/api/admin/support/room-1/resolve").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
-        ArgumentCaptor<RecordAdminActionCommand> command = ArgumentCaptor.forClass(RecordAdminActionCommand.class);
-        verify(audit).record(command.capture());
-        assertThat(command.getValue().type()).isEqualTo(AdminActionType.SUPPORT_RESOLVE);
+        verify(support).resolve("room-1", OPERATOR);
+    }
+
+    @Test
+    void replyGoesThroughTheAuditedSupportUseCase() throws Exception {
+        when(support.reply("room-1", OPERATOR, "확인했습니다"))
+                .thenReturn(new ChatMessage("message-9", "room-1", "admin-2", "확인했습니다", NOW));
+
+        mvc.perform(post("/api/admin/support/room-1/messages")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"확인했습니다\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("message-9"));
+
+        verify(messaging, never()).sendAdminSupport(any(), any(), any());
     }
 
     @Test

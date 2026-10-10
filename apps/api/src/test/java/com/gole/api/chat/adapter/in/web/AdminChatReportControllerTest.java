@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
@@ -19,11 +18,12 @@ import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.SnapshotMessage;
-import com.gole.api.chat.application.port.out.ChatReportSnapshotPort.StoredSnapshot;
+import com.gole.api.chat.application.port.in.GetChatReportSnapshotUseCase;
+import com.gole.api.chat.domain.model.ChatReportSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.Report;
 import com.gole.api.report.domain.model.ReportReason;
@@ -42,7 +42,7 @@ class AdminChatReportControllerTest {
     private static final Instant NOW = Instant.parse("2026-08-29T12:00:00Z");
 
     private final ManageReportsUseCase reports = mock(ManageReportsUseCase.class);
-    private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
+    private final GetChatReportSnapshotUseCase snapshots = mock(GetChatReportSnapshotUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
@@ -62,7 +62,7 @@ class AdminChatReportControllerTest {
 
     @Test
     void adminCanReadOnlyTheFixedSnapshotAndViewIsAudited() throws Exception {
-        StoredSnapshot stored = snapshot();
+        ChatReportSnapshot stored = snapshot();
         when(reports.get("report-1")).thenReturn(report(ReportTargetType.CHAT_MESSAGE));
         when(snapshots.findByReportId("report-1")).thenReturn(Optional.of(stored));
 
@@ -135,14 +135,14 @@ class AdminChatReportControllerTest {
                 NOW);
     }
 
-    private static StoredSnapshot snapshot() {
-        return new StoredSnapshot(
+    private static ChatReportSnapshot snapshot() {
+        return new ChatReportSnapshot(
                 "snapshot-1",
                 "report-1",
                 "room-1",
                 "message-1",
                 "reporter-1",
-                List.of(new SnapshotMessage("message-1", "sender-1", "서버에 고정된 문맥", NOW.minusSeconds(60))),
+                List.of(new ChatReportSnapshotMessage("message-1", "sender-1", "서버에 고정된 문맥", NOW.minusSeconds(60))),
                 NOW);
     }
 }

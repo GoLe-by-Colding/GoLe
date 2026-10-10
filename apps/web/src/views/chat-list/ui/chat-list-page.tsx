@@ -29,6 +29,7 @@ import {
   isThirdPartyProvisionConsentCancelledError,
   ThirdPartyProvisionConsentDialog,
   type ThirdPartyProvisionPath,
+  useDisplayNames,
   useSession,
   useThirdPartyProvisionConsent,
 } from "@entities/user";
@@ -335,6 +336,7 @@ export function ChatListPage() {
       (a, b) => new Date(activityAt(b)).getTime() - new Date(activityAt(a)).getTime(),
     );
   }, [visibleListingRooms, visibleResolvedConversation, visibleSocialRooms]);
+  const nameOf = useDisplayNames(conversations.flatMap(conversationMemberIds));
 
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.room.id === selectedId) ?? null,
@@ -746,19 +748,19 @@ export function ChatListPage() {
             }
           />
         ) : (
-          <div className="grid min-h-[660px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid h-[max(420px,min(760px,calc(100dvh-21rem)))] grid-rows-[minmax(0,1fr)] md:h-[max(520px,min(760px,calc(100dvh-16rem)))] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
             <aside
-              className={`min-w-0 border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
+              className={`flex min-h-0 min-w-0 flex-col border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
             >
               <div className="border-b border-neutral-100 px-4 py-3">
                 <p className="text-xs font-semibold tracking-wide text-neutral-500">
                   전체 대화 {conversations.length}
                 </p>
               </div>
-              <ul className="max-h-[612px] divide-y divide-neutral-100 overflow-y-auto">
+              <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
                 {conversations.map((conversation) => {
                   const active = conversation.room.id === selectedId;
-                  const title = conversationTitle(conversation, myId);
+                  const title = conversationTitle(conversation, myId, nameOf);
                   const unread = visibleUnreadCounts?.[conversation.room.id] ?? 0;
                   return (
                     <li key={conversation.room.id}>
@@ -776,7 +778,7 @@ export function ChatListPage() {
                         <span
                           className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-sm font-extrabold ${roomAvatarTone(conversation)}`}
                         >
-                          {roomInitial(conversation, myId)}
+                          {roomInitial(conversation, myId, nameOf)}
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col gap-1">
                           <span className="flex items-center gap-2">
@@ -810,7 +812,7 @@ export function ChatListPage() {
             </aside>
 
             {selected ? (
-              <section className="flex min-w-0 flex-col">
+              <section className="flex min-h-0 min-w-0 flex-col">
                 <header className="flex min-h-16 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-5">
                   <div className="flex min-w-0 items-center gap-3">
                     <button
@@ -822,7 +824,7 @@ export function ChatListPage() {
                     </button>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-neutral-900">
-                        {conversationTitle(selected, myId)}
+                        {conversationTitle(selected, myId, nameOf)}
                       </p>
                       <p className="truncate text-xs text-neutral-500">
                         {conversationSubtitle(selected, myId)}
@@ -1269,17 +1271,28 @@ function LoadingRows() {
           </div>
         ))}
       </div>
-      <Skeleton className="hidden min-h-[660px] rounded-2xl md:block" />
+      <Skeleton className="hidden h-[max(520px,min(760px,calc(100dvh-16rem)))] rounded-2xl md:block" />
     </div>
   );
 }
 
-function conversationTitle(conversation: Conversation, myId: string): string {
+type NameOf = (accountId: string, fallback?: string) => string;
+
+function conversationMemberIds(conversation: Conversation): readonly string[] {
+  return conversation.kind === "LISTING"
+    ? [conversation.room.buyerId, conversation.room.sellerId]
+    : conversation.room.memberIds;
+}
+
+/** 상대 닉네임이 없으면 예전처럼 상대 계정 ID 전체를 제목으로 쓴다. */
+function conversationTitle(conversation: Conversation, myId: string, nameOf: NameOf): string {
   if (conversation.kind === "LISTING") {
-    return partnerId(conversation.room, myId);
+    const partner = partnerId(conversation.room, myId);
+    return nameOf(partner, partner);
   }
   if (conversation.room.type === "DIRECT") {
-    return conversation.room.memberIds.find((member) => member !== myId) ?? "1:1 대화";
+    const peer = conversation.room.memberIds.find((member) => member !== myId);
+    return peer === undefined ? "1:1 대화" : nameOf(peer, peer);
   }
   return (
     conversation.room.title ?? (conversation.room.type === "SUPPORT" ? "운영팀 문의" : "그룹 대화")
@@ -1328,9 +1341,9 @@ function shortDate(value: string): string {
   return date.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
 
-function roomInitial(conversation: Conversation, myId: string): string {
+function roomInitial(conversation: Conversation, myId: string, nameOf: NameOf): string {
   if (conversation.kind === "SOCIAL" && conversation.room.type === "SUPPORT") return "GO";
-  return conversationTitle(conversation, myId).slice(0, 1).toUpperCase();
+  return conversationTitle(conversation, myId, nameOf).slice(0, 1).toUpperCase();
 }
 
 function roomAvatarTone(conversation: Conversation): string {

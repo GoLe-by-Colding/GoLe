@@ -35,11 +35,11 @@ public class TrackerAdminService implements ManageTrackerUseCase {
         this.clock = clock;
     }
 
-    public Diagnostics status() {
+    public TrackerDiagnostics status() {
         return tracker.diagnostics();
     }
 
-    public synchronized Diagnostics verify(String actorId) {
+    public synchronized TrackerDiagnostics verify(String actorId) {
         authorize(actorId);
         if (!ready()) return status();
         reserve();

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.listing.adapter.out.media.MediaListingPhotoAdapter;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.ReviseListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.RevisionResult;
@@ -45,6 +46,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class ListingServiceTest {
@@ -77,7 +79,7 @@ class ListingServiceTest {
                 interestTagNotifier,
                 priceDropNotifier,
                 bidMatchNotifier,
-                mediaAssets,
+                new MediaListingPhotoAdapter(mediaAssets),
                 clock,
                 BUMP_COOLDOWN);
     }
@@ -103,6 +105,17 @@ class ListingServiceTest {
         assertThat(notifier.notifications).containsExactly(new NewListingNotice("seller-1", id, "에펠탑 10307"));
         assertThat(notifier.setWatcherNotices).containsExactly(new SetWatcherNotice("seller-1", id, "10307"));
         assertThat(interestTagNotifier.notifications).isEmpty();
+    }
+
+    @Test
+    @DisplayName("최근 판매 중 매물을 상한까지만 낸다")
+    void newestActive_appliesLimit() {
+        service.create(validCommand());
+        service.create(validCommand());
+        service.create(validCommand());
+
+        assertThat(service.newestActive(2)).hasSize(2).allMatch(Listing::isActive);
+        assertThat(service.newestActive(0)).isEmpty();
     }
 
     @Test

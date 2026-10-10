@@ -1,7 +1,7 @@
 package com.gole.api.parts.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import com.gole.api.parts.adapter.in.web.PartRequestDtos.CreatePartRequestRequest;
 import com.gole.api.parts.adapter.in.web.PartRequestDtos.PartRequestResponse;
 import com.gole.api.parts.application.port.in.ClosePartRequestUseCase;

@@ -1,6 +1,5 @@
 package com.gole.api.collection.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.collection.adapter.in.web.CollectionDtos.AddItemRequest;
 import com.gole.api.collection.adapter.in.web.CollectionDtos.CollectionItemResponse;
 import com.gole.api.collection.adapter.in.web.CollectionDtos.EstimateResponse;
@@ -9,6 +8,7 @@ import com.gole.api.collection.application.port.in.EstimateCollectionValueUseCas
 import com.gole.api.collection.application.port.in.GetCollectionValueHistoryUseCase;
 import com.gole.api.collection.application.port.in.ManageCollectionUseCase;
 import com.gole.api.collection.application.port.in.ManageCollectionUseCase.AddCommand;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

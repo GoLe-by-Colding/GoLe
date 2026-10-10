@@ -1,6 +1,6 @@
 package com.gole.api.order.application.port.in;
 
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.time.Instant;
 import java.util.List;
 

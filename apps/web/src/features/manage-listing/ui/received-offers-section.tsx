@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatWon, type Listing } from "@entities/listing";
+import { useDisplayNames } from "@entities/user";
 import {
   acceptOffer,
   declineOffer,
@@ -48,6 +49,7 @@ export function ReceivedOffersSection({
   const now = useClock();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const nameOf = useDisplayNames((offers ?? []).map((offer) => offer.buyerId));
   const active = listing.status === "active";
 
   async function respond(offer: PriceOffer, response: Response) {
@@ -131,7 +133,7 @@ export function ReceivedOffersSection({
                   </div>
                   <span className="text-xs text-neutral-500">
                     {offer.origin === "bid" ? "구매 입찰" : "채팅 제안"} · 구매자{" "}
-                    {offer.buyerId.slice(0, 8)}
+                    {nameOf(offer.buyerId)}
                     {timeLeft === null ? "" : ` · ${timeLeft}`}
                   </span>
                 </div>

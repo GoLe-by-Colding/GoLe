@@ -8,6 +8,7 @@ import com.gole.api.common.exception.*;
 import com.gole.api.shipping.application.port.out.*;
 import com.gole.api.shipping.application.port.out.DeliveryTrackerPort.*;
 import com.gole.api.shipping.domain.model.*;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import java.time.*;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,12 +25,12 @@ class TrackerAdminServiceTest {
 
     @BeforeEach
     void ready() {
-        when(tracker.diagnostics()).thenReturn(new Diagnostics(true, true, false, null, null, null));
+        when(tracker.diagnostics()).thenReturn(new TrackerDiagnostics(true, true, false, null, null, null));
     }
 
     @Test
     void disabledDoesNotRunStub() {
-        when(tracker.diagnostics()).thenReturn(new Diagnostics(false, false, false, null, null, null));
+        when(tracker.diagnostics()).thenReturn(new TrackerDiagnostics(false, false, false, null, null, null));
         var result = service.sample("admin", "hanjin", "123456789012");
         assertThat(result.live()).isFalse();
         assertThat(result.status()).isEqualTo(DeliveryStatus.UNKNOWN);
@@ -39,7 +40,8 @@ class TrackerAdminServiceTest {
 
     @Test
     void missingCredentialsDoNotCallProvider() {
-        when(tracker.diagnostics()).thenReturn(new Diagnostics(true, false, false, null, null, "MISSING_CREDENTIALS"));
+        when(tracker.diagnostics())
+                .thenReturn(new TrackerDiagnostics(true, false, false, null, null, "MISSING_CREDENTIALS"));
         assertThat(service.sample("admin", "hanjin", "123456789012").failure()).isEqualTo("MISSING_CREDENTIALS");
         service.verify("admin");
         verify(tracker, never()).verifyConnection();
