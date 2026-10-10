@@ -5,6 +5,7 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
 import com.gole.api.admin.application.port.in.QueryAdminReadModelUseCase;
 import com.gole.api.admin.domain.model.AdminOrderStats;
+import com.gole.api.admin.domain.model.AdminVolumeCounts;
 import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
@@ -13,7 +14,9 @@ import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,9 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminDashboardController {
-
-    private static final List<String> COLLECTIONS =
-            List.of("accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
 
     private final QueryAdminReadModelUseCase readModel;
     private final ListAdminActionsUseCase listAdminActions;
@@ -60,7 +60,7 @@ public class AdminDashboardController {
     public OverviewResponse overview() {
         AdminOrderStats stats = readModel.orderStats();
         return new OverviewResponse(
-                readModel.collectionCounts(COLLECTIONS),
+                volumeCounts(readModel.volumeCounts()),
                 stats.completedGmv(),
                 stats.countByStatus(),
                 readModel.activeListingCount(),
@@ -74,5 +74,18 @@ public class AdminDashboardController {
     @GetMapping("/audit")
     public List<AuditRow> audit(@RequestParam(value = "limit", defaultValue = "50") int limit) {
         return listAdminActions.recent(limit).stream().map(AuditRow::from).toList();
+    }
+
+    /** 응답 키는 화면 라벨(`views/admin/model/labels.ts`)이 쓰는 이름이다. 순서도 화면 순서다. */
+    private static Map<String, Long> volumeCounts(AdminVolumeCounts counts) {
+        Map<String, Long> rows = new LinkedHashMap<>();
+        rows.put("accounts", counts.accounts());
+        rows.put("lego_sets", counts.legoSets());
+        rows.put("listings", counts.listings());
+        rows.put("orders", counts.orders());
+        rows.put("posts", counts.posts());
+        rows.put("reviews", counts.reviews());
+        rows.put("price_transactions", counts.priceTransactions());
+        return rows;
     }
 }
