@@ -40,6 +40,18 @@ function isCurrent(item: NavItem, pathname: string): boolean {
   return item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
 }
 
+function subscribeNothing(): () => void {
+  return () => undefined;
+}
+
+function isClient(): boolean {
+  return true;
+}
+
+function isServer(): boolean {
+  return false;
+}
+
 function subscribeLocation(onChange: () => void): () => void {
   window.addEventListener("popstate", onChange);
   return () => window.removeEventListener("popstate", onChange);
@@ -74,6 +86,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     getLocationSearch,
     getServerLocationSearch,
   );
+  const hydrated = useSyncExternalStore(subscribeNothing, isClient, isServer);
 
   // 운영 데이터는 서버 확인이 끝난 뒤에만 요청한다.
   useEffect(() => {
@@ -97,7 +110,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   // 확인 중에도 콘솔과 같은 골격(폭·제목 줄·240px 사이드바 그리드)을 유지한다.
   // 좁은 안내 카드로 떨어뜨리면 확인이 끝나는 순간 640px에서 1280px로 벌어지며
   // 화면 전체가 한 번 출렁인다. 메뉴 항목은 아직 노출하지 않는다.
-  if (access === "checking") {
+  // 서버는 세션(localStorage)을 모르므로 하이드레이션 전에는 "비로그인"으로 판정된다. 그대로 그리면
+  // 관리자에게도 첫 HTML 에 "관리자 로그인이 필요합니다"가 잠깐 떴다가 바뀐다 — 그 사이도 확인 중으로 본다.
+  if (!hydrated || access === "checking") {
     return (
       <ConsoleFrame badge={<Badge tone="neutral">확인 중</Badge>} nav={null}>
         <div className="flex min-h-[320px] items-center justify-center p-6" aria-busy="true">
