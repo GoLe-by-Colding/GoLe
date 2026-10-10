@@ -18,7 +18,10 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MARK_PATH = "apps/web/src/shared/ui/logo/mark.svg";
 /** 정본 경로를 그대로 복사해 쓰는 파일. 마크를 고치면 여기도 같이 고쳐야 한다. */
-const COPIES = ["apps/web/src/shared/ui/logo/logo.tsx", "apps/web/src/app/opengraph-image.tsx"];
+const COPIES = [
+  "apps/web/src/shared/ui/logo/presets/side-brick.tsx",
+  "apps/web/src/app/opengraph-image.tsx",
+];
 
 /** 브랜드 단색. 그라데이션은 `brand-identity.md`에서 금지한다. */
 const BRAND = "#1D4ED8"; // brand-600
@@ -27,7 +30,7 @@ const WHITE = "#FFFFFF";
 const GOLD_ON_BRAND = "#FACC15";
 /** 눈·미소. 흰 고래 위에서도 웹 로고와 같은 brand-950이다. */
 const FACE = "#131E4F";
-/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`logo.tsx`와 같다). */
+/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`presets/side-brick.tsx`와 같다). */
 const PARTS = ["gold", "body", "top", "face", "glint"];
 
 // ── 정본 읽기 ──
