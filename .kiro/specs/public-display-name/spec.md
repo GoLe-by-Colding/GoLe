@@ -41,11 +41,11 @@ account 안에서 끝난다.)
 
 ## 요구사항
 
-- [ ] R1. `GetPublicProfilesUseCase`(account `port.in`)가 ID 목록을 받아 요청 순서대로 `{accountId, nickname}`을 돌려준다. 중복·공백 ID는 버리고, 50개를 넘으면 거부한다.
-- [ ] R2. `AccountRepositoryPort`가 ID 목록의 닉네임만 투영해서 읽는다(계정 전체·비밀번호 해시를 읽지 않는다).
-- [ ] R3. `GET /api/v1/accounts/public-profiles`가 로그인 없이 응답하고, 응답에 닉네임 외 개인정보가 없다. 1분 캐시를 허용한다.
-- [ ] R4. 웹 `useDisplayNames`가 같은 틱의 ID를 한 번에 묻고 결과를 캐시한다.
-- [ ] R5. 커뮤니티 카드·글 상세·댓글, 셀러 샵 제목·후기 작성자, 셀러 미니 카드, 팔로잉 피드의 사람 목록, 채팅 목록·방 머리글·그룹 발신자, 매물 문의 작성자가 닉네임을 보여 준다. 닉네임이 없으면 지금 표시를 유지한다.
+- [x] R1. `GetPublicProfilesUseCase`(account `port.in`)가 ID 목록을 받아 요청 순서대로 `{accountId, nickname}`을 돌려준다. 중복·공백 ID는 버리고, 50개를 넘으면 거부한다.
+- [x] R2. `AccountRepositoryPort`가 ID 목록의 닉네임만 투영해서 읽는다(계정 전체·비밀번호 해시를 읽지 않는다).
+- [x] R3. `GET /api/v1/accounts/public-profiles`가 로그인 없이 응답하고, 응답에 닉네임 외 개인정보가 없다. 1분 캐시를 허용한다.
+- [x] R4. 웹 `useDisplayNames`가 같은 틱의 ID를 한 번에 묻고 결과를 캐시한다.
+- [x] R5. 커뮤니티 카드·글 상세·댓글, 셀러 샵 제목·후기 작성자, 셀러 미니 카드, 팔로잉 피드의 사람 목록, 채팅 목록·방 머리글·그룹 발신자, 매물 문의 작성자가 닉네임을 보여 준다. 닉네임이 없으면 지금 표시를 유지한다.
 
 ## 범위에서 뺀 것
 
