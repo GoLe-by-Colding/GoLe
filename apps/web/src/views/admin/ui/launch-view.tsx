@@ -172,7 +172,7 @@ export function AdminLaunchView() {
   const paymentReady = paymentReadiness?.ready === true;
 
   return (
-    <div className="gole-rise-in flex flex-col gap-7">
+    <div className="gole-rise-in flex flex-col gap-7 break-keep">
       <div>
         <Heading level={2}>출시 단계</Heading>
         <Text tone="muted" size="sm" className="mt-1">
@@ -415,7 +415,7 @@ export function AdminLaunchView() {
         >
           {history.map((row) => (
             <tr key={row.id} className="border-t border-neutral-100">
-              <td className="px-3 py-2.5 text-xs text-neutral-500">
+              <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
                 {formatDateTime(row.occurredAt)}
               </td>
               <td className="px-3 py-2.5 font-medium">{row.target}</td>

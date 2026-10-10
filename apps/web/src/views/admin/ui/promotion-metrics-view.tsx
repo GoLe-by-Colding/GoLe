@@ -52,7 +52,7 @@ export function AdminPromotionMetricsView() {
   }, [token]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 break-keep">
       <Heading level={2}>홍보 지표</Heading>
       <Text tone="muted" size="sm">
         운영 지표는 자동 집계이고, 품질 지표는 관리자가 홍보 게시 목록에서 직접 채점한 결과를 집계한

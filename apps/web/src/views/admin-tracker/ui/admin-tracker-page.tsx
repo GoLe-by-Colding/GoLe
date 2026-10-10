@@ -80,7 +80,8 @@ export function AdminTrackerPage() {
   }
   const ready = diagnostics?.enabled && diagnostics.configured;
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    // 콘솔 셸이 이미 안쪽 여백을 준다. 여기서 p-6 을 또 주면 320px 에서 글 폭이 약 156px 로 줄었다.
+    <div className="mx-auto min-w-0 max-w-4xl space-y-6">
       <header className="space-y-2">
         <p className="text-sm text-neutral-500">관리자 / 연동</p>
         <h1 className="text-2xl font-semibold">배송 Tracker</h1>
@@ -168,9 +169,10 @@ export function AdminTrackerPage() {
           }
         </pre>
         <p className="text-sm text-neutral-500">
-          apps/api/src/main/resources/application.yml이 환경변수를 읽습니다. 배포 환경의 secret 설정
-          또는 로컬 API 실행 터미널에 주입하고 API를 재배포해야 반영됩니다. 브라우저·NEXT_PUBLIC
-          변수·소스 코드·DB에 저장하지 마세요. 이 화면은 자격증명을 입력받거나 반환하지 않습니다.
+          <code className="break-all">apps/api/src/main/resources/application.yml</code>이
+          환경변수를 읽습니다. 배포 환경의 secret 설정 또는 로컬 API 실행 터미널에 주입하고 API를
+          재배포해야 반영됩니다. 브라우저·NEXT_PUBLIC 변수·소스 코드·DB에 저장하지 마세요. 이 화면은
+          자격증명을 입력받거나 반환하지 않습니다.
         </p>
         <a
           className="text-sm underline"

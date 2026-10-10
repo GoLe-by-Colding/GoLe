@@ -265,11 +265,16 @@ export function AdminDashboardView() {
         </div>
         <Card padded className="flex flex-col divide-y divide-neutral-100">
           {audit.map((entry) => (
-            <div key={entry.id} className="flex items-center gap-3 py-2.5 text-sm">
+            // 좁은 화면에서는 배지·날짜가 한 줄을 다 써 조치자가 "k…"로만 남았다. sm 미만은
+            // 날짜를 배지 옆에 두고 조치자·사유를 아랫줄 전체 폭으로 내린다.
+            <div
+              key={entry.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm sm:flex-nowrap"
+            >
               <Badge tone={AUDIT_TYPE_TONE[entry.type] ?? "neutral"}>
                 {AUDIT_TYPE_LABEL[entry.type] ?? entry.type}
               </Badge>
-              <span className="min-w-0 flex-1 truncate text-neutral-600">
+              <span className="min-w-0 truncate text-neutral-600 max-sm:order-last max-sm:basis-full sm:flex-1">
                 {entry.actorEmail}
                 {entry.reason !== null ? ` · ${entry.reason}` : ""}
               </span>
