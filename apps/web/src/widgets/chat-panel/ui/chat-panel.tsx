@@ -7,7 +7,7 @@ import {
   useRoomReadReceipt,
   type ChatReportReason,
 } from "@entities/chat";
-import { isThirdPartyProvisionConsentCancelledError } from "@entities/user";
+import { isThirdPartyProvisionConsentCancelledError, useDisplayNames } from "@entities/user";
 import { Button, Skeleton } from "@shared/ui";
 import { cn } from "@shared/lib";
 
@@ -67,6 +67,7 @@ export function ChatPanel({
   const [reportNotice, setReportNotice] = useState<string | undefined>();
   const messageInputId = useId();
   const logRef = useRef<HTMLDivElement>(null);
+  const nameOf = useDisplayNames(showSenderIdentity ? messages.map((m) => m.senderId) : []);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const lastMessageId = messages.at(-1)?.id ?? null;
   const onLatestMessageChangeRef = useRef(onLatestMessageChange);
@@ -188,7 +189,9 @@ export function ChatPanel({
               <div key={m.id} className="group flex justify-start">
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2">
                   <p className="text-xs text-neutral-500">
-                    {showSenderIdentity ? `${senderLabel(m.senderId)}의 ` : "차단한 사용자의 "}
+                    {showSenderIdentity
+                      ? `${nameOf(m.senderId, senderLabel(m.senderId))}의 `
+                      : "차단한 사용자의 "}
                     메시지를 숨겼습니다.
                   </p>
                   <button
@@ -225,10 +228,10 @@ export function ChatPanel({
                 {showSenderIdentity && !mine ? (
                   <div className="flex min-h-7 items-center gap-1.5 px-1">
                     <span
-                      className="max-w-48 truncate font-mono text-[11px] font-semibold text-neutral-500"
+                      className="max-w-48 truncate text-[11px] font-semibold text-neutral-500"
                       title={m.senderId}
                     >
-                      {senderLabel(m.senderId)}
+                      {nameOf(m.senderId, senderLabel(m.senderId))}
                     </span>
                     {onManageSender ? (
                       <button

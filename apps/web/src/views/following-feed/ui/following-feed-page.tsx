@@ -11,7 +11,7 @@ import {
   priceDropAmount,
 } from "@entities/listing";
 import { fetchPriceSnapshot } from "@entities/pricing";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import {
   Badge,
   Button,
@@ -121,6 +121,7 @@ export function FollowingFeedPage() {
     state.suggestedListings,
     state.suggestedPosts,
   ]);
+  const nameOf = useDisplayNames(people);
 
   // 검색·세트 페이지·판매자 샵과 같은 "추정 시세보다 N%" 한 줄. 보이는 매물(새 매물이 없으면 추천 매물)의 세트 시세를 함께 읽는다.
   const noteListings = state.listings.length > 0 ? state.listings : state.suggestedListings;
@@ -222,16 +223,16 @@ export function FollowingFeedPage() {
                     className="inline-flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                   >
                     <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-                      {personId.slice(0, 1).toUpperCase()}
+                      {nameOf(personId, personId.slice(0, 12)).slice(0, 1).toUpperCase()}
                     </span>
                     <span className="max-w-28 truncate text-sm font-semibold text-neutral-800">
-                      {personId.slice(0, 12)}
+                      {nameOf(personId, personId.slice(0, 12))}
                     </span>
                   </Link>
                   {personId !== accountId ? (
                     <Link
                       href={`/chat?direct=${encodeURIComponent(personId)}`}
-                      aria-label={`${personId.slice(0, 12)} 님과 대화`}
+                      aria-label={`${nameOf(personId, personId.slice(0, 12))} 님과 대화`}
                       className="grid h-8 w-8 place-items-center rounded-full text-brand-600 transition-colors hover:bg-brand-50"
                     >
                       <MessageCircleIcon className="h-4 w-4" />

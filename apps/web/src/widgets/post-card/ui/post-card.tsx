@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { POST_TOPIC_LABEL, type Post } from "@entities/community";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { LikeButton } from "@features/like-post";
 import { Card, MediaImage } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
@@ -13,6 +13,8 @@ export interface PostCardProps {
 
 export function PostCard({ post }: PostCardProps) {
   const { session } = useSession();
+  const nameOf = useDisplayNames([post.authorId]);
+  const authorName = nameOf(post.authorId);
   const cover = post.imageUrls[0];
   const topicLabel = POST_TOPIC_LABEL[post.type];
   const accentTopic = post.type === "moc" || post.type === "easter_egg";
@@ -49,14 +51,12 @@ export function PostCard({ post }: PostCardProps) {
           <Link
             href={`/shops/${encodeURIComponent(post.authorId)}`}
             className="flex min-w-0 items-center gap-2 rounded-sm outline-none hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-400"
-            aria-label={`${post.authorId.slice(0, 8)} 프로필 보기`}
+            aria-label={`${authorName} 프로필 보기`}
           >
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">
-              {post.authorId.slice(0, 1).toUpperCase()}
+              {authorName.slice(0, 1).toUpperCase()}
             </span>
-            <span className="truncate text-sm font-semibold text-neutral-900">
-              {post.authorId.slice(0, 8)}
-            </span>
+            <span className="truncate text-sm font-semibold text-neutral-900">{authorName}</span>
           </Link>
           {cover === undefined ? (
             <span
