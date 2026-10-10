@@ -485,7 +485,7 @@ export function AdminSettlementsView() {
             <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
               {formatKrw(row.payout)}
             </td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
               {formatDateTime(row.createdAt)}
             </td>
             <td className="px-3 py-2.5 text-right">{renderAction(row)}</td>

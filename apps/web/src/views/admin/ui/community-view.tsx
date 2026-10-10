@@ -93,7 +93,9 @@ export function AdminCommunityView() {
                 {p.status === "PUBLISHED" ? "게시중" : "삭제됨"}
               </Badge>
             </td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(p.createdAt)}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
+              {formatDateTime(p.createdAt)}
+            </td>
             <td className="px-3 py-2.5 text-right">
               {p.status === "DELETED" ? (
                 <span className="text-xs text-neutral-400">삭제됨</span>

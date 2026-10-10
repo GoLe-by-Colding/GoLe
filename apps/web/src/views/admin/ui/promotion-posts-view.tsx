@@ -269,11 +269,14 @@ function PromotionWorkspace({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <Heading level={2}>홍보 게시 검토</Heading>
-        <label className="flex items-center gap-2 text-sm text-neutral-600">
-          상태
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Heading level={2} className="min-w-0 break-keep">
+          홍보 게시 검토
+        </Heading>
+        <label className="flex min-w-0 items-center gap-2 text-sm text-neutral-600">
+          <span className="shrink-0 whitespace-nowrap">상태</span>
           <Select
+            className="min-w-32"
             value={status}
             disabled={busy}
             onChange={(e) => {

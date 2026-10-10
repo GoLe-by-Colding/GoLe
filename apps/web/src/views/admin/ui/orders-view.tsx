@@ -172,7 +172,9 @@ export function AdminOrdersView({ initialStatus = "" }: { readonly initialStatus
             <td className="px-3 py-2.5 text-neutral-600">{o.catalogSetNumber ?? "—"}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.buyerId)}</td>
             <td className="px-3 py-2.5 text-neutral-600">{shortId(o.sellerId)}</td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(o.createdAt)}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
+              {formatDateTime(o.createdAt)}
+            </td>
             <td className="px-3 py-2.5 text-right">
               {o.status === "PAYMENT_PENDING" || o.status === "PAYMENT_REVIEW" ? (
                 <Button

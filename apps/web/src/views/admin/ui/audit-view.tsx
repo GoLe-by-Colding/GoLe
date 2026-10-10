@@ -71,13 +71,15 @@ export function AdminAuditView() {
       </Text>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="조치자·대상·사유 검색"
-          aria-label="감사 로그 검색"
-          className="w-64 max-w-full"
-        />
+        {/* Input 은 기본이 w-full 이고 cn 이 클래스를 병합하지 않아 w-64 가 지던 것을 감싸서 고정한다. */}
+        <div className="w-64 max-w-full">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="조치자·대상·사유 검색"
+            aria-label="감사 로그 검색"
+          />
+        </div>
         <Select
           value={type}
           onChange={(event) => setType(event.target.value)}
