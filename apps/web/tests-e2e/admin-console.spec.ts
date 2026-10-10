@@ -690,6 +690,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       ["커뮤니티", "/admin/community"],
       ["회원", "/admin/accounts"],
       ["카탈로그", "/admin/catalog"],
+      ["마스코트", "/admin/mascot"],
       ["감사 로그", "/admin/audit"],
     ] as const;
 
@@ -785,6 +786,85 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(dashboardBox).not.toBeNull();
     expect(reportsBox).not.toBeNull();
     expect(reportsBox!.y).toBeGreaterThan(dashboardBox!.y + dashboardBox!.height);
+  });
+
+  test("마스코트는 기본 제공 고래 12벌 중 하나를 사유·확인 후 적용하고 같은 탭 헤더에 바로 반영한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const selection = (revision: number, assetId: string, assetName: string) => ({
+      revision,
+      assetId,
+      assetName,
+      actorId: "admin-1",
+      reason: revision === 0 ? "" : "가을 이벤트",
+      action: revision === 0 ? "DEFAULT" : "PUBLISH",
+      publishedAt: "2026-10-10T12:00:00Z",
+    });
+    let published = false;
+    let publishBody: unknown = null;
+    await page.route("**/api/admin/mascot/history**", (route) =>
+      route.fulfill({ json: published ? [selection(1, "baby-round", "둥근 아기 고래")] : [] }),
+    );
+    await page.route("**/api/admin/mascot", (route) =>
+      route.fulfill({
+        json: {
+          current: published
+            ? selection(1, "baby-round", "둥근 아기 고래")
+            : selection(0, "side-brick", "옆모습 브릭 고래"),
+          active: {
+            revision: published ? 1 : 0,
+            asset: published
+              ? { id: "baby-round", kind: "PRESET", name: "둥근 아기 고래" }
+              : { id: "side-brick", kind: "PRESET", name: "옆모습 브릭 고래" },
+          },
+          presets: [],
+          uploads: [],
+        },
+      }),
+    );
+    await page.route("**/api/admin/mascot/publish", async (route) => {
+      publishBody = route.request().postDataJSON();
+      published = true;
+      await route.fulfill({ json: selection(1, "baby-round", "둥근 아기 고래") });
+    });
+    // 적용 이벤트를 받은 사이트 Provider 가 브라우저에서 다시 받는 공개 조회.
+    await page.route("**/api/v1/config/mascot", (route) =>
+      route.fulfill({
+        json: { revision: 1, asset: { id: "baby-round", kind: "PRESET", name: "둥근 아기 고래" } },
+      }),
+    );
+
+    await page.goto("/admin/mascot");
+    await expect(page.getByRole("heading", { name: "마스코트", exact: true })).toBeVisible();
+    const presets = page.getByRole("heading", { name: "기본 제공 고래" }).locator("xpath=../..");
+    await expect(presets.getByRole("button", { pressed: false })).toHaveCount(11);
+    await expect(presets.getByRole("button", { pressed: true })).toContainText("옆모습 브릭 고래");
+
+    const apply = page.getByRole("button", { name: "이 마스코트 적용" });
+    await page.getByRole("button", { name: /둥근 아기 고래/ }).click();
+    await expect(apply).toBeDisabled();
+    await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("가을 이벤트");
+    await expect(apply).toBeDisabled();
+    await page.getByRole("checkbox").check();
+    await apply.click();
+
+    await expect(page.getByText(/revision 1 · 둥근 아기 고래/)).toBeVisible();
+    expect(publishBody).toEqual({
+      expectedRevision: 0,
+      assetId: "baby-round",
+      reason: "가을 이벤트",
+    });
+    // 헤더 로고가 새 고래(정면 아기 고래, viewBox 223.3×172.3)로 바뀐다.
+    await expect(page.locator("header a svg").first()).toHaveAttribute(
+      "viewBox",
+      "0 0 223.3 172.3",
+    );
+
+    const hasPageOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(hasPageOverflow).toBe(false);
   });
 
   test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({
@@ -1289,6 +1369,28 @@ test.describe("관리자 API 가드", () => {
     });
     expect(res.status()).toBe(400);
     expect((await res.json()).code).toBe("ADMIN_SELF_TARGET");
+    await ctx.dispose();
+  });
+
+  test("마스코트 공개 조회는 누구나, 관리 조회는 ADMIN만 할 수 있다 (mascot-assets R4.5)", async () => {
+    const ctx = await request.newContext({ baseURL: API_BASE });
+    const open = await ctx.get("/api/v1/config/mascot");
+    expect(open.status()).toBe(200);
+    const body = await open.json();
+    expect(body.asset).toHaveProperty("kind");
+    expect(body).not.toHaveProperty("actorId");
+    expect((await ctx.get("/api/admin/mascot")).status()).toBe(401);
+
+    test.skip(ADMIN_EMAIL === "", "GOLE_ADMIN_EMAIL/PASSWORD 미설정");
+    const signIn = await ctx.post("/api/v1/accounts/sessions", {
+      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    });
+    const { sessionToken } = await signIn.json();
+    const editor = await ctx.get("/api/admin/mascot", {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    expect(editor.status()).toBe(200);
+    expect((await editor.json()).presets).toHaveLength(12);
     await ctx.dispose();
   });
 });
