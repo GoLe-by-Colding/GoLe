@@ -118,3 +118,24 @@ export {
   saveAdminPromotionPostEvaluation,
 } from "./api/admin-api";
 export type { AdminExceptionEntry, AdminShipmentFacts, AdminOrderContacts } from "./api/admin-api";
+export type {
+  PromotionMemoryTarget,
+  PromotionGuidelineKind,
+  PromotionGuidelineStatus,
+  AdminPromotionFeedback,
+  UpdatePromotionGuidelineInput,
+  PromotionGuidelineSnapshot,
+  AdminPromotionGuideline,
+  PromotionRunMemoryContext,
+  AdminPromotionRun,
+} from "./api/admin-api";
+export {
+  fetchAdminPromotionFeedback,
+  fetchAdminPromotionFeedbackById,
+  fetchAdminPromotionGuidelines,
+  updateAdminPromotionGuideline,
+  activateAdminPromotionGuideline,
+  dismissAdminPromotionGuideline,
+  retireAdminPromotionGuideline,
+  fetchAdminPromotionRuns,
+} from "./api/admin-api";
