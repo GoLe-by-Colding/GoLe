@@ -2,6 +2,7 @@ package com.gole.api.promotion.application.port.in;
 
 import com.gole.api.promotion.domain.model.ModelCall;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionMemoryContext;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
@@ -33,5 +34,31 @@ public interface RecordPromotionRunUseCase {
             String promotionPostId,
             String agentSha,
             String runUrl,
-            List<ModelCall> calls) {}
+            List<ModelCall> calls,
+            PromotionMemoryContext memoryContext) {
+        public RecordRunCommand(
+                String runKey,
+                PromotionCategory category,
+                String sourceCommitSha,
+                RunOutcome outcome,
+                RunReasonCode reasonCode,
+                String detail,
+                String promotionPostId,
+                String agentSha,
+                String runUrl,
+                List<ModelCall> calls) {
+            this(
+                    runKey,
+                    category,
+                    sourceCommitSha,
+                    outcome,
+                    reasonCode,
+                    detail,
+                    promotionPostId,
+                    agentSha,
+                    runUrl,
+                    calls,
+                    PromotionMemoryContext.EMPTY);
+        }
+    }
 }

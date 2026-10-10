@@ -1,0 +1,8 @@
+# 홍보 메모리 구현 단계
+
+- [x] STEP 1: 요구사항/설계/API 계약 확정.
+- [x] STEP 2: 도메인 → 인바운드/아웃바운드 포트 → 서비스 → Mongo 어댑터 → 관리자 API 순서로 경험/지침 구현. 반려 원자성, maker-checker, 조회 예산, 실행 원장 호환 검증. 전체 단위 1,279통과/2스킵, 전체 통합 131통과/1스킵, 0실패.
+- [x] STEP 3: Python에서 사전 게이트 전 성찰 제안, 제한된 작업 기억 조립, Claude/Codex 단계별 전달, 원장 기록과 실패 격리 구현 및 테스트. 2026-10-09 Python 전체 218건 통과, 0실패, 0스킵.
+- [x] STEP 4: 관리자 화면에서 근거/제안 수정/확정/기각/활성 해제 구현. 기존 컴포넌트/스타일 재사용. format/lint/typecheck/fsd/build 통과, 관련 E2E 83건 통과.
+- [x] STEP 5: 홍보 피드백→성찰→사람 확정→다음 생성 반영→해제 시 제외 E2E 작성 및 실행. 메모리 통합 10건 및 관련 E2E 83건 통과. 전체 E2E 220통과/10스킵/0실패/0flaky(retries=0, 172.4초), 스킵은 E2E_BASE_URL 배포전용 live-smoke 10건.
+- [x] STEP 6: 전체 관련 게이트와 E2E 실제 실행 결과(통과/실패/스킵) 확인, 볼트 개발 로그·일지·아키텍처/도메인/화면 문서 기록. Python 218통과, actionlint/spotlessCheck 통과, 웹/코어 게이트 통과, 전체 E2E 220통과/10스킵. 루트가 Orca API :8080/WEB :3000 및 전용 Docker project gole-promotion-memory의 Mongo :27018/Redis :16379/MinIO :19000 LISTEN을 확인했으며 이어 사용하도록 유지한다. 실제 모델·운영 발행·실 HEIC·CoolSMS 발송·배포 스모크는 미검증.

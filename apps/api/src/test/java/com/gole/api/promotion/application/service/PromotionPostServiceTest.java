@@ -16,6 +16,8 @@ import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
+import com.gole.api.promotion.application.port.out.PromotionFeedbackRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
@@ -31,6 +33,7 @@ import com.gole.api.promotion.domain.model.CaptureDataSource;
 import com.gole.api.promotion.domain.model.PromotionCapture;
 import com.gole.api.promotion.domain.model.PromotionCategory;
 import com.gole.api.promotion.domain.model.PromotionChannel;
+import com.gole.api.promotion.domain.model.PromotionFeedback;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -54,8 +57,10 @@ class PromotionPostServiceTest {
     private final ManageMediaAssetsUseCase mediaAssets = mock(ManageMediaAssetsUseCase.class);
     private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
-    private final PromotionPostService service =
-            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
+    private final PromotionFeedbackRepositoryPort feedback = mock(PromotionFeedbackRepositoryPort.class);
+    private final PromotionPostEvaluationRepositoryPort evaluations = mock(PromotionPostEvaluationRepositoryPort.class);
+    private final PromotionPostService service = new PromotionPostService(
+            repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock, feedback, evaluations);
 
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -131,7 +136,8 @@ class PromotionPostServiceTest {
     }
 
     private PromotionPostService serviceOver(InMemoryRepo repo) {
-        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
+        return new PromotionPostService(
+                repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock, feedback, evaluations);
     }
 
     /** 같은 릴리스로 초안 하나를 만들고 검토 요청까지 올린다 — 그 릴리스를 점유한 상태. */
@@ -290,7 +296,7 @@ class PromotionPostServiceTest {
     void createAllowsSameSourceCommitAfterReject() {
         InMemoryRepo repo = new InMemoryRepo();
         PromotionPostService target = serviceOver(repo);
-        when(idGenerator.newId()).thenReturn("promo-1", "promo-2");
+        when(idGenerator.newId()).thenReturn("promo-1", "feedback-1", "promo-2");
         String first = createAndSubmit(target, SHA);
         target.reject(first, "reviewer-1", "오탈자 있음");
 
@@ -323,7 +329,8 @@ class PromotionPostServiceTest {
     void createRejectsSameSourceCommitOnceRetryLimitIsReached() {
         InMemoryRepo repo = new InMemoryRepo();
         PromotionPostService target = serviceOver(repo);
-        when(idGenerator.newId()).thenReturn("promo-1", "promo-2", "promo-3", "promo-4");
+        when(idGenerator.newId())
+                .thenReturn("promo-1", "feedback-1", "promo-2", "feedback-2", "promo-3", "feedback-3", "promo-4");
         for (int i = 0; i < 3; i++) {
             String id = createAndSubmit(target, SHA);
             target.reject(id, "reviewer-1", "다시 써 주세요");
@@ -512,6 +519,33 @@ class PromotionPostServiceTest {
 
         assertThatThrownBy(() -> service.approve("promo-1", "author-1"))
                 .isInstanceOf(com.gole.api.promotion.domain.exception.SelfReviewNotAllowedException.class);
+    }
+
+    @Test
+    @DisplayName("반려 스냅샷은 재제출로 게시물 사유가 초기화되어도 원문을 유지한다")
+    void reject_preservesSnapshotOnResubmit() {
+        PromotionPostService target = serviceOver(new InMemoryRepo());
+        when(idGenerator.newId()).thenReturn("promo-1", "feedback-1");
+        String id = createAndSubmit(target, SHA);
+        target.reject(id, "reviewer-1", "문장을 담백하게 고쳐 주세요");
+        target.submit(id);
+
+        ArgumentCaptor<PromotionFeedback> snapshot = ArgumentCaptor.forClass(PromotionFeedback.class);
+        verify(feedback).insert(snapshot.capture());
+        assertThat(snapshot.getValue().reason()).isEqualTo("문장을 담백하게 고쳐 주세요");
+        assertThat(snapshot.getValue().snapshot().caption()).isEqualTo("캡션");
+        assertThat(snapshot.getValue().snapshot().sourceCommitSha()).isEqualTo(SHA);
+        assertThat(target.get(id).getRejectionReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("자기 반려와 상태 오류에는 경험 기억을 남기지 않는다")
+    void reject_invalidReviewDoesNotWriteFeedback() {
+        when(repository.findById("promo-1"))
+                .thenReturn(Optional.of(saved(PromotionPostStatus.PENDING_REVIEW, "author-1")));
+        assertThatThrownBy(() -> service.reject("promo-1", "author-1", "사유"))
+                .isInstanceOf(com.gole.api.promotion.domain.exception.SelfReviewNotAllowedException.class);
+        verify(feedback, never()).insert(any());
     }
 
     @Test

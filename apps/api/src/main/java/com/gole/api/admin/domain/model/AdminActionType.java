@@ -58,5 +58,9 @@ public enum AdminActionType {
     /** 홍보 게시물 검토 반려(promotion-review D7). */
     PROMOTION_POST_REJECT,
     /** 홍보 게시물 외부 채널 발행(promotion-review D7). */
-    PROMOTION_POST_PUBLISH
+    PROMOTION_POST_PUBLISH,
+    PROMOTION_GUIDELINE_EDIT,
+    PROMOTION_GUIDELINE_ACTIVATE,
+    PROMOTION_GUIDELINE_DISMISS,
+    PROMOTION_GUIDELINE_RETIRE
 }

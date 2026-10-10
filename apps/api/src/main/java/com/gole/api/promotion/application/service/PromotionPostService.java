@@ -12,6 +12,8 @@ import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.Cap
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
+import com.gole.api.promotion.application.port.out.PromotionFeedbackRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
@@ -22,6 +24,7 @@ import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedExcept
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionCapture;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionFeedback;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -34,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 홍보 게시물 애플리케이션 서비스 — 작성, 검토 요청, 승인/반려, 발행을 오케스트레이션한다.
@@ -66,6 +70,8 @@ public class PromotionPostService
     private final ManageMediaAssetsUseCase mediaAssets;
     private final OperationalEventPublisher operationalEvents;
     private final Clock clock;
+    private final PromotionFeedbackRepositoryPort feedback;
+    private final PromotionPostEvaluationRepositoryPort evaluations;
 
     public PromotionPostService(
             PromotionPostRepositoryPort repository,
@@ -73,13 +79,17 @@ public class PromotionPostService
             SocialPublishPort publishPort,
             ManageMediaAssetsUseCase mediaAssets,
             OperationalEventPublisher operationalEvents,
-            Clock clock) {
+            Clock clock,
+            PromotionFeedbackRepositoryPort feedback,
+            PromotionPostEvaluationRepositoryPort evaluations) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.publishPort = publishPort;
         this.mediaAssets = mediaAssets;
         this.operationalEvents = operationalEvents;
         this.clock = clock;
+        this.feedback = feedback;
+        this.evaluations = evaluations;
     }
 
     @Override
@@ -206,9 +216,15 @@ public class PromotionPostService
     }
 
     @Override
+    @Transactional
     public PromotionPost reject(String promotionPostId, String reviewerId, String reason) {
         PromotionPost promotionPost = getOrThrow(promotionPostId);
         promotionPost.reject(reviewerId, reason, Instant.now(clock));
+        List<com.gole.api.promotion.domain.model.EvaluationReasonTag> tags = evaluations
+                .findByPromotionPostId(promotionPostId)
+                .map(evaluation -> List.copyOf(evaluation.getReasonTags()))
+                .orElseGet(List::of);
+        feedback.insert(PromotionFeedback.rejected(idGenerator.newId(), promotionPost, tags));
         return repository.save(promotionPost);
     }
 
