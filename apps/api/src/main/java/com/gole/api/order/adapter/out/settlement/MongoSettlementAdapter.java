@@ -4,7 +4,6 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
 import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase.SellerSettlementSummary;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.FeeTotals;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
@@ -12,13 +11,16 @@ import com.gole.api.order.application.port.out.SettlementLedgerPort;
 import com.gole.api.order.application.port.out.SettlementPort;
 import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.FeePolicy;
-import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.ManualPayoutPolicy;
 import com.gole.api.order.domain.model.Settlement;
+import com.gole.api.order.domain.model.SettlementLedger;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +64,7 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
 
     /** 지급 유예가 끝나는 시각. 원장 적재 시각 + holdback. */
     private Instant payableAt(Instant createdAt) {
-        return createdAt == null ? null : createdAt.plus(properties.getPayoutHoldback());
+        return ManualPayoutPolicy.payableAt(createdAt, properties.getPayoutHoldback());
     }
 
     @Override
@@ -136,21 +138,18 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
     @Override
     public SettlementSummary claimManualPayout(String orderId, String operatorId) {
         requireManualPayoutEnabled();
-        String actor = requireOperator(operatorId);
+        String actor = ManualPayoutPolicy.requireOperator(operatorId);
         Instant now = Instant.now(clock);
         requireAuthoritativePayableOrder(orderId);
         SettlementDocument beforeClaim = requireLedger(orderId);
-        requireHoldbackElapsed(beforeClaim, now);
+        ManualPayoutPolicy.requireHoldbackElapsed(toLedger(beforeClaim), properties.getPayoutHoldback(), now);
 
-        if (SettlementStatus.PAYOUT_IN_PROGRESS.name().equals(beforeClaim.getStatus())
-                && actor.equals(beforeClaim.getPayoutOperatorId())) {
+        if (ManualPayoutPolicy.alreadyClaimedBy(toLedger(beforeClaim), actor)) {
             return toSummary(beforeClaim);
         }
 
-        Query available = Query.query(Criteria.where("_id")
-                .is(orderId)
-                .and("status")
-                .in(SettlementStatus.PENDING.name(), SettlementStatus.PAYOUT_FAILED.name()));
+        Query available =
+                Query.query(Criteria.where("_id").is(orderId).and("status").in(names(ManualPayoutPolicy.CLAIMABLE)));
         Update claim = new Update()
                 .set("status", SettlementStatus.PAYOUT_IN_PROGRESS.name())
                 .set("payoutAttemptId", "manual-" + UUID.randomUUID())
@@ -163,38 +162,22 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
         if (claimed != null) {
             return toSummary(claimed);
         }
-        SettlementDocument existing = requireLedger(orderId);
-        if (SettlementStatus.PAYOUT_IN_PROGRESS.name().equals(existing.getStatus())) {
-            throw new ConflictException("SETTLEMENT_ALREADY_CLAIMED", "다른 운영자가 처리 중이거나 자동 지급 결과를 확인 중입니다");
-        }
-        throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "정산 상태가 변경되어 다시 확인해야 합니다");
+        throw ManualPayoutPolicy.claimRejected(toLedger(requireLedger(orderId)));
     }
 
     @Override
     public SettlementSummary reconcileManualPayout(String orderId, String operatorId, String reason) {
-        String actor = requireOperator(operatorId);
-        String detail = requireReason(reason);
+        String actor = ManualPayoutPolicy.requireOperator(operatorId);
+        String detail = ManualPayoutPolicy.requireReason(reason);
         Instant now = Instant.now(clock);
         SettlementDocument current = requireLedger(orderId);
-        if (!SettlementStatus.PAYOUT_IN_PROGRESS.name().equals(current.getStatus())) {
-            throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "진행 중인 정산만 재조정할 수 있습니다");
-        }
-
-        boolean ownedByActor = actor.equals(current.getPayoutOperatorId());
-        if (!ownedByActor) {
-            Instant attemptedAt = current.getPayoutAttemptedAt();
-            Instant staleAt = attemptedAt == null ? null : attemptedAt.plus(properties.getProviderClaimTimeout());
-            if (staleAt != null && now.isBefore(staleAt)) {
-                throw new ConflictException(
-                        "SETTLEMENT_CLAIM_STILL_ACTIVE",
-                        "다른 운영자 또는 지급사의 작업이 아직 진행 중입니다 (차단 가능 시각 %s)".formatted(staleAt));
-            }
-        }
+        String blockNote = ManualPayoutPolicy.reconcileBlockNote(
+                toLedger(current), actor, detail, now, properties.getProviderClaimTimeout());
 
         Query inProgress = claimIdentityQuery(current);
         Update blocked = new Update()
                 .set("status", SettlementStatus.PAYOUT_BLOCKED.name())
-                .set("payoutError", sanitizeError((ownedByActor ? "담당자 지급 결과 확인 필요: " : "장기 정체 지급 확인 필요: ") + detail))
+                .set("payoutError", blockNote)
                 .unset("payoutNextAttemptAt")
                 .unset("payoutOperatorId");
         SettlementDocument updated = mongoTemplate.findAndModify(
@@ -202,58 +185,51 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
         if (updated != null) {
             return toSummary(updated);
         }
-        throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "선점 상태가 변경되어 목록을 다시 확인해야 합니다");
+        throw ManualPayoutPolicy.reconcileRejected();
     }
 
     @Override
     public SettlementSummary recoverBlockedPayout(
             String orderId, String operatorId, boolean alreadyPaid, String paymentReference, String reason) {
-        String actor = requireOperator(operatorId);
-        String detail = requireReason(reason);
+        String actor = ManualPayoutPolicy.requireOperator(operatorId);
+        String detail = ManualPayoutPolicy.requireReason(reason);
         Instant now = Instant.now(clock);
         SettlementDocument current = requireLedger(orderId);
+        Query blocked =
+                Query.query(Criteria.where("_id").is(orderId).and("status").is(SettlementStatus.PAYOUT_BLOCKED.name()));
 
-        if (!SettlementStatus.PAYOUT_BLOCKED.name().equals(current.getStatus())) {
-            if (alreadyPaid
-                    && SettlementStatus.PAID.name().equals(current.getStatus())
-                    && paymentReference != null
-                    && paymentReference.trim().equals(current.getPaymentReference())) {
+        switch (ManualPayoutPolicy.recovery(toLedger(current), alreadyPaid, paymentReference)) {
+            case ALREADY_RECORDED -> {
                 return toSummary(current);
             }
-            throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "운영 확인 필요 상태의 정산만 복구할 수 있습니다");
-        }
-
-        if (alreadyPaid) {
-            if (paymentReference == null || paymentReference.isBlank()) {
-                throw new ConflictException("SETTLEMENT_REFERENCE_REQUIRED", "외부 지급을 확인한 증빙 번호를 입력해야 합니다");
-            }
-            Query blocked = Query.query(
-                    Criteria.where("_id").is(orderId).and("status").is(SettlementStatus.PAYOUT_BLOCKED.name()));
-            Update paid = new Update()
-                    .set("status", SettlementStatus.PAID.name())
-                    .set("paymentReference", paymentReference.trim())
-                    .set("paidAt", now)
-                    .set("payoutError", sanitizeError("외부 지급 확인 완료: " + detail))
-                    .unset("payoutOperatorId")
-                    .unset("payoutNextAttemptAt");
-            try {
-                SettlementDocument updated = mongoTemplate.findAndModify(
-                        blocked, paid, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
-                if (updated != null) {
-                    return toSummary(updated);
+            case RECORD_PAID -> {
+                Update paid = new Update()
+                        .set("status", SettlementStatus.PAID.name())
+                        .set("paymentReference", paymentReference.trim())
+                        .set("paidAt", now)
+                        .set("payoutError", ManualPayoutPolicy.externalPaidNote(detail))
+                        .unset("payoutOperatorId")
+                        .unset("payoutNextAttemptAt");
+                try {
+                    SettlementDocument updated = mongoTemplate.findAndModify(
+                            blocked, paid, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
+                    if (updated != null) {
+                        return toSummary(updated);
+                    }
+                } catch (DuplicateKeyException duplicateReference) {
+                    throw ManualPayoutPolicy.duplicateReference();
                 }
-            } catch (DuplicateKeyException duplicateReference) {
-                throw new ConflictException("SETTLEMENT_REFERENCE_DUPLICATE", "이미 다른 정산에 사용된 지급 증빙 번호입니다");
+                throw ManualPayoutPolicy.recoveryRejected();
             }
-            throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "복구 중 상태가 변경되어 목록을 다시 확인해야 합니다");
+            case RETRY -> {
+                // 아래에서 정산 모드별로 되돌린다.
+            }
         }
 
         requireAuthoritativePayableOrder(orderId);
-        requireHoldbackElapsed(current, now);
+        ManualPayoutPolicy.requireHoldbackElapsed(toLedger(current), properties.getPayoutHoldback(), now);
         if (properties.getMode() == SettlementProperties.Mode.PROVIDER) {
-            requireVerifiedPayoutContract();
-            Query blocked = Query.query(
-                    Criteria.where("_id").is(orderId).and("status").is(SettlementStatus.PAYOUT_BLOCKED.name()));
+            ManualPayoutPolicy.requireVerifiedContract(properties.isPayoutContractVerified());
             Update retry = new Update()
                     .set("status", SettlementStatus.PAYOUT_FAILED.name())
                     // 외부 미지급을 운영자가 확인했으므로 새 자동 지급 주기에는 재시도
@@ -261,7 +237,7 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
                     .set("payoutAttempts", 0)
                     .set("payoutAttemptedAt", now)
                     .set("payoutNextAttemptAt", now)
-                    .set("payoutError", sanitizeError("외부 미지급 확인 후 자동 재시도 요청 (%s): %s".formatted(actor, detail)))
+                    .set("payoutError", ManualPayoutPolicy.providerRetryNote(actor, detail))
                     .unset("payoutAttemptId")
                     .unset("payoutOperatorId");
             SettlementDocument updated = mongoTemplate.findAndModify(
@@ -269,34 +245,30 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
             if (updated != null) {
                 return toSummary(updated);
             }
-            throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "복구 중 상태가 변경되어 목록을 다시 확인해야 합니다");
+            throw ManualPayoutPolicy.recoveryRejected();
         }
 
         requireManualPayoutEnabled();
-        Query blocked =
-                Query.query(Criteria.where("_id").is(orderId).and("status").is(SettlementStatus.PAYOUT_BLOCKED.name()));
         Update retry = new Update()
                 .set("status", SettlementStatus.PAYOUT_IN_PROGRESS.name())
                 .set("payoutAttemptId", "manual-" + UUID.randomUUID())
                 .set("payoutOperatorId", actor)
                 .set("payoutAttemptedAt", now)
-                .set("payoutError", sanitizeError("외부 미지급 확인 후 수동 복구: " + detail))
+                .set("payoutError", ManualPayoutPolicy.manualRetryNote(detail))
                 .unset("payoutNextAttemptAt");
         SettlementDocument updated = mongoTemplate.findAndModify(
                 blocked, retry, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
         if (updated != null) {
             return toSummary(updated);
         }
-        throw new ConflictException("SETTLEMENT_STATE_CONFLICT", "복구 중 상태가 변경되어 목록을 다시 확인해야 합니다");
+        throw ManualPayoutPolicy.recoveryRejected();
     }
 
     @Override
     public SettlementSummary markPaid(String orderId, String operatorId, String paymentReference) {
         requireManualPayoutEnabled();
-        String actor = requireOperator(operatorId);
-        if (paymentReference == null || paymentReference.isBlank()) {
-            throw new ConflictException("SETTLEMENT_REFERENCE_REQUIRED", "지급 증빙 번호를 입력해야 합니다");
-        }
+        String actor = ManualPayoutPolicy.requireOperator(operatorId);
+        String reference = ManualPayoutPolicy.requirePaymentReference(paymentReference);
         Instant now = Instant.now(clock);
         requireAuthoritativePayableOrder(orderId);
         Query pending = Query.query(Criteria.where("_id")
@@ -307,7 +279,7 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
                 .is(actor));
         Update paid = new Update()
                 .set("status", SettlementStatus.PAID.name())
-                .set("paymentReference", paymentReference.trim())
+                .set("paymentReference", reference)
                 .set("paidAt", now)
                 .unset("payoutNextAttemptAt")
                 .unset("payoutError");
@@ -316,7 +288,7 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
             updated = mongoTemplate.findAndModify(
                     pending, paid, FindAndModifyOptions.options().returnNew(true), SettlementDocument.class);
         } catch (DuplicateKeyException duplicateReference) {
-            throw new ConflictException("SETTLEMENT_REFERENCE_DUPLICATE", "이미 다른 정산에 사용된 지급 증빙 번호입니다");
+            throw ManualPayoutPolicy.duplicateReference();
         }
         if (updated != null) {
             return toSummary(updated);
@@ -325,16 +297,8 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
         if (existing == null) {
             throw new NotFoundException("SETTLEMENT_NOT_FOUND", "정산 원장을 찾을 수 없습니다");
         }
-        if (SettlementStatus.PAID.name().equals(existing.getStatus())) {
-            if (paymentReference.trim().equals(existing.getPaymentReference())) {
-                return toSummary(existing);
-            }
-            throw new ConflictException("SETTLEMENT_ALREADY_PAID", "이미 다른 지급 증빙 번호로 완료된 정산입니다");
-        }
-        if (SettlementStatus.PAYOUT_IN_PROGRESS.name().equals(existing.getStatus())) {
-            throw new ConflictException("SETTLEMENT_CLAIM_OWNER_MISMATCH", "이 정산을 배정받은 운영자만 지급 완료할 수 있습니다");
-        }
-        throw new ConflictException("SETTLEMENT_CLAIM_REQUIRED", "외부 이체 전에 먼저 정산 작업을 배정받아야 합니다");
+        ManualPayoutPolicy.requireSamePaidEvidence(toLedger(existing), reference);
+        return toSummary(existing);
     }
 
     @Override
@@ -488,16 +452,8 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
     }
 
     private void requireManualPayoutEnabled() {
-        if (properties.getMode() != SettlementProperties.Mode.MANUAL) {
-            throw new ConflictException("SETTLEMENT_MANUAL_MODE_REQUIRED", "수동 지급은 MANUAL 정산 모드에서만 사용할 수 있습니다");
-        }
-        requireVerifiedPayoutContract();
-    }
-
-    private void requireVerifiedPayoutContract() {
-        if (!properties.isPayoutContractVerified()) {
-            throw new ConflictException("SETTLEMENT_CONTRACT_NOT_VERIFIED", "지급대행 계약 확인 전에는 판매자 지급을 처리할 수 없습니다");
-        }
+        ManualPayoutPolicy.requireManualMode(
+                properties.getMode() == SettlementProperties.Mode.MANUAL, properties.isPayoutContractVerified());
     }
 
     /** 자동 실행기는 운영자가 선점한 수동 지급을 절대 회수하지 않는다. */
@@ -506,21 +462,6 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
                 .orOperator(
                         Criteria.where("payoutOperatorId").exists(false),
                         Criteria.where("payoutOperatorId").is(null));
-    }
-
-    private static String requireOperator(String operatorId) {
-        if (operatorId == null || operatorId.isBlank()) {
-            throw new ConflictException("SETTLEMENT_OPERATOR_REQUIRED", "정산 작업자를 확인할 수 없습니다");
-        }
-        return operatorId.trim();
-    }
-
-    private static String requireReason(String reason) {
-        String detail = reason == null ? "" : reason.trim();
-        if (detail.isBlank()) {
-            throw new ConflictException("SETTLEMENT_RECONCILE_REASON_REQUIRED", "외부 지급 확인 근거와 조치 사유를 입력해야 합니다");
-        }
-        return detail;
     }
 
     private static Query claimIdentityQuery(SettlementDocument document) {
@@ -533,13 +474,9 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
     }
 
     private void requireAuthoritativePayableOrder(String orderId) {
-        OrderStatus orderStatus = orders.findById(orderId)
+        ManualPayoutPolicy.requirePayableOrder(orders.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("SETTLEMENT_ORDER_NOT_FOUND", "정산 대상 주문을 찾을 수 없습니다"))
-                .getStatus();
-        if (orderStatus != OrderStatus.COMPLETED) {
-            throw new ConflictException(
-                    "SETTLEMENT_ORDER_NOT_COMPLETED", "구매 확정된 주문만 지급할 수 있습니다 (현재 상태 %s)".formatted(orderStatus));
-        }
+                .getStatus());
     }
 
     private SettlementDocument requireLedger(String orderId) {
@@ -550,20 +487,22 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
         return document;
     }
 
-    private void requireHoldbackElapsed(SettlementDocument document, Instant now) {
-        if (document.getCreatedAt() == null) {
-            throw new ConflictException("SETTLEMENT_DATA_INVALID", "정산 원장의 생성 시각이 없어 지급을 잠갔습니다. 운영자 확인이 필요합니다");
-        }
-        Instant payable = payableAt(document.getCreatedAt());
-        if (now.isBefore(payable)) {
-            throw new ConflictException(
-                    "SETTLEMENT_HOLDBACK_ACTIVE", "지급 유예 기간이 끝나지 않아 아직 지급할 수 없습니다 (지급 가능 시각 %s)".formatted(payable));
-        }
+    private static String sanitizeError(String error) {
+        return SettlementLedger.payoutNote(error);
     }
 
-    private static String sanitizeError(String error) {
-        String value = error == null || error.isBlank() ? "알 수 없는 지급대행 오류" : error.trim();
-        return value.length() > 500 ? value.substring(0, 500) : value;
+    private static SettlementLedger toLedger(SettlementDocument document) {
+        return new SettlementLedger(
+                document.getOrderId(),
+                SettlementStatus.valueOf(document.getStatus()),
+                document.getPayoutOperatorId(),
+                document.getPayoutAttemptedAt(),
+                document.getPaymentReference(),
+                document.getCreatedAt());
+    }
+
+    private static List<String> names(Set<SettlementStatus> statuses) {
+        return statuses.stream().map(Enum::name).toList();
     }
 
     private SettlementSummary toSummary(SettlementDocument document) {

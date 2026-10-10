@@ -8,7 +8,7 @@ import com.gole.api.admin.domain.model.AdminOrderStats;
 import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
+import com.gole.api.order.domain.model.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportStatus;
 import io.swagger.v3.oas.annotations.Operation;

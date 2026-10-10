@@ -12,13 +12,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.common.exception.ConflictException;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort.Candidate;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;

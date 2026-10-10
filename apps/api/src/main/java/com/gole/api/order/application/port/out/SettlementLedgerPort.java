@@ -2,8 +2,8 @@ package com.gole.api.order.application.port.out;
 
 import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase.SellerSettlementSummary;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.FeeTotals;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.util.List;
 
 /**
