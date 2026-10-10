@@ -4,22 +4,23 @@ import com.gole.api.admin.domain.model.AdminListingRow;
 import com.gole.api.admin.domain.model.AdminOrderRow;
 import com.gole.api.admin.domain.model.AdminOrderStats;
 import com.gole.api.admin.domain.model.AdminPostRow;
+import com.gole.api.admin.domain.model.AdminVolumeCounts;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Outbound port: 운영 화면용 <b>읽기 전용</b> 조회. (admin-console 요구사항 9.2)
  *
- * <p>대시보드 집계와 모니터링 목록은 도메인 애그리거트가 아니라 리포팅용 read model이다.
- * 이를 포트 뒤에 두어 컨트롤러가 MongoDB(또는 어떤 저장소든)를 직접 알지 못하게 한다.
+ * <p>대시보드 집계와 모니터링 목록은 도메인 애그리거트가 아니라 리포팅용 read model이다. 값은 각 소유
+ * 컨텍스트(order·listing·community·account·catalog·review·pricing)의 조회 유스케이스가 내고, admin 은 그
+ * 컬렉션 이름이나 문서 필드를 모른다.
  *
  * <p>반환 record는 관리자 컨텍스트 소유다. 타 컨텍스트의 도메인 객체를 재사용하지 않는 것이
  * 컨텍스트 경계를 지키는 방법이다(읽기 모델은 그 컨텍스트의 불변식을 책임지지 않는다).
  */
 public interface AdminReadModelPort {
 
-    /** 컬렉션별 도큐먼트 수. (요구사항 2.2) */
-    Map<String, Long> collectionCounts(List<String> collections);
+    /** 전체 규모 숫자 — 회원·세트·매물·주문·게시글·후기·체결 기록 수. (요구사항 2.2) */
+    AdminVolumeCounts volumeCounts();
 
     /** 주문 상태별 건수 + 완료 주문 거래액(GMV). (요구사항 2.2) */
     AdminOrderStats orderStats();

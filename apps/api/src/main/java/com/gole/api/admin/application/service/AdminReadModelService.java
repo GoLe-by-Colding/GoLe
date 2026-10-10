@@ -6,8 +6,8 @@ import com.gole.api.admin.domain.model.AdminListingRow;
 import com.gole.api.admin.domain.model.AdminOrderRow;
 import com.gole.api.admin.domain.model.AdminOrderStats;
 import com.gole.api.admin.domain.model.AdminPostRow;
+import com.gole.api.admin.domain.model.AdminVolumeCounts;
 import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /** 운영 화면 읽기 모델 조회. 컨트롤러가 저장소 포트를 직접 알지 않게 하는 얇은 유스케이스다. */
@@ -21,8 +21,8 @@ public class AdminReadModelService implements QueryAdminReadModelUseCase {
     }
 
     @Override
-    public Map<String, Long> collectionCounts(List<String> collections) {
-        return readModel.collectionCounts(collections);
+    public AdminVolumeCounts volumeCounts() {
+        return readModel.volumeCounts();
     }
 
     @Override
