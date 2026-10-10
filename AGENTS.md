@@ -278,7 +278,8 @@ adapter/out/persistence → adapter/in/web.
 기준이라 위치와 상관없이 `AdminAuthInterceptor`가 건다.
 
 **관리자 감사 기록은 조치가 성공한 뒤 남긴다.** 조치와 감사가 한 트랜잭션이어야 하면 그 컨텍스트의 서비스가
-자기 감사 포트로 같은 트랜잭션에서 남긴다(chat 문의 콘솔의 `SupportAdminActionPort`). 그렇지 않으면 컨트롤러가
+자기 감사 포트로 같은 트랜잭션에서 남긴다(chat 문의 콘솔의 `SupportAdminActionPort`) — 조치가 되돌려지면 감사도 함께
+사라진다. 감사 기록 실패는 조치를 되돌리지 않는다(admin-console R8.5). 그렇지 않으면 컨트롤러가
 조치 유스케이스를 부른 뒤 admin 의 `RecordAdminActionUseCase` 로 남겨도 된다(2026-10-10 결정, 볼트 08 B-P3).
 
 `common/`은 컨텍스트가 아니라 횡단 관심사다: `aop/`(유스케이스 로깅·운영 신호),
