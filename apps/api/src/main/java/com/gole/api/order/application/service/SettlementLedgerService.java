@@ -3,6 +3,7 @@ package com.gole.api.order.application.service;
 import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.out.SettlementLedgerPort;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.util.List;
 import org.springframework.stereotype.Service;
 

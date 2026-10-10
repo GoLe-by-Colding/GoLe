@@ -1,5 +1,6 @@
 package com.gole.api.order.application.port.in;
 
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.time.Instant;
 import java.util.List;
 
@@ -28,14 +29,6 @@ public interface ManageSettlementsUseCase {
 
     /** 수수료 총액·건수 집계. (shipping-and-fees R5.6) 상태를 null로 주면 전체. */
     FeeTotals totals(SettlementStatus status);
-
-    enum SettlementStatus {
-        PENDING,
-        PAYOUT_IN_PROGRESS,
-        PAYOUT_FAILED,
-        PAYOUT_BLOCKED,
-        PAID
-    }
 
     record FeeTotals(long count, long grossTotal, long feeTotal, long payoutTotal) {}
 
