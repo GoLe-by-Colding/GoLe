@@ -58,5 +58,11 @@ public enum AdminActionType {
     /** 홍보 게시물 검토 반려(promotion-review D7). */
     PROMOTION_POST_REJECT,
     /** 홍보 게시물 외부 채널 발행(promotion-review D7). */
-    PROMOTION_POST_PUBLISH
+    PROMOTION_POST_PUBLISH,
+    /** 사이트 마스코트 에셋 업로드 등록(mascot-assets R3.6). */
+    MASCOT_ASSET_CREATE,
+    /** 사이트 마스코트 적용 — 서비스 전체의 고래 마크가 바뀐다(mascot-assets R3.6). */
+    MASCOT_PUBLISH,
+    /** 업로드 마스코트 삭제와 이미지 회수(mascot-assets R3.6). */
+    MASCOT_ASSET_DELETE
 }
