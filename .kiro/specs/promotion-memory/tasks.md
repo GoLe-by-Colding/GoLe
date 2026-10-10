@@ -7,3 +7,5 @@
 - [x] STEP 5: 홍보 피드백→성찰→사람 확정→다음 생성 반영→해제 시 제외 E2E 작성 및 실행. 메모리 통합 10건 및 관련 E2E 83건 통과. 전체 E2E 220통과/10스킵/0실패/0flaky(retries=0, 172.4초), 스킵은 E2E_BASE_URL 배포전용 live-smoke 10건.
 - [x] STEP 6: 전체 관련 게이트와 E2E 실제 실행 결과(통과/실패/스킵) 확인, 볼트 개발 로그·일지·아키텍처/도메인/화면 문서 기록. Python 218통과, actionlint/spotlessCheck 통과, 웹/코어 게이트 통과, 전체 E2E 220통과/10스킵. 루트가 Orca API :8080/WEB :3000 및 전용 Docker project gole-promotion-memory의 Mongo :27018/Redis :16379/MinIO :19000 LISTEN을 확인했으며 이어 사용하도록 유지한다. 실제 모델·운영 발행·실 HEIC·CoolSMS 발송·배포 스모크는 미검증.
 - [x] PR #231 충돌 해결: dev e55fe539의 PromotionMediaPort 구조와 반려 저장 의존성을 함께 유지하고 새 메모리 컨트롤러/테스트를 promotion 컨텍스트 및 common AdminActor로 정렬함. 홍보 단위 93건·아키텍처 9건·홍보 통합 16건 모두 0실패/0스킵, Python 홍보 112건·spotlessCheck·웹 typecheck 통과. 전체 E2E·운영 모델·발행은 재검증하지 않음. 관리자 승인 버전 경합과 6,000자 프롬프트 제한은 이번 충돌 해결 범위에서 변경하지 않음.
+
+- [x] PR #231 승인 동시성 보완: 버전 기반 수정/확정과 Mongo 원자적 조건부 저장, 409 최신 화면 갱신을 한 단위로 연결한다. 검증: 홍보 단위 95건·아키텍처 9건·실제 Mongo 통합 19건·관리자/메모리 E2E 46건 모두 0실패/0스킵, HTTP 입력 경계 3건 통과. spotlessCheck·웹 lint/typecheck/FSD/build·코어 typecheck/check:platform·변경 파일 Prettier 통과. 전체 웹 format:check는 기존 Windows CRLF 파일 380개에서 실패했으며 최신 전체 결과는 PR CI로 확인한다.

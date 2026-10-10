@@ -240,12 +240,13 @@ class PromotionMemoryIntegrationTest {
                         .guidelines())
                 .isEmpty();
         var id = first.getFirst().id();
-        service.edit(
+        var edited = service.edit(
                 id,
                 "화면을 읽을 수 있는 크기를 유지한다",
                 List.of(PromotionMemoryTarget.IMAGE_EDIT),
-                List.of(PromotionCategory.SERVICE));
-        service.activate(id, "human");
+                List.of(PromotionCategory.SERVICE),
+                first.getFirst().version());
+        service.activate(id, "human", edited.version());
         assertThat(service.context(PromotionCategory.SERVICE, List.of()).guidelines())
                 .hasSize(1);
         assertThat(service.context(PromotionCategory.FEATURE, List.of()).guidelines())
@@ -343,7 +344,8 @@ class PromotionMemoryIntegrationTest {
                     NOW.plusSeconds(index),
                     null,
                     null,
-                    "run-" + index);
+                    "run-" + index,
+                    0);
             guidelines.insert(guideline.activate("human", NOW.plusSeconds(index)));
         }
         var context = memory(feedback).context(PromotionCategory.SERVICE, List.of("/market"));
@@ -351,6 +353,111 @@ class PromotionMemoryIntegrationTest {
         assertThat(context.guidelines()).hasSize(8);
         assertThat(context.guidelines().getFirst().id()).isEqualTo("g9");
         assertThat(context.unreflectedFeedback()).hasSize(3);
+    }
+
+    private PromotionGuideline proposedGuideline() {
+        var guideline = new PromotionGuideline(
+                "g1",
+                PromotionGuidelineKind.PROCEDURE,
+                "원래 내용",
+                List.of(PromotionMemoryTarget.IMAGE_EDIT),
+                List.of(PromotionCategory.SERVICE),
+                List.of("f1"),
+                PromotionGuidelineStatus.PROPOSED,
+                "agent",
+                NOW,
+                NOW,
+                null,
+                null,
+                "run-1",
+                0);
+        guidelines.insert(guideline);
+        return guideline;
+    }
+
+    @Test
+    @DisplayName("A 수정 후 B 수정이 끼면 A가 보지 못한 내용을 확정하거나 덮어쓸 수 없다")
+    void guideline_staleReviewCannotApproveUnseenContent() {
+        var original = proposedGuideline();
+        var service = memory(feedback);
+        var a = service.edit("g1", "A 검토 내용", original.targets(), original.categories(), 0);
+        var b = service.edit("g1", "B 변경 내용", a.targets(), a.categories(), a.version());
+        assertThatThrownBy(() -> service.activate("g1", "human-a", a.version())).isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> service.edit("g1", "A 덮어쓰기", a.targets(), a.categories(), a.version()))
+                .isInstanceOf(ConflictException.class);
+        assertThat(guidelines.findById("g1").orElseThrow()).isEqualTo(b);
+        assertThat(b.version()).isEqualTo(2);
+        assertThat(b.updatedAt()).isEqualTo(a.updatedAt());
+        assertThat(b.confirmedBy()).isNull();
+        assertThat(service.activate("g1", "human-a", b.version()).content()).isEqualTo(b.content());
+    }
+
+    @Test
+    @DisplayName("같은 버전을 함께 읽은 수정과 확정은 한 요청만 성공하고 패자는 버전 충돌이다")
+    void guideline_concurrentEditAndActivationHaveOneWinner() throws Exception {
+        var original = proposedGuideline();
+        var barrier = new CyclicBarrier(2);
+        var racing = spy(guidelines);
+        doAnswer(invocation -> {
+                    Object result = invocation.callRealMethod();
+                    barrier.await(15, TimeUnit.SECONDS);
+                    return result;
+                })
+                .when(racing)
+                .findById("g1");
+        var service = transactional(new PromotionMemoryService(
+                feedback, racing, () -> UUID.randomUUID().toString(), CLOCK));
+        Callable<Boolean> edit = () -> {
+            try {
+                service.edit("g1", "경합 수정", original.targets(), original.categories(), 0);
+                return true;
+            } catch (ConflictException expected) {
+                assertThat(expected.getCode()).isEqualTo("PROMOTION_GUIDELINE_VERSION_CONFLICT");
+                return false;
+            }
+        };
+        Callable<Boolean> activate = () -> {
+            try {
+                service.activate("g1", "human", 0);
+                return true;
+            } catch (ConflictException expected) {
+                assertThat(expected.getCode()).isEqualTo("PROMOTION_GUIDELINE_VERSION_CONFLICT");
+                return false;
+            }
+        };
+        assertOneWinner(edit, activate);
+        var saved = guidelines.findById("g1").orElseThrow();
+        assertThat(saved.version()).isEqualTo(1);
+        if (saved.status() == PromotionGuidelineStatus.ACTIVE) {
+            assertThat(saved.content()).isEqualTo(original.content());
+            assertThat(saved.confirmedBy()).isEqualTo("human");
+        } else {
+            assertThat(saved.content()).isEqualTo("경합 수정");
+            assertThat(saved.confirmedBy()).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("버전 없는 과거 문서는 0으로 읽고 첫 수정부터 Int64 버전을 원자적으로 저장한다")
+    void guideline_legacyDocumentInitializesVersionOnEdit() {
+        var original = proposedGuideline();
+        var query = org.springframework.data.mongodb.core.query.Query.query(
+                org.springframework.data.mongodb.core.query.Criteria.where("_id")
+                        .is("g1"));
+        mongo.updateFirst(
+                query,
+                new org.springframework.data.mongodb.core.query.Update().unset("version"),
+                PromotionGuidelineDocument.class);
+        assertThat(guidelines.findById("g1").orElseThrow().version()).isZero();
+        var edited = memory(feedback).edit("g1", "기존 문서 수정", original.targets(), original.categories(), 0);
+        assertThat(edited.version()).isEqualTo(1);
+        assertThat(mongo.getCollection("promotion_guidelines")
+                        .find(new org.bson.Document("_id", "g1"))
+                        .first()
+                        .get("version"))
+                .isEqualTo(1L);
+        assertThat(edited.proposedBy()).isEqualTo(original.proposedBy());
+        assertThat(edited.sourceFeedbackIds()).isEqualTo(original.sourceFeedbackIds());
     }
 
     private boolean reflectAttempt(PromotionMemoryService service, String id) {

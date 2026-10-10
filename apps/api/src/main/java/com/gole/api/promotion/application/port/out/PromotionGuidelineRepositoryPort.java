@@ -9,7 +9,7 @@ import java.util.Optional;
 public interface PromotionGuidelineRepositoryPort {
     void insert(PromotionGuideline guideline);
 
-    PromotionGuideline save(PromotionGuideline guideline);
+    PromotionGuideline saveIfVersion(PromotionGuideline guideline, long expectedVersion);
 
     Optional<PromotionGuideline> findById(String id);
 

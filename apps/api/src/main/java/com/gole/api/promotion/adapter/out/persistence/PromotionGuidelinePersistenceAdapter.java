@@ -1,13 +1,16 @@
 package com.gole.api.promotion.adapter.out.persistence;
 
+import com.gole.api.common.exception.ConflictException;
 import com.gole.api.promotion.application.port.out.PromotionGuidelineRepositoryPort;
 import com.gole.api.promotion.domain.model.*;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -24,8 +27,32 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
     }
 
     @Override
-    public PromotionGuideline save(PromotionGuideline guideline) {
-        return toDomain(mongo.save(toDocument(guideline)));
+    public PromotionGuideline saveIfVersion(PromotionGuideline guideline, long expectedVersion) {
+        Criteria version = expectedVersion == 0
+                ? new Criteria()
+                        .orOperator(
+                                Criteria.where("version").is(0L),
+                                Criteria.where("version").is(null))
+                : Criteria.where("version").is(expectedVersion);
+        Query query =
+                Query.query(new Criteria().andOperator(Criteria.where("_id").is(guideline.id()), version));
+        Update update = new Update()
+                .set("content", guideline.content())
+                .set("targets", guideline.targets().stream().map(Enum::name).toList())
+                .set(
+                        "categories",
+                        guideline.categories().stream().map(Enum::name).toList())
+                .set("status", guideline.status().name())
+                .set("updatedAt", guideline.updatedAt())
+                .set("confirmedBy", guideline.confirmedBy())
+                .set("confirmedAt", guideline.confirmedAt())
+                .set("version", guideline.version());
+        PromotionGuidelineDocument saved = mongo.findAndModify(
+                query, update, FindAndModifyOptions.options().returnNew(true), PromotionGuidelineDocument.class);
+        if (saved == null) {
+            throw new ConflictException("PROMOTION_GUIDELINE_VERSION_CONFLICT", "다른 관리자가 변경했습니다. 최신 내용을 확인해주세요.");
+        }
+        return toDomain(saved);
     }
 
     @Override
@@ -80,7 +107,8 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
                 guideline.updatedAt(),
                 guideline.confirmedBy(),
                 guideline.confirmedAt(),
-                guideline.reflectionRunKey());
+                guideline.reflectionRunKey(),
+                guideline.version());
     }
 
     private PromotionGuideline toDomain(PromotionGuidelineDocument document) {
@@ -97,6 +125,7 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
                 document.updatedAt(),
                 document.confirmedBy(),
                 document.confirmedAt(),
-                document.reflectionRunKey());
+                document.reflectionRunKey(),
+                document.version() == null ? 0 : document.version());
     }
 }

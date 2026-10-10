@@ -71,8 +71,18 @@ class AdminPromotionMemoryControllerTest {
                     List.of("f1"));
             assertThat(validator.validate(new ReflectRequest(List.of("f1"), "run-1", List.of(proposal))))
                     .isNotEmpty();
-            assertThat(validator.validate(new EditRequest("수정", List.of(), List.of(PromotionCategory.FEATURE))))
+            assertThat(validator.validate(new EditRequest("수정", List.of(), List.of(PromotionCategory.FEATURE), 0L)))
                     .isNotEmpty();
+            for (Long version : java.util.Arrays.asList(null, -1L)) {
+                assertThat(validator.validate(new EditRequest(
+                                "수정",
+                                List.of(PromotionMemoryTarget.IMAGE_EDIT),
+                                List.of(PromotionCategory.FEATURE),
+                                version)))
+                        .isNotEmpty();
+                assertThat(validator.validate(new ActivateRequest(version))).isNotEmpty();
+            }
+            assertThat(validator.validate(new ActivateRequest(0L))).isEmpty();
         }
     }
 }

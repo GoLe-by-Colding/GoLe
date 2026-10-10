@@ -102,7 +102,8 @@ public class PromotionMemoryService implements ManagePromotionMemoryUseCase {
                             now,
                             null,
                             null,
-                            command.runKey());
+                            command.runKey(),
+                            0);
                 })
                 .toList();
         created.forEach(guidelines::insert);
@@ -120,28 +121,53 @@ public class PromotionMemoryService implements ManagePromotionMemoryUseCase {
     }
 
     @Override
-    @Transactional
     public PromotionGuideline edit(
-            String id, String content, List<PromotionMemoryTarget> targets, List<PromotionCategory> categories) {
-        return guidelines.save(getGuideline(id).edit(content, targets, categories, Instant.now(clock)));
+            String id,
+            String content,
+            List<PromotionMemoryTarget> targets,
+            List<PromotionCategory> categories,
+            long expectedVersion) {
+        PromotionGuideline current = getGuideline(id);
+        requireVersion(current, expectedVersion);
+        return guidelines.saveIfVersion(
+                current.edit(content, targets, categories, Instant.now(clock)), current.version());
     }
 
     @Override
-    @Transactional
-    public PromotionGuideline activate(String id, String actorId) {
-        return guidelines.save(getGuideline(id).activate(actorId, Instant.now(clock)));
+    public PromotionGuideline activate(String id, String actorId, long expectedVersion) {
+        PromotionGuideline current = getGuideline(id);
+        // 확정 응답만 유실된 같은 확정자의 재시도는 검토한 내용 그대로 반환한다.
+        if (expectedVersion >= 0
+                && current.status() == PromotionGuidelineStatus.ACTIVE
+                && actorId.equals(current.confirmedBy())
+                && expectedVersion == current.version() - 1) {
+            return current.activate(actorId, Instant.now(clock));
+        }
+        requireVersion(current, expectedVersion);
+        return saveChange(current, current.activate(actorId, Instant.now(clock)));
     }
 
     @Override
-    @Transactional
     public PromotionGuideline dismiss(String id) {
-        return guidelines.save(getGuideline(id).dismiss(Instant.now(clock)));
+        PromotionGuideline current = getGuideline(id);
+        return saveChange(current, current.dismiss(Instant.now(clock)));
     }
 
     @Override
-    @Transactional
     public PromotionGuideline retire(String id) {
-        return guidelines.save(getGuideline(id).retire(Instant.now(clock)));
+        PromotionGuideline current = getGuideline(id);
+        return saveChange(current, current.retire(Instant.now(clock)));
+    }
+
+    private PromotionGuideline saveChange(PromotionGuideline current, PromotionGuideline next) {
+        return current == next ? current : guidelines.saveIfVersion(next, current.version());
+    }
+
+    private static void requireVersion(PromotionGuideline current, long expectedVersion) {
+        if (expectedVersion < 0) throw new IllegalArgumentException("expectedVersion must be nonnegative");
+        if (current.version() != expectedVersion) {
+            throw new ConflictException("PROMOTION_GUIDELINE_VERSION_CONFLICT", "다른 관리자가 변경했습니다. 최신 내용을 확인해주세요.");
+        }
     }
 
     @Override

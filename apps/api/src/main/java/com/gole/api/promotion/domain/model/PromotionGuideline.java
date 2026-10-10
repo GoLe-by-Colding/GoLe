@@ -20,7 +20,8 @@ public record PromotionGuideline(
         Instant updatedAt,
         String confirmedBy,
         Instant confirmedAt,
-        String reflectionRunKey) {
+        String reflectionRunKey,
+        long version) {
 
     public static final int MAX_CONTENT = 1000;
 
@@ -53,6 +54,7 @@ public record PromotionGuideline(
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
         Objects.requireNonNull(reflectionRunKey, "reflectionRunKey");
+        if (version < 0) throw new IllegalArgumentException("version must be nonnegative");
     }
 
     public PromotionGuideline edit(
@@ -71,7 +73,8 @@ public record PromotionGuideline(
                 now,
                 confirmedBy,
                 confirmedAt,
-                reflectionRunKey);
+                reflectionRunKey,
+                Math.incrementExact(version));
     }
 
     public PromotionGuideline activate(String actorId, Instant now) {
@@ -93,7 +96,8 @@ public record PromotionGuideline(
                 now,
                 actorId,
                 now,
-                reflectionRunKey);
+                reflectionRunKey,
+                Math.incrementExact(version));
     }
 
     public PromotionGuideline dismiss(Instant now) {
@@ -120,7 +124,8 @@ public record PromotionGuideline(
                 now,
                 confirmedBy,
                 confirmedAt,
-                reflectionRunKey);
+                reflectionRunKey,
+                Math.incrementExact(version));
     }
 
     private void requireStatus(PromotionGuidelineStatus expected) {

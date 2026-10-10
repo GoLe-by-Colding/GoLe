@@ -244,7 +244,11 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
           .every((entry) => !entry.prompt.includes(proposed.content)),
       ).toBe(true);
       expect(
-        (await botApi.post(`/api/admin/promotion-guidelines/${guidelineId}/activate`)).status(),
+        (
+          await botApi.post(`/api/admin/promotion-guidelines/${guidelineId}/activate`, {
+            data: { expectedVersion: proposed.version },
+          })
+        ).status(),
       ).toBe(403);
       await approveFixture(reflected.postId);
 
@@ -254,6 +258,66 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
         exact: true,
       });
       const editor = proposalCard.getByRole("textbox", { name: "지침 내용", exact: true });
+      await expect(editor).toHaveValue(proposed.content);
+      const competingContent = `다른 관리자의 최신 검토 문구. ${runPrefix}`;
+      const competingInput = {
+        content: competingContent,
+        targets: proposed.targets,
+        categories: proposed.categories,
+      };
+      const concurrentEdit = await botApi.patch(`/api/admin/promotion-guidelines/${guidelineId}`, {
+        data: { ...competingInput, expectedVersion: proposed.version },
+      });
+      expect(concurrentEdit.ok()).toBe(true);
+      const changed = (await concurrentEdit.json()) as AdminPromotionGuideline;
+      expect(changed.version).toBe(proposed.version + 1);
+      await editor.fill("오래된 내용으로 확정하려는 검토");
+      const staleSave = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/promotion-guidelines/${guidelineId}`) &&
+          response.request().method() === "PATCH",
+      );
+      await proposalCard.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+      expect((await staleSave).status()).toBe(409);
+      await expect(editor).toHaveValue(competingContent);
+      await expect(
+        page.getByText("다른 관리자가 지침을 변경했습니다. 최신 내용을 다시 검토해 주세요."),
+      ).toBeVisible();
+
+      const saved = await page.request.patch(
+        `${API_BASE}/api/admin/promotion-guidelines/${guidelineId}`,
+        { data: { ...competingInput, content: approvedContent, expectedVersion: changed.version } },
+      );
+      expect(saved.ok()).toBe(true);
+      const reviewed = (await saved.json()) as AdminPromotionGuideline;
+      const betweenSaveAndApproval = await botApi.patch(
+        `/api/admin/promotion-guidelines/${guidelineId}`,
+        { data: { ...competingInput, expectedVersion: reviewed.version } },
+      );
+      expect(betweenSaveAndApproval.ok()).toBe(true);
+      const latest = (await betweenSaveAndApproval.json()) as AdminPromotionGuideline;
+      const staleActivation = await page.request.post(
+        `${API_BASE}/api/admin/promotion-guidelines/${guidelineId}/activate`,
+        { data: { expectedVersion: reviewed.version } },
+      );
+      expect(staleActivation.status()).toBe(409);
+      expect(await staleActivation.json()).toMatchObject({
+        code: "PROMOTION_GUIDELINE_VERSION_CONFLICT",
+      });
+      const afterConflict = (
+        await list<AdminPromotionGuideline>(
+          page.request,
+          "/api/admin/promotion-guidelines?limit=100",
+        )
+      ).find((entry) => entry.id === guidelineId);
+      expect(afterConflict).toMatchObject({
+        status: "PROPOSED",
+        content: competingContent,
+        version: latest.version,
+        confirmedBy: null,
+      });
+      await page.reload();
+      await expect(editor).toHaveValue(competingContent);
       await editor.fill(approvedContent);
       await proposalCard.getByRole("button", { name: "수정 후 확정", exact: true }).click();
       await expect(page.getByText("지침을 확정했습니다. 다음 실행부터 적용됩니다.")).toBeVisible();

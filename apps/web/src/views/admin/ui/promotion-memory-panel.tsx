@@ -91,14 +91,19 @@ export function PromotionMemoryPanel({
           missing.map((id) => fetchAdminPromotionFeedbackById(token, id)),
         );
         if (!active) return;
-        setData({
-          guidelines,
-          feedback: [
-            ...feedback,
-            ...results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
-          ],
-          runs,
-        });
+        setData((current) =>
+          current === null
+            ? current
+            : {
+                ...current,
+                feedback: [
+                  ...feedback,
+                  ...results.flatMap((result) =>
+                    result.status === "fulfilled" ? [result.value] : [],
+                  ),
+                ],
+              },
+        );
         setSourceErrors(missing.filter((_, index) => results[index]?.status === "rejected"));
       })
       .catch((cause: unknown) => {
@@ -124,13 +129,17 @@ export function PromotionMemoryPanel({
     setError(undefined);
     setNotice("");
     try {
-      if (input !== undefined) await updateAdminPromotionGuideline(token, guideline.id, input);
-      const operation = {
-        activate: activateAdminPromotionGuideline,
-        dismiss: dismissAdminPromotionGuideline,
-        retire: retireAdminPromotionGuideline,
-      }[action];
-      await operation(token, guideline.id);
+      const saved =
+        input === undefined
+          ? guideline
+          : await updateAdminPromotionGuideline(token, guideline.id, input);
+      if (action === "activate") {
+        await activateAdminPromotionGuideline(token, guideline.id, saved.version);
+      } else {
+        await { dismiss: dismissAdminPromotionGuideline, retire: retireAdminPromotionGuideline }[
+          action
+        ](token, guideline.id);
+      }
       setNotice(
         {
           activate: "지침을 확정했습니다. 다음 실행부터 적용됩니다.",
@@ -140,7 +149,22 @@ export function PromotionMemoryPanel({
       );
       setRevision((value) => value + 1);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "홍보 지침을 처리하지 못했습니다.");
+      if (cause instanceof ApiError && cause.code === "PROMOTION_GUIDELINE_VERSION_CONFLICT") {
+        try {
+          const guidelines = await fetchAdminPromotionGuidelines(
+            token,
+            status === "ALL" ? undefined : status,
+          );
+          setData((current) => (current === null ? current : { ...current, guidelines }));
+          setNotice("다른 관리자가 지침을 변경했습니다. 최신 내용을 다시 검토해 주세요.");
+        } catch {
+          setError(
+            "지침이 변경됐지만 최신 내용을 불러오지 못했습니다. 메모리 새로고침을 눌러 주세요.",
+          );
+        }
+      } else {
+        setError(cause instanceof ApiError ? cause.message : "홍보 지침을 처리하지 못했습니다.");
+      }
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -205,7 +229,7 @@ export function PromotionMemoryPanel({
           ) : null}
           {data.guidelines.map((guideline) => (
             <Card
-              key={`${guideline.id}:${guideline.updatedAt}`}
+              key={`${guideline.id}:${guideline.version}`}
               padded
               role="group"
               aria-label={`홍보 지침 ${guideline.id}`}
@@ -405,6 +429,7 @@ function GuidelineReview({
               }
               onClick={() =>
                 void onAction(guideline, "activate", {
+                  expectedVersion: guideline.version,
                   content: content.trim(),
                   targets,
                   categories,

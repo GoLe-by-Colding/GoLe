@@ -16,9 +16,13 @@ public interface ManagePromotionMemoryUseCase {
     List<PromotionGuideline> listGuidelines(PromotionGuidelineStatus status, int limit);
 
     PromotionGuideline edit(
-            String id, String content, List<PromotionMemoryTarget> targets, List<PromotionCategory> categories);
+            String id,
+            String content,
+            List<PromotionMemoryTarget> targets,
+            List<PromotionCategory> categories,
+            long expectedVersion);
 
-    PromotionGuideline activate(String id, String actorId);
+    PromotionGuideline activate(String id, String actorId, long expectedVersion);
 
     PromotionGuideline dismiss(String id);
 

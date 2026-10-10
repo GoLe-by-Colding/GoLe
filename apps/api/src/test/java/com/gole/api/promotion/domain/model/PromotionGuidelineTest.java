@@ -24,7 +24,8 @@ class PromotionGuidelineTest {
                 Instant.EPOCH,
                 null,
                 null,
-                "run-1");
+                "run-1",
+                0);
     }
 
     @Test
@@ -43,6 +44,8 @@ class PromotionGuidelineTest {
         assertThat(active.status()).isEqualTo(PromotionGuidelineStatus.ACTIVE);
         assertThat(active.confirmedBy()).isEqualTo("human");
         assertThat(active.activate("human", Instant.EPOCH.plusSeconds(3))).isEqualTo(active);
+        assertThat(edited.version()).isEqualTo(1);
+        assertThat(active.version()).isEqualTo(2);
     }
 
     @Test

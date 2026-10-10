@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -76,15 +77,17 @@ public class AdminPromotionMemoryController {
     @PatchMapping("/promotion-guidelines/{id}")
     public PromotionGuideline edit(
             @PathVariable String id, @Valid @RequestBody EditRequest request, HttpServletRequest http) {
-        PromotionGuideline result =
-                validated(() -> memory.edit(id, request.content(), request.targets(), request.categories()));
+        PromotionGuideline result = validated(() ->
+                memory.edit(id, request.content(), request.targets(), request.categories(), request.expectedVersion()));
         record(http, AdminActionType.PROMOTION_GUIDELINE_EDIT, id);
         return result;
     }
 
     @PostMapping("/promotion-guidelines/{id}/activate")
-    public PromotionGuideline activate(@PathVariable String id, HttpServletRequest http) {
-        PromotionGuideline result = memory.activate(id, AdminActor.of(http).id());
+    public PromotionGuideline activate(
+            @PathVariable String id, @Valid @RequestBody ActivateRequest request, HttpServletRequest http) {
+        PromotionGuideline result =
+                validated(() -> memory.activate(id, AdminActor.of(http).id(), request.expectedVersion()));
         record(http, AdminActionType.PROMOTION_GUIDELINE_ACTIVATE, id);
         return result;
     }
@@ -144,5 +147,8 @@ public class AdminPromotionMemoryController {
             String content,
 
             @NotNull @Size(min = 1, max = 3) List<@NotNull PromotionMemoryTarget> targets,
-            @NotNull @Size(min = 1, max = 2) List<@NotNull PromotionCategory> categories) {}
+            @NotNull @Size(min = 1, max = 2) List<@NotNull PromotionCategory> categories,
+            @NotNull @Min(0) Long expectedVersion) {}
+
+    public record ActivateRequest(@NotNull @Min(0) Long expectedVersion) {}
 }

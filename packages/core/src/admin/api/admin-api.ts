@@ -1065,18 +1065,23 @@ export interface AdminPromotionFeedback {
   readonly reflectedRunKey: string | null;
 }
 
-export interface UpdatePromotionGuidelineInput {
+export interface PromotionGuidelineSnapshot {
+  readonly id: string;
+  readonly kind: PromotionGuidelineKind;
   readonly content: string;
   readonly targets: readonly PromotionMemoryTarget[];
   readonly categories: readonly PromotionCategory[];
 }
 
-export interface PromotionGuidelineSnapshot extends UpdatePromotionGuidelineInput {
-  readonly id: string;
-  readonly kind: PromotionGuidelineKind;
+export interface UpdatePromotionGuidelineInput extends Pick<
+  PromotionGuidelineSnapshot,
+  "content" | "targets" | "categories"
+> {
+  readonly expectedVersion: number;
 }
 
 export interface AdminPromotionGuideline extends PromotionGuidelineSnapshot {
+  readonly version: number;
   readonly sourceFeedbackIds: readonly string[];
   readonly status: PromotionGuidelineStatus;
   readonly proposedBy: string;
@@ -1150,8 +1155,14 @@ export function updateAdminPromotionGuideline(
   });
 }
 
-export function activateAdminPromotionGuideline(token: string, id: string) {
-  return post<AdminPromotionGuideline>(token, `/api/admin/promotion-guidelines/${id}/activate`);
+export function activateAdminPromotionGuideline(
+  token: string,
+  id: string,
+  expectedVersion: number,
+) {
+  return post<AdminPromotionGuideline>(token, `/api/admin/promotion-guidelines/${id}/activate`, {
+    expectedVersion,
+  });
 }
 
 export function dismissAdminPromotionGuideline(token: string, id: string) {

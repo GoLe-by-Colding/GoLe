@@ -47,6 +47,52 @@ class PromotionMemoryServiceTest {
                 sources);
     }
 
+    private PromotionGuideline proposed() {
+        return new PromotionGuideline(
+                "g1",
+                PromotionGuidelineKind.PROCEDURE,
+                "가독성",
+                List.of(PromotionMemoryTarget.IMAGE_EDIT),
+                List.of(PromotionCategory.SERVICE),
+                List.of("f1"),
+                PromotionGuidelineStatus.PROPOSED,
+                "agent",
+                Instant.EPOCH,
+                Instant.EPOCH,
+                null,
+                null,
+                "run-1",
+                0);
+    }
+
+    @Test
+    @DisplayName("수정·확정은 오래된 검토 버전과 음수 버전을 저장 전에 거부한다")
+    void mutations_rejectStaleReview() {
+        var current =
+                proposed().edit("다른 관리자 내용", proposed().targets(), proposed().categories(), Instant.EPOCH);
+        when(guidelines.findById("g1")).thenReturn(Optional.of(current));
+        assertThatThrownBy(() -> memory.edit("g1", "덮어쓰기", current.targets(), current.categories(), 0))
+                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> memory.activate("g1", "human", 0)).isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> memory.activate("g1", "human", -1)).isInstanceOf(IllegalArgumentException.class);
+        verify(guidelines, never()).saveIfVersion(any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("확정 응답 유실의 동일 확정자 재시도만 이전 버전을 허용하고 다시 저장하지 않는다")
+    void activate_retriesOnlySameReviewedConfirmation() {
+        var active = proposed().activate("human-a", Instant.EPOCH);
+        when(guidelines.findById("g1")).thenReturn(Optional.of(active));
+        assertThat(memory.activate("g1", "human-a", 0)).isEqualTo(active);
+        assertThat(memory.activate("g1", "human-a", active.version())).isEqualTo(active);
+        assertThatThrownBy(() -> memory.activate("g1", "human-b", 0)).isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> memory.activate("g1", "agent", active.version()))
+                .isInstanceOf(com.gole.api.common.exception.ForbiddenException.class);
+        when(guidelines.findById("g1")).thenReturn(Optional.of(active.retire(Instant.EPOCH)));
+        assertThatThrownBy(() -> memory.activate("g1", "human-a", 0)).isInstanceOf(ConflictException.class);
+        verify(guidelines, never()).saveIfVersion(any(), anyLong());
+    }
+
     @Test
     @DisplayName("지침 근거는 최근 목록 범위와 무관하게 ID로 조회한다")
     void getFeedback_returnsHistoricalSource() {
