@@ -253,7 +253,9 @@ function InlineChatPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // 한글 등 입력기로 글자를 조합하는 중의 Enter 는 조합을 확정하는 키다. 여기서 보내면 메시지가
+            // 두 번 가거나 마지막 글자가 입력칸에 남는다.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               e.currentTarget.form?.requestSubmit();
             }
