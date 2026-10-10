@@ -157,6 +157,22 @@ class ManualPayoutPolicyTest {
         assertThat(SettlementLedger.payoutNote("가".repeat(501))).hasSize(500);
     }
 
+    @Test
+    @DisplayName("저장된 상태를 모르면(null) 어떤 전이도 허용하지 않고 상태 충돌로 거부한다")
+    void unknownStatus_allowsNoTransition() {
+        SettlementLedger unknown =
+                new SettlementLedger("order-1", null, "admin-1", NOW, "bank-42", NOW.minus(HOLDBACK));
+
+        assertThat(ManualPayoutPolicy.alreadyClaimedBy(unknown, "admin-1")).isFalse();
+        assertThat(ManualPayoutPolicy.claimRejected(unknown).getCode()).isEqualTo("SETTLEMENT_STATE_CONFLICT");
+        assertThat(codeOf(() -> ManualPayoutPolicy.reconcileBlockNote(unknown, "admin-1", "사유", NOW, CLAIM_TIMEOUT)))
+                .isEqualTo("SETTLEMENT_STATE_CONFLICT");
+        assertThat(codeOf(() -> ManualPayoutPolicy.recovery(unknown, true, "bank-42")))
+                .isEqualTo("SETTLEMENT_STATE_CONFLICT");
+        assertThat(codeOf(() -> ManualPayoutPolicy.requireSamePaidEvidence(unknown, "bank-42")))
+                .isEqualTo("SETTLEMENT_CLAIM_REQUIRED");
+    }
+
     private static String codeOf(Runnable action) {
         try {
             action.run();

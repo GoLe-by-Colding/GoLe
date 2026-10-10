@@ -6,6 +6,7 @@ import java.util.Objects;
 /**
  * 수동 지급 규칙이 판단에 쓰는 정산 원장 상태. 금액·수수료처럼 전이와 무관한 값은 담지 않는다.
  *
+ * @param status 지급 상태. 저장된 값을 알 수 없으면 {@code null} — 어떤 전이도 허용하지 않아 상태 충돌로 거부된다
  * @param payoutOperatorId 지금 지급 작업을 선점한 운영자. 자동 지급이거나 선점 전이면 {@code null}
  * @param createdAt 원장 적재 시각. 지급 유예 기간의 기준이며, 없으면 지급을 잠근다
  */
@@ -19,7 +20,6 @@ public record SettlementLedger(
 
     public SettlementLedger {
         Objects.requireNonNull(orderId, "orderId");
-        Objects.requireNonNull(status, "status");
     }
 
     private static final int MAX_PAYOUT_NOTE_LENGTH = 500;

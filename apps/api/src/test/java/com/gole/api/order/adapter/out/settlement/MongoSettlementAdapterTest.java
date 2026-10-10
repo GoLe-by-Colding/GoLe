@@ -58,6 +58,23 @@ class MongoSettlementAdapterTest {
     }
 
     @Test
+    void unknownStoredStatusIsRejectedAsStateConflictInsteadOfServerError() {
+        Instant createdAt = NOW.minus(Duration.ofDays(4));
+        when(mongo.findById(anyString(), eq(SettlementDocument.class)))
+                .thenReturn(new SettlementDocument(
+                        "order-1", "seller-1", 100_000, 5_000, 95_000, 0.05, "LEGACY_UNKNOWN", null, createdAt, null));
+
+        assertThatThrownBy(() -> adapter.claimManualPayout("order-1", OPERATOR))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.reconcileManualPayout("order-1", OPERATOR, "확인"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.recoverBlockedPayout("order-1", OPERATOR, false, null, "확인"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.markPaid("order-1", OPERATOR, "bank-42"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_CLAIM_REQUIRED");
+    }
+
+    @Test
     void settleOnce_usesAtomicUpsertForOneLedgerPerOrder() {
         adapter.settleOnce("order-1", "seller-1", 100_000);
 

@@ -494,11 +494,26 @@ public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerP
     private static SettlementLedger toLedger(SettlementDocument document) {
         return new SettlementLedger(
                 document.getOrderId(),
-                SettlementStatus.valueOf(document.getStatus()),
+                knownStatus(document.getStatus()),
                 document.getPayoutOperatorId(),
                 document.getPayoutAttemptedAt(),
                 document.getPaymentReference(),
                 document.getCreatedAt());
+    }
+
+    /**
+     * 저장된 상태값을 읽는다. 모르는 값이면 {@code null}을 돌려 정책이 어떤 전이도 허용하지 않게 한다 — 상태 문자열을 직접
+     * 비교하던 때처럼 409 상태 충돌로 거부되고, 500 으로 새지 않는다.
+     */
+    private static SettlementStatus knownStatus(String stored) {
+        if (stored == null) {
+            return null;
+        }
+        try {
+            return SettlementStatus.valueOf(stored);
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 
     private static List<String> names(Set<SettlementStatus> statuses) {
