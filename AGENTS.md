@@ -268,6 +268,7 @@ adapter/out/persistence → adapter/in/web.
 - 어댑터·config·bootstrap 은 다른 컨텍스트의 `application.port.in` 과 그 포트가 내주는 `domain`
   타입에만 의존한다. 상대 service·port.out·adapter·config 는 쓰지 않는다.
 - 인바운드 어댑터(컨트롤러)는 유스케이스만 부른다 — 서비스 구현·port.out·adapter.out 을 직접 쓰지 않는다.
+  트랜잭션도 걸지 않는다(`@Transactional` 금지) — 경계는 유스케이스가 정한다.
 - 유스케이스는 `application.service` 의 서비스가 구현한다. 어댑터가 인바운드 포트를 겸하지 않는다.
 - common 은 어느 컨텍스트에도 의존하지 않는다.
 
@@ -275,6 +276,10 @@ adapter/out/persistence → adapter/in/web.
 `AdminSupportController`, promotion 의 `AdminPromotionPostController`). admin 컨텍스트에는 여러
 컨텍스트를 가로지르는 화면(대시보드·예외 큐·신고 모더레이션)과 관리자 감사 로그만 둔다. 가드는 경로
 기준이라 위치와 상관없이 `AdminAuthInterceptor`가 건다.
+
+**관리자 감사 기록은 조치가 성공한 뒤 남긴다.** 조치와 감사가 한 트랜잭션이어야 하면 그 컨텍스트의 서비스가
+자기 감사 포트로 같은 트랜잭션에서 남긴다(chat 문의 콘솔의 `SupportAdminActionPort`). 그렇지 않으면 컨트롤러가
+조치 유스케이스를 부른 뒤 admin 의 `RecordAdminActionUseCase` 로 남겨도 된다(2026-10-10 결정, 볼트 08 B-P3).
 
 `common/`은 컨텍스트가 아니라 횡단 관심사다: `aop/`(유스케이스 로깅·운영 신호),
 `exception/`(DomainException 계열) + `web/GlobalExceptionHandler`(→ `{code, message}` 응답),
