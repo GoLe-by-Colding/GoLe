@@ -120,6 +120,26 @@ jobs:
             echo "받을 캡처가 없다 — 스택을 띄워 찍는다"
           fi
 
+      # 인증·패키지 접근 실패는 설치와 빌드 비용을 쓰기 전에 확인한다.
+      - name: Check capture image access
+        if: env.REUSE != 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          if ! printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+            echo "::error::PROMOTION_REGISTRY_LOGIN_FAILED: GHCR 로그인 실패"
+            echo "이미지 사전 확인 실패: PROMOTION_REGISTRY_LOGIN_FAILED" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          for image in "$GOLE_MINIO_IMAGE" "$GOLE_MC_IMAGE"; do
+            if ! docker pull "$image"; then
+              echo "::error::PROMOTION_IMAGE_PULL_FAILED: $image — 패키지의 GoLe Actions 읽기 권한과 digest를 확인한다"
+              echo "이미지 사전 확인 실패: PROMOTION_IMAGE_PULL_FAILED — 실패한 이미지와 원인은 해당 단계 로그에서 확인한다." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
+
       # 에이전트 코드는 dispatch 한 ref(최신)를 쓰고, 찍는 화면은 대상 릴리스로 고정한다.
       # 둘을 같은 체크아웃으로 쓰면 A 릴리스 diff 와 B 릴리스 화면이 섞인다.
       - name: Prepare capture source at target SHA
@@ -175,13 +195,6 @@ jobs:
         run: uv run --no-sync playwright install --with-deps chromium
 
       # 아래 세 단계는 ci.yml 의 e2e 잡과 같다. 바꾸면 양쪽을 같이 본다.
-      - name: Log in to GHCR
-        if: env.REUSE != 'true'
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-
       - name: Start infra (Mongo rs0 · Redis · MinIO)
         if: env.REUSE != 'true'
         working-directory: ${{ env.TARGET }}
