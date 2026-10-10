@@ -14,7 +14,10 @@ import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ConflictException;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -103,6 +106,24 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 .findByPhoneNumberAndPhoneVerifiedAtNotNull(phoneNumber.value())
                 .filter(other -> !other.getId().equals(excludingAccountId))
                 .isPresent();
+    }
+
+    @Override
+    public Map<String, Nickname> findNicknamesByIds(Collection<String> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        Query query =
+                Query.query(Criteria.where("_id").in(accountIds).and("nickname").ne(null));
+        query.fields().include("_id").include("nickname");
+        Map<String, Nickname> nicknames = new LinkedHashMap<>();
+        for (AccountDocument document : mongoTemplate.find(query, AccountDocument.class)) {
+            Nickname nickname = Nickname.ofNullable(document.getNickname());
+            if (nickname != null) {
+                nicknames.put(document.getId(), nickname);
+            }
+        }
+        return nicknames;
     }
 
     @Override
