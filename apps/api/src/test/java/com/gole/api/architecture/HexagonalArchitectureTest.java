@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
  *       위임해 구현한다({@code order/adapter/out/listing/ListingReservationAdapter} 가 표준 예시).
  *   <li>어댑터·설정·시더는 다른 컨텍스트의 인바운드 포트와 그 포트가 내주는 도메인 타입에만 의존한다.
  *   <li>인바운드 어댑터(웹)는 유스케이스만 부른다 — 서비스 구현·아웃바운드 포트·아웃바운드 어댑터를 직접 쓰지 않는다.
+ *   <li>인바운드 어댑터는 트랜잭션을 걸지 않는다. 트랜잭션 경계는 유스케이스(서비스)가 정한다.
  *   <li>유스케이스는 서비스가 구현한다 — 어댑터가 인바운드 포트를 겸하지 않는다.
  *   <li>common 은 어느 컨텍스트에도 의존하지 않는다.
  * </ul>
@@ -132,6 +133,17 @@ class HexagonalArchitectureTest {
                         "com.gole.api..application.service..",
                         "com.gole.api..application.port.out..",
                         "com.gole.api..adapter.out.."));
+    }
+
+    @Test
+    @DisplayName("인바운드 어댑터는 트랜잭션을 걸지 않는다 — 트랜잭션 경계는 유스케이스가 정한다")
+    void inboundAdapters_doNotDemarcateTransactions() {
+        check(noClasses()
+                .that()
+                .resideInAPackage("com.gole.api..adapter.in..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage("org.springframework.transaction.."));
     }
 
     @Test

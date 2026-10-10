@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase.RequeueReasonCode;
+import com.gole.api.chat.application.port.out.SupportAdminActionPort;
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.EventType;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.State;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
@@ -16,6 +18,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +27,9 @@ class SupportNotificationOutboxAdminServiceTest {
 
     private static final String EVENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final Instant NOW = Instant.parse("2026-09-04T12:00:00Z");
+    private static final SupportOperator OPERATOR = new SupportOperator("admin-1", "admin@gole.test");
+
+    private final List<String> audits = new ArrayList<>();
 
     @Test
     void deadLetterOnlyIsRequeuedAndImmediateReplayIsIdempotent() {
@@ -30,8 +37,9 @@ class SupportNotificationOutboxAdminServiceTest {
         SupportNotificationOutboxAdminService service = service(outbox, true);
         String confirmation = SupportNotificationOutboxAdminService.expectedConfirmation(EVENT_ID);
 
-        var first = service.requeue(EVENT_ID, confirmation, RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED);
-        var replay = service.requeue(EVENT_ID, confirmation, RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED);
+        var first = service.requeue(EVENT_ID, confirmation, RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED, OPERATOR);
+        var replay =
+                service.requeue(EVENT_ID, confirmation, RequeueReasonCode.WEBHOOK_CONFIGURATION_RESTORED, OPERATOR);
 
         assertThat(first.changed()).isTrue();
         assertThat(first.event().state()).isEqualTo(State.PENDING);
@@ -39,18 +47,22 @@ class SupportNotificationOutboxAdminServiceTest {
         assertThat(first.event().nextAttemptAt()).isEqualTo(NOW);
         assertThat(replay.changed()).isFalse();
         assertThat(replay.event().state()).isEqualTo(State.PENDING);
+        assertThat(audits)
+                .containsExactly("admin-1|SUPPORT_NOTIFICATION_REQUEUE|" + EVENT_ID
+                        + "|reasonCode=WEBHOOK_CONFIGURATION_RESTORED");
     }
 
     @Test
     void exactEventBoundConfirmationIsRequiredBeforeRepositoryAccess() {
         FakeOutbox outbox = new FakeOutbox(event(State.DEAD_LETTER, 12));
 
-        assertThatThrownBy(() ->
-                        service(outbox, true).requeue(EVENT_ID, EVENT_ID, RequeueReasonCode.DISCORD_INCIDENT_RESOLVED))
+        assertThatThrownBy(() -> service(outbox, true)
+                        .requeue(EVENT_ID, EVENT_ID, RequeueReasonCode.DISCORD_INCIDENT_RESOLVED, OPERATOR))
                 .isInstanceOf(BadRequestException.class)
                 .extracting(failure -> ((BadRequestException) failure).getCode())
                 .isEqualTo("SUPPORT_NOTIFICATION_REQUEUE_CONFIRMATION_MISMATCH");
         assertThat(outbox.requeueCalls).isZero();
+        assertThat(audits).isEmpty();
     }
 
     @Test
@@ -58,23 +70,25 @@ class SupportNotificationOutboxAdminServiceTest {
         String confirmation = SupportNotificationOutboxAdminService.expectedConfirmation(EVENT_ID);
         FakeOutbox dead = new FakeOutbox(event(State.DEAD_LETTER, 12));
         assertThatThrownBy(() -> service(dead, false)
-                        .requeue(EVENT_ID, confirmation, RequeueReasonCode.DISCORD_INCIDENT_RESOLVED))
+                        .requeue(EVENT_ID, confirmation, RequeueReasonCode.DISCORD_INCIDENT_RESOLVED, OPERATOR))
                 .isInstanceOf(ConflictException.class)
                 .extracting(failure -> ((ConflictException) failure).getCode())
                 .isEqualTo("SUPPORT_NOTIFICATION_DELIVERY_DISABLED");
 
         FakeOutbox delivered = new FakeOutbox(event(State.DELIVERED, 1));
         assertThatThrownBy(() -> service(delivered, true)
-                        .requeue(EVENT_ID, confirmation, RequeueReasonCode.MANUAL_DELIVERY_RETRY_APPROVED))
+                        .requeue(EVENT_ID, confirmation, RequeueReasonCode.MANUAL_DELIVERY_RETRY_APPROVED, OPERATOR))
                 .isInstanceOf(ConflictException.class)
                 .extracting(failure -> ((ConflictException) failure).getCode())
                 .isEqualTo("SUPPORT_NOTIFICATION_ALREADY_DELIVERED");
     }
 
-    private static SupportNotificationOutboxAdminService service(FakeOutbox outbox, boolean enabled) {
+    private SupportNotificationOutboxAdminService service(FakeOutbox outbox, boolean enabled) {
         SupportNotificationOutboxProperties properties = new SupportNotificationOutboxProperties();
         properties.setProcessingEnabled(enabled);
-        return new SupportNotificationOutboxAdminService(outbox, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        SupportAdminActionPort audit = (operator, action, targetId, detail) ->
+                audits.add(String.join("|", operator.id(), action.name(), targetId, detail));
+        return new SupportNotificationOutboxAdminService(outbox, properties, audit, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static SupportNotificationEvent event(State state, int attempts) {

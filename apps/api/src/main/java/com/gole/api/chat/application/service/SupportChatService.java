@@ -1,15 +1,20 @@
 package com.gole.api.chat.application.service;
 
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
 import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAdminActionPort;
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatAccount;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.ChatRoomType;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportAdminAction;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportInternalNote;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
@@ -22,7 +27,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 운영팀 문의 인박스의 배정·이관·상태·내부 메모를 담당한다. */
+/** 운영팀 문의 인박스의 배정·이관·상태·답변·내부 메모를 담당한다. 조치와 감사 기록을 한 트랜잭션에 묶는다. */
 @Service
 public class SupportChatService implements SupportConsoleUseCase {
 
@@ -32,6 +37,8 @@ public class SupportChatService implements SupportConsoleUseCase {
     private final SupportTicketRepositoryPort tickets;
     private final SupportInternalNotePort notes;
     private final ChatAccountPort accounts;
+    private final ChatMessagingUseCase messaging;
+    private final SupportAdminActionPort audit;
     private final Clock clock;
 
     public SupportChatService(
@@ -39,11 +46,15 @@ public class SupportChatService implements SupportConsoleUseCase {
             SupportTicketRepositoryPort tickets,
             SupportInternalNotePort notes,
             ChatAccountPort accounts,
+            ChatMessagingUseCase messaging,
+            SupportAdminActionPort audit,
             Clock clock) {
         this.rooms = rooms;
         this.tickets = tickets;
         this.notes = notes;
         this.accounts = accounts;
+        this.messaging = messaging;
+        this.audit = audit;
         this.clock = clock;
     }
 
@@ -64,7 +75,8 @@ public class SupportChatService implements SupportConsoleUseCase {
 
     @Transactional
     @Override
-    public SupportConversation assignToSelf(String roomId, String adminId) {
+    public SupportConversation assignToSelf(String roomId, SupportOperator operator) {
+        String adminId = operator.id();
         requireAdmin(adminId);
         SupportTicket ticket = requireTicket(roomId);
         SocialChatRoom room = requireSupportRoom(roomId);
@@ -74,18 +86,23 @@ public class SupportChatService implements SupportConsoleUseCase {
         if (ticket.assigneeId() != null) {
             boolean membershipRepaired = !room.isMember(adminId);
             SocialChatRoom reconciled = membershipRepaired ? rooms.save(room.withSupportAgent(null, adminId)) : room;
+            if (membershipRepaired) {
+                audit.record(operator, SupportAdminAction.SUPPORT_ASSIGN, roomId, null);
+            }
             return new SupportConversation(reconciled, ticket, membershipRepaired);
         }
 
         Instant now = Instant.now(clock);
         SupportTicket assignedTicket = tickets.save(ticket.assignTo(adminId, now));
         SocialChatRoom assignedRoom = rooms.save(room.withSupportAgent(null, adminId));
+        audit.record(operator, SupportAdminAction.SUPPORT_ASSIGN, roomId, null);
         return new SupportConversation(assignedRoom, assignedTicket, true);
     }
 
     @Transactional
     @Override
-    public SupportConversation transfer(String roomId, String actorId, String targetAdminId) {
+    public SupportConversation transfer(String roomId, SupportOperator operator, String targetAdminId) {
+        String actorId = operator.id();
         requireAdmin(actorId);
         requireAdmin(targetAdminId);
         if (actorId.equals(targetAdminId)) {
@@ -96,6 +113,7 @@ public class SupportChatService implements SupportConsoleUseCase {
         Instant now = Instant.now(clock);
         SupportTicket transferredTicket = tickets.save(ticket.transferTo(targetAdminId, now));
         SocialChatRoom transferredRoom = rooms.save(room.withSupportAgent(ticket.assigneeId(), targetAdminId));
+        audit.record(operator, SupportAdminAction.SUPPORT_TRANSFER, roomId, "assignee=" + targetAdminId);
         return new SupportConversation(transferredRoom, transferredTicket, true);
     }
 
@@ -107,7 +125,8 @@ public class SupportChatService implements SupportConsoleUseCase {
      */
     @Transactional
     @Override
-    public SupportTakeover takeOver(String roomId, String actorId, String rawReason) {
+    public SupportTakeover takeOver(String roomId, SupportOperator operator, String rawReason) {
+        String actorId = operator.id();
         requireAdmin(actorId);
         String reason = normalizeTakeoverReason(rawReason);
         SupportTicket ticket = requireTicket(roomId);
@@ -125,36 +144,60 @@ public class SupportChatService implements SupportConsoleUseCase {
         SocialChatRoom room = requireSupportRoom(roomId);
         SupportTicket takenTicket = tickets.save(nextTicket);
         SocialChatRoom takenRoom = rooms.save(room.withSupportAgent(previousAssigneeId, actorId));
+        audit.record(
+                operator,
+                SupportAdminAction.SUPPORT_TAKEOVER,
+                roomId,
+                "previousAssignee=%s; reason=%s".formatted(previousAssigneeId, reason));
         return new SupportTakeover(takenRoom, takenTicket, previousAssigneeId, reason);
     }
 
     @Transactional
     @Override
-    public SupportTransition resolve(String roomId, String actorId) {
-        SupportTicket current = requireAssignedTo(roomId, actorId);
+    public SupportTransition resolve(String roomId, SupportOperator operator) {
+        SupportTicket current = requireAssignedTo(roomId, operator.id());
         SupportTicket next = current.resolve(Instant.now(clock));
-        return next == current
-                ? new SupportTransition(current, false)
-                : new SupportTransition(tickets.save(next), true);
+        if (next == current) {
+            return new SupportTransition(current, false);
+        }
+        SupportTicket saved = tickets.save(next);
+        audit.record(operator, SupportAdminAction.SUPPORT_RESOLVE, roomId, null);
+        return new SupportTransition(saved, true);
     }
 
     @Transactional
     @Override
-    public SupportTransition reopen(String roomId, String actorId) {
+    public SupportTransition reopen(String roomId, SupportOperator operator) {
+        String actorId = operator.id();
         requireAdmin(actorId);
         SupportTicket ticket = requireTicket(roomId);
         if (ticket.assigneeId() != null && !ticket.assigneeId().equals(actorId)) {
             throw new ForbiddenException("SUPPORT_ASSIGNEE_ONLY", "담당 관리자만 문의를 재개할 수 있습니다");
         }
         SupportTicket next = ticket.reopen(Instant.now(clock));
-        return next == ticket ? new SupportTransition(ticket, false) : new SupportTransition(tickets.save(next), true);
+        if (next == ticket) {
+            return new SupportTransition(ticket, false);
+        }
+        SupportTicket saved = tickets.save(next);
+        audit.record(operator, SupportAdminAction.SUPPORT_REOPEN, roomId, null);
+        return new SupportTransition(saved, true);
     }
 
     @Transactional
     @Override
-    public void addNote(String roomId, String actorId, String note) {
-        requireAssignedTo(roomId, actorId);
-        notes.append(roomId, actorId, note.trim(), Instant.now(clock));
+    public ChatMessage reply(String roomId, SupportOperator operator, String content) {
+        requireAssignedTo(roomId, operator.id());
+        ChatMessage message = messaging.sendAdminSupport(roomId, operator.id(), content);
+        audit.record(operator, SupportAdminAction.SUPPORT_REPLY, roomId, null);
+        return message;
+    }
+
+    @Transactional
+    @Override
+    public void addNote(String roomId, SupportOperator operator, String note) {
+        requireAssignedTo(roomId, operator.id());
+        notes.append(roomId, operator.id(), note.trim(), Instant.now(clock));
+        audit.record(operator, SupportAdminAction.SUPPORT_INTERNAL_NOTE, roomId, null);
     }
 
     @Override
