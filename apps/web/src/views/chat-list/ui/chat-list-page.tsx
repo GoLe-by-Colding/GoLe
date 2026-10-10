@@ -746,16 +746,16 @@ export function ChatListPage() {
             }
           />
         ) : (
-          <div className="grid min-h-[660px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid h-[max(420px,min(760px,calc(100dvh-21rem)))] grid-rows-[minmax(0,1fr)] md:h-[max(520px,min(760px,calc(100dvh-16rem)))] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
             <aside
-              className={`min-w-0 border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
+              className={`flex min-h-0 min-w-0 flex-col border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
             >
               <div className="border-b border-neutral-100 px-4 py-3">
                 <p className="text-xs font-semibold tracking-wide text-neutral-500">
                   전체 대화 {conversations.length}
                 </p>
               </div>
-              <ul className="max-h-[612px] divide-y divide-neutral-100 overflow-y-auto">
+              <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
                 {conversations.map((conversation) => {
                   const active = conversation.room.id === selectedId;
                   const title = conversationTitle(conversation, myId);
@@ -810,7 +810,7 @@ export function ChatListPage() {
             </aside>
 
             {selected ? (
-              <section className="flex min-w-0 flex-col">
+              <section className="flex min-h-0 min-w-0 flex-col">
                 <header className="flex min-h-16 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-5">
                   <div className="flex min-w-0 items-center gap-3">
                     <button
@@ -1269,7 +1269,7 @@ function LoadingRows() {
           </div>
         ))}
       </div>
-      <Skeleton className="hidden min-h-[660px] rounded-2xl md:block" />
+      <Skeleton className="hidden h-[max(520px,min(760px,calc(100dvh-16rem)))] rounded-2xl md:block" />
     </div>
   );
 }
