@@ -9,3 +9,5 @@
 - [x] PR #231 충돌 해결: dev e55fe539의 PromotionMediaPort 구조와 반려 저장 의존성을 함께 유지하고 새 메모리 컨트롤러/테스트를 promotion 컨텍스트 및 common AdminActor로 정렬함. 홍보 단위 93건·아키텍처 9건·홍보 통합 16건 모두 0실패/0스킵, Python 홍보 112건·spotlessCheck·웹 typecheck 통과. 전체 E2E·운영 모델·발행은 재검증하지 않음. 관리자 승인 버전 경합과 6,000자 프롬프트 제한은 이번 충돌 해결 범위에서 변경하지 않음.
 
 - [x] PR #231 승인 동시성 보완: 버전 기반 수정/확정과 Mongo 원자적 조건부 저장, 409 최신 화면 갱신을 한 단위로 연결한다. 검증: 홍보 단위 95건·아키텍처 9건·실제 Mongo 통합 19건·관리자/메모리 E2E 46건 모두 0실패/0스킵, HTTP 입력 경계 3건 통과. spotlessCheck·웹 lint/typecheck/FSD/build·코어 typecheck/check:platform·변경 파일 Prettier 통과. 전체 웹 format:check는 기존 Windows CRLF 파일 380개에서 실패했으며 최신 전체 결과는 PR CI로 확인한다.
+
+- [x] PR #232 마스코트 dev 병합 후 재충돌 해결: dev 623ddf17을 통합하고 홍보 지침/마스코트 감사 유형·대상·라벨·색상을 모두 유지함. 마스코트 E2E의 동일 문구 두 요소 선택 오류는 exact 선택으로 수정함(테스트 오류). 단위/아키텍처 128건·Mongo 통합 22건·관리자/메모리 E2E 48건 모두 0실패/0스킵(retries=0), spotlessCheck·웹 타입/린트/FSD/빌드·코어 타입/플랫폼·충돌 및 수정 파일 Prettier 통과. 전체 E2E와 운영 모델/배포는 로컬에서 재실행하지 않음.
