@@ -37,6 +37,7 @@ import {
 import { AdminStatus, AdminTable } from "./table";
 import { PromotionEvaluationForm } from "./promotion-evaluation-form";
 import { PromotionReviewPanel } from "./promotion-review-panel";
+import { PromotionMemoryPanel } from "./promotion-memory-panel";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -78,6 +79,7 @@ function PromotionWorkspace({
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [publishNextBusy, setPublishNextBusy] = useState(false);
+  const [memoryRevision, setMemoryRevision] = useState(0);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -112,6 +114,7 @@ function PromotionWorkspace({
 
   useEffect(load, [load]);
   const reload = useCallback(() => {
+    setMemoryRevision((value) => value + 1);
     setRows(null);
     setListError(undefined);
     load();
@@ -396,6 +399,7 @@ function PromotionWorkspace({
           {notice}
         </p>
       ) : null}
+      <PromotionMemoryPanel token={token} accountId={accountId} refreshKey={memoryRevision} />
       <div className="flex items-center justify-between gap-3">
         <AdminStatus error={listError ?? error} loading={rows === null} />
         <div className="flex gap-2">

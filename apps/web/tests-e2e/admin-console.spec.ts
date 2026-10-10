@@ -59,6 +59,16 @@ async function mockMe(
 }
 
 test.beforeEach(async ({ page }) => {
+  // 메모리 패널도 합성 세션을 쓰는 화면 테스트에서는 실제 API와 분리한다.
+  await page.route(/\/api\/admin\/promotion-(?:guidelines|feedback|runs)(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route("**/api/admin/promotion-feedback/*", (route) =>
+    route.fulfill({
+      status: 404,
+      json: { code: "PROMOTION_FEEDBACK_NOT_FOUND", message: "반려 기록 없음" },
+    }),
+  );
   // 대부분의 화면 게이트 테스트는 HttpOnly 쿠키 없이 localStorage 메타데이터와 /me
   // 응답만 합성한다. 사이트 헤더의 독립적인 알림 폴링까지 실제 API로 보내면 그 401이
   // 세션을 정리하므로, 이 스펙 전체에서 전역 요청을 격리한다.
@@ -100,6 +110,11 @@ test.describe("홍보 Agent 검토 복구", () => {
     publishedAt: null,
     externalPostId: null,
     rejectionReason: null,
+    reviewerId: null,
+    reviewedAt: null,
+    category: "FEATURE",
+    captures: [],
+    provenance: null,
   };
 
   test.beforeEach(async ({ page }) => {
@@ -218,6 +233,350 @@ test.describe("홍보 Agent 검토 복구", () => {
     await page.getByRole("button", { name: "목록 새로고침" }).click();
     await expect(page.getByText(draft.caption, { exact: true })).toBeVisible();
     await expect(page.getByText("목록 조회 실패", { exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe("홍보 피드백 메모리", () => {
+  const proposal = {
+    id: "guideline-1",
+    version: 0,
+    kind: "PROCEDURE",
+    content: "원본 화면을 읽을 수 있도록 유지한다.",
+    targets: ["IMAGE_EDIT"],
+    categories: ["FEATURE", "SERVICE"],
+    sourceFeedbackIds: ["feedback-1"],
+    status: "PROPOSED",
+    proposedBy: "promotion-bot",
+    createdAt: "2026-10-08T00:00:00Z",
+    updatedAt: "2026-10-08T00:00:00Z",
+    confirmedBy: null,
+    confirmedAt: null,
+    reflectionRunKey: "reflection-1",
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await seedLocalSession(page, {
+      accountId: "admin-1",
+      sessionToken: "admin-test-token",
+      role: "ADMIN",
+    });
+    await mockMe(page, { status: 200, body: { accountId: "admin-1", role: "ADMIN" } });
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [] }),
+    );
+  });
+
+  test("제안 내용과 범위를 저장한 다음 확정하고 활성 해제한다", async ({ page }) => {
+    let guideline = { ...proposal };
+    const operations: string[] = [];
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [guideline] }),
+    );
+    await page.route("**/api/admin/promotion-guidelines/guideline-1", async (route) => {
+      expect(route.request().method()).toBe("PATCH");
+      const input = route.request().postDataJSON();
+      expect(input).toEqual({
+        expectedVersion: 0,
+        content: "화면 글자를 크게 유지한다.",
+        targets: ["IMAGE_EDIT", "CAPTION"],
+        categories: ["FEATURE"],
+      });
+      operations.push("patch");
+      guideline = {
+        ...guideline,
+        content: input.content,
+        targets: input.targets,
+        categories: input.categories,
+        version: guideline.version + 1,
+      };
+      await route.fulfill({ json: guideline });
+    });
+    await page.route("**/api/admin/promotion-guidelines/guideline-1/activate", async (route) => {
+      operations.push("activate");
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: guideline.version });
+      expect(guideline.proposedBy).toBe("promotion-bot");
+      guideline = { ...guideline, status: "ACTIVE", version: guideline.version + 1 };
+      await route.fulfill({ json: guideline });
+    });
+    await page.route("**/api/admin/promotion-guidelines/guideline-1/retire", async (route) => {
+      operations.push("retire");
+      guideline = { ...guideline, status: "RETIRED", version: guideline.version + 1 };
+      await route.fulfill({ json: guideline });
+    });
+    await page.goto("/admin/promotion");
+    await page.getByLabel("지침 내용", { exact: true }).fill("화면 글자를 크게 유지한다.");
+    await page.getByRole("checkbox", { name: "글 작성", exact: true }).check();
+    await page.getByRole("checkbox", { name: "서비스 홍보", exact: true }).uncheck();
+    await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+    await expect(page.getByText("지침을 확정했습니다. 다음 실행부터 적용됩니다.")).toBeVisible();
+    await page.getByRole("button", { name: "활성 해제", exact: true }).click();
+    await expect(
+      page.getByText("지침을 해제했습니다. 다음 실행부터 적용되지 않습니다."),
+    ).toBeVisible();
+    expect(operations).toEqual(["patch", "activate", "retire"]);
+  });
+
+  test("원 제안자는 문구를 바꿔도 직접 확정할 수 없고 기각만 한다", async ({ page }) => {
+    let dismissed = false;
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: dismissed ? [] : [{ ...proposal, proposedBy: "admin-1" }] }),
+    );
+    await page.route("**/api/admin/promotion-guidelines/guideline-1/dismiss", (route) => {
+      dismissed = true;
+      return route.fulfill({ json: { ...proposal, status: "DISMISSED", version: 1 } });
+    });
+    await page.goto("/admin/promotion");
+    await page.getByLabel("지침 내용", { exact: true }).fill("수정한 내용");
+    await expect(page.getByRole("button", { name: "수정 후 확정", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "기각", exact: true }).click();
+    await expect(page.getByText("지침 제안을 기각했습니다.")).toBeVisible();
+    expect(dismissed).toBe(true);
+  });
+
+  test("수정 저장 실패는 확정을 보내지 않고 문구를 보존해 재시도한다", async ({ page }) => {
+    let saves = 0;
+    let activates = 0;
+    let guideline = { ...proposal };
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [guideline] }),
+    );
+    await page.route("**/api/admin/promotion-guidelines/guideline-1", (route) => {
+      saves += 1;
+      if (saves > 1) guideline = { ...guideline, content: "보존할 수정 문구", version: 1 };
+      return route.fulfill(
+        saves === 1
+          ? { status: 503, json: { code: "UNAVAILABLE", message: "지침 저장 실패" } }
+          : { json: guideline },
+      );
+    });
+    await page.route("**/api/admin/promotion-guidelines/guideline-1/activate", (route) => {
+      activates += 1;
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1 });
+      guideline = { ...guideline, status: "ACTIVE", version: 2 };
+      return route.fulfill({ json: guideline });
+    });
+    await page.goto("/admin/promotion");
+    await page.getByLabel("지침 내용", { exact: true }).fill("보존할 수정 문구");
+    await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "지침 저장 실패" })).toBeVisible();
+    await expect(page.getByLabel("지침 내용", { exact: true })).toHaveValue("보존할 수정 문구");
+    expect(activates).toBe(0);
+    await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+    await expect(page.getByText("지침을 확정했습니다. 다음 실행부터 적용됩니다.")).toBeVisible();
+    expect(saves).toBe(2);
+    expect(activates).toBe(1);
+  });
+
+  for (const conflictAt of ["patch", "activate"] as const) {
+    test(`${conflictAt} 버전 충돌은 최신 문구와 범위를 불러오고 재검토 전 확정하지 않는다`, async ({
+      page,
+    }) => {
+      let guideline = { ...proposal };
+      let saves = 0;
+      let activates = 0;
+      const latest = {
+        content: "다른 관리자가 저장한 최신 문구",
+        targets: ["SCREEN_SELECTION"],
+        categories: ["SERVICE"],
+      };
+      const conflict = {
+        status: 409,
+        json: { code: "PROMOTION_GUIDELINE_VERSION_CONFLICT", message: "버전 충돌" },
+      };
+      await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+        route.fulfill({ json: [guideline] }),
+      );
+      await page.route("**/api/admin/promotion-guidelines/guideline-1", (route) => {
+        saves += 1;
+        const input = route.request().postDataJSON();
+        expect(input.expectedVersion).toBe(guideline.version);
+        if (saves === 1 && conflictAt === "patch") {
+          guideline = { ...guideline, ...latest, version: 1 };
+          return route.fulfill(conflict);
+        }
+        guideline = {
+          ...guideline,
+          content: input.content,
+          targets: input.targets,
+          categories: input.categories,
+          version: guideline.version + 1,
+        };
+        return route.fulfill({ json: guideline });
+      });
+      await page.route("**/api/admin/promotion-guidelines/guideline-1/activate", (route) => {
+        activates += 1;
+        expect(route.request().postDataJSON()).toEqual({ expectedVersion: guideline.version });
+        if (activates === 1 && conflictAt === "activate") {
+          guideline = { ...guideline, ...latest, version: guideline.version + 1 };
+          return route.fulfill(conflict);
+        }
+        guideline = { ...guideline, status: "ACTIVE", version: guideline.version + 1 };
+        return route.fulfill({ json: guideline });
+      });
+      await page.goto("/admin/promotion");
+      const editor = page.getByLabel("지침 내용", { exact: true });
+      await editor.fill("오래된 검토 내용");
+      await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+      await expect(
+        page.getByText("다른 관리자가 지침을 변경했습니다. 최신 내용을 다시 검토해 주세요."),
+      ).toBeVisible();
+      await expect(editor).toHaveValue(latest.content);
+      await expect(page.getByRole("checkbox", { name: "화면 선택", exact: true })).toBeChecked();
+      await expect(
+        page.getByRole("checkbox", { name: "이미지 다듬기", exact: true }),
+      ).not.toBeChecked();
+      await expect(
+        page.getByRole("checkbox", { name: "기능 홍보", exact: true }),
+      ).not.toBeChecked();
+      await expect(page.getByRole("checkbox", { name: "서비스 홍보", exact: true })).toBeChecked();
+      expect(saves).toBe(1);
+      expect(activates).toBe(conflictAt === "patch" ? 0 : 1);
+      expect(guideline.status).toBe("PROPOSED");
+      await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+      await expect(page.getByText("지침을 확정했습니다. 다음 실행부터 적용됩니다.")).toBeVisible();
+      expect(guideline.content).toBe(latest.content);
+      expect(saves).toBe(2);
+      expect(activates).toBe(conflictAt === "patch" ? 1 : 2);
+    });
+  }
+
+  test("최신 목록 밖의 지침 근거는 중복 없이 조회하고 반려 자료를 연결한다", async ({ page }) => {
+    let lookups = 0;
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [proposal, { ...proposal, id: "guideline-2" }] }),
+    );
+    await page.route("**/api/admin/promotion-feedback/feedback-1", (route) => {
+      lookups += 1;
+      return route.fulfill({
+        json: {
+          id: "feedback-1",
+          postId: "post-old",
+          reviewerId: "reviewer-1",
+          reviewedAt: "2026-09-01T00:00:00Z",
+          reason: "과거 반려 근거",
+          category: "SERVICE",
+          reasonTags: [],
+          targets: ["IMAGE_EDIT"],
+          reflectedAt: "2026-10-08T00:00:00Z",
+          reflectedRunKey: "reflection-1",
+          snapshot: {
+            caption: "최신 목록 밖의 원래 캡션",
+            mediaUrls: [],
+            captures: [],
+            provenance: null,
+            sourceCommitSha: null,
+          },
+        },
+      });
+    });
+
+    await page.goto("/admin/promotion");
+    const links = page.locator('a[href="#promotion-feedback-feedback-1"]');
+    await expect(links).toHaveCount(2);
+    await page.getByText(/^반려 당시 자료 · 최근/).click();
+    await expect(page.getByText("반려 사유: 과거 반려 근거")).toBeVisible();
+    await expect(page.getByText("당시 캡션: 최신 목록 밖의 원래 캡션")).toBeVisible();
+    expect(lookups).toBe(1);
+  });
+
+  test("과거 근거 조회 실패를 표시하고 지침 목록을 유지한 채 다시 조회한다", async ({ page }) => {
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [proposal] }),
+    );
+    let lookups = 0;
+    await page.route("**/api/admin/promotion-feedback/feedback-1", (route) => {
+      lookups += 1;
+      return route.fulfill({
+        status: 503,
+        json: { code: "UNAVAILABLE", message: "근거 조회 실패" },
+      });
+    });
+
+    await page.goto("/admin/promotion");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "반려 근거를 불러오지 못했습니다" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("지침 내용", { exact: true })).toHaveValue(proposal.content);
+    await expect(page.getByText("feedback-1 (근거 조회 실패)", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "메모리 새로고침", exact: true }).click();
+    await expect.poll(() => lookups).toBe(2);
+  });
+
+  test("반려 당시 원본과 과거 실행의 지침 내용을 현재 상태와 독립적으로 표시한다", async ({
+    page,
+  }) => {
+    await page.route("**/original.png", (route) => route.fulfill({ status: 404, body: "" }));
+    await page.route(/\/api\/admin\/promotion-feedback(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: "feedback-1",
+            postId: "post-1",
+            reviewerId: "reviewer-1",
+            reviewedAt: "2026-10-08T00:00:00Z",
+            reason: "글자가 작아 읽기 어렵다.",
+            category: "SERVICE",
+            reasonTags: [],
+            targets: ["IMAGE_EDIT"],
+            reflectedAt: null,
+            reflectedRunKey: null,
+            snapshot: {
+              caption: "반려 당시 캡션",
+              mediaUrls: ["/rejected.png"],
+              sourceCommitSha: null,
+              provenance: null,
+              captures: [
+                {
+                  label: "매물 탐색",
+                  route: "/market",
+                  actions: "",
+                  dataSource: "DEMO",
+                  capturedAt: "2026-10-08T00:00:00Z",
+                  originalUrl: "/original.png",
+                  edit: "처음 다듬기 지시문",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await page.route(/\/api\/admin\/promotion-runs(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: "run-old",
+            runKey: "legacy-run",
+            outcome: "SKIPPED",
+            reasonCode: "MODEL_SKIPPED",
+            recordedAt: "2026-10-07T00:00:00Z",
+          },
+          {
+            id: "run-1",
+            runKey: "applied-run",
+            outcome: "SUBMITTED",
+            reasonCode: "SUBMITTED",
+            recordedAt: "2026-10-08T00:00:00Z",
+            memoryContext: {
+              feedbackIds: ["feedback-1"],
+              guidelines: [{ ...proposal, content: "실행 당시 확정 문구" }],
+            },
+          },
+        ],
+      }),
+    );
+    await page.goto("/admin/promotion");
+    await page.getByText(/^반려 당시 자료 · 최근/).click();
+    await expect(page.getByText("당시 캡션: 반려 당시 캡션")).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: "반려 당시 원본 이미지 1", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: "반려 당시 원본 이미지 1", exact: true }),
+    ).toHaveAttribute("data-image-fallback", "true");
+    await page.getByText(/^실행에 사용한 기억 · 최근/).click();
+    await expect(page.getByText(/실행 당시 확정 문구/)).toBeVisible();
+    await expect(page.getByText("사용한 확정 지침 없음", { exact: true })).toBeVisible();
   });
 });
 
@@ -866,7 +1225,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.getByRole("checkbox").check();
     await apply.click();
 
-    await expect(page.getByText(/revision 1 · 둥근 아기 고래/)).toBeVisible();
+    await expect(page.getByText("revision 1 · 둥근 아기 고래", { exact: true })).toBeVisible();
     expect(publishBody).toEqual({
       expectedRevision: 0,
       assetId: "baby-round",

@@ -19,5 +19,6 @@ public enum AdminTargetType {
     CHAT_REPORT_SNAPSHOT,
     LAUNCH_CONFIG,
     PROMOTION_POST,
+    PROMOTION_GUIDELINE,
     MASCOT_ASSET
 }

@@ -14,14 +14,14 @@ import json
 import os
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from pydantic import ValidationError
 
-from gole_promotion_agent import drafting, policy
+from gole_promotion_agent import drafting, memory, policy
 from gole_promotion_agent.gateway_client import Gateway, GatewayError, decode_png, encode_png
 
 
@@ -33,6 +33,8 @@ class RunResult:
     code: str  # 원장의 RunReasonCode 와 같은 이름
     detail: str | None = None  # 모델이 쓴 사유·내부 오류 요약. 공개 로그에 찍지 않는다
     post_id: str | None = None
+    memory_context: Mapping[str, Any] | None = None
+    run_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class Drafter:
         sha: str | None = None,
         claude_model: str | None = None,
         codex_model: str | None = None,
+        run_key: str | None = None,
         log: Callable[[str], None] = print,
     ):
         if not service and not (sha and policy.SHA_PATTERN.match(sha)):
@@ -76,9 +79,55 @@ class Drafter:
         self._sha = sha
         self._claude_model = claude_model
         self._codex_model = codex_model
+        self.run_key = run_key or execution_run_key(os.environ)
+        self._memory = memory.Context()
+        self.memory_usage: dict[str, Any] = {"feedbackIds": [], "guidelines": []}
+        self._memory_error: str | None = None
         self._log = log
 
     def run(self) -> RunResult:
+        self.memory_usage = {"feedbackIds": [], "guidelines": []}
+        self._memory_error = None
+        try:
+            self._memory = memory.Context.model_validate(
+                self._publisher.memory_context("SERVICE" if self._service else "FEATURE", self._routes)
+            )
+        except Exception as error:  # noqa: BLE001 — 메모리 없이 새 초안을 만들지 않는다
+            self._log(f"[promotion-agent] MEMORY_CONTEXT_FAILED ({type(error).__name__})")
+            return RunResult("failed", "ERROR", "MEMORY_CONTEXT_FAILED", run_key=self.run_key)
+        self._reflect()
+        result = self._draft()
+        return replace(
+            result, detail=result.detail or self._memory_error,
+            memory_context=self.memory_usage, run_key=self.run_key,
+        )
+
+    def _reflect(self) -> None:
+        pending = self._memory.unreflectedFeedback
+        if not pending:
+            return
+        try:
+            response = self._gateway.call({
+                "engine": "claude", "model": self._claude_model,
+                "system": memory.REFLECTION_SYSTEM,
+                "prompt": memory.reflection_prompt(self._memory), "json_schema": memory.REFLECTION_SCHEMA,
+            })
+            reflection = memory.Reflection.model_validate(response.get("structured"))
+            self._publisher.reflect(reflection.payload([item.id for item in pending], self.run_key))
+        except Exception as error:  # noqa: BLE001 — 다음 실행이 미처리 경험을 다시 읽는다
+            self._memory_error = "MEMORY_REFLECTION_FAILED"
+            self._log(f"[promotion-agent] MEMORY_REFLECTION_FAILED ({type(error).__name__})")
+
+    def _remember(self, targets: Sequence[memory.Target]) -> str:
+        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", targets)
+        for item in feedback:
+            if item.id not in self.memory_usage["feedbackIds"]:
+                self.memory_usage["feedbackIds"].append(item.id)
+        known = {item["id"] for item in self.memory_usage["guidelines"]}
+        self.memory_usage["guidelines"].extend(item.applied_snapshot() for item in guidelines if item.id not in known)
+        return memory.render(feedback, guidelines)
+
+    def _draft(self) -> RunResult:
         if self._publisher.pending_count() >= policy.MAX_PENDING_REVIEW:
             return RunResult("skipped", "QUEUE_FULL")
 
@@ -108,7 +157,12 @@ class Drafter:
             return RunResult("skipped", "MODEL_SKIPPED", draft.skip_reason)
 
         picked = [shots[pick.image - 1] for pick in draft.picks]
-        polished = [self._polish(shot, index) for index, shot in enumerate(picked, start=1)]
+        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", ("IMAGE_EDIT",))
+        edit_prompt = drafting.POLISH_PROMPT + memory.render(feedback, guidelines)
+        if len(edit_prompt) > memory.MAX_EDIT_PROMPT:
+            return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG")
+        self._remember(("IMAGE_EDIT",))
+        polished = [self._polish(shot, index, edit_prompt) for index, shot in enumerate(picked, start=1)]
 
         media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
         # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
@@ -118,7 +172,7 @@ class Drafter:
         for pick, shot, path in zip(draft.picks, picked, polished):
             capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at}
             if path is not None:
-                capture |= {"originalMediaKey": next(original_keys), "edit": drafting.POLISH_PROMPT}
+                capture |= {"originalMediaKey": next(original_keys), "edit": edit_prompt}
             captures.append(capture)
 
         post_id = self._publisher.create(
@@ -177,7 +231,7 @@ class Drafter:
                 "model": self._claude_model,
                 "system": drafting.system_prompt(
                     self._publisher.history(policy.HISTORY_LIMIT), self._demo, self._service
-                ),
+                ) + self._remember(("CAPTION", "SCREEN_SELECTION")),
                 "prompt": drafting.task_prompt(
                     [shot.route for shot in shots], service=self._service, subject=subject, diff=diff
                 ),
@@ -193,21 +247,22 @@ class Drafter:
             raise ValueError("없는 후보 번호를 골랐다")
         return draft
 
-    def _polish(self, shot: Shot, index: int) -> Path | None:
+    def _polish(self, shot: Shot, index: int, prompt: str = drafting.POLISH_PROMPT) -> Path | None:
         """다듬은 이미지 경로. 실패하면 None — 그 자리는 원본을 그대로 올린다."""
         try:
             response = self._gateway.call(
                 {
                     "engine": "codex",
                     "model": self._codex_model,
-                    "prompt": drafting.POLISH_PROMPT,
+                    "prompt": prompt,
                     "images": [encode_png(shot.path)],
                     "want_images": True,
                 }
             )
             data = decode_png(response["images"][0])
         except (GatewayError, KeyError, IndexError, ValueError) as error:
-            self._log(f"[promotion-agent] 다듬기 실패 {shot.route}, 원본을 올림: {error}")
+            # 모델 오류가 입력 프롬프트를 인용할 수 있다. 작업 기억 원문은 공개 로그에 싣지 않는다.
+            self._log(f"[promotion-agent] 다듬기 실패 {shot.route}, 원본을 올림 ({type(error).__name__})")
             return None
         destination = self._run_dir / "polished" / f"{index:02d}-{_slug(shot.route)}.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -271,6 +326,11 @@ class UsageMeter:
         return totals
 
 
+def execution_run_key(env: Mapping[str, str]) -> str:
+    run_id, attempt = env.get("GITHUB_RUN_ID"), env.get("GITHUB_RUN_ATTEMPT") or "1"
+    return f"gh-{run_id}-{attempt}" if run_id and run_id.isdigit() and attempt.isdigit() else f"local-{uuid.uuid4().hex[:16]}"
+
+
 def run_payload(
     result: RunResult,
     calls: Sequence[Mapping[str, Any]],
@@ -280,11 +340,9 @@ def run_payload(
     env: Mapping[str, str],
 ) -> dict[str, Any]:
     """원장(POST /api/admin/promotion-runs) 한 줄. 모델이 쓴 사유는 detail 에만, 잘라서 담는다."""
-    run_id, attempt = env.get("GITHUB_RUN_ID"), env.get("GITHUB_RUN_ATTEMPT") or "1"
-    run_key = f"gh-{run_id}-{attempt}" if run_id and run_id.isdigit() and attempt.isdigit() else f"local-{uuid.uuid4().hex[:16]}"
     agent_sha = (env.get("PROMOTION_AGENT_CODE_SHA") or "").lower() or None
     return {
-        "runKey": run_key,
+        "runKey": result.run_key or execution_run_key(env),
         "category": "SERVICE" if service else "FEATURE",
         "sourceCommitSha": None if service else sha,
         "outcome": result.outcome.upper(),
@@ -294,6 +352,7 @@ def run_payload(
         "agentSha": agent_sha if agent_sha and policy.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
         "runUrl": env.get("PROMOTION_AGENT_RUN_URL") or None,
         "calls": list(calls)[: policy.MAX_RUN_CALLS],
+        **({"memoryContext": dict(result.memory_context)} if result.memory_context is not None else {}),
     }
 
 
@@ -339,23 +398,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     run_dir = Path(arguments.run_dir)
     meter = UsageMeter(gateway_client.from_env())
+    drafter = Drafter(
+        repo=Path(arguments.repo),
+        run_dir=run_dir,
+        publisher=publisher,
+        gateway=meter,
+        camera=camera,
+        routes=routes,
+        demo=demo,
+        service=arguments.service,
+        sha=arguments.sha,
+        claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
+        codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
+    )
     try:
-        result = Drafter(
-            repo=Path(arguments.repo),
-            run_dir=run_dir,
-            publisher=publisher,
-            gateway=meter,
-            camera=camera,
-            routes=routes,
-            demo=demo,
-            service=arguments.service,
-            sha=arguments.sha,
-            claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
-            codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
-        ).run()
+        result = drafter.run()
     except Exception as error:
         # 예외로 끝나도 그때까지 쓴 사용량은 원장에 남긴다. 예외 문구에는 내부 사정이 섞일 수 있어 이름만 담는다.
-        _close_run(publisher, run_dir, meter, RunResult("failed", "ERROR", type(error).__name__), arguments)
+        _close_run(publisher, run_dir, meter, RunResult(
+            "failed", "ERROR", type(error).__name__, memory_context=drafter.memory_usage, run_key=drafter.run_key,
+        ), arguments)
         raise
     return _close_run(publisher, run_dir, meter, result, arguments)
 
@@ -370,7 +432,7 @@ def _close_run(publisher: Any, run_dir: Path, meter: UsageMeter, result: RunResu
         status, recorded = type(error).__name__, False
     run_dir.mkdir(parents=True, exist_ok=True)
     # Actions 요약이 읽는 파일이다. 공개되므로 모델이 쓴 사유(detail)는 넣지 않는다.
-    summary = {k: v for k, v in payload.items() if k != "detail"} | {"totals": meter.totals(), "recorded": recorded}
+    summary = {k: v for k, v in payload.items() if k not in {"detail", "memoryContext"}} | {"totals": meter.totals(), "recorded": recorded}
     (run_dir / "run.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[promotion-agent] {result.outcome} ({result.code})")
     if not recorded:

@@ -29,7 +29,8 @@ public record PromotionRun(
         String agentSha,
         String runUrl,
         List<ModelCall> calls,
-        Instant recordedAt) {
+        Instant recordedAt,
+        PromotionMemoryContext memoryContext) {
 
     public static final int MAX_DETAIL = 300;
     public static final int MAX_CALLS = 20;
@@ -39,6 +40,35 @@ public record PromotionRun(
     private static final Pattern AGENT_SHA = Pattern.compile("[0-9a-f]{7,40}");
     private static final Pattern CONTROL = Pattern.compile("\\p{Cntrl}");
     private static final Pattern SPACES = Pattern.compile("\\s+");
+
+    public PromotionRun(
+            String id,
+            String runKey,
+            PromotionCategory category,
+            String sourceCommitSha,
+            RunOutcome outcome,
+            RunReasonCode reasonCode,
+            String detail,
+            String promotionPostId,
+            String agentSha,
+            String runUrl,
+            List<ModelCall> calls,
+            Instant recordedAt) {
+        this(
+                id,
+                runKey,
+                category,
+                sourceCommitSha,
+                outcome,
+                reasonCode,
+                detail,
+                promotionPostId,
+                agentSha,
+                runUrl,
+                calls,
+                recordedAt,
+                PromotionMemoryContext.EMPTY);
+    }
 
     public PromotionRun {
         Objects.requireNonNull(id, "id");
@@ -66,6 +96,7 @@ public record PromotionRun(
         }
         detail = cleanDetail(detail);
         calls = calls == null ? List.of() : List.copyOf(calls);
+        memoryContext = memoryContext == null ? PromotionMemoryContext.EMPTY : memoryContext;
         if (calls.size() > MAX_CALLS) {
             throw new IllegalArgumentException("too many model calls");
         }

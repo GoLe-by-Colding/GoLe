@@ -1041,3 +1041,141 @@ export function saveAdminPromotionPostEvaluation(
     input,
   );
 }
+
+// ── 홍보 피드백 메모리 ─────────────────────────────────────────
+
+export type PromotionMemoryTarget = "CAPTION" | "SCREEN_SELECTION" | "IMAGE_EDIT";
+export type PromotionGuidelineKind = "KNOWLEDGE" | "PROCEDURE";
+export type PromotionGuidelineStatus = "PROPOSED" | "ACTIVE" | "DISMISSED" | "RETIRED";
+
+export interface AdminPromotionFeedback {
+  readonly id: string;
+  readonly postId: string;
+  readonly reviewerId: string;
+  readonly reviewedAt: string;
+  readonly reason: string;
+  readonly category: PromotionCategory;
+  readonly snapshot: Pick<
+    AdminPromotionPost,
+    "caption" | "mediaUrls" | "captures" | "provenance" | "sourceCommitSha"
+  >;
+  readonly reasonTags: readonly EvaluationReasonTag[];
+  readonly targets: readonly PromotionMemoryTarget[];
+  readonly reflectedAt: string | null;
+  readonly reflectedRunKey: string | null;
+}
+
+export interface PromotionGuidelineSnapshot {
+  readonly id: string;
+  readonly kind: PromotionGuidelineKind;
+  readonly content: string;
+  readonly targets: readonly PromotionMemoryTarget[];
+  readonly categories: readonly PromotionCategory[];
+}
+
+export interface UpdatePromotionGuidelineInput extends Pick<
+  PromotionGuidelineSnapshot,
+  "content" | "targets" | "categories"
+> {
+  readonly expectedVersion: number;
+}
+
+export interface AdminPromotionGuideline extends PromotionGuidelineSnapshot {
+  readonly version: number;
+  readonly sourceFeedbackIds: readonly string[];
+  readonly status: PromotionGuidelineStatus;
+  readonly proposedBy: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly confirmedBy: string | null;
+  readonly confirmedAt: string | null;
+  readonly reflectionRunKey: string;
+}
+
+export interface PromotionRunMemoryContext {
+  readonly feedbackIds: readonly string[];
+  readonly guidelines: readonly PromotionGuidelineSnapshot[];
+}
+
+export interface AdminPromotionRun {
+  readonly id: string;
+  readonly runKey: string;
+  readonly category: PromotionCategory;
+  readonly outcome: "SUBMITTED" | "SKIPPED" | "FAILED";
+  readonly reasonCode: string;
+  readonly promotionPostId: string | null;
+  readonly recordedAt: string;
+  /** 과거 실행 원장에는 없을 수 있다. 당시 전달한 지침 내용은 해제 후에도 유지된다. */
+  readonly memoryContext?: PromotionRunMemoryContext | null;
+}
+
+export function fetchAdminPromotionFeedback(
+  token: string,
+  postId?: string,
+  limit = 50,
+): Promise<readonly AdminPromotionFeedback[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (postId) params.set("postId", postId);
+  return get<readonly AdminPromotionFeedback[]>(token, `/api/admin/promotion-feedback?${params}`);
+}
+
+export function fetchAdminPromotionGuidelines(
+  token: string,
+  status?: PromotionGuidelineStatus,
+  limit = 50,
+): Promise<readonly AdminPromotionGuideline[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  return get<readonly AdminPromotionGuideline[]>(
+    token,
+    `/api/admin/promotion-guidelines?${params}`,
+  );
+}
+
+/** 최근 목록 밖의 오래된 지침 근거도 ID로 조회한다. */
+export function fetchAdminPromotionFeedbackById(
+  token: string,
+  id: string,
+): Promise<AdminPromotionFeedback> {
+  return get<AdminPromotionFeedback>(
+    token,
+    `/api/admin/promotion-feedback/${encodeURIComponent(id)}`,
+  );
+}
+
+export function updateAdminPromotionGuideline(
+  token: string,
+  id: string,
+  input: UpdatePromotionGuidelineInput,
+): Promise<AdminPromotionGuideline> {
+  return apiRequest<AdminPromotionGuideline>(`/api/admin/promotion-guidelines/${id}`, {
+    method: "PATCH",
+    headers: auth(token),
+    body: input,
+  });
+}
+
+export function activateAdminPromotionGuideline(
+  token: string,
+  id: string,
+  expectedVersion: number,
+) {
+  return post<AdminPromotionGuideline>(token, `/api/admin/promotion-guidelines/${id}/activate`, {
+    expectedVersion,
+  });
+}
+
+export function dismissAdminPromotionGuideline(token: string, id: string) {
+  return post<AdminPromotionGuideline>(token, `/api/admin/promotion-guidelines/${id}/dismiss`);
+}
+
+export function retireAdminPromotionGuideline(token: string, id: string) {
+  return post<AdminPromotionGuideline>(token, `/api/admin/promotion-guidelines/${id}/retire`);
+}
+
+export function fetchAdminPromotionRuns(
+  token: string,
+  limit = 10,
+): Promise<readonly AdminPromotionRun[]> {
+  return get<readonly AdminPromotionRun[]>(token, `/api/admin/promotion-runs?limit=${limit}`);
+}

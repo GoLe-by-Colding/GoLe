@@ -263,7 +263,7 @@ public class AdminPromotionPostController {
             @NotNull CaptureDataSource dataSource,
             @NotNull Instant capturedAt,
             @Size(max = 80) String originalMediaKey,
-            @Size(max = 1000) String edit) {}
+            @Size(max = 6000) String edit) {}
 
     public record ProvenanceRequest(
             @Size(max = 500) String releaseTitle,

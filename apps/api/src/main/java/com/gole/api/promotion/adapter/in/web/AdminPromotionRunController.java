@@ -6,6 +6,10 @@ import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.Reco
 import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.RecordedRun;
 import com.gole.api.promotion.domain.model.ModelCall;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionGuideline;
+import com.gole.api.promotion.domain.model.PromotionGuidelineKind;
+import com.gole.api.promotion.domain.model.PromotionMemoryContext;
+import com.gole.api.promotion.domain.model.PromotionMemoryTarget;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
@@ -80,7 +84,33 @@ public class AdminPromotionRunController {
             @Size(max = 300) @Pattern(regexp = "https://github\\.com/.*")
             String runUrl,
 
-            @Size(max = PromotionRun.MAX_CALLS) List<@Valid @NotNull CallRequest> calls) {
+            @Size(max = PromotionRun.MAX_CALLS) List<@Valid @NotNull CallRequest> calls,
+            @Valid MemoryContextRequest memoryContext) {
+
+        public RecordRunRequest(
+                String runKey,
+                PromotionCategory category,
+                String sourceCommitSha,
+                RunOutcome outcome,
+                RunReasonCode reasonCode,
+                String detail,
+                String promotionPostId,
+                String agentSha,
+                String runUrl,
+                List<CallRequest> calls) {
+            this(
+                    runKey,
+                    category,
+                    sourceCommitSha,
+                    outcome,
+                    reasonCode,
+                    detail,
+                    promotionPostId,
+                    agentSha,
+                    runUrl,
+                    calls,
+                    null);
+        }
 
         RecordRunCommand toCommand() {
             return new RecordRunCommand(
@@ -95,7 +125,36 @@ public class AdminPromotionRunController {
                     runUrl,
                     calls == null
                             ? List.of()
-                            : calls.stream().map(CallRequest::toModelCall).toList());
+                            : calls.stream().map(CallRequest::toModelCall).toList(),
+                    memoryContext == null ? PromotionMemoryContext.EMPTY : memoryContext.toDomain());
+        }
+    }
+
+    public record MemoryContextRequest(
+            @Size(max = 3) List<@NotBlank @Size(max = 80) String> feedbackIds,
+            @Size(max = 8) List<@NotNull @Valid GuidelineSnapshotRequest> guidelines) {
+        PromotionMemoryContext toDomain() {
+            return new PromotionMemoryContext(
+                    feedbackIds,
+                    guidelines == null
+                            ? List.of()
+                            : guidelines.stream()
+                                    .map(GuidelineSnapshotRequest::toDomain)
+                                    .toList());
+        }
+    }
+
+    public record GuidelineSnapshotRequest(
+            @NotBlank @Size(max = 80) String id,
+            @NotNull PromotionGuidelineKind kind,
+
+            @NotBlank @Size(max = PromotionGuideline.MAX_CONTENT)
+            String content,
+
+            @NotNull @Size(min = 1, max = 3) List<@NotNull PromotionMemoryTarget> targets,
+            @NotNull @Size(min = 1, max = 2) List<@NotNull PromotionCategory> categories) {
+        PromotionMemoryContext.GuidelineSnapshot toDomain() {
+            return new PromotionMemoryContext.GuidelineSnapshot(id, kind, content, targets, categories);
         }
     }
 

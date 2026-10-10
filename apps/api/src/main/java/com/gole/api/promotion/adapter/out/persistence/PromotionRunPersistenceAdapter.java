@@ -4,6 +4,9 @@ import com.gole.api.promotion.adapter.out.persistence.PromotionRunDocument.CallD
 import com.gole.api.promotion.application.port.out.PromotionRunRepositoryPort;
 import com.gole.api.promotion.domain.model.ModelCall;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionGuidelineKind;
+import com.gole.api.promotion.domain.model.PromotionMemoryContext;
+import com.gole.api.promotion.domain.model.PromotionMemoryTarget;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
@@ -53,7 +56,7 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
     }
 
     private static PromotionRunDocument toDocument(PromotionRun run) {
-        return new PromotionRunDocument(
+        PromotionRunDocument document = new PromotionRunDocument(
                 run.id(),
                 run.runKey(),
                 run.category().name(),
@@ -76,6 +79,17 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
                                 call.durationMs()))
                         .toList(),
                 run.recordedAt());
+        document.setMemoryContext(new PromotionRunDocument.MemoryContextDocument(
+                run.memoryContext().feedbackIds(),
+                run.memoryContext().guidelines().stream()
+                        .map(guideline -> new PromotionRunDocument.GuidelineSnapshotDocument(
+                                guideline.id(),
+                                guideline.kind().name(),
+                                guideline.content(),
+                                guideline.targets().stream().map(Enum::name).toList(),
+                                guideline.categories().stream().map(Enum::name).toList()))
+                        .toList()));
+        return document;
     }
 
     private static PromotionRun toDomain(PromotionRunDocument document) {
@@ -102,6 +116,22 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
                                 call.costUsd(),
                                 call.durationMs()))
                         .toList(),
-                document.getRecordedAt());
+                document.getRecordedAt(),
+                document.getMemoryContext() == null
+                        ? PromotionMemoryContext.EMPTY
+                        : new PromotionMemoryContext(
+                                document.getMemoryContext().feedbackIds(),
+                                document.getMemoryContext().guidelines().stream()
+                                        .map(guideline -> new PromotionMemoryContext.GuidelineSnapshot(
+                                                guideline.id(),
+                                                PromotionGuidelineKind.valueOf(guideline.kind()),
+                                                guideline.content(),
+                                                guideline.targets().stream()
+                                                        .map(PromotionMemoryTarget::valueOf)
+                                                        .toList(),
+                                                guideline.categories().stream()
+                                                        .map(PromotionCategory::valueOf)
+                                                        .toList()))
+                                        .toList()));
     }
 }
