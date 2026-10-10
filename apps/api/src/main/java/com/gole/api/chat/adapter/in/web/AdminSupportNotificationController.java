@@ -1,11 +1,8 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
-import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase;
 import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase.RequeueReasonCode;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.common.web.auth.AdminActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,7 +12,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,34 +30,22 @@ public class AdminSupportNotificationController {
             "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
 
     private final RequeueSupportNotificationUseCase notifications;
-    private final RecordAdminActionUseCase audit;
 
-    public AdminSupportNotificationController(
-            RequeueSupportNotificationUseCase notifications, RecordAdminActionUseCase audit) {
+    public AdminSupportNotificationController(RequeueSupportNotificationUseCase notifications) {
         this.notifications = notifications;
-        this.audit = audit;
     }
 
     @Operation(
             summary = "문의 Discord dead-letter 재큐잉",
             description = "Discord 설정·장애 복구를 확인한 뒤 정확한 이벤트 ID 확인 문구와 정형 사유로 한 건만 재큐잉합니다.")
     @PostMapping("/{eventId}/requeue")
-    @Transactional
     public RequeueResponse requeue(
             @PathVariable @Pattern(regexp = EVENT_ID_PATTERN) String eventId,
             @Valid @RequestBody RequeueRequest request,
             HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var outcome = notifications.requeue(eventId, request.confirmation(), request.reasonCode());
-        if (outcome.changed()) {
-            audit.record(new RecordAdminActionCommand(
-                    actor.id(),
-                    actor.email(),
-                    AdminActionType.SUPPORT_NOTIFICATION_REQUEUE,
-                    AdminTargetType.SUPPORT_NOTIFICATION,
-                    outcome.event().eventId(),
-                    "reasonCode=" + request.reasonCode().name()));
-        }
+        var outcome = notifications.requeue(
+                eventId, request.confirmation(), request.reasonCode(), new SupportOperator(actor.id(), actor.email()));
         return RequeueResponse.from(outcome);
     }
 

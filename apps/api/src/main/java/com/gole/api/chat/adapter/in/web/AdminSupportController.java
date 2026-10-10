@@ -1,9 +1,5 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
-import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
-import com.gole.api.admin.domain.model.AdminActionType;
-import com.gole.api.admin.domain.model.AdminTargetType;
 import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
 import com.gole.api.chat.application.port.in.GetSupportAssistantAnalysisUseCase;
 import com.gole.api.chat.application.port.in.SocialChatUseCase;
@@ -12,6 +8,7 @@ import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportInternalNote;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.web.auth.AdminActor;
@@ -25,7 +22,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,19 +40,16 @@ public class AdminSupportController {
     private final SocialChatUseCase rooms;
     private final ChatMessagingUseCase messaging;
     private final GetSupportAssistantAnalysisUseCase supportAssistant;
-    private final RecordAdminActionUseCase audit;
 
     public AdminSupportController(
             SupportConsoleUseCase support,
             SocialChatUseCase rooms,
             ChatMessagingUseCase messaging,
-            GetSupportAssistantAnalysisUseCase supportAssistant,
-            RecordAdminActionUseCase audit) {
+            GetSupportAssistantAnalysisUseCase supportAssistant) {
         this.support = support;
         this.rooms = rooms;
         this.messaging = messaging;
         this.supportAssistant = supportAssistant;
-        this.audit = audit;
     }
 
     @Operation(summary = "문의 인박스", description = "메타데이터만 조회하며 대화 본문은 배정 후 별도 조회합니다.")
@@ -79,60 +72,40 @@ public class AdminSupportController {
     }
 
     @PostMapping("/{roomId}/assign")
-    @Transactional
     public TicketResponse assign(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var conversation = support.assignToSelf(roomId, actor.id());
-        if (conversation.changed()) {
-            record(actor, AdminActionType.SUPPORT_ASSIGN, roomId, null);
-        }
+        var conversation = support.assignToSelf(roomId, operator(actor));
         return response(conversation.ticket(), actor.id(), conversation.room().title());
     }
 
     @PostMapping("/{roomId}/transfer")
-    @Transactional
     public TicketResponse transfer(
             @PathVariable String roomId, @Valid @RequestBody TransferRequest request, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var conversation = support.transfer(roomId, actor.id(), request.assigneeId());
-        record(actor, AdminActionType.SUPPORT_TRANSFER, roomId, "assignee=" + request.assigneeId());
+        var conversation = support.transfer(roomId, operator(actor), request.assigneeId());
         return response(conversation.ticket(), actor.id(), conversation.room().title());
     }
 
     @Operation(summary = "문의 강제 인수", description = "응답 불가 또는 오배정된 타인 담당 미해결 문의를 사유와 감사 기록을 남기고 인수합니다.")
     @PostMapping("/{roomId}/takeover")
-    @Transactional
     public TicketResponse takeOver(
             @PathVariable String roomId, @Valid @RequestBody TakeoverRequest request, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var takeover = support.takeOver(roomId, actor.id(), request.reason());
-        record(
-                actor,
-                AdminActionType.SUPPORT_TAKEOVER,
-                roomId,
-                "previousAssignee=%s; reason=%s".formatted(takeover.previousAssigneeId(), takeover.reason()));
+        var takeover = support.takeOver(roomId, operator(actor), request.reason());
         return response(takeover.ticket(), actor.id(), takeover.room().title());
     }
 
     @PostMapping("/{roomId}/resolve")
-    @Transactional
     public TicketResponse resolve(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var transition = support.resolve(roomId, actor.id());
-        if (transition.changed()) {
-            record(actor, AdminActionType.SUPPORT_RESOLVE, roomId, null);
-        }
+        var transition = support.resolve(roomId, operator(actor));
         return response(transition.ticket(), actor.id());
     }
 
     @PostMapping("/{roomId}/reopen")
-    @Transactional
     public TicketResponse reopen(@PathVariable String roomId, HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        var transition = support.reopen(roomId, actor.id());
-        if (transition.changed()) {
-            record(actor, AdminActionType.SUPPORT_REOPEN, roomId, null);
-        }
+        var transition = support.reopen(roomId, operator(actor));
         return response(transition.ticket(), actor.id());
     }
 
@@ -151,13 +124,9 @@ public class AdminSupportController {
     }
 
     @PostMapping("/{roomId}/messages")
-    @Transactional
     public ChatController.MessageResponse reply(
             @PathVariable String roomId, @Valid @RequestBody MessageRequest request, HttpServletRequest http) {
-        AdminActor actor = AdminActor.of(http);
-        support.requireAssignedTo(roomId, actor.id());
-        ChatMessage message = messaging.sendAdminSupport(roomId, actor.id(), request.content());
-        record(actor, AdminActionType.SUPPORT_REPLY, roomId, null);
+        ChatMessage message = support.reply(roomId, operator(AdminActor.of(http)), request.content());
         return ChatController.MessageResponse.from(message);
     }
 
@@ -170,12 +139,9 @@ public class AdminSupportController {
     }
 
     @PostMapping("/{roomId}/notes")
-    @Transactional
     public ResponseEntity<Void> addNote(
             @PathVariable String roomId, @Valid @RequestBody NoteRequest request, HttpServletRequest http) {
-        AdminActor actor = AdminActor.of(http);
-        support.addNote(roomId, actor.id(), request.note());
-        record(actor, AdminActionType.SUPPORT_INTERNAL_NOTE, roomId, null);
+        support.addNote(roomId, operator(AdminActor.of(http)), request.note());
         return ResponseEntity.noContent().build();
     }
 
@@ -194,9 +160,8 @@ public class AdminSupportController {
         return TicketResponse.from(ticket, title, analysis);
     }
 
-    private void record(AdminActor actor, AdminActionType type, String roomId, String reason) {
-        audit.record(new RecordAdminActionCommand(
-                actor.id(), actor.email(), type, AdminTargetType.SUPPORT_TICKET, roomId, reason));
+    private static SupportOperator operator(AdminActor actor) {
+        return new SupportOperator(actor.id(), actor.email());
     }
 
     public record TransferRequest(@NotBlank String assigneeId) {}

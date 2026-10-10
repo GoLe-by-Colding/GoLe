@@ -1,9 +1,12 @@
 package com.gole.api.chat.application.service;
 
 import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase;
+import com.gole.api.chat.application.port.out.SupportAdminActionPort;
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
+import com.gole.api.chat.domain.model.SupportAdminAction;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.State;
+import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
@@ -11,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 자동 재시도 한도를 소진한 비식별 문의 알림을 운영자 확인 뒤 한 번 더 큐잉한다. */
 @Service
@@ -20,17 +24,24 @@ public class SupportNotificationOutboxAdminService implements RequeueSupportNoti
 
     private final SupportNotificationOutboxPort outbox;
     private final SupportNotificationOutboxProperties properties;
+    private final SupportAdminActionPort audit;
     private final Clock clock;
 
     public SupportNotificationOutboxAdminService(
-            SupportNotificationOutboxPort outbox, SupportNotificationOutboxProperties properties, Clock clock) {
+            SupportNotificationOutboxPort outbox,
+            SupportNotificationOutboxProperties properties,
+            SupportAdminActionPort audit,
+            Clock clock) {
         this.outbox = outbox;
         this.properties = properties;
+        this.audit = audit;
         this.clock = clock;
     }
 
+    @Transactional
     @Override
-    public RequeueOutcome requeue(String eventId, String confirmation, RequeueReasonCode reasonCode) {
+    public RequeueOutcome requeue(
+            String eventId, String confirmation, RequeueReasonCode reasonCode, SupportOperator operator) {
         Objects.requireNonNull(reasonCode, "reasonCode");
         if (!expectedConfirmation(eventId).equals(confirmation)) {
             throw new BadRequestException(
@@ -44,7 +55,13 @@ public class SupportNotificationOutboxAdminService implements RequeueSupportNoti
         Instant now = Instant.now(clock);
         var requeued = outbox.requeueDeadLetter(eventId, now);
         if (requeued.isPresent()) {
-            return new RequeueOutcome(requeued.orElseThrow(), true);
+            SupportNotificationEvent event = requeued.orElseThrow();
+            audit.record(
+                    operator,
+                    SupportAdminAction.SUPPORT_NOTIFICATION_REQUEUE,
+                    event.eventId(),
+                    "reasonCode=" + reasonCode.name());
+            return new RequeueOutcome(event, true);
         }
 
         SupportNotificationEvent current = outbox.findById(eventId)
