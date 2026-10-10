@@ -11,4 +11,6 @@ import com.gole.api.admin.domain.model.AdminTargetType;
 public interface AdminAuditPseudonymizationPort {
 
     long replaceTargetId(AdminTargetType targetType, String fromTargetId, String toTargetId);
+
+    long replaceTargetIdAndDropReason(AdminTargetType targetType, String fromTargetId, String toTargetId);
 }

@@ -18,10 +18,20 @@ public class AdminAuditPseudonymizationService implements PseudonymizeAdminActio
 
     @Override
     public long replaceTargetId(AdminTargetType targetType, String fromTargetId, String toTargetId) {
+        requireTargets(targetType, fromTargetId, toTargetId);
+        return pseudonymization.replaceTargetId(targetType, fromTargetId, toTargetId);
+    }
+
+    @Override
+    public long replaceTargetIdAndDropReason(AdminTargetType targetType, String fromTargetId, String toTargetId) {
+        requireTargets(targetType, fromTargetId, toTargetId);
+        return pseudonymization.replaceTargetIdAndDropReason(targetType, fromTargetId, toTargetId);
+    }
+
+    private static void requireTargets(AdminTargetType targetType, String fromTargetId, String toTargetId) {
         Objects.requireNonNull(targetType, "targetType");
         if (fromTargetId == null || fromTargetId.isBlank() || toTargetId == null || toTargetId.isBlank()) {
             throw new IllegalArgumentException("target ids must not be blank");
         }
-        return pseudonymization.replaceTargetId(targetType, fromTargetId, toTargetId);
     }
 }

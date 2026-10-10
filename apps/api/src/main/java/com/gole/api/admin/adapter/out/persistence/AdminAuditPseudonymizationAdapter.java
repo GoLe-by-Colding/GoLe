@@ -20,13 +20,25 @@ public class AdminAuditPseudonymizationAdapter implements AdminAuditPseudonymiza
 
     @Override
     public long replaceTargetId(AdminTargetType targetType, String fromTargetId, String toTargetId) {
+        return replace(targetType, fromTargetId, new Update().set("targetId", toTargetId));
+    }
+
+    @Override
+    public long replaceTargetIdAndDropReason(AdminTargetType targetType, String fromTargetId, String toTargetId) {
+        return replace(
+                targetType,
+                fromTargetId,
+                new Update().set("targetId", toTargetId).unset("reason"));
+    }
+
+    private long replace(AdminTargetType targetType, String fromTargetId, Update update) {
         return mongoTemplate
                 .updateMulti(
                         Query.query(new Criteria()
                                 .andOperator(
                                         Criteria.where("targetType").is(targetType.name()),
                                         Criteria.where("targetId").is(fromTargetId))),
-                        new Update().set("targetId", toTargetId),
+                        update,
                         AdminActionDocument.class)
                 .getModifiedCount();
     }
