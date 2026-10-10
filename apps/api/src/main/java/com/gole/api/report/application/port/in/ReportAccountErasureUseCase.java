@@ -1,0 +1,25 @@
+package com.gole.api.report.application.port.in;
+
+/**
+ * Inbound port: 회원 탈퇴 때 신고 컨텍스트가 맡는 일. (account-deletion-participants D1)
+ *
+ * <p>아직 파기하면 안 되는 기록이 남았는지 답하고, 파기할 때 자기 기록을 지우거나 익명 주체로 바꾼다. 호출자의
+ * 트랜잭션 안에서 돌아 계정 파기와 함께 커밋되거나 함께 되돌려진다.
+ */
+public interface ReportAccountErasureUseCase {
+
+    /** 처리 대기 중인 신고가 있는가 — 신고자이거나 계정 자체가 신고 대상인 경우. */
+    boolean hasPendingReport(String accountId);
+
+    /**
+     * 이 계정의 기록을 지우거나 {@code anonymousSubject}로 바꾼다.
+     *
+     * @return 처리한 기록 수
+     */
+    ReportErasure erase(String accountId, String anonymousSubject);
+
+    /**
+     * @param reports 신고자·신고 대상 가명화 수
+     */
+    record ReportErasure(long reports) {}
+}
