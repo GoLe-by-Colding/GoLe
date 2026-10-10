@@ -146,6 +146,9 @@ export const AUDIT_TYPE_LABEL: Readonly<Record<string, string>> = {
   PROMOTION_POST_APPROVE: "홍보 게시 승인",
   PROMOTION_POST_REJECT: "홍보 게시 반려",
   PROMOTION_POST_PUBLISH: "홍보 게시 발행",
+  MASCOT_ASSET_CREATE: "마스코트 업로드",
+  MASCOT_PUBLISH: "마스코트 적용",
+  MASCOT_ASSET_DELETE: "마스코트 삭제",
 };
 
 export const AUDIT_TYPE_TONE: Readonly<Record<string, BadgeTone>> = {
@@ -167,6 +170,9 @@ export const AUDIT_TYPE_TONE: Readonly<Record<string, BadgeTone>> = {
   PROMOTION_POST_APPROVE: "success",
   PROMOTION_POST_REJECT: "danger",
   PROMOTION_POST_PUBLISH: "brand",
+  MASCOT_ASSET_CREATE: "brand",
+  MASCOT_PUBLISH: "brand",
+  MASCOT_ASSET_DELETE: "warning",
 };
 
 /** ISO 문자열을 목록에서 읽기 좋은 짧은 형식으로. */
