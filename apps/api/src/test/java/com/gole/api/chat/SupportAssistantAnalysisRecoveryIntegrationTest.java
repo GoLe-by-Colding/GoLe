@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.chat.adapter.out.persistence.SupportAssistantAnalysisMongoRepository;
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import java.time.Instant;
 import java.util.List;
@@ -81,7 +81,7 @@ class SupportAssistantAnalysisRecoveryIntegrationTest {
         analyses.complete("room-1", first.leaseToken(), result("stale"), NOW.plusSeconds(8));
         assertThat(analyses.findCompletedByRoomId("room-1")).isEmpty();
 
-        Analysis completed = result("최종 초안");
+        SupportAssistantAnalysis completed = result("최종 초안");
         analyses.complete("room-1", second.leaseToken(), completed, NOW.plusSeconds(9));
         assertThat(analyses.findCompletedByRoomId("room-1"))
                 .contains(new SupportAssistantAnalysisRepositoryPort.StoredAnalysis(
@@ -139,10 +139,10 @@ class SupportAssistantAnalysisRecoveryIntegrationTest {
         assertThat(analyses.hasRemoteCopyPossible("room-1")).isTrue();
     }
 
-    private static Analysis result(String draft) {
-        return new Analysis(
+    private static SupportAssistantAnalysis result(String draft) {
+        return new SupportAssistantAnalysis(
                 SupportCategory.PRODUCT_FEEDBACK,
-                Priority.NORMAL,
+                SupportAssistantPriority.NORMAL,
                 "문의 요약",
                 draft,
                 List.of("MANUAL_REVIEW"),

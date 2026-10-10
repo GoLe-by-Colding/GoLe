@@ -1,7 +1,7 @@
 package com.gole.api.community.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentRequest;
 import com.gole.api.community.adapter.in.web.CommunityDtos.CommentResponse;
 import com.gole.api.community.adapter.in.web.CommunityDtos.EditPostRequest;
@@ -158,7 +158,7 @@ public class CommunityController {
             @Valid @RequestBody ReportCommentRequest request,
             HttpServletRequest http) {
         String reportId = reportCommentUseCase.report(new ReportCommentCommand(
-                AuthenticatedUser.id(http), postId, commentId, request.reason(), request.detail()));
+                AuthenticatedUser.id(http), postId, commentId, request.reason().name(), request.detail()));
         return Map.of("id", reportId);
     }
 

@@ -1,5 +1,7 @@
 package com.gole.api.chat.application.port.out;
 
+import com.gole.api.chat.domain.model.ChatReportSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -16,27 +18,16 @@ public interface ChatReportSnapshotPort {
 
     String capture(Snapshot snapshot);
 
-    Optional<StoredSnapshot> findByReportId(String reportId);
+    Optional<ChatReportSnapshot> findByReportId(String reportId);
 
     /** 신고 증거 사본이 하나라도 있으면 원 대화를 파기하지 않기 위한 보존 신호다. */
     boolean existsByRoomId(String roomId);
-
-    record SnapshotMessage(String messageId, String senderId, String content, Instant sentAt) {}
 
     record Snapshot(
             String reportId,
             String roomId,
             String reportedMessageId,
             String reporterId,
-            List<SnapshotMessage> messages,
-            Instant capturedAt) {}
-
-    record StoredSnapshot(
-            String id,
-            String reportId,
-            String roomId,
-            String reportedMessageId,
-            String reporterId,
-            List<SnapshotMessage> messages,
+            List<ChatReportSnapshotMessage> messages,
             Instant capturedAt) {}
 }

@@ -2,6 +2,7 @@ package com.gole.api.shipping.adapter.out.tracker;
 
 import com.gole.api.shipping.application.port.out.DeliveryTrackerPort;
 import com.gole.api.shipping.domain.model.DeliveryStatus;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -122,12 +123,12 @@ public class DeliveryTrackerApiAdapter implements DeliveryTrackerPort {
     }
 
     @Override
-    public synchronized Diagnostics diagnostics() {
-        return new Diagnostics(true, isConfigured(), connected, lastSuccessAt, lastFailureAt, lastFailure);
+    public synchronized TrackerDiagnostics diagnostics() {
+        return new TrackerDiagnostics(true, isConfigured(), connected, lastSuccessAt, lastFailureAt, lastFailure);
     }
 
     @Override
-    public synchronized Diagnostics verifyConnection() {
+    public synchronized TrackerDiagnostics verifyConnection() {
         Instant now = clock.instant();
         if (now.isBefore(nextVerificationAt)) return diagnostics();
         nextVerificationAt = now.plusSeconds(60);

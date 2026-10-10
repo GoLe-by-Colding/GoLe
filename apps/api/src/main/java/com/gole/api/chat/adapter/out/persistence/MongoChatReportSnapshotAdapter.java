@@ -2,6 +2,8 @@ package com.gole.api.chat.adapter.out.persistence;
 
 import com.gole.api.chat.adapter.out.persistence.ChatReportSnapshotDocument.SnapshotMessageDocument;
 import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
+import com.gole.api.chat.domain.model.ChatReportSnapshot;
+import com.gole.api.chat.domain.model.ChatReportSnapshotMessage;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -44,7 +46,7 @@ public class MongoChatReportSnapshotAdapter implements ChatReportSnapshotPort {
     }
 
     @Override
-    public Optional<StoredSnapshot> findByReportId(String reportId) {
+    public Optional<ChatReportSnapshot> findByReportId(String reportId) {
         return snapshots.findByReportId(reportId).map(MongoChatReportSnapshotAdapter::toStored);
     }
 
@@ -53,15 +55,15 @@ public class MongoChatReportSnapshotAdapter implements ChatReportSnapshotPort {
         return snapshots.existsByRoomId(roomId);
     }
 
-    private static StoredSnapshot toStored(ChatReportSnapshotDocument document) {
-        return new StoredSnapshot(
+    private static ChatReportSnapshot toStored(ChatReportSnapshotDocument document) {
+        return new ChatReportSnapshot(
                 document.getId(),
                 document.getReportId(),
                 document.getRoomId(),
                 document.getReportedMessageId(),
                 document.getReporterId(),
                 document.getMessages().stream()
-                        .map(message -> new SnapshotMessage(
+                        .map(message -> new ChatReportSnapshotMessage(
                                 message.messageId(), message.senderId(), message.content(), message.sentAt()))
                         .toList(),
                 document.getCapturedAt());

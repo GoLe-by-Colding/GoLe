@@ -7,12 +7,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.SessionCookie;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

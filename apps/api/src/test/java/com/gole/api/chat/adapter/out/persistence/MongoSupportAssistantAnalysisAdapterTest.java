@@ -8,8 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.mongodb.client.result.UpdateResult;
 import java.time.Instant;
@@ -93,7 +93,7 @@ class MongoSupportAssistantAnalysisAdapterTest {
 
     @Test
     void completedResultRoundTripsWithoutInquirySourceText() {
-        Analysis analysis = result();
+        SupportAssistantAnalysis analysis = result();
         SupportAssistantAnalysisDocument completed =
                 SupportAssistantAnalysisDocument.pending("room-1", STARTED_AT).completed(analysis, COMPLETED_AT);
         when(repository.findById("room-1")).thenReturn(Optional.of(completed));
@@ -106,7 +106,7 @@ class MongoSupportAssistantAnalysisAdapterTest {
 
     @Test
     void completionAndRetryAreGuardedByLeaseOwnership() {
-        Analysis analysis = result();
+        SupportAssistantAnalysis analysis = result();
 
         adapter.complete("room-1", "lease-1", analysis, COMPLETED_AT);
         adapter.retry("room-1", "lease-1", COMPLETED_AT, COMPLETED_AT.plusSeconds(5));
@@ -116,10 +116,10 @@ class MongoSupportAssistantAnalysisAdapterTest {
                 .updateFirst(any(Query.class), any(Update.class), eq(SupportAssistantAnalysisDocument.class));
     }
 
-    private static Analysis result() {
-        return new Analysis(
+    private static SupportAssistantAnalysis result() {
+        return new SupportAssistantAnalysis(
                 SupportCategory.TRADE,
-                Priority.HIGH,
+                SupportAssistantPriority.HIGH,
                 "거래 검토 필요",
                 "확인 후 안내드리겠습니다.",
                 List.of("ESCROW_REVIEW"),

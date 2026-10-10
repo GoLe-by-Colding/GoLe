@@ -2,6 +2,7 @@ package com.gole.api.order.application.service.pipeline;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.gole.api.order.adapter.out.shipping.ShippingPipelineAdapter;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
@@ -73,7 +74,8 @@ class PipelineRulesTest {
         fundsHeldOrder("o-old", NOW.minus(Duration.ofDays(3).plusMinutes(1)));
         fundsHeldOrder("o-fresh", NOW.minus(Duration.ofDays(2)));
 
-        UnshippedReminderRule rule = new UnshippedReminderRule(orders, shipments, notifier, markers, properties);
+        UnshippedReminderRule rule = new UnshippedReminderRule(
+                orders, new ShippingPipelineAdapter(shipments), notifier, markers, properties);
         assertThat(rule.candidates(NOW)).containsExactly("o-old");
         assertThat(rule.apply("o-old", NOW)).isTrue();
         assertThat(notifier.reminders).containsExactly("o-old");
@@ -88,7 +90,8 @@ class PipelineRulesTest {
         fundsHeldOrder("o-shipped", NOW.minus(Duration.ofDays(4)));
         shipments.put(shipment("o-shipped", DeliveryStatus.PENDING, NOW.minus(Duration.ofDays(1)), null));
 
-        UnshippedReminderRule rule = new UnshippedReminderRule(orders, shipments, notifier, markers, properties);
+        UnshippedReminderRule rule = new UnshippedReminderRule(
+                orders, new ShippingPipelineAdapter(shipments), notifier, markers, properties);
         assertThat(rule.apply("o-shipped", NOW)).isFalse();
         assertThat(notifier.reminders).isEmpty();
     }
@@ -100,7 +103,8 @@ class PipelineRulesTest {
         shipments.put(shipment("o-shipped", DeliveryStatus.IN_TRANSIT, NOW.minus(Duration.ofDays(8)), null));
 
         RecordingRefund refund = new RecordingRefund(orders);
-        UnshippedAutoRefundRule rule = new UnshippedAutoRefundRule(orders, shipments, refund, notifier, properties);
+        UnshippedAutoRefundRule rule = new UnshippedAutoRefundRule(
+                orders, new ShippingPipelineAdapter(shipments), refund, notifier, properties);
 
         assertThat(rule.candidates(NOW)).containsExactlyInAnyOrder("o-refund", "o-shipped");
         assertThat(rule.apply("o-refund", NOW)).isTrue();
@@ -128,8 +132,8 @@ class PipelineRulesTest {
                 "o-disputed", DeliveryStatus.DELIVERED, NOW.minus(Duration.ofDays(10)), NOW.minus(Duration.ofDays(8))));
 
         RecordingComplete complete = new RecordingComplete(orders);
-        AutoCompleteDeliveredRule rule =
-                new AutoCompleteDeliveredRule(shipments, orders, complete, notifier, properties);
+        AutoCompleteDeliveredRule rule = new AutoCompleteDeliveredRule(
+                new ShippingPipelineAdapter(shipments), orders, complete, notifier, properties);
 
         assertThat(rule.candidates(NOW)).containsExactlyInAnyOrder("o-done", "o-disputed");
         assertThat(rule.apply("o-done", NOW)).isTrue();
@@ -149,8 +153,8 @@ class PipelineRulesTest {
                 NOW.minus(Duration.ofDays(10)),
                 NOW.minus(Duration.ofDays(7).minusMinutes(1))));
 
-        AutoCompleteDeliveredRule rule =
-                new AutoCompleteDeliveredRule(shipments, orders, new RecordingComplete(orders), notifier, properties);
+        AutoCompleteDeliveredRule rule = new AutoCompleteDeliveredRule(
+                new ShippingPipelineAdapter(shipments), orders, new RecordingComplete(orders), notifier, properties);
         assertThat(rule.candidates(NOW)).isEmpty();
     }
 

@@ -1,7 +1,7 @@
 package com.gole.api.chat.adapter.out.persistence;
 
-import com.gole.api.chat.application.SupportNotificationOutboxProperties;
 import com.gole.api.chat.application.port.out.SupportNotificationOutboxPort;
+import com.gole.api.chat.application.service.SupportNotificationOutboxProperties;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportNotificationEvent;
 import com.gole.api.chat.domain.model.SupportNotificationEvent.EventType;

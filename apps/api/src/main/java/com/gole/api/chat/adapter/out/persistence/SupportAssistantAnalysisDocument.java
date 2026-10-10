@@ -1,6 +1,6 @@
 package com.gole.api.chat.adapter.out.persistence;
 
-import com.gole.api.chat.application.port.out.SupportAssistantPort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.annotation.Id;
@@ -104,7 +104,7 @@ public class SupportAssistantAnalysisDocument {
                 null);
     }
 
-    SupportAssistantAnalysisDocument completed(SupportAssistantPort.Analysis analysis, Instant at) {
+    SupportAssistantAnalysisDocument completed(SupportAssistantAnalysis analysis, Instant at) {
         return new SupportAssistantAnalysisDocument(
                 roomId,
                 COMPLETED,

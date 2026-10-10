@@ -2,15 +2,15 @@ package com.gole.api.order.adapter.out.settlement;
 
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase;
 import com.gole.api.order.application.port.in.GetSellerSettlementsUseCase.SellerSettlementSummary;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.FeeTotals;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.application.port.out.SettlementLedgerPort;
 import com.gole.api.order.application.port.out.SettlementPort;
+import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.order.domain.model.Settlement;
@@ -36,8 +36,7 @@ import org.springframework.stereotype.Component;
 
 /** 완료 주문의 판매자 정산 원장을 멱등 생성하고 관리자 지급 확인을 원자 처리한다. */
 @Component
-public class MongoSettlementAdapter
-        implements SettlementPort, ManageSettlementsUseCase, GetSellerSettlementsUseCase, AutomaticSettlementPort {
+public class MongoSettlementAdapter implements SettlementPort, SettlementLedgerPort, AutomaticSettlementPort {
 
     private static final Logger log = LoggerFactory.getLogger(MongoSettlementAdapter.class);
     private static final int MAX_ROWS = 200;

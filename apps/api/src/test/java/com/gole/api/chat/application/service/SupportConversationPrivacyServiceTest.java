@@ -1,0 +1,270 @@
+package com.gole.api.chat.application.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.PurgeReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionHoldReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionReleaseReasonCode;
+import com.gole.api.chat.application.port.out.ChatAccountPort;
+import com.gole.api.chat.application.port.out.ChatOrderEvidencePort;
+import com.gole.api.chat.application.port.out.ChatReportSnapshotPort;
+import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
+import com.gole.api.chat.application.port.out.SupportAuditReferencePort;
+import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort;
+import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeWrite;
+import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.ChatAccount;
+import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportPurgeCounts;
+import com.gole.api.chat.domain.model.SupportPurgeReceipt;
+import com.gole.api.chat.domain.model.SupportRetentionHold;
+import com.gole.api.chat.domain.model.SupportTicket;
+import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ConflictException;
+import com.gole.api.common.exception.ForbiddenException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class SupportConversationPrivacyServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-09-04T12:00:00Z");
+    private static final String ROOM_ID = "support-room-1";
+    private static final String KEY = "550e8400-e29b-41d4-a716-446655440001";
+
+    private final ChatAccountPort accounts = mock(ChatAccountPort.class);
+    private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
+    private final SocialChatRoomRepositoryPort rooms = mock(SocialChatRoomRepositoryPort.class);
+    private final ChatReportSnapshotPort snapshots = mock(ChatReportSnapshotPort.class);
+    private final ChatOrderEvidencePort orders = mock(ChatOrderEvidencePort.class);
+    private final SupportConversationPrivacyRepositoryPort privacy =
+            mock(SupportConversationPrivacyRepositoryPort.class);
+    private final SupportAssistantPurgePort assistantPurge = mock(SupportAssistantPurgePort.class);
+    private final SupportAuditReferencePort auditReferences = mock(SupportAuditReferencePort.class);
+    private final SupportConversationPrivacyService service = new SupportConversationPrivacyService(
+            accounts,
+            tickets,
+            rooms,
+            snapshots,
+            orders,
+            privacy,
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            assistantPurge,
+            mock(SupportAssistantAnalysisRepositoryPort.class),
+            auditReferences);
+
+    @BeforeEach
+    void setUp() {
+        when(accounts.findById("admin-1")).thenReturn(Optional.of(admin()));
+        when(tickets.findByRoomId(ROOM_ID)).thenReturn(Optional.of(resolvedTicket()));
+        when(rooms.findById(ROOM_ID)).thenReturn(Optional.of(SocialChatRoom.support(ROOM_ID, "user-1", "문의", NOW)));
+        when(orders.hasUnsettledOrder("user-1")).thenReturn(false);
+        when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void resolvedConversationIsPurgedOnceAndSameIdempotencyRequestReplaysReceipt() {
+        AtomicReference<SupportPurgeReceipt> stored = new AtomicReference<>();
+        when(privacy.purge(any())).thenAnswer(invocation -> {
+            PurgeWrite write = invocation.getArgument(0);
+            SupportPurgeReceipt receipt = receipt(write);
+            stored.set(receipt);
+            return receipt;
+        });
+
+        var first =
+                service.purge(ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY);
+        when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.of(stored.get()));
+        var replay =
+                service.purge(ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY);
+
+        assertThat(first.replayed()).isFalse();
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.receipt()).isEqualTo(first.receipt());
+        verify(privacy).purge(any());
+        verify(assistantPurge).purge(ROOM_ID, "user-1");
+    }
+
+    @Test
+    void sameIdempotencyKeyCannotBeReusedWithDifferentReason() {
+        SupportPurgeReceipt previous = new SupportPurgeReceipt(
+                "receipt-1",
+                "admin-1",
+                PurgeReasonCode.RETENTION_PERIOD_EXPIRED.name(),
+                "key-hash",
+                "different-request-fingerprint",
+                NOW.minusSeconds(10),
+                NOW,
+                new SupportPurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
+        when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.of(previous));
+
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("멱등 키");
+
+        verify(privacy, never()).purge(any());
+    }
+
+    @Test
+    void sameIdempotencyKeyCannotBeReusedForAnotherConversation() {
+        SupportPurgeReceipt previous = new SupportPurgeReceipt(
+                "receipt-1",
+                "admin-1",
+                PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED.name(),
+                "key-hash",
+                "different-request-fingerprint",
+                NOW.minusSeconds(10),
+                NOW,
+                new SupportPurgeCounts(1, 1, 1, 1, 0, 0, 0, 0));
+        when(privacy.findPurgeReceiptByIdempotencyKeyHash(any())).thenReturn(Optional.of(previous));
+
+        assertThatThrownBy(() -> service.purge(
+                        "another-room",
+                        "admin-1",
+                        "another-room",
+                        PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED,
+                        true,
+                        KEY))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("멱등 키");
+
+        verify(tickets, never()).findByRoomId(any());
+        verify(privacy, never()).purge(any());
+    }
+
+    @Test
+    void nonAdminOrSuspendedAdminIsRejectedBeforeConversationLookup() {
+        when(accounts.findById("user-1")).thenReturn(Optional.of(new ChatAccount("user-1", false, true, false)));
+        when(accounts.findById("suspended-admin"))
+                .thenReturn(Optional.of(new ChatAccount("suspended-admin", true, false, true)));
+
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "user-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "suspended-admin", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(tickets, never()).findByRoomId(any());
+        verify(privacy, never()).purge(any());
+    }
+
+    @Test
+    void explicitConfirmationAndPreservationReviewAreRequiredBeforeReadingConversation() {
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", "wrong-room", PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, false, KEY))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("보존");
+
+        verify(tickets, never()).findByRoomId(any());
+        verify(privacy, never()).purge(any());
+    }
+
+    @Test
+    void unresolvedHoldReportEvidenceAndActiveOrderEachBlockPurge() {
+        SupportTicket unresolved = SupportTicket.opened(ROOM_ID, "user-1", NOW);
+        when(tickets.findByRoomId(ROOM_ID)).thenReturn(Optional.of(unresolved));
+        assertBlocked("완료");
+
+        when(tickets.findByRoomId(ROOM_ID)).thenReturn(Optional.of(resolvedTicket()));
+        when(privacy.findRetentionHold(ROOM_ID))
+                .thenReturn(Optional.of(new SupportRetentionHold(
+                        ROOM_ID,
+                        "hold-1",
+                        true,
+                        RetentionHoldReasonCode.LEGAL_OBLIGATION.name(),
+                        "admin-1",
+                        NOW,
+                        null,
+                        null,
+                        null,
+                        0)));
+        assertBlocked("보존");
+
+        when(privacy.findRetentionHold(ROOM_ID)).thenReturn(Optional.empty());
+        when(snapshots.existsByRoomId(ROOM_ID)).thenReturn(true);
+        assertBlocked("신고 증거");
+
+        when(snapshots.existsByRoomId(ROOM_ID)).thenReturn(false);
+        when(orders.hasUnsettledOrder("user-1")).thenReturn(true);
+        assertBlocked("거래 또는 분쟁");
+
+        verify(privacy, never()).purge(any());
+    }
+
+    @Test
+    void retentionHoldIsExplicitAndReleaseIsIdempotent() {
+        when(privacy.saveRetentionHold(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var placed = service.placeRetentionHold(ROOM_ID, "admin-1", ROOM_ID, RetentionHoldReasonCode.ACTIVE_DISPUTE);
+        SupportRetentionHold active = placed.hold();
+        when(privacy.findRetentionHold(ROOM_ID)).thenReturn(Optional.of(active));
+        var released =
+                service.releaseRetentionHold(ROOM_ID, "admin-1", ROOM_ID, RetentionReleaseReasonCode.DISPUTE_CLOSED);
+        when(privacy.findRetentionHold(ROOM_ID)).thenReturn(Optional.of(released.hold()));
+        var replay =
+                service.releaseRetentionHold(ROOM_ID, "admin-1", ROOM_ID, RetentionReleaseReasonCode.DISPUTE_CLOSED);
+
+        assertThat(placed.changed()).isTrue();
+        assertThat(released.changed()).isTrue();
+        assertThat(released.hold().active()).isFalse();
+        assertThat(replay.changed()).isFalse();
+    }
+
+    private void assertBlocked(String message) {
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining(message);
+    }
+
+    private static ChatAccount admin() {
+        return new ChatAccount("admin-1", true, true, false);
+    }
+
+    private static SupportTicket resolvedTicket() {
+        return SupportTicket.opened(ROOM_ID, "user-1", NOW.minusSeconds(60))
+                .assignTo("admin-1", NOW.minusSeconds(30))
+                .resolve(NOW.minusSeconds(10));
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("원격 파기 실패를 성공으로 반환하지 않음")
+    void remotePurgeFailureEscapesForTransactionRollback() {
+        when(privacy.purge(any())).thenAnswer(invocation -> receipt(invocation.getArgument(0)));
+        org.mockito.Mockito.doThrow(new IllegalStateException("REMOTE_UNAVAILABLE"))
+                .when(assistantPurge)
+                .purge(ROOM_ID, "user-1");
+        assertThatThrownBy(() -> service.purge(
+                        ROOM_ID, "admin-1", ROOM_ID, PurgeReasonCode.DATA_SUBJECT_REQUEST_FULFILLED, true, KEY))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private static SupportPurgeReceipt receipt(PurgeWrite write) {
+        return new SupportPurgeReceipt(
+                write.receiptId(),
+                write.actorId(),
+                write.reasonCode(),
+                write.idempotencyKeyHash(),
+                write.requestFingerprint(),
+                write.resolvedAt(),
+                write.purgedAt(),
+                new SupportPurgeCounts(2, 1, 1, 1, 1, 2, 0, 0));
+    }
+}

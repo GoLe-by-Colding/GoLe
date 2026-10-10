@@ -1,9 +1,9 @@
 package com.gole.api.brickfilter.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.brickfilter.application.port.in.ManageBrickFilterUseCase;
 import com.gole.api.brickfilter.domain.model.BrickJob.Mode;
 import com.gole.api.common.exception.*;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import org.springframework.http.*;

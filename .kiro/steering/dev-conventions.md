@@ -19,37 +19,11 @@
 
 ## 백엔드 — 헥사고날 아키텍처
 
-### 레이어 구조
+### 레이어 구조·구현 순서·컨텍스트 간 연동
 
-```
-com.gole.api.<컨텍스트>/
-├── domain/
-│   └── model/          # 순수 도메인 객체 (외부 의존 없음)
-├── application/
-│   ├── port/
-│   │   ├── in/         # 인바운드 포트 (UseCase 인터페이스)
-│   │   └── out/        # 아웃바운드 포트 (Repository 인터페이스)
-│   └── service/        # 유스케이스 구현체 (포트 의존)
-└── adapter/
-    ├── in/
-    │   └── web/        # REST 컨트롤러 (인바운드 어댑터)
-    └── out/
-        └── persistence/ # MongoDB 어댑터 (아웃바운드 어댑터)
-```
-
-### 구현 순서 (반드시 이 순서)
-
-1. `domain/model/` — 도메인 객체
-2. `application/port/in/` — UseCase 인터페이스
-3. `application/port/out/` — Repository 인터페이스
-4. `application/service/` — 서비스 구현
-5. `adapter/out/persistence/` — Document + Repository 어댑터
-6. `adapter/in/web/` — Controller + Request/Response DTO
-
-### 컨텍스트 간 연동
-
-- 다른 컨텍스트의 **인바운드 포트(UseCase)에만** 의존한다.
-- 다른 컨텍스트의 service나 adapter를 직접 참조하지 않는다.
+정본은 `AGENTS.md` "아키텍처 — 백엔드"다. 여기 따로 적지 않는다 — 두 곳에 레이어 트리를 두었다가
+서로 어긋났다(2026-10-10 정리). 경계 규칙은 `apps/api/src/test/java/com/gole/api/architecture/
+HexagonalArchitectureTest.java`가 테스트로 강제한다.
 
 ### MongoDB 주의사항
 

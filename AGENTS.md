@@ -240,23 +240,47 @@ pnpm --filter web e2e
 
 ### 백엔드 — 헥사고날, 컨텍스트당 한 세트
 
-`com.gole.api.<컨텍스트>/`에 `domain/` → `application/port/{in,out}` + `application/service/` →
-`adapter/{in/web, out/...}`. 컨텍스트: account, admin, catalog, chat, collection, community,
-discovery, listing, media, notification, order, pricing, report, review.
+`com.gole.api.<컨텍스트>/` 한 단계가 바운디드 컨텍스트다(23개): account, admin, bid, brickfilter,
+catalog, chat, collection, community, design, discovery, launch, listing, media, notification, offer,
+operations, order, parts, pricing, promotion, report, review, shipping. payment·settlement 는 별도
+컨텍스트가 아니라 order 안(`order/adapter/out/{payment,settlement}`)이다.
+
+```
+domain/{model,exception}        순수 도메인. 프레임워크를 모른다
+application/port/{in,out}       유스케이스(in)·외부 의존(out) 인터페이스
+application/service/            유스케이스 구현. application 바로 밑에 클래스를 두지 않는다
+application/query/              (선택) 조회 조건 객체 — listing
+adapter/in/web · adapter/out/<대상>
+config/ · bootstrap/            (선택) 그 컨텍스트 전용 설정·로컬 시더
+```
 
 **새 기능은 반드시 이 순서로 만든다**: domain/model → port/in → port/out → service →
 adapter/out/persistence → adapter/in/web.
 
-**컨텍스트 간 연동은 상대의 인바운드 포트(UseCase)에만 의존한다.** 상대 service·adapter를 직접
-참조하지 않는다. 구현 형태는 "내 아웃바운드 포트를 상대 UseCase로 위임하는 어댑터"다 —
-`order/adapter/out/listing/ListingReservationAdapter.java`가 표준 예시(`ListingReservationPort`를
-listing의 `ReserveListingUseCase` 등으로 구현하고, 상대 도메인 객체를 내 컨텍스트가 필요한
-최소 데이터로 환원해 결합을 끊는다). order는 이 방식으로 listing·pricing·payment·settlement·
-notification과 붙는다.
+**경계 규칙은 `HexagonalArchitectureTest`(ArchUnit)가 `./gradlew test` 에서 강제한다.** 어기면
+테스트가 실패한다. 규칙을 바꾸려면 그 테스트와 이 절을 같이 고친다.
+
+- domain 은 Spring·Mongo·Jackson 과 자기 application·adapter 를 모른다.
+- application 은 adapter 와 Mongo·Redis(드라이버 `com.mongodb`·`org.bson` 포함)·Web 을 모른다.
+- **domain·application 은 다른 컨텍스트를 모른다.** 연동은 "내 아웃바운드 포트를 상대 UseCase 로
+  위임하는 어댑터"로만 한다 — `order/adapter/out/listing/ListingReservationAdapter.java`가 표준
+  예시다(상대 도메인 객체를 내 컨텍스트가 필요한 최소 데이터로 환원해 결합을 끊는다).
+- 어댑터·config·bootstrap 은 다른 컨텍스트의 `application.port.in` 과 그 포트가 내주는 `domain`
+  타입에만 의존한다. 상대 service·port.out·adapter·config 는 쓰지 않는다.
+- 인바운드 어댑터(컨트롤러)는 유스케이스만 부른다 — 서비스 구현·port.out·adapter.out 을 직접 쓰지 않는다.
+- 유스케이스는 `application.service` 의 서비스가 구현한다. 어댑터가 인바운드 포트를 겸하지 않는다.
+- common 은 어느 컨텍스트에도 의존하지 않는다.
+
+**관리자 API(`/api/admin/**`)는 기능을 소유한 컨텍스트의 `adapter/in/web`에 둔다**(예: chat 의
+`AdminSupportController`, promotion 의 `AdminPromotionPostController`). admin 컨텍스트에는 여러
+컨텍스트를 가로지르는 화면(대시보드·예외 큐·신고 모더레이션)과 관리자 감사 로그만 둔다. 가드는 경로
+기준이라 위치와 상관없이 `AdminAuthInterceptor`가 건다.
 
 `common/`은 컨텍스트가 아니라 횡단 관심사다: `aop/`(유스케이스 로깅·운영 신호),
 `exception/`(DomainException 계열) + `web/GlobalExceptionHandler`(→ `{code, message}` 응답),
-`config/`(Mongo 트랜잭션, 스케줄링, CORS, 운영 설정 가드), `operations/`(Discord 알림 발행).
+`web/auth/`(`AuthenticatedUser`·`RequiresOnboarding`·`AdminActor`·`SessionCookie` — 세션 해석은
+account·admin 인터셉터가 하고 컨트롤러는 이 타입으로만 읽는다), `config/`(Mongo 트랜잭션,
+스케줄링, CORS, 운영 설정 가드), `operations/`(Discord 알림 발행).
 
 MongoDB 규칙: `@Id`에 `@Indexed(unique=true)` 금지, Document 클래스와 도메인 모델은 분리하고
 매핑은 어댑터 책임, rs0라서 멀티도큐먼트 트랜잭션 사용 가능.

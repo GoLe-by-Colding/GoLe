@@ -1,10 +1,10 @@
 package com.gole.api.launch.adapter.in.web;
 
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchReadinessCheck;
+import com.gole.api.launch.domain.model.SettlementMode;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -69,7 +69,7 @@ public final class LaunchDtos {
         public static AdminLaunchConfigResponse from(
                 LaunchConfig effective,
                 LaunchConfig requested,
-                Mode settlementMode,
+                SettlementMode settlementMode,
                 boolean payoutContractVerified,
                 boolean sellerIdentityVerificationReady,
                 boolean emailAuthenticationAvailable) {

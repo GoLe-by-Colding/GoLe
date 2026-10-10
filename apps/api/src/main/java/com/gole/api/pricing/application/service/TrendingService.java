@@ -1,11 +1,10 @@
 package com.gole.api.pricing.application.service;
 
-import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
-import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.pricing.application.port.in.GetTrendingSetsUseCase;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort;
 import com.gole.api.pricing.application.port.out.PriceTransactionRepositoryPort.TradeAggregate;
 import com.gole.api.pricing.application.port.out.TrendingCachePort;
+import com.gole.api.pricing.application.port.out.TrendingSetCatalogPort;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,19 +28,19 @@ public class TrendingService implements GetTrendingSetsUseCase {
 
     private final PriceTransactionRepositoryPort repository;
     private final TrendingCachePort cache;
-    private final FindLegoSetUseCase findLegoSet;
+    private final TrendingSetCatalogPort catalog;
     private final Clock clock;
     private final MarketEvidencePolicy evidencePolicy;
 
     public TrendingService(
             PriceTransactionRepositoryPort repository,
             TrendingCachePort cache,
-            FindLegoSetUseCase findLegoSet,
+            TrendingSetCatalogPort catalog,
             Clock clock,
             MarketEvidencePolicy evidencePolicy) {
         this.repository = repository;
         this.cache = cache;
-        this.findLegoSet = findLegoSet;
+        this.catalog = catalog;
         this.clock = clock;
         this.evidencePolicy = evidencePolicy;
     }
@@ -74,9 +73,9 @@ public class TrendingService implements GetTrendingSetsUseCase {
         String name = aggregate.setNumber();
         String imageUrl = null;
         try {
-            LegoSet set = findLegoSet.findBySetNumber(aggregate.setNumber());
-            name = set.getName();
-            imageUrl = set.getImageUrl();
+            TrendingSetCatalogPort.SetLabel label = catalog.labelOf(aggregate.setNumber());
+            name = label.name();
+            imageUrl = label.imageUrl();
         } catch (RuntimeException ignored) {
             // 카탈로그에 없거나 조회 실패해도 랭킹 자체는 제공한다.
         }

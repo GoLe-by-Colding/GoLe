@@ -1,7 +1,7 @@
 package com.gole.api.shipping.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.shipping.application.port.in.GetShipmentUseCase;

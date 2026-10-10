@@ -1,7 +1,8 @@
 package com.gole.api.order.adapter.out.settlement;
 
-import com.gole.api.order.adapter.out.settlement.SettlementProperties.Mode;
 import com.gole.api.order.application.port.out.SettlementExecutionPort;
+import com.gole.api.order.config.SettlementProperties;
+import com.gole.api.order.config.SettlementProperties.Mode;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

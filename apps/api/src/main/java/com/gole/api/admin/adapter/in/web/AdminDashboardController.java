@@ -3,9 +3,9 @@ package com.gole.api.admin.adapter.in.web;
 import com.gole.api.admin.adapter.in.web.AdminDtos.AuditRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.OverviewResponse;
 import com.gole.api.admin.application.port.in.ListAdminActionsUseCase;
-import com.gole.api.admin.application.port.out.AdminReadModelPort;
-import com.gole.api.admin.application.port.out.AdminReadModelPort.OrderStats;
-import com.gole.api.chat.application.SupportChatService;
+import com.gole.api.admin.application.port.in.QueryAdminReadModelUseCase;
+import com.gole.api.admin.domain.model.AdminOrderStats;
+import com.gole.api.chat.application.port.in.SupportConsoleUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
@@ -33,18 +33,18 @@ public class AdminDashboardController {
     private static final List<String> COLLECTIONS =
             List.of("accounts", "lego_sets", "listings", "orders", "posts", "reviews", "price_transactions");
 
-    private final AdminReadModelPort readModel;
+    private final QueryAdminReadModelUseCase readModel;
     private final ListAdminActionsUseCase listAdminActions;
     private final ManageReportsUseCase manageReports;
-    private final SupportChatService support;
+    private final SupportConsoleUseCase support;
     private final ManageSettlementsUseCase manageSettlements;
     private final GetPaymentReadinessUseCase paymentReadiness;
 
     public AdminDashboardController(
-            AdminReadModelPort readModel,
+            QueryAdminReadModelUseCase readModel,
             ListAdminActionsUseCase listAdminActions,
             ManageReportsUseCase manageReports,
-            SupportChatService support,
+            SupportConsoleUseCase support,
             ManageSettlementsUseCase manageSettlements,
             GetPaymentReadinessUseCase paymentReadiness) {
         this.readModel = readModel;
@@ -58,7 +58,7 @@ public class AdminDashboardController {
     @Operation(summary = "대시보드 집계", description = "컬렉션 카운트 + GMV·주문상태·활성매물")
     @GetMapping("/overview")
     public OverviewResponse overview() {
-        OrderStats stats = readModel.orderStats();
+        AdminOrderStats stats = readModel.orderStats();
         return new OverviewResponse(
                 readModel.collectionCounts(COLLECTIONS),
                 stats.completedGmv(),

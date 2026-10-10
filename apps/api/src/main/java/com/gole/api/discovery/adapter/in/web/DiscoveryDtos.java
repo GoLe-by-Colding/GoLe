@@ -1,8 +1,8 @@
 package com.gole.api.discovery.adapter.in.web;
 
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import com.gole.api.discovery.domain.model.WishlistEntry;
 import com.gole.api.discovery.domain.model.WishlistTargetType;
-import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.media.domain.model.MediaKey;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -38,22 +38,22 @@ public final class DiscoveryDtos {
          *     {@code listedAt}은 정렬 키(등록 또는 마지막 끌올), {@code previousPrice}는 지금 가격이
          *     직전보다 쌀 때만 있는 직전가다. (listing-edit-and-bump R2)
          */
-        public static ListingSummaryResponse from(Listing l) {
+        public static ListingSummaryResponse from(DiscoveredListing l) {
             return new ListingSummaryResponse(
-                    l.getId(),
-                    l.getSellerId(),
-                    l.getTitle(),
-                    l.getPrice().amount(),
-                    l.getCondition().name().toLowerCase(),
-                    l.getCatalogSetNumber(),
-                    l.getCategory().name().toLowerCase(),
-                    l.getStatus().name().toLowerCase(),
-                    l.getPhotoUrls().stream()
+                    l.id(),
+                    l.sellerId(),
+                    l.title(),
+                    l.price(),
+                    l.condition().toLowerCase(),
+                    l.catalogSetNumber(),
+                    l.category().toLowerCase(),
+                    l.status().toLowerCase(),
+                    l.photoUrls().stream()
                             .flatMap(value -> MediaKey.safePublicPath(value).stream())
                             .toList(),
-                    l.getCreatedAt(),
-                    l.getListedAt(),
-                    l.getPreviousPrice() == null ? null : l.getPreviousPrice().amount());
+                    l.createdAt(),
+                    l.listedAt(),
+                    l.previousPrice());
         }
     }
 

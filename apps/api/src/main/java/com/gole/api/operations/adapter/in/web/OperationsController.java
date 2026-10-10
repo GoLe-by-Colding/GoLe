@@ -1,7 +1,7 @@
 package com.gole.api.operations.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
-import com.gole.api.operations.application.service.OperationsService;
+import com.gole.api.common.web.auth.AdminActor;
+import com.gole.api.operations.application.port.in.RunOperationsUseCase;
 import com.gole.api.operations.domain.OperationRun;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -15,15 +15,15 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin/operations")
 public class OperationsController {
-    private final OperationsService operations;
+    private final RunOperationsUseCase operations;
 
-    public OperationsController(OperationsService operations) {
+    public OperationsController(RunOperationsUseCase operations) {
         this.operations = operations;
     }
 
     @GetMapping
     public Snapshot list() {
-        return new Snapshot(OperationsService.JOBS, operations.history());
+        return new Snapshot(operations.jobs(), operations.history());
     }
 
     @PostMapping("/{jobId}/runs")
@@ -38,5 +38,5 @@ public class OperationsController {
 
             @Size(max = 36) String retryOf) {}
 
-    public record Snapshot(List<OperationsService.Job> jobs, List<OperationRun> history) {}
+    public record Snapshot(List<RunOperationsUseCase.Job> jobs, List<OperationRun> history) {}
 }

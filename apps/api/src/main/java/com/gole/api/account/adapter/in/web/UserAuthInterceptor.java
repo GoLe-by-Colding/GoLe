@@ -3,6 +3,8 @@ package com.gole.api.account.adapter.in.web;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
@@ -13,7 +15,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class UserAuthInterceptor implements HandlerInterceptor {
 
-    public static final String ATTR_ACCOUNT_ID = "gole.user.accountId";
+    public static final String ATTR_ACCOUNT_ID = AuthenticatedUser.ATTRIBUTE;
     private final GetCurrentSessionUseCase sessions;
     private final SessionCookie sessionCookie;
 

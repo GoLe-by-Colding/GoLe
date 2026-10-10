@@ -18,6 +18,7 @@ import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort.Candidate;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
 import java.time.Clock;

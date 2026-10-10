@@ -8,6 +8,7 @@ import com.gole.api.order.application.port.in.PrepareShipmentRegistrationUseCase
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.shipping.adapter.out.order.OrderShipmentOrderAdapter;
 import com.gole.api.shipping.application.port.in.RegisterWaybillUseCase.RegisterWaybillCommand;
 import com.gole.api.shipping.application.port.out.DeliveryTrackerPort;
 import com.gole.api.shipping.application.port.out.ShipmentNotifierPort;
@@ -51,7 +52,7 @@ class ShipmentServiceTest {
                 tracker,
                 new NoopCache(),
                 notifier,
-                orders,
+                new OrderShipmentOrderAdapter(orders),
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 Duration.ofMinutes(10),
                 Duration.ofHours(24));

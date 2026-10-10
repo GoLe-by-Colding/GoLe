@@ -9,10 +9,10 @@ import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
 import com.gole.api.discovery.domain.exception.DuplicateFollowException;
 import com.gole.api.discovery.domain.exception.DuplicateWishlistException;
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import com.gole.api.discovery.domain.model.Follow;
 import com.gole.api.discovery.domain.model.WishlistEntry;
 import com.gole.api.discovery.domain.model.WishlistTargetType;
-import com.gole.api.listing.domain.model.Listing;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -154,12 +154,12 @@ class DiscoveryServiceTest {
 
     private static final class NoopListingQuery implements ListingQueryPort {
         @Override
-        public List<Listing> activeBySeller(String sellerId) {
+        public List<DiscoveredListing> activeBySeller(String sellerId) {
             return List.of();
         }
 
         @Override
-        public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+        public List<DiscoveredListing> activeBySellers(List<String> sellerIds, int limit) {
             return List.of();
         }
     }
@@ -169,12 +169,12 @@ class DiscoveryServiceTest {
         private int requestedLimit;
 
         @Override
-        public List<Listing> activeBySeller(String sellerId) {
+        public List<DiscoveredListing> activeBySeller(String sellerId) {
             return List.of();
         }
 
         @Override
-        public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
+        public List<DiscoveredListing> activeBySellers(List<String> sellerIds, int limit) {
             requestedSellerIds = List.copyOf(sellerIds);
             requestedLimit = limit;
             return List.of();

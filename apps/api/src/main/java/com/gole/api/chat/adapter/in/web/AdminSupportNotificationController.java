@@ -1,12 +1,12 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.SupportNotificationOutboxAdminService;
-import com.gole.api.chat.application.SupportNotificationOutboxAdminService.RequeueReasonCode;
+import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase;
+import com.gole.api.chat.application.port.in.RequeueSupportNotificationUseCase.RequeueReasonCode;
+import com.gole.api.common.web.auth.AdminActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,11 +33,11 @@ public class AdminSupportNotificationController {
     private static final String EVENT_ID_PATTERN =
             "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
 
-    private final SupportNotificationOutboxAdminService notifications;
+    private final RequeueSupportNotificationUseCase notifications;
     private final RecordAdminActionUseCase audit;
 
     public AdminSupportNotificationController(
-            SupportNotificationOutboxAdminService notifications, RecordAdminActionUseCase audit) {
+            RequeueSupportNotificationUseCase notifications, RecordAdminActionUseCase audit) {
         this.notifications = notifications;
         this.audit = audit;
     }
@@ -71,7 +71,7 @@ public class AdminSupportNotificationController {
 
     public record RequeueResponse(String eventId, String state, int attempts, String nextAttemptAt, boolean changed) {
 
-        static RequeueResponse from(SupportNotificationOutboxAdminService.RequeueOutcome outcome) {
+        static RequeueResponse from(RequeueSupportNotificationUseCase.RequeueOutcome outcome) {
             var event = outcome.event();
             return new RequeueResponse(
                     event.eventId(),

@@ -3,6 +3,7 @@ package com.gole.api.order;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.admin.application.port.out.AdminReadModelPort;
+import com.gole.api.admin.domain.model.AdminOrderRow;
 import com.gole.api.listing.application.port.in.CreateListingUseCase;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.domain.model.ConditionDisclosure;
@@ -118,15 +119,15 @@ class PaymentMethodPersistenceIntegrationTest {
         payOrder.pay(paid);
         String pending = placedOrder(60_000, "buyer-pm-row-2");
 
-        List<AdminReadModelPort.OrderRow> rows = adminReadModel.recentOrders(null, null, 100);
+        List<AdminOrderRow> rows = adminReadModel.recentOrders(null, null, 100);
 
-        AdminReadModelPort.OrderRow paidRow =
+        AdminOrderRow paidRow =
                 rows.stream().filter(r -> r.id().equals(paid)).findFirst().orElseThrow();
         assertThat(paidRow.paymentMethod()).isNotNull();
         assertThat(paidRow.paymentMethod().type()).isEqualTo("EASY_PAY");
         assertThat(paidRow.paymentMethod().provider()).isEqualTo("KAKAOPAY");
 
-        AdminReadModelPort.OrderRow pendingRow =
+        AdminOrderRow pendingRow =
                 rows.stream().filter(r -> r.id().equals(pending)).findFirst().orElseThrow();
         assertThat(pendingRow.paymentMethod()).isNull();
     }

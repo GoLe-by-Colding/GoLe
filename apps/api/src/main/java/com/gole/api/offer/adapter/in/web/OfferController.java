@@ -1,8 +1,8 @@
 package com.gole.api.offer.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import com.gole.api.offer.adapter.in.web.OfferRequests.MakeOfferRequest;
 import com.gole.api.offer.application.port.in.ListOffersUseCase;
 import com.gole.api.offer.application.port.in.MakeOfferUseCase;
@@ -38,13 +38,13 @@ public class OfferController {
     private final MakeOfferUseCase makeOffer;
     private final RespondToOfferUseCase respondToOffer;
     private final ListOffersUseCase listOffers;
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
+    private final ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents;
 
     public OfferController(
             MakeOfferUseCase makeOffer,
             RespondToOfferUseCase respondToOffer,
             ListOffersUseCase listOffers,
-            ThirdPartyProvisionConsentService thirdPartyProvisionConsents) {
+            ManageThirdPartyProvisionConsentUseCase thirdPartyProvisionConsents) {
         this.makeOffer = makeOffer;
         this.respondToOffer = respondToOffer;
         this.listOffers = listOffers;

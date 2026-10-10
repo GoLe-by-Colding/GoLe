@@ -69,7 +69,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
 
     private void requireStubAllowed(String orderId) {
         if (!stubAllowed) {
-            throw new com.gole.api.order.application.port.out.PaymentGatewayUnavailableException(
+            throw new com.gole.api.order.domain.exception.PaymentGatewayUnavailableException(
                     orderId, new IllegalStateException("Production payment gateway is disabled"));
         }
     }

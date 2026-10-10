@@ -10,9 +10,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
+import com.gole.api.admin.adapter.out.moderation.ContentModerationAdapter;
+import com.gole.api.admin.adapter.out.report.ReportCaseAdapter;
+import com.gole.api.admin.application.port.in.QueryAdminReadModelUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
-import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.application.service.ResolveReportTargetService;
+import com.gole.api.common.exception.ConflictException;
 import com.gole.api.community.application.port.in.ModerateCommentUseCase;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
@@ -20,7 +23,6 @@ import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.domain.model.OrderStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
-import com.gole.api.report.domain.exception.ReportAlreadyHandledException;
 import com.gole.api.report.domain.model.Report;
 import com.gole.api.report.domain.model.ReportReason;
 import com.gole.api.report.domain.model.ReportStatus;
@@ -43,10 +45,17 @@ class AdminModerationControllerTest {
     private final ManageSettlementsUseCase settlements = mock(ManageSettlementsUseCase.class);
     private final PayOrderUseCase payments = mock(PayOrderUseCase.class);
     private final RecordAdminActionUseCase audit = mock(RecordAdminActionUseCase.class);
-    private final ResolveReportTargetService resolveTarget =
-            new ResolveReportTargetService(reports, listings, posts, comments, reviews);
+    private final ResolveReportTargetService resolveTarget = new ResolveReportTargetService(
+            new ReportCaseAdapter(reports), new ContentModerationAdapter(listings, posts, comments, reviews));
     private final AdminModerationController controller = new AdminModerationController(
-            mock(AdminReadModelPort.class), listings, posts, reports, settlements, payments, audit, resolveTarget);
+            mock(QueryAdminReadModelUseCase.class),
+            listings,
+            posts,
+            reports,
+            settlements,
+            payments,
+            audit,
+            resolveTarget);
 
     @Test
     @DisplayName("결제 재조정 성공 상태와 감사 로그를 반환한다")
@@ -89,7 +98,9 @@ class AdminModerationControllerTest {
 
         assertThatThrownBy(() -> controller.resolveReportTarget(
                         "report-1", new ReasonRequest("스팸"), new MockHttpServletRequest()))
-                .isInstanceOf(ReportAlreadyHandledException.class);
+                .isInstanceOf(ConflictException.class)
+                .extracting("code")
+                .isEqualTo("REPORT_ALREADY_HANDLED");
 
         verify(listings, never()).takedown(any(), any());
         verify(posts, never()).removeByModerator(any(), any());

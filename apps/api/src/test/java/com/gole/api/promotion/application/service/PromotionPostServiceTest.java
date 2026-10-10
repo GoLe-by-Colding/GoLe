@@ -14,6 +14,7 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
+import com.gole.api.promotion.adapter.out.media.MediaPromotionMediaAdapter;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CreatePromotionPostCommand;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
@@ -54,8 +55,13 @@ class PromotionPostServiceTest {
     private final ManageMediaAssetsUseCase mediaAssets = mock(ManageMediaAssetsUseCase.class);
     private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
-    private final PromotionPostService service =
-            new PromotionPostService(repository, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
+    private final PromotionPostService service = new PromotionPostService(
+            repository,
+            idGenerator,
+            publishPort,
+            new MediaPromotionMediaAdapter(mediaAssets),
+            operationalEvents,
+            clock);
 
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -131,7 +137,8 @@ class PromotionPostServiceTest {
     }
 
     private PromotionPostService serviceOver(InMemoryRepo repo) {
-        return new PromotionPostService(repo, idGenerator, publishPort, mediaAssets, operationalEvents, clock);
+        return new PromotionPostService(
+                repo, idGenerator, publishPort, new MediaPromotionMediaAdapter(mediaAssets), operationalEvents, clock);
     }
 
     /** 같은 릴리스로 초안 하나를 만들고 검토 요청까지 올린다 — 그 릴리스를 점유한 상태. */

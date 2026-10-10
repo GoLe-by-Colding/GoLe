@@ -1,7 +1,7 @@
 package com.gole.api.community.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.community.adapter.in.web.CommunityV2Dtos.PatchPostRequest;
 import com.gole.api.community.adapter.in.web.CommunityV2Dtos.PatchPostResponse;
 import com.gole.api.community.application.port.in.PatchPostUseCase;
