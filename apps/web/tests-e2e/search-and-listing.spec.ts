@@ -149,6 +149,10 @@ test.describe("Search & listing detail", () => {
     await page.route("**/api/v1/users/chat-e2e-buyer/notifications/unread-count", (route) =>
       route.fulfill({ json: { unreadCount: 0 } }),
     );
+    // 상세의 찜 상태 조회도 합성 세션을 사용하므로 실제 API의 401과 격리한다.
+    await page.route("**/api/v1/users/chat-e2e-buyer/wishlist", (route) =>
+      route.fulfill({ json: [] }),
+    );
     await page.route("**/api/v1/accounts/me/onboarding", (route) =>
       route.fulfill({
         json: {
