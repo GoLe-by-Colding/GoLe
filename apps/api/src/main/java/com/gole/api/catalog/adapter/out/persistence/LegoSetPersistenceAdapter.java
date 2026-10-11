@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -61,6 +62,18 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
                 .limit(Math.max(0, SEARCH_LIMIT - result.size()))
                 .forEach(result::add);
         return result;
+    }
+
+    @Override
+    public List<String> loadSetNumbersByThemeWords(List<String> words, int limit) {
+        if (words.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        // "star"+"wars" → "Star Wars"·"Star-Wars"·"StarWars". 이름 일부로 맞춘다("Marvel Super Heroes").
+        String regex = words.stream().map(Pattern::quote).collect(Collectors.joining("[\\s_-]*"));
+        return repository.findByThemeRegex(Pattern.compile(regex, Pattern.CASE_INSENSITIVE), Limit.of(limit)).stream()
+                .map(LegoSetDocument::getSetNumber)
+                .toList();
     }
 
     @Override
