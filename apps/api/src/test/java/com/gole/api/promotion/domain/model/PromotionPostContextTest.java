@@ -69,4 +69,67 @@ class PromotionPostContextTest {
         assertThatThrownBy(() -> capture.withOriginal("/api/v1/media/images/raw.png", " "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("배너 메타는 원본 연결에도 보존하고 실패·부분 메타·긴 헤드라인을 검증한다")
+    void capture_validatesStyleAndFallback() {
+        var capture = new PromotionCapture(
+                "컬렉션",
+                "/collection",
+                "",
+                CaptureDataSource.DEMO,
+                Instant.EPOCH,
+                null,
+                null,
+                "royal-blue-brick-mobile",
+                1,
+                "내 브릭을\n한곳에",
+                false);
+        var polished = capture.withOriginal("/api/v1/media/images/raw.png", "제작 절차");
+        assertThat(polished.styleId()).isEqualTo(capture.styleId());
+        assertThat(polished.headline()).isEqualTo(capture.headline());
+        assertThat(CAPTURE.polishFailed()).isFalse();
+        var failed = new PromotionCapture(
+                "컬렉션",
+                "/collection",
+                "",
+                CaptureDataSource.DEMO,
+                Instant.EPOCH,
+                null,
+                null,
+                "royal-blue-brick-mobile",
+                1,
+                "내 브릭을 한곳에",
+                true);
+        assertThatThrownBy(() -> failed.withOriginal("/api/v1/media/images/raw.png", "제작 절차"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new PromotionCapture(
+                        "x",
+                        "/",
+                        "",
+                        CaptureDataSource.DEMO,
+                        Instant.EPOCH,
+                        null,
+                        null,
+                        "royal-blue-brick-mobile",
+                        null,
+                        "문구",
+                        false))
+                .isInstanceOf(IllegalArgumentException.class);
+        for (String headline : List.of("😀".repeat(21), "첫 줄\n둘째 줄\n셋째 줄", "문구\u0000")) {
+            assertThatThrownBy(() -> new PromotionCapture(
+                            "x",
+                            "/",
+                            "",
+                            CaptureDataSource.DEMO,
+                            Instant.EPOCH,
+                            null,
+                            null,
+                            "royal-blue-brick-mobile",
+                            1,
+                            headline,
+                            false))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
 }

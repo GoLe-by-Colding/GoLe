@@ -34,7 +34,7 @@ public class AdminPromotionMemoryController {
         this.audit = audit;
     }
 
-    @Operation(summary = "이번 실행의 작업 기억", description = "관련 반려 3건, 활성 지침 8개, 미처리 반려 3건")
+    @Operation(summary = "이번 실행의 작업 기억", description = "관련 반려 3건, 분류에 해당하는 모든 활성 지침, 미처리 반려 3건")
     @GetMapping("/promotion-memory/context")
     public WorkingMemory context(
             @RequestParam(defaultValue = "FEATURE") PromotionCategory category,
@@ -72,6 +72,13 @@ public class AdminPromotionMemoryController {
             @RequestParam(required = false) PromotionGuidelineStatus status,
             @RequestParam(defaultValue = "50") int limit) {
         return memory.listGuidelines(status, limit);
+    }
+
+    @PostMapping("/promotion-memory/seed-core")
+    public List<PromotionGuideline> seedCore(HttpServletRequest http) {
+        List<PromotionGuideline> result = memory.seedCore(AdminActor.of(http).id());
+        result.forEach(guideline -> record(http, AdminActionType.PROMOTION_GUIDELINE_SEED, guideline.id()));
+        return result;
     }
 
     @PatchMapping("/promotion-guidelines/{id}")

@@ -5,6 +5,7 @@ import com.gole.api.promotion.application.port.out.PromotionGuidelineRepositoryP
 import com.gole.api.promotion.domain.model.*;
 import java.util.List;
 import java.util.Optional;
+import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -24,6 +25,21 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
     @Override
     public void insert(PromotionGuideline guideline) {
         mongo.insert(toDocument(guideline));
+    }
+
+    @Override
+    public PromotionGuideline insertIfAbsent(PromotionGuideline guideline) {
+        Document fields = new Document();
+        mongo.getConverter().write(toDocument(guideline), fields);
+        Update update = new Update();
+        fields.forEach((key, value) -> {
+            if (!key.equals("_id")) update.setOnInsert(key, value);
+        });
+        return toDomain(mongo.findAndModify(
+                Query.query(Criteria.where("_id").is(guideline.id())),
+                update,
+                FindAndModifyOptions.options().upsert(true).returnNew(true),
+                PromotionGuidelineDocument.class));
     }
 
     @Override
@@ -69,13 +85,12 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
     }
 
     @Override
-    public List<PromotionGuideline> findActive(PromotionCategory category, int limit) {
+    public List<PromotionGuideline> findActive(PromotionCategory category) {
         return find(Query.query(Criteria.where("status")
                         .is(PromotionGuidelineStatus.ACTIVE.name())
                         .and("categories")
                         .is(category.name()))
-                .with(newest())
-                .limit(limit));
+                .with(newest()));
     }
 
     @Override
@@ -108,7 +123,9 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
                 guideline.confirmedBy(),
                 guideline.confirmedAt(),
                 guideline.reflectionRunKey(),
-                guideline.version());
+                guideline.version(),
+                guideline.sourceType().name(),
+                guideline.sourceReference());
     }
 
     private PromotionGuideline toDomain(PromotionGuidelineDocument document) {
@@ -126,6 +143,10 @@ public class PromotionGuidelinePersistenceAdapter implements PromotionGuidelineR
                 document.confirmedBy(),
                 document.confirmedAt(),
                 document.reflectionRunKey(),
-                document.version() == null ? 0 : document.version());
+                document.version() == null ? 0 : document.version(),
+                document.sourceType() == null
+                        ? PromotionGuidelineSourceType.FEEDBACK
+                        : PromotionGuidelineSourceType.valueOf(document.sourceType()),
+                document.sourceReference());
     }
 }

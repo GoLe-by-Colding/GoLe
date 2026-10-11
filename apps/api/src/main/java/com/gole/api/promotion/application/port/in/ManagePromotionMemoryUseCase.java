@@ -7,6 +7,8 @@ import java.util.List;
 public interface ManagePromotionMemoryUseCase {
     WorkingMemory context(PromotionCategory category, List<String> routes);
 
+    List<PromotionGuideline> seedCore(String actorId);
+
     List<PromotionFeedback> listFeedback(String postId, int limit);
 
     PromotionFeedback getFeedback(String id);

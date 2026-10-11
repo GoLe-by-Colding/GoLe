@@ -111,6 +111,61 @@ class PromotionMemoryIntegrationTest {
                 feedbackRepo, guidelines, () -> UUID.randomUUID().toString(), CLOCK));
     }
 
+    @Test
+    @DisplayName("초기 시드는 반복·동시 등록에도 세 건만 남고 수정·해제를 덮어쓰지 않는다")
+    void seedCore_isAtomicAndPreservesReview() throws Exception {
+        var service = memory(feedback);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> service.seedCore("maker-a"));
+            var second = executor.submit(() -> service.seedCore("maker-b"));
+            assertThat(first.get(15, TimeUnit.SECONDS)).hasSize(3);
+            assertThat(second.get(15, TimeUnit.SECONDS)).hasSize(3);
+        }
+        assertThat(guidelines.findRecent(null, 50)).hasSize(3);
+        var seed = guidelines.findRecent(null, 50).getFirst();
+        var edited = service.edit(seed.id(), "검토된 수정", seed.targets(), seed.categories(), seed.version());
+        var active = service.activate(seed.id(), "checker", edited.version());
+        service.retire(active.id());
+        var repeated = service.seedCore("new-maker");
+        assertThat(repeated)
+                .filteredOn(item -> item.id().equals(seed.id()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.content()).isEqualTo("검토된 수정");
+                    assertThat(item.status()).isEqualTo(PromotionGuidelineStatus.RETIRED);
+                    assertThat(item.proposedBy()).isEqualTo(seed.proposedBy());
+                    assertThat(item.sourceReference()).isEqualTo(seed.sourceReference());
+                });
+    }
+
+    @Test
+    @DisplayName("출처 필드가 없는 과거 지침은 반려 기반으로 읽는다")
+    void guidelineSource_readsLegacyDocument() {
+        var old = new PromotionGuideline(
+                "legacy",
+                PromotionGuidelineKind.PROCEDURE,
+                "화면 가독성",
+                List.of(PromotionMemoryTarget.IMAGE_EDIT),
+                List.of(PromotionCategory.SERVICE),
+                List.of("f1"),
+                PromotionGuidelineStatus.PROPOSED,
+                "agent",
+                NOW,
+                NOW,
+                null,
+                null,
+                "run-old",
+                0);
+        guidelines.insert(old);
+        mongo.getCollection("promotion_guidelines")
+                .updateOne(
+                        new org.bson.Document("_id", "legacy"),
+                        new org.bson.Document(
+                                "$unset", new org.bson.Document("sourceType", "").append("sourceReference", "")));
+        assertThat(guidelines.findById("legacy").orElseThrow().sourceType())
+                .isEqualTo(PromotionGuidelineSourceType.FEEDBACK);
+    }
+
     private PromotionPost pending(String id, PromotionCategory category, String route) {
         var capture = new PromotionCapture(
                 "화면",
@@ -119,7 +174,11 @@ class PromotionMemoryIntegrationTest {
                 CaptureDataSource.DEMO,
                 NOW,
                 "/api/v1/media/images/original.png",
-                "편집 지침 ".repeat(200));
+                "편집 지침 ".repeat(200),
+                "royal-blue-brick-mobile",
+                1,
+                "내 브릭을 한곳에",
+                false);
         var post = PromotionPost.draft(
                 id,
                 PromotionChannel.THREADS,
@@ -323,7 +382,7 @@ class PromotionMemoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("관련 경로 우선/최신순으로 반려 3건과 활성 지침 8개만 선택한다")
+    @DisplayName("관련 경로 우선/최신순으로 반려 3건과 모든 활성 지침을 선택한다")
     void context_selectsRelevantWithinBudget() {
         source("match", PromotionCategory.SERVICE, "/market", NOW.minusSeconds(100));
         for (int index = 0; index < 5; index++) {
@@ -350,7 +409,7 @@ class PromotionMemoryIntegrationTest {
         }
         var context = memory(feedback).context(PromotionCategory.SERVICE, List.of("/market"));
         assertThat(context.feedback()).extracting(PromotionFeedback::id).containsExactly("match", "other4", "other3");
-        assertThat(context.guidelines()).hasSize(8);
+        assertThat(context.guidelines()).hasSize(10);
         assertThat(context.guidelines().getFirst().id()).isEqualTo("g9");
         assertThat(context.unreflectedFeedback()).hasSize(3);
     }

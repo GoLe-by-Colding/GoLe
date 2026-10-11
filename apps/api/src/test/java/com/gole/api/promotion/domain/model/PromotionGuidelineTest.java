@@ -10,6 +10,23 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class PromotionGuidelineTest {
+    @Test
+    @DisplayName("초기 지식은 문서 근거를 보존하고 다른 관리자만 확정한다")
+    void coreKnowledge_preservesSourceAndMaker() {
+        var seed = PromotionCoreKnowledge.proposals("maker", Instant.EPOCH).getFirst();
+        var edited = seed.edit("검토한 브랜드 지식", seed.targets(), seed.categories(), Instant.EPOCH);
+        assertThat(edited.sourceType()).isEqualTo(PromotionGuidelineSourceType.CORE_SEED);
+        assertThat(edited.sourceReference()).isEqualTo(seed.sourceReference());
+        assertThat(edited.sourceFeedbackIds()).isEmpty();
+        assertThatThrownBy(() -> edited.activate("maker", Instant.EPOCH)).isInstanceOf(ForbiddenException.class);
+        var retired = edited.activate("checker", Instant.EPOCH).retire(Instant.EPOCH);
+        assertThat(retired.sourceReference()).isEqualTo(seed.sourceReference());
+        assertThat(PromotionCoreKnowledge.proposals("other", Instant.EPOCH)
+                        .getFirst()
+                        .id())
+                .isEqualTo(seed.id());
+    }
+
     private PromotionGuideline proposed() {
         return new PromotionGuideline(
                 "g1",

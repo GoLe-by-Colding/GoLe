@@ -22,7 +22,11 @@ public record PromotionCapture(
         CaptureDataSource dataSource,
         Instant capturedAt,
         String originalUrl,
-        String edit) {
+        String edit,
+        String styleId,
+        Integer styleVersion,
+        String headline,
+        boolean polishFailed) {
 
     private static final int MAX_TEXT = 300;
     private static final int MAX_EDIT = 6000;
@@ -50,6 +54,40 @@ public record PromotionCapture(
         if ((originalUrl == null) != (edit == null)) {
             throw new IllegalArgumentException("originalUrl and edit go together");
         }
+        if (styleId != null || styleVersion != null || headline != null || polishFailed) {
+            if (styleId == null
+                    || !styleId.matches("[a-z0-9][a-z0-9-]{0,79}")
+                    || styleVersion == null
+                    || styleVersion < 1
+                    || headline == null
+                    || headline.isBlank()) {
+                throw new IllegalArgumentException("style metadata must be complete");
+            }
+            headline = headline.replace("\r\n", "\n").replace('\r', '\n');
+            if (headline.codePoints().anyMatch(value -> Character.isISOControl(value) && value != '\n')) {
+                throw new IllegalArgumentException("headline must not contain control characters");
+            }
+            headline = headline.strip();
+            if (headline.length() > 40
+                    || headline.lines().count() > 2
+                    || headline.lines().anyMatch(String::isBlank)) {
+                throw new IllegalArgumentException("headline must be 1..40 characters and at most two lines");
+            }
+            if (polishFailed && originalUrl != null) {
+                throw new IllegalArgumentException("failed polish must use the original image");
+            }
+        }
+    }
+
+    public PromotionCapture(
+            String label,
+            String route,
+            String actions,
+            CaptureDataSource dataSource,
+            Instant capturedAt,
+            String originalUrl,
+            String edit) {
+        this(label, route, actions, dataSource, capturedAt, originalUrl, edit, null, null, null, false);
     }
 
     /** 원본을 그대로 올린 사진. */
@@ -59,7 +97,18 @@ public record PromotionCapture(
     }
 
     public PromotionCapture withOriginal(String originalUrl, String edit) {
-        return new PromotionCapture(label, route, actions, dataSource, capturedAt, originalUrl, edit);
+        return new PromotionCapture(
+                label,
+                route,
+                actions,
+                dataSource,
+                capturedAt,
+                originalUrl,
+                edit,
+                styleId,
+                styleVersion,
+                headline,
+                polishFailed);
     }
 
     private static String requireText(String value, String name) {

@@ -45,8 +45,15 @@ public class PromotionMemoryService implements ManagePromotionMemoryUseCase {
         }
         return new WorkingMemory(
                 feedback.findRelevant(category, resolved, 3),
-                guidelines.findActive(category, 8),
+                guidelines.findActive(category),
                 feedback.findUnreflected(3));
+    }
+
+    @Override
+    public List<PromotionGuideline> seedCore(String actorId) {
+        return PromotionCoreKnowledge.proposals(actorId, Instant.now(clock)).stream()
+                .map(guidelines::insertIfAbsent)
+                .toList();
     }
 
     @Override

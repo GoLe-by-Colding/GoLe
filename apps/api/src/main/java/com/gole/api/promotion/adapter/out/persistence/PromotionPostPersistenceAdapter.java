@@ -193,7 +193,11 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                                 capture.dataSource().name(),
                                 capture.capturedAt(),
                                 capture.originalUrl(),
-                                capture.edit()))
+                                capture.edit(),
+                                capture.styleId(),
+                                capture.styleVersion(),
+                                capture.headline(),
+                                capture.polishFailed()))
                         .toList(),
                 provenance == null
                         ? null
@@ -213,7 +217,11 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
                                 CaptureDataSource.valueOf(capture.dataSource()),
                                 capture.capturedAt(),
                                 capture.originalUrl(),
-                                capture.edit()))
+                                capture.edit(),
+                                capture.styleId(),
+                                capture.styleVersion(),
+                                capture.headline(),
+                                Boolean.TRUE.equals(capture.polishFailed())))
                         .toList();
         PromotionPostDocument.ProvenanceDocument provenance = document.getProvenance();
         return new PromotionPostContext(

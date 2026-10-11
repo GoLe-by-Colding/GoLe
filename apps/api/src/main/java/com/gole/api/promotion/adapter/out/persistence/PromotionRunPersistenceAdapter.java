@@ -88,6 +88,10 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
                                 guideline.content(),
                                 guideline.targets().stream().map(Enum::name).toList(),
                                 guideline.categories().stream().map(Enum::name).toList()))
+                        .toList(),
+                run.memoryContext().stages().stream()
+                        .map(stage -> new PromotionRunDocument.StageSnapshotDocument(
+                                stage.stage().name(), stage.routes(), stage.feedbackIds(), stage.guidelineIds()))
                         .toList()));
         return document;
     }
@@ -132,6 +136,15 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
                                                 guideline.categories().stream()
                                                         .map(PromotionCategory::valueOf)
                                                         .toList()))
-                                        .toList()));
+                                        .toList(),
+                                document.getMemoryContext().stages() == null
+                                        ? List.of()
+                                        : document.getMemoryContext().stages().stream()
+                                                .map(stage -> new PromotionMemoryContext.StageSnapshot(
+                                                        PromotionMemoryContext.Stage.valueOf(stage.stage()),
+                                                        stage.routes(),
+                                                        stage.feedbackIds(),
+                                                        stage.guidelineIds()))
+                                                .toList()));
     }
 }
