@@ -14,6 +14,9 @@ from gole_promotion_agent.hands import BackendPublisher
 from .gitrepo import commit
 from .test_drafter import ARGS, DRAFT, ROUTES, FakeGateway, FakePublisher, RecordingPublisher, _drafter
 
+PLAN_STAGE = {"stage": "PLAN", "routes": ["/", "/collection", "/search"], "feedbackIds": [], "guidelineIds": []}
+IMAGE_STAGE = {"stage": "IMAGE_EDIT", "routes": ["/collection", "/"], "feedbackIds": [], "guidelineIds": []}
+
 
 def feedback(id="feedback-1", targets=None):
     return {
@@ -83,6 +86,10 @@ def test_proposedGuidelines_waitForHuman_thenBothStagesReceiveOnlyTheirTargets(t
     assert all("해제한 지침" not in json.dumps(request, ensure_ascii=False) for request in gateway.requests)
     assert result.memory_context["feedbackIds"] == ["feedback-1"]
     assert [item["id"] for item in result.memory_context["guidelines"]] == ["text", "image"]
+    assert result.memory_context["stages"] == [
+        PLAN_STAGE | {"feedbackIds": ["feedback-1"], "guidelineIds": ["text"]},
+        IMAGE_STAGE | {"feedbackIds": ["feedback-1"], "guidelineIds": ["image"]},
+    ]
     assert publisher.created[0][3]["captures"][0]["edit"] == polish[0]["prompt"]
 
 
@@ -95,7 +102,7 @@ def test_reflectionProposal_doesNotApplyDuringSameRun(tmp_path):
 
     assert publisher.reflections[0]["proposals"] == [proposal]
     assert all(proposal["content"] not in json.dumps(request, ensure_ascii=False) for request in gateway.requests[1:])
-    assert result.memory_context == {"feedbackIds": [], "guidelines": []}
+    assert result.memory_context == {"feedbackIds": [], "guidelines": [], "stages": [PLAN_STAGE, IMAGE_STAGE]}
 
 
 @pytest.mark.parametrize("failure", ["gateway", "contract", "save"])
@@ -151,9 +158,12 @@ def test_longEditPrompt_failsExplicitlyBeforeCodexInsteadOfTruncating(tmp_path):
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
-    assert (result.outcome, result.detail) == ("failed", "EDIT_PROMPT_TOO_LONG")
+    assert result.outcome == "failed" and result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
+    lengths = json.loads(result.detail.removeprefix("EDIT_PROMPT_TOO_LONG "))
+    assert lengths["total"] == sum(value for key, value in lengths.items() if key != "total") > 6_000
     assert [request["engine"] for request in gateway.requests] == ["claude"]
     assert publisher.created == [] and result.memory_context["guidelines"] == []
+    assert result.memory_context["stages"] == [PLAN_STAGE]
 
 
 def test_unusedImageGuidelines_areAbsentFromLedgerWhenClaudeSkips(tmp_path):
@@ -162,7 +172,7 @@ def test_unusedImageGuidelines_areAbsentFromLedgerWhenClaudeSkips(tmp_path):
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
-    assert result.memory_context == {"feedbackIds": [], "guidelines": []}
+    assert result.memory_context == {"feedbackIds": [], "guidelines": [], "stages": [PLAN_STAGE]}
 
 
 def test_sameRunnerReexecution_doesNotRetainRetiredGuidelines(tmp_path):
@@ -175,7 +185,7 @@ def test_sameRunnerReexecution_doesNotRetainRetiredGuidelines(tmp_path):
 
     result = drafter.run()
 
-    assert result.memory_context == {"feedbackIds": [], "guidelines": []}
+    assert result.memory_context == {"feedbackIds": [], "guidelines": [], "stages": [PLAN_STAGE, IMAGE_STAGE]}
     assert all("화면 글자가 읽힐 크기" not in json.dumps(request, ensure_ascii=False) for request in gateway.requests)
 
 
@@ -190,11 +200,95 @@ def test_proposalTrustBoundary_rejectsInvalidModelValues(patch):
         memory.Proposal.model_validate(data | patch)
 
 
-def test_contextRejectsOverBudgetFeedbackAndGuidelines():
-    for context in ({"feedback": [feedback()] * 4}, {"unreflectedFeedback": [feedback()] * 4},
-                    {"guidelines": [guideline()] * 9}):
+def test_contextRejectsOverBudgetFeedbackButKeepsAllGuidelines():
+    for context in ({"feedback": [feedback()] * 4}, {"unreflectedFeedback": [feedback()] * 4}):
         with pytest.raises(ValidationError):
             memory.Context.model_validate(context)
+    assert len(memory.Context.model_validate({"guidelines": [guideline(str(i)) for i in range(12)]}).guidelines) == 12
+
+
+def test_coreSeedGuideline_needsDocumentInsteadOfFeedback():
+    core = guideline() | {"kind": "KNOWLEDGE", "sourceFeedbackIds": [], "sourceType": "CORE_SEED",
+                          "sourceReference": ".kiro/steering/brand-identity.md@promotion-core-v1"}
+    assert memory.Guideline.model_validate(core).sourceFeedbackIds == []
+    for patch in ({"sourceReference": None}, {"kind": "PROCEDURE"}, {"sourceFeedbackIds": ["feedback-1"]},
+                  {"sourceType": "FEEDBACK"}):
+        with pytest.raises(ValidationError):
+            memory.Guideline.model_validate(core | patch)
+
+
+def test_stageMemory_requeriesChosenRoutes_freezesAllGuidelines_andRecordsSixEpisodes(tmp_path):
+    plan_feedback = [feedback(f"plan-{i}", ["CAPTION"]) for i in range(3)]
+    image_feedback = [feedback(f"image-{i}", ["IMAGE_EDIT"]) for i in range(3)]
+    active = [guideline(f"text-{i}", ["CAPTION"], content=f"짧은 문장 규칙 {i}") for i in range(10)]
+    active.append(guideline("image", content="실행 시작에 확정한 제작 절차"))
+    publisher, gateway = FakePublisher(), ReflectingGateway()
+
+    def context(category, routes):
+        publisher.memory_requests.append((category, list(routes)))
+        if len(publisher.memory_requests) == 1:
+            return {"feedback": plan_feedback, "guidelines": active}
+        active[-1]["content"] = "실행 중 새로 바뀐 제작 절차"
+        # 재조회 지침은 스냅샷에 반영하지도, 새로 파싱하지도 않는다.
+        return {"feedback": image_feedback, "guidelines": [{"invalid": True}]}
+
+    publisher.memory_context = context
+    result = _drafter(tmp_path, gateway, publisher).run()
+
+    assert result.outcome == "submitted"
+    assert publisher.memory_requests == [("SERVICE", ["/", "/collection", "/search"]),
+                                         ("SERVICE", ["/collection", "/"])]
+    choose, *polish = gateway.requests
+    assert all(f"짧은 문장 규칙 {i}" in choose["system"] for i in range(10))
+    assert all("실행 시작에 확정한 제작 절차" in item["prompt"] for item in polish)
+    assert all("실행 중 새로 바뀐 제작 절차" not in item["prompt"] for item in polish)
+    assert all("plan-0" not in item["prompt"] and "image-0" in item["prompt"] for item in polish)
+    assert len(result.memory_context["feedbackIds"]) == 6 and len(result.memory_context["guidelines"]) == 11
+    assert result.memory_context["stages"] == [
+        PLAN_STAGE | {"feedbackIds": [f"plan-{i}" for i in range(3)],
+                      "guidelineIds": [f"text-{i}" for i in range(10)]},
+        IMAGE_STAGE | {"feedbackIds": [f"image-{i}" for i in range(3)], "guidelineIds": ["image"]},
+    ]
+
+
+def test_selectedRouteMemoryFailure_preventsCodexAndSubmission(tmp_path):
+    publisher, gateway = FakePublisher(), ReflectingGateway()
+
+    def context(category, routes):
+        publisher.memory_requests.append((category, list(routes)))
+        if len(publisher.memory_requests) > 1:
+            raise ConnectionError("private-lookup-failure")
+        return {}
+
+    publisher.memory_context = context
+    result = _drafter(tmp_path, gateway, publisher).run()
+
+    assert (result.outcome, result.detail) == ("failed", "MEMORY_CONTEXT_FAILED")
+    assert [item["engine"] for item in gateway.requests] == ["claude"]
+    assert publisher.created == [] and result.memory_context["stages"] == [PLAN_STAGE]
+
+
+def test_promptSeparatesFactsProceduresAndEpisodes():
+    core = guideline("fact") | {"kind": "KNOWLEDGE", "content": "GoLe의 브랜드 색은 파랑"}
+    context = memory.Context.model_validate({"guidelines": [core, guideline()], "feedback": [feedback()]})
+    parts = memory.render_parts(context.feedback, context.guidelines)
+
+    assert "GoLe의 브랜드 색은 파랑" in parts["knowledge"] and "KNOWLEDGE" in parts["knowledge"]
+    assert "화면 글자가 읽힐 크기" in parts["procedure"] and "PROCEDURE" in parts["procedure"]
+    assert "화면 글자가 너무 작아" in parts["episodes"] and "EPISODIC" in parts["episodes"]
+    assert "GoLe의 브랜드 색은 파랑" not in parts["episodes"]
+
+
+def test_editBudgetCountsAstralCharactersLikeJava(tmp_path):
+    assert memory.utf16_length("한글😀") == 4
+    publisher = FakePublisher(memory_context={"guidelines": [
+        guideline(str(i), content="😀" * 500) for i in range(6)
+    ]})
+    gateway = ReflectingGateway()
+    result = _drafter(tmp_path, gateway, publisher).run()
+
+    assert result.outcome == "failed" and result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
+    assert [item["engine"] for item in gateway.requests] == ["claude"]
 
 
 def test_feedbackProjection_doesNotRecursivelyIncludePastEditPromptsOrRationale():
@@ -270,6 +364,8 @@ def test_e2eHelper_refusesNonLocalApiOrigins(url):
 
 def test_e2eHelper_passesThroughRealGatewayWithoutLaunchingAnyModelCli(tmp_path):
     import base64
+    import io
+    from PIL import Image
     from gole_promotion_agent import drafting
     from .run_memory_e2e import FakeCliGateway, png
 
@@ -281,4 +377,7 @@ def test_e2eHelper_passesThroughRealGatewayWithoutLaunchingAnyModelCli(tmp_path)
 
     assert choice["structured"]["decision"] == "draft"
     assert polished["ok"] and base64.b64decode(polished["images"][0]["data"]) == png()
+    with Image.open(io.BytesIO(png())) as image:
+        assert image.size == (390, 844)
+    assert choice["structured"]["picks"][0]["headline"] == "내 레고 세트, 한곳에"
     assert list(tmp_path.iterdir()) == []

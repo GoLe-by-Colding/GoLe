@@ -101,8 +101,10 @@ class _FakeContext:
 class _FakeBrowser:
     def __init__(self):
         self.contexts: list[_FakeContext] = []
+        self.options = []
 
-    def new_context(self, **_kwargs):
+    def new_context(self, **kwargs):
+        self.options.append(kwargs)
         context = _FakeContext()
         self.contexts.append(context)
         return context
@@ -115,6 +117,7 @@ def _capture_with_fake_browser(tmp_path: Path, session_provider) -> list[str]:
     browser = _FakeBrowser()
     camera._browser = browser  # 실제 Chromium 없이 조립만 검사한다
     camera.capture("/", tmp_path / "shot.png")
+    assert browser.options == [{"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True}]
     return browser.contexts[0].init_scripts
 
 
@@ -214,14 +217,25 @@ def test_backend_publisher_sends_capture_notes_and_provenance():
             "capturedAt": "2026-09-30T00:00:00+00:00",
             "originalMediaKey": None,
             "edit": None,
+            "styleId": None,
+            "styleVersion": None,
+            "headline": None,
+            "polishFailed": False,
         }
     ]
 
     # AI 로 다듬은 사진이면 원본 키와 지시문이 같이 나간다(검토 화면이 나란히 대조한다).
-    details["captures"][0] |= {"originalMediaKey": "raw-1", "edit": "목업에 넣음"}
+    details["captures"][0] |= {"originalMediaKey": "raw-1", "edit": "목업에 넣음",
+                               "styleId": "royal-blue-brick-mobile", "styleVersion": 1,
+                               "headline": "내 취향의 브릭", "polishFailed": False}
     publisher.create("a" * 40, "캡션", ["k1"], details)
     assert sent["captures"][0]["originalMediaKey"] == "raw-1"
     assert sent["captures"][0]["edit"] == "목업에 넣음"
+    assert sent["captures"][0]["styleId"] == "royal-blue-brick-mobile"
+    assert sent["captures"][0]["styleVersion"] == 1 and sent["captures"][0]["headline"] == "내 취향의 브릭"
+    details["captures"][0]["polishFailed"] = True
+    publisher.create("a" * 40, "캡션", ["k1"], details)
+    assert sent["captures"][0]["polishFailed"] is True
     assert sent["provenance"] == {
         "releaseTitle": "feat(web): 필터",
         "rationale": "필터가 새로 생겼어.",

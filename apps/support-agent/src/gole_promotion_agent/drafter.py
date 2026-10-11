@@ -81,12 +81,12 @@ class Drafter:
         self._codex_model = codex_model
         self.run_key = run_key or execution_run_key(os.environ)
         self._memory = memory.Context()
-        self.memory_usage: dict[str, Any] = {"feedbackIds": [], "guidelines": []}
+        self.memory_usage: dict[str, Any] = {"feedbackIds": [], "guidelines": [], "stages": []}
         self._memory_error: str | None = None
         self._log = log
 
     def run(self) -> RunResult:
-        self.memory_usage = {"feedbackIds": [], "guidelines": []}
+        self.memory_usage = {"feedbackIds": [], "guidelines": [], "stages": []}
         self._memory_error = None
         try:
             self._memory = memory.Context.model_validate(
@@ -118,14 +118,19 @@ class Drafter:
             self._memory_error = "MEMORY_REFLECTION_FAILED"
             self._log(f"[promotion-agent] MEMORY_REFLECTION_FAILED ({type(error).__name__})")
 
-    def _remember(self, targets: Sequence[memory.Target]) -> str:
-        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", targets)
+    def _remember(
+        self, stage: str, routes: Sequence[str],
+        feedback: Sequence[memory.Feedback], guidelines: Sequence[memory.Guideline],
+    ) -> None:
         for item in feedback:
             if item.id not in self.memory_usage["feedbackIds"]:
                 self.memory_usage["feedbackIds"].append(item.id)
         known = {item["id"] for item in self.memory_usage["guidelines"]}
         self.memory_usage["guidelines"].extend(item.applied_snapshot() for item in guidelines if item.id not in known)
-        return memory.render(feedback, guidelines)
+        self.memory_usage["stages"].append({
+            "stage": stage, "routes": list(dict.fromkeys(routes)),
+            "feedbackIds": [item.id for item in feedback], "guidelineIds": [item.id for item in guidelines],
+        })
 
     def _draft(self) -> RunResult:
         if self._publisher.pending_count() >= policy.MAX_PENDING_REVIEW:
@@ -157,20 +162,40 @@ class Drafter:
             return RunResult("skipped", "MODEL_SKIPPED", draft.skip_reason)
 
         picked = [shots[pick.image - 1] for pick in draft.picks]
-        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", ("IMAGE_EDIT",))
-        edit_prompt = drafting.POLISH_PROMPT + memory.render(feedback, guidelines)
-        if len(edit_prompt) > memory.MAX_EDIT_PROMPT:
-            return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG")
-        self._remember(("IMAGE_EDIT",))
-        polished = [self._polish(shot, index, edit_prompt) for index, shot in enumerate(picked, start=1)]
+        category = "SERVICE" if self._service else "FEATURE"
+        routes = list(dict.fromkeys(shot.route for shot in picked))
+        try:
+            refreshed = self._publisher.memory_context(category, routes)
+            episodes = memory.Context.model_validate({"feedback": refreshed.get("feedback", [])})
+        except Exception as error:  # noqa: BLE001 — 화면에 맞는 경험을 못 읽으면 제작하지 않는다
+            self._log(f"[promotion-agent] MEMORY_CONTEXT_FAILED ({type(error).__name__})")
+            return RunResult("failed", "ERROR", "MEMORY_CONTEXT_FAILED")
+        feedback, _ = episodes.select(category, ("IMAGE_EDIT",))
+        _, guidelines = self._memory.select(category, ("IMAGE_EDIT",))
+        edit_prompts = []
+        for pick in draft.picks:
+            parts = memory.render_parts(feedback, guidelines)
+            parts["fixed"] = drafting.POLISH_PROMPT + parts["fixed"]
+            parts["headline"] = "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": pick.headline}, ensure_ascii=False)
+            edit_prompt = "".join(parts.values())
+            if memory.utf16_length(edit_prompt) > memory.MAX_EDIT_PROMPT:
+                lengths = {name: memory.utf16_length(text) for name, text in parts.items()}
+                lengths["total"] = memory.utf16_length(edit_prompt)
+                return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG " + json.dumps(lengths))
+            edit_prompts.append(edit_prompt)
+        self._remember("IMAGE_EDIT", routes, feedback, guidelines)
+        polished = [self._polish(shot, index, prompt)
+                    for index, (shot, prompt) in enumerate(zip(picked, edit_prompts), start=1)]
 
         media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
         # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
         originals = [shot.path for shot, path in zip(picked, polished) if path is not None]
         original_keys = iter(self._publisher.upload(originals) if originals else ())
         captures = []
-        for pick, shot, path in zip(draft.picks, picked, polished):
-            capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at}
+        for pick, shot, path, edit_prompt in zip(draft.picks, picked, polished, edit_prompts):
+            capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at,
+                       "styleId": drafting.STYLE_ID, "styleVersion": drafting.STYLE_VERSION,
+                       "headline": pick.headline, "polishFailed": path is None}
             if path is not None:
                 capture |= {"originalMediaKey": next(original_keys), "edit": edit_prompt}
             captures.append(capture)
@@ -195,11 +220,26 @@ class Drafter:
             # 지난 릴리스 때 찍어 둔 화면을 그대로 쓴다(서비스 소개). 화면은 다음 릴리스 전까지 같다.
             if not manifest.exists():
                 return []
-            return [
-                Shot(item["route"], out / item["file"], item["captured_at"])
-                for item in json.loads(manifest.read_text(encoding="utf-8"))
-                if (out / item["file"]).exists()
-            ]
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            if (not isinstance(data, dict) or data.get("version") != policy.CAPTURE_MANIFEST_VERSION
+                    or data.get("viewport") != policy.CAPTURE_VIEWPORT or not isinstance(data.get("captures"), list)):
+                return []
+            reused = []
+            for item in data["captures"]:
+                if not isinstance(item, dict):
+                    return []
+                filename, route, captured_at = item.get("file"), item.get("route"), item.get("captured_at")
+                if (not isinstance(filename, str) or not filename or Path(filename).name != filename
+                        or "/" in filename or "\\" in filename or not filename.endswith(".png")
+                        or route not in self._routes or not policy.is_public_capture_route(route, self._demo)
+                        or not isinstance(captured_at, str) or not captured_at):
+                    return []
+                source = (out / filename).resolve()
+                if source.parent != out.resolve():
+                    return []
+                if source.is_file():
+                    reused.append(Shot(route, source, captured_at))
+            return reused
         shots: list[Shot] = []
         try:
             for index, route in enumerate(self._routes, start=1):
@@ -217,7 +257,8 @@ class Drafter:
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text(
             json.dumps(
-                [{"route": s.route, "file": s.path.name, "captured_at": s.captured_at} for s in shots],
+                {"version": policy.CAPTURE_MANIFEST_VERSION, "viewport": policy.CAPTURE_VIEWPORT,
+                 "captures": [{"route": s.route, "file": s.path.name, "captured_at": s.captured_at} for s in shots]},
                 ensure_ascii=False,
             ),
             encoding="utf-8",
@@ -225,13 +266,15 @@ class Drafter:
         return shots
 
     def _choose(self, shots: Sequence[Shot], subject: str | None, diff: str | None) -> drafting.DraftOutput:
+        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", ("CAPTION", "SCREEN_SELECTION"))
+        self._remember("PLAN", [shot.route for shot in shots], feedback, guidelines)
         response = self._gateway.call(
             {
                 "engine": "claude",
                 "model": self._claude_model,
                 "system": drafting.system_prompt(
                     self._publisher.history(policy.HISTORY_LIMIT), self._demo, self._service
-                ) + self._remember(("CAPTION", "SCREEN_SELECTION")),
+                ) + memory.render(feedback, guidelines),
                 "prompt": drafting.task_prompt(
                     [shot.route for shot in shots], service=self._service, subject=subject, diff=diff
                 ),

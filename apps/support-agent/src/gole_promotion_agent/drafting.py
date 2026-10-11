@@ -8,19 +8,40 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from gole_promotion_agent import policy
+from gole_promotion_agent import memory, policy
 
 MAX_PICKS = 3
+STYLE_ID = "royal-blue-brick-mobile"
+STYLE_VERSION = 1
 
 
 class Pick(BaseModel):
     image: int = Field(ge=1, description="후보 이미지 번호(1부터)")
     # 검토 화면에 사진 이름으로 붙는다. 왜 골랐는지는 rationale 에 쓴다.
     label: str = Field(min_length=1, max_length=40)
+    headline: str = Field(min_length=1, max_length=40, description="이미지 밖에 넣을 짧은 문구, 최대 40자/두 줄")
+
+    @field_validator("headline", mode="before")
+    @classmethod
+    def _normalize_headline(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+        if any((ord(char) < 32 or 127 <= ord(char) <= 159) and char != "\n" for char in normalized):
+            raise ValueError("문구에 제어문자를 쓰지 않는다")
+        return normalized.strip()
+
+    @model_validator(mode="after")
+    def _headline_valid(self) -> "Pick":
+        if (memory.utf16_length(self.headline) > 40 or len(self.headline.split("\n")) > 2
+                or not all(line.strip() for line in self.headline.split("\n"))):
+            raise ValueError("문구는 빈 줄 없이 최대 40자/두 줄이다")
+        return self
 
 
 class DraftOutput(BaseModel):
@@ -46,7 +67,7 @@ OUTPUT_SCHEMA: Mapping[str, Any] = {
     "type": "object",
     "properties": {
         "decision": {"type": "string", "enum": ["draft", "skip"]},
-        "skip_reason": {"type": "string"},
+        "skip_reason": {"type": "string", "maxLength": policy.MAX_RATIONALE},
         "caption": {"type": "string", "maxLength": policy.MAX_CAPTION},
         "rationale": {"type": "string", "maxLength": policy.MAX_RATIONALE},
         "picks": {
@@ -54,8 +75,9 @@ OUTPUT_SCHEMA: Mapping[str, Any] = {
             "maxItems": MAX_PICKS,
             "items": {
                 "type": "object",
-                "properties": {"image": {"type": "integer"}, "label": {"type": "string", "maxLength": 40}},
-                "required": ["image", "label"],
+                "properties": {"image": {"type": "integer"}, "label": {"type": "string", "maxLength": 40},
+                               "headline": {"type": "string", "minLength": 1, "maxLength": 40}},
+                "required": ["image", "label", "headline"],
             },
         },
     },
@@ -75,12 +97,13 @@ Read 로 이미지를 **모두 열어 실제로 무엇이 보이는지 확인한
 - 캡션은 **네가 이미지에서 직접 본 화면**에 근거해 쓴다. 화면에 없는 기능을 말하지 않는다.
 - 다른 이용자의 닉네임·프로필 사진·매물 사진이 크게 잡힌 화면은 고르지 않는다.
 - "아직 없어요" 같은 **빈 상태 화면은 고르지 않는다** — 그것은 그 기능의 모습이 아니다.
-- 고른 화면은 디자이너가 브라우저 목업에 넣어 다듬는다. 화면 자체가 홍보 이미지의 주인공이다.
+- 고른 모바일 화면은 디자이너가 휴대폰 목업에 넣어 다듬는다. 화면 자체가 홍보 이미지의 주인공이다.
 - 보여줄 만한 것이 없으면 억지로 만들지 말고 건너뛴다.
 
 결과는 구조화 출력으로 낸다:
 - 초안: decision="draft", caption, rationale(왜 이 화면들을 골랐는지 검토자가 읽을 한두 문장),
-  picks(올릴 순서대로 최대 {max_picks}장. image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색").
+  picks(올릴 순서대로 최대 {max_picks}장. image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색",
+  headline 은 화면 밖에 넣을 최대 40자/두 줄의 짧은 문구. 화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
 - 건너뜀: decision="skip", skip_reason.
 
 {history}"""
@@ -96,12 +119,7 @@ _SERVICE_MISSION = (
 )
 
 # 작업 기억을 붙인 실제 지시문을 검토 화면에 남긴다. 백엔드 상한은 6000자다.
-POLISH_PROMPT = (
-    "첨부 이미지는 GoLe(레고 중고거래) 웹앱의 실제 화면 캡처다. 이것을 SNS 홍보용 정사각형 이미지로 다듬어라. "
-    "화면을 살짝 기울인 브라우저 창 목업에 넣고, 코발트 블루(#2f56e6) 배경과 부드러운 그림자를 더한다. "
-    "화면 안의 글자·숫자·버튼·아이콘·배치는 **원본과 똑같이** 유지한다. 새 글자·로고·워터마크를 넣지 않는다. "
-    "레고 로고나 미니피규어를 그리지 않는다."
-)
+POLISH_PROMPT = (Path(__file__).parent / "procedures" / "royal-blue-brick-mobile-v1.md").read_text(encoding="utf-8")
 
 
 def system_prompt(history: Sequence[Mapping[str, Any]], demo: bool, service: bool) -> str:

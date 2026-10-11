@@ -28,8 +28,10 @@ class FakePublisher:
         self.uploaded = []
         self.context = memory_context or {}
         self.reflections = []
+        self.memory_requests = []
 
     def memory_context(self, category, routes):
+        self.memory_requests.append((category, list(routes)))
         return self.context
 
     def reflect(self, payload):
@@ -77,7 +79,8 @@ DRAFT = {
     "decision": "draft",
     "caption": "갖고 있는 세트와 갖고 싶은 세트를 한곳에",
     "rationale": "컬렉션 화면이 기능을 잘 보여줌",
-    "picks": [{"image": 2, "label": "컬렉션 목록"}, {"image": 1, "label": "홈"}],
+    "picks": [{"image": 2, "label": "컬렉션 목록", "headline": "내 레고 세트, 한곳에"},
+              {"image": 1, "label": "홈", "headline": "내 취향의 브릭, GoLe에서"}],
 }
 
 
@@ -109,7 +112,9 @@ def test_draft_sendsAllPromotionalScreensOnceThenPolishesPicks(tmp_path):
     assert "1. /\n2. /collection\n3. /search" in choose["prompt"]
     assert "지난 글" in choose["system"]
     assert [r["engine"] for r in polish] == ["codex", "codex"] and polish[0]["want_images"]
-    assert polish[0]["prompt"] == drafting.POLISH_PROMPT
+    assert polish[0]["prompt"].startswith(drafting.POLISH_PROMPT)
+    assert '$imagegen' in polish[0]["prompt"] and '#1D4ED8' in polish[0]["prompt"]
+    assert "내 레고 세트, 한곳에" in polish[0]["prompt"] and "내 취향의 브릭, GoLe에서" in polish[1]["prompt"]
 
     # 게시 이미지 2장 + 다듬은 사진의 원본 2장을 한 번에 올린다.
     published, originals = publisher.uploaded
@@ -120,7 +125,9 @@ def test_draft_sendsAllPromotionalScreensOnceThenPolishesPicks(tmp_path):
     assert sha is None and keys == ["key-0", "key-1"]
     first, second = details["captures"]
     assert first["route"] == "/collection" and first["originalMediaKey"] == "key-2"
-    assert first["edit"] == drafting.POLISH_PROMPT
+    assert first["edit"] == polish[0]["prompt"]
+    assert first["styleId"] == "royal-blue-brick-mobile" and first["styleVersion"] == 1
+    assert first["headline"] == DRAFT["picks"][0]["headline"] and first["polishFailed"] is False
     assert second["route"] == "/" and second["originalMediaKey"] == "key-3"
     assert publisher.finalized == ["post-1"]
 
@@ -134,6 +141,8 @@ def test_polishFailure_fallsBackToOriginal(tmp_path):
     (uploaded,) = publisher.uploaded  # 원본만 올렸으니 원본 업로드는 따로 없다
     assert [p.parent.name for p in uploaded] == ["captures", "captures"]
     assert all("originalMediaKey" not in c for c in publisher.created[0][3]["captures"])
+    assert all(c["polishFailed"] and c["styleId"] == "royal-blue-brick-mobile"
+               for c in publisher.created[0][3]["captures"])
 
 
 def test_skip_submitsNothing(tmp_path):
@@ -149,8 +158,10 @@ def test_skip_submitsNothing(tmp_path):
     "choice",
     [
         {"decision": "draft", "caption": "글"},
-        {**DRAFT, "picks": [{"image": 9, "label": "없는 번호"}]},
-        {**DRAFT, "picks": [{"image": 1, "label": "a"}, {"image": 1, "label": "b"}]},
+        {**DRAFT, "picks": [{"image": 9, "label": "없는 번호", "headline": "문구"}]},
+        {**DRAFT, "picks": [{"image": 1, "label": "a", "headline": "문구"},
+                           {"image": 1, "label": "b", "headline": "문구"}]},
+        {**DRAFT, "picks": [{"image": 1, "label": "문구 누락"}]},
     ],
 )
 def test_contractViolations_fail(tmp_path, choice):
@@ -191,7 +202,9 @@ def test_reusedCaptures_skipCameraAndKeepRouteOrder(tmp_path):
     # 릴리스 때 찍어 둔 화면으로 서비스 소개를 쓴다 — 스택 없이 돈다.
     first = FakeGateway(DRAFT)
     _drafter(tmp_path, first, FakePublisher()).run()
-    assert json.loads((tmp_path / "run" / "captures" / "manifest.json").read_text(encoding="utf-8"))[1]["route"] == "/collection"
+    manifest = json.loads((tmp_path / "run" / "captures" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == 2 and manifest["viewport"] == {"width": 390, "height": 844}
+    assert manifest["captures"][1]["route"] == "/collection"
 
     again = FakeGateway(DRAFT)
     publisher = FakePublisher()
@@ -206,6 +219,75 @@ def test_reusedCaptures_withoutManifest_fails(tmp_path):
     result = _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher(), camera=None).run()
 
     assert result.outcome == "failed"
+
+
+@pytest.mark.parametrize("patch", [
+    {"version": 1}, {"viewport": {"width": 1440, "height": 1024}},
+    {"captures": [{"route": "/", "file": "../outside.png", "captured_at": "now"}]},
+    {"captures": [{"route": "/admin", "file": "01-home.png", "captured_at": "now"}]},
+    {"captures": [{"route": "/", "file": "sub\\outside.png", "captured_at": "now"}]},
+])
+def test_reusedCaptures_rejectOldDesktopOrUnsafeManifest(tmp_path, patch):
+    _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
+    file = tmp_path / "run" / "captures" / "manifest.json"
+    file.write_text(json.dumps(json.loads(file.read_text(encoding="utf-8")) | patch), encoding="utf-8")
+    gateway, publisher = FakeGateway(DRAFT), FakePublisher()
+
+    result = _drafter(tmp_path, gateway, publisher, camera=None).run()
+
+    assert result.code == "NO_CAPTURES" and gateway.requests == [] and publisher.created == []
+
+
+def test_reusedCaptures_rejectLegacyArray(tmp_path):
+    _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
+    file = tmp_path / "run" / "captures" / "manifest.json"
+    data = json.loads(file.read_text(encoding="utf-8"))
+    file.write_text(json.dumps(data["captures"]), encoding="utf-8")
+
+    assert _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher(), camera=None).run().code == "NO_CAPTURES"
+
+
+@pytest.mark.parametrize("headline", ["", " ", "가" * 41, "😀" * 21, "하나\n둘\n셋", "하나\n\n둘", "하나\t둘", "\x7f문구"])
+def test_headlineTrustBoundary_rejectsOversizeOrInvalidText(tmp_path, headline):
+    publisher = FakePublisher()
+    choice = DRAFT | {"picks": [{"image": 1, "label": "화면", "headline": headline}]}
+
+    result = _drafter(tmp_path, FakeGateway(choice), publisher).run()
+
+    assert result.code == "CHOICE_INVALID" and publisher.created == []
+
+
+def test_headlineAcceptsExactlyFortyUtf16UnitsAndTwoLines():
+    assert drafting.Pick(image=1, label="화면", headline="😀" * 20).headline == "😀" * 20
+    assert drafting.Pick(image=1, label="화면", headline="내 취향의 브릭\nGoLe에서").headline.count("\n") == 1
+    assert drafting.Pick(image=1, label="화면", headline=" 하나\r\n둘\n ").headline == "하나\n둘"
+
+
+def test_fakeCapturesHaveMobileDimensions(tmp_path):
+    from PIL import Image
+
+    _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
+    with Image.open(tmp_path / "run" / "captures" / "01-home.png") as image:
+        assert image.size == (390, 844)
+
+
+def test_checksEveryHeadlinePromptBeforeAnyPolish(tmp_path, monkeypatch):
+    from gole_promotion_agent import memory
+
+    choice = DRAFT | {"picks": [{"image": 1, "label": "짧음", "headline": "짧음"},
+                               {"image": 2, "label": "김", "headline": "가" * 40}]}
+    first_prompt = drafting.POLISH_PROMPT + "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps(
+        {"headline": "짧음"}, ensure_ascii=False,
+    )
+    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", memory.utf16_length(first_prompt) + 1)
+    publisher, gateway = FakePublisher(), FakeGateway(choice)
+
+    result = _drafter(tmp_path, gateway, publisher).run()
+
+    assert result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
+    lengths = json.loads(result.detail.removeprefix("EDIT_PROMPT_TOO_LONG "))
+    assert set(lengths) == {"fixed", "headline", "knowledge", "procedure", "episodes", "total"}
+    assert [request["engine"] for request in gateway.requests] == ["claude"] and publisher.created == []
 
 
 def test_usageMeter_countsFailedCallsToo():

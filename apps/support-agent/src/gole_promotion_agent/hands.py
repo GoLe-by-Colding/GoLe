@@ -160,7 +160,7 @@ class PlaywrightCamera:
             raise ValueError("ROUTE_NOT_ALLOWED")
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        context = self._ensure_browser().new_context(viewport={"width": 1440, "height": 1024})
+        context = self._ensure_browser().new_context(viewport=dict(policy.CAPTURE_VIEWPORT), is_mobile=True, has_touch=True)
         try:
             context.set_default_timeout(policy.INTERACTION_TIMEOUT_SECONDS * 1000)
             context.route("**/*", self._guard)
@@ -328,6 +328,10 @@ class BackendPublisher:
                         # AI 로 다듬은 사진이면 원본 키와 지시문. 검토 화면이 나란히 대조한다.
                         "originalMediaKey": item.get("originalMediaKey"),
                         "edit": item.get("edit"),
+                        "styleId": item.get("styleId"),
+                        "styleVersion": item.get("styleVersion"),
+                        "headline": item.get("headline"),
+                        "polishFailed": item.get("polishFailed", False),
                     }
                     for item in details.get("captures", [])
                 ],

@@ -86,6 +86,9 @@ def test_codex_returnsGeneratedImages(tmp_path):
     command = calls[0]["command"]
     # 프롬프트는 stdin 으로 간다 — 인자에 두면 Windows shim 이 깨뜨려 -i 첨부까지 사라졌다.
     assert "다듬어" in calls[0]["input"] and not any("다듬어" in a for a in command)
+    assert calls[0]["input"].startswith("$imagegen\n")
+    assert "내장 image_gen" in calls[0]["input"]
+    assert "API/CLI 이미지 생성으로 대체하지 않는다" in calls[0]["input"]
     assert command[command.index("-i") + 1].endswith("img-01.png")
     assert command[command.index("-s") + 1] == "workspace-write"
 

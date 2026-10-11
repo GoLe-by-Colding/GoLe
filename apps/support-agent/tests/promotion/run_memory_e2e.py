@@ -39,7 +39,7 @@ def local_api_url(value: str) -> str:
 
 def png() -> bytes:
     out = io.BytesIO()
-    Image.new("RGB", (320, 240), "#2f56e6").save(out, format="PNG")
+    Image.new("RGB", (390, 844), "#1D4ED8").save(out, format="PNG")
     return out.getvalue()
 
 
@@ -72,7 +72,8 @@ class FakeCliGateway:
                 else:
                     structured = {
                         "decision": "draft", "caption": "갖고 있는 레고 세트를 한곳에 모아 보세요.",
-                        "rationale": "컬렉션 화면의 기능을 소개함", "picks": [{"image": 2, "label": "컬렉션"}],
+                        "rationale": "컬렉션 화면의 기능을 소개함",
+                        "picks": [{"image": 2, "label": "컬렉션", "headline": "내 레고 세트, 한곳에"}],
                     }
                 return subprocess.CompletedProcess(command, 0, json.dumps({
                     "subtype": "success", "structured_output": structured, "result": "",
@@ -118,7 +119,7 @@ def main() -> int:
         raise RuntimeError(f"실행 원장 기록 실패: HTTP {status}")
     requests_file = args.run_dir / "requests.json"
     requests_file.write_text(json.dumps(gateway.requests, ensure_ascii=False, indent=2), encoding="utf-8")
-    context = result.memory_context or {"feedbackIds": [], "guidelines": []}
+    context = result.memory_context or {"feedbackIds": [], "guidelines": [], "stages": []}
     output = {
         "postId": result.post_id, "runKey": payload["runKey"], "outcome": result.outcome,
         "reasonCode": result.code, "requestsFile": str(requests_file.resolve()),

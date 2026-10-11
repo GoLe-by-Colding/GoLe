@@ -191,6 +191,8 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
     if request.get("system"):
         prompt = f"{request['system']}\n\n{prompt}"
     if request.get("want_images"):
+        prompt = ("$imagegen\n내장 image_gen 도구로 첨부 이미지를 편집한다. "
+                  "도구를 사용할 수 없으면 실패로 종료하고 API/CLI 이미지 생성으로 대체하지 않는다.\n\n" + prompt)
         prompt += "\n\n만든 이미지는 out/ 폴더에 PNG 파일로 저장한다."
     # 프롬프트는 인자가 아니라 stdin 으로 준다. 인자로 주면 셸 shim(Windows 의 codex.cmd)이 괄호·따옴표
     # 섞인 문장을 깨뜨려 뒤의 -i 까지 사라진다 — 모델이 "첨부 이미지가 없다"고 답한다.

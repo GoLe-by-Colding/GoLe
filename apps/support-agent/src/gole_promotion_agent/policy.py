@@ -23,6 +23,8 @@ MAX_RATIONALE = 300
 INTERACTION_TIMEOUT_SECONDS = 5.0
 NAVIGATION_TIMEOUT_SECONDS = 30.0
 READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+CAPTURE_VIEWPORT = {"width": 390, "height": 844}
+CAPTURE_MANIFEST_VERSION = 2
 
 # 게이트 (스펙 D18)
 MAX_PENDING_REVIEW = 5
@@ -87,7 +89,7 @@ SESSION_FIELDS = ("accountId", "sessionToken", "role", "onboardingRequired")
 # 홍보물에 나오면 안 되는 요소를 가리는 표식. 클래스명·DOM 구조에 기대지 않으려고
 # `apps/web` 쪽에 이 속성을 직접 단다 — 리팩터링해도 캡처가 조용히 깨지지 않는다.
 CAPTURE_HIDE_ATTRIBUTE = "data-promotion-hide"
-CAPTURE_HIDE_CSS = f"[{CAPTURE_HIDE_ATTRIBUTE}]{{display:none !important}}"
+CAPTURE_HIDE_CSS = f"[{CAPTURE_HIDE_ATTRIBUTE}],nextjs-portal{{display:none !important}}"
 
 
 def session_init_script(session: Mapping[str, Any]) -> str:
@@ -116,6 +118,9 @@ def capture_chrome_script() -> str:
     css = json.dumps(CAPTURE_HIDE_CSS)
     return f"""
 (() => {{
+  window.localStorage.setItem("gole.analytics-consent.v1", JSON.stringify({{
+    version: 1, decision: "denied", updatedAt: new Date().toISOString()
+  }}));
   const apply = () => {{
     if (document.getElementById({style_id})) return;
     const root = document.head || document.documentElement;
