@@ -190,6 +190,50 @@ def test_claude_reportsUsageIncludingCacheAndCost(tmp_path):
     }
 
 
+def test_claude_apiError_reportsReasonAndStatusButNotCliText(tmp_path):
+    # claude CLI 2.1.296 실측: API 오류는 subtype=success 그대로 is_error 만 켜진다.
+    stdout = json.dumps({
+        "type": "result", "subtype": "success", "is_error": True,
+        "result": "Invalid API key · sk-ant-secret /home/friend/.claude",
+        "terminal_reason": "api_error", "api_error_status": 401,
+        "usage": {"input_tokens": 0, "output_tokens": 0},
+    })
+    runner, _ = _recording(stdout=stdout)
+
+    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert not response["ok"]
+    assert response["error"] == "claude 실패: success · api_error · HTTP 401"
+    log = (tmp_path / "gw.log").read_text(encoding="utf-8")
+    assert response["error"] in log
+    for output in (json.dumps(response, ensure_ascii=False), log):
+        assert "sk-ant" not in output
+        assert "/home/friend" not in output
+        assert "Invalid API key" not in output
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"subtype": "success; rm -rf ~", "terminal_reason": "sk-ant-secret", "api_error_status": "401"},
+        {"subtype": None, "terminal_reason": None, "api_error_status": True},
+        {"api_error_status": 99999},
+        {"subtype": ["success"], "terminal_reason": {"private": "/home/friend"}, "api_error_status": 401.0},
+        {"subtype": {"secret": "sk-ant-secret"}, "terminal_reason": ["api_error"]},
+    ],
+)
+def test_claude_failure_dropsUnknownReasonFields(tmp_path, fields):
+    runner, _ = _recording(stdout=json.dumps({"is_error": True, **fields}))
+
+    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert response["error"] == "claude 실패: 알 수 없음"
+    log = (tmp_path / "gw.log").read_text(encoding="utf-8")
+    assert "sk-ant-secret" not in log
+    assert "/home/friend" not in log
+    assert "rm -rf" not in log
+
+
 def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     runner, _ = _recording()
 
