@@ -33,3 +33,6 @@ GoLe-obsidian의 `04_프론트엔드/RN과 웹뷰 역할 분리.md`, 디자인 �
 - 원점/내비게이션·브릭 SSR·FCM 토큰·알림 경로·탭 동기화·WebScreen 수명주기 6개 파일: Node test 14개 서브테스트 전부 통과, 실패·스킵 0. 세부 검사 출력은 원점 23·탭 68·알림 39·수명주기 61개다.
 - 기존 Orca iPhone 17 Pro Expo Go에서 홈 웹 본문과 RN 5개 탭, 검색 탭의 상품 탐색·카드 표시를 확인했다. 실기기 FCM·카메라·OAuth 복귀·Android 검증을 대체하지 않는다.
 - 이번 웹의 Tailwind·인앱 모달 변경은 같은 모바일 웹을 쓰는 WebView에도 적용된다. CSS를 쓰지 않는 RN 네이티브 탭·기기 기능은 기존 StyleSheet 구조를 유지한다.
+
+- iOS·Android `expo export` 모두 성공. 네이티브 배포 바이너리 빌드와 실기기 검증을 뜻하지 않는다.
+- 기존 iPhone 17 Pro의 Expo Go에서 네이티브 홈·검색·내 정보 탭 전환과 웹 로그인 안내를 확인하고 홈으로 복귀했다.
