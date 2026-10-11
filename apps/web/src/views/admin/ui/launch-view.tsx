@@ -172,7 +172,7 @@ export function AdminLaunchView() {
   const paymentReady = paymentReadiness?.ready === true;
 
   return (
-    <div className="gole-rise-in flex flex-col gap-7 break-keep">
+    <div className="motion-safe:animate-rise-in flex flex-col gap-7 break-keep">
       <div>
         <Heading level={2}>출시 단계</Heading>
         <Text tone="muted" size="sm" className="mt-1">

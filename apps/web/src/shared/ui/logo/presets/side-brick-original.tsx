@@ -17,20 +17,20 @@ function SideBrickOriginalArt({ spout }: { readonly spout: boolean }) {
             strokeLinecap="round"
             opacity="0.75"
             transform="translate(0 -7)"
-            className="gole-spout-stream"
+            className="[stroke-dasharray:42_10] motion-safe:animate-spout-stream"
           />
           {/* 1x2 브릭 세 개. 스터드 두 개가 얹힌 폭이 곧 1x2다. */}
-          <g className="gole-spout-brick gole-spout-brick-a">
+          <g className="transform-fill origin-center motion-safe:animate-spout-brick-a">
             <rect x="60" y="-30" width="34" height="17" rx="3" fill="#F7BE2C" />
             <rect x="66" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
             <rect x="79" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
           </g>
-          <g className="gole-spout-brick gole-spout-brick-b">
+          <g className="transform-fill origin-center motion-safe:animate-spout-brick-b">
             <rect x="114" y="-42" width="34" height="17" rx="3" fill="#FF7A72" />
             <rect x="120" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
             <rect x="133" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
           </g>
-          <g className="gole-spout-brick gole-spout-brick-c">
+          <g className="transform-fill origin-center motion-safe:animate-spout-brick-c">
             <rect x="154" y="-20" width="34" height="17" rx="3" fill="#6082F7" />
             <rect x="160" y="-25" width="9" height="6" rx="2" fill="#6082F7" />
             <rect x="173" y="-25" width="9" height="6" rx="2" fill="#6082F7" />

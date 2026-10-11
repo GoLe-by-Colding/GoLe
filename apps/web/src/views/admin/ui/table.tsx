@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@shared/lib";
 import { AlertCircleIcon, Card, LoaderIcon, Text } from "@shared/ui";
 
@@ -39,8 +39,13 @@ export function AdminTable({
     <Card padded={false} className="min-w-0 max-w-full overflow-hidden">
       <div className="overflow-x-auto">
         <table
-          className={cn("w-full border-collapse text-sm", hasRows && STICKY_LAST_COLUMN)}
-          style={hasRows ? { minWidth } : undefined}
+          className={cn(
+            "w-full border-collapse text-sm",
+            hasRows && "min-w-(--table-min-w)",
+            hasRows && STICKY_LAST_COLUMN,
+          )}
+          // 화면마다 열 구성이 달라 호출부가 최소 폭을 넘긴다. 값만 변수로 주입한다.
+          style={hasRows ? ({ "--table-min-w": `${minWidth}px` } as CSSProperties) : undefined}
         >
           <caption className="sr-only">
             {caption} · {rowCount.toLocaleString("ko-KR")}개 결과

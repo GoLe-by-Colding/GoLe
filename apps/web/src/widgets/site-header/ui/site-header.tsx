@@ -32,9 +32,10 @@ export function SiteHeader() {
     if (!menuOpen) return;
 
     const restoreButton = menuButtonRef.current;
-    const previousOverflow = document.body.style.overflow;
     const desktopMedia = window.matchMedia("(min-width: 1024px)");
-    document.body.style.overflow = "hidden";
+    // 뒤 화면 스크롤 잠금. 이미 다른 레이어가 잠갔으면 그대로 두고, 직접 잠근 경우만 푼다.
+    const wasScrollLocked = document.body.classList.contains("overflow-hidden");
+    document.body.classList.add("overflow-hidden");
     window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true }));
 
     const closeOnDesktop = (event: MediaQueryListEvent) => {
@@ -73,7 +74,7 @@ export function SiteHeader() {
     return () => {
       desktopMedia.removeEventListener("change", closeOnDesktop);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (!wasScrollLocked) document.body.classList.remove("overflow-hidden");
       window.requestAnimationFrame(() => {
         if (restoreButton?.offsetParent !== null) restoreButton?.focus();
       });
