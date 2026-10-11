@@ -18,6 +18,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 const BOT_EMAIL = process.env.PROMOTION_AGENT_ADMIN_EMAIL ?? "e2e-promotion-bot@gole.test";
 const BOT_PASSWORD =
   process.env.PROMOTION_AGENT_ADMIN_PASSWORD ?? "e2e-promotion-bot-not-a-real-secret";
+const CORE_SEED_IDS = [
+  "7a45a651-c7a0-307e-a0b7-b3f2abf18317",
+  "2f0f999c-0823-3bfd-95fd-0991d9f990de",
+  "90cb344d-aa43-3b70-a915-706e24e3c98c",
+];
 
 function assertLocalOrigin(value: string) {
   const url = new URL(value);
@@ -74,7 +79,7 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
   );
   test.setTimeout(240_000);
 
-  test("반려 보존 → 지침 제안 → 사람 확정 → 두 모델 반영 → 해제 후 제외", async ({
+  test("초기 지식 확정 → 모바일 제작 → 반려 보존 → 성찰 확정 → 두 모델 반영 → 해제 후 제외", async ({
     page,
     baseURL,
   }, testInfo) => {
@@ -107,6 +112,7 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
 
     const runPrefix = `e2e-memory-${randomUUID()}`;
     const createdPosts: string[] = [];
+    let coreKnowledge: AdminPromotionGuideline[] = [];
     let guidelineId: string | undefined;
     const approvedContent = `화면 글자를 작게 줄이지 말고 읽을 수 있는 크기를 유지한다. ${runPrefix}`;
     const reason = `화면 글자가 너무 작아 읽기 어렵습니다. ${runPrefix}`;
@@ -143,6 +149,61 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       const result = JSON.parse(readFileSync(output, "utf8")) as RunnerOutput;
       expect(result.outcome, result.reasonCode).toBe("submitted");
       createdPosts.push(result.postId);
+      const manifest = JSON.parse(
+        readFileSync(join(runDir, "captures", "manifest.json"), "utf8"),
+      ) as {
+        version: number;
+        viewport: { width: number; height: number };
+        captures: { file: string; route: string }[];
+      };
+      expect(manifest.version).toBe(2);
+      expect(manifest.viewport).toEqual({ width: 390, height: 844 });
+      expect(manifest.captures.map((capture) => capture.route)).toEqual(["/", "/collection"]);
+      for (const capture of manifest.captures) {
+        const image = readFileSync(join(runDir, "captures", capture.file));
+        expect(image.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        expect([image.readUInt32BE(16), image.readUInt32BE(20)]).toEqual([390, 844]);
+      }
+      const post = (
+        await list<AdminPromotionPost>(
+          page.request,
+          "/api/admin/promotion-posts?status=PENDING_REVIEW&limit=100",
+        )
+      ).find((entry) => entry.id === result.postId);
+      expect(post?.captures).toHaveLength(1);
+      expect(post?.captures[0]).toMatchObject({
+        route: "/collection",
+        styleId: "royal-blue-brick-mobile",
+        styleVersion: 1,
+        headline: "내 레고 세트, 한곳에",
+        polishFailed: false,
+      });
+      expect(post?.captures[0]?.originalUrl).toBeTruthy();
+      expect(post?.captures[0]?.edit).toContain("$imagegen");
+      const requests = JSON.parse(readFileSync(result.requestsFile, "utf8")) as ModelRequest[];
+      const plan = requests.find(
+        (entry) => entry.engine === "claude" && !entry.json_schema?.properties?.proposals,
+      );
+      const edit = requests.find((entry) => entry.engine === "codex");
+      const stages = result.memoryContext.stages ?? [];
+      expect(stages.map((stage) => ({ stage: stage.stage, routes: stage.routes }))).toEqual([
+        { stage: "PLAN", routes: ["/", "/collection"] },
+        { stage: "IMAGE_EDIT", routes: ["/collection"] },
+      ]);
+      for (const knowledge of coreKnowledge) {
+        expect(plan?.system).toContain(knowledge.content);
+        expect(edit?.prompt).toContain(knowledge.content);
+        expect(result.memoryContext.guidelines).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: knowledge.id,
+              kind: "KNOWLEDGE",
+              content: knowledge.content,
+            }),
+          ]),
+        );
+        for (const stage of stages) expect(stage.guidelineIds).toContain(knowledge.id);
+      }
       return result;
     }
 
@@ -187,6 +248,75 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
             ).ok(),
           ).toBe(true);
       }
+
+      const seedResponse = await botApi.post("/api/admin/promotion-memory/seed-core");
+      expect(seedResponse.ok()).toBe(true);
+      const seeds = (await seedResponse.json()) as AdminPromotionGuideline[];
+      expect(seeds.map((seed) => seed.id).sort()).toEqual([...CORE_SEED_IDS].sort());
+      for (const seed of seeds) {
+        expect(seed).toMatchObject({
+          kind: "KNOWLEDGE",
+          sourceType: "CORE_SEED",
+          sourceReference: ".kiro/steering/brand-identity.md@promotion-core-v1",
+          sourceFeedbackIds: [],
+          proposedBy: bot.accountId,
+          reflectionRunKey: "seed-core-v1",
+        });
+        expect(
+          ["PROPOSED", "ACTIVE"],
+          "기존 시드 상태는 바꾸지 않으므로 전용 DB의 제안·활성 시드만 사용합니다",
+        ).toContain(seed.status);
+        expect(
+          (
+            await botApi.post(`/api/admin/promotion-guidelines/${seed.id}/activate`, {
+              data: { expectedVersion: seed.version },
+            })
+          ).status(),
+        ).toBe(403);
+      }
+      const editable = seeds.find((seed) => seed.status === "PROPOSED");
+      if (editable) {
+        const edited = await botApi.patch(`/api/admin/promotion-guidelines/${editable.id}`, {
+          data: {
+            expectedVersion: editable.version,
+            content: `${editable.content} 검토한 브랜드 기준이다.`,
+            targets: editable.targets,
+            categories: editable.categories,
+          },
+        });
+        expect(edited.ok()).toBe(true);
+        seeds[seeds.findIndex((seed) => seed.id === editable.id)] = await edited.json();
+      }
+      const repeatedSeed = await botApi.post("/api/admin/promotion-memory/seed-core");
+      expect(repeatedSeed.ok()).toBe(true);
+      expect(await repeatedSeed.json()).toEqual(seeds);
+      await page.goto("/admin/promotion");
+      for (const seed of seeds.filter((entry) => entry.status === "PROPOSED")) {
+        const card = page.getByRole("group", { name: `홍보 지침 ${seed.id}`, exact: true });
+        await expect(
+          card.getByText(`근거 문서: ${seed.sourceReference}`, { exact: true }),
+        ).toBeVisible();
+        await expect(card.getByRole("textbox", { name: "지침 내용", exact: true })).toHaveValue(
+          seed.content,
+        );
+        await card.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+        await expect(card.getByRole("button", { name: "활성 해제", exact: true })).toBeVisible();
+      }
+      const activeKnowledge = await list<AdminPromotionGuideline>(
+        page.request,
+        "/api/admin/promotion-guidelines?status=ACTIVE&limit=100",
+      );
+      coreKnowledge = activeKnowledge.filter((entry) => CORE_SEED_IDS.includes(entry.id));
+      expect(coreKnowledge).toHaveLength(3);
+      for (const seed of coreKnowledge) {
+        expect(seed.confirmedBy).toBe(admin.accountId);
+        expect(seed.content).toBe(seeds.find((entry) => entry.id === seed.id)?.content);
+      }
+      const repeatedActiveSeeds = await botApi.post("/api/admin/promotion-memory/seed-core");
+      expect(repeatedActiveSeeds.ok()).toBe(true);
+      expect(await repeatedActiveSeeds.json()).toEqual(
+        seeds.map((seed) => coreKnowledge.find((entry) => entry.id === seed.id)),
+      );
 
       const first = await run("apply", "first");
       await page.goto("/admin/promotion");
