@@ -625,6 +625,11 @@ GitHub 러너 (ubuntu-latest, environment: production)
   (`gh-<run_id>-<attempt>`)가 unique 라 재시도해도 1줄이고, 처음 기록을 덮어쓰지 않는다.
 - **모델이 쓴 글은 신뢰하지 않는 입력이다.** `detail` 은 러너와 서버 양쪽에서 제어문자를 지우고
   300자(글자 단위)로 자른다. 관리자만 읽는다(`/api/admin/**`).
+- **게이트웨이 claude 실패 문장은 허용 목록 코드와 숫자만 싣는다(2026-10-11).** claude CLI 는 API 오류
+  (인증 만료·사용량 한도·과부하)를 `subtype=success`·`is_error=true` 로 돌려줘 `claude 실패: success` 만
+  남았고 원인을 가릴 수 없었다(run 38145786323). 이제 `subtype`·`terminal_reason`(허용 목록)과
+  `api_error_status`(100~599 정수)만 잇는다(`claude 실패: success · api_error · HTTP 401`). CLI 원문은
+  응답과 게이트웨이 서버 로그 어디에도 추가하지 않는다. 잘못된 타입·미등록 코드도 버린다.
 - **원장 기록이 실패해도 실행 결과는 바꾸지 않는다.** 이미 낸 초안을 되돌리지 않고, Actions 요약에
   "기록 실패"를 남긴다.
 - **공개 Actions 에 남는 것**: 결과·사유 코드, 호출별 토큰·모델·시간, 검토 화면 링크. 캡션·고른 이유·

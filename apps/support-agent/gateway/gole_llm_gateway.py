@@ -50,6 +50,9 @@ MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 SESSION_ID_PATTERN = re.compile(rf"^session id: ({UUID_PATTERN.pattern})$", re.MULTILINE)
 CONFIG_MODEL_PATTERN = re.compile(r'model\s*=\s*"([A-Za-z0-9][A-Za-z0-9._:-]{0,63})"')
+# claude 실패 응답에 그대로 싣는 값. 목록 밖의 문자열은 버린다 — 공개 Actions 로그로 나가기 때문이다.
+CLAUDE_SUBTYPES = frozenset({"success", "error_max_turns", "error_during_execution", "error_max_structured_output_retries"})
+CLAUDE_TERMINAL_REASONS = frozenset({"api_error", "max_turns", "prompt_too_long", "aborted"})
 # 응답에 싣는 모델 이름. claude 는 여러 모델을 쓰면 쉼표로 잇는다.
 MODEL_LIST_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:,-]{0,255}")
 
@@ -156,13 +159,32 @@ def _claude(request: dict[str, Any], workdir: Path, paths: list[Path], runner: R
         duration_ms=result.get("duration_ms"),
     )
     if result.get("is_error") or result.get("subtype") != "success":
-        return {"ok": False, "error": f"claude 실패: {result.get('subtype')}", "usage": usage}
+        # API 오류(인증 만료·사용량 한도·과부하)는 subtype 이 success 그대로라 subtype 만으로는 가려지지
+        # 않는다. 응답과 서버 로그 모두 검증한 사유 코드·HTTP 상태만 남긴다.
+        error = _claude_error(result)
+        _log(error)
+        return {"ok": False, "error": error, "usage": usage}
     return {
         "ok": True,
         "text": result.get("result") or "",
         "structured": result.get("structured_output"),
         "usage": usage,
     }
+
+
+def _claude_error(result: dict[str, Any]) -> str:
+    """공개 로그로 나가는 claude 실패 문장. 알려진 코드와 숫자만 싣는다 — CLI 출력 원문은 비밀·경로를 담을 수 있다."""
+    parts = []
+    subtype = result.get("subtype")
+    if isinstance(subtype, str) and subtype in CLAUDE_SUBTYPES:
+        parts.append(subtype)
+    reason = result.get("terminal_reason")
+    if isinstance(reason, str) and reason in CLAUDE_TERMINAL_REASONS:
+        parts.append(reason)
+    status = result.get("api_error_status")
+    if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
+        parts.append(f"HTTP {status}")
+    return "claude 실패: " + (" · ".join(parts) or "알 수 없음")
 
 
 def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Runner) -> dict[str, Any]:
