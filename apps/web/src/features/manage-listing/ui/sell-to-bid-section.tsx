@@ -17,7 +17,7 @@ import {
   updateListing,
   type Listing,
 } from "@entities/listing";
-import { Button } from "@shared/ui";
+import { Button, useDialog } from "@shared/ui";
 import { draftFromListing, draftToInput } from "../model/listing-draft";
 
 export interface SellToBidSectionProps {
@@ -58,6 +58,7 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   /** 입찰가에 맞춰 올린 판매가. 올리지 않고 팔았으면 null. */
   const [raisedPrice, setRaisedPrice] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialog = useDialog();
 
   useEffect(() => {
     if (setNumber === null || listing.status !== "active") return;
@@ -88,18 +89,21 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
    */
   async function handleFill(raiseTo: number | null) {
     if (busy || setNumber === null || highest === null) return;
-    const confirmed = window.confirm(
-      raiseTo !== null
-        ? `판매가를 ${formatWon(raiseTo)}으로 올리고 최고 입찰가에 판매할까요?\n\n` +
+    const confirmed = await dialog.confirm({
+      title: raiseTo !== null ? "판매가를 올리고 판매" : "입찰가에 판매",
+      confirmLabel: "판매",
+      description:
+        raiseTo !== null
+          ? `판매가를 ${formatWon(raiseTo)}으로 올리고 최고 입찰가에 판매할까요?\n\n` +
             `입찰자에게 72시간 유효한 수락 제안이 생기고, 주문 금액은 ${formatWon(raiseTo)}이에요. ` +
             "내가 건 입찰은 제외돼요."
-        : `최고 입찰가 ${formatWon(highest)}에 이 매물을 판매할까요?\n\n` +
+          : `최고 입찰가 ${formatWon(highest)}에 이 매물을 판매할까요?\n\n` +
             "입찰자에게 72시간 유효한 수락 제안이 생기고, 구매자가 그 가격으로 거래를 진행해요. " +
             (highest > listing.price
               ? `주문 금액은 지금 판매가 ${formatWon(listing.price)}이에요. `
               : "") +
             "내가 건 입찰은 제외돼요.",
-    );
+    });
     if (!confirmed) return;
     setBusy(true);
     setError(null);
@@ -199,6 +203,7 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
           {error}
         </p>
       ) : null}
+      {dialog.element}
     </section>
   );
 }

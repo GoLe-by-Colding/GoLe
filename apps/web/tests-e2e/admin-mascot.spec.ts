@@ -282,12 +282,18 @@ test.describe("운영자 콘솔 · 마스코트", () => {
         json: { code: "MASCOT_ASSET_NOT_FOUND", message: "마스코트 에셋을 찾을 수 없습니다." },
       });
     });
-    page.on("dialog", (dialog) => void dialog.accept());
+    /** 앱 확인 모달에서 지우기를 확정한다. */
+    const confirmRemove = () =>
+      page
+        .getByRole("alertdialog", { name: "마스코트 지우기" })
+        .getByRole("button", { name: "지우기" })
+        .click();
 
     await page.goto("/admin/mascot");
     const uploads = page.getByRole("heading", { name: "업로드한 마스코트" }).locator("xpath=../..");
     const autumn = uploads.getByRole("listitem").filter({ hasText: "가을 고래" });
     await autumn.getByRole("button", { name: "지우기" }).click();
+    await confirmRemove();
     await expect(page.locator("p[role=alert]")).toContainText(
       "적용 중인 마스코트는 지울 수 없습니다.",
     );
@@ -301,6 +307,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
       .filter({ hasText: "겨울 고래" })
       .getByRole("button", { name: "지우기" })
       .click();
+    await confirmRemove();
     await expect(page.locator("p[role=alert]")).toContainText("마스코트 에셋을 찾을 수 없습니다.");
     await expect(uploads.getByRole("listitem").filter({ hasText: "겨울 고래" })).toHaveCount(0);
   });

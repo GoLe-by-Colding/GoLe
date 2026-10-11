@@ -13,7 +13,7 @@ import {
 } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Badge, Button, Heading, Text } from "@shared/ui";
+import { Badge, Button, Heading, Text, useDialog } from "@shared/ui";
 import { AdminStatus, AdminTable } from "./table";
 
 const STATUS_LABEL: Record<AdminAccountDeletionStatus, string> = {
@@ -39,6 +39,12 @@ const HOLD_REASONS: readonly AdminAccountDeletionHoldReason[] = [
   "FRAUD_OR_SECURITY_INVESTIGATION",
 ];
 
+const HOLD_REASON_LABEL: Readonly<Record<AdminAccountDeletionHoldReason, string>> = {
+  LEGAL_OBLIGATION: "법정 보존 의무",
+  DISPUTE_OR_CLAIM: "분쟁·청구 대응",
+  FRAUD_OR_SECURITY_INVESTIGATION: "부정 이용·보안 조사",
+};
+
 export function AdminAccountDeletionsView() {
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
@@ -46,6 +52,7 @@ export function AdminAccountDeletionsView() {
   const [rows, setRows] = useState<readonly AdminAccountDeletionRequest[] | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const dialog = useDialog();
 
   const load = useCallback(async () => {
     if (token === null) return;
@@ -94,18 +101,32 @@ export function AdminAccountDeletionsView() {
     }
   }
 
-  function confirmRequestId(requestId: string, action: string): boolean {
-    return (
-      window.prompt(`${action}하려면 요청 ID를 그대로 입력하세요.\n${requestId}`) === requestId
-    );
+  /** 요청 ID를 글자 그대로 다시 입력해야 통과한다. 다르면 모달 안에서 거부하고, 취소하면 false. */
+  async function confirmRequestId(requestId: string, action: string): Promise<boolean> {
+    const typed = await dialog.prompt({
+      title: action,
+      description: `${action}하려면 요청 ID를 그대로 입력하세요.\n${requestId}`,
+      label: "요청 ID",
+      confirmLabel: "다음",
+      validate: (value) => (value === requestId ? null : "요청 ID가 일치하지 않습니다."),
+    });
+    return typed === requestId;
   }
 
-  function placeHold(row: AdminAccountDeletionRequest): void {
-    if (token === null || !confirmRequestId(row.requestId, "보존 중지")) return;
-    const selected = window.prompt(
-      `보존 사유 코드를 입력하세요.\n${HOLD_REASONS.join("\n")}`,
-      "DISPUTE_OR_CLAIM",
-    );
+  async function placeHold(row: AdminAccountDeletionRequest): Promise<void> {
+    if (token === null || !(await confirmRequestId(row.requestId, "보존 중지"))) return;
+    const selected = await dialog.prompt({
+      title: "보존 사유",
+      label: "보존 사유 코드",
+      choices: HOLD_REASONS.map((reason) => ({
+        value: reason,
+        label: reason,
+        description: HOLD_REASON_LABEL[reason],
+      })),
+      defaultValue: "DISPUTE_OR_CLAIM",
+      confirmLabel: "보존 중지",
+    });
+    if (selected === null) return;
     if (!HOLD_REASONS.includes(selected as AdminAccountDeletionHoldReason)) {
       setError("허용된 보존 사유 코드를 선택해 주세요.");
       return;
@@ -115,11 +136,20 @@ export function AdminAccountDeletionsView() {
     );
   }
 
-  function complete(row: AdminAccountDeletionRequest): void {
-    if (token === null || !confirmRequestId(row.requestId, "연계 파기")) return;
-    const reviewed = window.confirm(
-      "진행 거래·정산·분쟁·신고·문의·법정 보존과 공개 콘텐츠 수명주기를 모두 확인했습니까? 서버가 마지막으로 다시 검사합니다.",
-    );
+  async function releaseHold(row: AdminAccountDeletionRequest): Promise<void> {
+    if (!(await confirmRequestId(row.requestId, "보존 중지 해제"))) return;
+    void run(row.requestId, () => releaseAdminAccountDeletionHold(token ?? "", row.requestId));
+  }
+
+  async function complete(row: AdminAccountDeletionRequest): Promise<void> {
+    if (token === null || !(await confirmRequestId(row.requestId, "연계 파기"))) return;
+    const reviewed = await dialog.confirm({
+      title: "연계 파기",
+      description:
+        "진행 거래·정산·분쟁·신고·문의·법정 보존과 공개 콘텐츠 수명주기를 모두 확인했습니까? 서버가 마지막으로 다시 검사합니다.",
+      confirmLabel: "파기",
+      tone: "danger",
+    });
     if (!reviewed) return;
     void run(row.requestId, () =>
       completeAdminAccountDeletion(token, row.requestId, crypto.randomUUID()),
@@ -213,7 +243,7 @@ export function AdminAccountDeletionsView() {
                         size="sm"
                         variant="ghost"
                         disabled={busy}
-                        onClick={() => placeHold(row)}
+                        onClick={() => void placeHold(row)}
                       >
                         보존 중지
                       </Button>
@@ -222,12 +252,7 @@ export function AdminAccountDeletionsView() {
                         size="sm"
                         variant="ghost"
                         disabled={busy || token === null}
-                        onClick={() => {
-                          if (!confirmRequestId(row.requestId, "보존 중지 해제")) return;
-                          void run(row.requestId, () =>
-                            releaseAdminAccountDeletionHold(token ?? "", row.requestId),
-                          );
-                        }}
+                        onClick={() => void releaseHold(row)}
                       >
                         중지 해제
                       </Button>
@@ -236,7 +261,7 @@ export function AdminAccountDeletionsView() {
                       size="sm"
                       variant="danger"
                       disabled={busy || row.status !== "READY"}
-                      onClick={() => complete(row)}
+                      onClick={() => void complete(row)}
                     >
                       연계 파기
                     </Button>
@@ -247,6 +272,7 @@ export function AdminAccountDeletionsView() {
           );
         })}
       </AdminTable>
+      {dialog.element}
     </div>
   );
 }

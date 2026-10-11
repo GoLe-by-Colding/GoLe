@@ -472,17 +472,17 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
       name: `판매가를 ${highestLabel}으로 올리고 바로 판매`,
     });
 
-    // 확인 대화상자에서 물러나면 가격도 바꾸지 않고 팔지도 않는다.
-    page.once("dialog", (dialog) => void dialog.dismiss());
+    // 확인 모달에서 물러나면 가격도 바꾸지 않고 팔지도 않는다.
     await raise.click();
+    const raiseDialog = page.getByRole("alertdialog", { name: "판매가를 올리고 판매" });
+    await raiseDialog.getByRole("button", { name: "취소" }).click();
+    await expect(raiseDialog).toHaveCount(0);
     expect(calls).toEqual([]);
 
-    page.once("dialog", (dialog) => {
-      expect(dialog.message()).toContain(`판매가를 ${highestLabel}으로 올리고`);
-      expect(dialog.message()).toContain(`주문 금액은 ${highestLabel}`);
-      void dialog.accept();
-    });
     await raise.click();
+    await expect(raiseDialog).toContainText(`판매가를 ${highestLabel}으로 올리고`);
+    await expect(raiseDialog).toContainText(`주문 금액은 ${highestLabel}`);
+    await raiseDialog.getByRole("button", { name: "판매" }).click();
 
     await expect.poll(() => calls).toEqual(["PUT", "FILL"]);
     expect(revisions).toEqual([{ price: highest }]);
@@ -496,11 +496,10 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
     const { listing, highest, calls, section } = await openSellerListingWithBid(page, 20000);
     const askLabel = `${listing.price.toLocaleString("ko-KR")}원`;
 
-    page.once("dialog", (dialog) => {
-      expect(dialog.message()).toContain(`주문 금액은 지금 판매가 ${askLabel}`);
-      void dialog.accept();
-    });
     await section.getByRole("button", { name: `판매가 ${askLabel} 그대로 판매` }).click();
+    const fillDialog = page.getByRole("alertdialog", { name: "입찰가에 판매" });
+    await expect(fillDialog).toContainText(`주문 금액은 지금 판매가 ${askLabel}`);
+    await fillDialog.getByRole("button", { name: "판매" }).click();
 
     await expect.poll(() => calls).toEqual(["FILL"]);
     await expect(
@@ -514,8 +513,11 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
     const highestLabel = `${highest.toLocaleString("ko-KR")}원`;
 
     await expect(section.getByRole("button", { name: /올리고/ })).toHaveCount(0);
-    page.once("dialog", (dialog) => void dialog.accept());
     await section.getByRole("button", { name: `최고 입찰가 ${highestLabel}에 바로 판매` }).click();
+    await page
+      .getByRole("alertdialog", { name: "입찰가에 판매" })
+      .getByRole("button", { name: "판매" })
+      .click();
 
     await expect.poll(() => calls).toEqual(["FILL"]);
     await expect(
@@ -554,10 +556,13 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
     );
 
     await page.goto(`/listings/${listing.id}`);
-    page.once("dialog", (dialog) => void dialog.accept());
     await page
       .getByTestId("sell-to-bid")
       .getByRole("button", { name: /바로 판매/ })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "입찰가에 판매" })
+      .getByRole("button", { name: "판매" })
       .click();
 
     await expect(
@@ -623,9 +628,12 @@ test.describe("구매 입찰 — 세트 상세 입찰부터 판매자 즉시 판
 
     const sellToBid = page.getByTestId("sell-to-bid");
     // 입찰가가 판매가(12,345원)보다 높으니 판매가를 입찰가로 올린 뒤 판다(실제 PUT → 체결).
-    page.once("dialog", (dialog) => void dialog.accept());
     await sellToBid
       .getByRole("button", { name: `판매가를 ${bidLabel}으로 올리고 바로 판매` })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "판매가를 올리고 판매" })
+      .getByRole("button", { name: "판매" })
       .click();
     await expect(sellToBid.getByText(`입찰가 ${bidLabel}에 판매를 수락했어요`)).toBeVisible();
     // 판매가를 입찰가로 올렸으니 주문 금액 상한 안내는 붙지 않는다.

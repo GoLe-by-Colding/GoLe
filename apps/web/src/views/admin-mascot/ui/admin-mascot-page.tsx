@@ -26,7 +26,7 @@ import {
 } from "@gole/core/mascot";
 import { ApiError, uploadImage } from "@shared/api";
 import { cn } from "@shared/lib";
-import { Badge, Button, Field, Input, Logo, Textarea } from "@shared/ui";
+import { Badge, Button, Field, Input, Logo, Textarea, useDialog } from "@shared/ui";
 
 /** 업로드 상한 — 미디어 서버 기본값(5MB)과 같다. */
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -78,6 +78,7 @@ export function AdminMascotPage() {
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const dialog = useDialog();
   const previewRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async (keepSelection: boolean) => {
@@ -209,12 +210,13 @@ export function AdminMascotPage() {
 
   async function remove(candidate: Candidate) {
     if (busy) return;
-    if (
-      !window.confirm(
-        `"${candidate.name}"을(를) 지울까요? 이미지 파일도 함께 폐기되며 되돌릴 수 없습니다.`,
-      )
-    )
-      return;
+    const confirmed = await dialog.confirm({
+      title: "마스코트 지우기",
+      description: `"${candidate.name}"을(를) 지울까요? 이미지 파일도 함께 폐기되며 되돌릴 수 없습니다.`,
+      confirmLabel: "지우기",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       await deleteMascotAsset(candidate.artwork.id);
@@ -398,6 +400,7 @@ export function AdminMascotPage() {
         }}
         onError={() => setNotice({ tone: "error", text: "이전 이력을 불러오지 못했습니다." })}
       />
+      {dialog.element}
     </section>
   );
 }
@@ -548,7 +551,7 @@ function PreviewPanel({
             maxHeight={140}
             showWordmark={false}
             spout
-            className="gole-mascot-float"
+            className="origin-[50%_62%] motion-safe:animate-mascot-float"
           />
         </div>
       </PreviewRow>
