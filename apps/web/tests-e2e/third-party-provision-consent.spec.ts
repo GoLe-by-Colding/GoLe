@@ -348,11 +348,20 @@ test.describe("제3자 제공 JIT 동의", () => {
         },
       });
     });
-    page.on("dialog", (dialog) => void dialog.accept());
-
     await page.goto("/profile/security");
     await expect(page.getByText("현재 상태: 동의함")).toBeVisible();
+    // 철회 확인 모달에서 취소하면 철회 요청을 보내지 않는다.
     await page.getByRole("button", { name: "동의 철회" }).click();
+    const withdraw = page.getByRole("alertdialog", { name: "제3자 제공 동의 철회" });
+    await withdraw.getByRole("button", { name: "취소" }).click();
+    await expect(withdraw).toHaveCount(0);
+    expect(withdrawalRequests).toHaveLength(0);
+
+    await page.getByRole("button", { name: "동의 철회" }).click();
+    await page
+      .getByRole("alertdialog", { name: "제3자 제공 동의 철회" })
+      .getByRole("button", { name: "철회" })
+      .click();
 
     await expect(page.getByText("현재 상태: 동의하지 않음")).toBeVisible();
     expect(withdrawalRequests).toHaveLength(1);

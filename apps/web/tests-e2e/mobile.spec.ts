@@ -61,7 +61,9 @@ test.describe("Mobile responsive", () => {
     const menu = page.getByRole("dialog", { name: "전체 메뉴" });
     await expect(menu).toBeVisible();
     await expect(page.getByRole("button", { name: "메뉴 닫기" })).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).overflow))
+      .toBe("hidden");
 
     const menuBox = await menu.boundingBox();
     expect(menuBox).not.toBeNull();
@@ -71,7 +73,9 @@ test.describe("Mobile responsive", () => {
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(page.getByRole("button", { name: "메뉴 열기" })).toBeFocused();
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).overflow))
+      .not.toBe("hidden");
   });
 
   test("모바일 검색은 적용된 필터를 칩으로 보이고 누르면 그 필터만 뺀다", async ({ page }) => {

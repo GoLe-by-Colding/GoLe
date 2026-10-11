@@ -9,7 +9,7 @@ import {
 } from "@entities/part-request";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button } from "@shared/ui";
+import { Button, useDialog } from "@shared/ui";
 
 export interface PartRequestOwnerActionsProps {
   readonly request: PartRequest;
@@ -38,12 +38,18 @@ export function PartRequestOwnerActions({
   const { session } = useSession();
   const [busy, setBusy] = useState<"close" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialog = useDialog();
 
   if (session?.accountId !== request.requesterId) return null;
 
   async function handleClose() {
     if (busy !== null) return;
-    if (!window.confirm("부품을 구했나요? 마감하면 게시판의 '찾는 중' 목록에서 빠져요.")) return;
+    const confirmed = await dialog.confirm({
+      title: "요청 마감",
+      description: "부품을 구했나요? 마감하면 게시판의 '찾는 중' 목록에서 빠져요.",
+      confirmLabel: "마감",
+    });
+    if (!confirmed) return;
     setBusy("close");
     setError(null);
     try {
@@ -57,7 +63,13 @@ export function PartRequestOwnerActions({
 
   async function handleDelete() {
     if (busy !== null) return;
-    if (!window.confirm("이 요청을 삭제할까요? 되돌릴 수 없어요.")) return;
+    const confirmed = await dialog.confirm({
+      title: "요청 삭제",
+      description: "이 요청을 삭제할까요? 되돌릴 수 없어요.",
+      confirmLabel: "삭제",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy("delete");
     setError(null);
     try {
@@ -97,6 +109,7 @@ export function PartRequestOwnerActions({
           {error}
         </p>
       ) : null}
+      {dialog.element}
     </div>
   );
 }

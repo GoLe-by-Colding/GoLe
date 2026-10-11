@@ -64,10 +64,7 @@ export function ChatButton({
           {open ? "채팅 닫기" : label}
         </Button>
         {open ? (
-          <div
-            className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft"
-            style={{ height: 420 }}
-          >
+          <div className="h-[420px] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-soft">
             <InlineChatPanel
               key={`${session.accountId}:${listingId}:${sellerId}`}
               listingId={listingId}

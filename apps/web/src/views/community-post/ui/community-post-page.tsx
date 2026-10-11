@@ -26,6 +26,7 @@ import {
   LinkButton,
   Skeleton,
   Text,
+  useDialog,
 } from "@shared/ui";
 
 export interface CommunityPostPageProps {
@@ -43,6 +44,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const [commentsError, setCommentsError] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [commentActionError, setCommentActionError] = useState<string | null>(null);
+  const dialog = useDialog();
 
   const loadComments = useCallback(async () => {
     setCommentsError(false);
@@ -145,7 +147,13 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const cover = post.imageUrls[0];
 
   async function handleDeleteComment(comment: Comment): Promise<void> {
-    if (!window.confirm("이 댓글을 삭제할까요? 화면에서 즉시 숨겨집니다.")) return;
+    const confirmed = await dialog.confirm({
+      title: "댓글 삭제",
+      description: "이 댓글을 삭제할까요? 화면에서 즉시 숨겨집니다.",
+      confirmLabel: "삭제",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setDeletingCommentId(comment.id);
     setCommentActionError(null);
     try {
@@ -255,6 +263,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
           <CommentForm postId={post.id} onAdded={() => void loadComments()} />
         </div>
       </div>
+      {dialog.element}
     </Container>
   );
 }

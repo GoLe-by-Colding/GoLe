@@ -32,8 +32,9 @@ export function DirectTradeConfirmation({
   useEffect(() => {
     if (!finalConfirmationOpen) return;
     const restoreTarget = triggerRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // 뒤 화면 스크롤 잠금. 이미 다른 레이어가 잠갔으면 그대로 두고, 직접 잠근 경우만 푼다.
+    const wasScrollLocked = document.body.classList.contains("overflow-hidden");
+    document.body.classList.add("overflow-hidden");
 
     const handleDialogKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busy) {
@@ -70,7 +71,7 @@ export function DirectTradeConfirmation({
     document.addEventListener("keydown", handleDialogKeyDown);
     return () => {
       document.removeEventListener("keydown", handleDialogKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (!wasScrollLocked) document.body.classList.remove("overflow-hidden");
       window.requestAnimationFrame(() => restoreTarget?.focus());
     };
   }, [busy, finalConfirmationOpen]);

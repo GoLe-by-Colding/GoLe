@@ -71,7 +71,7 @@ export function AdminDashboardView() {
   }, [token]);
 
   return (
-    <div className="gole-rise-in flex flex-col gap-8">
+    <div className="motion-safe:animate-rise-in flex flex-col gap-8">
       <AdminStatus error={error} loading={overview === null && error === undefined} />
 
       {overview !== null ? <PaymentReadinessPanel readiness={overview.paymentReadiness} /> : null}

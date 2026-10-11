@@ -1630,8 +1630,23 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
 
     await page.getByRole("button", { name: "지급 작업 시작" }).click();
     await page.getByRole("textbox", { name: /지급 증빙 번호/ }).fill("BANK-20260809-001");
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "지급 완료" }).click();
+    const payout = page.getByRole("button", { name: "지급 완료" });
+    await payout.click();
+    // 실이체 확인 문구는 앱 모달로 그대로 보인다. 취소하면 지급 완료 요청을 보내지 않는다.
+    const transfer = page.getByRole("alertdialog", { name: "지급 완료 확정" });
+    await expect(transfer).toContainText(
+      "외부 이체가 실제 완료됐나요? 입력한 증빙으로 지급 완료 상태를 확정합니다.",
+    );
+    await expect(transfer.getByRole("button", { name: "취소" })).toBeFocused();
+    await transfer.getByRole("button", { name: "취소" }).click();
+    await expect(transfer).toHaveCount(0);
+    expect(markedPaid).toBe(false);
+
+    await payout.click();
+    await page
+      .getByRole("alertdialog", { name: "지급 완료 확정" })
+      .getByRole("button", { name: "지급 완료로 확정" })
+      .click();
 
     await expect.poll(() => markedPaid).toBe(true);
     await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();

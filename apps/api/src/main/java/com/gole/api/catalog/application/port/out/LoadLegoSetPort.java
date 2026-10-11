@@ -24,4 +24,9 @@ public interface LoadLegoSetPort {
      * 홈 추천 세트 목록 조회 (최대 limit 개).
      */
     List<LegoSet> loadFeatured(int limit);
+
+    /**
+     * 테마 이름에 {@code words}가 이 순서로 들어 있는 세트의 번호(최대 limit 개). 낱말 사이 띄어쓰기·하이픈·밑줄과 대소문자는 가리지 않는다.
+     */
+    List<String> loadSetNumbersByThemeWords(List<String> words, int limit);
 }

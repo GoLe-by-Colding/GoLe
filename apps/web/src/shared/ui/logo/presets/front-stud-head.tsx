@@ -17,7 +17,7 @@ const GOLD_D =
 /** 1×2 브릭 한 개 — 몸 34×17 위에 스터드 두 개. */
 function SpoutBrick({ x, y, className }: { x: number; y: number; className: string }) {
   return (
-    <g className={cn("gole-spout-brick", className)}>
+    <g className={cn("transform-fill origin-center", className)}>
       <rect x={x} y={y} width="34" height="17" rx="3" />
       <rect x={x + 6} y={y - 5} width="9" height="6" rx="2" />
       <rect x={x + 19} y={y - 5} width="9" height="6" rx="2" />
@@ -36,11 +36,15 @@ function FrontStudHeadArt({ spout }: { readonly spout: boolean }) {
             strokeWidth="4"
             strokeLinecap="round"
             opacity="0.75"
-            className="gole-spout-stream stroke-brand-300"
+            className="stroke-brand-300 [stroke-dasharray:42_10] motion-safe:animate-spout-stream"
           />
-          <SpoutBrick x={150} y={24} className="gole-spout-brick-a fill-accent-500" />
-          <SpoutBrick x={200} y={8} className="gole-spout-brick-b fill-brand-400" />
-          <SpoutBrick x={222} y={52} className="gole-spout-brick-c fill-brand-300" />
+          <SpoutBrick
+            x={150}
+            y={24}
+            className="motion-safe:animate-spout-brick-a fill-accent-500"
+          />
+          <SpoutBrick x={200} y={8} className="motion-safe:animate-spout-brick-b fill-brand-400" />
+          <SpoutBrick x={222} y={52} className="motion-safe:animate-spout-brick-c fill-brand-300" />
         </>
       ) : null}
       {/* fill 속성은 CSS가 없을 때의 대비값이다. 클래스(토큰 + 변수)가 항상 이긴다. */}

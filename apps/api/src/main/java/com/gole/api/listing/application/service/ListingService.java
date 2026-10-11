@@ -12,6 +12,7 @@ import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
 import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
+import com.gole.api.listing.application.port.out.CatalogThemeSetsPort;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingBidMatchNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
@@ -22,6 +23,7 @@ import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.ListingConflictException;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
+import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingRevision;
 import com.gole.api.listing.domain.model.Money;
@@ -61,6 +63,7 @@ public class ListingService
     private final ListingPriceDropNotifierPort priceDropNotifier;
     private final ListingBidMatchNotifierPort bidMatchNotifier;
     private final ListingPhotoPort photos;
+    private final CatalogThemeSetsPort catalogThemeSets;
     private final Clock clock;
     private final Duration bumpCooldown;
 
@@ -72,6 +75,7 @@ public class ListingService
             ListingPriceDropNotifierPort priceDropNotifier,
             ListingBidMatchNotifierPort bidMatchNotifier,
             ListingPhotoPort photos,
+            CatalogThemeSetsPort catalogThemeSets,
             Clock clock,
             @Value("${gole.listing.bump.cooldown:PT24H}") Duration bumpCooldown) {
         if (bumpCooldown == null || bumpCooldown.isNegative()) {
@@ -84,6 +88,7 @@ public class ListingService
         this.priceDropNotifier = priceDropNotifier;
         this.bidMatchNotifier = bidMatchNotifier;
         this.photos = photos;
+        this.catalogThemeSets = catalogThemeSets;
         this.clock = clock;
         this.bumpCooldown = bumpCooldown;
     }
@@ -256,7 +261,12 @@ public class ListingService
 
     @Override
     public List<Listing> search(ListingSearchQuery query) {
-        return listingRepository.search(query);
+        InterestTag theme = query.interestTagInText();
+        if (theme == null) {
+            return listingRepository.search(query);
+        }
+        // 테마 이름으로 찾으면 그 테마의 카탈로그 세트로 판 매물도 찾는다 — 관심 테마를 단 매물은 일부뿐이다.
+        return listingRepository.search(query.withThemeSetNumbers(catalogThemeSets.setNumbersInTheme(theme)));
     }
 
     @Override

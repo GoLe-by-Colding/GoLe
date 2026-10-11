@@ -35,12 +35,13 @@ function OpenThirdPartyProvisionConsentDialog({
   useEffect(() => {
     restoreTargetRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // 뒤 화면 스크롤 잠금. 이미 다른 레이어가 잠갔으면 그대로 두고, 직접 잠근 경우만 푼다.
+    const wasScrollLocked = document.body.classList.contains("overflow-hidden");
+    document.body.classList.add("overflow-hidden");
     window.requestAnimationFrame(() => dialogRef.current?.focus());
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      if (!wasScrollLocked) document.body.classList.remove("overflow-hidden");
       window.requestAnimationFrame(() => restoreTargetRef.current?.focus());
     };
   }, []);

@@ -26,13 +26,15 @@ import {
 } from "@gole/core/mascot";
 import { ApiError, uploadImage } from "@shared/api";
 import { cn } from "@shared/lib";
-import { Badge, Button, Field, Input, Logo, Textarea } from "@shared/ui";
+import { Badge, Button, Field, Input, Logo, Textarea, useDialog } from "@shared/ui";
 
 /** 업로드 상한 — 미디어 서버 기본값(5MB)과 같다. */
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
 const MIN_SIDE = 16;
 const MAX_SIDE = 4096;
+/** 이력 한 쪽 크기 — 서버 `history(before)`가 한 번에 주는 리비전 수와 같다. */
+const HISTORY_PAGE = 25;
 
 interface Candidate {
   readonly artwork: MascotArtwork;
@@ -69,21 +71,29 @@ function formatTime(value: string): string {
 export function AdminMascotPage() {
   const [editor, setEditor] = useState<MascotEditor | null>(null);
   const [history, setHistory] = useState<readonly MascotSelection[]>([]);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const dialog = useDialog();
   const previewRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async (keepSelection: boolean) => {
     const [next, rows] = await Promise.all([fetchMascotEditor(), fetchMascotHistory()]);
     setEditor(next);
     setHistory(rows);
+    setHasMoreHistory(rows.length >= HISTORY_PAGE);
     setConflict(false);
+    // 고른 업로드 에셋을 그 사이 누가 지웠으면 적용 중인 에셋으로 돌아간다.
     setSelectedId((previous) =>
-      keepSelection && previous !== null ? previous : next.active.asset.id,
+      keepSelection &&
+      previous !== null &&
+      (isMascotPresetKey(previous) || next.uploads.some((upload) => upload.id === previous))
+        ? previous
+        : next.active.asset.id,
     );
   }, []);
 
@@ -94,6 +104,7 @@ export function AdminMascotPage() {
         if (!alive) return;
         setEditor(next);
         setHistory(rows);
+        setHasMoreHistory(rows.length >= HISTORY_PAGE);
         setSelectedId(next.active.asset.id);
       })
       .catch(() => {
@@ -177,6 +188,8 @@ export function AdminMascotPage() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         setConflict(true);
+        // 사이트 상태가 바뀌었으니 앞선 확인은 무효다. 최신 값을 보고 다시 확인하게 한다.
+        setReviewed(false);
         setNotice({
           tone: "error",
           text: "다른 관리자가 먼저 바꿨습니다. 고른 마스코트는 그대로 두었으니 최신 값을 불러온 뒤 다시 검토해 주세요.",
@@ -197,12 +210,13 @@ export function AdminMascotPage() {
 
   async function remove(candidate: Candidate) {
     if (busy) return;
-    if (
-      !window.confirm(
-        `"${candidate.name}"을(를) 지울까요? 이미지 파일도 함께 폐기되며 되돌릴 수 없습니다.`,
-      )
-    )
-      return;
+    const confirmed = await dialog.confirm({
+      title: "마스코트 지우기",
+      description: `"${candidate.name}"을(를) 지울까요? 이미지 파일도 함께 폐기되며 되돌릴 수 없습니다.`,
+      confirmLabel: "지우기",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       await deleteMascotAsset(candidate.artwork.id);
@@ -211,6 +225,10 @@ export function AdminMascotPage() {
       setNotice({ tone: "info", text: `"${candidate.name}"을(를) 지웠습니다.` });
     } catch (error) {
       setNotice({ tone: "error", text: errorText(error, "지우지 못했습니다.") });
+      // 그 사이 다른 관리자가 적용했거나(409) 이미 지웠으면(404) 목록이 낡았다. 최신 값으로 맞춘다.
+      if (error instanceof ApiError && (error.status === 409 || error.status === 404)) {
+        await load(true).catch(() => undefined);
+      }
     } finally {
       setBusy(false);
     }
@@ -365,6 +383,7 @@ export function AdminMascotPage() {
 
       <HistoryList
         history={history}
+        hasMore={hasMoreHistory}
         knownIds={new Set(candidates.map((candidate) => candidate.artwork.id))}
         busy={busy}
         onPick={(row) => {
@@ -375,9 +394,13 @@ export function AdminMascotPage() {
             text: `"${row.assetName}"을(를) 미리보기에 불러왔습니다. 확인 후 적용하세요.`,
           });
         }}
-        onMore={(rows) => setHistory([...history, ...rows])}
+        onMore={(rows) => {
+          setHistory((previous) => [...previous, ...rows]);
+          setHasMoreHistory(rows.length >= HISTORY_PAGE);
+        }}
         onError={() => setNotice({ tone: "error", text: "이전 이력을 불러오지 못했습니다." })}
       />
+      {dialog.element}
     </section>
   );
 }
@@ -528,7 +551,7 @@ function PreviewPanel({
             maxHeight={140}
             showWordmark={false}
             spout
-            className="gole-mascot-float"
+            className="origin-[50%_62%] motion-safe:animate-mascot-float"
           />
         </div>
       </PreviewRow>
@@ -812,6 +835,7 @@ function LocalPreview({
 
 function HistoryList({
   history,
+  hasMore,
   knownIds,
   busy,
   onPick,
@@ -819,6 +843,7 @@ function HistoryList({
   onError,
 }: {
   readonly history: readonly MascotSelection[];
+  readonly hasMore: boolean;
   readonly knownIds: ReadonlySet<string>;
   readonly busy: boolean;
   readonly onPick: (row: MascotSelection) => void;
@@ -870,7 +895,7 @@ function HistoryList({
           })}
         </ul>
       )}
-      {history.length >= 25 ? (
+      {hasMore ? (
         <Button
           variant="secondary"
           size="sm"

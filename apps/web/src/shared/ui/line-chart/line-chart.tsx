@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 export interface LineChartPoint {
   readonly value: number;
@@ -29,6 +29,13 @@ const PAD_B = 20;
 const PAD_L = 6;
 const PAD_R = 12; // 마지막 체결점 마커가 잘리지 않을 만큼만
 const GRID_LINES = 3;
+
+/**
+ * 런타임 좌표는 CSS 변수로만 넘기고 className이 `var()`로 읽는다. 스타일 자체는 className에 둔다.
+ */
+function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
+  return vars as CSSProperties;
+}
 
 /**
  * 모노톤 큐빅의 접선 길이 계수.
@@ -116,8 +123,8 @@ export function LineChart({
   if (points.length < 2) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg bg-neutral-50 text-sm text-neutral-400"
-        style={{ height }}
+        className="flex h-(--chart-h) items-center justify-center rounded-lg bg-neutral-50 text-sm text-neutral-400"
+        style={cssVars({ "--chart-h": `${height}px` })}
       >
         {emptyText}
       </div>
@@ -209,8 +216,8 @@ export function LineChart({
             onFocus={() => setHover(n - 1)}
             onBlur={() => setHover(null)}
             onKeyDown={handleKeyDown}
-            className="block w-full touch-pan-y rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-100"
-            style={{ aspectRatio: `${W} / ${H}` }}
+            // 비율은 viewBox(W×H) 상수와 같다.
+            className="block aspect-[720/280] w-full touch-pan-y rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-100"
           >
             <title>날짜별 체결가 추이</title>
 
@@ -283,14 +290,13 @@ export function LineChart({
           {/* 호버 툴팁 — 좌표계가 플롯과 같도록 플롯 컬럼 안에 둔다 */}
           {hp ? (
             <div
-              className="pointer-events-none absolute z-10 rounded-md bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift"
-              style={{
-                left: `clamp(52px, ${(hc!.x / W) * 100}%, calc(100% - 52px))`,
-                top: `${(hc!.y / H) * 100}%`,
-                transform: tooltipBelow
-                  ? "translate(-50%, 14px)"
-                  : "translate(-50%, calc(-100% - 14px))",
-              }}
+              className={`pointer-events-none absolute top-(--tip-y) left-[clamp(52px,var(--tip-x),calc(100%-52px))] z-10 -translate-x-1/2 rounded-md bg-neutral-900 px-2.5 py-1.5 text-center shadow-lift ${
+                tooltipBelow ? "translate-y-[14px]" : "-translate-y-[calc(100%+14px)]"
+              }`}
+              style={cssVars({
+                "--tip-x": `${(hc!.x / W) * 100}%`,
+                "--tip-y": `${(hc!.y / H) * 100}%`,
+              })}
             >
               <div className="whitespace-nowrap text-sm font-bold text-white">
                 {formatValue(hp.value)}
@@ -299,8 +305,9 @@ export function LineChart({
               {/* 데이터 점을 가리키는 꼬리 */}
               <span
                 aria-hidden="true"
-                className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-neutral-900"
-                style={tooltipBelow ? { top: -4 } : { bottom: -4 }}
+                className={`absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-neutral-900 ${
+                  tooltipBelow ? "top-[-4px]" : "bottom-[-4px]"
+                }`}
               />
             </div>
           ) : null}
@@ -315,18 +322,20 @@ export function LineChart({
             return (
               <span
                 key={i}
-                className={`absolute -translate-y-1/2 text-[10px] tabular-nums whitespace-nowrap text-neutral-400 @lg:text-[11px] ${
+                className={`absolute top-(--tick-y) -translate-y-1/2 text-[10px] tabular-nums whitespace-nowrap text-neutral-400 @lg:text-[11px] ${
                   interior ? "hidden @lg:block" : ""
                 }`}
-                style={{ top: `${(g.y / H) * 100}%` }}
+                style={cssVars({ "--tick-y": `${(g.y / H) * 100}%` })}
               >
                 {formatAxis(Math.round(g.v))}
               </span>
             );
           })}
           <span
-            className="absolute -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-[10px] font-bold tabular-nums whitespace-nowrap text-white @lg:text-[11px]"
-            style={{ top: `${(last.y / H) * 100}%`, backgroundColor: lineColor }}
+            className={`absolute top-(--tick-y) -translate-y-1/2 rounded-sm px-1.5 py-0.5 text-[10px] font-bold tabular-nums whitespace-nowrap text-white @lg:text-[11px] ${
+              up ? "bg-rise" : "bg-fall"
+            }`}
+            style={cssVars({ "--tick-y": `${(last.y / H) * 100}%` })}
           >
             {formatAxis(values[n - 1]!)}
           </span>
@@ -338,16 +347,14 @@ export function LineChart({
         {xLabelIndexes.map((index, i) => (
           <span
             key={index}
-            className="absolute top-0 text-[11px] tabular-nums whitespace-nowrap text-neutral-400"
-            style={{
-              left: `${(xAt(index) / W) * 100}%`,
-              transform:
-                i === 0
-                  ? "none"
-                  : i === xLabelIndexes.length - 1
-                    ? "translateX(-100%)"
-                    : "translateX(-50%)",
-            }}
+            className={`absolute top-0 left-(--label-x) text-[11px] tabular-nums whitespace-nowrap text-neutral-400 ${
+              i === 0
+                ? ""
+                : i === xLabelIndexes.length - 1
+                  ? "-translate-x-full"
+                  : "-translate-x-1/2"
+            }`}
+            style={cssVars({ "--label-x": `${(xAt(index) / W) * 100}%` })}
           >
             {points[index]!.label}
           </span>

@@ -3,6 +3,8 @@ package com.gole.api.listing.application.query;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gole.api.listing.domain.model.InterestTag;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ListingSearchQueryTest {
@@ -44,6 +46,20 @@ class ListingSearchQueryTest {
         assertThat(text("   ").interestTagInText()).isNull();
         assertThat(new ListingSearchQuery(null, null, null, null, null).interestTagInText())
                 .isNull();
+    }
+
+    @Test
+    void themeSetNumbers_startEmptyAndAreAddedAsAnImmutableCopy() {
+        ListingSearchQuery query = text("스타워즈");
+        assertThat(query.themeSetNumbers()).isEmpty();
+
+        List<String> numbers = new ArrayList<>(List.of("75192", "75313"));
+        ListingSearchQuery withSets = query.withThemeSetNumbers(numbers);
+        numbers.add("10307");
+
+        assertThat(withSets.themeSetNumbers()).containsExactly("75192", "75313");
+        assertThat(withSets.text()).isEqualTo("스타워즈");
+        assertThat(query.withThemeSetNumbers(null).themeSetNumbers()).isEmpty();
     }
 
     private static ListingSearchQuery text(String text) {

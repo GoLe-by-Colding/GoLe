@@ -316,19 +316,37 @@ test.describe("부품 요청 상세", () => {
       }
       return route.fulfill({ json: OPEN_REQUEST });
     });
-    page.on("dialog", (dialog) => void dialog.accept());
-
     await page.goto("/parts/pr-open-1");
 
     await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
     await expect(page.getByRole("button", { name: "도와줄게요" })).toHaveCount(0);
 
+    // 확인 모달에서 취소하면 마감 요청을 보내지 않는다.
     await page.getByRole("button", { name: "마감", exact: true }).click();
+    const closeDialog = page.getByRole("alertdialog", { name: "요청 마감" });
+    await closeDialog.getByRole("button", { name: "취소" }).click();
+    await expect(closeDialog).toHaveCount(0);
+    expect(closeCalls).toBe(0);
+
+    await page.getByRole("button", { name: "마감", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "요청 마감" })
+      .getByRole("button", { name: "마감" })
+      .click();
     await expect(page.getByText("마감된 요청이에요. 필요 없으면 삭제할 수 있어요.")).toBeVisible();
     await expect(page.getByRole("button", { name: "마감", exact: true })).toHaveCount(0);
     expect(closeCalls).toBe(1);
 
     await page.getByRole("button", { name: "삭제", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("alertdialog", { name: "요청 삭제" })).toHaveCount(0);
+    expect(deleteCalls).toBe(0);
+
+    await page.getByRole("button", { name: "삭제", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "요청 삭제" })
+      .getByRole("button", { name: "삭제" })
+      .click();
     await expect(page).toHaveURL(/\/parts\?status=mine$/);
     expect(deleteCalls).toBe(1);
     await expect(page.getByRole("button", { name: "내 요청" })).toHaveAttribute(
@@ -406,7 +424,6 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
     expect(setNumber, "카탈로그 추천 세트가 하나 이상 필요합니다").toBeTruthy();
 
     await signInAs(page, E2E_SELLER);
-    page.on("dialog", (dialog) => void dialog.accept());
     await page.goto(`/sets/${setNumber}`);
 
     const entry = page.getByTestId("set-part-requests");
@@ -435,8 +452,16 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
     await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
 
     await page.getByRole("button", { name: "마감", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "요청 마감" })
+      .getByRole("button", { name: "마감" })
+      .click();
     await expect(page.getByText("마감된 요청이에요. 필요 없으면 삭제할 수 있어요.")).toBeVisible();
     await page.getByRole("button", { name: "삭제", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "요청 삭제" })
+      .getByRole("button", { name: "삭제" })
+      .click();
     await expect(page).toHaveURL(/\/parts\?status=mine$/);
     await expect(page.getByRole("link", { name: title })).toHaveCount(0);
   });

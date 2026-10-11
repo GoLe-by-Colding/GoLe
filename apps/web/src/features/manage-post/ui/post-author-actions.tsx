@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { deletePost, editPost, type Post } from "@entities/community";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button, Textarea } from "@shared/ui";
+import { Button, Textarea, useDialog } from "@shared/ui";
 
 export interface PostAuthorActionsProps {
   readonly post: Post;
@@ -24,6 +24,7 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
   const [draft, setDraft] = useState(post.content);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialog = useDialog();
 
   if (!session || session.accountId !== post.authorId) {
     return null;
@@ -61,7 +62,13 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
 
   async function handleDelete() {
     if (!session || busy) return;
-    if (!window.confirm("이 게시글을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    const confirmed = await dialog.confirm({
+      title: "게시글 삭제",
+      description: "이 게시글을 삭제할까요? 되돌릴 수 없습니다.",
+      confirmLabel: "삭제",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError(null);
     try {
@@ -124,6 +131,7 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
         삭제
       </button>
       {error !== null ? <span className="text-sm text-danger">{error}</span> : null}
+      {dialog.element}
     </div>
   );
 }
