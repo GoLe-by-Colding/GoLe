@@ -42,6 +42,15 @@ export type { SelectProps } from "./select";
 export { Textarea } from "./textarea";
 export type { TextareaProps } from "./textarea";
 
+export { useDialog } from "./dialog";
+export type {
+  AlertDialogOptions,
+  ConfirmDialogOptions,
+  DialogChoice,
+  DialogController,
+  PromptDialogOptions,
+} from "./dialog";
+
 export { JsonLd } from "./json-ld";
 export type { JsonLdProps } from "./json-ld";
 
