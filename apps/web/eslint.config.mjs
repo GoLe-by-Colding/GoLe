@@ -38,6 +38,8 @@ const eslintConfig = defineConfig([
       ],
     },
     rules: {
+      // 브라우저 기본 대화상자 대신 `@shared/ui` 의 useDialog 모달을 쓴다(browser-dialogs R1.5).
+      "no-alert": "error",
       // v7 문법: 규칙명 element-types → dependencies, rules → policies,
       // 타입 문자열 → 엔티티 셀렉터({ element: { type } }), allow 항목에 to 래퍼 필수.
       "boundaries/dependencies": [

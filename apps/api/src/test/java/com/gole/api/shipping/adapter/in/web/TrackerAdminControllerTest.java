@@ -5,15 +5,15 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import com.gole.api.shipping.application.port.in.ManageTrackerUseCase;
-import com.gole.api.shipping.application.port.out.DeliveryTrackerPort.Diagnostics;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -47,7 +47,7 @@ class TrackerAdminControllerTest {
     @Test
     void adminCanReadMaskedDiagnosticsAndVerify() throws Exception {
         when(sessions.resolve(anyString())).thenReturn(Optional.of(new CurrentSession("admin", "", Role.ADMIN)));
-        var diagnostics = new Diagnostics(false, false, false, null, null, null);
+        var diagnostics = new TrackerDiagnostics(false, false, false, null, null, null);
         when(service.status()).thenReturn(diagnostics);
         when(service.verify("admin")).thenReturn(diagnostics);
         mvc.perform(get(BASE))

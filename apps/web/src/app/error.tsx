@@ -22,7 +22,7 @@ export default function Error({
   return (
     <main className="grid min-h-dvh place-items-center bg-neutral-50 px-6">
       <div className="flex flex-col items-center gap-6 text-center">
-        <Logo size={48} showWordmark={false} />
+        <Logo size={80} showWordmark={false} />
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-bold text-neutral-900">문제가 발생했어요</h1>
           <p className="max-w-[40ch] text-neutral-500">

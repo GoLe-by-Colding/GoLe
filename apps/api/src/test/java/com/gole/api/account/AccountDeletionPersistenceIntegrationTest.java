@@ -9,6 +9,7 @@ import com.gole.api.account.application.port.out.AccountDeletionRepositoryPort;
 import com.gole.api.account.domain.model.AccountDeletionBlocker;
 import com.gole.api.account.domain.model.AccountDeletionRequest;
 import com.gole.api.account.domain.model.AccountDeletionStatus;
+import com.gole.api.account.support.AccountLinkedRecordsWiring;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import java.time.Instant;
@@ -53,7 +54,9 @@ class AccountDeletionPersistenceIntegrationTest {
         transactionManager = new MongoTransactionManager(factory);
         deletionDocuments =
                 new MongoRepositoryFactory(mongo).getRepository(AccountDeletionRequestMongoRepository.class);
-        deletions = new MongoAccountDeletionAdapter(deletionDocuments, mongo);
+        // 배선만 바뀌었다 — 다른 컨텍스트의 기록은 각 소유 컨텍스트의 실제 탈퇴 참여 어댑터가 같은 세션으로 처리한다.
+        deletions = new MongoAccountDeletionAdapter(
+                deletionDocuments, mongo, AccountLinkedRecordsWiring.realParticipants(mongo));
     }
 
     @AfterAll

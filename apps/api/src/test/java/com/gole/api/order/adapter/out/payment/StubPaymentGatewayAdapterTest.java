@@ -3,7 +3,7 @@ package com.gole.api.order.adapter.out.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
+import com.gole.api.order.domain.exception.PaymentGatewayUnavailableException;
 import org.junit.jupiter.api.Test;
 
 class StubPaymentGatewayAdapterTest {

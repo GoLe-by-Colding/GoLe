@@ -4,12 +4,12 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.common.web.GlobalExceptionHandler;
+import com.gole.api.common.web.auth.SessionCookie;
 import com.gole.api.design.adapter.in.web.DesignController;
 import com.gole.api.design.application.port.in.ManageDesignUseCase;
 import com.gole.api.design.domain.model.*;

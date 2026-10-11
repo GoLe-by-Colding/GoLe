@@ -1,5 +1,5 @@
 import { apiRequest } from "../../runtime";
-import type { CollectionItem, OwnershipStatus } from "../model/types";
+import type { CollectionItem, CollectionValuePoint, OwnershipStatus } from "../model/types";
 
 const BASE = "/api/v1/collections";
 
@@ -18,6 +18,25 @@ export function fetchOwnedEstimate(userId: string, signal?: AbortSignal): Promis
     cache: "no-store",
     ...(signal === undefined ? {} : { signal }),
   }).then((r) => r.ownedEstimatedValue);
+}
+
+/**
+ * 보유 추정가 일별 추이(날짜 오름차순). `days`는 서버가 1~365로 받는다(기본 90).
+ * 서버가 조회 시점에 오늘 점을 먼저 갱신하므로, 보유 세트가 있으면 첫 조회부터 점 하나는 온다.
+ */
+export function fetchCollectionValueHistory(
+  userId: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<readonly CollectionValuePoint[]> {
+  const qs = new URLSearchParams({ days: String(days) });
+  return apiRequest<{ readonly points: readonly CollectionValuePoint[] }>(
+    `${BASE}/${userId}/value-history?${qs.toString()}`,
+    {
+      cache: "no-store",
+      ...(signal === undefined ? {} : { signal }),
+    },
+  ).then((r) => r.points);
 }
 
 export function addCollectionItem(

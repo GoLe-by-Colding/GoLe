@@ -1,5 +1,7 @@
 package com.gole.api.account.application.service;
 
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
+import com.gole.api.account.application.port.out.ConsentEventIdGeneratorPort;
 import com.gole.api.account.application.port.out.ThirdPartyProvisionConsentRepositoryPort;
 import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
@@ -12,7 +14,6 @@ import com.gole.api.common.exception.ForbiddenException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
-import org.bson.types.ObjectId;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,22 +23,25 @@ import org.springframework.stereotype.Service;
  * 대화의 열람은 이 서비스로 막지 않아 이용자의 권리 행사와 분쟁 확인을 보존한다.
  */
 @Service
-public class ThirdPartyProvisionConsentService {
-
-    public static final String REQUIRED_CODE = "THIRD_PARTY_PROVISION_CONSENT_REQUIRED";
-    public static final String SUBJECT_REQUIRED_CODE = "THIRD_PARTY_PROVISION_SUBJECT_CONSENT_REQUIRED";
+public class ThirdPartyProvisionConsentService implements ManageThirdPartyProvisionConsentUseCase {
 
     private final ThirdPartyProvisionConsentRepositoryPort repository;
     private final SignupPolicyProperties properties;
+    private final ConsentEventIdGeneratorPort ids;
     private final Clock clock;
 
     public ThirdPartyProvisionConsentService(
-            ThirdPartyProvisionConsentRepositoryPort repository, SignupPolicyProperties properties, Clock clock) {
+            ThirdPartyProvisionConsentRepositoryPort repository,
+            SignupPolicyProperties properties,
+            ConsentEventIdGeneratorPort ids,
+            Clock clock) {
         this.repository = repository;
         this.properties = properties;
+        this.ids = ids;
         this.clock = clock;
     }
 
+    @Override
     public ConsentStatus currentStatus(String accountId) {
         String version = properties.getThirdPartyProvisionVersion();
         return repository
@@ -47,6 +51,7 @@ public class ThirdPartyProvisionConsentService {
     }
 
     /** 새 개인정보 제공을 수반하는 기능의 서버측 최종 gate. */
+    @Override
     public void requireCurrent(String accountId) {
         if (!currentStatus(accountId).consented()) {
             throw new ForbiddenException(REQUIRED_CODE, "거래 상대방 또는 대화 참여자에게 정보를 제공하기 전에 별도 동의가 필요합니다");
@@ -54,17 +59,20 @@ public class ThirdPartyProvisionConsentService {
     }
 
     /** 다른 이용자의 개인정보를 새 수신자에게 제공할 때 정보주체의 현재 동의를 확인한다. */
+    @Override
     public void requireCurrentSubject(String accountId) {
         if (!currentStatus(accountId).consented()) {
             throw new ForbiddenException(SUBJECT_REQUIRED_CODE, "상대방 또는 대화 참여자의 제3자 제공 동의가 없어 아직 이 기능을 사용할 수 없습니다");
         }
     }
 
+    @Override
     public ConsentStatus consent(String accountId, String noticeVersion, SourcePath path, String requestId) {
         requireCurrentVersion(noticeVersion);
         return append(accountId, noticeVersion, Decision.CONSENTED, path, requestId);
     }
 
+    @Override
     public ConsentStatus withdraw(String accountId, String noticeVersion, String requestId) {
         requireCurrentVersion(noticeVersion);
         return append(accountId, noticeVersion, Decision.WITHDRAWN, SourcePath.ACCOUNT_SETTINGS, requestId);
@@ -103,13 +111,7 @@ public class ThirdPartyProvisionConsentService {
             throw new BadRequestException("CONSENT_REQUEST_ID_INVALID", "동의 요청 식별자를 확인해 주세요");
         }
         ThirdPartyProvisionConsentEvent requested = new ThirdPartyProvisionConsentEvent(
-                new ObjectId().toHexString(),
-                validatedAccountId,
-                version,
-                decision,
-                path,
-                requestId,
-                Instant.now(clock));
+                ids.newConsentEventId(), validatedAccountId, version, decision, path, requestId, Instant.now(clock));
         ThirdPartyProvisionConsentEvent stored = repository.appendOnce(requested);
         if (!sameDecision(requested, stored)) {
             throw new ConflictException("CONSENT_REQUEST_ID_REUSED", "이미 다른 동의 결정에 사용된 요청 식별자입니다");
@@ -140,6 +142,4 @@ public class ThirdPartyProvisionConsentService {
                 && expected.sourcePath() == stored.sourcePath()
                 && Objects.equals(expected.requestId(), stored.requestId());
     }
-
-    public record ConsentStatus(String noticeVersion, boolean consented, Instant lastDecisionAt) {}
 }

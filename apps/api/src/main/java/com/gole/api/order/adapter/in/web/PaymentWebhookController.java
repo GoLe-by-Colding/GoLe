@@ -7,7 +7,7 @@ import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
-import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
+import com.gole.api.order.domain.exception.PaymentGatewayUnavailableException;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.Map;

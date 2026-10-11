@@ -35,7 +35,7 @@ extra["protobufVersion"] = "4.36.1"
 
 dependencies {
     // 자동 request/logback 수집 없이 기존 운영 오류 경계에서 안전한 이벤트만 보낸다.
-    implementation("io.sentry:sentry:8.58.0")
+    implementation("io.sentry:sentry:8.59.0")
 
     // Web / Validation / Actuator
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -55,7 +55,7 @@ dependencies {
 
     // FCM HTTP v1 인증. Firebase Admin SDK 전체(Firestore·Auth·Storage 포함) 대신
     // 액세스 토큰 발급·갱신만 담당하는 인증 라이브러리만 쓴다. 발송은 JDK HttpClient로 직접 한다.
-    implementation("com.google.auth:google-auth-library-oauth2-http:1.53.0")
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.54.0")
 
     // PortOne Standard Webhooks signature verification (HMAC-SHA256 + replay-window validation).
     implementation("io.portone:server-sdk:0.24.0")
@@ -87,6 +87,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:mongodb")
+    // 헥사고날 경계 검사(HexagonalArchitectureTest). 프론트의 boundaries·steiger 에 해당한다.
+    testImplementation("com.tngtech.archunit:archunit:1.5.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

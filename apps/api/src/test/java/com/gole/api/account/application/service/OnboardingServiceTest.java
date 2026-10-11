@@ -3,6 +3,7 @@ package com.gole.api.account.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.account.adapter.out.notification.NotificationPhoneOtpSenderAdapter;
 import com.gole.api.account.application.port.in.ConfirmPhoneVerificationUseCase.ConfirmPhoneVerificationCommand;
 import com.gole.api.account.application.port.in.RequestPhoneVerificationUseCase.RequestPhoneVerificationCommand;
 import com.gole.api.account.application.port.in.SelectInterestTagsUseCase.SelectInterestTagsCommand;
@@ -10,6 +11,7 @@ import com.gole.api.account.application.port.in.SetNicknameUseCase.SetNicknameCo
 import com.gole.api.account.application.port.in.SubmitOnboardingConsentUseCase.SubmitConsentCommand;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
+import com.gole.api.account.application.port.out.PhoneOtpSenderPort;
 import com.gole.api.account.application.port.out.PhoneVerificationStorePort;
 import com.gole.api.account.config.PhoneVerificationCodeExposurePolicy;
 import com.gole.api.account.domain.exception.PhoneVerificationUnavailableException;
@@ -25,6 +27,7 @@ import com.gole.api.common.exception.ConflictException;
 import com.gole.api.notification.application.port.out.AlimtalkSendException;
 import com.gole.api.notification.application.port.out.AlimtalkSendException.FailureType;
 import com.gole.api.notification.application.port.out.AlimtalkSenderPort;
+import com.gole.api.notification.application.service.AlimtalkDispatchService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -66,7 +69,7 @@ class OnboardingServiceTest {
                 accounts,
                 phoneVerifications,
                 () -> "123456",
-                Optional.of(alimtalk),
+                codeSender(alimtalk),
                 passwordHasher,
                 hashedStorage(),
                 properties(),
@@ -116,7 +119,7 @@ class OnboardingServiceTest {
                 accounts,
                 phoneVerifications,
                 () -> "123456",
-                Optional.of(alimtalk),
+                codeSender(alimtalk),
                 passwordHasher,
                 hashedStorage(),
                 phoneOptional,
@@ -192,7 +195,7 @@ class OnboardingServiceTest {
                 accounts,
                 phoneVerifications,
                 () -> "123456",
-                Optional.of(alimtalk),
+                codeSender(alimtalk),
                 passwordHasher,
                 plaintextStorage(),
                 properties(),
@@ -286,7 +289,7 @@ class OnboardingServiceTest {
                 accounts,
                 phoneVerifications,
                 () -> "123456",
-                Optional.of(alimtalk),
+                codeSender(alimtalk),
                 passwordHasher,
                 hashedStorage(),
                 unconfigured,
@@ -306,7 +309,7 @@ class OnboardingServiceTest {
                 accounts,
                 phoneVerifications,
                 () -> "123456",
-                Optional.empty(),
+                codeSender(null),
                 passwordHasher,
                 hashedStorage(),
                 properties(),
@@ -621,5 +624,10 @@ class OnboardingServiceTest {
         public Instant instant() {
             return now;
         }
+    }
+
+    /** 실제 발송 경로(알림 유스케이스 + 어댑터)로 감싸 기록용 발송기에 닿는 요청을 그대로 검증한다. */
+    private static PhoneOtpSenderPort codeSender(AlimtalkSenderPort sender) {
+        return new NotificationPhoneOtpSenderAdapter(new AlimtalkDispatchService(Optional.ofNullable(sender)));
     }
 }

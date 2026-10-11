@@ -19,7 +19,9 @@ public record OrderResponse(
         String disputeDetail,
         Instant disputeOpenedAt,
         Instant createdAt,
-        List<StatusChange> history) {
+        List<StatusChange> history,
+        /** 금액을 정한 수락 제안. 정가 주문이면 null. (price-offer O18) */
+        String offerId) {
 
     public record StatusChange(String status, Instant occurredAt) {}
 
@@ -55,6 +57,7 @@ public record OrderResponse(
                 order.getDisputeDetail(),
                 order.getDisputeOpenedAt(),
                 order.getCreatedAt(),
-                history);
+                history,
+                order.getOfferId());
     }
 }

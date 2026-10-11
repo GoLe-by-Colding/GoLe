@@ -7,6 +7,7 @@ import com.gole.api.notification.application.port.out.InterestTagAlimtalkOutboxP
 import com.gole.api.notification.application.port.out.InterestTagRecipientPort;
 import com.gole.api.notification.application.service.InterestTagAlimtalkOutboxWorker;
 import com.gole.api.notification.application.service.InterestTagAlimtalkProperties;
+import com.gole.api.notification.application.service.NotificationPreferenceGate;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.State;
 import java.time.Clock;
@@ -67,6 +68,9 @@ class InterestTagAlimtalkOutboxIntegrationTest {
 
     @Autowired
     MongoTemplate mongo;
+
+    @Autowired
+    NotificationPreferenceGate preferences;
 
     @Autowired
     PlatformTransactionManager transactions;
@@ -278,6 +282,7 @@ class InterestTagAlimtalkOutboxIntegrationTest {
                         new com.gole.api.notification.application.port.out.ListingSnapshotPort.ListingSnapshot(
                                 listingId, true)),
                 (accountId, maximum, window) -> true,
+                preferences,
                 Optional.of(sender),
                 properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));

@@ -22,4 +22,7 @@ public interface BrowseListingsUseCase {
     List<Listing> activeBySellers(List<String> sellerIds, int limit);
 
     List<Listing> byIds(List<String> ids);
+
+    /** 판매 중인 매물을 최근 등록순으로 최대 {@code limit} 개(로컬 시더 등 운영 보조용). */
+    List<Listing> newestActive(int limit);
 }

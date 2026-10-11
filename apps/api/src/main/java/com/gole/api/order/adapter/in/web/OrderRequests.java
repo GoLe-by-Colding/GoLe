@@ -14,7 +14,9 @@ public final class OrderRequests {
             String listingId,
 
             String buyerId,
-            @jakarta.validation.constraints.Size(max = 20) String buyerPhone) {}
+            @jakarta.validation.constraints.Size(max = 20) String buyerPhone,
+            // 금액을 정할 수락 제안(price-offer O16). 없으면 정가 주문이다.
+            @jakarta.validation.constraints.Size(max = 100) String offerId) {}
 
     public record OpenDisputeRequest(
             @NotBlank String reason,

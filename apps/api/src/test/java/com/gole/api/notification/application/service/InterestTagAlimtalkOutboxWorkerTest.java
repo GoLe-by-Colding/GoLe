@@ -12,6 +12,7 @@ import com.gole.api.notification.application.port.out.ListingSnapshotPort;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.State;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.Type;
+import com.gole.api.notification.domain.model.NotificationCategory;
 import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Duration;
@@ -55,6 +56,53 @@ class InterestTagAlimtalkOutboxWorkerTest {
         assertThat(outbox.skipped)
                 .isEqualTo(new Skipped("listing-1:recipient-1", "lease-1", "RECIPIENT_NOT_ELIGIBLE", NOW));
         assertThat(sender.commands).isEmpty();
+        assertThat(outbox.retry).isNull();
+    }
+
+    @Test
+    void skipsDeliveryWhenRecipientTurnedOffWatchAlerts() {
+        FakeOutbox outbox = new FakeOutbox();
+        RecordingSender sender = new RecordingSender();
+        InMemoryNotificationPreferences preferences =
+                new InMemoryNotificationPreferences().disable("recipient-1", NotificationCategory.WATCH);
+
+        worker(outbox, eligibleRecipients(), activeListing(), Optional.of(sender), properties(), preferences)
+                .process(delivery(1));
+
+        assertThat(outbox.skipped)
+                .isEqualTo(new Skipped("listing-1:recipient-1", "lease-1", "RECIPIENT_OPTED_OUT", NOW));
+        assertThat(sender.commands).isEmpty();
+        assertThat(outbox.retry).isNull();
+    }
+
+    @Test
+    void deliversWhenOnlyAnotherCategoryIsTurnedOff() {
+        FakeOutbox outbox = new FakeOutbox();
+        RecordingSender sender = new RecordingSender();
+        InMemoryNotificationPreferences preferences =
+                new InMemoryNotificationPreferences().disable("recipient-1", NotificationCategory.COMMUNITY);
+
+        worker(outbox, eligibleRecipients(), activeListing(), Optional.of(sender), properties(), preferences)
+                .process(delivery(1));
+
+        assertThat(sender.commands).hasSize(1);
+        assertThat(outbox.delivered).containsExactly("listing-1:recipient-1", "lease-1");
+        assertThat(outbox.skipped).isNull();
+    }
+
+    @Test
+    void deliversWhenPreferenceLookupFails() {
+        FakeOutbox outbox = new FakeOutbox();
+        RecordingSender sender = new RecordingSender();
+        InMemoryNotificationPreferences preferences =
+                new InMemoryNotificationPreferences().disable("recipient-1", NotificationCategory.WATCH);
+        preferences.failWith(new IllegalStateException("mongo down"));
+
+        worker(outbox, eligibleRecipients(), activeListing(), Optional.of(sender), properties(), preferences)
+                .process(delivery(1));
+
+        assertThat(sender.commands).hasSize(1);
+        assertThat(outbox.delivered).containsExactly("listing-1:recipient-1", "lease-1");
         assertThat(outbox.retry).isNull();
     }
 
@@ -134,9 +182,26 @@ class InterestTagAlimtalkOutboxWorkerTest {
             ListingSnapshotPort listings,
             Optional<AlimtalkSenderPort> sender,
             InterestTagAlimtalkProperties properties) {
+        return worker(outbox, recipients, listings, sender, properties, new InMemoryNotificationPreferences());
+    }
+
+    private static InterestTagAlimtalkOutboxWorker worker(
+            FakeOutbox outbox,
+            InterestTagRecipientPort recipients,
+            ListingSnapshotPort listings,
+            Optional<AlimtalkSenderPort> sender,
+            InterestTagAlimtalkProperties properties,
+            InMemoryNotificationPreferences preferences) {
         AlimtalkDailyQuotaPort quota = (accountId, maximum, window) -> true;
         return new InterestTagAlimtalkOutboxWorker(
-                outbox, recipients, listings, quota, sender, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+                outbox,
+                recipients,
+                listings,
+                quota,
+                new NotificationPreferenceGate(preferences),
+                sender,
+                properties,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static InterestTagAlimtalkProperties properties() {

@@ -2220,6 +2220,10 @@ cleanup_deployment_images() {
     rollback_image="$(deployment_rollback_image "$service" "$request_id")"
     docker image rm "$rollback_image" >/dev/null 2>&1 || true
   done < <(deployment_image_services "$target" "$image_mode")
+  # 빌드가 같은 :local 태그를 덮어써서 이전 이미지는 dangling 으로, 빌드 캐시는 배포마다
+  # 쌓인다. 롤백 태그를 지운 뒤라 안전하며, 디스크 정리 실패가 배포 결과를 바꾸지 않게 한다.
+  docker image prune --force >/dev/null 2>&1 || true
+  docker builder prune --force --reserved-space 5GB >/dev/null 2>&1 || true
   cleanup_data_upgrade_marker "$request_id"
   if [ "$marker_present" -eq 1 ]; then
     remove_host_state "$SNAPSHOT_MARKER"

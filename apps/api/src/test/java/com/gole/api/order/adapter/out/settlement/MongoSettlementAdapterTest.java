@@ -12,12 +12,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.common.exception.ConflictException;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.out.AutomaticSettlementPort.Candidate;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.config.SettlementProperties;
 import com.gole.api.order.domain.model.FeePolicy;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
+import com.gole.api.order.domain.model.SettlementStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,6 +55,23 @@ class MongoSettlementAdapterTest {
         when(mongo.findById(anyString(), eq(SettlementDocument.class)))
                 .thenReturn(new SettlementDocument(
                         "order-default", "seller-1", 100_000, 5_000, 95_000, 0.05, "PENDING", null, createdAt, null));
+    }
+
+    @Test
+    void unknownStoredStatusIsRejectedAsStateConflictInsteadOfServerError() {
+        Instant createdAt = NOW.minus(Duration.ofDays(4));
+        when(mongo.findById(anyString(), eq(SettlementDocument.class)))
+                .thenReturn(new SettlementDocument(
+                        "order-1", "seller-1", 100_000, 5_000, 95_000, 0.05, "LEGACY_UNKNOWN", null, createdAt, null));
+
+        assertThatThrownBy(() -> adapter.claimManualPayout("order-1", OPERATOR))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.reconcileManualPayout("order-1", OPERATOR, "확인"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.recoverBlockedPayout("order-1", OPERATOR, false, null, "확인"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_STATE_CONFLICT");
+        assertThatThrownBy(() -> adapter.markPaid("order-1", OPERATOR, "bank-42"))
+                .hasFieldOrPropertyWithValue("code", "SETTLEMENT_CLAIM_REQUIRED");
     }
 
     @Test

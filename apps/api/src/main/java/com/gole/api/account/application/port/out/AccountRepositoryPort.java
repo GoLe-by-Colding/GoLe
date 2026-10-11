@@ -6,7 +6,9 @@ import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.account.domain.model.Role;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -47,6 +49,14 @@ public interface AccountRepositoryPort {
      * 입력해 두는 것만으로 그 번호를 영구히 막을 수 있다.
      */
     boolean existsByVerifiedPhoneNumber(PhoneNumber phoneNumber, String excludingAccountId);
+
+    /**
+     * 계정 ID 목록의 닉네임만 읽는다. 닉네임이 없거나 계정이 없는 ID는 결과에 넣지 않는다.
+     * (public-display-name R2 — 계정 전체·비밀번호 해시를 읽지 않는다)
+     */
+    default Map<String, Nickname> findNicknamesByIds(Collection<String> accountIds) {
+        return Map.of();
+    }
 
     /** 마케팅 알림톡 수신 자격 계정 ID를 _id 오름차순으로 한 페이지 조회한다. */
     default List<String> findMarketingReachableIdsByInterestTag(String tagKey, String afterAccountId, int limit) {

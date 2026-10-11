@@ -1,6 +1,8 @@
 package com.gole.api.chat.adapter.out.assistant;
 
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.support.v1.AnalyzeSupportRequest;
 import com.gole.support.v1.AnalyzeSupportResponse;
@@ -39,7 +41,7 @@ public class GrpcSupportAssistantAdapter implements SupportAssistantPort {
     }
 
     @Override
-    public Optional<Analysis> analyze(Request request) {
+    public Optional<SupportAssistantAnalysis> analyze(Request request) {
         AnalyzeSupportRequest grpcRequest = AnalyzeSupportRequest.newBuilder()
                 .setTicketId(request.ticketId())
                 .setDeclaredCategory(toGrpcCategory(request.declaredCategory()))
@@ -68,14 +70,15 @@ public class GrpcSupportAssistantAdapter implements SupportAssistantPort {
         }
     }
 
-    private static Analysis fromGrpc(AnalyzeSupportResponse response) {
-        return new Analysis(
+    private static SupportAssistantAnalysis fromGrpc(AnalyzeSupportResponse response) {
+        return new SupportAssistantAnalysis(
                 fromGrpcCategory(response.getRecommendedCategory()),
                 switch (response.getPriority()) {
-                    case SUPPORT_PRIORITY_LOW -> Priority.LOW;
-                    case SUPPORT_PRIORITY_HIGH -> Priority.HIGH;
-                    case SUPPORT_PRIORITY_URGENT -> Priority.URGENT;
-                    case SUPPORT_PRIORITY_NORMAL, SUPPORT_PRIORITY_UNSPECIFIED, UNRECOGNIZED -> Priority.NORMAL;
+                    case SUPPORT_PRIORITY_LOW -> SupportAssistantPriority.LOW;
+                    case SUPPORT_PRIORITY_HIGH -> SupportAssistantPriority.HIGH;
+                    case SUPPORT_PRIORITY_URGENT -> SupportAssistantPriority.URGENT;
+                    case SUPPORT_PRIORITY_NORMAL, SUPPORT_PRIORITY_UNSPECIFIED, UNRECOGNIZED ->
+                        SupportAssistantPriority.NORMAL;
                 },
                 response.getSummary(),
                 response.getDraftReply(),

@@ -20,12 +20,21 @@ POLISHED = PIXEL + b"polished"
 
 
 class FakePublisher:
-    def __init__(self, pending=0, exists=False):
+    def __init__(self, pending=0, exists=False, memory_context=None):
         self.pending = pending
         self._exists = exists
         self.created = []
         self.finalized = []
         self.uploaded = []
+        self.context = memory_context or {}
+        self.reflections = []
+
+    def memory_context(self, category, routes):
+        return self.context
+
+    def reflect(self, payload):
+        self.reflections.append(payload)
+        return []
 
     def pending_count(self):
         return self.pending

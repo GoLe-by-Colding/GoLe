@@ -3,12 +3,12 @@ package com.gole.api.operations;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.common.exception.*;
+import com.gole.api.common.web.auth.SessionCookie;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;

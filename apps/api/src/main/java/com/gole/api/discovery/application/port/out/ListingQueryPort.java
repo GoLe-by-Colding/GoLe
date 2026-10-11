@@ -1,6 +1,6 @@
 package com.gole.api.discovery.application.port.out;
 
-import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import java.util.List;
 
 /**
@@ -12,8 +12,8 @@ import java.util.List;
 public interface ListingQueryPort {
 
     /** 특정 셀러의 활성 리스팅. */
-    List<Listing> activeBySeller(String sellerId);
+    List<DiscoveredListing> activeBySeller(String sellerId);
 
     /** 여러 셀러의 활성 리스팅을 최신순으로 제한해 조회한다. */
-    List<Listing> activeBySellers(List<String> sellerIds, int limit);
+    List<DiscoveredListing> activeBySellers(List<String> sellerIds, int limit);
 }

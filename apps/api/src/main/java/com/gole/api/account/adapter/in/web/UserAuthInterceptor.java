@@ -3,6 +3,8 @@ package com.gole.api.account.adapter.in.web;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
@@ -13,7 +15,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class UserAuthInterceptor implements HandlerInterceptor {
 
-    public static final String ATTR_ACCOUNT_ID = "gole.user.accountId";
+    public static final String ATTR_ACCOUNT_ID = AuthenticatedUser.ATTRIBUTE;
     private final GetCurrentSessionUseCase sessions;
     private final SessionCookie sessionCookie;
 
@@ -55,7 +57,11 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                 || uri.startsWith("/api/v1/community/feed/following")
                 // 매물 조회는 공개지만 "내 매물"만은 예외다. 세션으로 대상을 정하므로 여기서
                 // 인증을 붙여야 하고, 빠지면 계정 속성이 없어 컨트롤러가 500으로 터진다.
-                || uri.startsWith("/api/v1/listings/mine");
+                || uri.startsWith("/api/v1/listings/mine")
+                // 가격 제안은 거래 당사자만 본다. 입찰·부품 요청은 목록·호가는 공개지만 "내 것"은 세션으로 정한다.
+                || uri.startsWith("/api/v1/offers")
+                || uri.startsWith("/api/v1/bids/mine")
+                || uri.startsWith("/api/v1/part-requests/mine");
         return !privateRead;
     }
 }

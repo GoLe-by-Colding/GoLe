@@ -1,17 +1,17 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
-import com.gole.api.chat.application.SupportConversationPrivacyService;
-import com.gole.api.chat.application.SupportConversationPrivacyService.PurgeReasonCode;
-import com.gole.api.chat.application.SupportConversationPrivacyService.RetentionHoldReasonCode;
-import com.gole.api.chat.application.SupportConversationPrivacyService.RetentionReleaseReasonCode;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeCounts;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.PurgeReceipt;
-import com.gole.api.chat.application.port.out.SupportConversationPrivacyRepositoryPort.RetentionHold;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.PurgeReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionHoldReasonCode;
+import com.gole.api.chat.application.port.in.ManageSupportConversationPrivacyUseCase.RetentionReleaseReasonCode;
+import com.gole.api.chat.domain.model.SupportPurgeCounts;
+import com.gole.api.chat.domain.model.SupportPurgeReceipt;
+import com.gole.api.chat.domain.model.SupportRetentionHold;
+import com.gole.api.common.web.auth.AdminActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,10 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/support-privacy")
 public class AdminSupportPrivacyController {
 
-    private final SupportConversationPrivacyService privacy;
+    private final ManageSupportConversationPrivacyUseCase privacy;
     private final RecordAdminActionUseCase audit;
 
-    public AdminSupportPrivacyController(SupportConversationPrivacyService privacy, RecordAdminActionUseCase audit) {
+    public AdminSupportPrivacyController(
+            ManageSupportConversationPrivacyUseCase privacy, RecordAdminActionUseCase audit) {
         this.privacy = privacy;
         this.audit = audit;
     }
@@ -68,7 +69,7 @@ public class AdminSupportPrivacyController {
                 request.preservationReviewed(),
                 idempotencyKey);
         if (!outcome.replayed()) {
-            PurgeCounts counts = outcome.receipt().counts();
+            SupportPurgeCounts counts = outcome.receipt().counts();
             audit.record(new RecordAdminActionCommand(
                     actor.id(),
                     actor.email(),
@@ -150,7 +151,7 @@ public class AdminSupportPrivacyController {
             PurgeCountsResponse counts,
             boolean replayed) {
 
-        static PurgeResponse from(PurgeReceipt receipt, boolean replayed) {
+        static PurgeResponse from(SupportPurgeReceipt receipt, boolean replayed) {
             return new PurgeResponse(
                     receipt.receiptId(),
                     receipt.actorId(),
@@ -172,7 +173,7 @@ public class AdminSupportPrivacyController {
             long retentionHolds,
             long auditReferencesAnonymized) {
 
-        static PurgeCountsResponse from(PurgeCounts counts) {
+        static PurgeCountsResponse from(SupportPurgeCounts counts) {
             return new PurgeCountsResponse(
                     counts.messages(),
                     counts.supportTickets(),
@@ -196,7 +197,7 @@ public class AdminSupportPrivacyController {
             String releaseReasonCode,
             boolean changed) {
 
-        static RetentionHoldResponse from(RetentionHold hold, boolean changed) {
+        static RetentionHoldResponse from(SupportRetentionHold hold, boolean changed) {
             return new RetentionHoldResponse(
                     hold.holdReference(),
                     hold.active(),

@@ -1,10 +1,12 @@
 package com.gole.api.promotion;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.promotion.adapter.out.persistence.PromotionPostDocument;
 import com.gole.api.promotion.adapter.out.persistence.PromotionPostMongoRepository;
 import com.gole.api.promotion.adapter.out.persistence.PromotionPostPersistenceAdapter;
+import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.model.CaptureDataSource;
 import com.gole.api.promotion.domain.model.PromotionCapture;
@@ -16,7 +18,9 @@ import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import com.gole.api.promotion.domain.model.PromotionProvenance;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -39,24 +43,26 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PromotionRecoveryIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-23T00:00:00Z");
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
+    private static final Duration INTERVAL = Duration.ofHours(6);
 
     @Container
     static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7");
 
     static MongoClient client;
+    static MongoTemplate mongo;
     static PromotionPostMongoRepository documents;
     static PromotionPostPersistenceAdapter posts;
 
     @BeforeAll
     static void connect() {
         client = MongoClients.create(MONGO.getReplicaSetUrl());
-        var mongo = new MongoTemplate(client, "gole_promotion_recovery_test");
+        mongo = new MongoTemplate(client, "gole_promotion_recovery_test");
         documents = new MongoRepositoryFactory(mongo).getRepository(PromotionPostMongoRepository.class);
         var resolver =
                 new MongoPersistentEntityIndexResolver(mongo.getConverter().getMappingContext());
         resolver.resolveIndexFor(PromotionPostDocument.class)
                 .forEach(index -> mongo.indexOps(PromotionPostDocument.class).ensureIndex(index));
-        posts = new PromotionPostPersistenceAdapter(documents);
+        posts = new PromotionPostPersistenceAdapter(documents, mongo);
     }
 
     @AfterAll
@@ -67,6 +73,7 @@ class PromotionRecoveryIntegrationTest {
     @BeforeEach
     void clean() {
         documents.deleteAll();
+        mongo.dropCollection("promotion_publish_slot");
     }
 
     @Test
@@ -115,7 +122,7 @@ class PromotionRecoveryIntegrationTest {
     }
 
     @Test
-    @DisplayName("다음 차례와 최신 발행 시각을 실제 정렬로 고른다")
+    @DisplayName("다음 차례를 실제 정렬로 고르고, 슬롯은 기존 최신 발행 시각으로 시작한다")
     void publishOrderQueries_useReviewAndPublishTimes() {
         approved("later", NOW.plusSeconds(20));
         approved("earlier", NOW.plusSeconds(10));
@@ -126,7 +133,51 @@ class PromotionRecoveryIntegrationTest {
         posts.save(published);
 
         assertThat(posts.findOldestApproved().orElseThrow().getId()).isEqualTo("earlier");
-        assertThat(posts.findLatestPublishedAt()).contains(NOW.plusSeconds(30));
+        Instant last = NOW.plusSeconds(30);
+        assertThatThrownBy(() -> posts.claimPublishSlot(last.plus(Duration.ofHours(5)), INTERVAL))
+                .isInstanceOf(PromotionPublishTooSoonException.class);
+        assertThat(posts.claimPublishSlot(last.plus(INTERVAL), INTERVAL)).isEqualTo(last);
+    }
+
+    @Test
+    @DisplayName("동시에 발행 슬롯을 잡으면 정확히 하나만 통과한다")
+    void publishSlot_concurrentClaimsHaveOneWinner() throws Exception {
+        int contenders = 8;
+        var barrier = new CyclicBarrier(contenders);
+        List<Callable<Boolean>> attempts = new ArrayList<>();
+        for (int i = 0; i < contenders; i++) {
+            attempts.add(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                try {
+                    posts.claimPublishSlot(NOW, INTERVAL);
+                    return true;
+                } catch (PromotionPublishTooSoonException expected) {
+                    return false;
+                }
+            });
+        }
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            long winners = 0;
+            for (var result : executor.invokeAll(attempts, 15, TimeUnit.SECONDS)) {
+                if (result.get()) winners++;
+            }
+            assertThat(winners).isEqualTo(1);
+        }
+    }
+
+    @Test
+    @DisplayName("반납하면 바로 다시 잡을 수 있고, 남이 다시 잡은 슬롯은 반납이 건드리지 않는다")
+    void publishSlot_releaseOnlyRestoresOwnClaim() {
+        Instant first = NOW.plusNanos(123_456); // 밀리초 아래가 있어도 반납이 맞아야 한다
+        Instant previous = posts.claimPublishSlot(first, INTERVAL);
+        posts.releasePublishSlot(first, previous);
+        assertThat(posts.claimPublishSlot(first, INTERVAL)).isEqualTo(previous);
+
+        Instant later = first.plus(INTERVAL);
+        posts.claimPublishSlot(later, INTERVAL);
+        posts.releasePublishSlot(first, previous); // 이미 남(later)이 잡은 뒤의 늦은 반납
+        assertThatThrownBy(() -> posts.claimPublishSlot(later.plusSeconds(1), INTERVAL))
+                .isInstanceOf(PromotionPublishTooSoonException.class);
     }
 
     private void approved(String id, Instant reviewedAt) {

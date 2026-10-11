@@ -149,6 +149,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # 홍보 메모리 E2E는 Python 러너와 HTTP 업로드까지 실제로 실행하고 모델 CLI만 대체한다.
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install pinned uv
+        run: python -m pip install uv==0.10.2
+
+      - name: Install promotion runner
+        working-directory: apps/support-agent
+        run: uv sync --locked --extra promotion
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -182,6 +195,9 @@ jobs:
           # 닫혀 있고, e2e 프로필+환경 조합이 아니면 API가 기동 자체를 거부한다.
           SPRING_PROFILES_ACTIVE: e2e
           GOLE_ENVIRONMENT: e2e
+          # 메이커-체커 검증용 봇. 사람 ADMIN은 아래 시더가 별도로 만든다(테스트 전용 값).
+          PROMOTION_AGENT_ADMIN_EMAIL: e2e-promotion-bot@gole.test
+          PROMOTION_AGENT_ADMIN_PASSWORD: e2e-promotion-bot-not-a-real-secret
           MONGODB_URI: mongodb://localhost:27017/gole_e2e?replicaSet=rs0
           MONGODB_DATABASE: gole_e2e
           REDIS_DATABASE: "15"
@@ -240,6 +256,9 @@ jobs:
       - name: E2E
         env:
           E2E_WITH_BACKEND: "1"
+          E2E_PROMOTION_MEMORY: "1"
+          PROMOTION_AGENT_ADMIN_EMAIL: e2e-promotion-bot@gole.test
+          PROMOTION_AGENT_ADMIN_PASSWORD: e2e-promotion-bot-not-a-real-secret
           GOLE_ADMIN_EMAIL: e2e-admin@gole.test
           GOLE_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080

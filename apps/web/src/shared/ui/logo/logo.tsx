@@ -1,31 +1,33 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { DEFAULT_MASCOT_KEY, type MascotArtwork, type UploadedMascot } from "@gole/core/mascot";
+import { env } from "@shared/config";
 import { cn } from "@shared/lib";
+import { useMascot } from "./mascot-context";
+import { MASCOT_ART } from "./presets";
 
 export interface LogoProps {
-  /** 고래 마크가 들어가는 정사각형 영역의 픽셀 크기. */
+  /** 마크의 가로 픽셀 크기. 세로는 그 마스코트의 비율로 정해진다. */
   readonly size?: number;
   readonly showWordmark?: boolean;
   readonly className?: string;
   readonly accentClassName?: string;
-  /** 히어로처럼 큰 장면에서만 브릭 분수를 표시한다. */
+  /** 히어로처럼 큰 장면에서만 브릭 분수를 표시한다. 분수 자리가 정의된 기본 제공 마스코트만 그린다. */
   readonly spout?: boolean;
+  /** `inverse`는 어두운 배경(푸터) 위다. 몸을 흰색으로 바꾸거나 어두운 배경용 이미지를 쓴다. */
+  readonly tone?: "default" | "inverse";
+  /** 이 마스코트를 그린다(관리자 미리보기). 없으면 사이트에 적용된 마스코트다. */
+  readonly mascot?: MascotArtwork;
+  /** 높이 상한(px). 정사각형에 가까운 그림이 `size` 폭을 다 쓰면 너무 커지는 목록 카드에서 쓴다. */
+  readonly maxHeight?: number;
 }
 
 /**
- * GoLe 브릭 고래 — 실제로 조립된 장난감처럼 읽히는 독자 마스코트.
+ * GoLe 로고 — 마스코트(고래 마크) + `GoLe` 워드마크. (mascot-assets R4)
  *
- * <p>설계 원칙: 매끈한 고래 실루엣 위에 스터드를 "얹지" 않는다. 그렇게 하면 스터드가
- * 스티커처럼 보여서 조립품이 아니라 장식이 된다. 대신 몸을 세 장의 큰 브릭 면으로 쌓고,
- * 등 스터드는 스파인 플레이트의 윤곽선 자체가 위로 솟아오른 형태로 그린다(한 개의 path).
- *
- * <p>실루엣은 유기적 곡선이 아니라 기하학이다. 위·중간 면을 같은 폭(x8~196)으로 맞춰
- * 한 덩어리 브릭 로프처럼 보이게 하고, 고래다움은 이마 쪽 큰 모서리 반경과
- * 배 면의 taper, 꼬리 단차로만 만든다. 면을 울퉁불퉁 겹치면 유충처럼 징그러워진다.
- *
- * <p>면광은 3단이다 — 윗면(밝음) / 정면(기본) / 아랫면(그늘). 사출 장난감은 곡면 그라데이션이
- * 아니라 면 단위로 빛을 받으므로, 면마다 단일 색을 주는 편이 실제 브릭에 가깝다.
- *
- * <p>지느러미와 꼬리는 힌지 핀으로 몸에 물린다. 핀을 그려 두면 "붙였다"가 아니라
- * "끼웠다"로 읽혀서 조립 완구의 인상이 생긴다.
+ * <p>마스코트는 관리자가 `/admin/mascot`에서 고른다. 기본 제공 그림은 `presets/`에 있고, 업로드 그림은 미디어
+ * 경로의 이미지다. 어떤 실패에도 기본 고래(옆모습 브릭 고래)를 그려 화면이 비지 않는다.
  */
 export function Logo({
   size = 32,
@@ -33,98 +35,22 @@ export function Logo({
   className,
   accentClassName = "text-brand-600",
   spout = false,
+  tone = "default",
+  mascot,
+  maxHeight,
 }: LogoProps) {
+  const active = useMascot();
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 font-extrabold tracking-tight", className)}
     >
-      <svg
-        width={size}
-        height={Math.round(size * (spout ? 194 / 274 : 146 / 274))}
-        viewBox={spout ? "0 -48 274 194" : "0 0 274 146"}
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0 overflow-visible"
-      >
-        {spout ? (
-          <g aria-hidden="true">
-            {/* 물줄기 — 가운데 스터드 뒤에서 시작해 위로 뻗으며 브릭이 솟는 경로를 안내한다. */}
-            <path
-              d="M96 10C90-6 84-14 75-21M100 8C102-9 108-21 118-29M104 11C116-2 130-8 144-8"
-              stroke="#93AEFB"
-              strokeWidth="4"
-              strokeLinecap="round"
-              opacity="0.75"
-              transform="translate(0 -7)"
-              className="gole-spout-stream"
-            />
-            {/* 1x2 브릭 세 개. 스터드 두 개가 얹힌 폭이 곧 1x2다. */}
-            <g className="gole-spout-brick gole-spout-brick-a">
-              <rect x="60" y="-30" width="34" height="17" rx="3" fill="#F7BE2C" />
-              <rect x="66" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
-              <rect x="79" y="-35" width="9" height="6" rx="2" fill="#F7BE2C" />
-            </g>
-            <g className="gole-spout-brick gole-spout-brick-b">
-              <rect x="114" y="-42" width="34" height="17" rx="3" fill="#FF7A72" />
-              <rect x="120" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
-              <rect x="133" y="-47" width="9" height="6" rx="2" fill="#FF7A72" />
-            </g>
-            <g className="gole-spout-brick gole-spout-brick-c">
-              <rect x="154" y="-20" width="34" height="17" rx="3" fill="#6082F7" />
-              <rect x="160" y="-25" width="9" height="6" rx="2" fill="#6082F7" />
-              <rect x="173" y="-25" width="9" height="6" rx="2" fill="#6082F7" />
-            </g>
-          </g>
-        ) : null}
-
-        {/* ── 꼬리: 몸 뒤로 빠져나온 꼬리자루에 힌지 핀으로 물린 두 장의 플레이트 ── */}
-        <polygon points="204,74 252,38 268,56 222,88" fill="#1D4ED8" />
-        <polygon points="204,90 262,102 254,126 214,102" fill="#1D4ED8" />
-        <path d="M188 66h18a5 5 0 0 1 5 5v22a5 5 0 0 1-5 5h-18V66Z" fill="#3B5CF2" />
-        <circle cx="206" cy="82" r="8.5" fill="#1A3FC0" />
-        <circle cx="206" cy="82" r="3.4" fill="#6082F7" />
-
-        {/* ── 스파인 플레이트: 몸통 뒤에 먼저 그려 베이스는 감추고 스터드만
-            등 표면 위로 솟게 한다. 분수 물줄기는 가운데 스터드 뒤에서 시작한다. ── */}
-        <path
-          d="M54 28V18a6 6 0 0 1 6-6h6V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h12V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h12V8a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v4h6a6 6 0 0 1 6 6v10H54Z"
-          fill="#93AEFB"
-          transform="translate(0 -7)"
-        />
-
-        {/* ── 몸통: 같은 폭(x8~196)으로 쌓인 큰 브릭 면 세 장(3단 면광) ── */}
-        {/* 윗면 — 위로 확장해 스파인 베이스를 덮고, 스터드가 몸에서 난 것처럼 연결한다. */}
-        <path d="M8 64V48C8 28 21 16 40 16H180C189 16 196 23 196 32V64H8Z" fill="#6082F7" />
-        {/* 정면 — 눈과 입이 놓이는 기본 면. 곧은 사각이어야 브릭으로 읽힌다. */}
-        <path d="M8 64h188v36H8V64Z" fill="#3B5CF2" />
-        {/* 아랫면 — 그늘진 배. 바닥 모서리만 굴려 몸이 아래로 좁아진다. */}
-        <path d="M8 100h188v6c0 11-9 18-20 18H30c-13 0-22-9-22-20v-4Z" fill="#1D4ED8" />
-        {/* 몰드 사출 하이라이트 — 이마 모서리의 짧은 광택과 면 경계선만. */}
-        <path
-          d="M16 44C17 33 25 25 36 23"
-          stroke="#FFFFFF"
-          strokeWidth="3"
-          strokeLinecap="round"
-          opacity="0.14"
-        />
-        <path
-          d="M14 65h174"
-          stroke="#FFFFFF"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          opacity="0.08"
-        />
-
-        {/* ── 가슴지느러미: 배 밑에 힌지 핀으로 물린 플레이트 한 장 ── */}
-        <polygon points="100,126 148,132 142,146 98,138" fill="#1D4ED8" />
-        <circle cx="107" cy="128" r="7" fill="#1A3FC0" />
-        <circle cx="107" cy="128" r="3" fill="#6082F7" />
-
-        {/* ── 얼굴: 작은 눈 하나와 짧은 입 ── */}
-        <circle cx="40" cy="76" r="5.6" fill="#091A3A" />
-        <circle cx="42" cy="73.6" r="1.6" fill="#FFFFFF" />
-        <path d="M22 90c5 4 11 4.6 17 2" stroke="#091A3A" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
+      <MascotMark
+        artwork={mascot ?? active}
+        size={size}
+        maxHeight={maxHeight}
+        spout={spout}
+        tone={tone}
+      />
       {showWordmark ? (
         <span>
           Go<span className={accentClassName}>Le</span>
@@ -132,4 +58,101 @@ export function Logo({
       ) : null}
     </span>
   );
+}
+
+interface MarkProps {
+  readonly artwork: MascotArtwork;
+  readonly size: number;
+  readonly maxHeight: number | undefined;
+  readonly spout: boolean;
+  readonly tone: "default" | "inverse";
+}
+
+function MascotMark({ artwork, size, maxHeight, spout, tone }: MarkProps) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (artwork.kind === "UPLOAD") {
+    const width = fitWidth(size, maxHeight, artwork.width / artwork.height);
+    const src = uploadSrc(artwork, width, tone);
+    if (failedSrc !== src) {
+      return (
+        <UploadedMark
+          src={src}
+          width={width}
+          height={Math.round((width * artwork.height) / artwork.width)}
+          onFail={setFailedSrc}
+        />
+      );
+    }
+  }
+  const art = MASCOT_ART[artwork.kind === "PRESET" ? artwork.id : DEFAULT_MASCOT_KEY];
+  const drawSpout = spout && art.hasSpout;
+  const box = drawSpout && art.spoutViewBox !== undefined ? art.spoutViewBox : art.viewBox;
+  const width = fitWidth(size, maxHeight, box[2] / box[3]);
+  const inverse = tone === "inverse";
+  return (
+    <svg
+      width={width}
+      height={Math.round((width * box[3]) / box[2])}
+      viewBox={box.join(" ")}
+      fill="none"
+      aria-hidden="true"
+      className={cn(
+        "shrink-0 overflow-visible",
+        // 몸 색을 변수로 받는 그림은 몸만 희게, 색이 박힌 옛 그림은 흰 실루엣으로 그린다.
+        inverse && art.themable && "[--gole-mark-body:var(--color-white)]",
+        inverse && !art.themable && "brightness-0 invert",
+      )}
+    >
+      <art.Art spout={drawSpout} />
+    </svg>
+  );
+}
+
+function UploadedMark({
+  src,
+  width,
+  height,
+  onFail,
+}: {
+  readonly src: string;
+  readonly width: number;
+  readonly height: number;
+  readonly onFail: (src: string) => void;
+}) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const image = imageRef.current;
+    // 서버가 그린 이미지가 하이드레이션 전에 실패하면 error 이벤트가 다시 오지 않는다.
+    if (image?.complete === true && image.naturalWidth === 0) onFail(src);
+  }, [src, onFail]);
+  return (
+    // 미디어 경로 이미지라 next/image 최적화 대상이 아니다(MediaImage 와 같다).
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={imageRef}
+      src={src}
+      width={width}
+      height={height}
+      alt=""
+      aria-hidden="true"
+      decoding="async"
+      className="shrink-0 object-contain"
+      onError={() => onFail(src)}
+    />
+  );
+}
+
+function fitWidth(size: number, maxHeight: number | undefined, aspect: number): number {
+  return maxHeight === undefined ? size : Math.min(size, Math.round(maxHeight * aspect));
+}
+
+/** 표시 폭의 2배를 덮는 가장 작은 썸네일 폭. 미디어 서버가 허용하는 폭만 쓴다. */
+const THUMB_WIDTHS = [240, 480, 960, 1600] as const;
+
+function uploadSrc(artwork: UploadedMascot, size: number, tone: "default" | "inverse"): string {
+  const path =
+    tone === "inverse" && artwork.darkImageUrl !== null ? artwork.darkImageUrl : artwork.imageUrl;
+  const base = path.startsWith("/api/") ? `${env.publicApiBaseUrl}${path}` : path;
+  const width = THUMB_WIDTHS.find((candidate) => candidate >= size * 2) ?? 1600;
+  return `${base}?w=${width}`;
 }

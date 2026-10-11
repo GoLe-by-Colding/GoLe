@@ -1,131 +1,86 @@
 package com.gole.api.chat.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.account.adapter.in.web.UserAuthInterceptor;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.SocialChatService;
-import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
+import com.gole.api.chat.application.port.in.StartSupportConversationUseCase;
+import com.gole.api.chat.application.port.in.StartSupportConversationUseCase.SupportConversation;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
-import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 
+/** 소셜 채팅 REST 경계. 동의 관문은 SocialChatConsentTest, 문의 시작 트랜잭션은 SupportIntakeServiceTest 가 본다. */
 class SocialChatControllerTest {
 
-    private final SocialChatService chats = mock(SocialChatService.class);
-    private final ChatMessagingService messaging = mock(ChatMessagingService.class);
-    private final SupportTicketRepositoryPort tickets = mock(SupportTicketRepositoryPort.class);
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents =
-            mock(ThirdPartyProvisionConsentService.class);
-    private final SocialChatController controller =
-            new SocialChatController(chats, messaging, tickets, thirdPartyProvisionConsents);
+    private static final Instant NOW = Instant.parse("2026-08-30T00:00:00Z");
+
+    private final SocialChatUseCase chats = mock(SocialChatUseCase.class);
+    private final StartSupportConversationUseCase supportIntake = mock(StartSupportConversationUseCase.class);
+    private final SocialChatController controller = new SocialChatController(chats, supportIntake);
 
     @Test
+    @DisplayName("내 방 목록의 문의 상태는 한 번에 읽는다")
     void myRoomsLoadsSupportStateInOneBatch() {
-        Instant now = Instant.parse("2026-08-30T00:00:00Z");
-        SocialChatRoom support = SocialChatRoom.support("support-1", "account-1", "결제 문의", now);
+        SocialChatRoom support = SocialChatRoom.support("support-1", "account-1", "결제 문의", NOW);
         SocialChatRoom group =
-                SocialChatRoom.group("group-1", "account-1", List.of("account-2", "account-3"), "모임", now);
+                SocialChatRoom.group("group-1", "account-1", List.of("account-2", "account-3"), "모임", NOW);
         SupportTicket ticket =
-                new SupportTicket("support-1", "account-1", SupportStatus.IN_PROGRESS, "admin-1", now, now, null);
+                new SupportTicket("support-1", "account-1", SupportStatus.IN_PROGRESS, "admin-1", NOW, NOW, null);
         when(chats.mySocialRooms("account-1", 100)).thenReturn(List.of(support, group));
-        when(tickets.findByRoomIds(List.of("support-1"))).thenReturn(List.of(ticket));
+        when(chats.supportTicketsOf(List.of("support-1"))).thenReturn(List.of(ticket));
 
         var response = controller.myRooms(authenticated("account-1"));
 
         assertThat(response).hasSize(2);
         assertThat(response.getFirst().supportStatus()).isEqualTo("IN_PROGRESS");
         assertThat(response.get(1).supportStatus()).isNull();
-        verify(tickets).findByRoomIds(List.of("support-1"));
+        verify(chats).supportTicketsOf(List.of("support-1"));
     }
 
     @Test
-    void creatingOrJoiningNonSupportRoomsRequiresCurrentConsentBeforeMutation() {
-        when(chats.findExistingDirect("legacy-user", "peer")).thenReturn(java.util.Optional.empty());
-        SocialChatRoom group =
-                SocialChatRoom.group("room-1", "legacy-user", List.of("member-1", "member-2"), "group", Instant.now());
-        when(chats.requireReadable("room-1", "legacy-user")).thenReturn(group);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.REQUIRED_CODE, "consent required"))
-                .when(thirdPartyProvisionConsents)
-                .requireCurrent("legacy-user");
+    @DisplayName("1:1·그룹·초대는 세션 계정으로 유스케이스에 넘긴다")
+    void directGroupInvite_delegateWithAuthenticatedAccount() {
+        SocialChatRoom direct = SocialChatRoom.direct("direct-1", "me", "peer", NOW);
+        SocialChatRoom group = SocialChatRoom.group("group-1", "me", List.of("a", "b"), "모임", NOW);
+        when(chats.startDirect("me", "peer")).thenReturn(direct);
+        when(chats.startGroup("me", "모임", List.of("a", "b"))).thenReturn(group);
+        when(chats.inviteMember("group-1", "me", "c")).thenReturn(group);
+        when(chats.supportTicketOf(org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> controller.createDirect(
-                        new SocialChatController.CreateDirectRequest("peer"), authenticated("legacy-user")))
-                .isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> controller.createGroup(
-                        new SocialChatController.CreateGroupRequest("group", List.of("a", "b")),
-                        authenticated("legacy-user")))
-                .isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> controller.invite(
-                        "room-1", new SocialChatController.InviteMemberRequest("peer"), authenticated("legacy-user")))
-                .isInstanceOf(ForbiddenException.class);
-
-        verify(chats, never()).createDirect("legacy-user", "peer");
-        verify(chats, never()).createGroup("legacy-user", "group", List.of("a", "b"));
-        verify(chats, never()).invite("room-1", "legacy-user", "peer");
+        assertThat(controller
+                        .createDirect(new SocialChatController.CreateDirectRequest("peer"), authenticated("me"))
+                        .id())
+                .isEqualTo("direct-1");
+        assertThat(controller
+                        .createGroup(
+                                new SocialChatController.CreateGroupRequest("모임", List.of("a", "b")),
+                                authenticated("me"))
+                        .id())
+                .isEqualTo("group-1");
+        assertThat(controller
+                        .invite("group-1", new SocialChatController.InviteMemberRequest("c"), authenticated("me"))
+                        .id())
+                .isEqualTo("group-1");
     }
 
     @Test
-    void existingDirectRoomCanBeReenteredAfterWithdrawal() {
-        SocialChatRoom room = SocialChatRoom.direct("direct-1", "legacy-user", "peer", Instant.now());
-        when(chats.findExistingDirect("legacy-user", "peer")).thenReturn(java.util.Optional.of(room));
-
-        var response = controller.createDirect(
-                new SocialChatController.CreateDirectRequest("peer"), authenticated("legacy-user"));
-
-        assertThat(response.id()).isEqualTo("direct-1");
-        verifyNoInteractions(thirdPartyProvisionConsents);
-        verify(chats, never()).createDirect("legacy-user", "peer");
-    }
-
-    @Test
-    void groupCreationAndInviteRequireEveryNewlyExposedSubjectsConsent() {
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
-                .when(thirdPartyProvisionConsents)
-                .requireCurrentSubject("member-2");
-
-        assertThatThrownBy(() -> controller.createGroup(
-                        new SocialChatController.CreateGroupRequest("group", List.of("member-1", "member-2")),
-                        authenticated("owner")))
-                .isInstanceOf(ForbiddenException.class)
-                .extracting("code")
-                .isEqualTo(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE);
-        verify(chats, never()).createGroup("owner", "group", List.of("member-1", "member-2"));
-
-        SocialChatRoom existing =
-                SocialChatRoom.group("room-1", "owner", List.of("member-1", "member-2"), "group", Instant.now());
-        when(chats.requireReadable("room-1", "owner")).thenReturn(existing);
-        doThrow(new ForbiddenException(ThirdPartyProvisionConsentService.SUBJECT_REQUIRED_CODE, "subject consent"))
-                .when(thirdPartyProvisionConsents)
-                .requireCurrentSubject("member-1");
-
-        assertThatThrownBy(() -> controller.invite(
-                        "room-1", new SocialChatController.InviteMemberRequest("new-member"), authenticated("owner")))
-                .isInstanceOf(ForbiddenException.class);
-        verify(chats, never()).invite("room-1", "owner", "new-member");
-    }
-
-    @Test
-    void supportCreationPersistsFirstMessageForAuthenticatedRequester() {
-        Instant now = Instant.parse("2026-08-30T00:00:00Z");
-        SocialChatRoom support = SocialChatRoom.support("support-1", "admin-1", "내 계정 문의", now);
-        SupportTicket ticket = SupportTicket.opened("support-1", "admin-1", SupportCategory.PRIVACY_ACCESS, now);
-        when(chats.createSupport("admin-1", "내 계정 문의", SupportCategory.PRIVACY_ACCESS))
-                .thenReturn(new SocialChatService.SupportConversation(support, ticket));
+    @DisplayName("문의 시작은 제목·분류·첫 메시지를 함께 넘기고 문의 기한을 내린다")
+    void supportCreation_delegatesFirstMessage() {
+        SocialChatRoom support = SocialChatRoom.support("support-1", "admin-1", "내 계정 문의", NOW);
+        SupportTicket ticket = SupportTicket.opened("support-1", "admin-1", SupportCategory.PRIVACY_ACCESS, NOW);
+        when(supportIntake.start("admin-1", "내 계정 문의", SupportCategory.PRIVACY_ACCESS, "운영 기능을 확인하고 싶습니다"))
+                .thenReturn(new SupportConversation(support, ticket));
 
         var response = controller.createSupport(
                 new SocialChatController.CreateSupportRequest(
@@ -136,13 +91,11 @@ class SocialChatControllerTest {
         assertThat(response.supportCategory()).isEqualTo("PRIVACY_ACCESS");
         assertThat(response.progressDueAt()).isEqualTo("2026-09-02T00:00:00Z");
         assertThat(response.responseDueAt()).isEqualTo("2026-09-09T00:00:00Z");
-        verify(messaging).sendSupportOpening("support-1", "admin-1", "운영 기능을 확인하고 싶습니다");
-        verifyNoInteractions(thirdPartyProvisionConsents);
     }
 
     private static MockHttpServletRequest authenticated(String accountId) {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setAttribute(UserAuthInterceptor.ATTR_ACCOUNT_ID, accountId);
+        request.setAttribute(AuthenticatedUser.ATTRIBUTE, accountId);
         return request;
     }
 }

@@ -1,0 +1,73 @@
+import type { MascotArt } from "./types";
+
+/*
+ * 스터드 세 개 고래 — `6fc65282`(2026-06-10)의 고래 마크. 다시 그리지 않고 그때의 SVG 를 그대로 옮겼다.
+ * 원본: `git show 6fc65282:apps/web/src/shared/ui/logo/logo.tsx`
+ */
+function ThreeStudsArt() {
+  return (
+    <>
+      {/* 꼬리 플루크 (위로 뻗는 고래 꼬리) */}
+      <path
+        d="M30 20.5C32.5 19 34.5 16.5 36 15C35.6 17.5 35 19.3 34.2 20.8C36 21 37.6 22.2 39 24C36.5 24.2 34 23.2 31.8 21.6C31.2 22 30.6 22.2 30 22Z"
+        fill="#1a3fc0"
+      />
+
+      {/* 몸통 (납작한 등 = 브릭 윗면) */}
+      <path
+        d="M5 21C5 15.5 9.5 13 16 13L26.5 13C30 13 32.5 15.5 32.5 19.5C32.5 24.5 28 28.5 19.5 28.5C10 28.5 5 26 5 21Z"
+        fill="#1d4ed8"
+      />
+
+      {/* 가슴 지느러미 */}
+      <path d="M14.5 27C16 30.5 19.5 31.5 22 30C20.3 28 17.5 27 14.5 27Z" fill="#1a3fc0" />
+
+      {/* 브릭 코스 심(seam) */}
+      <path
+        d="M6.5 20.6H30"
+        stroke="#1a3fc0"
+        strokeWidth="0.8"
+        strokeLinecap="round"
+        opacity="0.4"
+      />
+
+      {/* 입(미소) */}
+      <path
+        d="M5 22.4C6.6 23.9 8.7 23.9 10.2 22.8"
+        stroke="#1a3fc0"
+        strokeWidth="0.9"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      {/* 분수(물줄기) — 머리 위 숨구멍에서 솟는 골드 워터젯 */}
+      <g stroke="#eab308" strokeWidth="1.3" strokeLinecap="round" fill="none">
+        <path d="M9.6 12.4C9.2 9.4 8.6 7.4 7.6 5.8" />
+        <path d="M10.7 12.4C10.7 9.6 10.7 7.4 10.7 5.6" />
+        <path d="M11.7 12.6C12.3 9.8 13.1 7.8 14 6.4" />
+      </g>
+      <circle cx="7.4" cy="5.4" r="0.7" fill="#eab308" />
+      <circle cx="10.7" cy="5.2" r="0.7" fill="#eab308" />
+      <circle cx="14.2" cy="6" r="0.7" fill="#eab308" />
+
+      {/* 등 위 브릭 스터드 3개 (윗면 하이라이트로 입체) */}
+      <ellipse cx="13" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
+      <ellipse cx="13" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
+      <ellipse cx="18.5" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
+      <ellipse cx="18.5" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
+      <ellipse cx="24" cy="12.3" rx="2.1" ry="1" fill="#3b5cf2" />
+      <ellipse cx="24" cy="11.6" rx="2.1" ry="1" fill="#6082f7" />
+
+      {/* 눈 */}
+      <circle cx="9.5" cy="19.8" r="1.45" fill="#ffffff" />
+      <circle cx="9.2" cy="19.6" r="0.6" fill="#1b2f66" />
+    </>
+  );
+}
+
+export const threeStuds: MascotArt = {
+  viewBox: [0, 0, 40, 40],
+  hasSpout: false,
+  themable: false,
+  Art: ThreeStudsArt,
+};

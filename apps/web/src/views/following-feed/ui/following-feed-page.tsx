@@ -4,8 +4,14 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { fetchFeed, fetchFollowingFeed, type Post } from "@entities/community";
 import { fetchFollowing, fetchPersonalizedFeed, type ListingSummary } from "@entities/discovery";
-import { conditionLabel, fetchActiveListings, formatPriceKrw } from "@entities/listing";
-import { useSession } from "@entities/user";
+import {
+  conditionLabel,
+  fetchActiveListings,
+  formatPriceKrw,
+  priceDropAmount,
+} from "@entities/listing";
+import { fetchPriceSnapshot } from "@entities/pricing";
+import { useDisplayNames, useSession } from "@entities/user";
 import {
   Badge,
   Button,
@@ -19,6 +25,7 @@ import {
   Text,
 } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
+import { buildPriceNotes, priceNoteSetNumbers } from "@widgets/listing-grid";
 import { PostCard } from "@widgets/post-card";
 
 type FeedTab = "all" | "listings" | "posts";
@@ -103,14 +110,41 @@ export function FollowingFeedPage() {
     const posts = state.posts.length > 0 ? state.posts : state.suggestedPosts;
     listings.forEach((listing) => ids.add(listing.sellerId));
     posts.forEach((post) => ids.add(post.authorId));
+    // 내 매물·글도 추천 목록에 섞여 오므로, 만나볼 사람에서 나를 뺀다.
+    if (state.accountId !== null) ids.delete(state.accountId);
     return [...ids].slice(0, 12);
   }, [
+    state.accountId,
     state.followedSellerIds,
     state.listings,
     state.posts,
     state.suggestedListings,
     state.suggestedPosts,
   ]);
+  const nameOf = useDisplayNames(people);
+
+  // 검색·세트 페이지·판매자 샵과 같은 "추정 시세보다 N%" 한 줄. 보이는 매물(새 매물이 없으면 추천 매물)의 세트 시세를 함께 읽는다.
+  const noteListings = state.listings.length > 0 ? state.listings : state.suggestedListings;
+  const [priceNotes, setPriceNotes] = useState<Readonly<Record<string, string>>>({});
+  useEffect(() => {
+    const setNumbers = priceNoteSetNumbers(noteListings);
+    if (setNumbers.length === 0) return;
+    const controller = new AbortController();
+    void Promise.all(
+      setNumbers.map(
+        async (setNumber) =>
+          [
+            setNumber,
+            await fetchPriceSnapshot(setNumber, controller.signal).catch(() => null),
+          ] as const,
+      ),
+    ).then((entries) => {
+      if (!controller.signal.aborted) {
+        setPriceNotes(buildPriceNotes(noteListings, Object.fromEntries(entries)));
+      }
+    });
+    return () => controller.abort();
+  }, [noteListings]);
 
   const visibleState =
     state.accountId === accountId
@@ -166,7 +200,7 @@ export function FollowingFeedPage() {
 
         {people.length > 0 ? (
           <section className="flex flex-col gap-3" aria-labelledby="following-people-title">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <Heading level={2} id="following-people-title" className="text-xl">
                 {visibleState.followedSellerIds.length > 0
                   ? "이어지는 사람들"
@@ -189,16 +223,16 @@ export function FollowingFeedPage() {
                     className="inline-flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                   >
                     <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-                      {personId.slice(0, 1).toUpperCase()}
+                      {nameOf(personId, personId.slice(0, 12)).slice(0, 1).toUpperCase()}
                     </span>
                     <span className="max-w-28 truncate text-sm font-semibold text-neutral-800">
-                      {personId.slice(0, 12)}
+                      {nameOf(personId, personId.slice(0, 12))}
                     </span>
                   </Link>
                   {personId !== accountId ? (
                     <Link
                       href={`/chat?direct=${encodeURIComponent(personId)}`}
-                      aria-label={`${personId.slice(0, 12)} 님과 대화`}
+                      aria-label={`${nameOf(personId, personId.slice(0, 12))} 님과 대화`}
                       className="grid h-8 w-8 place-items-center rounded-full text-brand-600 transition-colors hover:bg-brand-50"
                     >
                       <MessageCircleIcon className="h-4 w-4" />
@@ -292,7 +326,11 @@ export function FollowingFeedPage() {
               >
                 <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
                   {shownListings.map((listing) => (
-                    <FollowingListingCard key={listing.id} listing={listing} />
+                    <FollowingListingCard
+                      key={listing.id}
+                      listing={listing}
+                      priceNote={priceNotes[listing.id]}
+                    />
                   ))}
                 </div>
               </FeedSection>
@@ -390,7 +428,13 @@ function FeedSection({
   );
 }
 
-function FollowingListingCard({ listing }: { readonly listing: ListingSummary }) {
+function FollowingListingCard({
+  listing,
+  priceNote,
+}: {
+  readonly listing: ListingSummary;
+  readonly priceNote: string | undefined;
+}) {
   const cover = listing.photoUrls[0];
   return (
     <Card
@@ -426,11 +470,18 @@ function FollowingListingCard({ listing }: { readonly listing: ListingSummary })
         </Link>
         <div className="mt-auto flex items-end justify-between gap-3 border-t border-neutral-100 pt-3">
           <div className="flex flex-col gap-0.5">
-            <strong className="text-lg font-extrabold tracking-tight text-neutral-900">
-              {formatPriceKrw(listing.price)}
-            </strong>
+            <div className="flex items-center gap-2">
+              <strong className="text-lg font-extrabold tracking-tight text-neutral-900">
+                {formatPriceKrw(listing.price)}
+              </strong>
+              {priceDropAmount(listing) !== null ? <Badge tone="success">가격 내림</Badge> : null}
+            </div>
+            {priceNote === undefined ? null : (
+              <span className="text-xs leading-snug break-keep text-neutral-500">{priceNote}</span>
+            )}
+            {/* 끌올하면 노출 기준 시각(listedAt)이 바뀐다. 구 API는 주지 않으므로 등록 시각으로 본다. */}
             <span className="text-xs text-neutral-400">
-              {new Date(listing.createdAt).toLocaleDateString("ko-KR")}
+              {new Date(listing.listedAt ?? listing.createdAt).toLocaleDateString("ko-KR")}
             </span>
           </div>
           <Link

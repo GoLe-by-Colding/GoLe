@@ -1,6 +1,6 @@
 package com.gole.api.operations.adapter.out.diagnostics;
 
-import com.gole.api.admin.application.service.ExceptionQueueService;
+import com.gole.api.admin.application.port.in.ListExceptionQueueUseCase;
 import com.gole.api.common.operations.DiscordOperationsProperties;
 import com.gole.api.operations.application.port.out.OperationsDiagnostics;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
@@ -9,13 +9,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ExistingOperationsDiagnostics implements OperationsDiagnostics {
-    private final ExceptionQueueService exceptions;
+    private final ListExceptionQueueUseCase exceptions;
     private final GetPaymentReadinessUseCase payment;
     private final DiscordOperationsProperties discord;
     private final Environment environment;
 
     public ExistingOperationsDiagnostics(
-            ExceptionQueueService exceptions,
+            ListExceptionQueueUseCase exceptions,
             GetPaymentReadinessUseCase payment,
             DiscordOperationsProperties discord,
             Environment environment) {

@@ -1,13 +1,13 @@
 package com.gole.api.shipping.application.port.in;
 
-import com.gole.api.shipping.application.port.out.DeliveryTrackerPort.Diagnostics;
 import com.gole.api.shipping.domain.model.DeliveryStatus;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import java.time.Instant;
 
 public interface ManageTrackerUseCase {
-    Diagnostics status();
+    TrackerDiagnostics status();
 
-    Diagnostics verify(String actorId);
+    TrackerDiagnostics verify(String actorId);
 
     Sample sample(String actorId, String carrier, String waybill);
 

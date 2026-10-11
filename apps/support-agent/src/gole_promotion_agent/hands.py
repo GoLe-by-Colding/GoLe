@@ -280,6 +280,22 @@ class BackendPublisher:
         # 발행이 스텁인 동안 PUBLISHED 는 계속 0건이라 전체 상태를 본다(스펙 D18).
         return tuple(self._list(None, limit))
 
+    def memory_context(self, category: str, routes: Sequence[str]) -> dict[str, Any]:
+        response = self._http().get(
+            "/api/admin/promotion-memory/context",
+            params=[("category", category), *(("routes", route) for route in routes)],
+            headers=self._headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def reflect(self, payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+        response = self._http().post(
+            "/api/admin/promotion-memory/reflect", json=dict(payload), headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
     def upload(self, paths: Sequence[Path]) -> tuple[str, ...]:
         files = [
             ("files", (Path(path).name, Path(path).read_bytes(), "image/png")) for path in paths

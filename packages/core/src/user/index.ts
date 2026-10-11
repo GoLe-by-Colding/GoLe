@@ -3,6 +3,7 @@ export type {
   RegisterResult,
   Me,
   OnboardingStatus,
+  PublicProfile,
   InterestTag,
   CurrentSignupPolicy,
   SignupPolicyAcceptance,
@@ -27,7 +28,7 @@ export { fetchSocialProviders, fetchSocialAuthorizeUrl, socialCallback } from ".
 export type { SocialCallbackResult } from "./api/user-api";
 export { logout, refreshSession } from "./api/user-api";
 export type { RefreshSessionResult } from "./api/user-api";
-export { fetchMe } from "./api/user-api";
+export { fetchMe, fetchPublicProfiles, PUBLIC_PROFILE_BATCH_MAX } from "./api/user-api";
 export {
   acceptThirdPartyProvisionConsent,
   fetchThirdPartyProvisionConsentStatus,

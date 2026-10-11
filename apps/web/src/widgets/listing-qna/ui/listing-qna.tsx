@@ -6,7 +6,7 @@ import {
   postListingComment,
   type ListingCommentItem,
 } from "@entities/listing";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { Button, Heading, LinkButton, Skeleton } from "@shared/ui";
 
@@ -21,6 +21,7 @@ export interface ListingQnaProps {
 export function ListingQna({ listingId, sellerTradingOpen }: ListingQnaProps) {
   const { session } = useSession();
   const [comments, setComments] = useState<readonly ListingCommentItem[] | null>(null);
+  const nameOf = useDisplayNames((comments ?? []).map((comment) => comment.authorId));
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -92,9 +93,9 @@ export function ListingQna({ listingId, sellerTradingOpen }: ListingQnaProps) {
             <li key={c.id} className="px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700">
-                  {c.authorId.slice(0, 1).toUpperCase()}
+                  {nameOf(c.authorId).slice(0, 1).toUpperCase()}
                 </span>
-                <span className="text-xs text-neutral-500">{c.authorId.slice(0, 8)}</span>
+                <span className="text-xs text-neutral-500">{nameOf(c.authorId)}</span>
                 <span className="ml-auto text-xs text-neutral-300">
                   {new Date(c.createdAt).toLocaleDateString("ko-KR")}
                 </span>

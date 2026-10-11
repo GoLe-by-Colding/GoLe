@@ -63,7 +63,7 @@ test('notification routes map server paths and reject external encodings', () =>
   assert.equal(route('/sets/21318'), '/set/21318');
   assert.equal(route('/seller/person_1'), '/seller/person_1');
   assert.equal(route('/notifications'), '/notifications');
-  assert.equal(route('/community/post-1'), '/notifications');
+  assert.equal(route('/community/post-1'), '/web?path=%2Fcommunity%2Fpost-1');
   for (const input of ['https://evil.test', '//evil.test', '/%2fevil.test', '/%252fevil.test', '/\\evil.test', '/a/../b', '/a%0ab', '/a?redirect=https://evil.test', '/%', null]) {
     assert.equal(route(input), null, String(input));
   }

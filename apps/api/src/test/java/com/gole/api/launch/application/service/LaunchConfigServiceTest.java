@@ -11,18 +11,19 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
+import com.gole.api.launch.adapter.out.order.OrderPaymentReadinessAdapter;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ChangeStageCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetFeatureOverrideCommand;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.SetReadinessCheckCommand;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
+import com.gole.api.launch.domain.model.SettlementMode;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ChannelType;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
@@ -51,14 +52,23 @@ class LaunchConfigServiceTest {
     private final GetPaymentReadinessUseCase readiness = mock(GetPaymentReadinessUseCase.class);
     private final LaunchSettlementModePort settlementMode = mock(LaunchSettlementModePort.class);
     private final LaunchConfigSafetyClampWriter safetyClampWriter = new LaunchConfigSafetyClampWriter(
-            repository, history, readiness, settlementMode, Clock.fixed(NOW, ZoneOffset.UTC));
+            repository,
+            history,
+            new OrderPaymentReadinessAdapter(readiness),
+            settlementMode,
+            Clock.fixed(NOW, ZoneOffset.UTC));
     private final LaunchConfigSafetyClamp safetyClamp = new LaunchConfigSafetyClamp(safetyClampWriter);
     private final LaunchConfigService service = new LaunchConfigService(
-            repository, history, readiness, settlementMode, safetyClamp, Clock.fixed(NOW, ZoneOffset.UTC));
+            repository,
+            history,
+            new OrderPaymentReadinessAdapter(readiness),
+            settlementMode,
+            safetyClamp,
+            Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void defaultToManualSettlement() {
-        when(settlementMode.currentMode()).thenReturn(Mode.MANUAL);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.MANUAL);
         when(settlementMode.payoutContractVerified()).thenReturn(true);
         when(readiness.getPaymentReadiness()).thenReturn(ready());
     }
@@ -108,7 +118,7 @@ class LaunchConfigServiceTest {
     @DisplayName("정산 조건이 깨지면 관리자 요청값도 Stage 1로 영구 잠근다")
     void requestedIsPersistentlyClampedWithExecution() {
         stored(LaunchStage.FULL);
-        when(settlementMode.currentMode()).thenReturn(Mode.DISABLED);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.DISABLED);
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
         assertThat(service.requested().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
@@ -118,25 +128,25 @@ class LaunchConfigServiceTest {
     @Test
     @DisplayName("저장 단계와 실제 정산 모드가 어긋나면 실행 가능한 단계로 fail-closed 한다")
     void currentUsesStageBySettlementModeSafetyMatrix() {
-        assertExecutableStage(LaunchStage.PREPARING, Mode.DISABLED, LaunchStage.PREPARING);
-        assertExecutableStage(LaunchStage.PREPARING, Mode.MANUAL, LaunchStage.PREPARING);
-        assertExecutableStage(LaunchStage.PREPARING, Mode.PROVIDER, LaunchStage.PREPARING);
-        assertExecutableStage(LaunchStage.BROWSE_ONLY, Mode.DISABLED, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.BROWSE_ONLY, Mode.MANUAL, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.BROWSE_ONLY, Mode.PROVIDER, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.TRADING, Mode.DISABLED, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.TRADING, Mode.MANUAL, LaunchStage.TRADING);
-        assertExecutableStage(LaunchStage.TRADING, Mode.PROVIDER, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.FULL, Mode.DISABLED, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.FULL, Mode.MANUAL, LaunchStage.BROWSE_ONLY);
-        assertExecutableStage(LaunchStage.FULL, Mode.PROVIDER, LaunchStage.FULL);
+        assertExecutableStage(LaunchStage.PREPARING, SettlementMode.DISABLED, LaunchStage.PREPARING);
+        assertExecutableStage(LaunchStage.PREPARING, SettlementMode.MANUAL, LaunchStage.PREPARING);
+        assertExecutableStage(LaunchStage.PREPARING, SettlementMode.PROVIDER, LaunchStage.PREPARING);
+        assertExecutableStage(LaunchStage.BROWSE_ONLY, SettlementMode.DISABLED, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.BROWSE_ONLY, SettlementMode.MANUAL, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.BROWSE_ONLY, SettlementMode.PROVIDER, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.TRADING, SettlementMode.DISABLED, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.TRADING, SettlementMode.MANUAL, LaunchStage.TRADING);
+        assertExecutableStage(LaunchStage.TRADING, SettlementMode.PROVIDER, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.FULL, SettlementMode.DISABLED, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.FULL, SettlementMode.MANUAL, LaunchStage.BROWSE_ONLY);
+        assertExecutableStage(LaunchStage.FULL, SettlementMode.PROVIDER, LaunchStage.FULL);
     }
 
     @Test
     @DisplayName("지급대행 계약 확인 전에는 저장값이 높아도 Stage 1로 잠근다")
     void unverifiedContractClampsMoneyStages() {
         stored(LaunchStage.FULL);
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
         when(settlementMode.payoutContractVerified()).thenReturn(false);
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
@@ -146,7 +156,7 @@ class LaunchConfigServiceTest {
     @DisplayName("결제 설정이 런타임에서 깨지면 저장 단계가 높아도 Stage 1로 잠근다")
     void misconfiguredPaymentClampsMoneyStages() {
         stored(LaunchStage.FULL);
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
@@ -171,7 +181,7 @@ class LaunchConfigServiceTest {
             persisted.set(saved);
             return saved;
         });
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThat(service.current().stage()).isEqualTo(LaunchStage.BROWSE_ONLY);
@@ -196,7 +206,7 @@ class LaunchConfigServiceTest {
     @DisplayName("정산 모드 변경으로 실행 단계가 낮아졌다면 상향 전이에 결제 준비 검증을 다시 한다")
     void modeChangeCannotBypassPaymentReadiness() {
         stored(LaunchStage.TRADING);
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
         when(readiness.getPaymentReadiness()).thenReturn(misconfigured());
 
         assertThatThrownBy(() -> service.changeStage(
@@ -222,7 +232,7 @@ class LaunchConfigServiceTest {
         verify(repository, never()).save(any());
     }
 
-    private void assertExecutableStage(LaunchStage storedStage, Mode mode, LaunchStage expectedStage) {
+    private void assertExecutableStage(LaunchStage storedStage, SettlementMode mode, LaunchStage expectedStage) {
         stored(storedStage);
         when(settlementMode.currentMode()).thenReturn(mode);
 
@@ -323,7 +333,7 @@ class LaunchConfigServiceTest {
     @DisplayName("고단계에서 필수 운영 확인을 취소하면 Stage 1로 함께 안전 잠근다")
     void revokingRequiredReadinessLowersStage() {
         stored(LaunchStage.FULL);
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
 
         var result = service.setReadinessCheck(new SetReadinessCheckCommand(
                 LaunchReadinessCheck.PAYOUT_FLOW, false, "지급 재처리 검증 만료", "admin-1", "a@gole.local"));
@@ -387,7 +397,7 @@ class LaunchConfigServiceTest {
         stored(LaunchStage.BROWSE_ONLY);
         when(readiness.getPaymentReadiness()).thenReturn(ready());
 
-        for (Mode incompatible : new Mode[] {Mode.DISABLED, Mode.PROVIDER}) {
+        for (SettlementMode incompatible : new SettlementMode[] {SettlementMode.DISABLED, SettlementMode.PROVIDER}) {
             when(settlementMode.currentMode()).thenReturn(incompatible);
             assertThatThrownBy(() -> service.changeStage(
                             new ChangeStageCommand(LaunchStage.TRADING, "Stage 2 전환", "admin-1", "a@gole.local")))
@@ -396,7 +406,7 @@ class LaunchConfigServiceTest {
                     .hasMessageContaining("수동 정산 모드");
         }
 
-        for (Mode incompatible : new Mode[] {Mode.DISABLED, Mode.MANUAL}) {
+        for (SettlementMode incompatible : new SettlementMode[] {SettlementMode.DISABLED, SettlementMode.MANUAL}) {
             when(settlementMode.currentMode()).thenReturn(incompatible);
             assertThatThrownBy(() -> service.changeStage(
                             new ChangeStageCommand(LaunchStage.FULL, "Stage 3 전환", "admin-1", "a@gole.local")))
@@ -405,7 +415,7 @@ class LaunchConfigServiceTest {
                     .hasMessageContaining("지급대행 모드");
         }
 
-        when(settlementMode.currentMode()).thenReturn(Mode.PROVIDER);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.PROVIDER);
         assertThat(service.changeStage(
                                 new ChangeStageCommand(LaunchStage.FULL, "지급대행 계약 완료", "admin-1", "a@gole.local"))
                         .stage())

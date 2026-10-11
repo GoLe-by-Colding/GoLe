@@ -80,6 +80,37 @@ test.describe("Following feed", () => {
     );
     await page.route("**/api/v1/listings", (route) => route.fulfill({ json: [] }));
     await page.route("**/api/v1/community/posts?limit=6", (route) => route.fulfill({ json: [] }));
+    // 피드 카드도 검색·샵과 같은 시세 한 줄을 단다. 같은 상태(중고-양호) 실제 표본 추정 15만 원 → 12.9만 원은 14% 낮음.
+    await page.route("**/api/v1/pricing/sets/10497/snapshot", (route) =>
+      route.fulfill({
+        json: {
+          setNumber: "10497",
+          state: "ESTABLISHED",
+          minimumSamples: 3,
+          sampleCount: 12,
+          observations: [],
+          statistics: null,
+          valuation: {
+            setNumber: "10497",
+            hasData: true,
+            marketPrice: 180000,
+            conditions: [
+              {
+                condition: "used_good",
+                basis: "grade",
+                depreciationPct: 17,
+                fairPrice: 150000,
+                sellPrice: 144000,
+                buyPrice: 157500,
+                sampleCount: 6,
+                basedOnRealData: true,
+              },
+            ],
+          },
+          provenance: { mode: "FIRST_PARTY", includedSources: ["platform_payment"], demo: false },
+        },
+      }),
+    );
     await page.addInitScript(() => {
       window.localStorage.setItem(
         "gole.session",
@@ -92,6 +123,7 @@ test.describe("Following feed", () => {
     await expect(page.getByRole("heading", { name: "팔로잉 피드", exact: true })).toBeVisible();
     await expect(page.getByText("1명", { exact: true })).toBeVisible();
     await expect(page.getByText("팔로우한 판매자의 새 우주선")).toBeVisible();
+    await expect(page.getByText("추정 시세보다 14% 낮음", { exact: true })).toBeVisible();
     await expect(page.getByText("오늘 완성한 우주선 MOC를 소개해요")).toBeVisible();
     await expect(page.getByRole("link", { name: "대화", exact: true }).first()).toHaveAttribute(
       "href",

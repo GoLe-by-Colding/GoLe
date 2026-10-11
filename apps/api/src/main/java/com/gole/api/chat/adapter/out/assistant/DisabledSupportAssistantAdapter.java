@@ -1,6 +1,7 @@
 package com.gole.api.chat.adapter.out.assistant;
 
 import com.gole.api.chat.application.port.out.SupportAssistantPort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class DisabledSupportAssistantAdapter implements SupportAssistantPort {
 
     @Override
-    public Optional<Analysis> analyze(Request request) {
+    public Optional<SupportAssistantAnalysis> analyze(Request request) {
         return Optional.empty();
     }
 }

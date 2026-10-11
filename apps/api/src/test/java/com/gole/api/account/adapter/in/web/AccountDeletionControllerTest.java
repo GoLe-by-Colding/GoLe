@@ -19,6 +19,7 @@ import com.gole.api.account.application.port.in.RequestAccountDeletionUseCase.Re
 import com.gole.api.account.domain.model.AccountDeletionStatus;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.util.List;

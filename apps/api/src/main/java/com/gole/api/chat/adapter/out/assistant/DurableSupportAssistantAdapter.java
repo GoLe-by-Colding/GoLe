@@ -6,13 +6,13 @@ import com.gole.api.agent.grpc.JobRequest;
 import com.gole.api.agent.grpc.JobState;
 import com.gole.api.agent.grpc.PurgeJobRequest;
 import com.gole.api.agent.grpc.SubmitJobRequest;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.AnalysisPendingException;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
 import com.gole.api.chat.application.port.out.SupportAssistantPort.Request;
 import com.gole.api.chat.application.port.out.SupportAssistantPurgePort;
 import com.gole.api.chat.application.port.out.SupportAssistantWorkSourcePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
@@ -86,7 +86,7 @@ public class DurableSupportAssistantAdapter implements SupportAssistantPurgePort
         return new DurableSupportAssistantSettings(target, caller, token, timeout);
     }
 
-    public Optional<Analysis> analyze(Request request) {
+    public Optional<SupportAssistantAnalysis> analyze(Request request) {
         Deadline deadline = Deadline.after(timeout.toNanos(), TimeUnit.NANOSECONDS);
         boolean remotePending = false;
         try {
@@ -127,7 +127,7 @@ public class DurableSupportAssistantAdapter implements SupportAssistantPurgePort
                     return Optional.empty();
                 }
                 if (job.getState() == JobState.SUCCEEDED) {
-                    Optional<Analysis> result = parse(job);
+                    Optional<SupportAssistantAnalysis> result = parse(job);
                     return deadline.isExpired() ? Optional.empty() : result;
                 }
                 if (job.getState() == JobState.FAILED || job.getState() == JobState.CANCELLED) {
@@ -164,7 +164,7 @@ public class DurableSupportAssistantAdapter implements SupportAssistantPurgePort
                         .isPresent();
     }
 
-    private Optional<Analysis> parse(Job job) {
+    private Optional<SupportAssistantAnalysis> parse(Job job) {
         if (!job.getHumanReviewRequired()) {
             return Optional.empty();
         }
@@ -186,9 +186,9 @@ public class DurableSupportAssistantAdapter implements SupportAssistantPurgePort
         }
         String summary = text(value, "summary", 2000);
         String draft = text(value, "draft_reply", 4000);
-        return Optional.of(new Analysis(
+        return Optional.of(new SupportAssistantAnalysis(
                 SupportCategory.valueOf(text(value, "recommended_category", 128)),
-                Priority.valueOf(text(value, "priority", 32)),
+                SupportAssistantPriority.valueOf(text(value, "priority", 32)),
                 summary,
                 draft,
                 risk,

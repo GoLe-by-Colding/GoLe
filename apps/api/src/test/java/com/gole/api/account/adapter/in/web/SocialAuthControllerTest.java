@@ -21,6 +21,7 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

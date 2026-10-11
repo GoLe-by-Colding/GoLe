@@ -3,9 +3,9 @@ package com.gole.api.order.application.service.pipeline;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
 import com.gole.api.order.application.port.out.OrderEventNotifierPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
+import com.gole.api.order.application.port.out.PipelineShipmentPort;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -20,14 +20,14 @@ import org.springframework.stereotype.Component;
 public class UnshippedAutoRefundRule implements PipelineRule {
 
     private final OrderRepositoryPort orders;
-    private final GetShipmentUseCase shipments;
+    private final PipelineShipmentPort shipments;
     private final RefundOrderUseCase refundOrder;
     private final OrderEventNotifierPort notifier;
     private final PipelineProperties properties;
 
     public UnshippedAutoRefundRule(
             OrderRepositoryPort orders,
-            GetShipmentUseCase shipments,
+            PipelineShipmentPort shipments,
             RefundOrderUseCase refundOrder,
             OrderEventNotifierPort notifier,
             PipelineProperties properties) {
@@ -54,7 +54,7 @@ public class UnshippedAutoRefundRule implements PipelineRule {
 
     @Override
     public boolean apply(String orderId, Instant now) {
-        if (shipments.getByOrderId(orderId).isPresent()) {
+        if (shipments.hasShipment(orderId)) {
             return false; // 발송됨 — 환불 대상 아님
         }
         Order order = orders.findById(orderId).orElse(null);

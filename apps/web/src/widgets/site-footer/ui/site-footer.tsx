@@ -31,7 +31,12 @@ export async function SiteFooter() {
       <Container width="xl">
         <div className="flex flex-col gap-7 py-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <Logo size={30} className="text-lg text-white" accentClassName="text-accent-400" />
+            <Logo
+              size={30}
+              tone="inverse"
+              className="text-lg text-white"
+              accentClassName="text-accent-400"
+            />
             <nav className="flex flex-wrap gap-x-6 gap-y-2">
               {NAV.map((n) => (
                 <Link

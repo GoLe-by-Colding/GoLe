@@ -2,6 +2,7 @@ package com.gole.api.account.adapter.in.web;
 
 import com.gole.api.account.application.port.in.GetOnboardingStatusUseCase;
 import com.gole.api.account.domain.exception.OnboardingRequiredException;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;

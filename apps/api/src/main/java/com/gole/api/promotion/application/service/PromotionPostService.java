@@ -4,25 +4,25 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
-import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
-import com.gole.api.media.domain.model.MediaKey;
-import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
 import com.gole.api.promotion.application.port.in.PublishNextPromotionPostUseCase;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
+import com.gole.api.promotion.application.port.out.PromotionFeedbackRepositoryPort;
+import com.gole.api.promotion.application.port.out.PromotionMediaPort;
+import com.gole.api.promotion.application.port.out.PromotionPostEvaluationRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.SocialPublishPort;
 import com.gole.api.promotion.domain.exception.InvalidPromotionPostStateException;
 import com.gole.api.promotion.domain.exception.NoApprovedPromotionPostsException;
 import com.gole.api.promotion.domain.exception.PromotionPostNotFoundException;
-import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.exception.SourceCommitRetryLimitExceededException;
 import com.gole.api.promotion.domain.model.PromotionCapture;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionFeedback;
 import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 홍보 게시물 애플리케이션 서비스 — 작성, 검토 요청, 승인/반려, 발행을 오케스트레이션한다.
@@ -56,7 +57,7 @@ public class PromotionPostService
      */
     private static final int MAX_DRAFTS_PER_SOURCE_COMMIT = 3;
 
-    /** 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 한다. */
+    /** 버튼을 연달아 눌러도 피드가 한꺼번에 채워지지 않게 한다. 개별 발행과 다음 차례 발행 모두 지킨다(D24). */
     static final Duration MIN_PUBLISH_INTERVAL = Duration.ofHours(6);
 
     private static final String ADMIN_PATH = "/admin/promotion";
@@ -64,23 +65,29 @@ public class PromotionPostService
     private final PromotionPostRepositoryPort repository;
     private final PromotionPostIdGeneratorPort idGenerator;
     private final SocialPublishPort publishPort;
-    private final ManageMediaAssetsUseCase mediaAssets;
+    private final PromotionMediaPort media;
     private final OperationalEventPublisher operationalEvents;
     private final Clock clock;
+    private final PromotionFeedbackRepositoryPort feedback;
+    private final PromotionPostEvaluationRepositoryPort evaluations;
 
     public PromotionPostService(
             PromotionPostRepositoryPort repository,
             PromotionPostIdGeneratorPort idGenerator,
             SocialPublishPort publishPort,
-            ManageMediaAssetsUseCase mediaAssets,
+            PromotionMediaPort media,
             OperationalEventPublisher operationalEvents,
-            Clock clock) {
+            Clock clock,
+            PromotionFeedbackRepositoryPort feedback,
+            PromotionPostEvaluationRepositoryPort evaluations) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.publishPort = publishPort;
-        this.mediaAssets = mediaAssets;
+        this.media = media;
         this.operationalEvents = operationalEvents;
         this.clock = clock;
+        this.feedback = feedback;
+        this.evaluations = evaluations;
     }
 
     @Override
@@ -102,7 +109,7 @@ public class PromotionPostService
         }
         String id = idGenerator.newId();
         List<String> mediaUrls =
-                command.mediaKeys().stream().map(MediaKey::publicPath).toList();
+                command.mediaKeys().stream().map(media::publicPath).toList();
         PromotionPost draft = PromotionPost.draft(
                 id,
                 command.channel(),
@@ -119,12 +126,12 @@ public class PromotionPostService
                 .filter(Objects::nonNull)
                 .map(CaptureOriginal::mediaKey)
                 .forEach(referenced::add);
-        mediaAssets.replaceReferences(command.authorId(), MediaTargetType.PROMOTION_POST, id, referenced, true);
+        media.attachToPost(command.authorId(), id, referenced);
         return repository.save(draft).getId();
     }
 
     /** 설명표마다 다듬기 전 원본을 붙인다. 원본은 스테이지 키로 받아 공개 경로로 바꾼다. */
-    private static PromotionPostContext withOriginals(PromotionPostContext context, List<CaptureOriginal> originals) {
+    private PromotionPostContext withOriginals(PromotionPostContext context, List<CaptureOriginal> originals) {
         if (originals.isEmpty()) {
             return context;
         }
@@ -138,7 +145,7 @@ public class PromotionPostService
             captures.add(
                     original == null
                             ? capture
-                            : capture.withOriginal(MediaKey.publicPath(original.mediaKey()), original.edit()));
+                            : capture.withOriginal(media.publicPath(original.mediaKey()), original.edit()));
         }
         return new PromotionPostContext(context.category(), captures, context.provenance());
     }
@@ -207,9 +214,15 @@ public class PromotionPostService
     }
 
     @Override
+    @Transactional
     public PromotionPost reject(String promotionPostId, String reviewerId, String reason) {
         PromotionPost promotionPost = getOrThrow(promotionPostId);
         promotionPost.reject(reviewerId, reason, Instant.now(clock));
+        List<com.gole.api.promotion.domain.model.EvaluationReasonTag> tags = evaluations
+                .findByPromotionPostId(promotionPostId)
+                .map(evaluation -> List.copyOf(evaluation.getReasonTags()))
+                .orElseGet(List::of);
+        feedback.insert(PromotionFeedback.rejected(idGenerator.newId(), promotionPost, tags));
         return repository.save(promotionPost);
     }
 
@@ -221,20 +234,24 @@ public class PromotionPostService
             throw new InvalidPromotionPostStateException(
                     promotionPostId, PromotionPostStatus.APPROVED, promotionPost.getStatus());
         }
-        SocialPublishPort.PublishResult result = publishPort.publish(promotionPost);
-        promotionPost.markPublished(result.externalPostId(), Instant.now(clock));
+        // 간격 판정과 갱신을 한 번에 한다 — 동시에 눌러도 한 요청만 여기를 지난다(D24).
+        Instant now = Instant.now(clock);
+        Instant previous = repository.claimPublishSlot(now, MIN_PUBLISH_INTERVAL);
+        SocialPublishPort.PublishResult result;
+        try {
+            result = publishPort.publish(promotionPost);
+        } catch (RuntimeException failure) {
+            // 외부에 안 나갔으니 슬롯을 돌려줘 바로 다시 시도할 수 있게 한다. 아래 저장 실패는
+            // 이미 나간 뒤라 돌려주지 않는다 — 돌려주면 같은 글이 또 나간다.
+            repository.releasePublishSlot(now, previous);
+            throw failure;
+        }
+        promotionPost.markPublished(result.externalPostId(), now);
         return repository.save(promotionPost);
     }
 
     @Override
     public PromotionPost publishNext() {
-        Instant now = Instant.now(clock);
-        repository.findLatestPublishedAt().ifPresent(latest -> {
-            Instant availableAt = latest.plus(MIN_PUBLISH_INTERVAL);
-            if (now.isBefore(availableAt)) {
-                throw new PromotionPublishTooSoonException(availableAt);
-            }
-        });
         PromotionPost next = repository.findOldestApproved().orElseThrow(NoApprovedPromotionPostsException::new);
         return publish(next.getId());
     }

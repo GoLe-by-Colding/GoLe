@@ -1,8 +1,8 @@
 package com.gole.api.chat.adapter.out.persistence;
 
 import com.gole.api.chat.application.port.out.SupportAssistantAnalysisRepositoryPort;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Priority;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
+import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
 import java.time.Instant;
 import java.util.List;
@@ -79,7 +79,7 @@ public class MongoSupportAssistantAnalysisAdapter implements SupportAssistantAna
     }
 
     @Override
-    public void complete(String roomId, String leaseToken, Analysis analysis, Instant completedAt) {
+    public void complete(String roomId, String leaseToken, SupportAssistantAnalysis analysis, Instant completedAt) {
         Query ownedLease = ownedLease(roomId, leaseToken)
                 .addCriteria(Criteria.where("leaseUntil").gt(completedAt));
         Update completed = new Update()
@@ -244,9 +244,9 @@ public class MongoSupportAssistantAnalysisAdapter implements SupportAssistantAna
             return Optional.empty();
         }
         try {
-            Analysis analysis = new Analysis(
+            SupportAssistantAnalysis analysis = new SupportAssistantAnalysis(
                     SupportCategory.valueOf(document.getCategory()),
-                    Priority.valueOf(document.getPriority()),
+                    SupportAssistantPriority.valueOf(document.getPriority()),
                     document.getSummary(),
                     document.getDraft(),
                     document.getRisk(),

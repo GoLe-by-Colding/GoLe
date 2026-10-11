@@ -88,6 +88,20 @@
   /* 거래 정보의 연속성을 보여주는 홈 시세 티커 전용 모션. */
   --animate-market-ticker: market-ticker 40s linear infinite;
 
+  /* 마스코트 분수. 세 브릭이 같은 궤적을 한 박자씩 어긋나 날아가도록 지연을 토큰에 넣는다.
+     지연을 따로 유틸리티로 주면 같은 변형 안에서 animation 단축 속성과 출력 순서를 다툰다. */
+  --animate-spout-brick-a: brick-spout 3.2s cubic-bezier(0.65, 0, 0.35, 1) -200ms infinite both;
+  --animate-spout-brick-b: brick-spout 3.2s cubic-bezier(0.65, 0, 0.35, 1) -120ms infinite both;
+  --animate-spout-brick-c: brick-spout 3.2s cubic-bezier(0.65, 0, 0.35, 1) -40ms infinite both;
+  --animate-spout-stream: spout-stream 3.2s ease-in-out infinite;
+  --animate-mascot-float: mascot-float 4.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  --animate-rise-in: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* 히어로 우측 레일. 분수 → 라이브 지표 → CTA 순서로 시선이 내려가야 하므로
+     같은 rise-in을 한 박자씩 늦춰 재생해 읽는 방향 자체를 연출한다. */
+  --animate-hero-flow: rise-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-hero-flow-2: rise-in 460ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+  --animate-hero-flow-3: rise-in 460ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+
   @keyframes market-ticker {
     from {
       transform: translateX(0);
@@ -161,100 +175,32 @@
   }
 }
 
-@layer components {
-  .gole-spout-brick {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: brick-spout 3.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-    animation-fill-mode: both;
-  }
-
-  .gole-spout-brick-a {
-    animation-delay: -200ms;
-  }
-
-  .gole-spout-brick-b {
-    animation-delay: -120ms;
-  }
-
-  .gole-spout-brick-c {
-    animation-delay: -40ms;
-  }
-
-  .gole-spout-stream {
-    stroke-dasharray: 42 10;
-    animation: spout-stream 3.2s ease-in-out infinite;
-  }
-
-  .gole-mascot-float {
-    transform-origin: 50% 62%;
-    animation: mascot-float 4.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-  }
-
-  .gole-rise-in {
-    animation: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  /* 히어로 우측 레일. 분수 → 라이브 지표 → CTA 순서로 시선이 내려가야 하므로
-     같은 rise-in을 한 박자씩 늦춰 재생해 읽는 방향 자체를 연출한다. */
-  .gole-hero-flow > * {
-    animation: rise-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  .gole-hero-flow > *:nth-child(2) {
-    animation-delay: 90ms;
-  }
-
-  .gole-hero-flow > *:nth-child(3) {
-    animation-delay: 180ms;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .gole-spout-brick,
-    .gole-spout-stream,
-    .gole-mascot-float,
-    .gole-rise-in,
-    .gole-hero-flow > * {
-      animation: none;
-      opacity: 1;
-    }
-  }
-}
-
 @layer base {
   html {
+    /* 관리자 디자인 토큰이 덮는 기준 글자 크기. */
     --design-font-size: 16px;
-    font-size: var(--design-font-size);
-    font-family: var(--font-sans);
-    color: var(--color-neutral-900);
-    background-color: var(--color-neutral-50);
-    scroll-behavior: smooth;
-    -webkit-tap-highlight-color: transparent;
     /* 스크롤바 자리를 항상 비워 둔다. 페이지마다 내용 높이가 달라 세로 스크롤바가
        생겼다 사라지면 뷰포트 폭이 스크롤바 두께만큼 바뀌고, 가운데 정렬된 레이아웃이
-       이동할 때마다 좌우로 흔들린다(오버레이 스크롤바가 아닌 환경에서). */
-    scrollbar-gutter: stable;
+       이동할 때마다 좌우로 흔들린다(오버레이 스크롤바가 아닌 환경에서).
+       모션을 줄인 사용자에게는 앵커 이동도 즉시 한다. */
+    @apply bg-neutral-50 font-sans text-(length:--design-font-size) text-neutral-900 scroll-smooth [scrollbar-gutter:stable] [-webkit-tap-highlight-color:transparent] motion-reduce:scroll-auto;
   }
 
   body {
-    min-height: 100dvh;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+    @apply min-h-dvh [-webkit-font-smoothing:antialiased] [text-rendering:optimizeLegibility];
   }
 
   h1,
   h2,
   h3,
   h4 {
-    line-height: 1.15;
-    letter-spacing: -0.025em;
-    font-weight: 700;
-    color: var(--color-neutral-900);
+    /* leading-* 는 --tw-leading 을 남겨 제목에 붙은 text-* 유틸리티의 행간까지 1.15로 묶는다.
+       유틸리티가 행간을 정하도록 기본값은 변수 없는 임의 속성으로 둔다. */
+    @apply [line-height:1.15] font-bold tracking-tight text-neutral-900;
   }
 
   ::selection {
-    background-color: var(--color-brand-200);
-    color: var(--color-brand-900);
+    @apply bg-brand-200 text-brand-900;
   }
 
   /* 기본 전환은 레이아웃을 움직이지 않는 속성에 한정한다. */
@@ -264,14 +210,28 @@
   input,
   textarea,
   select {
-    transition-property: color, background-color, border-color, opacity;
-    transition-duration: 150ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    /* 지속 시간 150ms·cubic-bezier(0.4, 0, 0.2, 1)은 Tailwind 기본 전환값과 같다. */
+    @apply transition-[color,background-color,border-color,opacity];
   }
 
   /* 포커스 링 */
   :focus-visible {
-    outline: 2px solid var(--color-brand-400);
-    outline-offset: 2px;
+    @apply outline-2 outline-offset-2 outline-brand-400;
+  }
+}
+
+/*
+ * iOS(WebKit)는 글자가 16px보다 작은 입력란에 초점이 가면 화면을 확대하고, 입력을 마쳐도 되돌리지 않는다.
+ * 앱 WebView에서 검색창(text-sm)을 누르면 약 1.15배 확대되어 우측 버튼·카드가 잘린 채 남았다.
+ * 손가락으로 입력하는 기기와 휴대폰 폭(sm 미만)에서 작은 글자(text-sm·text-xs)를 쓴 입력·선택·여러 줄 입력을
+ * 16px로 올린다. 폭 조건은 포인터 정보를 주지 않는 에뮬레이터·WebView에서도 휴대폰 화면을 놓치지 않게 한다.
+ * viewport의 확대 금지(maximum-scale)는 사용자의 손가락 확대까지 막으므로 쓰지 않는다.
+ * 레이어 밖에 두어 utilities 레이어의 text-sm·text-xs보다 항상 우선한다. 넓은 데스크톱(정밀 포인터)은 그대로다.
+ * 다른 유틸리티를 이겨야 하는 덮어쓰기라 선택자는 레이어 밖에 두고 값만 Tailwind로 적용한다. text-base는 행간까지 바꾸며
+ * rem이라 관리자 글자 크기 토큰을 따라가므로 16px 고정 임의 값을 쓴다.
+ */
+@media (pointer: coarse), (max-width: 639.98px) {
+  :is(input, select, textarea):is(.text-sm, .text-xs) {
+    @apply text-[16px];
   }
 }

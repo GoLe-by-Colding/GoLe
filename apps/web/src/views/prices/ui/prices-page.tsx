@@ -66,9 +66,7 @@ export async function PricesPage({ initialSetNumber }: PricesPageProps) {
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>시세</Heading>
-          <Text tone="secondary">
-            체결가 기반 시세 추이와 상태별 감가 · 즉시판매/즉시구매 추정가
-          </Text>
+          <Text tone="secondary">미개봉 체결가 추이와 상태별 추정 시세 · 빠른 판매/구매 추정</Text>
         </div>
 
         {board.status === "failed" ? (

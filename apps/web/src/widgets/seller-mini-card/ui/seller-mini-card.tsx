@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchSellerShop } from "@entities/discovery";
 import { fetchSellerRating, type SellerRating } from "@entities/review";
+import { useDisplayNames } from "@entities/user";
 import { StarIcon } from "@shared/ui";
 
 export interface SellerMiniCardProps {
@@ -18,6 +19,7 @@ export interface SellerMiniCardProps {
 export function SellerMiniCard({ sellerId, reviewsOpen }: SellerMiniCardProps) {
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [listingCount, setListingCount] = useState<number | null>(null);
+  const sellerName = useDisplayNames([sellerId])(sellerId);
 
   useEffect(() => {
     let active = true;
@@ -45,11 +47,11 @@ export function SellerMiniCard({ sellerId, reviewsOpen }: SellerMiniCardProps) {
       className="group flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/40"
     >
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-50 text-base font-bold text-brand-700">
-        {sellerId.slice(0, 1).toUpperCase()}
+        {sellerName.slice(0, 1).toUpperCase()}
       </span>
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-sm font-semibold text-neutral-900">
-          {sellerId.slice(0, 8)} 님의 샵
+          {sellerName} 님의 샵
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500">
           {reviewsOpen && hasRating ? (

@@ -1,6 +1,6 @@
 package com.gole.api.review.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.review.adapter.in.web.ReviewDtos.ReplyReviewRequest;
 import com.gole.api.review.adapter.in.web.ReviewDtos.ReviewResponse;
 import com.gole.api.review.adapter.in.web.ReviewDtos.SellerRatingResponse;

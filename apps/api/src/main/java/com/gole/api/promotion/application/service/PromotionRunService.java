@@ -43,7 +43,8 @@ public class PromotionRunService implements RecordPromotionRunUseCase {
                 command.agentSha(),
                 command.runUrl(),
                 command.calls(),
-                Instant.now(clock));
+                Instant.now(clock),
+                command.memoryContext());
         PromotionRun stored = runs.insertIfAbsent(run);
         return new RecordedRun(stored, stored.id().equals(run.id()));
     }

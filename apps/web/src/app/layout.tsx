@@ -7,6 +7,7 @@ import { AnalyticsConsentManager } from "@widgets/analytics-consent";
 import { analyticsRuntimeConfig, BUSINESS_INFO, env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import { DesignTheme } from "@shared/ui/design-theme";
+import { SiteMascot } from "@shared/ui/logo";
 import "./globals.css";
 
 const SITE_NAME = "GoLe";
@@ -108,7 +109,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body>
         <CoreBootstrap />
         <DesignTheme />
-        {children}
+        <SiteMascot>{children}</SiteMascot>
         <StructuredData />
         <Suspense fallback={null}>
           <AnalyticsConsentManager configuration={analyticsRuntimeConfig} />

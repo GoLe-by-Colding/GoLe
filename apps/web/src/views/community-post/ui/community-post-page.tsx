@@ -14,7 +14,7 @@ import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
 import { PostAuthorActions } from "@features/manage-post";
-import { useSession } from "@entities/user";
+import { useDisplayNames, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import {
   Badge,
@@ -26,6 +26,7 @@ import {
   LinkButton,
   Skeleton,
   Text,
+  useDialog,
 } from "@shared/ui";
 
 export interface CommunityPostPageProps {
@@ -43,6 +44,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const [commentsError, setCommentsError] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [commentActionError, setCommentActionError] = useState<string | null>(null);
+  const dialog = useDialog();
 
   const loadComments = useCallback(async () => {
     setCommentsError(false);
@@ -82,6 +84,10 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
       window.clearTimeout(timer);
     };
   }, [postId, postAttempt, loadComments]);
+
+  const nameOf = useDisplayNames(
+    post === null ? [] : [post.authorId, ...comments.map((comment) => comment.authorId)],
+  );
 
   if (postStatus === "missing") {
     return (
@@ -141,7 +147,13 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const cover = post.imageUrls[0];
 
   async function handleDeleteComment(comment: Comment): Promise<void> {
-    if (!window.confirm("이 댓글을 삭제할까요? 화면에서 즉시 숨겨집니다.")) return;
+    const confirmed = await dialog.confirm({
+      title: "댓글 삭제",
+      description: "이 댓글을 삭제할까요? 화면에서 즉시 숨겨집니다.",
+      confirmLabel: "삭제",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setDeletingCommentId(comment.id);
     setCommentActionError(null);
     try {
@@ -159,7 +171,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
       <div className="flex flex-col gap-5 pt-8 pb-16">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Heading level={2}>{post.authorId.slice(0, 8)}</Heading>
+            <Heading level={2}>{nameOf(post.authorId)}</Heading>
             {session?.accountId !== post.authorId ? (
               <LinkButton
                 href={`/chat?direct=${encodeURIComponent(post.authorId)}`}
@@ -209,7 +221,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
                 className="flex items-start justify-between gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-50"
               >
                 <p className="min-w-0 leading-relaxed">
-                  <span className="font-semibold text-neutral-900">{c.authorId.slice(0, 8)}</span>{" "}
+                  <span className="font-semibold text-neutral-900">{nameOf(c.authorId)}</span>{" "}
                   <span className="break-words text-neutral-700">{c.content}</span>
                 </p>
                 <div className="flex shrink-0 items-center gap-2">
@@ -251,6 +263,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
           <CommentForm postId={post.id} onAdded={() => void loadComments()} />
         </div>
       </div>
+      {dialog.element}
     </Container>
   );
 }

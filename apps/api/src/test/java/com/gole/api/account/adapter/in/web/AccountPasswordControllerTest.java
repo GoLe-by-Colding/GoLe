@@ -23,6 +23,7 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ServiceUnavailableException;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

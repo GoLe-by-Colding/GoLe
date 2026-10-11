@@ -17,14 +17,13 @@ import com.gole.api.community.application.port.in.PublishPostUseCase;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
 import com.gole.api.community.application.port.out.PostAuthorNotifierPort;
+import com.gole.api.community.application.port.out.PostImagePort;
 import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.domain.exception.PostNotFoundException;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.community.domain.model.Post;
 import com.gole.api.community.domain.model.PostStatus;
 import com.gole.api.community.domain.model.PostType;
-import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
-import com.gole.api.media.domain.model.MediaTargetType;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -56,7 +55,7 @@ public class CommunityService
     private final CommentRepositoryPort commentRepository;
     private final CommunityIdGeneratorPort idGenerator;
     private final PostAuthorNotifierPort postAuthorNotifier;
-    private final ManageMediaAssetsUseCase mediaAssets;
+    private final PostImagePort postImages;
     private final Clock clock;
 
     public CommunityService(
@@ -64,13 +63,13 @@ public class CommunityService
             CommentRepositoryPort commentRepository,
             CommunityIdGeneratorPort idGenerator,
             PostAuthorNotifierPort postAuthorNotifier,
-            ManageMediaAssetsUseCase mediaAssets,
+            PostImagePort postImages,
             Clock clock) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.idGenerator = idGenerator;
         this.postAuthorNotifier = postAuthorNotifier;
-        this.mediaAssets = mediaAssets;
+        this.postImages = postImages;
         this.clock = clock;
     }
 
@@ -85,8 +84,7 @@ public class CommunityService
                 command.imageKeys(),
                 com.gole.api.community.domain.model.PostType.fromKey(command.topic()),
                 Instant.now(clock));
-        mediaAssets.replaceReferences(
-                command.authorId(), MediaTargetType.COMMUNITY_POST, postId, command.imageKeys(), true);
+        postImages.replaceImages(command.authorId(), postId, command.imageKeys(), true);
         return postRepository.save(post).getId();
     }
 
@@ -186,7 +184,7 @@ public class CommunityService
         }
         post.delete();
         postRepository.save(post);
-        mediaAssets.revokeTarget(MediaTargetType.COMMUNITY_POST, postId);
+        postImages.revokeImages(postId);
     }
 
     /**
@@ -199,7 +197,7 @@ public class CommunityService
         Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         post.delete();
         postRepository.save(post);
-        mediaAssets.revokeTarget(MediaTargetType.COMMUNITY_POST, postId);
+        postImages.revokeImages(postId);
     }
 
     @Override
@@ -209,8 +207,7 @@ public class CommunityService
         if (!post.getAuthorId().equals(command.requesterId())) {
             throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
         }
-        mediaAssets.replaceReferences(
-                command.requesterId(), MediaTargetType.COMMUNITY_POST, command.postId(), command.imageKeys(), true);
+        postImages.replaceImages(command.requesterId(), command.postId(), command.imageKeys(), true);
         post.edit(command.content(), command.imageKeys());
         postRepository.save(post);
     }
@@ -230,15 +227,10 @@ public class CommunityService
         List<String> nextPhotos = command.photos().provided() ? command.photos().value() : post.getImageUrls();
         PostStatus nextStatus = command.status().provided() ? command.status().value() : post.getStatus();
         if (command.photos().provided()) {
-            mediaAssets.replaceReferences(
-                    command.requesterId(),
-                    MediaTargetType.COMMUNITY_POST,
-                    command.postId(),
-                    nextPhotos,
-                    nextStatus == PostStatus.PUBLISHED);
+            postImages.replaceImages(
+                    command.requesterId(), command.postId(), nextPhotos, nextStatus == PostStatus.PUBLISHED);
         } else {
-            mediaAssets.setTargetVisibility(
-                    MediaTargetType.COMMUNITY_POST, command.postId(), nextStatus == PostStatus.PUBLISHED);
+            postImages.setVisibility(command.postId(), nextStatus == PostStatus.PUBLISHED);
         }
         post.edit(nextBody, nextPhotos, nextStatus);
         return postRepository.save(post);

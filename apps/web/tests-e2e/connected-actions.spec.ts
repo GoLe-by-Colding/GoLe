@@ -242,13 +242,16 @@ test.describe("위시리스트 연결", () => {
       await route.fulfill({ status: 204, body: "" });
     });
 
+    // 결제 단계면 구매 버튼이 내 가격 제안을 읽는다(세션 필요). 합성 세션이 실백엔드 401로 지워지지 않게 한다.
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
+
     await page.goto(`/listings/${listing!.id}`);
-    await page.getByRole("button", { name: "위시 빼기" }).click();
-    await expect(page.getByRole("button", { name: "위시 담기" })).toBeEnabled();
+    await page.getByRole("button", { name: "세트 알림 끄기" }).click();
+    await expect(page.getByRole("button", { name: "세트 알림 받기" })).toBeEnabled();
     expect(deleteCount).toBe(1);
 
-    await page.getByRole("button", { name: "위시 담기" }).click();
-    await expect(page.getByRole("button", { name: "위시 빼기" })).toBeEnabled();
+    await page.getByRole("button", { name: "세트 알림 받기" }).click();
+    await expect(page.getByRole("button", { name: "세트 알림 끄기" })).toBeEnabled();
     expect(postCount).toBe(1);
   });
 });

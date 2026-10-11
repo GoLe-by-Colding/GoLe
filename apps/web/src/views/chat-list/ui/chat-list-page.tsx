@@ -29,10 +29,12 @@ import {
   isThirdPartyProvisionConsentCancelledError,
   ThirdPartyProvisionConsentDialog,
   type ThirdPartyProvisionPath,
+  useDisplayNames,
   useSession,
   useThirdPartyProvisionConsent,
 } from "@entities/user";
-import { DirectTradeConfirmation } from "@features/chat-listing";
+import { DirectTradeConfirmation, ListingOfferPanel } from "@features/chat-listing";
+import { isPurchaseOpen } from "@features/purchase";
 import { ChatPanel } from "@widgets/chat-panel";
 import {
   Badge,
@@ -84,6 +86,11 @@ export function ChatListPage() {
   const requestedComposer = searchParams.get("compose")?.trim().toLowerCase() ?? "";
   const requestedSupportCategory = supportCategory(searchParams.get("category"));
   const requestedRoomId = searchParams.get("room")?.trim() ?? "";
+  // 다른 화면에서 대화를 열며 넘긴 입력창 초안. 그 방에만 쓰도록 들어올 때의 방 id와 묶어 둔다.
+  const [roomDraft] = useState(() => ({
+    roomId: searchParams.get("room")?.trim() ?? "",
+    text: (searchParams.get("draft") ?? "").trim().slice(0, 500),
+  }));
   const [listingRooms, setListingRooms] = useState<readonly ChatRoom[] | null>(null);
   const [socialRooms, setSocialRooms] = useState<readonly SocialChatRoom[] | null>(null);
   const [roomsOwnerId, setRoomsOwnerId] = useState<string | null>(null);
@@ -101,6 +108,9 @@ export function ChatListPage() {
   const [roomResolveRetryNonce, setRoomResolveRetryNonce] = useState(0);
   const [tradeBusy, setTradeBusy] = useState(false);
   const [directTradeOpen, setDirectTradeOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  // 열린 대화의 마지막 메시지. 가격 제안 배너가 이 값이 바뀔 때 제안을 다시 읽는다.
+  const [latestMessageId, setLatestMessageId] = useState<string | null>(null);
   const [blockedAccountIds, setBlockedAccountIds] = useState<readonly string[] | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<ChatUnreadCounts | null>(null);
   const [unreadOwnerId, setUnreadOwnerId] = useState<string | null>(null);
@@ -228,6 +238,8 @@ export function ChatListPage() {
             launchResult.value.sellerIdentityVerificationReady &&
             launchResult.value.tradeMode === "DIRECT_CHAT",
         );
+        // 매물 상세의 구매 버튼과 같은 판정이다. 설정을 못 읽으면 결제를 추측해서 열지 않는다.
+        setPaymentsOpen(launchResult.status === "fulfilled" && isPurchaseOpen(launchResult.value));
 
         const availableIds = new Set([
           ...nextSocial.map((room) => room.id),
@@ -324,6 +336,7 @@ export function ChatListPage() {
       (a, b) => new Date(activityAt(b)).getTime() - new Date(activityAt(a)).getTime(),
     );
   }, [visibleListingRooms, visibleResolvedConversation, visibleSocialRooms]);
+  const nameOf = useDisplayNames(conversations.flatMap(conversationMemberIds));
 
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.room.id === selectedId) ?? null,
@@ -346,6 +359,7 @@ export function ChatListPage() {
     const consumeRoomQuery = () => {
       const nextSearchParams = new URLSearchParams(searchParamsString);
       nextSearchParams.delete("room");
+      nextSearchParams.delete("draft");
       const nextQuery = nextSearchParams.toString();
       router.replace(`/chat${nextQuery.length > 0 ? `?${nextQuery}` : ""}`, { scroll: false });
     };
@@ -734,19 +748,19 @@ export function ChatListPage() {
             }
           />
         ) : (
-          <div className="grid min-h-[660px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid h-[max(420px,min(760px,calc(100dvh-21rem)))] grid-rows-[minmax(0,1fr)] md:h-[max(520px,min(760px,calc(100dvh-16rem)))] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-soft md:grid-cols-[340px_minmax(0,1fr)]">
             <aside
-              className={`min-w-0 border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
+              className={`flex min-h-0 min-w-0 flex-col border-r border-neutral-200 ${selected !== null ? "max-md:hidden" : ""}`}
             >
               <div className="border-b border-neutral-100 px-4 py-3">
                 <p className="text-xs font-semibold tracking-wide text-neutral-500">
                   전체 대화 {conversations.length}
                 </p>
               </div>
-              <ul className="max-h-[612px] divide-y divide-neutral-100 overflow-y-auto">
+              <ul className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
                 {conversations.map((conversation) => {
                   const active = conversation.room.id === selectedId;
-                  const title = conversationTitle(conversation, myId);
+                  const title = conversationTitle(conversation, myId, nameOf);
                   const unread = visibleUnreadCounts?.[conversation.room.id] ?? 0;
                   return (
                     <li key={conversation.room.id}>
@@ -764,7 +778,7 @@ export function ChatListPage() {
                         <span
                           className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-sm font-extrabold ${roomAvatarTone(conversation)}`}
                         >
-                          {roomInitial(conversation, myId)}
+                          {roomInitial(conversation, myId, nameOf)}
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col gap-1">
                           <span className="flex items-center gap-2">
@@ -798,7 +812,7 @@ export function ChatListPage() {
             </aside>
 
             {selected ? (
-              <section className="flex min-w-0 flex-col">
+              <section className="flex min-h-0 min-w-0 flex-col">
                 <header className="flex min-h-16 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-5">
                   <div className="flex min-w-0 items-center gap-3">
                     <button
@@ -810,7 +824,7 @@ export function ChatListPage() {
                     </button>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-neutral-900">
-                        {conversationTitle(selected, myId)}
+                        {conversationTitle(selected, myId, nameOf)}
                       </p>
                       <p className="truncate text-xs text-neutral-500">
                         {conversationSubtitle(selected, myId)}
@@ -862,7 +876,7 @@ export function ChatListPage() {
                   </div>
                 </header>
                 {blockManageOpen && managedBlockTarget !== null && blockedAccountIds !== null ? (
-                  <div className="gole-rise flex flex-col gap-3 border-b border-danger/15 bg-danger/5 px-4 py-3 sm:px-5">
+                  <div className="motion-safe:animate-rise-in flex flex-col gap-3 border-b border-danger/15 bg-danger/5 px-4 py-3 sm:px-5">
                     <div>
                       <p className="text-sm font-semibold text-neutral-900">
                         {managedTargetBlocked
@@ -916,7 +930,7 @@ export function ChatListPage() {
                   </div>
                 ) : null}
                 {inviteOpen && selected.kind === "SOCIAL" && selected.room.type === "GROUP" ? (
-                  <div className="gole-rise flex flex-wrap items-end gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
+                  <div className="motion-safe:animate-rise-in flex flex-wrap items-end gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
                     <label className="min-w-[220px] flex-1 text-xs font-semibold text-neutral-600">
                       초대할 계정 ID
                       <input
@@ -952,6 +966,22 @@ export function ChatListPage() {
                     onToggle={() => void toggleDirectTradeConfirmation()}
                   />
                 ) : null}
+                {selected.kind === "LISTING" &&
+                blockedAccountIds !== null &&
+                !selectedTargetBlocked &&
+                selected.room.directTradeCompletedAt === null ? (
+                  <ListingOfferPanel
+                    key={`offer:${selected.room.id}`}
+                    roomId={selected.room.id}
+                    listingId={selected.room.listingId}
+                    buyerId={selected.room.buyerId}
+                    sellerId={selected.room.sellerId}
+                    myId={myId}
+                    paymentsOpen={paymentsOpen}
+                    refreshKey={latestMessageId}
+                    runWithConsent={runWithConsent}
+                  />
+                ) : null}
                 <div className="min-h-0 flex-1">
                   {blockedAccountIds === null ? (
                     <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -977,6 +1007,10 @@ export function ChatListPage() {
                       roomId={selected.room.id}
                       myId={myId}
                       onRoomRead={handleRoomRead}
+                      onLatestMessageChange={setLatestMessageId}
+                      {...(roomDraft.text.length > 0 && roomDraft.roomId === selected.room.id
+                        ? { initialDraft: roomDraft.text }
+                        : {})}
                       hiddenSenderIds={blockedAccountIds}
                       showSenderIdentity={
                         selected.kind === "SOCIAL" && selected.room.type === "GROUP"
@@ -1087,7 +1121,7 @@ function ConversationComposer({
   return (
     <form
       onSubmit={submit}
-      className="gole-rise flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/50 p-5 sm:p-6"
+      className="motion-safe:animate-rise-in flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/50 p-5 sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -1237,17 +1271,28 @@ function LoadingRows() {
           </div>
         ))}
       </div>
-      <Skeleton className="hidden min-h-[660px] rounded-2xl md:block" />
+      <Skeleton className="hidden h-[max(520px,min(760px,calc(100dvh-16rem)))] rounded-2xl md:block" />
     </div>
   );
 }
 
-function conversationTitle(conversation: Conversation, myId: string): string {
+type NameOf = (accountId: string, fallback?: string) => string;
+
+function conversationMemberIds(conversation: Conversation): readonly string[] {
+  return conversation.kind === "LISTING"
+    ? [conversation.room.buyerId, conversation.room.sellerId]
+    : conversation.room.memberIds;
+}
+
+/** 상대 닉네임이 없으면 예전처럼 상대 계정 ID 전체를 제목으로 쓴다. */
+function conversationTitle(conversation: Conversation, myId: string, nameOf: NameOf): string {
   if (conversation.kind === "LISTING") {
-    return partnerId(conversation.room, myId);
+    const partner = partnerId(conversation.room, myId);
+    return nameOf(partner, partner);
   }
   if (conversation.room.type === "DIRECT") {
-    return conversation.room.memberIds.find((member) => member !== myId) ?? "1:1 대화";
+    const peer = conversation.room.memberIds.find((member) => member !== myId);
+    return peer === undefined ? "1:1 대화" : nameOf(peer, peer);
   }
   return (
     conversation.room.title ?? (conversation.room.type === "SUPPORT" ? "운영팀 문의" : "그룹 대화")
@@ -1296,9 +1341,9 @@ function shortDate(value: string): string {
   return date.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
 
-function roomInitial(conversation: Conversation, myId: string): string {
+function roomInitial(conversation: Conversation, myId: string, nameOf: NameOf): string {
   if (conversation.kind === "SOCIAL" && conversation.room.type === "SUPPORT") return "GO";
-  return conversationTitle(conversation, myId).slice(0, 1).toUpperCase();
+  return conversationTitle(conversation, myId, nameOf).slice(0, 1).toUpperCase();
 }
 
 function roomAvatarTone(conversation: Conversation): string {

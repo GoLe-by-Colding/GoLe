@@ -203,15 +203,26 @@ recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
 # may not erase rollback provenance from an in-flight built deployment.
 write_initial_snapshot
 write_transaction built
+rm -f /tmp/docker.calls
 if SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-cleanup \
   all "$request_id" >/tmp/unsafe-cleanup.out 2>&1; then
   echo 'direct image cleanup accepted a non-terminal deployment' >&2
   exit 1
 fi
 [ -e "/var/backups/gole-images/images.$compact_request_id" ]
+if grep -Eq '^(image|builder) prune' /tmp/docker.calls 2>/dev/null; then
+  echo 'rejected image cleanup still pruned Docker state' >&2
+  exit 1
+fi
 sed -i 's/^state=built$/state=rollback-restored/' /etc/gole/deployment.transaction
 SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-images-cleanup all "$request_id"
 [ ! -e "/var/backups/gole-images/images.$compact_request_id" ]
+# Terminal cleanup reclaims dangling images and caps the build cache only
+# after rollback tags are gone.
+grep -qx 'image prune --force' /tmp/docker.calls
+grep -qx 'builder prune --force --reserved-space 5GB' /tmp/docker.calls
+[ "$(grep -n '^image rm ' /tmp/docker.calls | tail -1 | cut -d: -f1)" -lt \
+  "$(grep -n '^image prune' /tmp/docker.calls | cut -d: -f1)" ]
 [ -e /etc/gole/deployment.transaction ]
 recovery="$(SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-recover)"
 [ "$recovery" = RECOVERED ]

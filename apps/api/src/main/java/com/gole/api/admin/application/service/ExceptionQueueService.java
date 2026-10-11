@@ -1,18 +1,18 @@
 package com.gole.api.admin.application.service;
 
-import com.gole.api.order.application.port.in.GetOrderUseCase;
-import com.gole.api.order.application.port.out.OrderRepositoryPort;
-import com.gole.api.order.application.service.pipeline.PipelineProperties;
-import com.gole.api.order.domain.model.Order;
-import com.gole.api.order.domain.model.OrderStatus;
-import com.gole.api.shipping.application.port.in.GetShipmentUseCase;
-import com.gole.api.shipping.domain.model.Shipment;
+import com.gole.api.admin.application.port.in.ListExceptionQueueUseCase;
+import com.gole.api.admin.application.port.out.ExceptionQueueOrderPort;
+import com.gole.api.admin.application.port.out.ExceptionQueueOrderPort.QueueOrder;
+import com.gole.api.admin.application.port.out.ExceptionQueueOrderPort.Thresholds;
+import com.gole.api.admin.application.port.out.ExceptionQueueShipmentPort;
+import com.gole.api.admin.application.port.out.ExceptionQueueShipmentPort.QueueShipment;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 
 /**
@@ -23,126 +23,88 @@ import org.springframework.stereotype.Service;
  * 등재 시점 1회 알림은 파이프라인 규칙(마커)이 따로 담당한다.
  */
 @Service
-public class ExceptionQueueService {
+public class ExceptionQueueService implements ListExceptionQueueUseCase {
 
-    private final OrderRepositoryPort orders;
-    private final GetOrderUseCase getOrder;
-    private final GetShipmentUseCase shipments;
-    private final PipelineProperties properties;
+    private final ExceptionQueueOrderPort orders;
+    private final ExceptionQueueShipmentPort shipments;
     private final Clock clock;
 
-    public ExceptionQueueService(
-            OrderRepositoryPort orders,
-            GetOrderUseCase getOrder,
-            GetShipmentUseCase shipments,
-            PipelineProperties properties,
-            Clock clock) {
+    public ExceptionQueueService(ExceptionQueueOrderPort orders, ExceptionQueueShipmentPort shipments, Clock clock) {
         this.orders = orders;
-        this.getOrder = getOrder;
         this.shipments = shipments;
-        this.properties = properties;
         this.clock = clock;
     }
 
+    @Override
     public List<ExceptionEntry> list() {
         Instant now = Instant.now(clock);
+        Thresholds thresholds = orders.thresholds();
         List<ExceptionEntry> entries = new ArrayList<>();
 
-        // 분쟁(즉시) + 판정 지연(3일 초과 시 에스컬레이션 표시)
-        for (Order order : orders.findByStatus(OrderStatus.DISPUTED)) {
-            boolean escalated = order.getStatusChangedAt().isBefore(now.minus(properties.disputeEscalationAfter()));
+        // 분쟁(즉시) + 판정 지연(기준 초과 시 에스컬레이션 표시)
+        for (QueueOrder order : orders.disputedOrders()) {
+            boolean escalated = order.statusChangedAt().isBefore(now.minus(thresholds.disputeEscalationAfter()));
             entries.add(entry(
                     escalated ? "dispute_escalated" : "dispute",
                     escalated ? "분쟁 판정 지연" : "분쟁",
                     order,
-                    order.getDisputeOpenedAt() == null ? order.getStatusChangedAt() : order.getDisputeOpenedAt(),
-                    order.getDisputeReason() == null
-                            ? null
-                            : order.getDisputeReason().label()));
+                    order.disputeOpenedAt() == null ? order.statusChangedAt() : order.disputeOpenedAt(),
+                    order.disputeReasonLabel()));
         }
-        // 택배사 미접수(3일)
-        for (Shipment s : shipments.findPendingRegisteredBefore(now.minus(properties.carrierPickupTimeout()))) {
-            addShipmentEntry(entries, "carrier_pickup_stall", "택배사 미접수", s, s.getRegisteredAt());
-        }
-        // 배송 정체(14일)
-        for (Shipment s : shipments.findInTransitStalledSince(now.minus(properties.transitStallAfter()))) {
-            addShipmentEntry(entries, "transit_stall", "배송 정체", s, s.getStatusChangedAt());
-        }
-        // 추적 불가(24시간)
-        for (Shipment s : shipments.findUnknownSince(now.minus(properties.trackerUnknownAfter()))) {
-            addShipmentEntry(entries, "tracker_unknown", "추적 불가", s, s.getUnknownSince());
-        }
+        // 택배사 미접수
+        addShipmentEntries(
+                entries,
+                "carrier_pickup_stall",
+                "택배사 미접수",
+                shipments.awaitingPickupRegisteredBefore(now.minus(thresholds.carrierPickupTimeout())),
+                QueueShipment::registeredAt);
+        // 배송 정체
+        addShipmentEntries(
+                entries,
+                "transit_stall",
+                "배송 정체",
+                shipments.inTransitStalledSince(now.minus(thresholds.transitStallAfter())),
+                QueueShipment::statusChangedAt);
+        // 추적 불가
+        addShipmentEntries(
+                entries,
+                "tracker_unknown",
+                "추적 불가",
+                shipments.trackerUnknownSince(now.minus(thresholds.trackerUnknownAfter())),
+                QueueShipment::unknownSince);
 
         entries.sort(Comparator.comparing(ExceptionEntry::since));
         return entries;
     }
 
-    private void addShipmentEntry(
-            List<ExceptionEntry> entries, String type, String label, Shipment shipment, Instant since) {
-        Order order;
-        try {
-            order = getOrder.getById(shipment.getOrderId());
-        } catch (RuntimeException missing) {
-            return; // 주문이 사라진 배송 — 큐에 올릴 수 없다
+    private void addShipmentEntries(
+            List<ExceptionEntry> entries,
+            String type,
+            String label,
+            List<QueueShipment> found,
+            Function<QueueShipment, Instant> since) {
+        for (QueueShipment shipment : found) {
+            Optional<QueueOrder> order = orders.findOrder(shipment.orderId());
+            // 주문이 사라진 배송은 큐에 올릴 수 없고, 이미 종결(환불·완료)된 주문의 배송 문제는 사람이 볼 일이 아니다.
+            if (order.isEmpty() || !order.get().fundsHeld()) {
+                continue;
+            }
+            entries.add(entry(type, label, order.get(), since.apply(shipment), null));
         }
-        // 이미 종결(환불·완료)된 주문의 배송 문제는 사람이 볼 일이 아니다.
-        if (order.getStatus() != OrderStatus.FUNDS_HELD && order.getStatus() != OrderStatus.DISPUTED) {
-            return;
-        }
-        entries.add(entry(type, label, order, since, null));
     }
 
-    private ExceptionEntry entry(String type, String label, Order order, Instant since, String detail) {
-        ShipmentFacts facts =
-                shipments.getByOrderId(order.getId()).map(ShipmentFacts::from).orElse(null);
+    private ExceptionEntry entry(String type, String label, QueueOrder order, Instant since, String detail) {
         return new ExceptionEntry(
                 type,
                 label,
-                order.getId(),
-                order.getStatus().name().toLowerCase(Locale.ROOT),
-                order.getBuyerId(),
-                order.getSellerId(),
-                order.getAmount(),
+                order.id(),
+                order.status(),
+                order.buyerId(),
+                order.sellerId(),
+                order.amount(),
                 since,
                 detail,
-                order.getDisputeDetail(),
-                facts);
-    }
-
-    /**
-     * @param shipment 배송 사실(R4.3) — 분쟁 판정 근거로 화면에 함께 보여준다. 미발송이면 null.
-     */
-    public record ExceptionEntry(
-            String type,
-            String typeLabel,
-            String orderId,
-            String orderStatus,
-            String buyerId,
-            String sellerId,
-            long amount,
-            Instant since,
-            String reason,
-            String disputeDetail,
-            ShipmentFacts shipment) {}
-
-    public record ShipmentFacts(
-            String carrierLabel,
-            String waybillNumber,
-            String status,
-            String rawStatus,
-            Instant registeredAt,
-            Instant deliveredAt,
-            Instant lastTrackedAt) {
-
-        static ShipmentFacts from(Shipment s) {
-            return new ShipmentFacts(
-                    s.getCarrier().label(),
-                    s.getWaybill().value(),
-                    s.getStatus().name().toLowerCase(Locale.ROOT),
-                    s.getRawStatus(),
-                    s.getRegisteredAt(),
-                    s.getDeliveredAt(),
-                    s.getLastTrackedAt());
-        }
+                order.disputeDetail(),
+                shipments.factsOf(order.id()).orElse(null));
     }
 }

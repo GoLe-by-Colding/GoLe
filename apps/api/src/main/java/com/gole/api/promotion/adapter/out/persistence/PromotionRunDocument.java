@@ -26,6 +26,7 @@ public class PromotionRunDocument {
     private String agentSha;
     private String runUrl;
     private List<CallDocument> calls;
+    private MemoryContextDocument memoryContext;
 
     @Indexed
     private Instant recordedAt;
@@ -40,6 +41,19 @@ public class PromotionRunDocument {
             long outputTokens,
             Double costUsd,
             Long durationMs) {}
+
+    public record MemoryContextDocument(List<String> feedbackIds, List<GuidelineSnapshotDocument> guidelines) {}
+
+    public record GuidelineSnapshotDocument(
+            String id, String kind, String content, List<String> targets, List<String> categories) {}
+
+    void setMemoryContext(MemoryContextDocument memoryContext) {
+        this.memoryContext = memoryContext;
+    }
+
+    public MemoryContextDocument getMemoryContext() {
+        return memoryContext;
+    }
 
     protected PromotionRunDocument() {}
 

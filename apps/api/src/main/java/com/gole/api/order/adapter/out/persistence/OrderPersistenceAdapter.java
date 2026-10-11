@@ -116,6 +116,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 order.getPaymentEvidenceKind() == null
                         ? null
                         : order.getPaymentEvidenceKind().name(),
+                order.getOfferId(),
                 order.getVersion());
     }
 
@@ -178,6 +179,7 @@ public class OrderPersistenceAdapter implements OrderRepositoryPort {
                 document.getDisputeOpenedAt(),
                 document.getShipmentRegisteredAt(),
                 parseEvidenceKind(document.getPaymentEvidenceKind()),
+                document.getOfferId(),
                 document.getCreatedAt(),
                 history,
                 document.getVersion());

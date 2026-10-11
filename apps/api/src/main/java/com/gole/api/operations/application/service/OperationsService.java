@@ -3,6 +3,7 @@ package com.gole.api.operations.application.service;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.operations.application.port.in.RunOperationsUseCase;
 import com.gole.api.operations.application.port.out.OperationsDiagnostics;
 import com.gole.api.operations.application.port.out.OperationsStore;
 import com.gole.api.operations.domain.OperationRun;
@@ -14,8 +15,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
-public class OperationsService {
-    public record Job(String id, String title, String description) {}
+public class OperationsService implements RunOperationsUseCase {
 
     public static final List<Job> JOBS = List.of(
             new Job("exception-queue", "예외큐 재집계", "현재 주문·배송 예외를 다시 조회합니다. 주문 상태를 변경하지 않습니다."),
@@ -32,10 +32,17 @@ public class OperationsService {
         this.clock = clock;
     }
 
+    @Override
+    public List<Job> jobs() {
+        return JOBS;
+    }
+
+    @Override
     public List<OperationRun> history() {
         return store.recent();
     }
 
+    @Override
     public OperationRun execute(String jobId, String actorId, String reasonCode, String retryOf) {
         if (actorId == null || actorId.isBlank()) throw new ForbiddenException("ADMIN_ONLY", "관리자 인증이 필요합니다");
         if (JOBS.stream().noneMatch(job -> job.id().equals(jobId)))

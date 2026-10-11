@@ -1,6 +1,7 @@
 package com.gole.api.account.adapter.in.web;
 
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
+import com.gole.api.account.application.port.in.VerifySellerIdentityUseCase;
+import com.gole.api.common.web.auth.RequiresVerifiedSellerIdentity;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
@@ -17,9 +18,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class SellerIdentityGuardInterceptor implements HandlerInterceptor {
 
-    private final SellerIdentityVerificationService sellerIdentityVerification;
+    private final VerifySellerIdentityUseCase sellerIdentityVerification;
 
-    public SellerIdentityGuardInterceptor(SellerIdentityVerificationService sellerIdentityVerification) {
+    public SellerIdentityGuardInterceptor(VerifySellerIdentityUseCase sellerIdentityVerification) {
         this.sellerIdentityVerification = sellerIdentityVerification;
     }
 

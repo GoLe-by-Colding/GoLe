@@ -1,6 +1,7 @@
 package com.gole.api.discovery.adapter.out.listing;
 
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import com.gole.api.listing.application.port.in.BrowseListingsUseCase;
 import com.gole.api.listing.domain.model.Listing;
 import java.util.List;
@@ -23,12 +24,32 @@ public class ListingQueryAdapter implements ListingQueryPort {
     }
 
     @Override
-    public List<Listing> activeBySeller(String sellerId) {
-        return browseListings.activeBySeller(sellerId);
+    public List<DiscoveredListing> activeBySeller(String sellerId) {
+        return toDiscovered(browseListings.activeBySeller(sellerId));
     }
 
     @Override
-    public List<Listing> activeBySellers(List<String> sellerIds, int limit) {
-        return browseListings.activeBySellers(sellerIds, limit);
+    public List<DiscoveredListing> activeBySellers(List<String> sellerIds, int limit) {
+        return toDiscovered(browseListings.activeBySellers(sellerIds, limit));
+    }
+
+    private static List<DiscoveredListing> toDiscovered(List<Listing> listings) {
+        return listings.stream().map(ListingQueryAdapter::toDiscovered).toList();
+    }
+
+    private static DiscoveredListing toDiscovered(Listing l) {
+        return new DiscoveredListing(
+                l.getId(),
+                l.getSellerId(),
+                l.getTitle(),
+                l.getPrice().amount(),
+                l.getCondition().name(),
+                l.getCatalogSetNumber(),
+                l.getCategory().name(),
+                l.getStatus().name(),
+                l.getPhotoUrls(),
+                l.getCreatedAt(),
+                l.getListedAt(),
+                l.getPreviousPrice() == null ? null : l.getPreviousPrice().amount());
     }
 }

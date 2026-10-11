@@ -2,6 +2,7 @@ package com.gole.api.account.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;

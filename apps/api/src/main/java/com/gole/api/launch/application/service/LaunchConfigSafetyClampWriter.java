@@ -2,15 +2,14 @@ package com.gole.api.launch.application.service;
 
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
+import com.gole.api.launch.application.port.out.LaunchPaymentReadinessPort;
+import com.gole.api.launch.application.port.out.LaunchPaymentReadinessPort.PaymentReadiness;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchStage;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.State;
+import com.gole.api.launch.domain.model.SettlementMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -32,14 +31,14 @@ public class LaunchConfigSafetyClampWriter {
 
     private final LaunchConfigRepositoryPort repository;
     private final LaunchConfigHistoryPort history;
-    private final GetPaymentReadinessUseCase paymentReadiness;
+    private final LaunchPaymentReadinessPort paymentReadiness;
     private final LaunchSettlementModePort settlementMode;
     private final Clock clock;
 
     public LaunchConfigSafetyClampWriter(
             LaunchConfigRepositoryPort repository,
             LaunchConfigHistoryPort history,
-            GetPaymentReadinessUseCase paymentReadiness,
+            LaunchPaymentReadinessPort paymentReadiness,
             LaunchSettlementModePort settlementMode,
             Clock clock) {
         this.repository = repository;
@@ -93,23 +92,23 @@ public class LaunchConfigSafetyClampWriter {
             return LaunchStage.BROWSE_ONLY;
         }
 
-        Mode mode = settlementMode.currentMode();
+        SettlementMode mode = settlementMode.currentMode();
         if (!settlementMode.payoutContractVerified()) {
             return LaunchStage.BROWSE_ONLY;
         }
-        if (stored.stage() == LaunchStage.TRADING && mode != Mode.MANUAL) {
+        if (stored.stage() == LaunchStage.TRADING && mode != SettlementMode.MANUAL) {
             return LaunchStage.BROWSE_ONLY;
         }
-        if (stored.stage() == LaunchStage.FULL && mode != Mode.PROVIDER) {
+        if (stored.stage() == LaunchStage.FULL && mode != SettlementMode.PROVIDER) {
             return LaunchStage.BROWSE_ONLY;
         }
         if (!stored.isEnabled(LaunchFeature.PAYMENTS)) {
             return stored.stage();
         }
 
-        Snapshot snapshot;
+        PaymentReadiness snapshot;
         try {
-            snapshot = paymentReadiness.getPaymentReadiness();
+            snapshot = paymentReadiness.current().orElse(null);
         } catch (RuntimeException readinessFailure) {
             log.error("결제 준비 상태 조회 실패 — Stage 1로 fail-closed", readinessFailure);
             return LaunchStage.BROWSE_ONLY;
@@ -117,7 +116,7 @@ public class LaunchConfigSafetyClampWriter {
         return isReady(snapshot) ? stored.stage() : LaunchStage.BROWSE_ONLY;
     }
 
-    private static boolean isReady(Snapshot snapshot) {
-        return snapshot != null && snapshot.ready() && snapshot.state() == State.READY;
+    private static boolean isReady(PaymentReadiness snapshot) {
+        return snapshot != null && snapshot.ready();
     }
 }

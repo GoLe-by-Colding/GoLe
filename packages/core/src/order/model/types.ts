@@ -34,6 +34,11 @@ export interface Order {
   readonly disputeOpenedAt: string | null;
   readonly createdAt: string;
   readonly history: readonly OrderStatusChange[];
+  /**
+   * 금액을 정한 수락 가격 제안(price-offer O18). 정가 주문이면 `null`.
+   * 배포 순서가 어긋나 구 API가 응답하는 동안에도 깨지지 않게 선택 필드로 읽는다.
+   */
+  readonly offerId?: string | null;
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {

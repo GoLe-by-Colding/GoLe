@@ -11,7 +11,7 @@ export default function Loading() {
         <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-3">
-              <Skeleton className="aspect-square w-full rounded-lg" />
+              <Skeleton className="aspect-[4/3] w-full rounded-lg" />
               <div className="flex items-center gap-2">
                 <Skeleton circle className="h-7 w-7" />
                 <Skeleton className="h-4 w-24" />

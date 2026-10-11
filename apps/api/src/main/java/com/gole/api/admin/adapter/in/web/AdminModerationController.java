@@ -9,17 +9,18 @@ import com.gole.api.admin.adapter.in.web.AdminDtos.ReasonRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.RecoverSettlementRequest;
 import com.gole.api.admin.adapter.in.web.AdminDtos.ReportRow;
 import com.gole.api.admin.adapter.in.web.AdminDtos.SettlementRow;
+import com.gole.api.admin.application.port.in.QueryAdminReadModelUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase.RecordAdminActionCommand;
-import com.gole.api.admin.application.port.out.AdminReadModelPort;
-import com.gole.api.admin.application.service.ResolveReportTargetService;
+import com.gole.api.admin.application.port.in.ResolveReportTargetUseCase;
 import com.gole.api.admin.domain.model.AdminActionType;
 import com.gole.api.admin.domain.model.AdminTargetType;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
-import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementStatus;
 import com.gole.api.order.application.port.in.PayOrderUseCase;
+import com.gole.api.order.domain.model.SettlementStatus;
 import com.gole.api.report.application.port.in.ManageReportsUseCase;
 import com.gole.api.report.domain.model.ReportStatus;
 import com.gole.api.report.domain.model.ReportTargetType;
@@ -53,24 +54,24 @@ public class AdminModerationController {
 
     private static final int MAX_ROWS = 100;
 
-    private final AdminReadModelPort readModel;
+    private final QueryAdminReadModelUseCase readModel;
     private final ModerateListingUseCase moderateListing;
     private final ModeratePostUseCase moderatePost;
     private final ManageReportsUseCase manageReports;
     private final ManageSettlementsUseCase manageSettlements;
     private final PayOrderUseCase payOrders;
     private final RecordAdminActionUseCase audit;
-    private final ResolveReportTargetService resolveReportTarget;
+    private final ResolveReportTargetUseCase resolveReportTarget;
 
     public AdminModerationController(
-            AdminReadModelPort readModel,
+            QueryAdminReadModelUseCase readModel,
             ModerateListingUseCase moderateListing,
             ModeratePostUseCase moderatePost,
             ManageReportsUseCase manageReports,
             ManageSettlementsUseCase manageSettlements,
             PayOrderUseCase payOrders,
             RecordAdminActionUseCase audit,
-            ResolveReportTargetService resolveReportTarget) {
+            ResolveReportTargetUseCase resolveReportTarget) {
         this.readModel = readModel;
         this.moderateListing = moderateListing;
         this.moderatePost = moderatePost;
@@ -238,7 +239,8 @@ public class AdminModerationController {
     @PostMapping("/reports/{reportId}/resolve-target")
     public ReportRow resolveReportTarget(
             @PathVariable String reportId, @Valid @RequestBody ReasonRequest request, HttpServletRequest http) {
-        var report = resolveReportTarget.resolve(reportId, request.reason());
+        resolveReportTarget.resolve(reportId, request.reason());
+        var report = manageReports.get(reportId);
         if (report.getTargetType() == ReportTargetType.LISTING) {
             record(
                     http,
@@ -269,7 +271,7 @@ public class AdminModerationController {
     @Operation(summary = "수수료 집계", description = "정산 원장 기준 수수료 총액·건수(R5.6). status 미지정 시 전체.")
     @GetMapping("/settlements/summary")
     public ManageSettlementsUseCase.FeeTotals settlementTotals(
-            @RequestParam(required = false) ManageSettlementsUseCase.SettlementStatus status) {
+            @RequestParam(required = false) SettlementStatus status) {
         return manageSettlements.totals(status);
     }
 

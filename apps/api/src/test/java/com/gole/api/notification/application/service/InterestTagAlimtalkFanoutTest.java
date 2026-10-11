@@ -10,6 +10,7 @@ import com.gole.api.notification.application.port.out.ListingSnapshotPort;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.State;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.Type;
+import com.gole.api.notification.domain.model.NotificationCategory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -78,6 +79,44 @@ class InterestTagAlimtalkFanoutTest {
     }
 
     @Test
+    void excludesRecipientsWhoTurnedOffWatchAlertsBeforeSpendingQuota() {
+        FakeOutbox outbox = new FakeOutbox();
+        FakeRecipients recipients = new FakeRecipients(List.of("opted-out", "allowed", "community-off"));
+        FakeQuota quota = new FakeQuota();
+        InMemoryNotificationPreferences preferences = new InMemoryNotificationPreferences()
+                .disable("opted-out", NotificationCategory.WATCH)
+                .disable("community-off", NotificationCategory.COMMUNITY);
+        InterestTagAlimtalkEvent event = claimedFanout(1, null, 0);
+
+        worker(outbox, recipients, quota, properties(10, 1, 10), preferences).process(event);
+
+        assertThat(outbox.enqueued)
+                .extracting(InterestTagAlimtalkEvent::recipientAccountId)
+                .containsExactly("allowed", "community-off");
+        // 꺼둔 사람 몫으로 하루 한도를 쓰지 않는다.
+        assertThat(quota.acquired).containsExactly("allowed", "community-off");
+        assertThat(outbox.delivered).containsExactly(event.eventId(), event.leaseToken());
+    }
+
+    @Test
+    void fanoutIncludesEveryoneWhenPreferenceLookupFails() {
+        FakeOutbox outbox = new FakeOutbox();
+        FakeRecipients recipients = new FakeRecipients(List.of("opted-out", "allowed"));
+        InMemoryNotificationPreferences preferences =
+                new InMemoryNotificationPreferences().disable("opted-out", NotificationCategory.WATCH);
+        preferences.failWith(new IllegalStateException("mongo down"));
+        InterestTagAlimtalkEvent event = claimedFanout(1, null, 0);
+
+        worker(outbox, recipients, new FakeQuota(), properties(10, 1, 10), preferences)
+                .process(event);
+
+        assertThat(outbox.enqueued)
+                .extracting(InterestTagAlimtalkEvent::recipientAccountId)
+                .containsExactly("opted-out", "allowed");
+        assertThat(outbox.retry).isNull();
+    }
+
+    @Test
     void stopsAtMaximumRecipientsEvenWhenMoreRecipientsAreAvailable() {
         FakeOutbox outbox = new FakeOutbox();
         FakeRecipients recipients = new FakeRecipients(List.of("account-1", "account-2", "account-3"));
@@ -97,6 +136,15 @@ class InterestTagAlimtalkFanoutTest {
             FakeRecipients recipients,
             AlimtalkDailyQuotaPort quota,
             InterestTagAlimtalkProperties properties) {
+        return worker(outbox, recipients, quota, properties, new InMemoryNotificationPreferences());
+    }
+
+    private static InterestTagAlimtalkOutboxWorker worker(
+            FakeOutbox outbox,
+            FakeRecipients recipients,
+            AlimtalkDailyQuotaPort quota,
+            InterestTagAlimtalkProperties properties,
+            InMemoryNotificationPreferences preferences) {
         ListingSnapshotPort listings =
                 listingId -> Optional.of(new ListingSnapshotPort.ListingSnapshot(listingId, true));
         return new InterestTagAlimtalkOutboxWorker(
@@ -104,6 +152,7 @@ class InterestTagAlimtalkFanoutTest {
                 recipients,
                 listings,
                 quota,
+                new NotificationPreferenceGate(preferences),
                 Optional.<AlimtalkSenderPort>empty(),
                 properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));

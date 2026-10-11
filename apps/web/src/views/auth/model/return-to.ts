@@ -27,18 +27,25 @@ export function applyRoleGuard(
   return target;
 }
 
-/** 복귀 경로를 사람이 읽을 수 있는 짧은 이름으로 바꾼다(안내 문구용). */
+/**
+ * 복귀 경로를 사람이 읽을 수 있는 짧은 이름으로 바꾼다(안내 문구용).
+ * 안내 문장이 "로그인하면 {이름} 화면으로 돌아갑니다"라서 이름에는 "화면"을 붙이지 않는다
+ * — 붙이면 "이전 화면 화면으로"처럼 겹친다.
+ */
 export function returnToLabel(target: string): string {
-  const path = target.split("?")[0] ?? target;
+  const path = target.split(/[?#]/)[0] ?? target;
   if (path === "/") {
     return "홈";
   }
   if (path === "/collection") {
     return "내 컬렉션";
   }
+  if (path === "/profile" || path.startsWith("/profile/")) {
+    return "내 정보";
+  }
   if (isAdminPath(target)) {
     return "운영자 콘솔";
   }
   // 인증 화면에 사용자가 만든 임의 경로 문자열을 브랜드 문구처럼 노출하지 않는다.
-  return "이전 화면";
+  return "이전";
 }

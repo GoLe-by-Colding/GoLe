@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.application.service.EmailAuthenticationAvailabilityService;
 import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.admin.adapter.in.web.AdminAuthInterceptor;
 import com.gole.api.admin.application.port.in.RecordAdminActionUseCase;
@@ -17,9 +18,10 @@ import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.ReadinessChangeResult;
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
+import com.gole.api.launch.application.service.LaunchSettlementStatusService;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchStage;
+import com.gole.api.launch.domain.model.SettlementMode;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,15 +40,15 @@ class AdminLaunchControllerTest {
             getLaunchConfig,
             manageLaunchConfig,
             audit,
-            settlementMode,
+            new LaunchSettlementStatusService(settlementMode),
             sellerIdentityVerification,
-            new EmailAuthenticationAvailability("test", false));
+            new EmailAuthenticationAvailabilityService(new EmailAuthenticationAvailability("test", false)));
     private final LaunchConfig browseOnly = new LaunchConfig(LaunchStage.BROWSE_ONLY, Map.of(), null, "admin-1");
 
     @BeforeEach
     void setUp() {
         when(getLaunchConfig.current()).thenReturn(browseOnly);
-        when(settlementMode.currentMode()).thenReturn(Mode.DISABLED);
+        when(settlementMode.currentMode()).thenReturn(SettlementMode.DISABLED);
     }
 
     @Test

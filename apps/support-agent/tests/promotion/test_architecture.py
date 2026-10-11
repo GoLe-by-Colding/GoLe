@@ -7,7 +7,7 @@
 import ast
 from pathlib import Path
 
-from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, policy
+from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, memory, policy
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
 
@@ -33,13 +33,13 @@ def top_level_imports(module) -> set[str]:
 
 def test_no_module_imports_sdks_at_module_level():
     """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다."""
-    for module in (drafter, drafting, fakes, gateway_client, hands, policy):
+    for module in (drafter, drafting, fakes, gateway_client, hands, memory, policy):
         assert not any(name.startswith(SDK_PREFIXES) for name in top_level_imports(module)), module
 
 
 def test_package_never_calls_a_model_sdk_directly():
     """모델 호출은 게이트웨이(CLI)뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
-    for module in (drafter, drafting, fakes, gateway_client, hands, policy):
+    for module in (drafter, drafting, fakes, gateway_client, hands, memory, policy):
         assert not any(
             name.startswith(("anthropic", "openai", "langgraph", "langchain"))
             for name in imported_modules(module)

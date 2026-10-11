@@ -10,6 +10,7 @@ import com.gole.api.notification.application.port.out.InterestTagRecipientPort;
 import com.gole.api.notification.application.port.out.ListingSnapshotPort;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent;
 import com.gole.api.notification.domain.model.InterestTagAlimtalkEvent.Type;
+import com.gole.api.notification.domain.model.NotificationCategory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,12 +18,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/** 관심태그 FANOUT을 DELIVERY로 나누고 발송 직전 자격을 재검증하는 lease 워커. */
+/**
+ * 관심태그 FANOUT을 DELIVERY로 나누고 발송 직전 자격을 재검증하는 lease 워커.
+ *
+ * <p>관심 테마 알림톡은 수신 설정의 {@link NotificationCategory#WATCH}를 따른다. 마케팅 수신 동의는
+ * 수신자 포트가 따로 거르는 별개 조건이다. (notification-preferences P6)
+ */
 @Component
 public class InterestTagAlimtalkOutboxWorker {
 
@@ -32,6 +39,7 @@ public class InterestTagAlimtalkOutboxWorker {
     private final InterestTagRecipientPort recipients;
     private final ListingSnapshotPort listings;
     private final AlimtalkDailyQuotaPort quota;
+    private final NotificationPreferenceGate preferences;
     private final Optional<AlimtalkSenderPort> sender;
     private final InterestTagAlimtalkProperties properties;
     private final Clock clock;
@@ -41,6 +49,7 @@ public class InterestTagAlimtalkOutboxWorker {
             InterestTagRecipientPort recipients,
             ListingSnapshotPort listings,
             AlimtalkDailyQuotaPort quota,
+            NotificationPreferenceGate preferences,
             Optional<AlimtalkSenderPort> sender,
             InterestTagAlimtalkProperties properties,
             Clock clock) {
@@ -48,6 +57,7 @@ public class InterestTagAlimtalkOutboxWorker {
         this.recipients = recipients;
         this.listings = listings;
         this.quota = quota;
+        this.preferences = preferences;
         this.sender = sender;
         this.properties = properties;
         this.clock = clock;
@@ -105,12 +115,14 @@ public class InterestTagAlimtalkOutboxWorker {
             }
 
             String nextCursor = page.getLast();
+            // 쿼터를 쓰기 전에 거른다. 꺼둔 사람 몫으로 하루 한도를 깎으면, 켜둔 다른 알림톡이 밀린다.
+            Set<String> optedOut = preferences.optedOut(NotificationCategory.WATCH, page);
             for (String accountId : page) {
                 if (enqueued >= properties.maxRecipientsPerListing()) {
                     outbox.delivered(event.eventId(), event.leaseToken(), Instant.now(clock));
                     return;
                 }
-                if (accountId.equals(event.sellerId())) {
+                if (accountId.equals(event.sellerId()) || optedOut.contains(accountId)) {
                     continue;
                 }
                 if (!quota.acquire(accountId, properties.dailyLimitPerAccount(), properties.quotaWindow())) {
@@ -140,6 +152,11 @@ public class InterestTagAlimtalkOutboxWorker {
                 recipients.resolveEligible(event.recipientAccountId(), event.interestTagKey());
         if (recipient.isEmpty()) {
             outbox.skipped(event.eventId(), event.leaseToken(), "RECIPIENT_NOT_ELIGIBLE", Instant.now(clock));
+            return;
+        }
+        // 팬아웃 뒤 발송 전까지 사이에 껐을 수 있다. 재확인한다.
+        if (!preferences.allows(event.recipientAccountId(), NotificationCategory.WATCH)) {
+            outbox.skipped(event.eventId(), event.leaseToken(), "RECIPIENT_OPTED_OUT", Instant.now(clock));
             return;
         }
         if (!isListingActive(event.listingId())) {

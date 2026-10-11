@@ -1,5 +1,7 @@
 package com.gole.api.launch.application.port.out;
 
+import com.gole.api.launch.domain.model.SettlementMode;
+
 /**
  * 공개 단계가 의존하는 실제 정산 실행 모드.
  *
@@ -9,13 +11,7 @@ package com.gole.api.launch.application.port.out;
  */
 public interface LaunchSettlementModePort {
 
-    enum Mode {
-        DISABLED,
-        MANUAL,
-        PROVIDER
-    }
-
-    Mode currentMode();
+    SettlementMode currentMode();
 
     /** 서면 PG/지급대행 계약을 운영자가 확인했는가. true만으로 계약을 대신하지 않는다. */
     boolean payoutContractVerified();

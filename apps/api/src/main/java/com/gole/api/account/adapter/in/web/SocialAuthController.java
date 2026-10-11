@@ -9,6 +9,7 @@ import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.BadRequestException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;

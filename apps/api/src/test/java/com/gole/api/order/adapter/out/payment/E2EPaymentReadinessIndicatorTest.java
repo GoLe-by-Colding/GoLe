@@ -3,10 +3,10 @@ package com.gole.api.order.adapter.out.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ChannelType;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.State;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
+import com.gole.api.order.application.port.out.PaymentReadinessProbePort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -25,14 +25,14 @@ class E2EPaymentReadinessIndicatorTest {
                 .withPropertyValues("spring.profiles.active=e2e", "gole.environment=e2e", "portone.enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(GetPaymentReadinessUseCase.class);
+                    assertThat(context).hasSingleBean(PaymentReadinessProbePort.class);
                     assertThat(context).hasSingleBean(PaymentGatewayPort.class);
-                    assertThat(context.getBean(GetPaymentReadinessUseCase.class))
+                    assertThat(context.getBean(PaymentReadinessProbePort.class))
                             .isInstanceOf(E2EPaymentReadinessIndicator.class);
                     assertThat(context.getBean(PaymentGatewayPort.class)).isInstanceOf(StubPaymentGatewayAdapter.class);
 
                     var snapshot =
-                            context.getBean(GetPaymentReadinessUseCase.class).getPaymentReadiness();
+                            context.getBean(PaymentReadinessProbePort.class).getPaymentReadiness();
                     assertThat(snapshot.enabled()).isTrue();
                     assertThat(snapshot.ready()).isTrue();
                     assertThat(snapshot.state()).isEqualTo(State.READY);
@@ -72,10 +72,10 @@ class E2EPaymentReadinessIndicatorTest {
                 .withPropertyValues("spring.profiles.active=local", "gole.environment=local", "portone.enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(GetPaymentReadinessUseCase.class);
-                    assertThat(context.getBean(GetPaymentReadinessUseCase.class))
+                    assertThat(context).hasSingleBean(PaymentReadinessProbePort.class);
+                    assertThat(context.getBean(PaymentReadinessProbePort.class))
                             .isInstanceOf(PortOneReadinessIndicator.class);
-                    assertThat(context.getBean(GetPaymentReadinessUseCase.class)
+                    assertThat(context.getBean(PaymentReadinessProbePort.class)
                                     .getPaymentReadiness()
                                     .state())
                             .isEqualTo(State.DISABLED);

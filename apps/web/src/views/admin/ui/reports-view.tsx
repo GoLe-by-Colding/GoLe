@@ -130,11 +130,15 @@ export function AdminReportsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Heading level={2}>신고 큐</Heading>
-        <label className="flex items-center gap-2 text-sm text-neutral-600">
-          상태
-          <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+        <label className="flex min-w-0 items-center gap-2 text-sm text-neutral-600">
+          <span className="shrink-0 whitespace-nowrap">상태</span>
+          <Select
+            className="min-w-32"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as StatusFilter)}
+          >
             <option value="PENDING">접수</option>
             <option value="RESOLVED">조치완료</option>
             <option value="DISMISSED">기각</option>
@@ -195,8 +199,12 @@ export function AdminReportsView() {
             <td className="max-w-[220px] truncate px-3 py-2.5 text-neutral-600">
               {r.detail.length > 0 ? r.detail : "—"}
             </td>
-            <td className="px-3 py-2.5 text-neutral-600">{shortId(r.reporterId)}</td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(r.createdAt)}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-neutral-600">
+              {shortId(r.reporterId)}
+            </td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
+              {formatDateTime(r.createdAt)}
+            </td>
             <td className="px-3 py-2.5">
               <Badge tone={REPORT_STATUS_TONE[r.status] ?? "neutral"}>
                 {REPORT_STATUS_LABEL[r.status] ?? r.status}

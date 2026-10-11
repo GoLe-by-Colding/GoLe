@@ -1,10 +1,12 @@
 package com.gole.api.collection.adapter.in.web;
 
 import com.gole.api.collection.domain.model.CollectionItem;
+import com.gole.api.collection.domain.model.CollectionValueSnapshot;
 import com.gole.api.collection.domain.model.OwnershipStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
+import java.util.List;
 
 public final class CollectionDtos {
 
@@ -24,4 +26,22 @@ public final class CollectionDtos {
     }
 
     public record EstimateResponse(long ownedEstimatedValue) {}
+
+    /** 자산 추이. 날짜 오름차순. (collection-value-history H3) */
+    public record ValueHistoryResponse(List<ValuePointResponse> points) {
+
+        public static ValueHistoryResponse from(List<CollectionValueSnapshot> snapshots) {
+            return new ValueHistoryResponse(
+                    snapshots.stream().map(ValuePointResponse::from).toList());
+        }
+    }
+
+    /** @param date Asia/Seoul 기준 {@code yyyy-MM-dd} */
+    public record ValuePointResponse(String date, long ownedValue, int ownedCount, int pricedCount) {
+
+        static ValuePointResponse from(CollectionValueSnapshot snapshot) {
+            return new ValuePointResponse(
+                    snapshot.date().toString(), snapshot.ownedValue(), snapshot.ownedCount(), snapshot.pricedCount());
+        }
+    }
 }

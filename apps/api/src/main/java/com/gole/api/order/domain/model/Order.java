@@ -31,6 +31,8 @@ public final class Order {
     private PaymentEvidenceKind paymentEvidenceKind;
     /** 구매자 CS 연락처(숫자만 정규화). 미수집(레거시) 주문은 null. (shipping-and-fees R8.1) */
     private final PhoneNumber buyerPhone;
+    /** 이 주문의 금액을 정한 수락 제안. 정가 주문·레거시 주문은 null. (price-offer O18) */
+    private final String offerId;
 
     // 분쟁(R4). DISPUTED 진입 시 채워지고 판정 후에도 기록으로 남는다.
     private DisputeReason disputeReason;
@@ -156,7 +158,7 @@ public final class Order {
                 version);
     }
 
-    /** 정식 생성자(결제 증빙 포함). 영속성 어댑터가 사용한다. */
+    /** 정식 생성자(결제 증빙 포함). */
     public Order(
             String id,
             String listingId,
@@ -176,6 +178,49 @@ public final class Order {
             Instant createdAt,
             List<OrderStatusChange> history,
             Long version) {
+        this(
+                id,
+                listingId,
+                buyerId,
+                sellerId,
+                catalogSetNumber,
+                listingCondition,
+                amount,
+                status,
+                paymentMethod,
+                buyerPhone,
+                disputeReason,
+                disputeDetail,
+                disputeOpenedAt,
+                shipmentRegisteredAt,
+                paymentEvidenceKind,
+                null,
+                createdAt,
+                history,
+                version);
+    }
+
+    /** 정식 생성자(수락 제안 포함). 영속성 어댑터가 사용한다. */
+    public Order(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            OrderStatus status,
+            PaymentMethod paymentMethod,
+            PhoneNumber buyerPhone,
+            DisputeReason disputeReason,
+            String disputeDetail,
+            Instant disputeOpenedAt,
+            Instant shipmentRegisteredAt,
+            PaymentEvidenceKind paymentEvidenceKind,
+            String offerId,
+            Instant createdAt,
+            List<OrderStatusChange> history,
+            Long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.listingId = Objects.requireNonNull(listingId, "listingId");
         this.buyerId = Objects.requireNonNull(buyerId, "buyerId");
@@ -191,6 +236,7 @@ public final class Order {
         this.disputeDetail = disputeDetail;
         this.disputeOpenedAt = disputeOpenedAt;
         this.shipmentRegisteredAt = shipmentRegisteredAt;
+        this.offerId = offerId;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.history = new ArrayList<>(history);
         this.version = version;
@@ -263,6 +309,27 @@ public final class Order {
             long amount,
             PhoneNumber buyerPhone,
             Instant now) {
+        return place(
+                id, listingId, buyerId, sellerId, catalogSetNumber, listingCondition, amount, buyerPhone, null, now);
+    }
+
+    /**
+     * 신규 주문(수락 제안 포함). 금액은 호출한 쪽이 {@code min(제안가, 매물가)}로 정해 넘긴다.
+     * (price-offer O17, O18)
+     *
+     * @param offerId 금액을 정한 수락 제안. 정가 주문이면 null
+     */
+    public static Order place(
+            String id,
+            String listingId,
+            String buyerId,
+            String sellerId,
+            String catalogSetNumber,
+            String listingCondition,
+            long amount,
+            PhoneNumber buyerPhone,
+            String offerId,
+            Instant now) {
         List<OrderStatusChange> history = new ArrayList<>();
         history.add(new OrderStatusChange(OrderStatus.PAYMENT_PENDING, now));
         return new Order(
@@ -279,6 +346,9 @@ public final class Order {
                 null,
                 null,
                 null,
+                null,
+                null,
+                offerId,
                 now,
                 history,
                 null);
@@ -465,6 +535,11 @@ public final class Order {
 
     public Instant getShipmentRegisteredAt() {
         return shipmentRegisteredAt;
+    }
+
+    /** 이 주문의 금액을 정한 수락 제안. 정가 주문이면 null. */
+    public String getOfferId() {
+        return offerId;
     }
 
     /** 마지막 상태 전이 시각. 파이프라인 타임아웃 판정의 기준이다. (R9) */

@@ -1,6 +1,6 @@
 package com.gole.api.chat.application.port.out;
 
-import com.gole.api.chat.application.port.out.SupportAssistantPort.Analysis;
+import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +15,7 @@ public interface SupportAssistantAnalysisRepositoryPort {
     Optional<Claim> tryClaim(String roomId, Instant startedAt, Instant leaseUntil, int maxAttempts);
 
     /** 같은 임대 토큰을 가진 실행자만 완료 상태를 기록할 수 있다. */
-    void complete(String roomId, String leaseToken, Analysis analysis, Instant completedAt);
+    void complete(String roomId, String leaseToken, SupportAssistantAnalysis analysis, Instant completedAt);
 
     /** 일시 실패를 다음 실행 시각과 함께 돌려놓는다. */
     void retry(String roomId, String leaseToken, Instant failedAt, Instant nextAttemptAt);
@@ -40,5 +40,5 @@ public interface SupportAssistantAnalysisRepositoryPort {
 
     record Claim(String roomId, String leaseToken, int attempt) {}
 
-    record StoredAnalysis(String roomId, Analysis analysis, Instant completedAt) {}
+    record StoredAnalysis(String roomId, SupportAssistantAnalysis analysis, Instant completedAt) {}
 }

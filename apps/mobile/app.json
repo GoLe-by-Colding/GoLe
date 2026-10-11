@@ -13,12 +13,16 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 찍을 때 카메라를 사용합니다.",
+        "NSPhotoLibraryUsageDescription": "판매 글과 커뮤니티 게시물에 올릴 브릭 사진을 고를 때 사진 보관함을 사용합니다."
       }
     },
     "android": {
       "package": "kr.gole.app",
       "adaptiveIcon": {
-        "backgroundColor": "#EFF3FF",
+        "backgroundColor": "#1D4ED8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -34,13 +38,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#EFF3FF",
+          "backgroundColor": "#1D4ED8",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }]
     ],
     "experiments": {
       "typedRoutes": true,

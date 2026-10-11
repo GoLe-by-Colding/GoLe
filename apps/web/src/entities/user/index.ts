@@ -17,7 +17,14 @@ export {
 export { saveSession, loadSession, clearSession } from "./model/session-store";
 export { clearAccountBrowserStorage } from "./model/account-browser-storage";
 export { useSession } from "./model/use-session";
+export { useDisplayNames, fallbackDisplayName } from "./model/use-display-names";
 export type { UseSessionResult } from "./model/use-session";
+export { useAdminAccess } from "./model/use-admin-access";
+export type {
+  AdminAccess,
+  UseAdminAccessOptions,
+  UseAdminAccessResult,
+} from "./model/use-admin-access";
 export {
   isThirdPartyProvisionConsentCancelledError,
   isThirdPartyProvisionConsentRequiredError,

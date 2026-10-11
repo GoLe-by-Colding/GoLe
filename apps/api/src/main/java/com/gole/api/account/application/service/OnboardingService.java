@@ -9,6 +9,7 @@ import com.gole.api.account.application.port.in.SetNicknameUseCase;
 import com.gole.api.account.application.port.in.SubmitOnboardingConsentUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.PasswordHasherPort;
+import com.gole.api.account.application.port.out.PhoneOtpSenderPort;
 import com.gole.api.account.application.port.out.PhoneVerificationStorePort;
 import com.gole.api.account.application.port.out.PhoneVerificationStorePort.PhoneVerificationChallenge;
 import com.gole.api.account.application.port.out.VerificationCodeGeneratorPort;
@@ -24,17 +25,12 @@ import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PhoneNumber;
 import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.notification.application.port.out.AlimtalkSendException;
-import com.gole.api.notification.application.port.out.AlimtalkSenderPort;
-import com.gole.api.notification.application.port.out.AlimtalkSenderPort.SendAlimtalkCommand;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
@@ -44,9 +40,8 @@ import org.springframework.stereotype.Service;
  * <p><b>각 단계는 성공하는 즉시 저장한다</b>(D1). 끝에서 한 번에 커밋하면 중간에 이탈한
  * 사용자가 다음 로그인 때 처음부터 다시 해야 하는데, 온보딩은 이탈률이 가장 높은 구간이다.
  *
- * <p>OTP 발송은 신규 포트를 만들지 않고 notification 컨텍스트의 {@link AlimtalkSenderPort}를
- * 그대로 호출한다(D3). 실제 CoolSMS 빈이나 로컬 전용 로깅 빈이 없는 구성도 부팅할 수 있도록
- * Optional로 주입한다. 공개 환경의 로깅 빈은 요청을 성공처럼 처리하지 않고 실패로 닫힌다.
+ * <p>OTP 발송은 {@link PhoneOtpSenderPort}로 한다(D3). 어댑터가 notification 의 알림톡 발송
+ * 유스케이스에 위임하며, 발송 경로가 없거나 접수가 거절되면 {@code false} 로 돌아온다.
  *
  * <p>OTP 저장 형태는 {@link PhoneVerificationCodeExposurePolicy}가 정한다 — 기본은 단방향 해시고,
  * 실제 발송이 없는 개발 환경에서 명시적으로 옵트인했을 때만 평문이다.
@@ -70,7 +65,7 @@ public class OnboardingService
     private final AccountRepositoryPort accountRepository;
     private final PhoneVerificationStorePort phoneVerifications;
     private final VerificationCodeGeneratorPort codeGenerator;
-    private final Optional<AlimtalkSenderPort> alimtalkSender;
+    private final PhoneOtpSenderPort codeSender;
     private final PasswordHasherPort passwordHasher;
     private final PhoneVerificationCodeExposurePolicy codeExposure;
     private final OnboardingProperties properties;
@@ -80,7 +75,7 @@ public class OnboardingService
             AccountRepositoryPort accountRepository,
             PhoneVerificationStorePort phoneVerifications,
             VerificationCodeGeneratorPort codeGenerator,
-            Optional<AlimtalkSenderPort> alimtalkSender,
+            PhoneOtpSenderPort codeSender,
             PasswordHasherPort passwordHasher,
             PhoneVerificationCodeExposurePolicy codeExposure,
             OnboardingProperties properties,
@@ -88,7 +83,7 @@ public class OnboardingService
         this.accountRepository = accountRepository;
         this.phoneVerifications = phoneVerifications;
         this.codeGenerator = codeGenerator;
-        this.alimtalkSender = alimtalkSender;
+        this.codeSender = codeSender;
         this.passwordHasher = passwordHasher;
         this.codeExposure = codeExposure;
         this.properties = properties;
@@ -230,16 +225,12 @@ public class OnboardingService
         // 개발 흐름을 재현하지만, staging/production에서는 요청을 실패로 닫는다. 승인된
         // 템플릿이 필요한 실제 어댑터의 요구는
         // CoolsmsAlimtalkAdapter.validate()가 이미 강제한다(빈 값이면 AlimtalkSendException).
-        if (alimtalkSender.isEmpty()) {
-            throw new PhoneVerificationUnavailableException();
-        }
-        String templateId = properties.phoneVerificationTemplateId();
-        try {
-            alimtalkSender
-                    .get()
-                    .send(new SendAlimtalkCommand(
-                            phoneNumber.value(), templateId, Map.of(properties.phoneVerificationCodeVariable(), code)));
-        } catch (AlimtalkSendException ex) {
+        boolean accepted = codeSender.send(
+                phoneNumber.value(),
+                properties.phoneVerificationTemplateId(),
+                properties.phoneVerificationCodeVariable(),
+                code);
+        if (!accepted) {
             // 접수 실패를 성공으로 넘기면 사용자는 오지 않는 코드를 기다린다. 코드를 저장하기
             // 전에 던져서 "재요청" 버튼이 곧바로 살아 있게 한다(쿨다운도 아직 걸리지 않았다).
             throw new PhoneVerificationUnavailableException();

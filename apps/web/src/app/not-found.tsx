@@ -4,7 +4,7 @@ export default function NotFound() {
   return (
     <main className="grid min-h-dvh place-items-center bg-neutral-50 px-6">
       <div className="flex flex-col items-center gap-6 text-center">
-        <Logo size={48} showWordmark={false} />
+        <Logo size={80} showWordmark={false} />
         <p className="text-7xl font-extrabold tracking-tight text-brand-600">404</p>
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-bold text-neutral-900">페이지를 찾을 수 없어요</h1>

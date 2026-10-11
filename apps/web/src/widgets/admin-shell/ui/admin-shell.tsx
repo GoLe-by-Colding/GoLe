@@ -4,8 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { fetchAdminOverview } from "@entities/admin";
-import { fetchMe, useSession } from "@entities/user";
-import { ApiError } from "@shared/api";
+import { useAdminAccess, useSession } from "@entities/user";
 import { cn } from "@shared/lib";
 import { Badge, Button, Container, Heading, LinkButton, Text } from "@shared/ui";
 
@@ -31,10 +30,27 @@ const NAV: readonly NavItem[] = [
   { href: "/admin/account-deletions", label: "탈퇴 검토" },
   { href: "/admin/catalog", label: "카탈로그" },
   { href: "/admin/design", label: "디자인 토큰" },
+  { href: "/admin/mascot", label: "마스코트" },
   { href: "/admin/operations", label: "운영 자동화" },
   { href: "/admin/integrations/tracker", label: "배송 연동" },
   { href: "/admin/audit", label: "감사 로그" },
 ];
+
+function isCurrent(item: NavItem, pathname: string): boolean {
+  return item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+}
+
+function subscribeNothing(): () => void {
+  return () => undefined;
+}
+
+function isClient(): boolean {
+  return true;
+}
+
+function isServer(): boolean {
+  return false;
+}
 
 function subscribeLocation(onChange: () => void): () => void {
   window.addEventListener("popstate", onChange);
@@ -50,15 +66,6 @@ function getServerLocationSearch(): string {
 }
 
 /**
- * 권한 판정 상태.
- *
- * `localStorage`의 role은 사용자가 직접 바꿀 수 있으므로 **판정 근거로 쓰지 않는다**.
- * 항상 서버(`GET /api/v1/accounts/me`)가 인증 토큰(HttpOnly 쿠키 또는 Bearer)으로
- * 확인해 준 결과만 신뢰하고, 확인 전·확인 실패는 모두 닫힌 쪽으로 떨어진다.
- */
-type Access = "checking" | "granted" | "unauthenticated" | "forbidden" | "error";
-
-/**
  * 운영자 콘솔 셸 — 권한 게이트 + 좌측 내비. (요구사항 1.3, 1.4, 2.1, 2.3)
  *
  * 별도 어드민 앱이 아니라 같은 사이트의 한 영역이므로 사이트 헤더/푸터 안에 들어간다.
@@ -67,59 +74,19 @@ type Access = "checking" | "granted" | "unauthenticated" | "forbidden" | "error"
 export function AdminShell({ children }: { readonly children: ReactNode }) {
   const { session } = useSession();
   const pathname = usePathname();
-  const accountId = session?.accountId ?? null;
   const token = session?.sessionToken ?? "";
-  // 확인 결과를 확인 대상(계정 + 토큰)과 함께 보관해, 세션이 바뀌면 즉시 무효가 되게 한다.
-  const identity = accountId === null ? null : JSON.stringify([accountId, token]);
-  const [verified, setVerified] = useState<{
-    readonly identity: string;
-    readonly access: Exclude<Access, "checking">;
-  } | null>(null);
+  // 권한은 로컬 role이 아니라 서버 확인으로만 판정한다(확인 전·실패는 닫힌 쪽).
+  const { access, retry } = useAdminAccess();
   const [pendingReports, setPendingReports] = useState(0);
   const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
+  // 좁은 화면 메뉴는 연 경로에서만 열려 있다 — 다른 화면으로 옮기면 저절로 접힌다.
+  const [menuOpenedAt, setMenuOpenedAt] = useState<string | null>(null);
   const search = useSyncExternalStore(
     subscribeLocation,
     getLocationSearch,
     getServerLocationSearch,
   );
-  const [verificationAttempt, setVerificationAttempt] = useState(0);
-
-  const access: Access =
-    identity === null
-      ? "unauthenticated"
-      : verified !== null && verified.identity === identity
-        ? verified.access
-        : "checking";
-
-  // 서버 권한 확인. 로컬 세션이 아예 없으면 요청 자체를 하지 않는다.
-  useEffect(() => {
-    if (identity === null) {
-      return;
-    }
-    let active = true;
-    const settle = (result: Exclude<Access, "checking">): void => {
-      if (active) {
-        setVerified({ identity, access: result });
-      }
-    };
-    void fetchMe(token)
-      .then((me) => settle(me.role === "ADMIN" ? "granted" : "forbidden"))
-      .catch((cause: unknown) => {
-        if (cause instanceof ApiError && cause.status === 401) {
-          settle("unauthenticated");
-          return;
-        }
-        if (cause instanceof ApiError && cause.status === 403) {
-          settle("forbidden");
-          return;
-        }
-        // 확인 자체가 실패하면 열어주지 않는다(fail closed).
-        settle("error");
-      });
-    return () => {
-      active = false;
-    };
-  }, [identity, token, verificationAttempt]);
+  const hydrated = useSyncExternalStore(subscribeNothing, isClient, isServer);
 
   // 운영 데이터는 서버 확인이 끝난 뒤에만 요청한다.
   useEffect(() => {
@@ -143,7 +110,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   // 확인 중에도 콘솔과 같은 골격(폭·제목 줄·240px 사이드바 그리드)을 유지한다.
   // 좁은 안내 카드로 떨어뜨리면 확인이 끝나는 순간 640px에서 1280px로 벌어지며
   // 화면 전체가 한 번 출렁인다. 메뉴 항목은 아직 노출하지 않는다.
-  if (access === "checking") {
+  // 서버는 세션(localStorage)을 모르므로 하이드레이션 전에는 "비로그인"으로 판정된다. 그대로 그리면
+  // 관리자에게도 첫 HTML 에 "관리자 로그인이 필요합니다"가 잠깐 떴다가 바뀐다 — 그 사이도 확인 중으로 본다.
+  if (!hydrated || access === "checking") {
     return (
       <ConsoleFrame badge={<Badge tone="neutral">확인 중</Badge>} nav={null}>
         <div className="flex min-h-[320px] items-center justify-center p-6" aria-busy="true">
@@ -185,14 +154,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           일시적인 네트워크 오류입니다. 로그인 상태는 유지되며 다시 확인할 수 있습니다.
         </Text>
         <div className="flex flex-wrap justify-center gap-3">
-          <Button
-            onClick={() => {
-              setVerified(null);
-              setVerificationAttempt((attempt) => attempt + 1);
-            }}
-          >
-            다시 시도
-          </Button>
+          <Button onClick={retry}>다시 시도</Button>
           <LinkButton href="/" variant="secondary">
             홈으로
           </LinkButton>
@@ -200,6 +162,10 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
       </GateFrame>
     );
   }
+
+  const currentItem = NAV.find((item) => isCurrent(item, pathname));
+  const menuOpen = menuOpenedAt === pathname;
+  const pendingTotal = pendingReports + unassignedSupportTickets;
 
   return (
     <ConsoleFrame
@@ -209,10 +175,45 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           aria-label="운영자 메뉴"
           className="border-b border-neutral-200/70 bg-white p-3 sm:p-4 lg:border-r lg:border-b-0"
         >
-          <ul className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col">
+          {/* 메뉴가 19개라 lg 미만에서 격자로 펼치면 본문이 첫 화면 아래(320px에서 y≈670)로 밀린다.
+              좁은 화면에서는 지금 화면 이름만 보이는 버튼으로 접고, 누르면 같은 격자를 연다. */}
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls="admin-menu-list"
+            onClick={() => setMenuOpenedAt(menuOpen ? null : pathname)}
+            className="flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-surface-raised px-3 text-sm font-semibold text-neutral-900 lg:hidden"
+          >
+            <span className="min-w-0 truncate">메뉴 · {currentItem?.label ?? "대시보드"}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              {pendingTotal > 0 ? <Badge tone="warning">{pendingTotal}</Badge> : null}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+                className={cn(
+                  "transition-transform motion-reduce:transition-none",
+                  menuOpen && "rotate-180",
+                )}
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
+          </button>
+          <ul
+            id="admin-menu-list"
+            className={cn(
+              "grid grid-cols-2 gap-2 max-lg:mt-3 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col",
+              !menuOpen && "max-lg:hidden",
+            )}
+          >
             {NAV.map((item) => {
-              const active =
-                item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+              const active = isCurrent(item, pathname);
               return (
                 <li key={item.href}>
                   <AdminNavigationItem href={item.href} label={item.label} active={active}>
@@ -256,7 +257,9 @@ function ConsoleFrame({
           {badge}
         </div>
 
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_minmax(0,1fr)]">
+        {/* overflow-clip: 둥근 모서리는 자르되 스크롤 컨테이너를 만들지 않는다. overflow-hidden 이면
+            이 격자가 sticky 의 기준이 되어 사이드바·마스코트 미리보기가 붙지 않고 위에 빈 칸이 생긴다. */}
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-clip rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_minmax(0,1fr)]">
           {nav ?? (
             <div
               aria-hidden="true"

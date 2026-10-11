@@ -12,8 +12,6 @@ import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
-import com.gole.api.media.domain.exception.ObjectStorageUnavailableException;
-import com.gole.api.order.application.port.out.PaymentGatewayUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Map;
@@ -118,30 +116,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleServiceUnavailable(ServiceUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
-    }
-
-    @ExceptionHandler(PaymentGatewayUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handlePaymentGatewayUnavailable(
-            PaymentGatewayUnavailableException ex, HttpServletRequest request) {
-        log.warn("결제 검증 일시 장애 path={}", request.getRequestURI(), ex);
-        operationalEventPublisher.publish(new OperationalEvent(
-                Category.PAYMENT,
-                Level.ERROR,
-                "결제 검증 일시 장애",
-                "PG 결제 상태를 확인하지 못해 주문 상태를 보존하고 재시도를 요청했습니다.",
-                Map.of("요청 경로", request.getRequestURI()),
-                Instant.now()));
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ErrorResponse("PAYMENT_GATEWAY_UNAVAILABLE", "결제 상태 확인이 지연되고 있습니다. 잠시 후 다시 시도해 주세요."));
-    }
-
-    @ExceptionHandler(ObjectStorageUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleObjectStorageUnavailable(
-            ObjectStorageUnavailableException ex, HttpServletRequest request) {
-        String errorReference = publishDependencyFailure("미디어 저장소 연결 장애", ex, request);
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ErrorResponse(
-                        "MEDIA_STORAGE_UNAVAILABLE", "이미지 저장소 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요. 참조: " + errorReference));
     }
 
     @ExceptionHandler(UncategorizedMongoDbException.class)
@@ -264,22 +238,6 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("INTERNAL_SERVER_ERROR", "일시적인 오류가 발생했습니다. 참조: " + errorReference));
     }
 
-    private String publishDependencyFailure(String title, Exception ex, HttpServletRequest request) {
-        String errorReference = UUID.randomUUID().toString();
-        log.error("[{}] {} path={}", errorReference, title, request.getRequestURI(), ex);
-        operationalEventPublisher.publish(new OperationalEvent(
-                Category.APPLICATION,
-                Level.ERROR,
-                title,
-                "외부 인프라 연결 실패를 감지했습니다. 서버 로그에서 원인을 확인하고 연결 상태를 복구하세요.",
-                Map.of(
-                        "오류 참조", errorReference,
-                        "요청 경로", request.getRequestURI(),
-                        "예외 종류", ex.getClass().getSimpleName()),
-                Instant.now()));
-        return errorReference;
-    }
-
     private static ResponseEntity<?> clientError(HttpStatus status, ErrorResponse error, HttpServletRequest request) {
         String accept = request.getHeader(HttpHeaders.ACCEPT);
         if (accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE)) {
@@ -292,5 +250,9 @@ public class GlobalExceptionHandler {
                     .body("event: error\ndata: " + error.code() + "\n\n");
         }
         return ResponseEntity.status(status).body(error);
+    }
+
+    private String publishDependencyFailure(String title, Exception ex, HttpServletRequest request) {
+        return DependencyFailures.publish(operationalEventPublisher, log, title, ex, request);
     }
 }

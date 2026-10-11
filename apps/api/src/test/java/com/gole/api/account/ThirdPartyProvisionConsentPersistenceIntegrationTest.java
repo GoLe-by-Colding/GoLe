@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.account.adapter.out.persistence.ThirdPartyProvisionConsentMongoRepository;
+import com.gole.api.account.application.port.in.ManageThirdPartyProvisionConsentUseCase;
 import com.gole.api.account.application.port.out.ThirdPartyProvisionConsentRepositoryPort;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.Decision;
 import com.gole.api.account.domain.model.ThirdPartyProvisionConsentEvent.SourcePath;
@@ -46,7 +46,7 @@ class ThirdPartyProvisionConsentPersistenceIntegrationTest {
     }
 
     @Autowired
-    ThirdPartyProvisionConsentService consents;
+    ManageThirdPartyProvisionConsentUseCase consents;
 
     @Autowired
     ThirdPartyProvisionConsentRepositoryPort events;

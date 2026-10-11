@@ -50,7 +50,8 @@ public class ListingReservationAdapter implements ListingReservationPort {
         return new ReservedListing(
                 listing.getId(),
                 listing.getSellerId(),
-                listing.getCatalogSetNumber(),
+                // 완료 주문은 이 세트의 체결가가 된다 — 세트 한 벌 거래만 넘긴다(미니피규어·부품은 null).
+                listing.wholeSetNumber(),
                 listing.getPrice().amount(),
                 listing.getCondition().name().toLowerCase());
     }

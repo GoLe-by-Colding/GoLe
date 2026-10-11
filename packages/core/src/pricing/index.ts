@@ -20,6 +20,15 @@ export {
 } from "./model/types";
 export { filterPricePointsByPeriod } from "./model/period";
 export {
+  listingPriceGap,
+  priceComparableSetNumber,
+  priceGapBasisCaption,
+  priceGapLabel,
+  sameGradeEstimate,
+  SIMILAR_PRICE_RATIO,
+} from "./model/price-gap";
+export type { ListingPriceGap, PriceComparableListing, SameGradeEstimate } from "./model/price-gap";
+export {
   fetchPriceStatistics,
   fetchPriceStatisticsForPage,
   fetchPriceSnapshot,

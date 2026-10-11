@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
 import { registerDeviceToken } from "@gole/core/notification";
 import { getDevicePushToken } from "../lib/device-push-token";
 import { notificationRoute } from "@/shared/lib";
@@ -12,6 +12,8 @@ import { notificationRoute } from "@/shared/lib";
  */
 export function usePushRegistration(isSignedIn: boolean): void {
   const router = useRouter();
+  const navigationKey = useRootNavigationState()?.key;
+  const lastHandled = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -37,17 +39,27 @@ export function usePushRegistration(isSignedIn: boolean): void {
   }, [isSignedIn]);
 
   useEffect(() => {
+    if (!navigationKey) return;
     // 백엔드가 link를 data 페이로드로 싣는다. notification이 아니라 data여야
     // 포그라운드·백그라운드 어느 상태에서 받아도 같은 값을 읽을 수 있다.
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+      const identifier = `${response.notification.request.identifier}:${response.notification.date}`;
+      if (lastHandled.current === identifier) return;
       const link = notificationRoute(notificationLink(response));
       if (link !== null) {
         // 앱 내부 경로만 따른다. 외부 URL을 그대로 열면 푸시가 피싱 통로가 된다.
         router.push(link as Parameters<typeof router.push>[0]);
       }
-    });
+      lastHandled.current = identifier;
+      Notifications.clearLastNotificationResponse();
+    };
+    const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    // 앱이 종료된 상태에서 누른 알림은 listener 등록 이전에 도착하므로 별도로 읽는다.
+    const initialResponse = Notifications.getLastNotificationResponse();
+    if (initialResponse !== null) handleResponse(initialResponse);
     return () => subscription.remove();
-  }, [router]);
+  }, [navigationKey, router]);
 }
 
 /**

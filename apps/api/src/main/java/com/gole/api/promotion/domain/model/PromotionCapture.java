@@ -25,7 +25,7 @@ public record PromotionCapture(
         String edit) {
 
     private static final int MAX_TEXT = 300;
-    private static final int MAX_EDIT = 1000;
+    private static final int MAX_EDIT = 6000;
 
     public PromotionCapture {
         label = requireText(label, "label");

@@ -27,6 +27,7 @@ import com.gole.api.account.domain.exception.EmailAlreadyRegisteredException;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import com.gole.api.common.exception.UnauthorizedException;
 import com.gole.api.common.web.ClientAddressResolver;
+import com.gole.api.common.web.auth.SessionCookie;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;

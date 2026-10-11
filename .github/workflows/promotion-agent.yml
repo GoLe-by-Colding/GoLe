@@ -35,6 +35,8 @@ permissions:
   contents: read
   # 지난 실행의 캡처 아티팩트를 받는다.
   actions: read
+  # 데모 스택의 MinIO·mc 이미지(비공개 GHCR)를 받는다.
+  packages: read
 
 concurrency:
   group: promotion-agent
@@ -56,6 +58,9 @@ jobs:
       # 입력은 ${{ }} 로 run 에 직접 넣지 않는다 — 셸 명령 치환 경로가 된다. 환경변수로만 읽는다.
       SHA: ${{ github.event.workflow_run.head_sha || inputs.sha }}
       SERVICE: ${{ github.event_name == 'schedule' || inputs.service }}
+      # MinIO 공식 이미지가 공개 레지스트리에서 사라져 ci.yml E2E 와 같은 소스 빌드 GHCR 이미지를 쓴다.
+      GOLE_MINIO_IMAGE: ghcr.io/gole-by-colding/minio:RELEASE.2025-09-07T16-13-09Z@sha256:fd4bf518becea030ae14e629d74ac3c41182c548689c3896937b72439d2d1ef8
+      GOLE_MC_IMAGE: ghcr.io/gole-by-colding/mc:RELEASE.2025-08-13T08-35-41Z@sha256:47a390e3b5f38ad99c025f1f956b04344feee74f802673f9379452b6e617b69f
     steps:
       # 비싼 스택 기동 전에 입력부터 막는다. 서비스 홍보는 지금 main 화면을 찍는다.
       - name: Validate input
@@ -114,6 +119,26 @@ jobs:
             rm -rf "$dest"
             echo "받을 캡처가 없다 — 스택을 띄워 찍는다"
           fi
+
+      # 인증·패키지 접근 실패는 설치와 빌드 비용을 쓰기 전에 확인한다.
+      - name: Check capture image access
+        if: env.REUSE != 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          if ! printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+            echo "::error::PROMOTION_REGISTRY_LOGIN_FAILED: GHCR 로그인 실패"
+            echo "이미지 사전 확인 실패: PROMOTION_REGISTRY_LOGIN_FAILED" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          for image in "$GOLE_MINIO_IMAGE" "$GOLE_MC_IMAGE"; do
+            if ! docker pull "$image"; then
+              echo "::error::PROMOTION_IMAGE_PULL_FAILED: $image — 패키지의 GoLe Actions 읽기 권한과 digest를 확인한다"
+              echo "이미지 사전 확인 실패: PROMOTION_IMAGE_PULL_FAILED — 실패한 이미지와 원인은 해당 단계 로그에서 확인한다." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
 
       # 에이전트 코드는 dispatch 한 ref(최신)를 쓰고, 찍는 화면은 대상 릴리스로 고정한다.
       # 둘을 같은 체크아웃으로 쓰면 A 릴리스 diff 와 B 릴리스 화면이 섞인다.

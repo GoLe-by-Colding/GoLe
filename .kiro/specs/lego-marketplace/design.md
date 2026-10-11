@@ -67,6 +67,18 @@ com.gole.api.<context>/
   - 불변식: 사진 1장 이상 필수(`MissingPhotoException`), `RESERVED` 삭제 거부, `DELETED` 판매 거부, 가격 양수.
   - 값객체 `Money`, `ConditionDisclosure`(완전성/박스/설명서/누락·하자), enum `ItemCondition`, `Completeness`.
 - 검색: `ListingSearchQuery`(query/condition/minPrice/maxPrice/`ListingSortOrder`).
+  - 키워드는 제목·설명 부분 일치(대소문자 무시)다. 키워드가 세트 번호 형태(`75192`·`#75192`·브릭링크식 `10307-1`)면
+    기본 번호로 바꿔 글자를 찾고 카탈로그 세트 번호(`^번호(-\d+)?$`)도 함께 본다(2026-10-09). 판매자가 번호를 전용 칸에만
+    넣고 제목에 쓰지 않아도 번호로 찾혀야 한다. 번호 일부(`1030`)는 세트 번호 칸과 맞춰 보지 않는다.
+  - 키워드가 관심 테마 이름(`InterestTag` 라벨·키 — "스타워즈"·"Star Wars"·"star-wars", 대소문자·띄어쓰기·하이픈 무시)이면 그 관심
+    테마를 단 매물도 찾는다(2026-10-09). 카탈로그 테마는 영어라 한국어 테마 검색이 0건이었다. 이름의 일부("스타")는 테마로 보지 않는다.
+  - 그 테마의 **카탈로그 세트로 판 매물**도 찾는다(2026-10-10). 판매자 대부분이 관심 테마를 달지 않아서다. listing은 자기 아웃바운드
+    포트 `CatalogThemeSetsPort`를 catalog 인바운드 포트 `FindThemeSetNumbersUseCase`로 위임하는 어댑터로 구현한다(표준 연동 방식).
+    - 관심 테마 키(`star-wars`)의 낱말을 차례로 담은 카탈로그 테마를 찾는다 — 대소문자·띄어쓰기·하이픈·밑줄 무시, 이름 일부 일치
+      ("super-heroes" → "Marvel Super Heroes"). 별도 매핑 표를 두지 않는다.
+    - 한 테마에서 세트 번호를 최대 300개까지 받아 `catalogSetNumber` `^(번호|…)(-\d+)?$`로 OR 조건에 더한다(변형 번호 포함).
+    - 카테고리는 가리지 않는다 — 그 세트에서 나온 미니피규어·부품도 같은 테마다.
+    - 카탈로그를 읽지 못하면 관심 테마·글자 검색만으로 계속한다(검색을 실패시키지 않는다).
 - 인바운드 포트: Create/Get/Search/Browse/MarkSold/Delete/**Reserve/Release**(order 연동용).
 
 #### order (안전거래/에스크로)
@@ -113,7 +125,7 @@ com.gole.api.<context>/
 
 | 컬렉션 | 키 필드 | 비고 |
 |---|---|---|
-| `accounts` | `_id`(UUID), `email`(unique idx), status, role, passwordHash, verificationCode, failedAttempts, lockedUntil | 인증/잠금 상태 |
+| `accounts` | `_id`(UUID), `email`(unique idx), status, role, passwordHash, verificationCodeHash, verificationCodeIssuedAt, failedAttempts, lockedUntil | 인증/잠금 상태. 인증 코드는 원문 대신 hash와 발급 시각을 둘 다 둔다 — 한쪽만 남은 문서는 "발급된 코드 없음"으로 읽는다(조회가 500으로 죽지 않게, 2026-10-10) |
 | `lego_sets` | `_id`=setNumber, name, theme, pieceCount, releaseYear, retirementStatus, imageUrl, featured | 카탈로그 |
 | `listings` | `_id`, sellerId(idx), title, description, price, condition, disclosure{...}, photoUrls[], catalogSetNumber, status(idx), createdAt | 매물 |
 | `orders` | `_id`, listingId, buyerId, sellerId, catalogSetNumber, amount, status, history[], `@Version` | 안전거래 |

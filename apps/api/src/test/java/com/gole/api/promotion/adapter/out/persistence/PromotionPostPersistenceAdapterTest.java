@@ -22,11 +22,13 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.mongodb.core.MongoTemplate;
 
 class PromotionPostPersistenceAdapterTest {
 
     private final PromotionPostMongoRepository repository = mock(PromotionPostMongoRepository.class);
-    private final PromotionPostPersistenceAdapter adapter = new PromotionPostPersistenceAdapter(repository);
+    private final PromotionPostPersistenceAdapter adapter =
+            new PromotionPostPersistenceAdapter(repository, mock(MongoTemplate.class));
 
     @Test
     @DisplayName("발행 목록은 발행 시각 순으로 자른다 — 최신 발행이 limit 밖으로 밀리지 않게")

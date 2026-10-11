@@ -3,6 +3,7 @@ package com.gole.api.account.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.gole.api.account.adapter.out.id.ObjectIdConsentEventIdGeneratorAdapter;
 import com.gole.api.account.application.port.out.ThirdPartyProvisionConsentRepositoryPort;
 import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
@@ -33,7 +34,10 @@ class ThirdPartyProvisionConsentServiceTest {
     void setUp() {
         events = new InMemoryConsentEvents();
         service = new ThirdPartyProvisionConsentService(
-                events, new SignupPolicyProperties(), Clock.fixed(now, ZoneOffset.UTC));
+                events,
+                new SignupPolicyProperties(),
+                new ObjectIdConsentEventIdGeneratorAdapter(),
+                Clock.fixed(now, ZoneOffset.UTC));
     }
 
     @Test

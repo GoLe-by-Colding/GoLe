@@ -1,11 +1,12 @@
 package com.gole.api.admin.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.SessionCookie;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase;
 import com.gole.api.account.application.port.in.GetCurrentSessionUseCase.CurrentSession;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.UnauthorizedException;
+import com.gole.api.common.web.auth.AdminActor;
+import com.gole.api.common.web.auth.SessionCookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -18,15 +19,16 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 관리자 가드. {@code /api/admin/**} 요청에 대해 Authorization: Bearer 토큰을 Redis 세션으로 해석하고
  * ADMIN 권한일 때만 통과시킨다. 그 외에는 401/403. 해석된 계정 id는 요청 속성으로 전달한다.
  *
- * <p>관리자 컨텍스트의 인바운드 어댑터로서 계정 컨텍스트의 인바운드 포트(세션 해석)에만 의존한다.
+ * <p>관리자 컨텍스트의 인바운드 어댑터로서 계정 컨텍스트의 인바운드 포트(세션 해석)와 그 도메인 타입({@code Role})에만
+ * 의존한다. 세션 쿠키 해석과 조치자 전달 타입은 common 의 공통 웹 인증({@code common.web.auth})을 쓴다.
  */
 @Component
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(AdminAuthInterceptor.class);
 
-    public static final String ATTR_ACCOUNT_ID = "gole.admin.accountId";
-    public static final String ATTR_ACCOUNT_EMAIL = "gole.admin.accountEmail";
+    public static final String ATTR_ACCOUNT_ID = AdminActor.ATTR_ACCOUNT_ID;
+    public static final String ATTR_ACCOUNT_EMAIL = AdminActor.ATTR_ACCOUNT_EMAIL;
 
     private final GetCurrentSessionUseCase getCurrentSession;
     private final SessionCookie sessionCookie;

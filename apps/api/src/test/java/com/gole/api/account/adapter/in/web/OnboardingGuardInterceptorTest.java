@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.gole.api.account.application.port.in.GetOnboardingStatusUseCase;
 import com.gole.api.account.application.port.in.GetOnboardingStatusUseCase.OnboardingStatus;
 import com.gole.api.account.domain.exception.OnboardingRequiredException;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import java.lang.reflect.Method;
 import java.util.List;
 import org.junit.jupiter.api.Test;

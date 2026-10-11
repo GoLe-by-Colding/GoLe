@@ -114,7 +114,15 @@ for (const a of accounts) {
         // 주는 실제 값과 같은 의미로, "이 계정은 온보딩 단계 없이도 늘 통과한다"이다.
         legacyExempt: true,
       },
-      \$unset: { verificationCode: "", verificationCodeIssuedAt: "", lockedUntil: "", suspendedReason: "" },
+      // 인증 코드는 hash·발급 시각을 함께 지운다. 한쪽만 남으면 계정 조회가 반쪽 상태를 만난다
+      // (옛 원문 필드 verificationCode 도 남아 있을 수 있어 같이 지운다).
+      \$unset: {
+        verificationCode: "",
+        verificationCodeHash: "",
+        verificationCodeIssuedAt: "",
+        lockedUntil: "",
+        suspendedReason: "",
+      },
     },
     { upsert: true },
   );

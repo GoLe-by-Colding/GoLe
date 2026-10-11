@@ -1,6 +1,6 @@
 package com.gole.api.discovery.application.port.in;
 
-import com.gole.api.listing.domain.model.Listing;
+import com.gole.api.discovery.domain.model.DiscoveredListing;
 import java.util.List;
 
 /**
@@ -8,5 +8,5 @@ import java.util.List;
  */
 public interface GetPersonalizedFeedUseCase {
 
-    List<Listing> feed(String userId, int limit);
+    List<DiscoveredListing> feed(String userId, int limit);
 }

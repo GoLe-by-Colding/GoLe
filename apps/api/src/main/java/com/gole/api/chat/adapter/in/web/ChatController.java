@@ -1,23 +1,14 @@
 package com.gole.api.chat.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
-import com.gole.api.account.adapter.in.web.RequiresOnboarding;
-import com.gole.api.account.application.service.SellerIdentityVerificationService;
-import com.gole.api.account.application.service.ThirdPartyProvisionConsentService;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomDocument;
-import com.gole.api.chat.adapter.out.persistence.ChatRoomMongoRepository;
-import com.gole.api.chat.application.ChatMessagingService;
-import com.gole.api.chat.application.ChatReadService;
-import com.gole.api.chat.application.DirectTradeService;
-import com.gole.api.chat.application.SocialChatService;
-import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
+import com.gole.api.chat.application.port.in.ChatMessagingUseCase;
+import com.gole.api.chat.application.port.in.ChatReadStateUseCase;
+import com.gole.api.chat.application.port.in.DirectTradeUseCase;
+import com.gole.api.chat.application.port.in.ListingChatRoomUseCase;
+import com.gole.api.chat.application.port.in.SocialChatUseCase;
 import com.gole.api.chat.domain.model.ChatMessage;
-import com.gole.api.chat.domain.model.ChatRoomType;
-import com.gole.api.chat.domain.model.SocialChatRoom;
-import com.gole.api.chat.domain.model.SupportTicket;
-import com.gole.api.common.exception.ForbiddenException;
-import com.gole.api.common.exception.NotFoundException;
-import com.gole.api.listing.application.port.in.GetListingUseCase;
+import com.gole.api.chat.domain.model.ChatRoom;
+import com.gole.api.common.web.auth.AuthenticatedUser;
+import com.gole.api.common.web.auth.RequiresOnboarding;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,13 +19,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -65,41 +54,29 @@ public class ChatController {
     private static final int REPLAY_BATCH_SIZE = 200;
     private static final int MAX_REPLAY_MESSAGES_PER_CONNECTION = 5_000;
 
-    private final ChatRoomMongoRepository roomRepo;
+    private final ListingChatRoomUseCase rooms;
+    private final SocialChatUseCase socialChats;
+    private final ChatMessagingUseCase messaging;
+    private final ChatReadStateUseCase reads;
+    private final DirectTradeUseCase directTrades;
     private final RedisMessageListenerContainer listenerContainer;
-    private final GetListingUseCase getListingUseCase;
     private final ObjectMapper objectMapper;
-    private final DirectTradeService directTrades;
-    private final SocialChatService socialChats;
-    private final ChatMessagingService messaging;
-    private final ChatReadService reads;
-    private final SupportTicketRepositoryPort supportTickets;
-    private final ThirdPartyProvisionConsentService thirdPartyProvisionConsents;
-    private final SellerIdentityVerificationService sellerIdentityVerification;
 
     public ChatController(
-            ChatRoomMongoRepository roomRepo,
+            ListingChatRoomUseCase rooms,
+            SocialChatUseCase socialChats,
+            ChatMessagingUseCase messaging,
+            ChatReadStateUseCase reads,
+            DirectTradeUseCase directTrades,
             RedisMessageListenerContainer listenerContainer,
-            GetListingUseCase getListingUseCase,
-            ObjectMapper objectMapper,
-            DirectTradeService directTrades,
-            SocialChatService socialChats,
-            ChatMessagingService messaging,
-            ChatReadService reads,
-            SupportTicketRepositoryPort supportTickets,
-            ThirdPartyProvisionConsentService thirdPartyProvisionConsents,
-            SellerIdentityVerificationService sellerIdentityVerification) {
-        this.roomRepo = roomRepo;
-        this.listenerContainer = listenerContainer;
-        this.getListingUseCase = getListingUseCase;
-        this.objectMapper = objectMapper;
-        this.directTrades = directTrades;
+            ObjectMapper objectMapper) {
+        this.rooms = rooms;
         this.socialChats = socialChats;
         this.messaging = messaging;
         this.reads = reads;
-        this.supportTickets = supportTickets;
-        this.thirdPartyProvisionConsents = thirdPartyProvisionConsents;
-        this.sellerIdentityVerification = sellerIdentityVerification;
+        this.directTrades = directTrades;
+        this.listenerContainer = listenerContainer;
+        this.objectMapper = objectMapper;
     }
 
     @Operation(summary = "채팅방 생성 또는 조회", description = "listingId 기반 구매자↔판매자 1:1 채팅방. 이미 존재하면 기존 방을 반환합니다(멱등).")
@@ -107,40 +84,12 @@ public class ChatController {
     @RequiresOnboarding // onboarding D5, R9
     @ResponseStatus(HttpStatus.OK)
     public RoomResponse createOrGetRoom(@Valid @RequestBody CreateRoomRequest req, HttpServletRequest http) {
-        String buyerId = AuthenticatedUser.id(http);
-        String sellerId = getListingUseCase.getById(req.listingId()).getSellerId();
-        if (buyerId.equals(sellerId)) {
-            throw new ForbiddenException("CHAT_SELF_ROOM_NOT_ALLOWED", "자신의 매물에는 채팅을 시작할 수 없습니다");
-        }
-        socialChats.requireCanStartPrivateConversation(buyerId, sellerId);
-        var existing = roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId());
-        if (existing.isPresent()) {
-            // 철회 뒤에도 이미 참여 중인 방과 과거 대화는 계속 열 수 있다.
-            return RoomResponse.from(existing.get());
-        }
-        // 기존 방 재진입은 유지하되, 새 거래 연결은 대상 판매자의 실제 전화번호 인증과
-        // 운영 준비 래치를 모두 통과해야 한다. 구매자의 인증 상태로 대신 판단하지 않는다.
-        sellerIdentityVerification.requireVerifiedSeller(sellerId);
-        thirdPartyProvisionConsents.requireCurrent(buyerId);
-        thirdPartyProvisionConsents.requireCurrentSubject(sellerId);
-        // 삭제 전 만들어진 거래방은 이력 보존을 위해 계속 반환하되,
-        // 공개되지 않는 매물에 새 방을 만드는 것은 막는다.
-        getListingUseCase.getPublicById(req.listingId());
-        ChatRoomDocument doc =
-                new ChatRoomDocument(UUID.randomUUID().toString(), req.listingId(), buyerId, sellerId, Instant.now());
-        try {
-            return RoomResponse.from(roomRepo.save(doc));
-        } catch (DuplicateKeyException concurrentCreation) {
-            return roomRepo.findByBuyerIdAndSellerIdAndListingId(buyerId, sellerId, req.listingId())
-                    .map(RoomResponse::from)
-                    .orElseThrow(() -> concurrentCreation);
-        }
+        return RoomResponse.from(rooms.open(AuthenticatedUser.id(http), req.listingId()));
     }
 
     @GetMapping("/rooms")
     public List<RoomResponse> myRooms(HttpServletRequest http) {
-        String actorId = AuthenticatedUser.id(http);
-        return roomRepo.findTop100ByBuyerIdOrSellerIdOrderByLastMessageAtDesc(actorId, actorId).stream()
+        return rooms.myRooms(AuthenticatedUser.id(http)).stream()
                 .map(RoomResponse::from)
                 .toList();
     }
@@ -148,16 +97,12 @@ public class ChatController {
     @Operation(summary = "읽을 수 있는 채팅방 단건 조회", description = "알림 딥링크가 최근 100개 밖의 방도 안전하게 열 수 있도록 멤버십을 다시 검사합니다.")
     @GetMapping("/rooms/{roomId}")
     public ResolvedRoomResponse room(@PathVariable String roomId, HttpServletRequest http) {
-        SocialChatRoom readable = socialChats.requireReadable(roomId, AuthenticatedUser.id(http));
-        if (readable.type() == ChatRoomType.LISTING) {
-            ChatRoomDocument listingRoom = roomRepo.findById(roomId)
-                    .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
-            return ResolvedRoomResponse.listing(RoomResponse.from(listingRoom));
+        var resolved = rooms.resolve(roomId, AuthenticatedUser.id(http));
+        if (resolved.isListing()) {
+            return ResolvedRoomResponse.listing(RoomResponse.from(resolved.listingRoom()));
         }
-        SupportTicket ticket = readable.type() == ChatRoomType.SUPPORT
-                ? supportTickets.findByRoomId(roomId).orElse(null)
-                : null;
-        return ResolvedRoomResponse.social(SocialChatController.SocialRoomResponse.from(readable, ticket));
+        return ResolvedRoomResponse.social(
+                SocialChatController.SocialRoomResponse.from(resolved.socialRoom(), resolved.supportTicket()));
     }
 
     @GetMapping("/unread-counts")
@@ -187,32 +132,19 @@ public class ChatController {
     @Operation(summary = "직거래 완료 확인", description = "구매자와 판매자가 각각 확인하면 매물을 판매 완료로 전환합니다.")
     @PostMapping("/rooms/{roomId}/direct-trade/confirmation")
     public RoomResponse confirmDirectTrade(@PathVariable String roomId, HttpServletRequest http) {
-        String actorId = AuthenticatedUser.id(http);
-        SocialChatRoom room = socialChats.requireReadable(roomId, actorId);
-        room.requireDirectTradeAllowed();
-        ChatRoomDocument listingRoom = roomRepo.findById(roomId)
-                .orElseThrow(() -> new NotFoundException("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다"));
-        sellerIdentityVerification.requireVerifiedSeller(listingRoom.getSellerId());
-        return RoomResponse.from(directTrades.confirm(roomId, actorId));
+        return RoomResponse.from(directTrades.confirm(roomId, AuthenticatedUser.id(http)));
     }
 
     @DeleteMapping("/rooms/{roomId}/direct-trade/confirmation")
     public RoomResponse cancelDirectTradeConfirmation(@PathVariable String roomId, HttpServletRequest http) {
-        String actorId = AuthenticatedUser.id(http);
-        socialChats.requireReadable(roomId, actorId).requireDirectTradeAllowed();
-        return RoomResponse.from(directTrades.cancelConfirmation(roomId, actorId));
+        return RoomResponse.from(directTrades.cancelConfirmation(roomId, AuthenticatedUser.id(http)));
     }
 
     @PostMapping("/rooms/{roomId}/messages")
     @ResponseStatus(HttpStatus.CREATED)
     public MessageResponse sendMessage(
             @PathVariable String roomId, @Valid @RequestBody SendMessageRequest req, HttpServletRequest http) {
-        String actorId = AuthenticatedUser.id(http);
-        SocialChatRoom room = socialChats.requireReadable(roomId, actorId);
-        if (room.type() != ChatRoomType.SUPPORT) {
-            thirdPartyProvisionConsents.requireCurrent(actorId);
-        }
-        return MessageResponse.from(messaging.send(roomId, actorId, req.content()));
+        return MessageResponse.from(messaging.sendFromUser(roomId, AuthenticatedUser.id(http), req.content()));
     }
 
     @Operation(
@@ -340,17 +272,17 @@ public class ChatController {
             String sellerConfirmedAt,
             String directTradeCompletedAt) {
 
-        public static RoomResponse from(ChatRoomDocument d) {
+        public static RoomResponse from(ChatRoom room) {
             return new RoomResponse(
-                    d.getId(),
-                    d.getListingId(),
-                    d.getBuyerId(),
-                    d.getSellerId(),
-                    d.getCreatedAt().toString(),
-                    d.getLastMessageAt().toString(),
-                    instant(d.getBuyerConfirmedAt()),
-                    instant(d.getSellerConfirmedAt()),
-                    instant(d.getDirectTradeCompletedAt()));
+                    room.id(),
+                    room.listingId(),
+                    room.buyerId(),
+                    room.sellerId(),
+                    room.createdAt().toString(),
+                    room.lastMessageAt().toString(),
+                    instant(room.buyerConfirmedAt()),
+                    instant(room.sellerConfirmedAt()),
+                    instant(room.directTradeCompletedAt()));
         }
 
         private static String instant(Instant value) {

@@ -49,6 +49,59 @@ export function createListing(input: CreateListingInput): Promise<Listing> {
   });
 }
 
+/**
+ * 매물 수정 본문. 등록과 같은 검증을 받지만 `category`·`catalogSetNumber`는 없다 —
+ * 세트가 바뀌면 관심 세트 알림·입찰 매칭·시세 귀속이 틀어지므로 서버가 수정을 받지 않는다.
+ */
+export interface UpdateListingInput {
+  readonly title: string;
+  readonly description: string;
+  readonly price: number;
+  readonly condition: ItemCondition;
+  readonly completeness: Completeness;
+  readonly hasBox: boolean;
+  readonly hasManual: boolean;
+  readonly hasMissingParts: boolean;
+  readonly missingPartsNote: string;
+  readonly defectsNote: string;
+  readonly photoKeys: readonly string[];
+  readonly interestTag: ListingInterestTag | null;
+}
+
+/**
+ * 판매자가 자기 매물을 통째로 교체 수정한다(`PUT`). 판매 중(`ACTIVE`)인 매물만 받는다.
+ * 실패 코드는 {@link listingMutationErrorMessage}로 문구를 고른다.
+ */
+export function updateListing(listingId: string, input: UpdateListingInput): Promise<Listing> {
+  return apiRequest<Listing>(`/api/v1/listings/${encodeURIComponent(listingId)}`, {
+    method: "PUT",
+    body: {
+      title: input.title,
+      description: input.description,
+      price: input.price,
+      condition: input.condition.toUpperCase(),
+      completeness: input.completeness.toUpperCase(),
+      hasBox: input.hasBox,
+      hasManual: input.hasManual,
+      hasMissingParts: input.hasMissingParts,
+      missingPartsNote: input.missingPartsNote,
+      defectsNote: input.defectsNote,
+      photoKeys: input.photoKeys,
+      interestTag: input.interestTag,
+    },
+  });
+}
+
+/**
+ * 끌올. 노출 기준 시각(`listedAt`)을 지금으로 당겨 "최신순" 맨 위로 올린다.
+ * 쿨다운 안이면 429 `LISTING_BUMP_COOLDOWN`과 `Retry-After`가 온다(`ApiError.retryAfterMs`).
+ */
+export function bumpListing(listingId: string): Promise<Listing> {
+  return apiRequest<Listing>(`/api/v1/listings/${encodeURIComponent(listingId)}/bump`, {
+    method: "POST",
+  });
+}
+
 /** 활성 리스팅 목록. 항상 최신을 반영하도록 캐시하지 않는다. */
 export function fetchActiveListings(signal?: AbortSignal): Promise<readonly Listing[]> {
   return apiRequest<readonly Listing[]>("/api/v1/listings", {

@@ -8,22 +8,19 @@ import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.Readine
 import com.gole.api.launch.application.port.in.ManageLaunchConfigUseCase.StageChangeResult;
 import com.gole.api.launch.application.port.out.LaunchConfigHistoryPort;
 import com.gole.api.launch.application.port.out.LaunchConfigRepositoryPort;
+import com.gole.api.launch.application.port.out.LaunchPaymentReadinessPort;
+import com.gole.api.launch.application.port.out.LaunchPaymentReadinessPort.PaymentReadiness;
 import com.gole.api.launch.application.port.out.LaunchSettlementModePort;
-import com.gole.api.launch.application.port.out.LaunchSettlementModePort.Mode;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchConfigChange;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchReadinessCheck;
 import com.gole.api.launch.domain.model.LaunchStage;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
-import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.State;
+import com.gole.api.launch.domain.model.SettlementMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,7 +46,7 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
     private static final int MAX_REASON_LENGTH = 500;
     private final LaunchConfigRepositoryPort repository;
     private final LaunchConfigHistoryPort history;
-    private final GetPaymentReadinessUseCase paymentReadiness;
+    private final LaunchPaymentReadinessPort paymentReadiness;
     private final LaunchSettlementModePort settlementMode;
     private final LaunchConfigSafetyClamp safetyClamp;
     private final Clock clock;
@@ -57,7 +54,7 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
     public LaunchConfigService(
             LaunchConfigRepositoryPort repository,
             LaunchConfigHistoryPort history,
-            GetPaymentReadinessUseCase paymentReadiness,
+            LaunchPaymentReadinessPort paymentReadiness,
             LaunchSettlementModePort settlementMode,
             LaunchConfigSafetyClamp safetyClamp,
             Clock clock) {
@@ -268,23 +265,23 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
     }
 
     private void requireCompatibleSettlementMode(LaunchStage target) {
-        Mode mode = settlementMode.currentMode();
+        SettlementMode mode = settlementMode.currentMode();
         if (target.atLeast(LaunchStage.TRADING) && !settlementMode.payoutContractVerified()) {
             throw new ConflictException(
                     "LAUNCH_PAYOUT_CONTRACT_REQUIRED", "Stage 2 이상은 현재 도메인·거래 모델에 대한 PG/지급대행 계약 확인이 필요합니다");
         }
-        if (target == LaunchStage.TRADING && mode != Mode.MANUAL) {
+        if (target == LaunchStage.TRADING && mode != SettlementMode.MANUAL) {
             throw new ConflictException(
                     "LAUNCH_MANUAL_SETTLEMENT_REQUIRED", "Stage 2는 수동 정산 모드에서만 열 수 있습니다 (현재 모드 %s)".formatted(mode));
         }
-        if (target == LaunchStage.FULL && mode != Mode.PROVIDER) {
+        if (target == LaunchStage.FULL && mode != SettlementMode.PROVIDER) {
             throw new ConflictException(
                     "LAUNCH_PROVIDER_MODE_REQUIRED", "Stage 3은 지급대행 모드에서만 열 수 있습니다 (현재 모드 %s)".formatted(mode));
         }
     }
 
     private void requirePartnerPayoutPrerequisites(LaunchConfig before) {
-        if (before.stage() != LaunchStage.FULL || settlementMode.currentMode() != Mode.PROVIDER) {
+        if (before.stage() != LaunchStage.FULL || settlementMode.currentMode() != SettlementMode.PROVIDER) {
             throw new ConflictException("LAUNCH_PROVIDER_MODE_REQUIRED", "자동 지급은 Stage 3과 지급대행 모드가 모두 준비돼야 열 수 있습니다");
         }
         if (!before.isEnabled(LaunchFeature.PAYMENTS)) {
@@ -299,9 +296,9 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
      * <p>비밀값은 메시지에 담지 않는다 — 어떤 설정이 비었는지 이름만 알려준다.
      */
     private void requirePaymentReadiness() {
-        Snapshot snapshot;
+        PaymentReadiness snapshot;
         try {
-            snapshot = paymentReadiness.getPaymentReadiness();
+            snapshot = paymentReadiness.current().orElse(null);
         } catch (RuntimeException readinessFailure) {
             log.error("결제 준비 상태 조회 실패 — 결제 개방 전이를 거부함", readinessFailure);
             throw new ConflictException("LAUNCH_PAYMENT_NOT_READY", "결제 준비 상태를 확인할 수 없어 이 단계로 올릴 수 없습니다");
@@ -316,19 +313,16 @@ public class LaunchConfigService implements GetLaunchConfigUseCase, ManageLaunch
                 "LAUNCH_PAYMENT_NOT_READY", "결제 설정이 준비되지 않아 이 단계로 올릴 수 없습니다 (%s)".formatted(detail));
     }
 
-    private static boolean isReady(Snapshot snapshot) {
-        return snapshot != null && snapshot.ready() && snapshot.state() == State.READY;
+    private static boolean isReady(PaymentReadiness snapshot) {
+        return snapshot != null && snapshot.ready();
     }
 
-    private static String issues(Snapshot snapshot) {
-        List<ConfigurationIssue> issues = snapshot.issues();
+    private static String issues(PaymentReadiness snapshot) {
+        List<String> issues = snapshot.problemSettings();
         if (issues == null || issues.isEmpty()) {
             return "";
         }
-        return ", 문제 설정="
-                + issues.stream()
-                        .map(issue -> issue.setting() + "(" + issue.problem() + ")")
-                        .collect(Collectors.joining(", "));
+        return ", 문제 설정=" + String.join(", ", issues);
     }
 
     private static String requireReason(String reason) {

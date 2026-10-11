@@ -7,8 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.gole.api.order.adapter.out.settlement.SettlementProperties.Mode;
 import com.gole.api.order.application.port.out.SettlementExecutionPort;
+import com.gole.api.order.config.SettlementProperties;
+import com.gole.api.order.config.SettlementProperties.Mode;
 import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

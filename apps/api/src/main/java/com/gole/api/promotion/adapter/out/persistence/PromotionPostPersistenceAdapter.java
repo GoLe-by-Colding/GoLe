@@ -2,6 +2,7 @@ package com.gole.api.promotion.adapter.out.persistence;
 
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort;
 import com.gole.api.promotion.application.port.out.PromotionPostRepositoryPort.ReviewTimestamps;
+import com.gole.api.promotion.domain.exception.PromotionPublishTooSoonException;
 import com.gole.api.promotion.domain.exception.SourceCommitAlreadyPromotedException;
 import com.gole.api.promotion.domain.model.CaptureDataSource;
 import com.gole.api.promotion.domain.model.PromotionCapture;
@@ -11,11 +12,20 @@ import com.gole.api.promotion.domain.model.PromotionPost;
 import com.gole.api.promotion.domain.model.PromotionPostContext;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import com.gole.api.promotion.domain.model.PromotionProvenance;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,10 +35,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryPort {
 
-    private final PromotionPostMongoRepository repository;
+    /** 발행 채널이 Threads 하나라 슬롯도 하나다. */
+    private static final String PUBLISH_SLOT_ID = "THREADS";
 
-    public PromotionPostPersistenceAdapter(PromotionPostMongoRepository repository) {
+    private final PromotionPostMongoRepository repository;
+    private final MongoTemplate mongo;
+
+    public PromotionPostPersistenceAdapter(PromotionPostMongoRepository repository, MongoTemplate mongo) {
         this.repository = repository;
+        this.mongo = mongo;
     }
 
     @Override
@@ -84,11 +99,57 @@ public class PromotionPostPersistenceAdapter implements PromotionPostRepositoryP
     }
 
     @Override
-    public Optional<Instant> findLatestPublishedAt() {
+    public Instant claimPublishSlot(Instant now, Duration interval) {
+        // 슬롯이 없으면 기존 발행 이력으로 시작한다 — 배포 직후 첫 발행도 직전 발행 기준으로 판정된다.
+        mongo.upsert(
+                slot(),
+                new Update().setOnInsert("lastPublishedAt", latestPublishedAt().orElse(Instant.EPOCH)),
+                PublishSlotDocument.class);
+        PublishSlotDocument previous = mongo.findAndModify(
+                Query.query(Criteria.where("_id")
+                        .is(PUBLISH_SLOT_ID)
+                        .and("lastPublishedAt")
+                        .lte(now.minus(interval))),
+                new Update().set("lastPublishedAt", millis(now)),
+                FindAndModifyOptions.options().returnNew(false),
+                PublishSlotDocument.class);
+        if (previous != null) {
+            return previous.lastPublishedAt();
+        }
+        PublishSlotDocument current = mongo.findOne(slot(), PublishSlotDocument.class);
+        Instant last = current == null ? now : current.lastPublishedAt();
+        throw new PromotionPublishTooSoonException(last.plus(interval));
+    }
+
+    @Override
+    public void releasePublishSlot(Instant claimedAt, Instant previous) {
+        mongo.updateFirst(
+                Query.query(Criteria.where("_id")
+                        .is(PUBLISH_SLOT_ID)
+                        .and("lastPublishedAt")
+                        .is(millis(claimedAt))),
+                new Update().set("lastPublishedAt", previous),
+                PublishSlotDocument.class);
+    }
+
+    private Optional<Instant> latestPublishedAt() {
         return repository
                 .findFirstByStatusOrderByPublishedAtDesc(PromotionPostStatus.PUBLISHED.name())
                 .map(PromotionPostDocument::getPublishedAt);
     }
+
+    /** Mongo 는 밀리초까지만 저장한다 — 맞추지 않으면 반납의 동등 비교가 절대 맞지 않는다. */
+    private static Instant millis(Instant instant) {
+        return instant.truncatedTo(ChronoUnit.MILLIS);
+    }
+
+    private static Query slot() {
+        return Query.query(Criteria.where("_id").is(PUBLISH_SLOT_ID));
+    }
+
+    /** 발행 간격의 경합 지점. 문서 하나라 findAndModify 하나로 원자적이다(D24). */
+    @Document("promotion_publish_slot")
+    record PublishSlotDocument(@Id String id, Instant lastPublishedAt) {}
 
     @Override
     public long countByStatus(PromotionPostStatus status) {

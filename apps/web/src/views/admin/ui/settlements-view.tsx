@@ -15,7 +15,7 @@ import {
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { formatKrw } from "@shared/lib";
-import { Badge, Button, Heading, Input, Select, Text } from "@shared/ui";
+import { Badge, Button, Heading, Input, Select, Text, useDialog } from "@shared/ui";
 import { formatDateTime, shortId } from "../model/labels";
 import { AdminStatus, AdminTable } from "./table";
 
@@ -43,6 +43,7 @@ export function AdminSettlementsView() {
   const [reconcileReasons, setReconcileReasons] = useState<Readonly<Record<string, string>>>({});
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const dialog = useDialog();
 
   const load = useCallback(() => {
     if (token === null) return;
@@ -73,11 +74,13 @@ export function AdminSettlementsView() {
       setError("지급 증빙 번호를 입력해 주세요.");
       return;
     }
-    if (
-      !window.confirm("외부 이체가 실제 완료됐나요? 입력한 증빙으로 지급 완료 상태를 확정합니다.")
-    ) {
-      return;
-    }
+    const confirmed = await dialog.confirm({
+      title: "지급 완료 확정",
+      description: "외부 이체가 실제 완료됐나요? 입력한 증빙으로 지급 완료 상태를 확정합니다.",
+      confirmLabel: "지급 완료로 확정",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusyOrder(orderId);
     setError(undefined);
     try {
@@ -145,13 +148,16 @@ export function AdminSettlementsView() {
       setError("이미 지급된 건은 외부 지급 증빙 번호를 입력해야 합니다.");
       return;
     }
-    const confirmed = window.confirm(
-      alreadyPaid
+    const confirmed = await dialog.confirm({
+      title: "차단된 정산 복구",
+      description: alreadyPaid
         ? "외부 지급사·은행에서 실제 지급 완료를 확인했나요? 입력한 증빙으로 정산을 완료 처리합니다."
         : launch?.settlementMode === "PROVIDER"
           ? "외부 지급사에서 지급되지 않았음을 확인했나요? 자동 지급 재시도 예산을 새로 부여합니다."
           : "외부 지급사·은행에서 지급되지 않았음을 확인했나요? 이 정산을 내 작업으로 다시 배정합니다.",
-    );
+      confirmLabel: "복구",
+      tone: "danger",
+    });
     if (!confirmed) return;
     setBusyOrder(orderId);
     setError(undefined);
@@ -485,13 +491,14 @@ export function AdminSettlementsView() {
             <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
               {formatKrw(row.payout)}
             </td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
               {formatDateTime(row.createdAt)}
             </td>
             <td className="px-3 py-2.5 text-right">{renderAction(row)}</td>
           </tr>
         ))}
       </AdminTable>
+      {dialog.element}
     </div>
   );
 }

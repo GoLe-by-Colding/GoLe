@@ -37,6 +37,7 @@ import {
 import { AdminStatus, AdminTable } from "./table";
 import { PromotionEvaluationForm } from "./promotion-evaluation-form";
 import { PromotionReviewPanel } from "./promotion-review-panel";
+import { PromotionMemoryPanel } from "./promotion-memory-panel";
 
 type StatusFilter = "ALL" | PromotionPostStatus;
 
@@ -78,6 +79,7 @@ function PromotionWorkspace({
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [publishNextBusy, setPublishNextBusy] = useState(false);
+  const [memoryRevision, setMemoryRevision] = useState(0);
 
   const [caption, setCaption] = useState("");
   const [images, setImages] = useState<readonly UploadedImage[]>([]);
@@ -112,6 +114,7 @@ function PromotionWorkspace({
 
   useEffect(load, [load]);
   const reload = useCallback(() => {
+    setMemoryRevision((value) => value + 1);
     setRows(null);
     setListError(undefined);
     load();
@@ -196,7 +199,7 @@ function PromotionWorkspace({
   }
 
   // 규칙에 따른 발행 거절은 장애가 아니라 예상된 결과라, 연결 오류 배너가 아닌 안내로 보여준다.
-  const PUBLISH_NEXT_MESSAGES: Readonly<Record<string, string>> = {
+  const PUBLISH_MESSAGES: Readonly<Record<string, string>> = {
     PROMOTION_NO_APPROVED_POSTS: "발행할 승인된 글이 없습니다. 먼저 검토 대기 글을 승인해 주세요.",
     PROMOTION_PUBLISH_TOO_SOON: "직전 발행 후 6시간이 지나야 다음 글을 올릴 수 있습니다.",
   };
@@ -212,7 +215,7 @@ function PromotionWorkspace({
       setNotice(`승인된 글 중 가장 먼저 승인된 글(${shortId(published.id)})을 발행했습니다.`);
       reload();
     } catch (cause) {
-      const known = cause instanceof ApiError ? PUBLISH_NEXT_MESSAGES[cause.code] : undefined;
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
       if (known !== undefined) {
         setNotice(known);
       } else {
@@ -242,9 +245,15 @@ function PromotionWorkspace({
       reload();
       return true;
     } catch (cause) {
-      setError(
-        cause instanceof ApiError ? cause.message : "처리하지 못했습니다. 다시 시도해 주세요.",
-      );
+      // 행별 발행도 6시간 간격을 지키므로 같은 안내를 띄운다.
+      const known = cause instanceof ApiError ? PUBLISH_MESSAGES[cause.code] : undefined;
+      if (known !== undefined) {
+        setNotice(known);
+      } else {
+        setError(
+          cause instanceof ApiError ? cause.message : "처리하지 못했습니다. 다시 시도해 주세요.",
+        );
+      }
       return false;
     } finally {
       mutationInFlight.current = false;
@@ -263,11 +272,14 @@ function PromotionWorkspace({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <Heading level={2}>홍보 게시 검토</Heading>
-        <label className="flex items-center gap-2 text-sm text-neutral-600">
-          상태
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Heading level={2} className="min-w-0 break-keep">
+          홍보 게시 검토
+        </Heading>
+        <label className="flex min-w-0 items-center gap-2 text-sm text-neutral-600">
+          <span className="shrink-0 whitespace-nowrap">상태</span>
           <Select
+            className="min-w-32"
             value={status}
             disabled={busy}
             onChange={(e) => {
@@ -387,6 +399,7 @@ function PromotionWorkspace({
           {notice}
         </p>
       ) : null}
+      <PromotionMemoryPanel token={token} accountId={accountId} refreshKey={memoryRevision} />
       <div className="flex items-center justify-between gap-3">
         <AdminStatus error={listError ?? error} loading={rows === null} />
         <div className="flex gap-2">

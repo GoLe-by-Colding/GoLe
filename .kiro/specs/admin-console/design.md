@@ -162,7 +162,7 @@ com.gole.api.admin/
 │   │   └── AdminDtos.java
 │   └── out/
 │       ├── persistence/AdminActionDocument / MongoRepository / AuditPersistenceAdapter
-│       └── readmodel/MongoAdminReadModelAdapter.java
+│       └── readmodel/CrossContextAdminReadModelAdapter.java   # 2026-10-10: 소유 컨텍스트 조회 포트로 위임
 └── config/AdminWebConfig.java
 ```
 
@@ -186,7 +186,7 @@ com.gole.api.admin/
 
 ```java
 interface AdminReadModelPort {
-    Map<String, Long> collectionCounts(List<String> collections);
+    AdminVolumeCounts volumeCounts();                     // 2026-10-10: 컬렉션 이름 목록 → 이름 있는 필드
     OrderStats orderStats();                              // 상태별 건수 + 완료 GMV
     long activeListingCount();
     List<OrderRow> recentOrders(String status, int limit);
@@ -195,7 +195,9 @@ interface AdminReadModelPort {
 }
 ```
 
-- 구현 `MongoAdminReadModelAdapter`가 유일하게 `MongoTemplate`을 안다. 컨트롤러는 DB를 모른다. (R9.2)
+- 컨트롤러는 DB를 모른다(R9.2). 2026-10-10부터 구현 `CrossContextAdminReadModelAdapter`도 다른 컨텍스트 컬렉션을 직접 읽지 않고
+  order·listing·community 의 `Monitor*UseCase`와 account·catalog·review·pricing 의 `Count*UseCase`로 위임한다(PR #226).
+  처음 구현이던 `MongoAdminReadModelAdapter`는 지웠다.
 - 반환 타입은 admin 컨텍스트 소유의 얇은 record(read model). 타 컨텍스트 도메인 객체를 재사용하지 않는다.
 
 #### AdminActor (조치자 식별)
@@ -286,7 +288,11 @@ src/app/(main)/admin/
 
 `widgets/admin-bar`를 `(main)/layout.tsx`에 배치한다.
 
-- `session.role === "ADMIN"`이 아니면 **아무것도 렌더링하지 않는다**(R1.7).
+- 서버가 ADMIN으로 확인하지 않으면 **아무것도 렌더링하지 않는다**(R1.7). 판정은 콘솔 셸과 같은
+  `entities/user`의 `useAdminAccess`(`GET /api/v1/accounts/me`)로 한다. 로컬 `session.role`은 사용자가
+  바꿀 수 있으므로 "서버에 물어볼지"의 힌트로만 쓴다 — 일반 사용자는 매 화면 `/me`를 부르지 않고,
+  확인 전에는 바도 그리지 않고 관리자 API(미처리 신고 수)도 부르지 않는다. 콘솔(`/admin/**`)
+  안에서는 셸이 같은 확인을 하므로 바는 묻지 않는다.
 - 하단 고정 바에 표시: `ADMIN` 뱃지 · 미처리 신고 수 · 콘솔 바로가기.
 - 현재 경로를 파싱해 컨텍스트 조치를 노출한다.
   - `/listings/{id}` → "이 매물 내리기"

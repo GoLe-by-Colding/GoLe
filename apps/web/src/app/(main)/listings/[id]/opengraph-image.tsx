@@ -35,43 +35,28 @@ export default async function OpengraphImage({
   }
 
   return new ImageResponse(
+    // Satori(`next/og`)는 실험 기능인 `tw` prop으로 Tailwind 클래스를 읽는다. 앱의 `@theme`은 모르므로 색은 임의 값으로 쓴다.
+    // 그라데이션만 `style`에 둔다. Satori `tw`는 임의 값·from/to 그라데이션을 모두 무시한다(2026-10-11 next 16.3.8에서 렌더해 확인).
+    // gap 유틸리티도 없어 간격은 뒤 자식의 margin으로 준다(렌더 픽셀 동일 확인).
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
-        padding: "72px",
-        justifyContent: "space-between",
-        background: "linear-gradient(135deg, #1d4ed8 0%, #1c2f7c 100%)",
-        color: "#ffffff",
-        fontFamily: "sans-serif",
-      }}
+      tw="flex h-full w-full flex-col justify-between p-[72px] font-sans text-white"
+      style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #1c2f7c 100%)" }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <div style={{ fontSize: "32px", fontWeight: 800 }}>GoLe</div>
+      <div tw="flex items-center">
+        <div tw="text-[32px] font-extrabold">GoLe</div>
         {category ? (
-          <div
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              borderRadius: "8px",
-              padding: "4px 12px",
-              fontSize: "22px",
-            }}
-          >
+          <div tw="ml-[16px] rounded-[8px] bg-white/20 px-[12px] py-[4px] text-[22px]">
             {category}
           </div>
         ) : null}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div style={{ fontSize: "64px", fontWeight: 800, lineHeight: 1.1 }}>{title}</div>
-        {price ? (
-          <div style={{ fontSize: "48px", fontWeight: 700, color: "#facc15" }}>{price}</div>
-        ) : null}
+      <div tw="flex flex-col">
+        <div tw="text-[64px] font-extrabold leading-[1.1]">{title}</div>
+        {price ? <div tw="mt-[16px] text-[48px] font-bold text-[#facc15]">{price}</div> : null}
       </div>
 
-      <div style={{ fontSize: "24px", opacity: 0.7 }}>gole.co.kr</div>
+      <div tw="text-[24px] opacity-70">gole.co.kr</div>
     </div>,
     size,
   );

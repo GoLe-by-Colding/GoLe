@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.community.adapter.out.media.MediaPostImageAdapter;
 import com.gole.api.community.application.port.in.CommentOnPostUseCase.CommentCommand;
 import com.gole.api.community.application.port.in.DeleteCommentUseCase.DeleteCommentCommand;
 import com.gole.api.community.application.port.in.GetFeedUseCase.FeedCursor;
@@ -45,7 +46,12 @@ class CommunityServiceTest {
         notifier = new RecordingPostAuthorNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         service = new CommunityService(
-                posts, new InMemoryComments(), new SeqIds(), notifier, mock(ManageMediaAssetsUseCase.class), clock);
+                posts,
+                new InMemoryComments(),
+                new SeqIds(),
+                notifier,
+                new MediaPostImageAdapter(mock(ManageMediaAssetsUseCase.class)),
+                clock);
     }
 
     private String publish() {

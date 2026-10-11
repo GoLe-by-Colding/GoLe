@@ -437,9 +437,10 @@ export function AdminSupportView() {
           </Text>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
-            상태
+          <label className="flex min-w-0 items-center gap-2 text-sm text-neutral-600">
+            <span className="shrink-0 whitespace-nowrap">상태</span>
             <Select
+              className="min-w-32"
               value={status}
               onChange={(event) => setStatus(event.target.value as StatusFilter)}
             >
@@ -450,9 +451,10 @@ export function AdminSupportView() {
               <option value="RESOLVED">해결</option>
             </Select>
           </label>
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
-            유형
+          <label className="flex min-w-0 items-center gap-2 text-sm text-neutral-600">
+            <span className="shrink-0 whitespace-nowrap">유형</span>
             <Select
+              className="min-w-32"
               value={category}
               onChange={(event) => setCategory(event.target.value as CategoryFilter)}
             >
@@ -478,7 +480,7 @@ export function AdminSupportView() {
         ) : null,
       )}
 
-      <div className="grid min-h-[560px] overflow-hidden rounded-xl border border-neutral-200 bg-white xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid overflow-hidden rounded-xl border border-neutral-200 bg-white xl:min-h-[560px] xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside
           className={cn(
             "border-b border-neutral-200 bg-neutral-50/70 xl:border-r xl:border-b-0",

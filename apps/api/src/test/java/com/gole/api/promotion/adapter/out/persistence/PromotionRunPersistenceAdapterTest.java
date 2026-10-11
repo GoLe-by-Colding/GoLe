@@ -9,6 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.gole.api.promotion.domain.model.ModelCall;
 import com.gole.api.promotion.domain.model.PromotionCategory;
+import com.gole.api.promotion.domain.model.PromotionGuidelineKind;
+import com.gole.api.promotion.domain.model.PromotionMemoryContext;
+import com.gole.api.promotion.domain.model.PromotionMemoryTarget;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
@@ -63,5 +66,36 @@ class PromotionRunPersistenceAdapterTest {
 
         assertThat(stored.id()).isEqualTo("run-0");
         assertThat(stored.calls()).isEmpty();
+        assertThat(stored.memoryContext()).isEqualTo(PromotionMemoryContext.EMPTY);
+    }
+
+    @Test
+    @DisplayName("실행 원장에 당시 지침 내용과 범위를 그대로 보존한다")
+    void insertIfAbsent_preservesMemorySnapshot() {
+        when(repository.insert(any(PromotionRunDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var base = run("run-1");
+        var context = new PromotionMemoryContext(
+                List.of("feedback-1"),
+                List.of(new PromotionMemoryContext.GuidelineSnapshot(
+                        "g1",
+                        PromotionGuidelineKind.PROCEDURE,
+                        "가독성을 우선한다",
+                        List.of(PromotionMemoryTarget.IMAGE_EDIT),
+                        List.of(PromotionCategory.FEATURE))));
+        var submitted = new PromotionRun(
+                base.id(),
+                base.runKey(),
+                base.category(),
+                base.sourceCommitSha(),
+                base.outcome(),
+                base.reasonCode(),
+                base.detail(),
+                base.promotionPostId(),
+                base.agentSha(),
+                base.runUrl(),
+                base.calls(),
+                base.recordedAt(),
+                context);
+        assertThat(adapter.insertIfAbsent(submitted).memoryContext()).isEqualTo(context);
     }
 }

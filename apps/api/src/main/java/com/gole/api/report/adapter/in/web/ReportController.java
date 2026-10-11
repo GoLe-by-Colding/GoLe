@@ -1,7 +1,7 @@
 package com.gole.api.report.adapter.in.web;
 
-import com.gole.api.account.adapter.in.web.AuthenticatedUser;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.web.auth.AuthenticatedUser;
 import com.gole.api.report.adapter.in.web.ReportDtos.SubmitReportRequest;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
 import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;

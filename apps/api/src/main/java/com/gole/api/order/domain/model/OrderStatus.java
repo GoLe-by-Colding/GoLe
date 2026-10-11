@@ -16,5 +16,10 @@ public enum OrderStatus {
     DISPUTED,
     COMPLETED,
     REFUND_PENDING,
-    REFUNDED
+    REFUNDED;
+
+    /** 더 이상 바뀌지 않는 종결 상태(결제 실패·완료·환불 완료). 나머지는 돈이나 분쟁 증거가 아직 움직이는 중이다. */
+    public boolean isTerminal() {
+        return this == PAYMENT_FAILED || this == COMPLETED || this == REFUNDED;
+    }
 }

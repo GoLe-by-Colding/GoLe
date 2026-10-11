@@ -2,6 +2,7 @@ package com.gole.api.catalog.application.service;
 
 import com.gole.api.catalog.application.port.in.CreateLegoSetUseCase;
 import com.gole.api.catalog.application.port.in.FindLegoSetUseCase;
+import com.gole.api.catalog.application.port.in.FindThemeSetNumbersUseCase;
 import com.gole.api.catalog.application.port.in.ListFeaturedLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase;
 import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
@@ -15,7 +16,9 @@ import com.gole.api.catalog.domain.model.CatalogImagePath;
 import com.gole.api.catalog.domain.model.LegoSet;
 import com.gole.api.catalog.domain.model.RetirementStatus;
 import com.gole.api.common.exception.BadRequestException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,6 +29,7 @@ import org.springframework.stereotype.Service;
 public class CatalogService
         implements FindLegoSetUseCase,
                 SearchLegoSetsUseCase,
+                FindThemeSetNumbersUseCase,
                 ListFeaturedLegoSetsUseCase,
                 CreateLegoSetUseCase,
                 UpdateLegoSetUseCase,
@@ -34,6 +38,10 @@ public class CatalogService
     private static final int FEATURED_LIMIT = 12;
     private static final int ADMIN_LIST_LIMIT = 200;
     private static final int SEARCH_QUERY_MAX_LENGTH = 100;
+    /** 테마 이름 낱말 수 상한. 관심 테마 키는 낱말 1~2개다("star-wars"). */
+    private static final int MAX_THEME_WORDS = 4;
+    /** 한 번에 내주는 테마 세트 번호 상한. 받는 쪽이 검색 조건에 그대로 넣으므로 무한정 키우지 않는다. */
+    private static final int MAX_THEME_SET_NUMBERS = 500;
 
     private final LoadLegoSetPort loadLegoSetPort;
     private final CatalogAdminPort catalogAdminPort;
@@ -83,6 +91,22 @@ public class CatalogService
             throw new BadRequestException("CATALOG_QUERY_TOO_LONG", "검색어는 100자 이하여야 합니다");
         }
         return loadLegoSetPort.searchByNameOrTheme(normalized);
+    }
+
+    @Override
+    public List<String> setNumbersInTheme(String themeSlug, int limit) {
+        if (themeSlug == null || limit <= 0) {
+            return List.of();
+        }
+        List<String> words = Arrays.stream(themeSlug.toLowerCase(Locale.ROOT).split("[\\s_-]+"))
+                .filter(word -> !word.isEmpty())
+                .toList();
+        if (words.isEmpty()
+                || words.size() > MAX_THEME_WORDS
+                || !words.stream().allMatch(word -> word.matches("[a-z0-9]+"))) {
+            return List.of();
+        }
+        return loadLegoSetPort.loadSetNumbersByThemeWords(words, Math.min(limit, MAX_THEME_SET_NUMBERS));
     }
 
     @Override

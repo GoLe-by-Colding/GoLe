@@ -7,12 +7,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.common.exception.NotFoundException;
+import com.gole.api.community.adapter.out.report.ReportCommentReportAdapter;
 import com.gole.api.community.application.port.in.ReportCommentUseCase.ReportCommentCommand;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.domain.model.Comment;
 import com.gole.api.report.application.port.in.SubmitReportUseCase;
 import com.gole.api.report.application.port.in.SubmitReportUseCase.SubmitReportCommand;
-import com.gole.api.report.domain.model.ReportReason;
 import com.gole.api.report.domain.model.ReportTargetType;
 import java.time.Instant;
 import java.util.Optional;
@@ -23,7 +23,8 @@ class CommentReportServiceTest {
 
     private final CommentRepositoryPort comments = mock(CommentRepositoryPort.class);
     private final SubmitReportUseCase reports = mock(SubmitReportUseCase.class);
-    private final CommentReportService service = new CommentReportService(comments, reports);
+    private final CommentReportService service =
+            new CommentReportService(comments, new ReportCommentReportAdapter(reports));
 
     @Test
     void verifiesStoredParentBeforeSubmittingCommentReport() {
@@ -31,8 +32,8 @@ class CommentReportServiceTest {
         when(comments.findById("comment-1")).thenReturn(Optional.of(comment));
         when(reports.submit(org.mockito.ArgumentMatchers.any())).thenReturn("report-1");
 
-        String result = service.report(
-                new ReportCommentCommand("reporter-1", "post-1", "comment-1", ReportReason.INAPPROPRIATE, "욕설"));
+        String result =
+                service.report(new ReportCommentCommand("reporter-1", "post-1", "comment-1", "INAPPROPRIATE", "욕설"));
 
         assertThat(result).isEqualTo("report-1");
         ArgumentCaptor<SubmitReportCommand> command = ArgumentCaptor.forClass(SubmitReportCommand.class);
@@ -47,13 +48,13 @@ class CommentReportServiceTest {
         Comment visible = new Comment("comment-1", "post-1", "author-1", "원문", Instant.EPOCH);
         when(comments.findById("comment-1")).thenReturn(Optional.of(visible));
 
-        assertThatThrownBy(() -> service.report(
-                        new ReportCommentCommand("reporter-1", "other-post", "comment-1", ReportReason.OTHER, "")))
+        assertThatThrownBy(() ->
+                        service.report(new ReportCommentCommand("reporter-1", "other-post", "comment-1", "OTHER", "")))
                 .isInstanceOf(NotFoundException.class);
 
         when(comments.findById("comment-1")).thenReturn(Optional.of(visible.hide("조치됨", Instant.EPOCH.plusSeconds(1))));
-        assertThatThrownBy(() -> service.report(
-                        new ReportCommentCommand("reporter-1", "post-1", "comment-1", ReportReason.OTHER, "")))
+        assertThatThrownBy(() ->
+                        service.report(new ReportCommentCommand("reporter-1", "post-1", "comment-1", "OTHER", "")))
                 .isInstanceOf(NotFoundException.class);
     }
 }

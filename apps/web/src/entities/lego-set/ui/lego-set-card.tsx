@@ -54,7 +54,7 @@ export function LegoSetCard({ set }: LegoSetCardProps) {
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-1.5 p-4">
+      <div className="flex flex-col gap-1.5 p-3 sm:p-4">
         <span className="text-xs font-medium tracking-wide text-neutral-500">{set.theme}</span>
         <Link
           href={detailHref}

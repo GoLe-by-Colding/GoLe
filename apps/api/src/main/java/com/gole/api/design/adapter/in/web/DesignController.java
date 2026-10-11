@@ -1,6 +1,6 @@
 package com.gole.api.design.adapter.in.web;
 
-import com.gole.api.admin.adapter.in.web.AdminActor;
+import com.gole.api.common.web.auth.AdminActor;
 import com.gole.api.design.application.port.in.ManageDesignUseCase;
 import com.gole.api.design.domain.model.*;
 import jakarta.servlet.http.HttpServletRequest;

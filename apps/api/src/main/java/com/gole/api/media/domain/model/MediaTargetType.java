@@ -4,5 +4,7 @@ package com.gole.api.media.domain.model;
 public enum MediaTargetType {
     LISTING,
     COMMUNITY_POST,
-    PROMOTION_POST
+    PROMOTION_POST,
+    /** 관리자가 올린 사이트 마스코트 이미지(mascot-assets R2). */
+    MASCOT_ASSET
 }

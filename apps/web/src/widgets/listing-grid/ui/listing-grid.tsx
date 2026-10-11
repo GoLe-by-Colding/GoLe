@@ -11,6 +11,8 @@ export interface ListingGridProps {
   readonly emptyAction?: ReactNode;
   /** 초기 노출 수. 기본 20. */
   readonly pageSize?: number;
+  /** 매물 id → 같은 등급 추정 시세와의 차이 한 줄. 서버에서 `buildPriceNotes`로 만든다. */
+  readonly priceNotes?: Readonly<Record<string, string>> | undefined;
 }
 
 /**
@@ -22,6 +24,7 @@ export function ListingGrid({
   emptyMessage = "표시할 상품이 없습니다.",
   emptyAction,
   pageSize = 20,
+  priceNotes,
 }: ListingGridProps) {
   const [visible, setVisible] = useState(pageSize);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -56,13 +59,15 @@ export function ListingGrid({
 
   return (
     <div>
+      {/* 360px 이상 휴대폰은 2열로 나란히 비교한다(390px에서 한 화면에 카드 1장뿐이던 1열을 바꿈).
+          320px급 좁은 폭은 카드가 130px 아래로 줄어 긴 금액이 넘치므로 1열을 유지한다. */}
       <div
-        className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
+        className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))] sm:gap-5"
         data-testid="listing-grid"
       >
         {shown.map((listing) => (
-          <Link key={listing.id} href={`/listings/${listing.id}`}>
-            <ListingCard listing={listing} />
+          <Link key={listing.id} href={`/listings/${listing.id}`} className="block h-full">
+            <ListingCard listing={listing} priceNote={priceNotes?.[listing.id]} />
           </Link>
         ))}
       </div>

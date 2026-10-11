@@ -2,6 +2,7 @@ package com.gole.api.shipping.application.port.out;
 
 import com.gole.api.shipping.domain.model.Carrier;
 import com.gole.api.shipping.domain.model.DeliveryStatus;
+import com.gole.api.shipping.domain.model.TrackerDiagnostics;
 import com.gole.api.shipping.domain.model.WaybillNumber;
 import java.time.Instant;
 
@@ -18,21 +19,13 @@ public interface DeliveryTrackerPort {
 
     TrackingResult track(TrackingQuery query);
 
-    default Diagnostics diagnostics() {
-        return new Diagnostics(false, isConfigured(), false, null, null, null);
+    default TrackerDiagnostics diagnostics() {
+        return new TrackerDiagnostics(false, isConfigured(), false, null, null, null);
     }
 
-    default Diagnostics verifyConnection() {
+    default TrackerDiagnostics verifyConnection() {
         return diagnostics();
     }
-
-    record Diagnostics(
-            boolean enabled,
-            boolean configured,
-            boolean connected,
-            Instant lastSuccessAt,
-            Instant lastFailureAt,
-            String lastFailure) {}
 
     /**
      * @param registeredAt 운송장 등록 시각. 스텁이 경과 시간 기반 시뮬레이션에 쓴다(R6.3).

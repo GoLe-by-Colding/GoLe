@@ -1,20 +1,15 @@
 package com.gole.api.admin.adapter.in.web;
 
-import com.gole.api.account.application.port.in.ManageAccountsUseCase.AccountSummary;
-import com.gole.api.account.domain.model.Role;
-import com.gole.api.admin.application.port.out.AdminReadModelPort;
 import com.gole.api.admin.domain.model.AdminAction;
-import com.gole.api.catalog.application.port.in.ListLegoSetsUseCase.LegoSetSummary;
-import com.gole.api.catalog.domain.model.LegoSet;
-import com.gole.api.catalog.domain.model.RetirementStatus;
+import com.gole.api.admin.domain.model.AdminListingRow;
+import com.gole.api.admin.domain.model.AdminOrderRow;
+import com.gole.api.admin.domain.model.AdminPaymentMethodView;
+import com.gole.api.admin.domain.model.AdminPostRow;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.ConfigurationIssue;
 import com.gole.api.order.application.port.in.GetPaymentReadinessUseCase.Snapshot;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase.SettlementSummary;
 import com.gole.api.report.domain.model.Report;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
@@ -24,7 +19,7 @@ import java.util.Map;
  * 관리자 API의 요청/응답 DTO.
  *
  * <p>응답 record는 읽기 모델·유스케이스 결과를 웹 표현으로 옮기기만 한다.
- * 저장소 도큐먼트를 직접 다루지 않는다(그 책임은 {@link AdminReadModelPort} 어댑터에 있다).
+ * 저장소 도큐먼트를 직접 다루지 않는다(그 책임은 읽기 모델 포트의 영속성 어댑터에 있다).
  */
 public final class AdminDtos {
 
@@ -90,7 +85,7 @@ public final class AdminDtos {
             PaymentMethodResponse paymentMethod,
             Instant createdAt) {
 
-        public static OrderRow from(AdminReadModelPort.OrderRow row) {
+        public static OrderRow from(AdminOrderRow row) {
             return new OrderRow(
                     row.id(),
                     row.status(),
@@ -111,7 +106,7 @@ public final class AdminDtos {
      */
     public record PaymentMethodResponse(String type, String provider) {
 
-        public static PaymentMethodResponse from(AdminReadModelPort.PaymentMethodView view) {
+        public static PaymentMethodResponse from(AdminPaymentMethodView view) {
             return view == null ? null : new PaymentMethodResponse(view.type(), view.provider());
         }
     }
@@ -119,7 +114,7 @@ public final class AdminDtos {
     public record ListingRow(
             String id, String title, String sellerId, long price, String status, String category, Instant createdAt) {
 
-        public static ListingRow from(AdminReadModelPort.ListingRow row) {
+        public static ListingRow from(AdminListingRow row) {
             return new ListingRow(
                     row.id(), row.title(), row.sellerId(), row.price(), row.status(), row.category(), row.createdAt());
         }
@@ -127,7 +122,7 @@ public final class AdminDtos {
 
     public record PostRow(String id, String authorId, String content, String type, String status, Instant createdAt) {
 
-        public static PostRow from(AdminReadModelPort.PostRow row) {
+        public static PostRow from(AdminPostRow row) {
             return new PostRow(
                     row.id(), row.authorId(), preview(row.content()), row.type(), row.status(), row.createdAt());
         }
@@ -142,31 +137,11 @@ public final class AdminDtos {
         }
     }
 
-    // ── 회원 ──────────────────────────────────────────────────
-
-    public record AccountRow(
-            String id, String email, String role, String status, Instant lockedUntil, String suspendedReason) {
-
-        public static AccountRow from(AccountSummary summary) {
-            return new AccountRow(
-                    summary.id(),
-                    summary.email(),
-                    summary.role().name(),
-                    summary.status().name(),
-                    summary.lockedUntil(),
-                    summary.suspendedReason());
-        }
-    }
-
     // ── 조치 요청 ──────────────────────────────────────────────
 
     /** 사유가 필수인 모더레이션 조치(매물 내림·게시글 삭제·계정 정지). */
     public record ReasonRequest(
             @NotBlank(message = "조치 사유를 입력해야 합니다") String reason) {}
-
-    public record ChangeRoleRequest(@NotNull Role role) {}
-
-    public record FeaturedRequest(boolean featured) {}
 
     public record MarkSettlementPaidRequest(
             @NotBlank(message = "지급 증빙 번호를 입력해야 합니다") @Size(max = 120)
@@ -219,60 +194,6 @@ public final class AdminDtos {
     }
 
     public record PaymentReconciliationResponse(String orderId, String status) {}
-
-    // ── 카탈로그 ───────────────────────────────────────────────
-
-    public record CreateSetRequest(
-            @NotBlank String setNumber,
-            @NotBlank String name,
-            @NotBlank String theme,
-            @Min(0) int pieceCount,
-            int releaseYear,
-            @NotNull RetirementStatus retirementStatus,
-
-            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP)
-            String imageUrl,
-
-            boolean featured) {}
-
-    public record UpdateSetRequest(
-            @NotBlank String name,
-            @NotBlank String theme,
-            @Min(0) int pieceCount,
-            int releaseYear,
-            @NotNull RetirementStatus retirementStatus,
-
-            @Pattern(regexp = com.gole.api.catalog.domain.model.CatalogImagePath.REGEXP)
-            String imageUrl,
-
-            boolean featured) {}
-
-    public record LegoSetResponse(
-            String setNumber,
-            String name,
-            String theme,
-            int pieceCount,
-            int releaseYear,
-            String retirementStatus,
-            String imageUrl,
-            boolean featured) {
-
-        public static LegoSetResponse from(LegoSetSummary summary) {
-            return from(summary.set(), summary.featured());
-        }
-
-        public static LegoSetResponse from(LegoSet s, boolean featured) {
-            return new LegoSetResponse(
-                    s.getSetNumber(),
-                    s.getName(),
-                    s.getTheme(),
-                    s.getPieceCount(),
-                    s.getReleaseYear(),
-                    s.getRetirementStatus().name(),
-                    s.getImageUrl(),
-                    featured);
-        }
-    }
 
     // ── 신고 ──────────────────────────────────────────────────
 

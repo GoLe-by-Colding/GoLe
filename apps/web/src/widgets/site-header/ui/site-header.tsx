@@ -32,9 +32,10 @@ export function SiteHeader() {
     if (!menuOpen) return;
 
     const restoreButton = menuButtonRef.current;
-    const previousOverflow = document.body.style.overflow;
     const desktopMedia = window.matchMedia("(min-width: 1024px)");
-    document.body.style.overflow = "hidden";
+    // 뒤 화면 스크롤 잠금. 이미 다른 레이어가 잠갔으면 그대로 두고, 직접 잠근 경우만 푼다.
+    const wasScrollLocked = document.body.classList.contains("overflow-hidden");
+    document.body.classList.add("overflow-hidden");
     window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true }));
 
     const closeOnDesktop = (event: MediaQueryListEvent) => {
@@ -73,7 +74,7 @@ export function SiteHeader() {
     return () => {
       desktopMedia.removeEventListener("change", closeOnDesktop);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      if (!wasScrollLocked) document.body.classList.remove("overflow-hidden");
       window.requestAnimationFrame(() => {
         if (restoreButton?.offsetParent !== null) restoreButton?.focus();
       });
@@ -95,7 +96,7 @@ export function SiteHeader() {
       className={`sticky top-0 border-b border-neutral-200 bg-white ${menuOpen ? "z-[60]" : "z-40"}`}
     >
       <Container width="xl">
-        <div className="flex h-16 items-center gap-8">
+        <div className="flex h-16 items-center gap-4 xl:gap-8">
           <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
             <Logo size={32} className="text-xl" />
           </Link>
@@ -104,6 +105,8 @@ export function SiteHeader() {
             한 줄에 들어가려면 약 1275px가 필요한데 Container width="xl"의 내용 폭은 1240px다.
             그래서 데스크톱 nav는 lg(1024px), 검색 입력은 xl(1280px)부터만 노출한다.
             (이 값을 낮추면 640~1100px 구간에서 링크 텍스트가 글자 단위로 줄바꿈되며 깨진다.)
+            관리자에게는 "관리자" 버튼이 하나 더 붙어 lg~xl 구간(1024px)에서 "로그아웃"이 20px 밀려
+            잘렸다. 그 구간만 간격(gap-4)과 메뉴 좌우 여백(px-2)을 줄인다.
           */}
           <nav className="flex shrink-0 items-center gap-1 whitespace-nowrap max-lg:hidden">
             {NAV_ITEMS.map((item) => {
@@ -113,7 +116,7 @@ export function SiteHeader() {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`relative border-b-2 px-3 py-2 text-sm transition-colors ${
+                  className={`relative border-b-2 px-2 py-2 text-sm transition-colors xl:px-3 ${
                     active
                       ? "border-brand-600 font-semibold text-brand-700"
                       : "border-transparent font-medium text-neutral-500 hover:border-neutral-300 hover:text-neutral-900"
