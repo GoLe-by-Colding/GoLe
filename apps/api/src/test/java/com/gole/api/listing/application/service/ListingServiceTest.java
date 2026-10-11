@@ -15,6 +15,7 @@ import com.gole.api.listing.adapter.out.media.MediaListingPhotoAdapter;
 import com.gole.api.listing.application.port.in.CreateListingUseCase.CreateListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.ReviseListingCommand;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase.RevisionResult;
+import com.gole.api.listing.application.port.out.CatalogThemeSetsPort;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
 import com.gole.api.listing.application.port.out.ListingBidMatchNotifierPort;
 import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
@@ -60,6 +61,7 @@ class ListingServiceTest {
     private RecordingPriceDropNotifier priceDropNotifier;
     private RecordingBidMatchNotifier bidMatchNotifier;
     private ManageMediaAssetsUseCase mediaAssets;
+    private RecordingCatalogThemeSets themeSets;
     private MutableClock clock;
     private ListingService service;
 
@@ -71,6 +73,7 @@ class ListingServiceTest {
         priceDropNotifier = new RecordingPriceDropNotifier();
         bidMatchNotifier = new RecordingBidMatchNotifier();
         mediaAssets = mock(ManageMediaAssetsUseCase.class);
+        themeSets = new RecordingCatalogThemeSets();
         clock = new MutableClock(NOW);
         service = new ListingService(
                 repository,
@@ -80,6 +83,7 @@ class ListingServiceTest {
                 priceDropNotifier,
                 bidMatchNotifier,
                 new MediaListingPhotoAdapter(mediaAssets),
+                themeSets,
                 clock,
                 BUMP_COOLDOWN);
     }
@@ -184,6 +188,29 @@ class ListingServiceTest {
                 List.of("p.jpg"),
                 null);
         assertThatThrownBy(() -> service.create(cmd)).isInstanceOf(InvalidPriceException.class);
+    }
+
+    @Test
+    void search_addsCatalogThemeSetNumbersWhenTextIsAThemeName() {
+        // 판매자 대부분이 관심 테마를 달지 않는다 — "스타워즈"로 찾으면 그 테마의 카탈로그 세트로 판 매물도 찾아야 한다.
+        themeSets.answer = List.of("75192", "75313");
+
+        service.search(new ListingSearchQuery("스타워즈", null, null, null, null));
+
+        assertThat(themeSets.asked).containsExactly(InterestTag.STAR_WARS);
+        assertThat(repository.lastQuery.themeSetNumbers()).containsExactly("75192", "75313");
+    }
+
+    @Test
+    void search_doesNotAskCatalogUnlessTextIsAThemeName() {
+        themeSets.answer = List.of("75192");
+
+        service.search(new ListingSearchQuery("팰컨", null, null, null, null));
+        service.search(new ListingSearchQuery("스타", null, null, null, null));
+        service.search(ListingSearchQuery.newestAll());
+
+        assertThat(themeSets.asked).isEmpty();
+        assertThat(repository.lastQuery.themeSetNumbers()).isEmpty();
     }
 
     @Test
@@ -750,6 +777,7 @@ class ListingServiceTest {
                 Comparator.comparing(Listing::getListedAt).reversed();
 
         private final List<Listing> store = new ArrayList<>();
+        private ListingSearchQuery lastQuery;
 
         // 실제 저장소처럼 넣고 꺼낼 때 복사한다. 같은 객체를 돌려주면 서비스가 메모리에서 바꾼 값이
         // 원자 갱신 전에 이미 "저장된" 것처럼 보여, 경합에서 지는 경로를 검증할 수 없다.
@@ -770,6 +798,7 @@ class ListingServiceTest {
 
         @Override
         public List<Listing> search(ListingSearchQuery query) {
+            lastQuery = query;
             return store.stream()
                     .filter(Listing::isActive)
                     .filter(l -> query.setNumber() == null || query.setNumber().equals(l.getCatalogSetNumber()))
@@ -964,6 +993,17 @@ class ListingServiceTest {
                 throw failure;
             }
             notifications.add(new InterestTagListingNotice(sellerId, listingId, title, tag));
+        }
+    }
+
+    private static final class RecordingCatalogThemeSets implements CatalogThemeSetsPort {
+        private final List<InterestTag> asked = new ArrayList<>();
+        private List<String> answer = List.of();
+
+        @Override
+        public List<String> setNumbersInTheme(InterestTag theme) {
+            asked.add(theme);
+            return answer;
         }
     }
 }
