@@ -1,7 +1,7 @@
-"""초안 한 편을 만드는 두 번의 모델 호출 — 프롬프트와 출력 계약.
+"""초안 한 편을 만드는 codex 한 번의 호출 — 프롬프트와 출력 계약(D25).
 
-1. Claude: 미리 찍어 둔 후보 화면들을 한 번에 보고, 올릴 화면을 고르고 캡션을 쓴다(구조화 출력).
-2. Codex: 고른 실제 화면을 홍보 이미지로 다듬는다(생성형 편집). 화면 내용은 바꾸지 말라고 고정한다.
+한 호출이 ① 후보 화면 하나 고르기·캡션 ② 미처리 반려 성찰 ③ 고른 화면을 홍보 이미지로 제작을 모두 한다.
+화면 내용은 바꾸지 말라고 고정한다(제작 절차 파일).
 
 규칙(톤·데모 안내·최근 글)은 `policy` 에서 가져온다. 검증의 정본은 아래 pydantic 모델이다.
 """
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from gole_promotion_agent import memory, policy
 
-MAX_PICKS = 3
+MAX_PICKS = 1
 STYLE_ID = "royal-blue-brick-mobile"
 STYLE_VERSION = 1
 
@@ -63,33 +63,52 @@ class DraftOutput(BaseModel):
         return self
 
 
+_NULLABLE_TEXT = {"type": ["string", "null"]}
+# codex --output-schema 는 엄격 모드다 — 모든 속성이 required, additionalProperties=false. 길이·개수는 pydantic 이 본다.
 OUTPUT_SCHEMA: Mapping[str, Any] = {
     "type": "object",
+    "additionalProperties": False,
+    "required": ["decision", "skip_reason", "caption", "rationale", "pick", "reflection"],
     "properties": {
         "decision": {"type": "string", "enum": ["draft", "skip"]},
-        "skip_reason": {"type": "string", "maxLength": policy.MAX_RATIONALE},
-        "caption": {"type": "string", "maxLength": policy.MAX_CAPTION},
-        "rationale": {"type": "string", "maxLength": policy.MAX_RATIONALE},
-        "picks": {
-            "type": "array",
-            "maxItems": MAX_PICKS,
-            "items": {
-                "type": "object",
-                "properties": {"image": {"type": "integer"}, "label": {"type": "string", "maxLength": 40},
-                               "headline": {"type": "string", "minLength": 1, "maxLength": 40}},
-                "required": ["image", "label", "headline"],
+        "skip_reason": _NULLABLE_TEXT,
+        "caption": _NULLABLE_TEXT,
+        "rationale": _NULLABLE_TEXT,
+        "pick": {"anyOf": [{"type": "null"}, {
+            "type": "object", "additionalProperties": False, "required": ["image", "label", "headline"],
+            "properties": {"image": {"type": "integer"}, "label": {"type": "string"}, "headline": {"type": "string"}},
+        }]},
+        "reflection": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["kind", "content", "targets", "categories", "sourceFeedbackIds"],
+            "properties": {
+                "kind": {"type": "string", "enum": ["KNOWLEDGE", "PROCEDURE"]},
+                "content": {"type": "string"},
+                "targets": {"type": "array", "items": {"type": "string", "enum": list(memory.ALL_TARGETS)}},
+                "categories": {"type": "array", "items": {"type": "string", "enum": ["FEATURE", "SERVICE"]}},
+                "sourceFeedbackIds": {"type": "array", "items": {"type": "string"}},
             },
-        },
+        }},
     },
-    "required": ["decision"],
 }
+
+
+def parse(structured: Any) -> DraftOutput:
+    """한 호출의 구조화 출력에서 초안 부분. 성찰(reflection)은 memory.Reflection 이 따로 검증한다."""
+    data = structured if isinstance(structured, dict) else {}
+    pick = data.get("pick")
+    return DraftOutput.model_validate(
+        {key: data.get(key) for key in ("decision", "skip_reason", "caption", "rationale")}
+        | {"picks": [pick] if pick else []}
+    )
+
 
 _SYSTEM = """{tone}
 
 너는 GoLe 홍보 초안 에이전트다. {mission}
 
-첨부 이미지는 방금 찍은 GoLe 의 실제 화면들이다. 이미지 목록에 번호와 화면 경로가 있다.
-Read 로 이미지를 **모두 열어 실제로 무엇이 보이는지 확인한 뒤** 판단한다.
+첨부 이미지는 방금 찍은 GoLe 의 실제 모바일 화면들이다. 후보 목록에 번호와 화면 경로가 있다.
+첨부 이미지를 **모두 보고 실제로 무엇이 보이는지 확인한 뒤** 판단한다.
 
 {screen_note}
 
@@ -97,14 +116,8 @@ Read 로 이미지를 **모두 열어 실제로 무엇이 보이는지 확인한
 - 캡션은 **네가 이미지에서 직접 본 화면**에 근거해 쓴다. 화면에 없는 기능을 말하지 않는다.
 - 다른 이용자의 닉네임·프로필 사진·매물 사진이 크게 잡힌 화면은 고르지 않는다.
 - "아직 없어요" 같은 **빈 상태 화면은 고르지 않는다** — 그것은 그 기능의 모습이 아니다.
-- 고른 모바일 화면은 디자이너가 휴대폰 목업에 넣어 다듬는다. 화면 자체가 홍보 이미지의 주인공이다.
+- 고른 화면 한 장이 홍보 이미지의 주인공이다. 작업 3에서 그 화면을 휴대폰 목업에 넣어 만든다.
 - 보여줄 만한 것이 없으면 억지로 만들지 말고 건너뛴다.
-
-결과는 구조화 출력으로 낸다:
-- 초안: decision="draft", caption, rationale(왜 이 화면들을 골랐는지 검토자가 읽을 한두 문장),
-  picks(올릴 순서대로 최대 {max_picks}장. image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색",
-  headline 은 화면 밖에 넣을 최대 40자/두 줄의 짧은 문구. 화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
-- 건너뜀: decision="skip", skip_reason.
 
 {history}"""
 
@@ -127,7 +140,6 @@ def system_prompt(history: Sequence[Mapping[str, Any]], demo: bool, service: boo
         tone=policy.tone_guide(),
         mission=_SERVICE_MISSION if service else _FEATURE_MISSION,
         screen_note=policy.screen_note(demo),
-        max_picks=MAX_PICKS,
         history=policy.render_history(history),
     )
 
@@ -145,3 +157,38 @@ def task_prompt(
         )
     )
     return f"{head}\n\n후보 화면(첨부 이미지와 같은 순서):\n{listed}"
+
+
+_TASKS = """
+
+## 작업 1 — 화면 하나 고르기·캡션
+{task}
+
+- 초안: decision="draft", skip_reason=null, caption,
+  rationale(이 화면을 고른 이유만 검토자가 읽을 한두 문장으로. 작업 과정·파일 저장·검증 여부는 쓰지 않는다),
+  pick(image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색",
+  headline 은 화면 밖에 넣을 최대 40자/두 줄의 짧은 문구. 화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
+- 건너뜀: decision="skip", skip_reason, caption·rationale·pick 은 null. 이때 작업 3은 하지 않는다.
+- 작업 기억의 지침은 targets 에 CAPTION·SCREEN_SELECTION 이 있는 것만 이 작업에 적용한다.
+
+## 작업 2 — 반려 성찰 (reflection 필드)
+{reflection}
+
+## 작업 3 — 고른 화면을 홍보 이미지로 제작
+decision="draft" 일 때만 한다. pick.image 번호의 첨부 원본 한 장을 아래 절차로 만든다.
+headline 은 작업 1의 pick.headline 을 그대로 쓴다. 작업 기억의 지침은 targets 에 IMAGE_EDIT 가 있는 것만 적용한다.
+
+{procedure}
+
+완성 이미지 한 장만 out/ 폴더에 PNG 로 저장한다. 이미지 생성이 실패해도 JSON 은 낸다.
+
+최종 메시지는 스키마에 맞는 JSON 하나뿐이다."""
+
+
+def run_prompt(system: str, memory_block: str, task: str, reflection: str | None) -> str:
+    """codex 한 호출의 지시문. reflection 이 None 이면 성찰할 반려가 없다."""
+    return system + memory_block + _TASKS.format(
+        task=task,
+        reflection=reflection or "미처리 반려가 없다. reflection=[] 로 낸다.",
+        procedure=POLISH_PROMPT.strip(),
+    )

@@ -60,27 +60,22 @@ class FakeCliGateway:
         self.requests.append(dict(request))
 
         def runner(command, **kwargs):
-            if request["engine"] == "claude":
-                if "proposals" in request.get("json_schema", {}).get("properties", {}):
-                    feedback = json.loads(request["prompt"].split("\n", 1)[1])["feedback"]
-                    proposals = [] if self.phase != "propose" else [{
-                        "kind": "PROCEDURE", "content": PROPOSAL_CONTENT,
-                        "targets": ["CAPTION", "SCREEN_SELECTION", "IMAGE_EDIT"],
-                        "categories": ["FEATURE", "SERVICE"], "sourceFeedbackIds": [feedback[0]["id"]],
-                    }]
-                    structured = {"proposals": proposals}
-                else:
-                    structured = {
-                        "decision": "draft", "caption": "갖고 있는 레고 세트를 한곳에 모아 보세요.",
-                        "rationale": "컬렉션 화면의 기능을 소개함",
-                        "picks": [{"image": 2, "label": "컬렉션", "headline": "내 레고 세트, 한곳에"}],
-                    }
-                return subprocess.CompletedProcess(command, 0, json.dumps({
-                    "subtype": "success", "structured_output": structured, "result": "",
-                    "usage": {"input_tokens": 10, "output_tokens": 5},
-                }, ensure_ascii=False), "")
+            # codex 한 번(D25): 구조화 출력(-o 파일)과 out/ 의 이미지를 함께 낸다.
+            pending = re.search(r'"feedbackIds": (\[[^\]]*\])', request["prompt"])
+            feedback_ids = json.loads(pending.group(1)) if pending else []
+            proposals = [] if self.phase != "propose" or not feedback_ids else [{
+                "kind": "PROCEDURE", "content": PROPOSAL_CONTENT,
+                "targets": ["CAPTION", "SCREEN_SELECTION", "IMAGE_EDIT"],
+                "categories": ["FEATURE", "SERVICE"], "sourceFeedbackIds": feedback_ids[:1],
+            }]
+            structured = {
+                "decision": "draft", "skip_reason": None, "caption": "갖고 있는 레고 세트를 한곳에 모아 보세요.",
+                "rationale": "컬렉션 화면의 기능을 소개함",
+                "pick": {"image": 2, "label": "컬렉션", "headline": "내 레고 세트, 한곳에"},
+                "reflection": proposals,
+            }
             (Path(kwargs["cwd"]) / "out" / "polished.png").write_bytes(png())
-            Path(command[command.index("-o") + 1]).write_text("완료", encoding="utf-8")
+            Path(command[command.index("-o") + 1]).write_text(json.dumps(structured, ensure_ascii=False), encoding="utf-8")
             events = json.dumps({"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 5}})
             return subprocess.CompletedProcess(command, 0, events, "")
 
@@ -110,7 +105,7 @@ def main() -> int:
     result = Drafter(
         repo=Path.cwd(), run_dir=args.run_dir, publisher=publisher, gateway=meter,
         camera=Camera(ROUTES), routes=ROUTES, demo=True, service=True, run_key=args.run_key,
-        claude_model="fake-claude", codex_model="fake-codex",
+        codex_model="fake-codex",
         log=lambda message: print(message, file=sys.stderr),
     ).run()
     payload = run_payload(result, meter.calls, service=True, sha=None, env={})

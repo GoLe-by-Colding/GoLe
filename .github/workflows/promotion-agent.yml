@@ -5,8 +5,8 @@ name: Promotion agent
 #   - 월·수·금 10:00 KST 스케줄 · service=true   → 서비스 소개 글
 # 러너 안에 데모 데이터가 든 스택을 띄워 후보 화면을 찍는다. 스택은 릴리스(기능 홍보) 때만 띄우고,
 # 서비스 소개는 마지막으로 찍어 둔 캡처(promotion-captures 아티팩트)를 받아 쓴다 — 화면은 다음 릴리스
-# 전까지 같다. 받을 캡처가 없을 때만 스택을 띄워 찍는다. 화면 고르기·캡션(claude)과 화면 다듬기
-# (codex)는 SSH 로 부르는 LLM 게이트웨이(apps/support-agent/gateway)의 CLI 가 한다. 초안(다듬은
+# 전까지 같다. 받을 캡처가 없을 때만 스택을 띄워 찍는다. 화면 고르기·캡션·반려 성찰·이미지 제작은
+# SSH 로 부르는 LLM 게이트웨이(apps/support-agent/gateway)의 codex 가 한 번에 한다(D25). 초안(다듬은
 # 이미지·원본·설명표·출처)은 운영 검토 큐에 낸다. 발행은 사람이 관리자 화면에서 한다.
 #
 # 저장소가 공개라 이 실행의 로그·요약·아티팩트는 누구나 본다. 여기에는 숫자·고정 코드·링크만 남긴다.
@@ -293,7 +293,6 @@ jobs:
           PROMOTION_GATEWAY_PORT: ${{ vars.PROMOTION_GATEWAY_PORT }}
           # Prepare 단계의 키 파일이 있으면 실행 중 읽으며 비밀번호보다 우선한다.
           PROMOTION_GATEWAY_PASSWORD: ${{ secrets.PROMOTION_GATEWAY_PASSWORD }}
-          PROMOTION_AGENT_CLAUDE_MODEL: ${{ vars.PROMOTION_AGENT_CLAUDE_MODEL }}
           PROMOTION_AGENT_CODEX_MODEL: ${{ vars.PROMOTION_AGENT_CODEX_MODEL }}
           # 내는 곳: 운영 검토 큐.
           PROMOTION_AGENT_ADMIN_EMAIL: ${{ secrets.PROMOTION_AGENT_ADMIN_EMAIL }}

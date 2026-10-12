@@ -1,7 +1,7 @@
-"""홍보 초안 한 편을 만든다. 러너 안 데모 스택을 찍고, 판단·다듬기는 게이트웨이의 CLI 에 맡긴다.
+"""홍보 초안 한 편을 만든다. 러너 안 데모 스택을 찍고, 판단·제작은 게이트웨이의 codex 한 번에 맡긴다(D25).
 
-    후보 화면 일괄 캡처 ─▶ 게이트웨이 claude: 화면 고르기·캡션 ─▶ 게이트웨이 codex: 고른 화면 다듬기
-                       ─▶ 검증 ─▶ BackendPublisher: 다듬은 이미지 + 원본 + 지시문 제출(검토 요청)
+    후보 화면 일괄 캡처 ─▶ 게이트웨이 codex 1회: 화면 하나 고르기·캡션 + 반려 성찰 + 홍보 이미지 제작
+                       ─▶ 검증 ─▶ BackendPublisher: 성찰 저장, 다듬은 이미지 + 원본 + 지시문 제출(검토 요청)
 
 모델은 만들기만 하고 검증·제출은 여기서 한다. 운영 관리자 자격증명은 게이트웨이로 가지 않는다 —
 서버로 가는 것은 데모 화면 캡처와 프롬프트뿐이다.
@@ -61,7 +61,6 @@ class Drafter:
         demo: bool,
         service: bool,
         sha: str | None = None,
-        claude_model: str | None = None,
         codex_model: str | None = None,
         run_key: str | None = None,
         log: Callable[[str], None] = print,
@@ -77,7 +76,6 @@ class Drafter:
         self._demo = demo
         self._service = service
         self._sha = sha
-        self._claude_model = claude_model
         self._codex_model = codex_model
         self.run_key = run_key or execution_run_key(os.environ)
         self._memory = memory.Context()
@@ -95,24 +93,20 @@ class Drafter:
         except Exception as error:  # noqa: BLE001 — 메모리 없이 새 초안을 만들지 않는다
             self._log(f"[promotion-agent] MEMORY_CONTEXT_FAILED ({type(error).__name__})")
             return RunResult("failed", "ERROR", "MEMORY_CONTEXT_FAILED", run_key=self.run_key)
-        self._reflect()
         result = self._draft()
         return replace(
             result, detail=result.detail or self._memory_error,
             memory_context=self.memory_usage, run_key=self.run_key,
         )
 
-    def _reflect(self) -> None:
+    def _reflect(self, structured: Any) -> None:
+        """같은 호출이 낸 성찰 제안을 저장한다. 실패해도 초안은 계속 낸다 — 다음 실행이 미처리 경험을 다시 읽는다."""
         pending = self._memory.unreflectedFeedback
         if not pending:
             return
         try:
-            response = self._gateway.call({
-                "engine": "claude", "model": self._claude_model,
-                "system": memory.REFLECTION_SYSTEM,
-                "prompt": memory.reflection_prompt(self._memory), "json_schema": memory.REFLECTION_SCHEMA,
-            })
-            reflection = memory.Reflection.model_validate(response.get("structured"))
+            proposals = structured.get("reflection") if isinstance(structured, dict) else None
+            reflection = memory.Reflection.model_validate({"proposals": proposals})
             self._publisher.reflect(reflection.payload([item.id for item in pending], self.run_key))
         except Exception as error:  # noqa: BLE001 — 다음 실행이 미처리 경험을 다시 읽는다
             self._memory_error = "MEMORY_REFLECTION_FAILED"
@@ -151,10 +145,42 @@ class Drafter:
         if not shots:
             return RunResult("failed", "NO_CAPTURES")
 
+        category = "SERVICE" if self._service else "FEATURE"
+        plan_feedback, plan_guidelines = self._memory.select(category, ("CAPTION", "SCREEN_SELECTION"))
+        image_feedback, image_guidelines = self._memory.select(category, ("IMAGE_EDIT",))
+        # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 호출 전에 잰다.
+        parts = _edit_parts(image_feedback, image_guidelines, "가" * 41)
+        if memory.utf16_length("".join(parts.values())) > memory.MAX_EDIT_PROMPT:
+            lengths = {name: memory.utf16_length(text) for name, text in parts.items()}
+            lengths["total"] = sum(lengths.values())
+            return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG " + json.dumps(lengths))
+
+        feedback = list({item.id: item for item in [*plan_feedback, *image_feedback]}.values())
+        guidelines = list({item.id: item for item in [*plan_guidelines, *image_guidelines]}.values())
+        self._remember("PLAN", [shot.route for shot in shots], plan_feedback, plan_guidelines)
+        prompt = drafting.run_prompt(
+            drafting.system_prompt(self._publisher.history(policy.HISTORY_LIMIT), self._demo, self._service),
+            memory.render(feedback, guidelines),
+            drafting.task_prompt([shot.route for shot in shots], service=self._service, subject=subject, diff=diff),
+            memory.reflection_prompt(self._memory, [item.id for item in feedback], [item.id for item in guidelines]),
+        )
         try:
-            draft = self._choose(shots, subject, diff)
+            response = self._gateway.call({
+                "engine": "codex", "model": self._codex_model, "prompt": prompt,
+                "json_schema": drafting.OUTPUT_SCHEMA, "want_images": True,
+                "images": [encode_png(shot.path) for shot in shots],
+            })
         except GatewayError as error:
+            if re.fullmatch(r"[A-Z_]+", str(error)):
+                self._log(f"[promotion-agent] {error}")  # 계정 정지·한도 같은 고정 코드만 공개 로그에 남긴다
             return RunResult("failed", "GATEWAY_FAILED", str(error))
+        structured = response.get("structured")
+        (self._run_dir / "choice.json").write_text(json.dumps(structured, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._reflect(structured)
+        try:
+            draft = drafting.parse(structured)
+            if any(pick.image > len(shots) for pick in draft.picks):
+                raise ValueError("없는 후보 번호를 골랐다")
         except (ValidationError, ValueError) as error:
             # pydantic 오류 문자열에는 모델 출력 일부(input_value)가 들어 있다 — 원장에만 남긴다.
             return RunResult("failed", "CHOICE_INVALID", str(error))
@@ -162,30 +188,10 @@ class Drafter:
             return RunResult("skipped", "MODEL_SKIPPED", draft.skip_reason)
 
         picked = [shots[pick.image - 1] for pick in draft.picks]
-        category = "SERVICE" if self._service else "FEATURE"
-        routes = list(dict.fromkeys(shot.route for shot in picked))
-        try:
-            refreshed = self._publisher.memory_context(category, routes)
-            episodes = memory.Context.model_validate({"feedback": refreshed.get("feedback", [])})
-        except Exception as error:  # noqa: BLE001 — 화면에 맞는 경험을 못 읽으면 제작하지 않는다
-            self._log(f"[promotion-agent] MEMORY_CONTEXT_FAILED ({type(error).__name__})")
-            return RunResult("failed", "ERROR", "MEMORY_CONTEXT_FAILED")
-        feedback, _ = episodes.select(category, ("IMAGE_EDIT",))
-        _, guidelines = self._memory.select(category, ("IMAGE_EDIT",))
-        edit_prompts = []
-        for pick in draft.picks:
-            parts = memory.render_parts(feedback, guidelines)
-            parts["fixed"] = drafting.POLISH_PROMPT + parts["fixed"]
-            parts["headline"] = "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": pick.headline}, ensure_ascii=False)
-            edit_prompt = "".join(parts.values())
-            if memory.utf16_length(edit_prompt) > memory.MAX_EDIT_PROMPT:
-                lengths = {name: memory.utf16_length(text) for name, text in parts.items()}
-                lengths["total"] = memory.utf16_length(edit_prompt)
-                return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG " + json.dumps(lengths))
-            edit_prompts.append(edit_prompt)
-        self._remember("IMAGE_EDIT", routes, feedback, guidelines)
-        polished = [self._polish(shot, index, prompt)
-                    for index, (shot, prompt) in enumerate(zip(picked, edit_prompts), start=1)]
+        edit_prompts = ["".join(_edit_parts(image_feedback, image_guidelines, pick.headline).values())
+                        for pick in draft.picks]
+        self._remember("IMAGE_EDIT", [shot.route for shot in picked], image_feedback, image_guidelines)
+        polished = [self._polished(response, shot) for shot in picked]
 
         media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
         # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
@@ -265,52 +271,28 @@ class Drafter:
         )
         return shots
 
-    def _choose(self, shots: Sequence[Shot], subject: str | None, diff: str | None) -> drafting.DraftOutput:
-        feedback, guidelines = self._memory.select("SERVICE" if self._service else "FEATURE", ("CAPTION", "SCREEN_SELECTION"))
-        self._remember("PLAN", [shot.route for shot in shots], feedback, guidelines)
-        response = self._gateway.call(
-            {
-                "engine": "claude",
-                "model": self._claude_model,
-                "system": drafting.system_prompt(
-                    self._publisher.history(policy.HISTORY_LIMIT), self._demo, self._service
-                ) + memory.render(feedback, guidelines),
-                "prompt": drafting.task_prompt(
-                    [shot.route for shot in shots], service=self._service, subject=subject, diff=diff
-                ),
-                "json_schema": drafting.OUTPUT_SCHEMA,
-                "images": [encode_png(shot.path) for shot in shots],
-            }
-        )
-        (self._run_dir / "choice.json").write_text(
-            json.dumps(response.get("structured"), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        draft = drafting.DraftOutput.model_validate(response.get("structured") or {})
-        if any(pick.image > len(shots) for pick in draft.picks):
-            raise ValueError("없는 후보 번호를 골랐다")
-        return draft
-
-    def _polish(self, shot: Shot, index: int, prompt: str = drafting.POLISH_PROMPT) -> Path | None:
-        """다듬은 이미지 경로. 실패하면 None — 그 자리는 원본을 그대로 올린다."""
+    def _polished(self, response: Mapping[str, Any], shot: Shot) -> Path | None:
+        """같은 호출이 만든 홍보 이미지 경로. 없거나 깨졌으면 None — 그 자리는 원본을 그대로 올린다."""
         try:
-            response = self._gateway.call(
-                {
-                    "engine": "codex",
-                    "model": self._codex_model,
-                    "prompt": prompt,
-                    "images": [encode_png(shot.path)],
-                    "want_images": True,
-                }
-            )
             data = decode_png(response["images"][0])
-        except (GatewayError, KeyError, IndexError, ValueError) as error:
+        except (GatewayError, KeyError, IndexError, TypeError, ValueError) as error:
             # 모델 오류가 입력 프롬프트를 인용할 수 있다. 작업 기억 원문은 공개 로그에 싣지 않는다.
-            self._log(f"[promotion-agent] 다듬기 실패 {shot.route}, 원본을 올림 ({type(error).__name__})")
+            self._log(f"[promotion-agent] 이미지 제작 실패 {shot.route}, 원본을 올림 ({type(error).__name__})")
             return None
-        destination = self._run_dir / "polished" / f"{index:02d}-{_slug(shot.route)}.png"
+        destination = self._run_dir / "polished" / f"01-{_slug(shot.route)}.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(data)
         return destination
+
+
+def _edit_parts(
+    feedback: Sequence[memory.Feedback], guidelines: Sequence[memory.Guideline], headline: str,
+) -> dict[str, str]:
+    """검토 화면에 남기는 제작 지시문 — 고정 절차 + IMAGE_EDIT 작업 기억 + 문구."""
+    parts = memory.render_parts(feedback, guidelines)
+    parts["fixed"] = drafting.POLISH_PROMPT + parts["fixed"]
+    parts["headline"] = "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": headline}, ensure_ascii=False)
+    return parts
 
 
 def _required(name: str) -> str:
@@ -451,7 +433,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         demo=demo,
         service=arguments.service,
         sha=arguments.sha,
-        claude_model=os.environ.get("PROMOTION_AGENT_CLAUDE_MODEL") or None,
         codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
     )
     try:

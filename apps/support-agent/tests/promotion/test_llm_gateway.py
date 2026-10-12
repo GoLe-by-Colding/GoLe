@@ -48,21 +48,20 @@ def test_gateway_uses_only_stdlib():
     assert all(name == "__future__" or name.split(".")[0] in sys.stdlib_module_names for name in modules)
 
 
-def test_claude_returnsStructuredOutputAndOnlyReadsInbox(tmp_path):
-    payload = {"type": "result", "subtype": "success", "is_error": False,
-               "result": "{}", "structured_output": {"decision": "skip"}}
-    runner, calls = _recording(json.dumps(payload))
+def test_codex_returnsStructuredOutputAndAttachesInbox(tmp_path):
+    def write_output(command, kwargs):
+        Path(command[command.index("-o") + 1]).write_text('{"decision": "skip"}', encoding="utf-8")
+
+    runner, calls = _recording(on_call=write_output)
 
     response = gateway.handle(
-        {"engine": "claude", "prompt": "골라", "json_schema": {"type": "object"},
-         "images": [{"data": PNG_B64}]},
+        {"engine": "codex", "prompt": "골라", "json_schema": {"type": "object"}, "images": [{"data": PNG_B64}]},
         runner=runner, root=tmp_path,
     )
 
     assert response["ok"] and response["structured"] == {"decision": "skip"}
     command = calls[0]["command"]
-    assert "Read(./in/**)" in command and "dontAsk" in command
-    assert "in/img-01.png" in calls[0]["input"]
+    assert command[command.index("-i") + 1].endswith("img-01.png") and "in/img-01.png" in calls[0]["input"]
     assert list(tmp_path.iterdir()) == []  # 임시 폴더를 남기지 않는다
 
 
@@ -91,6 +90,37 @@ def test_codex_returnsGeneratedImages(tmp_path):
     assert "API/CLI 이미지 생성으로 대체하지 않는다" in calls[0]["input"]
     assert command[command.index("-i") + 1].endswith("img-01.png")
     assert command[command.index("-s") + 1] == "workspace-write"
+
+
+@pytest.mark.parametrize("makes_image", [True, False])
+def test_codexOneCall_returnsStructuredAndImagesButNoFreeText(tmp_path, makes_image):
+    # D25: 고르기·성찰·제작을 한 번에. 이미지가 없어도 구조화 출력은 돌려준다 — 호출 쪽이 원본을 쓴다.
+    def write_output(command, kwargs):
+        if makes_image:
+            (Path(kwargs["cwd"]) / "out" / "pick-1.png").write_bytes(PNG)
+        Path(command[command.index("-o") + 1]).write_text('{"decision": "skip"}', encoding="utf-8")
+
+    runner, calls = _recording(on_call=write_output)
+
+    response = gateway.handle(
+        {"engine": "codex", "prompt": "골라서 만들어", "want_images": True,
+         "json_schema": {"type": "object"}, "images": [{"data": PNG_B64}] * 2},
+        runner=runner, root=tmp_path,
+    )
+
+    assert response["ok"] and response["structured"] == {"decision": "skip"} and response["text"] == ""
+    assert len(response["images"]) == (1 if makes_image else 0)
+    assert "--output-schema" in calls[0]["command"]
+
+
+def test_codexUsageLimit_reportsFixedCode(tmp_path):
+    runner = lambda command, **kw: subprocess.CompletedProcess(  # noqa: E731
+        command, 1, "", "ERROR: You've hit your usage limit. Try again later."
+    )
+
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and response["error"] == "CODEX_USAGE_LIMIT"
 
 
 def test_codex_sandboxWithoutShell_takesImageFromGeneratedFolderAndCleansIt(tmp_path, monkeypatch):
@@ -174,25 +204,6 @@ def test_codexFailureWithoutImages_stillReportsUsage(tmp_path, monkeypatch):
     assert "--json" in calls[0]
 
 
-def test_claude_reportsUsageIncludingCacheAndCost(tmp_path):
-    stdout = json.dumps({
-        "subtype": "success", "is_error": False, "result": "ok", "duration_ms": 2498,
-        "total_cost_usd": 0.214875,
-        "usage": {"input_tokens": 2, "cache_creation_input_tokens": 24467,
-                  "cache_read_input_tokens": 95255, "output_tokens": 4},
-        "modelUsage": {"claude-opus-5-5": {"inputTokens": 2}},
-    })
-    runner, _ = _recording(stdout=stdout)
-
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
-
-    assert response["usage"] == {
-        "engine": "claude", "model": "claude-opus-5-5",
-        "input_tokens": 2 + 24467 + 95255, "cached_input_tokens": 95255, "output_tokens": 4,
-        "cost_usd": 0.214875, "duration_ms": 2498,
-    }
-
-
 def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     runner, _ = _recording()
 
@@ -206,10 +217,10 @@ def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     "request_",
     [
         {"engine": "bash", "prompt": "x"},
-        {"engine": "claude", "prompt": ""},
-        {"engine": "claude", "prompt": "x", "images": [{"data": base64.b64encode(b"GIF89a").decode()}]},
-        {"engine": "claude", "prompt": "x", "want_images": True},
-        {"engine": "claude", "prompt": "x", "images": [{"data": PNG_B64}] * 13},
+        {"engine": "claude", "prompt": "x"},  # D25: codex 하나만 받는다
+        {"engine": "codex", "prompt": ""},
+        {"engine": "codex", "prompt": "x", "images": [{"data": base64.b64encode(b"GIF89a").decode()}]},
+        {"engine": "codex", "prompt": "x", "images": [{"data": PNG_B64}] * 25},
     ],
 )
 def test_badRequests_neverRunACli(tmp_path, request_):
@@ -224,7 +235,7 @@ def test_timeout_isReportedNotRaised(tmp_path):
     def runner(command, **kwargs):
         raise subprocess.TimeoutExpired(command, 1)
 
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
 
     assert not response["ok"] and "시간 초과" in response["error"]
 
@@ -267,7 +278,7 @@ def test_unexpectedError_isGenericInResponse(tmp_path, monkeypatch, capsys):
         raise RuntimeError("C:/Users/friend/secret-path")
 
     monkeypatch.setattr(gateway, "handle", boom)
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"claude","prompt":"x"}')))
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"codex","prompt":"x"}')))
 
     gateway.main()
 
@@ -281,21 +292,17 @@ def test_flagLikeModel_isRejectedBeforeAnyCli(tmp_path, model):
     runner, calls = _recording()
 
     with pytest.raises(gateway.BadRequest):
-        gateway.handle({"engine": "claude", "prompt": "x", "model": model}, runner=runner, root=tmp_path)
+        gateway.handle({"engine": "codex", "prompt": "x", "model": model}, runner=runner, root=tmp_path)
     assert calls == []
 
 
-def test_system_isPassedAsFileNotArgument(tmp_path):
-    seen = {}
+def test_systemAndPrompt_goThroughStdinNotArguments(tmp_path):
+    runner, calls = _recording()
 
-    def runner(command, **kwargs):
-        flag = command.index("--append-system-prompt-file")
-        seen["text"] = Path(command[flag + 1]).read_text(encoding="utf-8")
-        seen["command"] = command
-        return subprocess.CompletedProcess(command, 0, json.dumps({"subtype": "success", "result": "ok"}), "")
+    gateway.handle({"engine": "codex", "prompt": "x", "system": "--dangerously-bypass-approvals-and-sandbox",
+                    "model": "gpt-6.1-sol"}, runner=runner, root=tmp_path)
 
-    gateway.handle({"engine": "claude", "prompt": "x", "system": "--tools Bash", "model": "sonnet"}, runner=runner, root=tmp_path)
-
-    assert seen["text"] == "--tools Bash"
-    assert "--tools Bash" not in seen["command"]
-    assert seen["command"][seen["command"].index("--model") + 1] == "sonnet"
+    command = calls[0]["command"]
+    assert "--dangerously-bypass-approvals-and-sandbox" not in command
+    assert calls[0]["input"].startswith("--dangerously-bypass-approvals-and-sandbox\n\nx")
+    assert command[command.index("-m") + 1] == "gpt-6.1-sol"

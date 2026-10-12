@@ -12,10 +12,10 @@ from gole_promotion_agent.gateway_client import GatewayError
 from gole_promotion_agent.hands import BackendPublisher
 
 from .gitrepo import commit
-from .test_drafter import ARGS, DRAFT, ROUTES, FakeGateway, FakePublisher, RecordingPublisher, _drafter
+from .test_drafter import ARGS, DRAFT, ROUTES, SKIP, FakeGateway, FakePublisher, RecordingPublisher, _drafter
 
 PLAN_STAGE = {"stage": "PLAN", "routes": ["/", "/collection", "/search"], "feedbackIds": [], "guidelineIds": []}
-IMAGE_STAGE = {"stage": "IMAGE_EDIT", "routes": ["/collection", "/"], "feedbackIds": [], "guidelineIds": []}
+IMAGE_STAGE = {"stage": "IMAGE_EDIT", "routes": ["/collection"], "feedbackIds": [], "guidelineIds": []}
 
 
 def feedback(id="feedback-1", targets=None):
@@ -36,21 +36,14 @@ def guideline(id="guideline-1", targets=None, status="ACTIVE", content="화면 �
 
 
 class ReflectingGateway(FakeGateway):
-    def __init__(self, proposals=None, fails=False):
-        super().__init__(DRAFT)
-        self.proposals, self.fails = proposals or [], fails
+    """한 호출이 초안과 함께 성찰 제안(reflection)을 낸다(D25)."""
 
-    def call(self, request):
-        if "proposals" in request.get("json_schema", {}).get("properties", {}):
-            self.requests.append(request)
-            if self.fails:
-                raise GatewayError("비공개 모델 실패 원문")
-            return {"structured": {"proposals": self.proposals}}
-        return super().call(request)
+    def __init__(self, proposals=None, choice=DRAFT):
+        super().__init__(choice | {"reflection": proposals or []})
 
 
 @pytest.mark.parametrize("gate", ["QUEUE_FULL", "NO_WEB_CHANGE", "ALREADY_DRAFTED"])
-def test_reflect_runsBeforeEveryGenerationGate(tmp_path, repo, gate):
+def test_generationGates_skipModelAndLeaveExperienceForNextRun(tmp_path, repo, gate):
     gateway = ReflectingGateway()
     publisher = FakePublisher(pending=5 if gate == "QUEUE_FULL" else 0,
                               exists=gate == "ALREADY_DRAFTED",
@@ -63,12 +56,11 @@ def test_reflect_runsBeforeEveryGenerationGate(tmp_path, repo, gate):
     result = _drafter(tmp_path, gateway, publisher, **options).run()
 
     assert result.code == gate and camera.calls == []
-    assert len(gateway.requests) == 1 and gateway.requests[0]["engine"] == "claude"
-    assert publisher.reflections == [{"feedbackIds": ["feedback-1"], "runKey": "test-reflection", "proposals": []}]
+    assert gateway.requests == [] and publisher.reflections == []
     assert result.run_key == "test-reflection"
 
 
-def test_proposedGuidelines_waitForHuman_thenBothStagesReceiveOnlyTheirTargets(tmp_path):
+def test_proposedGuidelines_waitForHuman_thenEachStageRecordsOnlyItsTargets(tmp_path):
     text = guideline("text", ["CAPTION", "SCREEN_SELECTION"], content="글은 짧게 쓴다")
     image = guideline("image")
     pending = guideline("pending", status="PROPOSED", content="아직 승인하지 않은 제안")
@@ -78,46 +70,59 @@ def test_proposedGuidelines_waitForHuman_thenBothStagesReceiveOnlyTheirTargets(t
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
-    choose, *polish = gateway.requests
-    assert "글은 짧게 쓴다" in choose["system"] and image["content"] not in choose["system"]
-    assert "화면 글자가 너무 작아" in choose["system"] and "실제 픽셀을 보지 못했다" in choose["system"]
-    assert all(image["content"] in request["prompt"] and text["content"] not in request["prompt"] for request in polish)
-    assert all("아직 승인하지 않은 제안" not in json.dumps(request, ensure_ascii=False) for request in gateway.requests)
-    assert all("해제한 지침" not in json.dumps(request, ensure_ascii=False) for request in gateway.requests)
+    (request,) = gateway.requests
+    prompt = request["prompt"]
+    assert "글은 짧게 쓴다" in prompt and image["content"] in prompt
+    assert prompt.count("화면 글자가 너무 작아") == 1 and "실제 픽셀을 보지 못했다" in prompt
+    assert "아직 승인하지 않은 제안" not in prompt and "해제한 지침" not in prompt
+    edit = publisher.created[0][3]["captures"][0]["edit"]
+    assert image["content"] in edit and text["content"] not in edit
     assert result.memory_context["feedbackIds"] == ["feedback-1"]
     assert [item["id"] for item in result.memory_context["guidelines"]] == ["text", "image"]
     assert result.memory_context["stages"] == [
         PLAN_STAGE | {"feedbackIds": ["feedback-1"], "guidelineIds": ["text"]},
         IMAGE_STAGE | {"feedbackIds": ["feedback-1"], "guidelineIds": ["image"]},
     ]
-    assert publisher.created[0][3]["captures"][0]["edit"] == polish[0]["prompt"]
 
 
-def test_reflectionProposal_doesNotApplyDuringSameRun(tmp_path):
+def test_reflection_isSavedFromTheSameCall_andFeedbackAppearsOnce(tmp_path):
     proposal = {key: value for key, value in guideline(status="PROPOSED").items() if key not in {"id", "status"}}
-    context = {"unreflectedFeedback": [feedback()]}
+    context = {"feedback": [feedback()], "unreflectedFeedback": [feedback()]}
     gateway, publisher = ReflectingGateway([proposal]), FakePublisher(memory_context=context)
 
-    result = _drafter(tmp_path, gateway, publisher).run()
+    result = _drafter(tmp_path, gateway, publisher, run_key="same-run").run()
 
-    assert publisher.reflections[0]["proposals"] == [proposal]
-    assert all(proposal["content"] not in json.dumps(request, ensure_ascii=False) for request in gateway.requests[1:])
-    assert result.memory_context == {"feedbackIds": [], "guidelines": [], "stages": [PLAN_STAGE, IMAGE_STAGE]}
+    assert publisher.reflections == [{"feedbackIds": ["feedback-1"], "runKey": "same-run", "proposals": [proposal]}]
+    (request,) = gateway.requests
+    assert request["prompt"].count("화면 글자가 너무 작아") == 1  # 에피소드에 실었으니 성찰은 ID로만 가리킨다
+    assert '"feedbackIds": ["feedback-1"]' in request["prompt"]
+    assert result.outcome == "submitted" and result.detail is None
 
 
-@pytest.mark.parametrize("failure", ["gateway", "contract", "save"])
-def test_reflectionFailure_keepsExperienceUnprocessedAndUsesExistingContext(tmp_path, failure):
+def test_noUnreflectedFeedback_asksForEmptyReflectionAndSavesNothing(tmp_path):
+    gateway, publisher = ReflectingGateway(), FakePublisher()
+
+    _drafter(tmp_path, gateway, publisher).run()
+
+    assert "미처리 반려가 없다" in gateway.requests[0]["prompt"] and publisher.reflections == []
+
+
+@pytest.mark.parametrize("failure", ["contract", "shape", "save"])
+def test_reflectionFailure_keepsExperienceUnprocessedButStillSubmits(tmp_path, failure):
     context = {"feedback": [feedback()], "unreflectedFeedback": [feedback()], "guidelines": [guideline()]}
     publisher = FakePublisher(memory_context=context)
-    proposals = [{**guideline(), "sourceFeedbackIds": ["not-in-this-batch"]}] if failure == "contract" else None
-    gateway = ReflectingGateway(proposals, fails=failure == "gateway")
+    proposals = {
+        "contract": [{**guideline(), "sourceFeedbackIds": ["not-in-this-batch"]}],
+        "shape": [{"kind": "BASH"}],
+        "save": [],
+    }[failure]
+    gateway = ReflectingGateway(proposals)
     if failure == "save":
         publisher.reflect = lambda _payload: (_ for _ in ()).throw(ConnectionError("비공개 HTTP 오류"))
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.outcome == "submitted" and result.detail == "MEMORY_REFLECTION_FAILED"
-    assert "화면 글자가 읽힐 크기" in gateway.requests[-1]["prompt"]
     assert context["unreflectedFeedback"] == [feedback()]
     if failure != "save":
         assert publisher.reflections == []
@@ -133,21 +138,19 @@ def test_memoryFetchFailure_preventsCapturesAndModels(tmp_path):
     assert gateway.requests == [] and camera.calls == []
 
 
-def test_polishError_quotingPrivateMemory_doesNotLeakToPublicLogs(tmp_path, capsys):
+def test_brokenImage_quotingPrivateMemory_doesNotLeakToPublicLogs(tmp_path, capsys):
     sentinel = "비공개-반려지침-노출금지"
     publisher = FakePublisher(memory_context={"guidelines": [guideline(content=sentinel)]})
 
     class QuotingGateway(FakeGateway):
         def call(self, request):
-            if request["engine"] == "codex":
-                assert sentinel in request["prompt"]
-                raise GatewayError(request["prompt"])
-            return super().call(request)
+            assert sentinel in request["prompt"]
+            return {"ok": True, "structured": DRAFT, "images": [{"name": "x.png", "data": request["prompt"]}]}
 
     result = _drafter(tmp_path, QuotingGateway(DRAFT), publisher, log=print).run()
 
     public_log = capsys.readouterr().out
-    assert result.outcome == "submitted" and "GatewayError" in public_log
+    assert result.outcome == "submitted" and "이미지 제작 실패" in public_log
     assert sentinel not in public_log and "홍보 작업 기억" not in public_log
     assert all(path.parent.name == "captures" for path in publisher.uploaded[0])
 
@@ -161,14 +164,13 @@ def test_longEditPrompt_failsExplicitlyBeforeCodexInsteadOfTruncating(tmp_path):
     assert result.outcome == "failed" and result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
     lengths = json.loads(result.detail.removeprefix("EDIT_PROMPT_TOO_LONG "))
     assert lengths["total"] == sum(value for key, value in lengths.items() if key != "total") > 6_000
-    assert [request["engine"] for request in gateway.requests] == ["claude"]
-    assert publisher.created == [] and result.memory_context["guidelines"] == []
-    assert result.memory_context["stages"] == [PLAN_STAGE]
+    assert gateway.requests == [] and publisher.created == []
+    assert result.memory_context == {"feedbackIds": [], "guidelines": [], "stages": []}
 
 
-def test_unusedImageGuidelines_areAbsentFromLedgerWhenClaudeSkips(tmp_path):
+def test_unusedImageGuidelines_areAbsentFromLedgerWhenCodexSkips(tmp_path):
     publisher = FakePublisher(memory_context={"guidelines": [guideline()]})
-    gateway = FakeGateway({"decision": "skip", "skip_reason": "화면 없음"})
+    gateway = FakeGateway(SKIP)
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
@@ -217,55 +219,28 @@ def test_coreSeedGuideline_needsDocumentInsteadOfFeedback():
             memory.Guideline.model_validate(core | patch)
 
 
-def test_stageMemory_requeriesChosenRoutes_freezesAllGuidelines_andRecordsSixEpisodes(tmp_path):
-    plan_feedback = [feedback(f"plan-{i}", ["CAPTION"]) for i in range(3)]
-    image_feedback = [feedback(f"image-{i}", ["IMAGE_EDIT"]) for i in range(3)]
+def test_stageMemory_queriesOnce_freezesAllGuidelines_andRecordsEachStage(tmp_path):
+    plan_feedback = [feedback(f"plan-{i}", ["CAPTION"]) for i in range(2)]
+    image_feedback = [feedback("image-0", ["IMAGE_EDIT"])]
     active = [guideline(f"text-{i}", ["CAPTION"], content=f"짧은 문장 규칙 {i}") for i in range(10)]
     active.append(guideline("image", content="실행 시작에 확정한 제작 절차"))
-    publisher, gateway = FakePublisher(), ReflectingGateway()
+    publisher = FakePublisher(memory_context={"feedback": plan_feedback + image_feedback, "guidelines": active})
+    gateway = ReflectingGateway()
 
-    def context(category, routes):
-        publisher.memory_requests.append((category, list(routes)))
-        if len(publisher.memory_requests) == 1:
-            return {"feedback": plan_feedback, "guidelines": active}
-        active[-1]["content"] = "실행 중 새로 바뀐 제작 절차"
-        # 재조회 지침은 스냅샷에 반영하지도, 새로 파싱하지도 않는다.
-        return {"feedback": image_feedback, "guidelines": [{"invalid": True}]}
-
-    publisher.memory_context = context
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.outcome == "submitted"
-    assert publisher.memory_requests == [("SERVICE", ["/", "/collection", "/search"]),
-                                         ("SERVICE", ["/collection", "/"])]
-    choose, *polish = gateway.requests
-    assert all(f"짧은 문장 규칙 {i}" in choose["system"] for i in range(10))
-    assert all("실행 시작에 확정한 제작 절차" in item["prompt"] for item in polish)
-    assert all("실행 중 새로 바뀐 제작 절차" not in item["prompt"] for item in polish)
-    assert all("plan-0" not in item["prompt"] and "image-0" in item["prompt"] for item in polish)
-    assert len(result.memory_context["feedbackIds"]) == 6 and len(result.memory_context["guidelines"]) == 11
+    assert publisher.memory_requests == [("SERVICE", ["/", "/collection", "/search"])]
+    (request,) = gateway.requests
+    assert all(f"짧은 문장 규칙 {i}" in request["prompt"] for i in range(10))
+    edit = publisher.created[0][3]["captures"][0]["edit"]
+    assert "실행 시작에 확정한 제작 절차" in edit and "짧은 문장 규칙 0" not in edit
+    assert "image-0" in edit and "plan-0" not in edit
+    assert len(result.memory_context["feedbackIds"]) == 3 and len(result.memory_context["guidelines"]) == 11
     assert result.memory_context["stages"] == [
-        PLAN_STAGE | {"feedbackIds": [f"plan-{i}" for i in range(3)],
-                      "guidelineIds": [f"text-{i}" for i in range(10)]},
-        IMAGE_STAGE | {"feedbackIds": [f"image-{i}" for i in range(3)], "guidelineIds": ["image"]},
+        PLAN_STAGE | {"feedbackIds": ["plan-0", "plan-1"], "guidelineIds": [f"text-{i}" for i in range(10)]},
+        IMAGE_STAGE | {"feedbackIds": ["image-0"], "guidelineIds": ["image"]},
     ]
-
-
-def test_selectedRouteMemoryFailure_preventsCodexAndSubmission(tmp_path):
-    publisher, gateway = FakePublisher(), ReflectingGateway()
-
-    def context(category, routes):
-        publisher.memory_requests.append((category, list(routes)))
-        if len(publisher.memory_requests) > 1:
-            raise ConnectionError("private-lookup-failure")
-        return {}
-
-    publisher.memory_context = context
-    result = _drafter(tmp_path, gateway, publisher).run()
-
-    assert (result.outcome, result.detail) == ("failed", "MEMORY_CONTEXT_FAILED")
-    assert [item["engine"] for item in gateway.requests] == ["claude"]
-    assert publisher.created == [] and result.memory_context["stages"] == [PLAN_STAGE]
 
 
 def test_promptSeparatesFactsProceduresAndEpisodes():
@@ -288,7 +263,7 @@ def test_editBudgetCountsAstralCharactersLikeJava(tmp_path):
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.outcome == "failed" and result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
-    assert [item["engine"] for item in gateway.requests] == ["claude"]
+    assert gateway.requests == []
 
 
 def test_feedbackProjection_doesNotRecursivelyIncludePastEditPromptsOrRationale():
@@ -370,14 +345,13 @@ def test_e2eHelper_passesThroughRealGatewayWithoutLaunchingAnyModelCli(tmp_path)
     from .run_memory_e2e import FakeCliGateway, png
 
     gateway = FakeCliGateway("apply", tmp_path)
-    choice = gateway.call({"engine": "claude", "model": "fake-claude", "prompt": "골라",
-                           "json_schema": drafting.OUTPUT_SCHEMA})
-    polished = gateway.call({"engine": "codex", "model": "fake-codex", "prompt": "다듬어",
-                             "want_images": True, "images": [{"data": base64.b64encode(png()).decode()}]})
+    response = gateway.call({"engine": "codex", "model": "fake-codex", "prompt": "골라서 만들어",
+                             "json_schema": drafting.OUTPUT_SCHEMA, "want_images": True,
+                             "images": [{"data": base64.b64encode(png()).decode()}] * 2})
 
-    assert choice["structured"]["decision"] == "draft"
-    assert polished["ok"] and base64.b64decode(polished["images"][0]["data"]) == png()
+    assert response["structured"]["decision"] == "draft" and response["text"] == ""
+    assert base64.b64decode(response["images"][0]["data"]) == png()
     with Image.open(io.BytesIO(png())) as image:
         assert image.size == (390, 844)
-    assert choice["structured"]["picks"][0]["headline"] == "내 레고 세트, 한곳에"
+    assert response["structured"]["pick"]["headline"] == "내 레고 세트, 한곳에"
     assert list(tmp_path.iterdir()) == []

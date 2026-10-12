@@ -61,6 +61,8 @@ class FakePublisher:
 
 
 class FakeGateway:
+    """codex 한 번의 호출(D25): 구조화 출력과 만든 이미지를 함께 돌려준다."""
+
     def __init__(self, choice, polish_fails=False):
         self.choice = choice
         self.polish_fails = polish_fails
@@ -68,20 +70,20 @@ class FakeGateway:
 
     def call(self, request):
         self.requests.append(request)
-        if request["engine"] == "claude":
-            return {"ok": True, "structured": self.choice, "text": "", "images": []}
-        if self.polish_fails:
-            raise GatewayError("codex 가 이미지를 만들지 않았다")
-        return {"ok": True, "images": [{"name": "p.png", "data": base64.b64encode(POLISHED).decode()}]}
+        images = [] if self.polish_fails else [{"name": "p.png", "data": base64.b64encode(POLISHED).decode()}]
+        return {"ok": True, "structured": self.choice, "images": images}
 
 
 DRAFT = {
     "decision": "draft",
+    "skip_reason": None,
     "caption": "갖고 있는 세트와 갖고 싶은 세트를 한곳에",
     "rationale": "컬렉션 화면이 기능을 잘 보여줌",
-    "picks": [{"image": 2, "label": "컬렉션 목록", "headline": "내 레고 세트, 한곳에"},
-              {"image": 1, "label": "홈", "headline": "내 취향의 브릭, GoLe에서"}],
+    "pick": {"image": 2, "label": "컬렉션 목록", "headline": "내 레고 세트, 한곳에"},
+    "reflection": [],
 }
+SKIP = {"decision": "skip", "skip_reason": "볼 게 없음", "caption": None, "rationale": None, "pick": None,
+        "reflection": []}
 
 
 def _drafter(tmp_path, gateway, publisher, **overrides):
@@ -100,68 +102,93 @@ def _drafter(tmp_path, gateway, publisher, **overrides):
     return Drafter(**options)
 
 
-def test_draft_sendsAllPromotionalScreensOnceThenPolishesPicks(tmp_path):
+def test_draft_sendsAllScreensInOneCodexCall_andSubmitsItsImage(tmp_path):
     gateway = FakeGateway(DRAFT)
     publisher = FakePublisher()
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.outcome == "submitted"
-    choose, *polish = gateway.requests
-    assert choose["engine"] == "claude" and len(choose["images"]) == 3  # /terms 는 후보가 아니다
-    assert "1. /\n2. /collection\n3. /search" in choose["prompt"]
-    assert "지난 글" in choose["system"]
-    assert [r["engine"] for r in polish] == ["codex", "codex"] and polish[0]["want_images"]
-    assert polish[0]["prompt"].startswith(drafting.POLISH_PROMPT)
-    assert '$imagegen' in polish[0]["prompt"] and '#1D4ED8' in polish[0]["prompt"]
-    assert "내 레고 세트, 한곳에" in polish[0]["prompt"] and "내 취향의 브릭, GoLe에서" in polish[1]["prompt"]
+    (request,) = gateway.requests  # 고르기·성찰·제작이 한 호출이다
+    assert request["engine"] == "codex" and request["want_images"] and len(request["images"]) == 3  # /terms 제외
+    assert request["json_schema"] == drafting.OUTPUT_SCHEMA and "system" not in request
+    prompt = request["prompt"]
+    assert "1. /\n2. /collection\n3. /search" in prompt and "지난 글" in prompt
+    assert "$imagegen" in prompt and "#1D4ED8" in prompt and "reflection=[]" in prompt
+    assert "Read 로" not in prompt and "디자이너" not in prompt and "picks" not in prompt
+    assert "이 화면을 고른 이유만" in prompt
 
-    # 게시 이미지 2장 + 다듬은 사진의 원본 2장을 한 번에 올린다.
-    published, originals = publisher.uploaded
-    assert [p.parent.name for p in published] == ["polished", "polished"]
-    assert [p.parent.name for p in originals] == ["captures", "captures"]
-    assert published[0].read_bytes() == POLISHED
+    # 게시 이미지 1장 + 다듬은 사진의 원본 1장.
+    (published,), (original,) = publisher.uploaded
+    assert published.parent.name == "polished" and published.read_bytes() == POLISHED
+    assert original.parent.name == "captures"
     sha, caption, keys, details = publisher.created[0]
-    assert sha is None and keys == ["key-0", "key-1"]
-    first, second = details["captures"]
-    assert first["route"] == "/collection" and first["originalMediaKey"] == "key-2"
-    assert first["edit"] == polish[0]["prompt"]
-    assert first["styleId"] == "royal-blue-brick-mobile" and first["styleVersion"] == 1
-    assert first["headline"] == DRAFT["picks"][0]["headline"] and first["polishFailed"] is False
-    assert second["route"] == "/" and second["originalMediaKey"] == "key-3"
+    assert sha is None and keys == ["key-0"]
+    (capture,) = details["captures"]
+    assert capture["route"] == "/collection" and capture["originalMediaKey"] == "key-1"
+    assert capture["edit"].startswith(drafting.POLISH_PROMPT) and "내 레고 세트, 한곳에" in capture["edit"]
+    assert capture["styleId"] == "royal-blue-brick-mobile" and capture["styleVersion"] == 1
+    assert capture["headline"] == DRAFT["pick"]["headline"] and capture["polishFailed"] is False
     assert publisher.finalized == ["post-1"]
 
 
-def test_polishFailure_fallsBackToOriginal(tmp_path):
+def test_missingImage_fallsBackToOriginal(tmp_path):
     publisher = FakePublisher()
 
     result = _drafter(tmp_path, FakeGateway(DRAFT, polish_fails=True), publisher).run()
 
     assert result.outcome == "submitted"
     (uploaded,) = publisher.uploaded  # 원본만 올렸으니 원본 업로드는 따로 없다
-    assert [p.parent.name for p in uploaded] == ["captures", "captures"]
-    assert all("originalMediaKey" not in c for c in publisher.created[0][3]["captures"])
-    assert all(c["polishFailed"] and c["styleId"] == "royal-blue-brick-mobile"
-               for c in publisher.created[0][3]["captures"])
+    assert [p.parent.name for p in uploaded] == ["captures"]
+    (capture,) = publisher.created[0][3]["captures"]
+    assert "originalMediaKey" not in capture and capture["polishFailed"]
+    assert capture["styleId"] == "royal-blue-brick-mobile"
 
 
 def test_skip_submitsNothing(tmp_path):
     publisher = FakePublisher()
 
-    result = _drafter(tmp_path, FakeGateway({"decision": "skip", "skip_reason": "볼 게 없음"}), publisher).run()
+    result = _drafter(tmp_path, FakeGateway(SKIP), publisher).run()
 
     assert (result.outcome, result.code, result.detail) == ("skipped", "MODEL_SKIPPED", "볼 게 없음")
     assert publisher.created == [] and publisher.uploaded == []
+
+
+def test_accountLimit_logsFixedCodeAndDoesNotSubmitOrRetry(tmp_path):
+    calls, logs = [], []
+
+    def fail(request):
+        calls.append(request)
+        raise GatewayError("CODEX_USAGE_LIMIT")
+
+    publisher = FakePublisher()
+    result = _drafter(tmp_path, SimpleNamespace(call=fail), publisher, log=logs.append).run()
+
+    assert (result.outcome, result.code, result.detail) == ("failed", "GATEWAY_FAILED", "CODEX_USAGE_LIMIT")
+    assert "[promotion-agent] CODEX_USAGE_LIMIT" in logs
+    assert len(calls) == 1
+    assert publisher.created == [] and publisher.uploaded == []
+
+
+def test_freeTextGatewayError_staysOutOfPublicLog(tmp_path):
+    logs = []
+
+    def fail(_request):
+        raise GatewayError("codex 실패(종료 코드 1)")
+
+    _drafter(tmp_path, SimpleNamespace(call=fail), FakePublisher(), log=logs.append).run()
+
+    assert logs == []
 
 
 @pytest.mark.parametrize(
     "choice",
     [
         {"decision": "draft", "caption": "글"},
-        {**DRAFT, "picks": [{"image": 9, "label": "없는 번호", "headline": "문구"}]},
-        {**DRAFT, "picks": [{"image": 1, "label": "a", "headline": "문구"},
-                           {"image": 1, "label": "b", "headline": "문구"}]},
-        {**DRAFT, "picks": [{"image": 1, "label": "문구 누락"}]},
+        {**DRAFT, "pick": {"image": 9, "label": "없는 번호", "headline": "문구"}},
+        {**DRAFT, "pick": {"image": 1, "label": "문구 누락"}},
+        {**DRAFT, "pick": None},
+        None,
     ],
 )
 def test_contractViolations_fail(tmp_path, choice):
@@ -195,7 +222,7 @@ def test_featureWithoutWebChanges_skipsWithoutCalling(tmp_path, repo):
 def test_choiceIsKeptForTheArtifact(tmp_path):
     _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
 
-    assert json.loads((tmp_path / "run" / "choice.json").read_text(encoding="utf-8"))["picks"][0]["image"] == 2
+    assert json.loads((tmp_path / "run" / "choice.json").read_text(encoding="utf-8"))["pick"]["image"] == 2
 
 
 def test_reusedCaptures_skipCameraAndKeepRouteOrder(tmp_path):
@@ -250,7 +277,7 @@ def test_reusedCaptures_rejectLegacyArray(tmp_path):
 @pytest.mark.parametrize("headline", ["", " ", "가" * 41, "😀" * 21, "하나\n둘\n셋", "하나\n\n둘", "하나\t둘", "\x7f문구"])
 def test_headlineTrustBoundary_rejectsOversizeOrInvalidText(tmp_path, headline):
     publisher = FakePublisher()
-    choice = DRAFT | {"picks": [{"image": 1, "label": "화면", "headline": headline}]}
+    choice = DRAFT | {"pick": {"image": 1, "label": "화면", "headline": headline}}
 
     result = _drafter(tmp_path, FakeGateway(choice), publisher).run()
 
@@ -271,23 +298,20 @@ def test_fakeCapturesHaveMobileDimensions(tmp_path):
         assert image.size == (390, 844)
 
 
-def test_checksEveryHeadlinePromptBeforeAnyPolish(tmp_path, monkeypatch):
+def test_editPromptBudget_isCheckedWithLongestHeadlineBeforeCalling(tmp_path, monkeypatch):
     from gole_promotion_agent import memory
 
-    choice = DRAFT | {"picks": [{"image": 1, "label": "짧음", "headline": "짧음"},
-                               {"image": 2, "label": "김", "headline": "가" * 40}]}
-    first_prompt = drafting.POLISH_PROMPT + "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps(
-        {"headline": "짧음"}, ensure_ascii=False,
-    )
-    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", memory.utf16_length(first_prompt) + 1)
-    publisher, gateway = FakePublisher(), FakeGateway(choice)
+    shortest = drafting.POLISH_PROMPT + "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": "짧음"}, ensure_ascii=False)
+    # 실제 문구가 짧아도 모델이 정할 수 있는 가장 긴 문구가 들어가지 않으면 부르지 않는다.
+    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", memory.utf16_length(shortest) + 1)
+    publisher, gateway = FakePublisher(), FakeGateway(DRAFT)
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
     lengths = json.loads(result.detail.removeprefix("EDIT_PROMPT_TOO_LONG "))
     assert set(lengths) == {"fixed", "headline", "knowledge", "procedure", "episodes", "total"}
-    assert [request["engine"] for request in gateway.requests] == ["claude"] and publisher.created == []
+    assert gateway.requests == [] and publisher.created == []
 
 
 def test_usageMeter_countsFailedCallsToo():

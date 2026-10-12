@@ -58,11 +58,10 @@ interface RunnerOutput {
   memoryContext: PromotionRunMemoryContext;
 }
 
+// 실행 하나는 codex 를 한 번만 부른다(promotion-review D25) — 고르기·성찰·제작이 한 프롬프트다.
 interface ModelRequest {
   engine: string;
-  system?: string;
   prompt: string;
-  json_schema?: { properties?: { proposals?: unknown } };
 }
 
 async function list<T>(api: APIRequestContext, path: string): Promise<T[]> {
@@ -181,18 +180,15 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       expect(post?.captures[0]?.originalUrl).toBeTruthy();
       expect(post?.captures[0]?.edit).toContain("$imagegen");
       const requests = JSON.parse(readFileSync(result.requestsFile, "utf8")) as ModelRequest[];
-      const plan = requests.find(
-        (entry) => entry.engine === "claude" && !entry.json_schema?.properties?.proposals,
-      );
-      const edit = requests.find((entry) => entry.engine === "codex");
+      expect(requests.map((entry) => entry.engine)).toEqual(["codex"]);
+      const [oneCall] = requests;
       const stages = result.memoryContext.stages ?? [];
       expect(stages.map((stage) => ({ stage: stage.stage, routes: stage.routes }))).toEqual([
         { stage: "PLAN", routes: ["/", "/collection"] },
         { stage: "IMAGE_EDIT", routes: ["/collection"] },
       ]);
       for (const knowledge of coreKnowledge) {
-        expect(plan?.system).toContain(knowledge.content);
-        expect(edit?.prompt).toContain(knowledge.content);
+        expect(oneCall?.prompt).toContain(knowledge.content);
         expect(result.memoryContext.guidelines).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -467,12 +463,8 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       const appliedRequests = JSON.parse(
         readFileSync(applied.requestsFile, "utf8"),
       ) as ModelRequest[];
-      const choose = appliedRequests.find(
-        (entry) => entry.engine === "claude" && !entry.json_schema?.properties?.proposals,
-      );
-      const polish = appliedRequests.find((entry) => entry.engine === "codex");
-      expect(choose?.system).toContain(approvedContent);
-      expect(polish?.prompt).toContain(approvedContent);
+      expect(appliedRequests).toHaveLength(1);
+      expect(appliedRequests[0]?.prompt).toContain(approvedContent);
       expect(applied.memoryContext.guidelines).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: guidelineId, content: approvedContent }),
@@ -493,11 +485,7 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       const retiredRequests = JSON.parse(
         readFileSync(retired.requestsFile, "utf8"),
       ) as ModelRequest[];
-      expect(
-        retiredRequests.every(
-          (entry) => !`${entry.system ?? ""}\n${entry.prompt}`.includes(approvedContent),
-        ),
-      ).toBe(true);
+      expect(retiredRequests.every((entry) => !entry.prompt.includes(approvedContent))).toBe(true);
       const recorded = (
         await list<AdminPromotionRun>(page.request, "/api/admin/promotion-runs?limit=100")
       ).find((entry) => entry.runKey === applied.runKey);
