@@ -244,8 +244,9 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
   가지 않는다 — 서버로 가는 것은 데모 화면 캡처와 프롬프트뿐이다.
 - **다듬은 이미지는 원본과 함께 낸다.** 생성형 편집은 화면을 다시 그리므로 글자·숫자가 바뀔 수 있다.
   검토 패널이 둘을 나란히 보여준다.
-- **게이트웨이**(`gateway/`)는 서버에 단독으로 복사하는 표준 라이브러리 스크립트다. 설치·
-  `authorized_keys` forced command 설정은 `gateway/gole_llm_gateway.py` 머리말을 본다.
+- **게이트웨이**(`gateway/`)는 요청마다 일회용 Docker 컨테이너로 돈다(`Dockerfile`, GHCR `gole-llm-gateway:stable`).
+  codex 로그인은 전용 볼륨에만 있고 설정은 이미지의 `config.toml`로 고정한다. 서버 설치·`authorized_keys`
+  forced command는 `gateway/gole_llm_gateway.py` 머리말을 본다.
 
 ### 실행
 

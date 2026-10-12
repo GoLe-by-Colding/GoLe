@@ -539,7 +539,8 @@ leasing이 아니며(D17), egress가 필요한 작업을 "문의 원문은 밖�
 
 ### D20. GitHub 러너에서 돌고, 모델은 SSH LLM 게이트웨이의 CLI로 부른다 — D10·D16·D17을 정정한다
 
-> **2026-10-12 — 모델 호출 구성은 D25가 대체한다.** 러너·트리거·SSH·자격증명 경계·검증 원칙은 유지한다.
+> **2026-10-12 — 모델 호출 구성은 D25, 게이트웨이 실행 위치는 D26이 대체한다.** 러너·트리거·자격증명
+> 경계·검증 원칙은 유지한다.
 
 **정정 이유.** 운영 VM 경로는 여유 메모리 900 MB 위에서 Chromium과 장기 대화를 함께 돌려야 했고,
 그래서 체크포인트·재개·3단 제출 체인이 필요했다. 모델은 API 키로 불렀는데 크레딧이 비어 있는
@@ -687,6 +688,40 @@ GitHub 러너 (ubuntu-latest, environment: production)
 - **응답은 구조화 출력과 이미지뿐이다.** 게이트웨이는 자유 글(`text`)을 돌려주지 않는다. 구조화 필드도 모델이 쓴
   글이므로 사람 검토 전에는 운영 DB에만 둔다(D23).
 
+### D26. 게이트웨이는 지인 서버의 일회용 Docker 컨테이너로 돈다 — 구독 계정 격리
+
+**정정 이유.** 게이트웨이가 서버 계정 홈에서 돌아 그 계정의 `~/.codex`(전역 `AGENTS.md`·hooks·설정)가 홍보 결과에
+섞였고, SSH가 비밀번호 인증이라 셸 전체가 열려 있었다.
+
+```
+러너 ─SSH(전용 키, forced command)→ 지인 서버
+  docker run --rm -i --pull=always --read-only --tmpfs /tmp --memory 2g --cpus 2     -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable
+    └ gole_llm_gateway.py (stdin JSON → codex exec → stdout JSON)
+```
+
+- **HTTP 서버를 띄우지 않는다.** 요청마다 컨테이너 하나가 뜨고 끝나면 지워진다. 포트·TLS·토큰 인증을 새로
+  만들지 않고 기존 stdin/stdout 계약을 그대로 쓴다.
+- **CODEX_HOME은 이 게이트웨이 전용 볼륨이다.** 볼륨에는 `auth.json`과 잠금 파일만 두고, `config.toml`은 이미지에
+  굽는다(전역 지침·hooks 없음). 로그인은 볼륨 안에서 `codex login --device-auth`로 새로 한다 — 호스트의
+  `~/.codex`를 복사하지 않는다. 같은 계정이라도 세션이 따로라 서로의 토큰 갱신이 상대를 무효화하지 않는다.
+- **동시 실행은 볼륨의 파일 잠금으로 하나만.** 토큰 갱신도 함께 직렬화된다.
+- **배포는 이미지다.** `gateway/**`가 바뀌면 워크플로가 GHCR(공개)에 `:sha`·`:stable`로 올린다. 서버는 요청마다
+  `--pull=always`로 받는다. 서버에 파일을 써 넣던 설치 스크립트(`install-remote.sh`·`run.sh`)는 지운다.
+- **SSH는 키 인증만.** `authorized_keys`의 forced command로 위 `docker run` 한 줄만 허용한다
+  (`no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding`). 비밀번호 경로(`sshpass`·
+  `PROMOTION_GATEWAY_PASSWORD`)는 지운다. 그 사용자는 docker 그룹이 필요하다 — 사실상 호스트 root이므로,
+  서버 주인이 꺼리면 sudoers에 이 명령 한 줄만 허용한다.
+- **호출 빈도 상한.** 실행당 1호출(D25), 워크플로 동시 실행 1개(`concurrency: promotion-agent`), 기능 홍보는
+  릴리스(SHA)당 1회(D11), 서비스 소개는 월·수·금. 검토 대기 5건 이상이면 시작하지 않는다(D18). `main`은 릴리스
+  PR로만 바뀌어 기능 홍보가 하루 몇 번씩 돌 일이 없으므로 일일 상한은 따로 두지 않는다 — 릴리스가 잦아지면
+  원장(`promotion_runs`)으로 같은 날 실행 수를 세어 건너뛰는 규칙을 더한다.
+- **남는 위험(코드로 못 막는다).**
+  - 구독 계정을 자동화에 쓰는 것은 OpenAI가 "신뢰할 수 있는 개인 자동화"로만 두는 방식이다. 계정 정지는
+    예고 없이 올 수 있고, 그동안 실행은 `GATEWAY_FAILED`로 끝난다.
+  - 서버에 이미 로그인된 계정이 지인 개인 계정이면 계정 공유다. 어느 계정을 쓰는지 운영 문서에 적는다.
+  - 호스트 root는 볼륨의 `auth.json`을 읽을 수 있다. 컨테이너는 서버 계정 홈과의 섞임을 막을 뿐 서버 주인을 막지는 않는다.
+  - codex는 컨테이너 안의 `auth.json`을 읽을 수 있다. 응답의 구조화 필드는 사람 검토 전에는 운영 DB에만 있다(D23).
+
 ## 요구사항 (EARS)
 
 - P1 WHEN 관리자가 채널·캡션(500자 이하)·미디어 업로드 키(선택, `mediaKeys`)로 초안을 등록하면,
@@ -772,13 +807,13 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - `apps/support-agent/src/gole_promotion_agent/`(Python). 파일 분해는 D20 표를 따른다.
     관측 격리는 `gole_agent_runtime.privacy`를 재사용한다. 엔트리포인트는
     `python -m gole_promotion_agent --repo --run-dir (--sha | --service) [--reuse-captures]`.
-  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 PATH를 잡는 `run.sh`.
-    외부 서버에 커밋을 고정해 내려받아 설치한다. 줄바꿈은 LF로 고정한다(`.gitattributes`).
+  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 이미지 `Dockerfile`·`config.toml`(D26).
+    줄바꿈은 LF로 고정한다(`.gitattributes`).
   - `apps/support-agent/pyproject.toml` — `[project.optional-dependencies] promotion`에
     Playwright·HTTP 클라이언트를 둔다. 모델 SDK는 없다.
   - `.github/workflows/promotion-agent.yml` — 트리거·데모 스택·SSH 준비·실행·아티팩트(D20·D21).
     시크릿(`production` 환경): `PROMOTION_GATEWAY_TARGET`, `PROMOTION_GATEWAY_KNOWN_HOSTS`,
-    `PROMOTION_GATEWAY_KEY` 또는 `PROMOTION_GATEWAY_PASSWORD`, `PROMOTION_AGENT_ADMIN_EMAIL`·
+    `PROMOTION_GATEWAY_SSH_KEY`, `PROMOTION_AGENT_ADMIN_EMAIL`·
     `PROMOTION_AGENT_ADMIN_PASSWORD`. 변수: `PROMOTION_GATEWAY_PORT`(22가 아닐 때).
   - 운영 봇 계정은 `AdminAccountSeeder`가 `gole.env`의 `PROMOTION_AGENT_ADMIN_*`로 없을 때만
     만든다. 캡처는 데모 스택의 e2e 관리자로 하므로 운영 봇에는 전화 인증이 필요 없다.

@@ -1,0 +1,4 @@
+# 홍보 게이트웨이 전용 codex 설정(promotion-review D26). entrypoint.sh 가 요청마다 CODEX_HOME 에 덮어쓴다.
+# 전역 지침(AGENTS.md)·hooks·플러그인·알림을 두지 않는다 — 서버 계정의 개인 설정이 홍보 결과에 섞이지 않게.
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"

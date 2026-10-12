@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """SSH 로 부르는 LLM 게이트웨이. 요청 JSON 을 stdin 으로 받아 codex CLI 를 돌리고 JSON 을 돌려준다.
 
-서버의 CLI 는 사용자 본인 계정으로 로그인돼 있다. 서버에는 이 파일과 run.sh 만 둔다(표준 라이브러리만
-쓴다). 설치:
+요청마다 일회용 Docker 컨테이너 하나로 돈다(promotion-review D26). 이미지는 `gateway/Dockerfile`, codex 로그인은
+게이트웨이 전용 볼륨(CODEX_HOME)에만 있다. 서버 설치(한 번):
 
-    mkdir -p ~/gole-llm-gateway && cp gole_llm_gateway.py run.sh ~/gole-llm-gateway/
-    chmod +x ~/gole-llm-gateway/run.sh
-    # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다:
-    # command="~/gole-llm-gateway/run.sh",no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA... gole-promotion
+    docker volume create gole-codex-home
+    docker run --rm -it -v gole-codex-home:/home/gateway/.codex --entrypoint codex \\
+      ghcr.io/gole-by-colding/gole-llm-gateway:stable login --device-auth
+    # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다(한 줄로):
+    # command="docker run --rm -i --pull=always --read-only --tmpfs /tmp --memory 2g --cpus 2
+    #   -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable",
+    #   no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA... gole-promotion
 
 요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,
         "model"?: str, "images"?: [{"data": base64}], "want_images"?: bool}
