@@ -379,6 +379,18 @@ def test_flagLikeModel_isRejectedBeforeAnyCli(tmp_path, model):
     assert calls == []
 
 
+def test_reasoning_isPassedAsConfigOverrideOnlyFromTheAllowedList(tmp_path):
+    runner, calls = _recording()
+
+    gateway.handle({"engine": "codex", "prompt": "x", "reasoning": "medium"}, runner=runner, root=tmp_path)
+
+    command = calls[0]["command"]
+    assert command[command.index("-c") + 1] == 'model_reasoning_effort="medium"'
+    with pytest.raises(gateway.BadRequest):
+        gateway.handle({"engine": "codex", "prompt": "x", "reasoning": 'high"\nsandbox_mode="x'}, runner=runner, root=tmp_path)
+    assert len(calls) == 1
+
+
 def test_systemAndPrompt_goThroughStdinNotArguments(tmp_path):
     runner, calls = _recording()
 

@@ -70,13 +70,12 @@ def test_proposedGuidelines_waitForHuman_thenEachStageRecordsOnlyItsTargets(tmp_
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
-    (request,) = gateway.requests
-    prompt = request["prompt"]
-    assert "글은 짧게 쓴다" in prompt and image["content"] in prompt
-    assert prompt.count("화면 글자가 너무 작아") == 1 and "실제 픽셀을 보지 못했다" in prompt
-    assert "아직 승인하지 않은 제안" not in prompt and "해제한 지침" not in prompt
-    edit = publisher.created[0][3]["captures"][0]["edit"]
-    assert image["content"] in edit and text["content"] not in edit
+    plan, make = (request["prompt"] for request in gateway.requests)
+    assert text["content"] in plan and image["content"] not in plan  # 단계마다 자기 targets 의 지침만
+    assert image["content"] in make and text["content"] not in make
+    assert plan.count("화면 글자가 너무 작아") == 1 and "실제 픽셀을 보지 못했다" in plan
+    assert all("아직 승인하지 않은 제안" not in p and "해제한 지침" not in p for p in (plan, make))
+    assert publisher.created[0][3]["captures"][0]["edit"] == make
     assert result.memory_context["feedbackIds"] == ["feedback-1"]
     assert [item["id"] for item in result.memory_context["guidelines"]] == ["text", "image"]
     assert result.memory_context["stages"] == [
@@ -93,9 +92,9 @@ def test_reflection_isSavedFromTheSameCall_andFeedbackAppearsOnce(tmp_path):
     result = _drafter(tmp_path, gateway, publisher, run_key="same-run").run()
 
     assert publisher.reflections == [{"feedbackIds": ["feedback-1"], "runKey": "same-run", "proposals": [proposal]}]
-    (request,) = gateway.requests
-    assert request["prompt"].count("화면 글자가 너무 작아") == 1  # 에피소드에 실었으니 성찰은 ID로만 가리킨다
-    assert '"feedbackIds": ["feedback-1"]' in request["prompt"]
+    plan = gateway.requests[0]["prompt"]
+    assert plan.count("화면 글자가 너무 작아") == 1  # 에피소드에 실었으니 성찰은 ID로만 가리킨다
+    assert '"feedbackIds": ["feedback-1"]' in plan
     assert result.outcome == "submitted" and result.detail is None
 
 
@@ -144,8 +143,10 @@ def test_brokenImage_quotingPrivateMemory_doesNotLeakToPublicLogs(tmp_path, caps
 
     class QuotingGateway(FakeGateway):
         def call(self, request):
+            if not request.get("want_images"):
+                return super().call(request)
             assert sentinel in request["prompt"]
-            return {"ok": True, "structured": DRAFT, "images": [{"name": "x.png", "data": request["prompt"]}]}
+            return {"ok": True, "images": [{"name": "x.png", "data": request["prompt"]}]}
 
     result = _drafter(tmp_path, QuotingGateway(DRAFT), publisher, log=print).run()
 
@@ -231,8 +232,8 @@ def test_stageMemory_queriesOnce_freezesAllGuidelines_andRecordsEachStage(tmp_pa
 
     assert result.outcome == "submitted"
     assert publisher.memory_requests == [("SERVICE", ["/", "/collection", "/search"])]
-    (request,) = gateway.requests
-    assert all(f"짧은 문장 규칙 {i}" in request["prompt"] for i in range(10))
+    plan, make = gateway.requests
+    assert all(f"짧은 문장 규칙 {i}" in plan["prompt"] for i in range(10))
     edit = publisher.created[0][3]["captures"][0]["edit"]
     assert "실행 시작에 확정한 제작 절차" in edit and "짧은 문장 규칙 0" not in edit
     assert "image-0" in edit and "plan-0" not in edit

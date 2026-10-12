@@ -77,3 +77,17 @@ def capture_all(
         encoding="utf-8",
     )
     return shots
+
+
+def thumbnail(path: Path, width: int = 195) -> dict[str, str]:
+    """고르기용 축소본(PNG, base64). 고르는 데는 원본 해상도가 필요 없고, 장수만큼 토큰이 준다(D25 실측)."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    with Image.open(path) as image:
+        small = image.convert("RGB").resize((width, round(image.height * width / image.width)))
+    buffer = io.BytesIO()
+    small.save(buffer, format="PNG")
+    return {"data": base64.b64encode(buffer.getvalue()).decode("ascii")}

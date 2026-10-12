@@ -13,7 +13,7 @@
     #   no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA... gole-promotion
 
 요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,
-        "model"?: str, "images"?: [{"data": base64}], "want_images"?: bool}
+        "model"?: str, "reasoning"?: "low"|"medium"|"high", "images"?: [{"data": base64}], "want_images"?: bool}
 응답:  {"ok": bool, "text": str, "structured": obj|null, "images": [{"name", "data"}], "error"?: str,
         "usage": {engine, model, input_tokens, cached_input_tokens, output_tokens, cost_usd, duration_ms}|null}
 
@@ -139,6 +139,9 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         command += ["--output-schema", str(schema)]
     if request.get("model"):
         command += ["-m", request["model"]]
+    if request.get("reasoning"):
+        # 고르기처럼 가벼운 호출은 추론을 낮춰 사용량을 아낀다. 값은 handle 이 목록으로 거른다.
+        command += ["-c", f'model_reasoning_effort="{request["reasoning"]}"']
     prompt = str(request["prompt"])
     if request.get("system"):
         prompt = f"{request['system']}\n\n{prompt}"
@@ -197,6 +200,9 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         # 이미지 요청에는 자유 글을 돌려주지 않는다. codex 는 홈 폴더를 읽을 수 있어서, 키가 샌 쪽이 "토큰 파일을
         # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 구조화 출력은 호출 쪽이 스키마로 검증하고
         # 사람 검토 전에는 운영 DB 에만 둔다(D23·D25). 이미지가 없으면 호출 쪽이 원본을 쓴다.
+        return {"ok": True, "structured": structured, "images": images, "usage": usage}
+    if structured is not None:
+        # 스키마 요청은 구조화 출력만 쓴다. 자유 글은 돌려주지 않는다(D25) — 위 이미지 요청과 같은 이유다.
         return {"ok": True, "structured": structured, "images": images, "usage": usage}
     return {"ok": True, "text": text, "structured": structured, "images": images, "usage": usage}
 
@@ -331,6 +337,8 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
     model = request.get("model")
     if model is not None and not (isinstance(model, str) and MODEL_PATTERN.fullmatch(model)):
         raise BadRequest("model 은 영문·숫자·._:- 로 된 이름이어야 한다")
+    if request.get("reasoning") is not None and request["reasoning"] not in ("low", "medium", "high"):
+        raise BadRequest("reasoning 은 low·medium·high 중 하나")
     if request.get("system") is not None and not isinstance(request["system"], str):
         raise BadRequest("system 은 문자열이다")
     if request.get("json_schema") is not None and not isinstance(request["json_schema"], dict):

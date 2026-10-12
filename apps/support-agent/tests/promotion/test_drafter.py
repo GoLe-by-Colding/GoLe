@@ -62,7 +62,7 @@ class FakePublisher:
 
 
 class FakeGateway:
-    """codex 한 번의 호출(D25): 구조화 출력과 만든 이미지를 함께 돌려준다."""
+    """codex 기획 호출은 구조화 출력, 제작 호출은 이미지를 돌려준다(D25)."""
 
     def __init__(self, choice, polish_fails=False):
         self.choice = choice
@@ -71,8 +71,11 @@ class FakeGateway:
 
     def call(self, request):
         self.requests.append(request)
-        images = [] if self.polish_fails else [{"name": "p.png", "data": base64.b64encode(POLISHED).decode()}]
-        return {"ok": True, "structured": self.choice, "images": images}
+        if not request.get("want_images"):  # 기획 호출
+            return {"ok": True, "structured": self.choice, "images": []}
+        if self.polish_fails:  # 제작 호출
+            raise GatewayError("codex 가 이미지를 만들지 않았다")
+        return {"ok": True, "images": [{"name": "p.png", "data": base64.b64encode(POLISHED).decode()}]}
 
 
 DRAFT = {
@@ -103,21 +106,31 @@ def _drafter(tmp_path, gateway, publisher, **overrides):
     return Drafter(**options)
 
 
-def test_draft_sendsAllScreensInOneCodexCall_andSubmitsItsImage(tmp_path):
+def test_draft_plansOnThumbnailsThenMakesFromOneOriginal(tmp_path):
+    import io
+
+    from PIL import Image
+
     gateway = FakeGateway(DRAFT)
     publisher = FakePublisher()
 
     result = _drafter(tmp_path, gateway, publisher).run()
 
     assert result.outcome == "submitted"
-    (request,) = gateway.requests  # 고르기·성찰·제작이 한 호출이다
-    assert request["engine"] == "codex" and request["want_images"] and len(request["images"]) == 3  # /terms 제외
-    assert request["json_schema"] == drafting.OUTPUT_SCHEMA and "system" not in request
-    prompt = request["prompt"]
-    assert "1. /\n2. /collection\n3. /search" in prompt and "지난 글" in prompt
-    assert "$imagegen" in prompt and "#1D4ED8" in prompt and "reflection=[]" in prompt
-    assert "Read 로" not in prompt and "디자이너" not in prompt and "picks" not in prompt
-    assert "이 화면을 고른 이유만" in prompt
+    plan, make = gateway.requests  # 기획 1회 + 제작 1회(D25)
+    # 기획: 후보 전부(/terms 제외)를 축소본으로, 도구·이미지 생성 없이, 추론은 낮게.
+    assert plan["engine"] == "codex" and not plan.get("want_images") and plan["reasoning"] == "medium"
+    assert plan["json_schema"] == drafting.OUTPUT_SCHEMA and len(plan["images"]) == 3
+    with Image.open(io.BytesIO(base64.b64decode(plan["images"][0]["data"]))) as thumb:
+        assert thumb.width == 195
+    prompt = plan["prompt"]
+    assert "1. /\n2. /collection\n3. /search" in prompt and "지난 글" in prompt and "reflection=[]" in prompt
+    assert "$imagegen" not in prompt and "이미지는 만들지 않는다" in prompt and "이 화면을 고른 이유만" in prompt
+    # 제작: 고른 원본 한 장과 고정 절차·문구·진행 규칙만.
+    assert make["want_images"] and len(make["images"]) == 1 and "json_schema" not in make
+    assert base64.b64decode(make["images"][0]["data"]) == (tmp_path / "run" / "captures" / "02-collection.png").read_bytes()
+    assert make["prompt"].startswith(drafting.POLISH_PROMPT) and "내 레고 세트, 한곳에" in make["prompt"]
+    assert make["prompt"].endswith(drafting.MAKE_RULES) and "지난 글" not in make["prompt"]
 
     # 게시 이미지 1장 + 다듬은 사진의 원본 1장.
     (published,), (original,) = publisher.uploaded
@@ -127,10 +140,27 @@ def test_draft_sendsAllScreensInOneCodexCall_andSubmitsItsImage(tmp_path):
     assert sha is None and keys == ["key-0"]
     (capture,) = details["captures"]
     assert capture["route"] == "/collection" and capture["originalMediaKey"] == "key-1"
-    assert capture["edit"].startswith(drafting.POLISH_PROMPT) and "내 레고 세트, 한곳에" in capture["edit"]
+    assert capture["edit"] == make["prompt"]  # 검토 화면의 지시문은 실제로 보낸 그대로다
     assert capture["styleId"] == "royal-blue-brick-mobile" and capture["styleVersion"] == 1
     assert capture["headline"] == DRAFT["pick"]["headline"] and capture["polishFailed"] is False
     assert publisher.finalized == ["post-1"]
+
+
+def test_makeAccountError_fallsBackToOriginalAndLogsTheCode(tmp_path):
+    logs = []
+
+    class Limited(FakeGateway):
+        def call(self, request):
+            if request.get("want_images"):
+                self.requests.append(request)
+                raise GatewayError("CODEX_USAGE_LIMIT")
+            return super().call(request)
+
+    publisher = FakePublisher()
+    result = _drafter(tmp_path, Limited(DRAFT), publisher, log=logs.append).run()
+
+    assert result.outcome == "submitted" and publisher.created[0][3]["captures"][0]["polishFailed"]
+    assert any("CODEX_USAGE_LIMIT" in line for line in logs)
 
 
 def test_missingImage_fallsBackToOriginal(tmp_path):
@@ -311,7 +341,7 @@ def test_editPromptBudget_isCheckedWithLongestHeadlineBeforeCalling(tmp_path, mo
 
     assert result.detail.startswith("EDIT_PROMPT_TOO_LONG ")
     lengths = json.loads(result.detail.removeprefix("EDIT_PROMPT_TOO_LONG "))
-    assert set(lengths) == {"fixed", "headline", "knowledge", "procedure", "episodes", "total"}
+    assert set(lengths) == {"fixed", "headline", "rules", "knowledge", "procedure", "episodes", "total"}
     assert gateway.requests == [] and publisher.created == []
 
 

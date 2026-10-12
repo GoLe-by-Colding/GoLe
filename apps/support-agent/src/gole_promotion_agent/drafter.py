@@ -1,6 +1,6 @@
-"""홍보 초안 한 편을 만든다. 러너 안 데모 스택을 찍고, 판단·제작은 게이트웨이의 codex 한 번에 맡긴다(D25).
+"""홍보 초안 한 편을 만든다. 러너 안 데모 스택을 찍고, 판단·제작은 게이트웨이의 codex 두 번(기획·제작)에 맡긴다(D25).
 
-    후보 화면 일괄 캡처 ─▶ 게이트웨이 codex 1회: 화면 하나 고르기·캡션 + 반려 성찰 + 홍보 이미지 제작
+    후보 화면 일괄 캡처 ─▶ codex 기획(축소본): 화면 하나 고르기·캡션·반려 성찰 ─▶ codex 제작(원본 1장): 홍보 이미지
                        ─▶ 검증 ─▶ BackendPublisher: 성찰 저장, 다듬은 이미지 + 원본 + 지시문 제출(검토 요청)
 
 모델은 만들기만 하고 검증·제출은 여기서 한다. 운영 관리자 자격증명은 게이트웨이로 가지 않는다 —
@@ -15,12 +15,12 @@ import os
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Sequence
 
 from pydantic import ValidationError
 
 from gole_promotion_agent import drafting, memory, policy
-from gole_promotion_agent.captures import Shot, _slug, capture_all
+from gole_promotion_agent.captures import Shot, _slug, capture_all, thumbnail
 from gole_promotion_agent.gateway_client import Gateway, GatewayError, decode_png, encode_png
 from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run, execution_run_key
 
@@ -132,20 +132,20 @@ class Drafter:
             lengths["total"] = sum(lengths.values())
             return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG " + json.dumps(lengths))
 
-        feedback = list({item.id: item for item in [*plan_feedback, *image_feedback]}.values())
-        guidelines = list({item.id: item for item in [*plan_guidelines, *image_guidelines]}.values())
         self._remember("PLAN", [shot.route for shot in shots], plan_feedback, plan_guidelines)
-        prompt = drafting.run_prompt(
+        prompt = drafting.plan_prompt(
             drafting.system_prompt(self._publisher.history(policy.HISTORY_LIMIT), self._demo, self._service),
-            memory.render(feedback, guidelines),
+            memory.render(plan_feedback, plan_guidelines),
             drafting.task_prompt([shot.route for shot in shots], service=self._service, subject=subject, diff=diff),
-            memory.reflection_prompt(self._memory, [item.id for item in feedback], [item.id for item in guidelines]),
+            memory.reflection_prompt(
+                self._memory, [item.id for item in plan_feedback], [item.id for item in plan_guidelines],
+            ),
         )
         try:
+            # 기획 호출(D25): 고르기용 축소본만 싣고 도구 없이 한 번에 답하게 한다 — 무거운 제작 단계에 후보를 끌고 가지 않는다.
             response = self._gateway.call({
-                "engine": "codex", "model": self._codex_model, "prompt": prompt,
-                "json_schema": drafting.OUTPUT_SCHEMA, "want_images": True,
-                "images": [encode_png(shot.path) for shot in shots],
+                "engine": "codex", "model": self._codex_model, "reasoning": "medium", "prompt": prompt,
+                "json_schema": drafting.OUTPUT_SCHEMA, "images": [thumbnail(shot.path) for shot in shots],
             })
         except GatewayError as error:
             if re.fullmatch(r"[A-Z_]+", str(error)):
@@ -168,7 +168,7 @@ class Drafter:
         edit_prompts = ["".join(_edit_parts(image_feedback, image_guidelines, pick.headline).values())
                         for pick in draft.picks]
         self._remember("IMAGE_EDIT", [shot.route for shot in picked], image_feedback, image_guidelines)
-        polished = [self._polished(response, shot) for shot in picked]
+        polished = [self._make(shot, prompt) for shot, prompt in zip(picked, edit_prompts)]
 
         media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
         # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
@@ -196,13 +196,18 @@ class Drafter:
         self._publisher.finalize(post_id)
         return RunResult("submitted", "SUBMITTED", post_id=post_id)
 
-    def _polished(self, response: Mapping[str, Any], shot: Shot) -> Path | None:
-        """같은 호출이 만든 홍보 이미지 경로. 없거나 깨졌으면 None — 그 자리는 원본을 그대로 올린다."""
+    def _make(self, shot: Shot, prompt: str) -> Path | None:
+        """제작 호출(D25): 고른 원본 한 장을 홍보 이미지로. 실패하면 None — 그 자리는 원본을 그대로 올린다."""
         try:
+            response = self._gateway.call({
+                "engine": "codex", "model": self._codex_model, "prompt": prompt,
+                "images": [encode_png(shot.path)], "want_images": True,
+            })
             data = decode_png(response["images"][0])
         except (GatewayError, KeyError, IndexError, TypeError, ValueError) as error:
             # 모델 오류가 입력 프롬프트를 인용할 수 있다. 작업 기억 원문은 공개 로그에 싣지 않는다.
-            self._log(f"[promotion-agent] 이미지 제작 실패 {shot.route}, 원본을 올림 ({type(error).__name__})")
+            code = f" {error}" if isinstance(error, GatewayError) and re.fullmatch(r"[A-Z_]+", str(error)) else ""
+            self._log(f"[promotion-agent] 이미지 제작 실패 {shot.route}, 원본을 올림 ({type(error).__name__}{code})")
             return None
         destination = self._run_dir / "polished" / f"01-{_slug(shot.route)}.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -213,10 +218,11 @@ class Drafter:
 def _edit_parts(
     feedback: Sequence[memory.Feedback], guidelines: Sequence[memory.Guideline], headline: str,
 ) -> dict[str, str]:
-    """검토 화면에 남기는 제작 지시문 — 고정 절차 + IMAGE_EDIT 작업 기억 + 문구."""
+    """제작 호출의 지시문이자 검토 화면에 남는 기록 — 고정 절차 + IMAGE_EDIT 작업 기억 + 문구 + 진행 규칙."""
     parts = memory.render_parts(feedback, guidelines)
     parts["fixed"] = drafting.POLISH_PROMPT + parts["fixed"]
     parts["headline"] = "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": headline}, ensure_ascii=False)
+    parts["rules"] = drafting.MAKE_RULES
     return parts
 
 

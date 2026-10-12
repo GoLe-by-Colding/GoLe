@@ -1,9 +1,7 @@
-"""초안 한 편을 만드는 codex 한 번의 호출 — 프롬프트와 출력 계약(D25).
+"""초안 한 편을 만드는 codex 두 번의 호출 — 프롬프트와 출력 계약(D25).
 
-한 호출이 ① 후보 화면 하나 고르기·캡션 ② 미처리 반려 성찰 ③ 고른 화면을 홍보 이미지로 제작을 모두 한다.
-화면 내용은 바꾸지 말라고 고정한다(제작 절차 파일).
-
-규칙(톤·데모 안내·최근 글)은 `policy` 에서 가져온다. 검증의 정본은 아래 pydantic 모델이다.
+1. 기획: 후보 화면 축소본을 한 번에 보고 화면 하나 고르기·캡션·반려 성찰(구조화 출력, 도구 없음).
+2. 제작: 고른 원본 한 장을 고정 절차로 홍보 이미지로 만든다. 화면 내용은 바꾸지 말라고 고정한다.
 """
 
 from __future__ import annotations
@@ -116,7 +114,7 @@ _SYSTEM = """{tone}
 - 캡션은 **네가 이미지에서 직접 본 화면**에 근거해 쓴다. 화면에 없는 기능을 말하지 않는다.
 - 다른 이용자의 닉네임·프로필 사진·매물 사진이 크게 잡힌 화면은 고르지 않는다.
 - "아직 없어요" 같은 **빈 상태 화면은 고르지 않는다** — 그것은 그 기능의 모습이 아니다.
-- 고른 화면 한 장이 홍보 이미지의 주인공이다. 작업 3에서 그 화면을 휴대폰 목업에 넣어 만든다.
+- 고른 화면 한 장이 홍보 이미지의 주인공이다. 다음 단계가 그 화면을 휴대폰 목업에 넣어 만든다.
 - 보여줄 만한 것이 없으면 억지로 만들지 말고 건너뛴다.
 
 {history}"""
@@ -159,36 +157,30 @@ def task_prompt(
     return f"{head}\n\n후보 화면(첨부 이미지와 같은 순서):\n{listed}"
 
 
-_TASKS = """
+_PLAN_TASKS = """
 
 ## 작업 1 — 화면 하나 고르기·캡션
 {task}
 
 - 초안: decision="draft", skip_reason=null, caption,
-  rationale(이 화면을 고른 이유만 검토자가 읽을 한두 문장으로. 작업 과정·파일 저장·검증 여부는 쓰지 않는다),
+  rationale(이 화면을 고른 이유만 검토자가 읽을 한두 문장으로. 작업 과정은 쓰지 않는다),
   pick(image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색",
-  headline 은 화면 밖에 넣을 최대 40자/두 줄의 짧은 문구. 화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
-- 건너뜀: decision="skip", skip_reason, caption·rationale·pick 은 null. 이때 작업 3은 하지 않는다.
-- 작업 기억의 지침은 targets 에 CAPTION·SCREEN_SELECTION 이 있는 것만 이 작업에 적용한다.
+  headline 은 화면 밖에 크게 넣을 문구. 두 줄로 나누고 한 줄은 15자 안쪽, 전체 40자 이하.
+  화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
+- 건너뜀: decision="skip", skip_reason, caption·rationale·pick 은 null.
 
 ## 작업 2 — 반려 성찰 (reflection 필드)
 {reflection}
 
-## 작업 3 — 고른 화면을 홍보 이미지로 제작
-decision="draft" 일 때만 한다. pick.image 번호의 첨부 원본 한 장을 아래 절차로 만든다.
-headline 은 작업 1의 pick.headline 을 그대로 쓴다. 작업 기억의 지침은 targets 에 IMAGE_EDIT 가 있는 것만 적용한다.
+이미지는 만들지 않는다 — 고른 화면은 다음 단계가 따로 제작한다. 첨부 이미지는 고르기용 축소본이다.
+도구·셸을 쓰지 말고 첨부 이미지만 보고 곧바로 스키마에 맞는 JSON 하나만 낸다."""
 
-{procedure}
-
-완성 이미지 한 장만 out/ 폴더에 PNG 로 저장한다. 이미지 생성이 실패해도 JSON 은 낸다.
-
-최종 메시지는 스키마에 맞는 JSON 하나뿐이다."""
+# 제작 호출 끝에 붙는 고정 지시. 확인 단계마다 맥락 전체가 다시 실려 토큰이 커진다(D25 실측).
+MAKE_RULES = "\n\n셸 명령·파일 목록 확인·저장 결과 재확인 없이 이미지를 만들고 바로 끝낸다."
 
 
-def run_prompt(system: str, memory_block: str, task: str, reflection: str | None) -> str:
-    """codex 한 호출의 지시문. reflection 이 None 이면 성찰할 반려가 없다."""
-    return system + memory_block + _TASKS.format(
-        task=task,
-        reflection=reflection or "미처리 반려가 없다. reflection=[] 로 낸다.",
-        procedure=POLISH_PROMPT.strip(),
+def plan_prompt(system: str, memory_block: str, task: str, reflection: str | None) -> str:
+    """기획 호출(고르기·캡션·성찰)의 지시문. reflection 이 None 이면 성찰할 반려가 없다."""
+    return system + memory_block + _PLAN_TASKS.format(
+        task=task, reflection=reflection or "미처리 반려가 없다. reflection=[] 로 낸다.",
     )
