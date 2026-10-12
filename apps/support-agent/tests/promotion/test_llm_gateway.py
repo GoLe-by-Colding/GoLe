@@ -24,6 +24,7 @@ PNG_B64 = base64.b64encode(PNG).decode()
 def _isolated_server_state(tmp_path, monkeypatch):
     """테스트가 실제 서버 로그(~/.cache)를 더럽히거나 실제 codex 이미지 폴더를 지우지 않게 한다."""
     monkeypatch.setattr(gateway, "LOG_PATH", tmp_path / "gw.log")
+    monkeypatch.setattr(gateway, "USAGE_PATH", tmp_path / "usage.jsonl")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
 
 
@@ -121,6 +122,88 @@ def test_codexUsageLimit_reportsFixedCode(tmp_path):
     response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
 
     assert not response["ok"] and response["error"] == "CODEX_USAGE_LIMIT"
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,code", [
+    (1, json.dumps({"type": "error", "codex_error_info": "usage_limit_exceeded"}), "", "CODEX_USAGE_LIMIT"),
+    (1, "", "stream error: rate_limit_exceeded", "CODEX_RATE_LIMIT"),
+    (1, "", "Your authentication session could not be refreshed automatically.", "CODEX_AUTH_REQUIRED"),
+    (1, "", "Error: Not logged in", "CODEX_AUTH_REQUIRED"),
+    (1, json.dumps({"type": "turn.failed", "error": {"message": "server_overloaded"}}), "", "CODEX_OVERLOADED"),
+    (0, json.dumps({"type": "turn.failed", "error": {"message": "context_window_exceeded"}}), "", "CODEX_CONTEXT_TOO_LARGE"),
+])
+def test_codexFailures_areClassifiedIntoFixedCodes(tmp_path, returncode, stdout, stderr, code):
+    runner = lambda command, **kw: subprocess.CompletedProcess(command, returncode, stdout, stderr)  # noqa: E731
+
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and response["error"] == code
+
+
+class _Clock:
+    def __init__(self):
+        self.t = 1_000_000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _recorded(guard, ok=True, error=None, input_tokens=0):
+    guard.record({"ok": ok, "error": error, "usage": {"input_tokens": input_tokens, "output_tokens": 1}})
+
+
+def test_accountGuard_coolsDownAfterAccountErrorsThenAllowsAgain(tmp_path, monkeypatch):
+    clock = _Clock()
+    guard = gateway._AccountGuard(tmp_path / "usage.jsonl", now=clock)
+    _recorded(guard, ok=False, error="CODEX_USAGE_LIMIT", input_tokens=10)
+
+    assert guard.refusal() == "CODEX_COOLDOWN"
+    clock.t += gateway.COOLDOWN_SECONDS["CODEX_USAGE_LIMIT"]
+    assert guard.refusal() is None
+    _recorded(guard, ok=False, error="codex 실패(종료 코드 1)")  # 코드 결함은 계정을 쉬게 하지 않는다
+    assert guard.refusal() is None
+
+
+def test_accountGuard_refusesOverDailyBudgetAndForgetsAfterADay(tmp_path, monkeypatch):
+    monkeypatch.setattr(gateway, "DAILY_INPUT_TOKENS", 100)
+    clock = _Clock()
+    guard = gateway._AccountGuard(tmp_path / "usage.jsonl", now=clock)
+    _recorded(guard, input_tokens=60)
+    assert guard.refusal() is None
+    _recorded(guard, input_tokens=40)
+
+    assert guard.refusal() == "GATEWAY_BUDGET_EXCEEDED"
+    clock.t += 24 * 3600
+    assert guard.refusal() is None
+
+
+def test_accountGuard_keepsOnlyAWeekOfRecords(tmp_path):
+    clock = _Clock()
+    path = tmp_path / "usage.jsonl"
+    guard = gateway._AccountGuard(path, now=clock)
+    _recorded(guard, input_tokens=1)
+    clock.t += gateway.KEEP_SECONDS
+    _recorded(guard, input_tokens=2)
+
+    assert [json.loads(line)["input"] for line in path.read_text(encoding="utf-8").splitlines()] == [2]
+
+
+def test_main_refusesWithoutCallingTheCliWhileCoolingDown(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(gateway, "LOCK_PATH", tmp_path / "gw.lock")
+    calls = []
+
+    def limited(request):
+        calls.append(request)
+        return {"ok": False, "error": "CODEX_USAGE_LIMIT", "usage": {"input_tokens": 5}}
+
+    monkeypatch.setattr(gateway, "handle", limited)
+    for _ in range(2):
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"codex","prompt":"x"}')))
+        gateway.main()
+
+    first, second = (json.loads(line) for line in capsys.readouterr().out.replace("}{", "}\n{").splitlines())
+    assert first["error"] == "CODEX_USAGE_LIMIT" and second["error"] == "CODEX_COOLDOWN"
+    assert len(calls) == 1
 
 
 def test_codex_sandboxWithoutShell_takesImageFromGeneratedFolderAndCleansIt(tmp_path, monkeypatch):

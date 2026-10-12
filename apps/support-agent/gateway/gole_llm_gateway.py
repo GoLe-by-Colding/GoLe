@@ -47,6 +47,17 @@ TIMEOUT_SECONDS = int(os.environ.get("GOLE_GATEWAY_TIMEOUT", "900"))
 LOCK_WAIT_SECONDS = 30 * 60
 LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "gole-llm-gateway.lock"))
 LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
+# 계정 가드(D27). 기록은 잠금 파일 옆(Docker 에서는 CODEX_HOME 볼륨)에 둔다.
+USAGE_PATH = Path(os.environ.get("GOLE_GATEWAY_USAGE", LOCK_PATH.parent / "gole-llm-gateway-usage.jsonl"))
+DAILY_INPUT_TOKENS = int(os.environ.get("GOLE_GATEWAY_DAILY_INPUT_TOKENS", "2000000"))
+_COOLDOWN_HOURS = float(os.environ.get("GOLE_GATEWAY_COOLDOWN_HOURS", "6"))
+# 이 코드로 끝난 호출 뒤에는 그만큼 CLI 를 부르지 않는다 — 한도·로그인 문제에 계정을 다시 두드리지 않게.
+COOLDOWN_SECONDS = {
+    "CODEX_USAGE_LIMIT": _COOLDOWN_HOURS * 3600,
+    "CODEX_AUTH_REQUIRED": _COOLDOWN_HOURS * 3600,
+    "CODEX_RATE_LIMIT": 30 * 60,
+}
+KEEP_SECONDS = 7 * 24 * 3600
 # 모델 이름은 CLI 인자로 들어간다. "-" 로 시작하면 옵션으로 읽힐 수 있어 첫 글자를 영숫자로 묶는다.
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 # codex 세션 ID 는 파일 경로 조각이 되므로 UUID 모양만 받는다. --json 이 아니면 stderr 머리에 찍힌다.
@@ -160,12 +171,13 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         output_tokens=_count(tokens.get("output_tokens")),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
-    if completed.returncode != 0:
-        _log(f"codex rc={completed.returncode} stderr={(completed.stderr or completed.stdout or '')[-2000:]!r}")
-        if "usage limit" in f"{completed.stdout or ''}\n{completed.stderr or ''}".casefold():
-            # 구독 한도. 계정 문제와 코드 결함을 공개 로그에서 구별하도록 고정 코드로 돌려준다.
-            return {"ok": False, "error": "CODEX_USAGE_LIMIT", "usage": usage}
-        return {"ok": False, "error": f"codex 실패(종료 코드 {completed.returncode})", "usage": usage}
+    failed = [e for e in events if e.get("type") in ("turn.failed", "error")]
+    if completed.returncode != 0 or any(e.get("type") == "turn.failed" for e in events):
+        detail = "\n".join([*(json.dumps(e, ensure_ascii=False) for e in failed), completed.stderr or ""])
+        _log(f"codex rc={completed.returncode} detail={(detail or completed.stdout or '')[-2000:]!r}")
+        # 계정 문제(한도·로그인)와 코드 결함을 공개 로그에서 구별하도록 고정 코드로 돌려준다. 원문은 서버 로그에만.
+        code = _classify(detail if detail.strip() else completed.stdout or "")
+        return {"ok": False, "error": code or f"codex 실패(종료 코드 {completed.returncode})", "usage": usage}
     text = last.read_text(encoding="utf-8").strip() if last.exists() else ""
     structured = None
     if request.get("json_schema"):
@@ -187,6 +199,22 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         # 사람 검토 전에는 운영 DB 에만 둔다(D23·D25). 이미지가 없으면 호출 쪽이 원본을 쓴다.
         return {"ok": True, "structured": structured, "images": images, "usage": usage}
     return {"ok": True, "text": text, "structured": structured, "images": images, "usage": usage}
+
+
+# codex 실패 원문에서 찾는 표지 → 고정 코드. 앞쪽이 먼저 이긴다. 영문 표지는 CLI 의 CodexErrorInfo 값과 안내 문구다.
+_ERROR_MARKERS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("usage_limit_exceeded", "usage limit"), "CODEX_USAGE_LIMIT"),
+    (("rate_limit_exceeded", "rate limit", "too many requests"), "CODEX_RATE_LIMIT"),
+    (("unauthorized", "not logged in", "not signed in", "could not be refreshed", "refresh token was rejected"),
+     "CODEX_AUTH_REQUIRED"),
+    (("server_overloaded", "service unavailable"), "CODEX_OVERLOADED"),
+    (("context_window_exceeded",), "CODEX_CONTEXT_TOO_LARGE"),
+)
+
+
+def _classify(detail: str) -> str | None:
+    lowered = detail.casefold()
+    return next((code for markers, code in _ERROR_MARKERS if any(m in lowered for m in markers)), None)
 
 
 def _codex_events(stdout: str | None) -> list[dict[str, Any]]:
@@ -346,12 +374,63 @@ class _Lock:
                 return self
             except BlockingIOError:
                 if time.monotonic() > deadline:
-                    raise TimeoutError("다른 요청이 끝나지 않았다")
+                    raise TimeoutError("GATEWAY_BUSY")
                 time.sleep(2)
 
     def __exit__(self, *exc: Any) -> None:
         if self._handle is not None:
             self._handle.close()
+
+
+class _AccountGuard:
+    """구독 계정을 지킨다(D27). 호출 기록을 볼륨에 남기고, 예산을 넘었거나 계정 오류 직후면 CLI 를 부르지 않는다.
+
+    호출 쪽이 무엇이든(러너 재시도·수동 실행) 같은 계정을 두드리는 곳은 여기 하나라 여기서 막는다.
+    _Lock 안에서만 쓰므로 기록 파일에 경합이 없다.
+    """
+
+    def __init__(self, path: Path, *, now: Callable[[], float] = time.time):
+        self._path = path
+        self._now = now
+
+    def _records(self) -> list[dict[str, Any]]:
+        try:
+            lines = self._path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        records = []
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict) and isinstance(record.get("t"), (int, float)):
+                records.append(record)
+        return records
+
+    def refusal(self) -> str | None:
+        """지금 CLI 를 부르면 안 되는 이유(고정 코드). 불러도 되면 None."""
+        now, records = self._now(), self._records()
+        # 막은 요청은 기록하지 않으므로 마지막 줄이 마지막으로 CLI 를 부른 결과다.
+        if records and now - records[-1]["t"] < COOLDOWN_SECONDS.get(records[-1].get("code"), 0):
+            return "CODEX_COOLDOWN"
+        spent = sum(_count(r.get("input")) for r in records if now - r["t"] < 24 * 3600)
+        return "GATEWAY_BUDGET_EXCEEDED" if spent >= DAILY_INPUT_TOKENS else None
+
+    def record(self, response: dict[str, Any]) -> None:
+        now = self._now()
+        usage = response.get("usage") or {}
+        error = response.get("error")
+        kept = [r for r in self._records() if now - r["t"] < KEEP_SECONDS]
+        kept.append({
+            "t": now, "code": None if response.get("ok") else (error if error in _CODES else "FAILED"),
+            "input": _count(usage.get("input_tokens")), "output": _count(usage.get("output_tokens")),
+        })
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
+
+
+_CODES = {code for _, code in _ERROR_MARKERS}
 
 
 def _failure(message: str) -> dict[str, Any]:
@@ -365,7 +444,14 @@ def main() -> int:
             raise BadRequest("요청이 너무 크다")
         request = json.loads(raw.decode("utf-8"))
         with _Lock():
-            response = handle(request)
+            guard = _AccountGuard(USAGE_PATH)
+            refusal = guard.refusal()
+            if refusal:
+                _log(f"계정 가드가 막음: {refusal}")
+                response = _failure(refusal)
+            else:
+                response = handle(request)
+                guard.record(response)
     except BadRequest as error:  # 우리가 쓴 문장이라 그대로 돌려줘도 된다
         response = _failure(str(error))
     except (ValueError, TimeoutError) as error:  # JSON 형식 오류·잠금 대기 초과

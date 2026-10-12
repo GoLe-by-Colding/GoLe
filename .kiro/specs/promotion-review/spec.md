@@ -722,6 +722,31 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - 호스트 root는 볼륨의 `auth.json`을 읽을 수 있다. 컨테이너는 서버 계정 홈과의 섞임을 막을 뿐 서버 주인을 막지는 않는다.
   - codex는 컨테이너 안의 `auth.json`을 읽을 수 있다. 응답의 구조화 필드는 사람 검토 전에는 운영 DB에만 있다(D23).
 
+### D27. 계정 가드는 게이트웨이가 가진다 — 고정 오류 코드·예산·냉각
+
+**이유.** 같은 구독 계정을 두드리는 곳은 게이트웨이 하나다. 러너 재시도·수동 실행·다른 워크플로가 무엇이든 계정을
+지키는 판단은 계정을 가진 쪽에 둔다. 백엔드 원장·사유 코드는 바꾸지 않는다 — 러너는 고정 코드를 `GATEWAY_FAILED`의
+`detail`로 남기고 공개 로그에는 코드만 찍는다(D23).
+
+- **고정 오류 코드.** codex 실패 원문(`--json`의 `error`·`turn.failed` 이벤트와 stderr)을 다음으로 분류한다.
+  원문은 서버 로그에만 남는다.
+
+  | 코드 | 언제 | 냉각 |
+  |---|---|---|
+  | `CODEX_USAGE_LIMIT` | 구독 사용량 한도 | `GOLE_GATEWAY_COOLDOWN_HOURS`(기본 6시간) |
+  | `CODEX_AUTH_REQUIRED` | 로그인 만료·미로그인 — 사람이 볼륨에서 다시 로그인해야 한다 | 같음 |
+  | `CODEX_RATE_LIMIT` | 일시적 속도 제한 | 30분 |
+  | `CODEX_OVERLOADED` | 서버 과부하 | 없음 |
+  | `CODEX_CONTEXT_TOO_LARGE` | 맥락 창 초과 — 프롬프트·첨부를 줄여야 한다 | 없음 |
+  | `CODEX_COOLDOWN` | 위 냉각 시간 안이라 CLI를 부르지 않음 | — |
+  | `GATEWAY_BUDGET_EXCEEDED` | 최근 24시간 입력 토큰이 `GOLE_GATEWAY_DAILY_INPUT_TOKENS`(기본 200만) 이상 | — |
+  | `GATEWAY_BUSY` | 앞 요청이 30분 넘게 잠금을 쥠 | — |
+
+- **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(`CODEX_HOME` 볼륨)의 JSONL 한 줄로 남기고,
+  7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.
+- 표지 문자열은 codex CLI 0.162.1 바이너리의 `CodexErrorInfo` 값·안내 문구에서 확인했다. 실제 한도·만료 상황의
+  출력으로는 확인하지 못했으므로 이벤트와 stderr 양쪽을 본다.
+
 ## 요구사항 (EARS)
 
 - P1 WHEN 관리자가 채널·캡션(500자 이하)·미디어 업로드 키(선택, `mediaKeys`)로 초안을 등록하면,
