@@ -9,7 +9,8 @@ import pytest
 from gole_promotion_agent import drafting
 from types import SimpleNamespace
 
-from gole_promotion_agent.drafter import Drafter, RunResult, UsageMeter, _close_run, run_payload
+from gole_promotion_agent.drafter import Drafter
+from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run as _close_run, run_payload
 from gole_promotion_agent.fakes import PIXEL, FakeCamera
 from gole_promotion_agent.gateway_client import GatewayError
 

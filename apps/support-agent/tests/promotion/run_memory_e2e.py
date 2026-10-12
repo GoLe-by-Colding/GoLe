@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from PIL import Image  # noqa: E402
 
-from gole_promotion_agent.drafter import Drafter, UsageMeter, run_payload  # noqa: E402
+from gole_promotion_agent.drafter import Drafter  # noqa: E402
+from gole_promotion_agent.ledger import UsageMeter, run_payload  # noqa: E402
 from gole_promotion_agent.fakes import FakeCamera  # noqa: E402
 from gole_promotion_agent.gateway_client import LocalGateway  # noqa: E402
 from gole_promotion_agent.hands import BackendPublisher  # noqa: E402

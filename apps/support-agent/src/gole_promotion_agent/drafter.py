@@ -13,39 +13,16 @@ import argparse
 import json
 import os
 import re
-import uuid
-from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from pydantic import ValidationError
 
 from gole_promotion_agent import drafting, memory, policy
+from gole_promotion_agent.captures import Shot, _slug, capture_all
 from gole_promotion_agent.gateway_client import Gateway, GatewayError, decode_png, encode_png
-
-
-@dataclass(frozen=True)
-class RunResult:
-    """실행 결과. 공개 Actions 로그에는 outcome·code 만 나가고 detail 은 관리자 전용 원장에만 간다(D23)."""
-
-    outcome: str  # submitted · skipped · failed
-    code: str  # 원장의 RunReasonCode 와 같은 이름
-    detail: str | None = None  # 모델이 쓴 사유·내부 오류 요약. 공개 로그에 찍지 않는다
-    post_id: str | None = None
-    memory_context: Mapping[str, Any] | None = None
-    run_key: str | None = None
-
-
-@dataclass(frozen=True)
-class Shot:
-    route: str
-    path: Path
-    captured_at: str
-
-
-def _slug(route: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", route.lower()).strip("-") or "home"
+from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run, execution_run_key
 
 
 class Drafter:
@@ -141,7 +118,7 @@ class Drafter:
                 return RunResult("skipped", "ALREADY_DRAFTED")
             subject, diff = scanner.subject(), scanner.diff()
 
-        shots = self._capture_all()
+        shots = capture_all(self._run_dir, self._camera, self._routes, self._demo, self._log)
         if not shots:
             return RunResult("failed", "NO_CAPTURES")
 
@@ -219,58 +196,6 @@ class Drafter:
         self._publisher.finalize(post_id)
         return RunResult("submitted", "SUBMITTED", post_id=post_id)
 
-    def _capture_all(self) -> list[Shot]:
-        out = self._run_dir / "captures"
-        manifest = out / "manifest.json"
-        if self._camera is None:
-            # 지난 릴리스 때 찍어 둔 화면을 그대로 쓴다(서비스 소개). 화면은 다음 릴리스 전까지 같다.
-            if not manifest.exists():
-                return []
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            if (not isinstance(data, dict) or data.get("version") != policy.CAPTURE_MANIFEST_VERSION
-                    or data.get("viewport") != policy.CAPTURE_VIEWPORT or not isinstance(data.get("captures"), list)):
-                return []
-            reused = []
-            for item in data["captures"]:
-                if not isinstance(item, dict):
-                    return []
-                filename, route, captured_at = item.get("file"), item.get("route"), item.get("captured_at")
-                if (not isinstance(filename, str) or not filename or Path(filename).name != filename
-                        or "/" in filename or "\\" in filename or not filename.endswith(".png")
-                        or route not in self._routes or not policy.is_public_capture_route(route, self._demo)
-                        or not isinstance(captured_at, str) or not captured_at):
-                    return []
-                source = (out / filename).resolve()
-                if source.parent != out.resolve():
-                    return []
-                if source.is_file():
-                    reused.append(Shot(route, source, captured_at))
-            return reused
-        shots: list[Shot] = []
-        try:
-            for index, route in enumerate(self._routes, start=1):
-                destination = out / f"{index:02d}-{_slug(route)}.png"
-                try:
-                    self._camera.capture(route, destination)
-                except ValueError as error:
-                    # 화면 하나가 안 찍혀도 나머지로 판단한다. 무엇이 빠졌는지는 로그에 남긴다.
-                    self._log(f"[promotion-agent] 캡처 실패 {route}: {error}")
-                    continue
-                shots.append(Shot(route, destination, datetime.now(timezone.utc).isoformat()))
-        finally:
-            self._camera.close()
-        # 다음 서비스 소개 실행이 다시 찍지 않고 쓰도록 무엇을 언제 찍었는지 남긴다.
-        manifest.parent.mkdir(parents=True, exist_ok=True)
-        manifest.write_text(
-            json.dumps(
-                {"version": policy.CAPTURE_MANIFEST_VERSION, "viewport": policy.CAPTURE_VIEWPORT,
-                 "captures": [{"route": s.route, "file": s.path.name, "captured_at": s.captured_at} for s in shots]},
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-        return shots
-
     def _polished(self, response: Mapping[str, Any], shot: Shot) -> Path | None:
         """같은 호출이 만든 홍보 이미지 경로. 없거나 깨졌으면 None — 그 자리는 원본을 그대로 올린다."""
         try:
@@ -300,85 +225,6 @@ def _required(name: str) -> str:
     if not value:
         raise ValueError(f"{name}_REQUIRED")
     return value
-
-
-class UsageMeter:
-    """게이트웨이 호출마다 사용량을 모은다. 실패한 호출도 토큰을 쓰므로 예외에 실린 몫까지 센다.
-
-    호출 기록은 원장 API(ModelCall)와 같은 모양으로 쌓는다. ssh 자체가 실패해 사용량을 모르면 0 으로 둔다.
-    """
-
-    def __init__(self, gateway: Gateway):
-        self._gateway = gateway
-        self.calls: list[dict[str, Any]] = []
-
-    def call(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        try:
-            response = self._gateway.call(request)
-        except GatewayError as error:
-            self._add(request, False, error.usage)
-            raise
-        self._add(request, True, response.get("usage"))
-        return response
-
-    def _add(self, request: Mapping[str, Any], ok: bool, usage: Mapping[str, Any] | None) -> None:
-        usage = usage or {}
-        self.calls.append(
-            {
-                "engine": usage.get("engine") or request.get("engine"),
-                "model": usage.get("model"),
-                "ok": ok,
-                "inputTokens": usage.get("input_tokens") or 0,
-                "cachedInputTokens": usage.get("cached_input_tokens") or 0,
-                "outputTokens": usage.get("output_tokens") or 0,
-                "costUsd": usage.get("cost_usd"),
-                "durationMs": usage.get("duration_ms"),
-            }
-        )
-
-    def totals(self) -> dict[str, dict[str, Any]]:
-        totals: dict[str, dict[str, Any]] = {}
-        for call in self.calls:
-            total = totals.setdefault(
-                call["engine"] or "unknown",
-                {"calls": 0, "inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "costUsd": None},
-            )
-            total["calls"] += 1
-            for key in ("inputTokens", "cachedInputTokens", "outputTokens"):
-                total[key] += call[key]
-            if call["costUsd"] is not None:
-                total["costUsd"] = (total["costUsd"] or 0) + call["costUsd"]
-        return totals
-
-
-def execution_run_key(env: Mapping[str, str]) -> str:
-    run_id, attempt = env.get("GITHUB_RUN_ID"), env.get("GITHUB_RUN_ATTEMPT") or "1"
-    return f"gh-{run_id}-{attempt}" if run_id and run_id.isdigit() and attempt.isdigit() else f"local-{uuid.uuid4().hex[:16]}"
-
-
-def run_payload(
-    result: RunResult,
-    calls: Sequence[Mapping[str, Any]],
-    *,
-    service: bool,
-    sha: str | None,
-    env: Mapping[str, str],
-) -> dict[str, Any]:
-    """원장(POST /api/admin/promotion-runs) 한 줄. 모델이 쓴 사유는 detail 에만, 잘라서 담는다."""
-    agent_sha = (env.get("PROMOTION_AGENT_CODE_SHA") or "").lower() or None
-    return {
-        "runKey": result.run_key or execution_run_key(env),
-        "category": "SERVICE" if service else "FEATURE",
-        "sourceCommitSha": None if service else sha,
-        "outcome": result.outcome.upper(),
-        "reasonCode": result.code,
-        "detail": policy.clean_detail(result.detail),
-        "promotionPostId": result.post_id,
-        "agentSha": agent_sha if agent_sha and policy.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
-        "runUrl": env.get("PROMOTION_AGENT_RUN_URL") or None,
-        "calls": list(calls)[: policy.MAX_RUN_CALLS],
-        **({"memoryContext": dict(result.memory_context)} if result.memory_context is not None else {}),
-    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -439,29 +285,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = drafter.run()
     except Exception as error:
         # 예외로 끝나도 그때까지 쓴 사용량은 원장에 남긴다. 예외 문구에는 내부 사정이 섞일 수 있어 이름만 담는다.
-        _close_run(publisher, run_dir, meter, RunResult(
+        close_run(publisher, run_dir, meter, RunResult(
             "failed", "ERROR", type(error).__name__, memory_context=drafter.memory_usage, run_key=drafter.run_key,
         ), arguments)
         raise
-    return _close_run(publisher, run_dir, meter, result, arguments)
+    return close_run(publisher, run_dir, meter, result, arguments)
 
-
-def _close_run(publisher: Any, run_dir: Path, meter: UsageMeter, result: RunResult, arguments: Any) -> int:
-    """원장에 한 줄 남기고 공개 로그에는 결과·코드만 찍는다. 원장 기록이 실패해도 실행 결과는 바꾸지 않는다."""
-    payload = run_payload(result, meter.calls, service=arguments.service, sha=arguments.sha, env=os.environ)
-    try:
-        status = publisher.record_run(payload)
-        recorded = status in (200, 201)
-    except Exception as error:  # noqa: BLE001 — 기록 실패가 초안 제출을 되돌리면 안 된다
-        status, recorded = type(error).__name__, False
-    run_dir.mkdir(parents=True, exist_ok=True)
-    # Actions 요약이 읽는 파일이다. 공개되므로 모델이 쓴 사유(detail)는 넣지 않는다.
-    summary = {k: v for k, v in payload.items() if k not in {"detail", "memoryContext"}} | {"totals": meter.totals(), "recorded": recorded}
-    (run_dir / "run.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"[promotion-agent] {result.outcome} ({result.code})")
-    if not recorded:
-        print(f"[promotion-agent] 실행 원장 기록 실패: {status}")
-    return 1 if result.outcome == "failed" else 0
 
 if __name__ == "__main__":
     raise SystemExit(main())

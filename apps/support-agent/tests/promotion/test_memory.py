@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from gole_promotion_agent import memory
-from gole_promotion_agent.drafter import RunResult, UsageMeter, _close_run
+from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run as _close_run
 from gole_promotion_agent.fakes import FakeCamera
 from gole_promotion_agent.gateway_client import GatewayError
 from gole_promotion_agent.hands import BackendPublisher
