@@ -197,11 +197,12 @@ export function AdminOperationsView() {
         <h2 className="text-xl font-semibold">실행 이력</h2>
         {snapshot?.history.length === 0 && <p className="text-sm">아직 실행한 작업이 없습니다.</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          {/* 머리글이 "관리/자"처럼 글자 단위로 꺾이지 않게 표 폭을 지키고 가로로 스크롤한다. */}
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr>
                 {["작업 / 실행 ID", "시각 / 관리자", "상태 / 결과", "조치"].map((label) => (
-                  <th key={label} className="border-b border-neutral-200 p-3">
+                  <th key={label} className="whitespace-nowrap border-b border-neutral-200 p-3">
                     {label}
                   </th>
                 ))}

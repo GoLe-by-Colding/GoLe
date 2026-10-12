@@ -147,6 +147,73 @@ class CatalogServiceTest {
         assertThat(legacy.getImageUrl()).isNull();
     }
 
+    @Test
+    void setNumbersInTheme_asksWithLowercaseWordsOfTheSlug() {
+        ThemeWordsPort port = new ThemeWordsPort(List.of("75192", "75313"));
+        CatalogService service = new CatalogService(port, new FakeAdminPort(), NO_NOTIFIER);
+
+        assertThat(service.setNumbersInTheme("Star-Wars", 300)).containsExactly("75192", "75313");
+        assertThat(port.words).containsExactly("star", "wars");
+        assertThat(port.limit).isEqualTo(300);
+    }
+
+    @Test
+    void setNumbersInTheme_doesNotAskForBlankOrNonWordSlugs() {
+        ThemeWordsPort port = new ThemeWordsPort(List.of("75192"));
+        CatalogService service = new CatalogService(port, new FakeAdminPort(), NO_NOTIFIER);
+
+        assertThat(service.setNumbersInTheme(null, 300)).isEmpty();
+        assertThat(service.setNumbersInTheme(" - ", 300)).isEmpty();
+        // 정규식 문자는 테마 낱말이 아니다 — 저장소에 패턴으로 흘려보내지 않는다.
+        assertThat(service.setNumbersInTheme(".*", 300)).isEmpty();
+        assertThat(service.setNumbersInTheme("a-b-c-d-e", 300)).isEmpty();
+        assertThat(service.setNumbersInTheme("icons", 0)).isEmpty();
+        assertThat(port.words).isNull();
+    }
+
+    @Test
+    void setNumbersInTheme_capsHowManyNumbersOneThemeReturns() {
+        ThemeWordsPort port = new ThemeWordsPort(List.of("10307"));
+        CatalogService service = new CatalogService(port, new FakeAdminPort(), NO_NOTIFIER);
+
+        service.setNumbersInTheme("icons", 10_000);
+
+        assertThat(port.limit).isEqualTo(500);
+    }
+
+    /** 테마 낱말로 묻는 것만 기록하는 저장소. 다른 조회는 쓰지 않는다. */
+    private static final class ThemeWordsPort implements LoadLegoSetPort {
+        private final List<String> answer;
+        private List<String> words;
+        private int limit;
+
+        private ThemeWordsPort(List<String> answer) {
+            this.answer = answer;
+        }
+
+        @Override
+        public Optional<LegoSet> loadBySetNumber(String setNumber) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<LegoSet> searchByNameOrTheme(String query) {
+            return List.of();
+        }
+
+        @Override
+        public List<LegoSet> loadFeatured(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public List<String> loadSetNumbersByThemeWords(List<String> words, int limit) {
+            this.words = words;
+            this.limit = limit;
+            return answer;
+        }
+    }
+
     private record FakeLoadPort(Optional<LegoSet> byNumber, List<LegoSet> bySearch) implements LoadLegoSetPort {
 
         @Override
@@ -162,6 +229,11 @@ class CatalogServiceTest {
         @Override
         public List<LegoSet> loadFeatured(int limit) {
             return bySearch;
+        }
+
+        @Override
+        public List<String> loadSetNumbersByThemeWords(List<String> words, int limit) {
+            return bySearch.stream().map(LegoSet::getSetNumber).limit(limit).toList();
         }
     }
 

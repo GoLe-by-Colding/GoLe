@@ -5,7 +5,18 @@ const vm = require('node:vm');
 const ts = require('../../../apps/mobile/node_modules/typescript');
 const source = fs.readFileSync(path.join(__dirname, '../../../apps/mobile/src/views/web/model/navigation.ts'), 'utf8');
 const exportsObject = {};
-vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: exportsObject, URL });
+// 탭·알림 경로 검증을 공유하게 된 뒤에도 실제 의존 코드를 읽어 원점 회귀를 실행한다.
+const shared = {};
+const routeSource = fs.readFileSync(path.join(__dirname, '../../../apps/mobile/src/shared/lib/notification-route.ts'), 'utf8');
+vm.runInNewContext(ts.transpileModule(routeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: shared, URL });
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
+  exports: exportsObject,
+  URL,
+  require: (name) => {
+    assert.equal(name, '@/shared/lib');
+    return shared;
+  },
+});
 const { resolveWebOrigin, navigationTarget } = exportsObject;
 assert.equal(resolveWebOrigin(undefined, true, false), 'http://localhost:3000');
 assert.equal(resolveWebOrigin(undefined, true, true), 'http://10.0.2.2:3000');

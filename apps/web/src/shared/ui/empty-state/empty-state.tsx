@@ -72,7 +72,7 @@ export function EmptyState({
             size={160}
             showWordmark={false}
             spout
-            className={animated ? "gole-mascot-float" : ""}
+            className={animated ? "origin-[50%_62%] motion-safe:animate-mascot-float" : ""}
           />
         </div>
 

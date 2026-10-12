@@ -366,14 +366,20 @@ test.describe("내 정보", () => {
         },
       }),
     );
-    page.on("dialog", (dialog) => void dialog.accept());
-
     await page.goto("/profile/security");
     await page.getByRole("button", { name: "탈퇴 본인확인 코드 받기" }).click();
     await page.getByLabel("현재 계정 이메일").fill("seller@gole.test");
     await page.getByLabel("확인 문구").fill("회원 탈퇴");
     await page.getByLabel("이메일 본인확인 코드").fill("123456");
     await page.getByRole("button", { name: "회원 탈퇴 요청" }).click();
+    await page
+      .getByRole("alertdialog", { name: "회원 탈퇴" })
+      .getByRole("button", { name: "탈퇴 요청" })
+      .click();
+    // 접수 안내는 요청 ID를 모달로 보여 주고, 확인하면 로그인 화면으로 간다.
+    const accepted = page.getByRole("alertdialog", { name: "회원 탈퇴 요청 접수" });
+    await expect(accepted).toContainText("요청 ID: account-deletion-request-1");
+    await accepted.getByRole("button", { name: "로그인 화면으로" }).click();
 
     await expect(page).toHaveURL(/\/login\?deletionRequested=1/);
     await expect

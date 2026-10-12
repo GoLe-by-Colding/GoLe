@@ -28,12 +28,14 @@ import {
   Input,
   LinkButton,
   Text,
+  useDialog,
 } from "@shared/ui";
 
 export function AccountSecurityPage() {
   const router = useRouter();
   const { session } = useSession();
   const sessionAccountId = session?.accountId ?? null;
+  const dialog = useDialog();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -100,6 +102,8 @@ export function AccountSecurityPage() {
           <Text tone="secondary">비밀번호를 바꾸려면 로그인이 필요합니다.</Text>
           <LinkButton href="/login?returnTo=%2Fprofile%2Fsecurity">로그인하러 가기</LinkButton>
         </div>
+        {/* 탈퇴 접수 직후 세션이 지워져도 요청 ID 안내 모달은 이 화면 위에 남는다. */}
+        {dialog.element}
       </Container>
     );
   }
@@ -156,9 +160,13 @@ export function AccountSecurityPage() {
 
   async function withdrawProvisionConsent(): Promise<void> {
     if (currentConsentStatus === null || consentBusy) return;
-    const confirmed = window.confirm(
-      "동의를 철회하면 새 대화·메시지 전송·거래 상대방 연락처 조회가 제한됩니다. 과거 대화는 계속 읽을 수 있습니다. 철회할까요?",
-    );
+    const confirmed = await dialog.confirm({
+      title: "제3자 제공 동의 철회",
+      description:
+        "동의를 철회하면 새 대화·메시지 전송·거래 상대방 연락처 조회가 제한됩니다. 과거 대화는 계속 읽을 수 있습니다. 철회할까요?",
+      confirmLabel: "철회",
+      tone: "danger",
+    });
     if (!confirmed) return;
     setConsentBusy(true);
     setConsentError(null);
@@ -223,9 +231,13 @@ export function AccountSecurityPage() {
   async function submitDeletion(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (deletionBusy || emailAuthenticationAvailable !== true) return;
-    const confirmed = window.confirm(
-      "탈퇴를 요청하면 즉시 모든 기기에서 로그아웃되고 다시 로그인할 수 없습니다. 진행할까요?",
-    );
+    const confirmed = await dialog.confirm({
+      title: "회원 탈퇴",
+      description:
+        "탈퇴를 요청하면 즉시 모든 기기에서 로그아웃되고 다시 로그인할 수 없습니다. 진행할까요?",
+      confirmLabel: "탈퇴 요청",
+      tone: "danger",
+    });
     if (!confirmed) return;
     setDeletionBusy(true);
     setDeletionError(null);
@@ -238,7 +250,11 @@ export function AccountSecurityPage() {
         idempotencyKey,
       );
       clearAccountBrowserStorage();
-      window.alert(`회원 탈퇴 요청이 접수되었습니다.\n요청 ID: ${result.requestId}`);
+      await dialog.alert({
+        title: "회원 탈퇴 요청 접수",
+        description: `회원 탈퇴 요청이 접수되었습니다.\n요청 ID: ${result.requestId}`,
+        confirmLabel: "로그인 화면으로",
+      });
       router.replace("/login?deletionRequested=1");
     } catch (cause) {
       setDeletionError(
@@ -533,6 +549,7 @@ export function AccountSecurityPage() {
           )}
         </Card>
       </div>
+      {dialog.element}
     </Container>
   );
 }

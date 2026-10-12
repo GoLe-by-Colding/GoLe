@@ -876,7 +876,7 @@ export function ChatListPage() {
                   </div>
                 </header>
                 {blockManageOpen && managedBlockTarget !== null && blockedAccountIds !== null ? (
-                  <div className="gole-rise flex flex-col gap-3 border-b border-danger/15 bg-danger/5 px-4 py-3 sm:px-5">
+                  <div className="motion-safe:animate-rise-in flex flex-col gap-3 border-b border-danger/15 bg-danger/5 px-4 py-3 sm:px-5">
                     <div>
                       <p className="text-sm font-semibold text-neutral-900">
                         {managedTargetBlocked
@@ -930,7 +930,7 @@ export function ChatListPage() {
                   </div>
                 ) : null}
                 {inviteOpen && selected.kind === "SOCIAL" && selected.room.type === "GROUP" ? (
-                  <div className="gole-rise flex flex-wrap items-end gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
+                  <div className="motion-safe:animate-rise-in flex flex-wrap items-end gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
                     <label className="min-w-[220px] flex-1 text-xs font-semibold text-neutral-600">
                       초대할 계정 ID
                       <input
@@ -1121,7 +1121,7 @@ function ConversationComposer({
   return (
     <form
       onSubmit={submit}
-      className="gole-rise flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/50 p-5 sm:p-6"
+      className="motion-safe:animate-rise-in flex flex-col gap-4 rounded-2xl border border-brand-100 bg-brand-50/50 p-5 sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
         <div>

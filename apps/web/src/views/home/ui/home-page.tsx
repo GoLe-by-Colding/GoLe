@@ -126,7 +126,7 @@ export async function HomePage() {
                   size={104}
                   showWordmark={false}
                   spout
-                  className="gole-mascot-float shrink-0 sm:hidden"
+                  className="origin-[50%_62%] motion-safe:animate-mascot-float shrink-0 sm:hidden"
                 />
               </div>
               <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-neutral-900">
@@ -163,7 +163,7 @@ export async function HomePage() {
                 있으므로 지표만 남고, 지표도 없으면 빈 상자가 되지 않게 레일을 숨긴다. */}
             <div
               className={cn(
-                "gole-hero-flow flex min-w-0 flex-col gap-5 rounded-[1.75rem] border border-brand-100 bg-brand-50 p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6",
+                "flex *:motion-safe:animate-hero-flow *:nth-2:motion-safe:animate-hero-flow-2 *:nth-3:motion-safe:animate-hero-flow-3 min-w-0 flex-col gap-5 rounded-[1.75rem] border border-brand-100 bg-brand-50 p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6",
                 liveStats.length === 0 && "max-sm:hidden",
               )}
             >
@@ -172,7 +172,12 @@ export async function HomePage() {
                   aria-hidden="true"
                   className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent"
                 />
-                <Logo size={256} showWordmark={false} spout className="gole-mascot-float" />
+                <Logo
+                  size={256}
+                  showWordmark={false}
+                  spout
+                  className="origin-[50%_62%] motion-safe:animate-mascot-float"
+                />
               </div>
 
               {liveStats.length > 0 ? (

@@ -89,14 +89,18 @@ export function AdminListingsView() {
                 {l.title}
               </Link>
             </td>
-            <td className="px-3 py-2.5 text-neutral-600">{shortId(l.sellerId)}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-neutral-600">
+              {shortId(l.sellerId)}
+            </td>
             <td className="px-3 py-2.5 text-right tabular-nums">{formatKrw(l.price)}</td>
             <td className="px-3 py-2.5">
               <Badge tone={LISTING_STATUS_TONE[l.status] ?? "neutral"}>
                 {LISTING_STATUS_LABEL[l.status] ?? l.status}
               </Badge>
             </td>
-            <td className="px-3 py-2.5 text-xs text-neutral-500">{formatDateTime(l.createdAt)}</td>
+            <td className="whitespace-nowrap px-3 py-2.5 text-xs text-neutral-500">
+              {formatDateTime(l.createdAt)}
+            </td>
             <td className="px-3 py-2.5 text-right">
               {l.status === "DELETED" ? (
                 <span className="text-xs text-neutral-400">내려짐</span>

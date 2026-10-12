@@ -16,7 +16,7 @@ const GOLD_D = "M154 90.8V78.5A6.5 6.5 0 0 1 160.5 72H172.5A6.5 6.5 0 0 1 179 78
 /** 1×2 브릭 한 개 — 몸 34×17 위에 스터드 두 개. 분수 그룹 안의 좌표다. */
 function SpoutBrick({ x, y, className }: { x: number; y: number; className: string }) {
   return (
-    <g className={cn("gole-spout-brick", className)}>
+    <g className={cn("transform-fill origin-center", className)}>
       <rect x={x} y={y} width="34" height="17" rx="3" />
       <rect x={x + 6} y={y - 5} width="9" height="6" rx="2" />
       <rect x={x + 19} y={y - 5} width="9" height="6" rx="2" />
@@ -35,11 +35,15 @@ function TailUpArt({ spout }: { readonly spout: boolean }) {
             strokeWidth="4"
             strokeLinecap="round"
             opacity="0.75"
-            className="gole-spout-stream stroke-brand-300"
+            className="stroke-brand-300 [stroke-dasharray:42_10] motion-safe:animate-spout-stream"
           />
-          <SpoutBrick x={184} y={21} className="gole-spout-brick-a fill-accent-500" />
-          <SpoutBrick x={238} y={9} className="gole-spout-brick-b fill-brand-400" />
-          <SpoutBrick x={278} y={31} className="gole-spout-brick-c fill-brand-300" />
+          <SpoutBrick
+            x={184}
+            y={21}
+            className="motion-safe:animate-spout-brick-a fill-accent-500"
+          />
+          <SpoutBrick x={238} y={9} className="motion-safe:animate-spout-brick-b fill-brand-400" />
+          <SpoutBrick x={278} y={31} className="motion-safe:animate-spout-brick-c fill-brand-300" />
         </g>
       ) : null}
       {/* fill 속성은 CSS가 없을 때의 대비값이다. 클래스(토큰 + 변수)가 항상 이긴다. */}

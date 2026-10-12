@@ -24,49 +24,30 @@ const MARK_GLINT_D =
 
 export default function OpengraphImage() {
   return new ImageResponse(
-    <div
-      style={{
-        display: "flex",
-        width: "100%",
-        height: "100%",
-        padding: "80px",
-        alignItems: "stretch",
-        justifyContent: "space-between",
-        // 브랜드 규칙: 단색 면. 그라데이션 배경은 쓰지 않는다.
-        background: "#1d4ed8",
-        color: "#ffffff",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", fontSize: "46px", fontWeight: 800, letterSpacing: "-1px" }}>
-          Go<span style={{ color: "#facc15" }}>Le</span>
+    // Satori(`next/og`)는 실험 기능인 `tw` prop으로 Tailwind 클래스를 읽는다. 앱의 `@theme`은 모르므로 색은 임의 값으로 쓴다.
+    // 브랜드 규칙: 단색 면. 그라데이션 배경은 쓰지 않는다.
+    // Satori `tw`에는 gap 유틸리티가 없어 간격은 두 번째 자식의 margin으로 준다(렌더 픽셀 동일 확인).
+    <div tw="flex h-full w-full items-stretch justify-between bg-[#1d4ed8] p-[80px] font-sans text-white">
+      <div tw="flex flex-col justify-between">
+        <div tw="flex text-[46px] font-extrabold tracking-[-1px]">
+          Go<span tw="text-[#facc15]">Le</span>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              fontSize: "92px",
-              fontWeight: 800,
-              letterSpacing: "-4px",
-              lineHeight: 1.02,
-            }}
-          >
+        <div tw="flex flex-col">
+          <div tw="flex flex-col text-[92px] font-extrabold leading-[1.02] tracking-[-4px]">
             <span>Brick</span>
             <span>Marketplace</span>
           </div>
-          <div style={{ fontSize: "32px", opacity: 0.85 }}>
+          <div tw="mt-[18px] text-[32px] opacity-85">
             Prices · Direct Chat · Collection · Community
           </div>
         </div>
 
-        <div style={{ fontSize: "28px", opacity: 0.7 }}>gole.co.kr</div>
+        <div tw="text-[28px] opacity-70">gole.co.kr</div>
       </div>
 
       {/* 흰 옆모습 브릭 고래 + 골드 스터드 한 점 — 앱 아이콘과 같은 조합. 힌지 핀 고리로 파란 면이 비친다. */}
-      <div style={{ display: "flex", alignItems: "center", paddingBottom: "24px" }}>
+      <div tw="flex items-center pb-[24px]">
         <svg width="420" height="235" viewBox="0 0 235.8 132.2" fill="none">
           <path d={MARK_GOLD_D} fill="#facc15" />
           <path d={MARK_BODY_D} fill="#ffffff" />

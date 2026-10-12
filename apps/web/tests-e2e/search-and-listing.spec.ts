@@ -38,6 +38,20 @@ test.describe("Search & listing detail", () => {
     }
   });
 
+  test("한국어 테마 이름으로 찾으면 관심 테마를 달지 않은 그 테마 세트 매물도 나온다", async ({
+    page,
+  }) => {
+    test.skip(targetsRemoteHost, "시드 매물로 확인하는 회귀 테스트");
+    // 시드의 AT-AT(#75313)는 관심 테마가 없고 제목에도 "스타워즈"가 없다 — 카탈로그 테마("Star Wars")로만 찾힌다.
+    // 밀레니엄 팰컨(#75192)은 판매자가 관심 테마를 단 매물이다.
+    await page.goto(`/search?query=${encodeURIComponent("스타워즈")}`);
+    const cards = page.getByTestId("listing-card");
+    await expect(cards.filter({ hasText: "AT-AT UCS 조립완성" }).first()).toBeVisible();
+    await expect(cards.filter({ hasText: "밀레니엄 팰컨 UCS 정품" }).first()).toBeVisible();
+    // 다른 테마(Icons)의 에펠탑 시드 매물은 나오지 않는다.
+    await expect(cards.filter({ hasText: "에펠탑 미개봉 새상품" })).toHaveCount(0);
+  });
+
   test("세트 페이지에서 이 세트로 판매 등록을 시작할 수 있다", async ({ page }) => {
     await page.goto("/sets/10307");
     await expect(page.getByRole("link", { name: "이 세트 팔기" }).first()).toHaveAttribute(

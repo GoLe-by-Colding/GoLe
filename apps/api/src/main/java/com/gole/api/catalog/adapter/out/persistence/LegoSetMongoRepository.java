@@ -1,6 +1,7 @@
 package com.gole.api.catalog.adapter.out.persistence;
 
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
@@ -20,4 +21,7 @@ public interface LegoSetMongoRepository extends MongoRepository<LegoSetDocument,
 
     /** 추천(featured) 플래그가 켜진 문서 목록을 최대 limit 개 조회. */
     List<LegoSetDocument> findByFeaturedIsTrue(Limit limit);
+
+    /** 테마 이름이 패턴에 맞는 문서(패턴의 대소문자 무시 플래그를 따른다). */
+    List<LegoSetDocument> findByThemeRegex(Pattern theme, Limit limit);
 }

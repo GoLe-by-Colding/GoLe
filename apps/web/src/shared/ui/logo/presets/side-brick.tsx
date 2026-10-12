@@ -20,7 +20,7 @@ import type { MascotArt } from "./types";
  * 힌지 핀 고리는 구멍이라 배경색이 비친다. 윗단은 톤으로만 나눈다 — 흰 이음선은 작은 크기에서 뚜껑 선처럼 읽혔다.
  *
  * 가운데 골드 스터드가 분수공이다. spout 변형은 거기서 물줄기와 브릭이 솟아 꼬리 쪽(오른쪽)으로 떨어진다.
- * `gole-spout-*` 키프레임은 원본 때 그대로이고 `transform-box: fill-box`라 축척을 바꿔도 움직임 비율이 같다.
+ * 분수(`animate-spout-*`) 키프레임은 원본 때 그대로이고 `transform-box: fill-box`라 축척을 바꿔도 움직임 비율이 같다.
  */
 const MARK_W = 235.8;
 const MARK_H = 132.2;
@@ -53,7 +53,7 @@ const SPOUT_PLACE = "translate(106 0) scale(0.88) translate(-111 5)";
 /** 1×2 브릭 한 개 — 몸 34×17 위에 스터드 두 개. */
 function SpoutBrick({ x, y, className }: { x: number; y: number; className: string }) {
   return (
-    <g className={cn("gole-spout-brick", className)}>
+    <g className={cn("transform-fill origin-center", className)}>
       <rect x={x} y={y} width="34" height="17" rx="3" />
       <rect x={x + 6} y={y - 5} width="9" height="6" rx="2" />
       <rect x={x + 19} y={y - 5} width="9" height="6" rx="2" />
@@ -72,11 +72,23 @@ function SideBrickArt({ spout }: { readonly spout: boolean }) {
             strokeWidth="4"
             strokeLinecap="round"
             opacity="0.75"
-            className="gole-spout-stream stroke-brand-300"
+            className="stroke-brand-300 [stroke-dasharray:42_10] motion-safe:animate-spout-stream"
           />
-          <SpoutBrick x={60} y={-30} className="gole-spout-brick-a fill-accent-500" />
-          <SpoutBrick x={114} y={-42} className="gole-spout-brick-b fill-brand-400" />
-          <SpoutBrick x={154} y={-20} className="gole-spout-brick-c fill-brand-300" />
+          <SpoutBrick
+            x={60}
+            y={-30}
+            className="motion-safe:animate-spout-brick-a fill-accent-500"
+          />
+          <SpoutBrick
+            x={114}
+            y={-42}
+            className="motion-safe:animate-spout-brick-b fill-brand-400"
+          />
+          <SpoutBrick
+            x={154}
+            y={-20}
+            className="motion-safe:animate-spout-brick-c fill-brand-300"
+          />
         </g>
       ) : null}
       {/* fill 속성은 CSS가 없을 때의 대비값이다. 클래스(토큰 + 변수)가 항상 이긴다. */}

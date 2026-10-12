@@ -36,6 +36,22 @@ const NAV: readonly NavItem[] = [
   { href: "/admin/audit", label: "감사 로그" },
 ];
 
+function isCurrent(item: NavItem, pathname: string): boolean {
+  return item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+}
+
+function subscribeNothing(): () => void {
+  return () => undefined;
+}
+
+function isClient(): boolean {
+  return true;
+}
+
+function isServer(): boolean {
+  return false;
+}
+
 function subscribeLocation(onChange: () => void): () => void {
   window.addEventListener("popstate", onChange);
   return () => window.removeEventListener("popstate", onChange);
@@ -63,11 +79,14 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   const { access, retry } = useAdminAccess();
   const [pendingReports, setPendingReports] = useState(0);
   const [unassignedSupportTickets, setUnassignedSupportTickets] = useState(0);
+  // 좁은 화면 메뉴는 연 경로에서만 열려 있다 — 다른 화면으로 옮기면 저절로 접힌다.
+  const [menuOpenedAt, setMenuOpenedAt] = useState<string | null>(null);
   const search = useSyncExternalStore(
     subscribeLocation,
     getLocationSearch,
     getServerLocationSearch,
   );
+  const hydrated = useSyncExternalStore(subscribeNothing, isClient, isServer);
 
   // 운영 데이터는 서버 확인이 끝난 뒤에만 요청한다.
   useEffect(() => {
@@ -91,7 +110,9 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
   // 확인 중에도 콘솔과 같은 골격(폭·제목 줄·240px 사이드바 그리드)을 유지한다.
   // 좁은 안내 카드로 떨어뜨리면 확인이 끝나는 순간 640px에서 1280px로 벌어지며
   // 화면 전체가 한 번 출렁인다. 메뉴 항목은 아직 노출하지 않는다.
-  if (access === "checking") {
+  // 서버는 세션(localStorage)을 모르므로 하이드레이션 전에는 "비로그인"으로 판정된다. 그대로 그리면
+  // 관리자에게도 첫 HTML 에 "관리자 로그인이 필요합니다"가 잠깐 떴다가 바뀐다 — 그 사이도 확인 중으로 본다.
+  if (!hydrated || access === "checking") {
     return (
       <ConsoleFrame badge={<Badge tone="neutral">확인 중</Badge>} nav={null}>
         <div className="flex min-h-[320px] items-center justify-center p-6" aria-busy="true">
@@ -142,6 +163,10 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
     );
   }
 
+  const currentItem = NAV.find((item) => isCurrent(item, pathname));
+  const menuOpen = menuOpenedAt === pathname;
+  const pendingTotal = pendingReports + unassignedSupportTickets;
+
   return (
     <ConsoleFrame
       badge={<Badge tone="brand">ADMIN</Badge>}
@@ -150,10 +175,45 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
           aria-label="운영자 메뉴"
           className="border-b border-neutral-200/70 bg-white p-3 sm:p-4 lg:border-r lg:border-b-0"
         >
-          <ul className="grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col">
+          {/* 메뉴가 19개라 lg 미만에서 격자로 펼치면 본문이 첫 화면 아래(320px에서 y≈670)로 밀린다.
+              좁은 화면에서는 지금 화면 이름만 보이는 버튼으로 접고, 누르면 같은 격자를 연다. */}
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls="admin-menu-list"
+            onClick={() => setMenuOpenedAt(menuOpen ? null : pathname)}
+            className="flex h-11 w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-surface-raised px-3 text-sm font-semibold text-neutral-900 lg:hidden"
+          >
+            <span className="min-w-0 truncate">메뉴 · {currentItem?.label ?? "대시보드"}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              {pendingTotal > 0 ? <Badge tone="warning">{pendingTotal}</Badge> : null}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+                className={cn(
+                  "transition-transform motion-reduce:transition-none",
+                  menuOpen && "rotate-180",
+                )}
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
+          </button>
+          <ul
+            id="admin-menu-list"
+            className={cn(
+              "grid grid-cols-2 gap-2 max-lg:mt-3 min-[360px]:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col",
+              !menuOpen && "max-lg:hidden",
+            )}
+          >
             {NAV.map((item) => {
-              const active =
-                item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+              const active = isCurrent(item, pathname);
               return (
                 <li key={item.href}>
                   <AdminNavigationItem href={item.href} label={item.label} active={active}>
@@ -197,7 +257,9 @@ function ConsoleFrame({
           {badge}
         </div>
 
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_minmax(0,1fr)]">
+        {/* overflow-clip: 둥근 모서리는 자르되 스크롤 컨테이너를 만들지 않는다. overflow-hidden 이면
+            이 격자가 sticky 의 기준이 되어 사이드바·마스코트 미리보기가 붙지 않고 위에 빈 칸이 생긴다. */}
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-clip rounded-2xl border border-neutral-200/70 bg-neutral-50 shadow-soft lg:[grid-template-columns:240px_minmax(0,1fr)]">
           {nav ?? (
             <div
               aria-hidden="true"

@@ -172,7 +172,9 @@ export function AdminCatalogView() {
       <Heading level={2}>카탈로그 관리</Heading>
       <AdminStatus error={error} loading={sets === null} />
 
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 xl:[grid-template-columns:320px_minmax(0,1fr)]">
+      {/* 콘솔 본문은 xl 에서도 약 930px 다. 폼 280 + 간격 24 + 표 560 이 그 안에 들어가야
+          "추천 해제" 같은 조치 버튼이 표 끝에서 잘리지 않는다. */}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 xl:[grid-template-columns:280px_minmax(0,1fr)]">
         <Card padded className="flex min-w-0 h-fit flex-col gap-4 max-sm:p-4">
           <Heading level={3}>{editing !== null ? `세트 수정 · #${editing}` : "세트 등록"}</Heading>
           <Field label="세트 번호">
@@ -309,7 +311,7 @@ export function AdminCatalogView() {
             caption="브릭 세트 카탈로그 목록"
             headers={["번호", "이름", "테마", "피스", "상태", "관리"]}
             alignRight={[3, 5]}
-            minWidth={640}
+            minWidth={560}
             empty="등록된 세트가 없습니다."
             rowCount={visibleSets.length}
           >

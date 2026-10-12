@@ -40,10 +40,14 @@ function readMark() {
   const paths = Object.fromEntries(
     [...svg.matchAll(/<path id="gole-([a-z]+)" d="([^"]+)"/g)].map((m) => [m[1], m[2]]),
   );
-  const missing = PARTS.filter((part) => !paths[part]);
+  // 정본 색. 흰 배경 위 스플래시는 웹 로고와 같은 색을 그대로 쓴다.
+  const fills = Object.fromEntries(
+    [...svg.matchAll(/<path id="gole-([a-z]+)" d="[^"]+" fill="([^"]+)"/g)].map((m) => [m[1], m[2]]),
+  );
+  const missing = PARTS.filter((part) => !paths[part] || !fills[part]);
   if (!vb || missing.length > 0)
     throw new Error(`${MARK_PATH}: viewBox 또는 gole-${missing.join("·gole-")}를 찾지 못함`);
-  return { w: Number(vb[1]), h: Number(vb[2]), ...paths };
+  return { w: Number(vb[1]), h: Number(vb[2]), ...paths, fills };
 }
 
 function checkCopies(mark) {
@@ -141,12 +145,14 @@ function variants(mark) {
       safeZone: true,
       svg: svgDoc(108, placed(mark, { canvas: 108, width: FG_WIDTH, ...mono })),
     },
-    // 배경색은 app.json(expo-splash-screen)이 brand-600으로 따로 준다. 그래서 흰 고래다.
+    // 네이티브 스플래시. 흰 배경(app.json expo-splash-screen)이라 정본 색 고래 + GoLe 워드마크다.
+    // 288 단위 = Android 288dp 아이콘 캔버스(app.json imageWidth 288). PNG는 xxxhdpi(×4)를 덮는다.
     {
       out: "apps/mobile/assets/brand/splash-icon.svg",
       png: "apps/mobile/assets/images/splash-icon.png",
-      size: 512,
-      svg: svgDoc(256, placed(mark, { canvas: 256, width: 200, ...color })),
+      size: SPLASH_CANVAS * 4,
+      splashCircle: true,
+      svg: svgDoc(SPLASH_CANVAS, splashArt(mark)),
     },
     // Android 상태 표시줄 알림 아이콘. 시스템이 알파만 보고 단색으로 칠하므로 흰 실루엣 + 투명 배경이다.
     // 24dp 중 가장자리 1dp를 비우는 규격이라 96px(xxxhdpi) 캔버스에 폭 88px로 앉힌다.
@@ -158,6 +164,62 @@ function variants(mark) {
       svg: svgDoc(96, placed(mark, { canvas: 96, width: 88, ...mono })),
     },
   ];
+}
+
+// ── 네이티브 스플래시 ──
+/** Android 12+ 스플래시 아이콘 캔버스(dp). 시스템이 가운데 지름 192dp 원만 남긴다(배경 없는 아이콘). */
+const SPLASH_CANVAS = 288;
+/** 원 반지름 96dp에서 안티앨리어싱 여유 2dp를 뺀 상한. 생성 후 실측해 넘으면 멈춘다. */
+const SPLASH_RADIUS_DP = 94;
+/** 고래 폭(dp). 기존 76dp의 두 배 남짓 — 흰 화면에서 첫눈에 고래가 주인공이다. */
+const SPLASH_WHALE = 150;
+/** 고래와 워드마크 사이(dp). */
+const SPLASH_GAP = 16;
+/** 워드마크 배율. 원래 좌표는 글자 높이 34·폭 119.75 단위다. */
+const WORDMARK_SCALE = 0.95;
+
+/**
+ * `GoLe` 워드마크. 글꼴 파일 없이 둥근 선(굵기 6.5)으로 그린 기하 글자라 어느 머신의 librsvg든 같은 PNG가 나오고,
+ * 둥근 끝이 브릭 고래의 둥근 모서리와 어울린다. 좌표는 기준선 y=0, 대문자 높이 34·소문자 높이 25(선 바깥 기준)이고
+ * 소문자의 속공간(반지름 6)이 작은 크기에서도 막히지 않는 굵기다.
+ * 웹 로고처럼 `Go`는 짙은 남색, `Le`는 브랜드 파랑이다.
+ */
+function wordmark(go, le) {
+  const stroke = `stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none"`;
+  // G: 오른쪽 위(45°)에서 위·왼쪽·아래를 돌아 오른쪽 가운데로 온 뒤 안쪽으로 가로획.
+  const g = "M26.72 -26.72A13.75 13.75 0 1 0 30.75 -17L21 -17";
+  // o: 소문자 높이 25의 원.
+  const o = "M60.25 -12.5A9.25 9.25 0 1 0 41.75 -12.5A9.25 9.25 0 1 0 60.25 -12.5Z";
+  // L: 세로획 + 바닥 가로획.
+  const l = "M71.25 -30.75L71.25 -3.25L87 -3.25";
+  // e: 가운데 가로획에서 위·왼쪽·아래로 돌아 오른쪽 아래(40°)에서 끝난다.
+  const e = "M98 -12.5L116.5 -12.5A9.25 9.25 0 1 0 114.34 -6.55";
+  return [
+    `<path d="${g} ${o}" stroke="${go}" ${stroke}/>`,
+    `<path d="${l} ${e}" stroke="${le}" ${stroke}/>`,
+  ];
+}
+const WORDMARK_W = 119.75;
+const WORDMARK_H = 34;
+
+/** 고래(정본 색) 위, 워드마크 아래로 쌓은 묶음을 288dp 캔버스 가운데에 둔다. */
+function splashArt(mark) {
+  const s = SPLASH_WHALE / mark.w;
+  const whaleH = mark.h * s;
+  const wordW = WORDMARK_W * WORDMARK_SCALE;
+  const wordH = WORDMARK_H * WORDMARK_SCALE;
+  const top = (SPLASH_CANVAS - (whaleH + SPLASH_GAP + wordH)) / 2;
+  const whaleX = (SPLASH_CANVAS - SPLASH_WHALE) / 2 + SPLASH_WHALE * NUDGE_X;
+  const wordX = (SPLASH_CANVAS - wordW) / 2;
+  const baseline = top + whaleH + SPLASH_GAP + wordH;
+  const whale = PARTS.map((part) => `<path d="${mark[part]}" fill="${mark.fills[part]}"/>`);
+  const word = wordmark(mark.fills.face, mark.fills.body);
+  return `  <g transform="translate(${whaleX.toFixed(3)} ${top.toFixed(3)}) scale(${s.toFixed(5)})">
+${whale.map((path) => `    ${path}`).join("\n")}
+  </g>
+  <g transform="translate(${wordX.toFixed(3)} ${baseline.toFixed(3)}) scale(${WORDMARK_SCALE})">
+${word.map((path) => `    ${path}`).join("\n")}
+  </g>`;
 }
 
 /** 브라우저 탭용 favicon. 탭 바 색에 묻히지 않게 둥근 브랜드 타일 위에 흰 고래를 올린다. */
@@ -175,8 +237,8 @@ function loadSharp() {
   return createRequire(webRequire.resolve("next/package.json"))("sharp");
 }
 
-/** 불투명 픽셀 중 캔버스 중심에서 가장 먼 거리(dp, 108dp 기준). */
-async function farthestDp(sharp, pngPath) {
+/** 불투명 픽셀 중 캔버스 중심에서 가장 먼 거리(dp, `canvasDp` 기준 — 어댑티브 108dp, 스플래시 288dp). */
+async function farthestDp(sharp, pngPath, canvasDp = 108) {
   const { data, info } = await sharp(pngPath)
     .ensureAlpha()
     .raw()
@@ -189,7 +251,7 @@ async function farthestDp(sharp, pngPath) {
         max = Math.max(max, Math.hypot(x + 0.5 - c, y + 0.5 - c));
     }
   }
-  return (max / info.width) * 108;
+  return (max / info.width) * canvasDp;
 }
 
 /** PNG 여러 장을 담은 ICO. 2007년 이후 브라우저·OS는 PNG 페이로드를 그대로 읽는다. */
@@ -240,6 +302,14 @@ for (const v of variants(mark)) {
     if (dp > 33)
       throw new Error(`${v.png}: 중심에서 ${dp.toFixed(1)}dp — 세이프존(반지름 33dp)을 벗어남`);
     note = ` · 최원점 ${dp.toFixed(1)}dp/33dp`;
+  }
+  if (v.splashCircle) {
+    const dp = await farthestDp(sharp, join(ROOT, v.png), SPLASH_CANVAS);
+    if (dp > SPLASH_RADIUS_DP)
+      throw new Error(
+        `${v.png}: 중심에서 ${dp.toFixed(1)}dp — Android 12 스플래시 원(반지름 ${SPLASH_RADIUS_DP}dp)을 벗어남`,
+      );
+    note = ` · 최원점 ${dp.toFixed(1)}dp/${SPLASH_RADIUS_DP}dp`;
   }
   console.log(`  ${v.out.split("/").pop()} → ${v.png.split("/").pop()} (${v.size}px${note})`);
 }

@@ -3,6 +3,7 @@ package com.gole.api.listing.application.query;
 import com.gole.api.listing.domain.model.InterestTag;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingCategory;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -10,6 +11,9 @@ import java.util.regex.Pattern;
 /**
  * 리스팅 검색 조건. null 필드는 해당 필터를 적용하지 않는다. (요구사항 14)
  * 검색은 항상 활성(ACTIVE) 리스팅만 대상으로 한다.
+ *
+ * @param themeSetNumbers 검색어가 관심 테마 이름일 때 그 테마의 카탈로그 세트 번호. 서비스가 catalog에서 받아 채운다 —
+ *     요청에서 오지 않는다. 비어 있으면 테마 세트로는 찾지 않는다.
  */
 public record ListingSearchQuery(
         String text,
@@ -18,7 +22,8 @@ public record ListingSearchQuery(
         Long maxPrice,
         ListingSortOrder sort,
         ListingCategory category,
-        String setNumber) {
+        String setNumber,
+        List<String> themeSetNumbers) {
 
     public ListingSearchQuery {
         if (sort == null) {
@@ -27,6 +32,19 @@ public record ListingSearchQuery(
         if (setNumber != null && setNumber.isBlank()) {
             setNumber = null;
         }
+        themeSetNumbers = themeSetNumbers == null ? List.of() : List.copyOf(themeSetNumbers);
+    }
+
+    /** 요청에서 만드는 검색 조건 — 테마 세트 번호는 서비스가 나중에 채운다. */
+    public ListingSearchQuery(
+            String text,
+            ItemCondition condition,
+            Long minPrice,
+            Long maxPrice,
+            ListingSortOrder sort,
+            ListingCategory category,
+            String setNumber) {
+        this(text, condition, minPrice, maxPrice, sort, category, setNumber, List.of());
     }
 
     /** 세트번호 필터 없는 검색(레거시 호환). */
@@ -89,6 +107,11 @@ public record ListingSearchQuery(
     }
 
     private static final Pattern SET_NUMBER_TEXT = Pattern.compile("#?(\\d{3,7})(?:-\\d{1,2})?");
+
+    /** 검색어가 테마 이름일 때 그 테마의 카탈로그 세트 번호를 더한 조건. */
+    public ListingSearchQuery withThemeSetNumbers(List<String> setNumbers) {
+        return new ListingSearchQuery(text, condition, minPrice, maxPrice, sort, category, setNumber, setNumbers);
+    }
 
     public static ListingSearchQuery newestAll() {
         return new ListingSearchQuery(null, null, null, null, ListingSortOrder.NEWEST, null, null);

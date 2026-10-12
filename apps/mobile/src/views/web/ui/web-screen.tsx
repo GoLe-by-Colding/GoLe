@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { useDevicePushToken, webPushTokenScript } from "@/features/push-notifications";
+import { releaseSplash } from "@/shared/lib";
 import { themes } from "@/shared/theme";
 import {
   appNavigationMessage,
@@ -169,6 +170,8 @@ export function WebScreen({
    * 보낸 목적지는 지우지 않고 '보내지 않음'으로 되돌려, 다시 시도가 그 목적지를 연다.
    */
   const fail = useCallback(() => {
+    // 실패 화면(오프라인·오류)을 스플래시가 가리지 않게 바로 내린다.
+    releaseSplash();
     loaded.current = false;
     loading.current = true;
     const request = pending.current;
@@ -188,6 +191,8 @@ export function WebScreen({
    */
   const finishLoad = useCallback(
     (url: string) => {
+      // 첫 웹 화면이 그려졌다 — 네이티브 스플래시에서 곧바로 이어진다.
+      releaseSplash();
       loaded.current = true;
       track(url);
       const request = pending.current;

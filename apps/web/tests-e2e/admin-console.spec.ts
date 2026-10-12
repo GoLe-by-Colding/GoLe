@@ -1358,17 +1358,25 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     });
   });
 
-  test("좁은 화면에서 콘솔 셸이 페이지 전체 가로 스크롤을 만들지 않는다", async ({ page }) => {
+  test("좁은 화면에서 콘솔 메뉴는 접혀 있다가 열면 격자로 흐르고, 페이지 가로 스크롤을 만들지 않는다", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/admin");
 
     const navigation = page.getByRole("navigation", { name: "운영자 메뉴" });
     await expect(navigation).toBeVisible();
+    // 메뉴 19개를 다 펼치면 본문이 첫 화면 아래로 밀리므로 지금 화면 이름만 보이는 버튼으로 접는다.
+    const toggle = navigation.getByRole("button", { name: /메뉴 · 대시보드/ });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(navigation.getByRole("link", { name: "대시보드", exact: true })).toBeHidden();
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
 
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
     const navigationBounds = await navigation.evaluate((element) => ({
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
@@ -1382,6 +1390,15 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     expect(dashboardBox).not.toBeNull();
     expect(reportsBox).not.toBeNull();
     expect(reportsBox!.y).toBeGreaterThan(dashboardBox!.y + dashboardBox!.height);
+
+    // 다른 화면으로 옮기면 메뉴는 저절로 접히고 버튼이 새 화면 이름을 보인다.
+    await page.route("**/api/admin/**", (route) => route.abort("failed"));
+    await navigation.getByRole("link", { name: "감사 로그", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+    await expect(navigation.getByRole("button", { name: /메뉴 · 감사 로그/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   test("마스코트는 기본 제공 고래 12벌 중 하나를 사유·확인 후 적용하고 같은 탭 헤더에 바로 반영한다", async ({
@@ -1850,8 +1867,23 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
 
     await page.getByRole("button", { name: "지급 작업 시작" }).click();
     await page.getByRole("textbox", { name: /지급 증빙 번호/ }).fill("BANK-20260809-001");
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "지급 완료" }).click();
+    const payout = page.getByRole("button", { name: "지급 완료" });
+    await payout.click();
+    // 실이체 확인 문구는 앱 모달로 그대로 보인다. 취소하면 지급 완료 요청을 보내지 않는다.
+    const transfer = page.getByRole("alertdialog", { name: "지급 완료 확정" });
+    await expect(transfer).toContainText(
+      "외부 이체가 실제 완료됐나요? 입력한 증빙으로 지급 완료 상태를 확정합니다.",
+    );
+    await expect(transfer.getByRole("button", { name: "취소" })).toBeFocused();
+    await transfer.getByRole("button", { name: "취소" }).click();
+    await expect(transfer).toHaveCount(0);
+    expect(markedPaid).toBe(false);
+
+    await payout.click();
+    await page
+      .getByRole("alertdialog", { name: "지급 완료 확정" })
+      .getByRole("button", { name: "지급 완료로 확정" })
+      .click();
 
     await expect.poll(() => markedPaid).toBe(true);
     await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();
