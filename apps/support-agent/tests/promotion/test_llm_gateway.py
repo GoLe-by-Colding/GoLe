@@ -4,6 +4,8 @@ import ast
 import io
 import base64
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -401,3 +403,37 @@ def test_systemAndPrompt_goThroughStdinNotArguments(tmp_path):
     assert "--dangerously-bypass-approvals-and-sandbox" not in command
     assert calls[0]["input"].startswith("--dangerously-bypass-approvals-and-sandbox\n\nx")
     assert command[command.index("-m") + 1] == "gpt-6.1-sol"
+
+
+ENTRYPOINT = GATEWAY / "entrypoint.sh"
+
+
+def _entrypoint(codex_home):
+    sh = shutil.which("sh")
+    if sh is None:
+        pytest.skip("sh 가 없다")
+    return subprocess.run([sh, str(ENTRYPOINT)], env={**os.environ, "CODEX_HOME": str(codex_home)},
+                          capture_output=True, text=True, encoding="utf-8")
+
+
+def test_entrypoint_refuses_human_codex_home_without_deleting(tmp_path):
+    # 볼륨 대신 사람이 쓰던 ~/.codex 를 붙인 경우 — 정리가 그 기록을 날리면 안 된다.
+    home = tmp_path / "codex"
+    home.mkdir()
+    (home / "history.jsonl").write_text("{}\n")
+    (home / "state.sqlite").write_text("x")
+    completed = _entrypoint(home)
+    assert json.loads(completed.stdout)["error"] == "GATEWAY_MISCONFIGURED"
+    assert completed.returncode == 0
+    assert (home / "history.jsonl").exists() and (home / "state.sqlite").exists()
+
+
+def test_entrypoint_wipes_state_but_keeps_login(tmp_path):
+    home = tmp_path / "codex"
+    home.mkdir()
+    for name in ("auth.json", "installation_id", "gateway.lock", "gole-llm-gateway-usage.jsonl", "state.sqlite"):
+        (home / name).write_text("x")
+    (home / "skills").mkdir()
+    _entrypoint(home)  # 이미지 밖이라 config 복사에서 멈춘다 — 정리는 그 전에 끝난다
+    assert sorted(p.name for p in home.iterdir()) == [
+        "auth.json", "gateway.lock", "gole-llm-gateway-usage.jsonl", "installation_id"]

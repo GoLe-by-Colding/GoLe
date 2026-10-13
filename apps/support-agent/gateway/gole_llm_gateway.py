@@ -8,14 +8,17 @@
     docker run --rm -it -v gole-codex-home:/home/gateway/.codex --entrypoint codex \\
       ghcr.io/gole-by-colding/gole-llm-gateway:stable login --device-auth
     # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다(한 줄로):
-    # command="docker run --rm -i --pull=always --read-only --tmpfs /tmp --memory 2g --cpus 2
-    #   -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable",
-    #   no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA... gole-promotion
+    # restrict,command="docker run --rm -i --pull=always --log-driver none --cap-drop ALL
+    #   --security-opt no-new-privileges --pids-limit 256 --read-only --tmpfs /tmp --memory 2g --cpus 2
+    #   -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable" ssh-ed25519 AAAA... gole-promotion
+    # restrict 는 포워딩·pty 등 SSH 부가 기능을 앞으로 생길 것까지 끈다. --log-driver none 은 stdout(응답 = 캡션·
+    # 이미지)이 서버 Docker 로그(journald 등)에 남지 않게 한다.
     # --pull=always 로 새 stable 을 받을 때마다 옛 이미지가 이름 없이 남는다. 서버 cron 에 주 1회 정리를 건다:
     # 0 4 * * 1 docker image prune -f
 
 볼륨은 반드시 위 login 명령(이미지 안 경로에 마운트)으로 처음 채운다. 다른 경로에 먼저 마운트하면 root 소유로
-생겨 게이트웨이 사용자가 쓰지 못한다(2026-10-13 실측). SSH 가 끊겨도 컨테이너는 진행 중인 codex 호출을 끝까지
+생겨 게이트웨이 사용자가 쓰지 못한다(2026-10-13 실측). 서버 계정의 ~/.codex 를 볼륨 대신 붙이지 않는다 — 진입점은
+사람이 쓰던 흔적(history.jsonl·AGENTS.md 등)을 보면 지우지 않고 GATEWAY_MISCONFIGURED 로 멈춘다. SSH 가 끊겨도 컨테이너는 진행 중인 codex 호출을 끝까지
 (최대 TIMEOUT_SECONDS) 돌고 사라진다 — 그동안 잠금을 쥐므로 다음 요청은 기다린다.
 
 요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,

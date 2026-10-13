@@ -716,7 +716,9 @@ GitHub 러너 (ubuntu-latest, environment: production)
 
 ```
 러너 ─SSH(전용 키, forced command)→ 지인 서버
-  docker run --rm -i --pull=always --read-only --tmpfs /tmp --memory 2g --cpus 2     -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable
+  docker run --rm -i --pull=always --log-driver none --cap-drop ALL --security-opt no-new-privileges
+    --pids-limit 256 --read-only --tmpfs /tmp --memory 2g --cpus 2
+    -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable
     └ gole_llm_gateway.py (stdin JSON → codex exec → stdout JSON)
 ```
 
@@ -737,10 +739,17 @@ GitHub 러너 (ubuntu-latest, environment: production)
     GHCR이 응답하지 않으면 그 실행은 실패한다(다음 실행이 다시 받는다).
   - SSH가 끊겨도(Actions 취소) 컨테이너는 진행 중인 codex 호출을 최대 `TIMEOUT_SECONDS`까지 마치고 사라진다.
     그동안 잠금을 쥐므로 다음 요청은 기다린다.
+- **지인 서버를 지키는 것(2026-10-13 점검).**
+  - 진입점의 정리는 볼륨을 비운다. 서버 계정의 `~/.codex`를 볼륨 대신 붙이면 그 기록·설정이 지워지므로, 사람이 쓰던
+    흔적(`history.jsonl`·`AGENTS.md`·`AGENTS.override.md`·`hooks.json`)이 보이면 아무것도 지우지 않고
+    `GATEWAY_MISCONFIGURED`를 돌려준다. `codex exec`는 이 파일들을 만들지 않는다(컨테이너 실측).
+  - `--log-driver none`: 응답(캡션·이미지)이 stdout으로 나가므로, 서버 Docker가 journald 등으로 로그를 모으면 거기 남는다.
+  - `--cap-drop ALL`·`no-new-privileges`·`--pids-limit 256`: codex에 필요 없는 권한과 프로세스 폭주를 막는다.
+    이 플래그로 미로그인 실호출까지 정상 동작했다(`CODEX_AUTH_REQUIRED`).
 - **배포는 이미지다.** `gateway/**`가 바뀌면 워크플로가 GHCR(공개)에 `:sha`·`:stable`로 올린다. 서버는 요청마다
   `--pull=always`로 받는다. 서버에 파일을 써 넣던 설치 스크립트(`install-remote.sh`·`run.sh`)는 지운다.
 - **SSH는 키 인증만.** `authorized_keys`의 forced command로 위 `docker run` 한 줄만 허용한다
-  (`no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding`). 비밀번호 경로(`sshpass`·
+  (`restrict` — 포워딩·pty 등 부가 기능을 앞으로 생길 것까지 끈다). 비밀번호 경로(`sshpass`·
   `PROMOTION_GATEWAY_PASSWORD`)는 지운다. 그 사용자는 docker 그룹이 필요하다 — 사실상 호스트 root이므로,
   서버 주인이 꺼리면 sudoers에 이 명령 한 줄만 허용한다.
 - **호출 빈도 상한.** 실행당 기획 1회·제작 1회(D25), 워크플로 동시 실행 1개(`concurrency: promotion-agent`), 기능 홍보는
@@ -751,6 +760,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - 구독 계정을 자동화에 쓰는 것은 OpenAI가 "신뢰할 수 있는 개인 자동화"로만 두는 방식이다. 계정 정지는
     예고 없이 올 수 있고, 그동안 실행은 `GATEWAY_FAILED`로 끝난다.
   - 서버에 이미 로그인된 계정이 지인 개인 계정이면 계정 공유다. 어느 계정을 쓰는지 운영 문서에 적는다.
+  - GHCR `:stable`에 올릴 수 있는 쪽(main의 배포 워크플로)은 지인 서버에서 코드를 돌리고 볼륨의 `auth.json`을 읽을 수
+    있다. 이 경계는 main 보호 규칙뿐이다 — 서버 주인에게 알린다.
   - 호스트 root는 볼륨의 `auth.json`을 읽을 수 있다. 컨테이너는 서버 계정 홈과의 섞임을 막을 뿐 서버 주인을 막지는 않는다.
   - codex는 컨테이너 안의 `auth.json`을 읽을 수 있다. 응답의 구조화 필드는 사람 검토 전에는 운영 DB에만 있다(D23).
 
