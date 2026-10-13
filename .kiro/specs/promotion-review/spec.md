@@ -726,6 +726,17 @@ GitHub 러너 (ubuntu-latest, environment: production)
   굽는다(전역 지침·hooks 없음). 로그인은 볼륨 안에서 `codex login --device-auth`로 새로 한다 — 호스트의
   `~/.codex`를 복사하지 않는다. 같은 계정이라도 세션이 따로라 서로의 토큰 갱신이 상대를 무효화하지 않는다.
 - **동시 실행은 볼륨의 파일 잠금으로 하나만.** 토큰 갱신도 함께 직렬화된다.
+- **요청마다 띄우고 내리는 데서 확인한 것(2026-10-13, 로컬 Docker 실측).**
+  - 컨테이너 기동 비용은 약 1초다. 읽기 전용 루트에서도 codex가 돈다(쓰는 곳은 `CODEX_HOME`과 `/tmp`뿐).
+  - codex는 실행마다 상태 DB(state·logs·memories·goals)·스킬·셸 스냅숏을 `CODEX_HOME`에 쌓는다(1회 약 38MB).
+    진입점이 매번 `auth.json`·`installation_id`·게이트웨이 잠금·로그·가드 기록만 남기고 지운다 — 요청끼리 이어받는
+    것이 없고 볼륨이 자라지 않는다. 내장 `imagegen` 스킬은 기동 때 다시 깔린다. `memories` 기능은 설정으로 끈다.
+  - 미로그인 실호출은 `401 Unauthorized`로 끝나고 `CODEX_AUTH_REQUIRED`로 분류됐다(D27 표지 실측 확인).
+  - 볼륨은 이미지 안 경로로 처음 마운트해야 게이트웨이 사용자 소유가 된다. 다른 경로로 먼저 마운트하면 root 소유다.
+  - `--pull=always`는 새 `stable`마다 옛 이미지를 남긴다 — 서버 cron으로 주 1회 `docker image prune -f`.
+    GHCR이 응답하지 않으면 그 실행은 실패한다(다음 실행이 다시 받는다).
+  - SSH가 끊겨도(Actions 취소) 컨테이너는 진행 중인 codex 호출을 최대 `TIMEOUT_SECONDS`까지 마치고 사라진다.
+    그동안 잠금을 쥐므로 다음 요청은 기다린다.
 - **배포는 이미지다.** `gateway/**`가 바뀌면 워크플로가 GHCR(공개)에 `:sha`·`:stable`로 올린다. 서버는 요청마다
   `--pull=always`로 받는다. 서버에 파일을 써 넣던 설치 스크립트(`install-remote.sh`·`run.sh`)는 지운다.
 - **SSH는 키 인증만.** `authorized_keys`의 forced command로 위 `docker run` 한 줄만 허용한다
