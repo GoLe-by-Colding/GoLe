@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""SSH 로 부르는 LLM 게이트웨이. 요청 JSON 을 stdin 으로 받아 codex CLI 를 돌리고 JSON 을 돌려준다.
+"""LLM 게이트웨이. 요청 JSON 하나를 받아 codex CLI 를 돌리고 JSON 을 돌려준다(stdin/stdout 또는 call()).
 
-요청마다 일회용 Docker 컨테이너 하나로 돈다(promotion-review D26·D28). 코드 이미지는 `gateway/Dockerfile`(GHCR
-`:stable`)이고, 지인 서버가 그 위에 codex 로그인을 얹어 `:local` 을 굽는다. 서버 쪽 진입점은 `server/run.sh` 다.
-서버 설치(한 번, Docker BuildKit 과 flock 이 있어야 한다):
+지인 서버의 일회용 Docker 컨테이너 안에서 돈다(promotion-review D26·D28·D29). 주문 하나를 처리하는
+`gole_promotion_deliver` 가 같은 컨테이너에서 call() 로 기획·제작 두 번을 부른다. 코드 이미지는 `gateway/Dockerfile`
+(GHCR `:stable`)이고, 지인 서버가 그 위에 codex 로그인을 얹어 `:local` 을 굽는다. 서버 진입점은 `server/run.sh` 다.
+서버 설치(한 번. docker(BuildKit), flock·setsid(util-linux), curl 이 있어야 한다):
 
     mkdir -p /opt/gole-gateway   # 이 저장소의 gateway/server/{run.sh,Dockerfile.local,.dockerignore} 를 복사
     docker run --name gole-login -it --entrypoint codex \\
@@ -11,16 +12,22 @@
     docker cp gole-login:/home/gateway/.codex/auth.json /opt/gole-gateway/auth.json && docker rm gole-login
     chmod 600 /opt/gole-gateway/auth.json
     docker volume create gole-gateway-state
+    # 납품 설정(0600). 토큰은 여기서 만들고, 그 SHA-256 만 운영 백엔드의 PROMOTION_AGENT_TOKEN_SHA256 에 넣는다:
+    #   TOKEN=$(openssl rand -hex 32); printf '%s' "$TOKEN" | sha256sum
+    # /opt/gole-gateway/promotion.env
+    #   PROMOTION_AGENT_API_URL=https://gole.co.kr
+    #   PROMOTION_AGENT_TOKEN=<TOKEN>
+    #   DISCORD_OPERATIONS_WEBHOOK_URL=<운영 채널 웹훅>
     # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다:
     # restrict,command="/opt/gole-gateway/run.sh" ssh-ed25519 AAAA... gole-promotion
     # restrict 는 포워딩·pty 등 SSH 부가 기능을 앞으로 생길 것까지 끈다.
 
-run.sh 가 요청마다 stable 을 받아 바뀌었으면 다시 굽고, 끝난 뒤 codex 가 갱신한 auth.json 을 꺼내 바뀌었으면 다시
-굽는다. 옛 이미지 정리(prune)도 그때 한다. 컨테이너 제약(--log-driver none 등)은 run.sh 에 있다.
+run.sh 는 `submit <run_key>` 로 주문서를 받아 jobs/ 에 두고 바로 "접수"로 답한 뒤, 백그라운드에서 stable 을 받아
+바뀌었으면 다시 굽고 deliver 컨테이너를 돌린다. 끝나면 codex 가 갱신한 auth.json 을 꺼내 바뀌었으면 다시 굽는다.
+옛 이미지 정리(prune)도 그때 한다. 컨테이너 제약(--log-driver none 등)은 run.sh 에 있다.
 상태 볼륨은 이미지 안 경로(/home/gateway/state)로 처음 붙여야 게이트웨이 사용자 소유가 된다(2026-10-13 실측).
 CODEX_HOME 에는 아무것도 붙이지 않는다 — 진입점은 사람이 쓰던 흔적(history.jsonl·AGENTS.md 등)을 보면 지우지 않고
-GATEWAY_MISCONFIGURED 로 멈춘다. SSH 가 끊겨도 컨테이너는 진행 중인 codex 호출을 끝까지(최대 TIMEOUT_SECONDS) 돌고,
-run.sh 는 그것을 기다려 토큰을 회수한다 — 그동안 잠금을 쥐므로 다음 요청은 기다린다.
+GATEWAY_MISCONFIGURED 로 멈춘다.
 
 요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,
         "model"?: str, "reasoning"?: "low"|"medium"|"high", "images"?: [{"data": base64}], "want_images"?: bool}
