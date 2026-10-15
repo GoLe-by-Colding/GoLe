@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.account.application.port.in.ManageAccountsUseCase;
@@ -14,7 +16,7 @@ import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.exception.UnauthorizedException;
 import java.util.HexFormat;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -37,8 +39,8 @@ class PromotionAgentTokenInterceptorTest {
     }
 
     private void bot(Role role, AccountStatus status) {
-        when(accounts.list(anyString(), anyInt()))
-                .thenReturn(List.of(new AccountSummary("bot-1", BOT, role, status, null, null)));
+        when(accounts.findByEmail(BOT))
+                .thenReturn(Optional.of(new AccountSummary("bot-1", BOT, role, status, null, null)));
     }
 
     private boolean handle(PromotionAgentTokenInterceptor interceptor, MockHttpServletRequest request) {
@@ -96,10 +98,18 @@ class PromotionAgentTokenInterceptorTest {
         bot(Role.ADMIN, AccountStatus.SUSPENDED);
         assertThatThrownBy(() -> handle(interceptor, request("Bearer " + TOKEN)))
                 .isInstanceOf(ForbiddenException.class);
-        when(accounts.list(anyString(), anyInt()))
-                .thenReturn(List.of(
-                        new AccountSummary("x", "other-" + BOT, Role.ADMIN, AccountStatus.VERIFIED, null, null)));
+        when(accounts.findByEmail(BOT)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> handle(interceptor, request("Bearer " + TOKEN)))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("봇 계정은 정확한 이메일로만 찾는다 — 비슷한 이메일 계정이 많아도 밀리지 않는다")
+    void botLookup_isExactNotPartial() {
+        bot(Role.ADMIN, AccountStatus.VERIFIED);
+
+        assertThat(handle(new PromotionAgentTokenInterceptor(HASH, BOT, accounts), request("Bearer " + TOKEN)))
+                .isTrue();
+        verify(accounts, never()).list(anyString(), anyInt());
     }
 }

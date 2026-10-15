@@ -47,6 +47,19 @@ class AccountAdminServiceTest {
     }
 
     @Test
+    @DisplayName("이메일 정확 조회: 비슷한 이메일에 밀리지 않고, 대소문자·공백은 정규화하며, 형식이 틀리면 비어 있다")
+    void findByEmail_isExact() {
+        for (int i = 0; i < 6; i++) {
+            seed("near-" + i, "x" + i + "bot@gole.io", Role.USER);
+        }
+        seed("bot", "bot@gole.io", Role.ADMIN);
+
+        assertThat(service.findByEmail(" BOT@gole.io ").map(AccountSummary::id)).contains("bot");
+        assertThat(service.findByEmail("none@gole.io")).isEmpty();
+        assertThat(service.findByEmail("not-an-email")).isEmpty();
+    }
+
+    @Test
     @DisplayName("6.2/6.3 정지하면 상태가 SUSPENDED가 되고 활성 세션이 전부 폐기된다")
     void suspendRevokesSessions() {
         seed("u1", "user@gole.io", Role.USER);

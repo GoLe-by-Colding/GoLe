@@ -65,9 +65,7 @@ public class PromotionAgentTokenInterceptor implements HandlerInterceptor {
             log.warn("[Promotion agent denied] reason=invalid_token path={}", request.getRequestURI());
             throw new UnauthorizedException("INVALID_PROMOTION_AGENT_TOKEN", "홍보 토큰이 올바르지 않습니다");
         }
-        AccountSummary bot = accounts.list(botEmail, 5).stream()
-                .filter(account -> account.email().equalsIgnoreCase(botEmail))
-                .findFirst()
+        AccountSummary bot = accounts.findByEmail(botEmail)
                 .filter(account -> account.role() == Role.ADMIN && account.status() != AccountStatus.SUSPENDED)
                 .orElseThrow(() -> {
                     log.warn("[Promotion agent denied] reason=bot_account_unusable path={}", request.getRequestURI());
