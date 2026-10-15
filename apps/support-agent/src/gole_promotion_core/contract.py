@@ -19,6 +19,7 @@ ALL_TARGETS: tuple[Target, ...] = ("CAPTION", "SCREEN_SELECTION", "IMAGE_EDIT")
 MAX_FEEDBACK = 3
 
 MAX_PICKS = 1
+MAX_HEADLINE = 40
 STYLE_ID = "royal-blue-brick-mobile"
 STYLE_VERSION = 1
 
@@ -41,7 +42,7 @@ class Pick(BaseModel):
     image: int = Field(ge=1, description="후보 이미지 번호(1부터)")
     # 검토 화면에 사진 이름으로 붙는다. 왜 골랐는지는 rationale 에 쓴다.
     label: str = Field(min_length=1, max_length=40)
-    headline: str = Field(min_length=1, max_length=40, description="이미지 밖에 넣을 짧은 문구, 최대 40자/두 줄")
+    headline: str = Field(min_length=1, max_length=MAX_HEADLINE, description="이미지 밖에 넣을 짧은 문구, 최대 40자/두 줄")
 
     @field_validator("headline", mode="before")
     @classmethod
@@ -55,7 +56,7 @@ class Pick(BaseModel):
 
     @model_validator(mode="after")
     def _headline_valid(self) -> "Pick":
-        if (utf16_length(self.headline) > 40 or len(self.headline.split("\n")) > 2
+        if (utf16_length(self.headline) > MAX_HEADLINE or len(self.headline.split("\n")) > 2
                 or not all(line.strip() for line in self.headline.split("\n"))):
             raise ValueError("문구는 빈 줄 없이 최대 40자/두 줄이다")
         return self
@@ -67,6 +68,15 @@ class DraftOutput(BaseModel):
     caption: str | None = Field(default=None, min_length=1, max_length=limits.MAX_CAPTION)
     rationale: str | None = Field(default=None, min_length=1, max_length=limits.MAX_RATIONALE)
     picks: list[Pick] = Field(default_factory=list, max_length=MAX_PICKS)
+
+    @field_validator("caption", "rationale", "skip_reason")
+    @classmethod
+    def _fits_java_length(cls, value: str | None, info: Any) -> str | None:
+        # 백엔드는 UTF-16 단위로 잰다. 이모지가 많은 글은 글자 수로는 통과해도 납품 전체가 400 이 된다.
+        limit = limits.MAX_CAPTION if info.field_name == "caption" else limits.MAX_RATIONALE
+        if value is not None and utf16_length(value) > limit:
+            raise ValueError(f"{info.field_name} 은 UTF-16 {limit}자 이하다")
+        return value
 
     @model_validator(mode="after")
     def _complete(self) -> "DraftOutput":

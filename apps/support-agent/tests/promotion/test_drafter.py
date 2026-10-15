@@ -530,3 +530,45 @@ def test_closeRun_queuedOrDelivered_leavesTheLedgerToTheDelivery(tmp_path, capsy
     delivered = RunResult("submitted", "SUBMITTED", post_id="p", run_key="gh-1-1", delivered=True)
     assert _close_run(publisher, tmp_path, [], delivered, ARGS) == 0
     assert publisher.recorded == [] and "기록 실패" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("error, recorded", [
+    ("GATEWAY_BUSY", True),               # 서버가 저장 전에 거절했다 — 이 실행은 여기서 끝났다
+    ("GATEWAY_DUPLICATE", True),
+    ("ssh 실패(종료 코드 255)", False),    # 받았는지 모른다 — 받았다면 납품이 원장을 남긴다
+    ("게이트웨이 시간 초과(300초)", False),
+    ("DELIVERY_FAILED", False),
+])
+def test_submitFailure_recordsTheLedgerOnlyWhenTheServerSurelyRefused(tmp_path, error, recorded):
+    # 러너가 같은 runKey 로 먼저 남기면, 서버가 실제로 받아 나중에 납품한 초안을 백엔드가 버린다(크로스 체크 지적).
+    class Failing:
+        def submit(self, order):
+            raise GatewayError(error)
+
+    result = _drafter(tmp_path, None, FakePublisher(), submitter=Failing()).run()
+    publisher = RecordingPublisher()
+
+    assert _close_run(publisher, tmp_path, [], result, ARGS) == 1  # 어느 쪽이든 잡은 실패로 알린다
+    assert bool(publisher.recorded) is recorded
+
+
+def test_captionIsMeasuredInUtf16LikeTheBackend():
+    # 글자 수로는 450 이하지만 이모지 하나가 UTF-16 2자라 백엔드 상한(@Size)을 넘는다.
+    with pytest.raises(ValueError):
+        contract.parse(DRAFT | {"caption": "😀" * 300})
+    assert contract.parse(DRAFT | {"caption": "😀" * 225}).caption
+
+
+def test_editPromptBudget_countsJsonEscapedHeadlines(tmp_path, monkeypatch):
+    from gole_promotion_agent import memory
+
+    # 따옴표는 JSON 에서 두 글자가 된다. 한글 41자로 재던 예산은 이 문구를 담지 못했다.
+    korean = drafting.POLISH_PROMPT + contract.headline_block("가" * 41) + drafting.MAKE_RULES
+    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", contract.utf16_length(korean))
+    gateway = FakeGateway(DRAFT)
+
+    result = _drafter(tmp_path, gateway, FakePublisher()).run()
+
+    assert result.detail.startswith("EDIT_PROMPT_TOO_LONG ") and gateway.requests == []
+    assert contract.utf16_length(contract.headline_block('"' * 40)) > contract.utf16_length(
+        contract.headline_block("가" * 41))

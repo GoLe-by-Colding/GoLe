@@ -340,7 +340,7 @@ jobs:
             jq -r '"결과: **\(.outcome)** (`\(.reasonCode)`)"
               + (if .outcome == "QUEUED"
                  then " · 지인 서버가 주문 `\(.runKey)` 을 받았다. 초안·원장·실패 알림은 서버가 남긴다" else "" end)
-              + "\n\n실행 원장: " + (if .recorded == null then "지인 서버의 납품이 남긴다"
+              + "\n\n실행 원장: " + (if .recorded == null then "이 실행은 남기지 않았다 — 지인 서버가 주문을 받았다면 납품이 남긴다"
                  elif .recorded then "기록함" else "**기록 실패** — 사유 원문은 남지 않았다" end)' "$run"
           } >> "$GITHUB_STEP_SUMMARY"
 

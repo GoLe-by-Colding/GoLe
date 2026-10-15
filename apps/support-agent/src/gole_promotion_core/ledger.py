@@ -24,6 +24,8 @@ class RunResult:
     memory_context: Mapping[str, Any] | None = None
     run_key: str | None = None
     delivered: bool = False  # 납품 창구가 이미 원장을 남겼다 — 러너가 다시 남기지 않는다
+    # 서버가 주문을 받았는지 모른다(응답 유실·시간 초과). 받았다면 납품이 원장을 남기므로 러너는 남기지 않는다(D29).
+    unknown: bool = False
 
 
 class UsageMeter:
@@ -119,8 +121,8 @@ def close_run(
     둘 다 여기서 남기지 않는다. 같은 runKey 를 먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다.
     """
     payload = run_payload(result, calls, service=arguments.service, sha=arguments.sha, env=os.environ)
-    if result.outcome == "queued" or result.delivered:
-        status, recorded = None, None if result.outcome == "queued" else True
+    if result.outcome == "queued" or result.delivered or result.unknown:
+        status, recorded = None, True if result.delivered else None
     else:
         try:
             status = publisher.record_run(payload)

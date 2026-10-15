@@ -27,6 +27,12 @@ from gole_promotion_core.ledger import RunResult, close_run, execution_run_key
 from gole_promotion_core.order import ImageStage, Order, Shot
 
 
+# run.sh 가 주문을 저장하기 전에 거절할 때만 내는 코드(D27·D29). 이 밖의 실패는 서버가 받았는지 모른다.
+SERVER_REFUSALS = frozenset({
+    "GATEWAY_BUSY", "GATEWAY_BAD_REQUEST", "GATEWAY_MISCONFIGURED", "GATEWAY_FAILED", "GATEWAY_DUPLICATE",
+})
+
+
 class Drafter:
     def __init__(
         self,
@@ -115,8 +121,9 @@ class Drafter:
         category = "SERVICE" if self._service else "FEATURE"
         plan_feedback, plan_guidelines = self._memory.select(category, ("CAPTION", "SCREEN_SELECTION"))
         image_feedback, image_guidelines = self._memory.select(category, ("IMAGE_EDIT",))
-        # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 주문 전에 잰다.
-        parts = _edit_parts(image_feedback, image_guidelines, "가" * 41)
+        # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 주문 전에 잰다 —
+        # 문구는 JSON 으로 들어가므로 이스케이프되는 따옴표 40자(80자로 늘어남)가 가장 길다.
+        parts = _edit_parts(image_feedback, image_guidelines, '"' * contract.MAX_HEADLINE)
         if contract.utf16_length("".join(parts.values())) > memory.MAX_EDIT_PROMPT:
             lengths = {name: contract.utf16_length(text) for name, text in parts.items()}
             lengths["total"] = sum(lengths.values())
@@ -166,7 +173,9 @@ class Drafter:
         except GatewayError as error:
             if re.fullmatch(r"[A-Z_]+", str(error)):
                 self._log(f"[promotion-agent] {error}")  # 서버 거절(GATEWAY_BUSY 등) 같은 고정 코드만 공개 로그에 남긴다
-            return RunResult("failed", "GATEWAY_FAILED", str(error))
+            # 서버가 분명히 거절했을 때만 이 runKey 로 원장을 남긴다. 접수 여부를 모르면(응답 유실 등) 남기지 않는다 —
+            # 서버가 받아 납품하면 같은 runKey 의 러너 기록이 그 납품을 버리게 된다.
+            return RunResult("failed", "GATEWAY_FAILED", str(error), unknown=str(error) not in SERVER_REFUSALS)
         return finished if finished is not None else RunResult("queued", "QUEUED")
 
 
