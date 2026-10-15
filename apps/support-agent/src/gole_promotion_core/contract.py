@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -24,6 +25,16 @@ STYLE_VERSION = 1
 
 def utf16_length(text: str) -> int:
     return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+def headline_block(headline: str) -> str:
+    """제작 지시문 가운데 모델이 정한 문구 자리. 러너(길이 미리 재기)와 서버(실제 제작)가 같은 모양을 쓴다."""
+    return "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": headline}, ensure_ascii=False)
+
+
+def edit_prompt(prefix: str, headline: str, rules: str) -> str:
+    """제작 호출의 지시문이자 검토 화면에 남는 기록 — 고정 절차·작업 기억(prefix) + 문구 + 진행 규칙."""
+    return prefix + headline_block(headline) + rules
 
 
 class Pick(BaseModel):

@@ -455,28 +455,39 @@ def _failure(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message, "text": "", "structured": None, "images": [], "usage": None}
 
 
-def main() -> int:
-    raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
+def call(request: Any) -> dict[str, Any]:
+    """요청 하나를 잠금·계정 가드 안에서 처리한다. 언제나 응답 JSON 을 돌려준다 — 같은 컨테이너의 deliver(D29)도 이걸 부른다."""
     try:
-        if len(raw) > MAX_REQUEST_BYTES:
-            raise BadRequest("요청이 너무 크다")
-        request = json.loads(raw.decode("utf-8"))
         with _Lock():
             guard = _AccountGuard(USAGE_PATH)
             refusal = guard.refusal()
             if refusal:
                 _log(f"계정 가드가 막음: {refusal}")
-                response = _failure(refusal)
-            else:
-                response = handle(request)
-                guard.record(response)
+                return _failure(refusal)
+            response = handle(request)
+            guard.record(response)
+            return response
     except BadRequest as error:  # 우리가 쓴 문장이라 그대로 돌려줘도 된다
-        response = _failure(str(error))
-    except (ValueError, TimeoutError) as error:  # JSON 형식 오류·잠금 대기 초과
-        response = _failure("요청을 처리하지 못함" if isinstance(error, ValueError) else str(error))
-    except Exception:  # noqa: BLE001 — 클라이언트는 언제나 JSON 을 받아야 한다
+        return _failure(str(error))
+    except TimeoutError as error:  # 잠금 대기 초과
+        return _failure(str(error))
+    except ValueError:  # 요청 모양 오류
+        return _failure("요청을 처리하지 못함")
+    except Exception:  # noqa: BLE001 — 호출 쪽은 언제나 JSON 을 받아야 한다
         _log("게이트웨이 오류\n" + traceback.format_exc())
-        response = _failure("게이트웨이 오류(서버 로그 참고)")
+        return _failure("게이트웨이 오류(서버 로그 참고)")
+
+
+def main() -> int:
+    raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
+    if len(raw) > MAX_REQUEST_BYTES:
+        response = _failure("요청이 너무 크다")
+    else:
+        try:
+            request = json.loads(raw.decode("utf-8"))
+        except ValueError:
+            request = None
+        response = _failure("요청을 처리하지 못함") if request is None else call(request)
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

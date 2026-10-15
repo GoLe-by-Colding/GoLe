@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - apps/support-agent/gateway/**
+      # 납품(deliver, D29)이 이미지 안에서 쓰는 공용 계약과 deliver 코드
+      - apps/support-agent/src/gole_promotion_core/**
+      - apps/support-agent/src/gole_promotion_deliver/**
   workflow_dispatch:
 
 permissions:
@@ -37,7 +40,7 @@ jobs:
           owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           image="ghcr.io/$owner/gole-llm-gateway"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker build -t "$image:$GITHUB_SHA" apps/support-agent/gateway
+          docker build -t "$image:$GITHUB_SHA" -f apps/support-agent/gateway/Dockerfile apps/support-agent
           # 연기 테스트: 잘못된 engine 은 CLI 를 부르지 않고 고정 문장으로 거절되는지 본다. 쓰는 자리(CODEX_HOME·상태 볼륨)만
           # tmpfs 로 열어, 이미지가 그 밖에 쓰려 하면 여기서 깨지게 한다.
           out="$(printf '{"engine":"smoke","prompt":"ping"}' | docker run --rm -i --read-only --tmpfs /tmp \
@@ -47,6 +50,11 @@ jobs:
             *'"ok": false'*'engine'*) ;;
             *) echo "::error::게이트웨이 이미지 연기 테스트 실패 — stable 은 이전 이미지 그대로다"; exit 1 ;;
           esac
+          # deliver(D29)가 이미지의 파이썬·pydantic 으로 import 되는지 본다. 러너와 파이썬 버전이 다르다.
+          docker run --rm --read-only --tmpfs /tmp \
+            --tmpfs /home/gateway/.codex:uid=10010,mode=0700 --tmpfs /home/gateway/state:uid=10010,mode=0700 \
+            "$image:$GITHUB_SHA" python3 -c "import gole_promotion_deliver.__main__, gole_promotion_core.order" \
+            || { echo "::error::deliver import 실패 — stable 은 이전 이미지 그대로다"; exit 1; }
           docker tag "$image:$GITHUB_SHA" "$image:stable"
           docker push "$image:$GITHUB_SHA"
           docker push "$image:stable"

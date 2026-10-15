@@ -8,12 +8,14 @@ import ast
 from pathlib import Path
 
 from gole_promotion_agent import captures, drafter, drafting, fakes, gateway_client, hands, memory, policy
-from gole_promotion_core import contract, gateway, ledger, limits, publisher
+from gole_promotion_core import contract, gateway, ledger, limits, order, publisher
+from gole_promotion_deliver import __main__ as deliver_main, deliver
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
 AGENT = (captures, drafter, drafting, fakes, gateway_client, hands, memory, policy)
-CORE = (contract, gateway, ledger, limits, publisher)
-MODULES = AGENT + CORE
+CORE = (contract, gateway, ledger, limits, order, publisher)
+DELIVER = (deliver, deliver_main)
+MODULES = AGENT + CORE + DELIVER
 
 
 def imported_modules(module) -> set[str]:
@@ -55,9 +57,9 @@ def test_runner_isolates_external_observability():
     assert "gole_agent_runtime.privacy" in imported_modules(drafter)
 
 
-def test_core_never_imports_the_runner_package():
-    """서버의 deliver 가 core 만 받아도 돌아야 한다(D29). core 가 agent 를 끌어오면 서버 이미지에 러너 코드가 딸려 간다."""
-    for module in CORE:
+def test_server_side_never_imports_the_runner_package():
+    """서버 이미지에는 core·deliver 만 들어간다(D29). agent 를 끌어오면 서버에서 import 가 깨진다."""
+    for module in CORE + DELIVER:
         assert not any(name.startswith("gole_promotion_agent") for name in imported_modules(module)), module
 
 

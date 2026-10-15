@@ -222,7 +222,7 @@ def _edit_parts(
     """제작 호출의 지시문이자 검토 화면에 남는 기록 — 고정 절차 + IMAGE_EDIT 작업 기억 + 문구 + 진행 규칙."""
     parts = memory.render_parts(feedback, guidelines)
     parts["fixed"] = drafting.POLISH_PROMPT + parts["fixed"]
-    parts["headline"] = "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": headline}, ensure_ascii=False)
+    parts["headline"] = contract.headline_block(headline)
     parts["rules"] = drafting.MAKE_RULES
     return parts
 
