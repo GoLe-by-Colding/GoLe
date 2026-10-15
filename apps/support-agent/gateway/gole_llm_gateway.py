@@ -56,7 +56,7 @@ TIMEOUT_SECONDS = int(os.environ.get("GOLE_GATEWAY_TIMEOUT", "900"))
 LOCK_WAIT_SECONDS = 30 * 60
 LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "gole-llm-gateway.lock"))
 LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
-# 계정 가드(D27). 기록은 잠금 파일 옆(Docker 에서는 CODEX_HOME 볼륨)에 둔다.
+# 계정 가드(D27). 기록은 잠금 파일 옆(Docker 에서는 상태 볼륨, D28)에 둔다.
 USAGE_PATH = Path(os.environ.get("GOLE_GATEWAY_USAGE", LOCK_PATH.parent / "gole-llm-gateway-usage.jsonl"))
 DAILY_INPUT_TOKENS = int(os.environ.get("GOLE_GATEWAY_DAILY_INPUT_TOKENS", "2000000"))
 _COOLDOWN_HOURS = float(os.environ.get("GOLE_GATEWAY_COOLDOWN_HOURS", "6"))

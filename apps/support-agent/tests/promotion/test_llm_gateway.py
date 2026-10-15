@@ -435,5 +435,5 @@ def test_entrypoint_wipes_state_but_keeps_login(tmp_path):
         (home / name).write_text("x")
     (home / "skills").mkdir()
     _entrypoint(home)  # 이미지 밖이라 config 복사에서 멈춘다 — 정리는 그 전에 끝난다
-    assert sorted(p.name for p in home.iterdir()) == [
-        "auth.json", "gateway.lock", "gole-llm-gateway-usage.jsonl", "installation_id"]
+    # 잠금·가드 기록은 상태 볼륨으로 옮겼다(D28). CODEX_HOME 에 있으면 남기지 않는다.
+    assert sorted(p.name for p in home.iterdir()) == ["auth.json", "installation_id"]

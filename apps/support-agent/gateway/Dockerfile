@@ -9,17 +9,20 @@ RUN apt-get update \
     && npm cache clean --force
 
 RUN useradd --create-home --uid 10010 gateway \
-    && mkdir -p /home/gateway/.codex \
-    && chown gateway:gateway /home/gateway/.codex \
-    && chmod 700 /home/gateway/.codex
+    && mkdir -p /home/gateway/.codex /home/gateway/state \
+    && chown gateway:gateway /home/gateway/.codex /home/gateway/state \
+    && chmod 700 /home/gateway/.codex /home/gateway/state
 
 COPY gole_llm_gateway.py config.toml entrypoint.sh /opt/gateway/
 RUN chmod 0755 /opt/gateway/entrypoint.sh
 
-# 볼륨이 이 자리에 붙는다. 로그인·잠금·서버 로그만 여기 남는다.
+# 로그인(auth.json)은 지인 서버가 이 이미지 위에 굽는다(D28, server/Dockerfile.local).
+# 상태 볼륨(gole-gateway-state)이 state 에 붙는다 — 잠금·서버 로그·계정 가드 기록만 두고 비밀은 두지 않는다.
+# 볼륨을 이 경로에 처음 붙이면 위에서 만든 소유자를 이어받는다.
 ENV CODEX_HOME=/home/gateway/.codex \
-    GOLE_GATEWAY_LOCK=/home/gateway/.codex/gateway.lock \
-    GOLE_GATEWAY_LOG=/home/gateway/.codex/gateway.log
+    GOLE_GATEWAY_LOCK=/home/gateway/state/gateway.lock \
+    GOLE_GATEWAY_LOG=/home/gateway/state/gateway.log \
+    GOLE_GATEWAY_USAGE=/home/gateway/state/gole-llm-gateway-usage.jsonl
 USER gateway
 WORKDIR /tmp
 ENTRYPOINT ["/opt/gateway/entrypoint.sh"]
