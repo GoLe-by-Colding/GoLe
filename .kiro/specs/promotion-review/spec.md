@@ -799,6 +799,7 @@ GitHub 러너 (ubuntu-latest, environment: production)
   | `GATEWAY_BUSY` | 앞 요청이 30분 넘게 잠금을 쥠(게이트웨이 안 또는 서버 `run.sh`) | — |
   | `GATEWAY_IMAGE_UNAVAILABLE` | 서버에 구운 `:local`이 없고 stable 받기·굽기도 실패(D28) | — |
   | `GATEWAY_MISCONFIGURED` | 서버에 `auth.json`이 없거나, CODEX_HOME 에 사람이 쓰던 codex 파일이 있음 | — |
+  | `GATEWAY_DUPLICATE` | 같은 runKey 주문이 이미 끝났거나 실패해 다시 돌지 않음(D29) | — |
 
 - **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(상태 볼륨, D28)의 JSONL 한 줄로 남기고,
   7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.
@@ -843,6 +844,9 @@ GitHub 러너 (ubuntu-latest, environment: production)
   확인하지 못했다 — `auth.json` 수정 시각과 `run.log`의 "토큰 갱신" 줄로 지켜본다.
 - **남는 위험.** D26의 것이 그대로다. 특히 main 의 배포 워크플로가 `:stable`을 바꾸면 그 코드는 서버에서 로그인과 함께
   돈다. 서버에서 저장소 사본을 꾸리다 `server/auth.json`을 커밋하지 않도록 `.gitignore`에 넣었다.
+  `docker image prune`은 옛 `:local` 이미지만 지운다 — 옛 `auth.json`이 든 BuildKit 빌드 캐시는 서버에 남을 수 있다(Codex 크로스
+  체크 지적). 서버 밖으로 나가는 경로는 없고 서버 root 는 지금의 `auth.json`도 읽으므로 받아들인다. 서버의 다른 빌드 캐시까지
+  지우는 `docker builder prune`은 지인 서버라 걸지 않는다.
 
 ### D29. 지인 서버가 초안을 검토 큐에 직접 배달한다 — 러너는 주문만 넣고 끝난다 (D20·D25 일부 정정)
 
@@ -878,7 +882,14 @@ GitHub 러너 (ubuntu-latest, environment: production)
   agent 를 import 하지 않는다 — 서버 이미지에 agent 가 없다. 로컬 모드(`PROMOTION_GATEWAY=local`)만 agent 가 deliver 를
   불러 이 프로세스에서 끝까지 돈다. 문구 블록처럼 프롬프트와 검증이 같이 쓰는 규칙은 core 에 하나만 둔다.
 - **러너는 접수 뒤 원장을 남기지 않는다.** 주문이 접수되면 결과는 `QUEUED`이고 원장은 납품이 남긴다 — 러너가 같은 runKey 로
-  먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다. 접수 전에 끝난 실행(큐 가득·중복·캡처 없음·서버 거절)만 러너가 남긴다.
+  먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다. 접수 전에 끝난 실행(큐 가득·중복·캡처 없음)과 서버가 **저장 전에
+  분명히 거절한** 실행(`GATEWAY_BUSY`·`BAD_REQUEST`·`MISCONFIGURED`·`FAILED`·`DUPLICATE`)만 러너가 남긴다. SSH 응답 유실·시간
+  초과처럼 서버가 받았는지 모르는 실패는 잡을 실패로 알리되 원장은 남기지 않는다 — 받았다면 납품이 남긴다(2026-10-15
+  Codex 크로스 체크 지적).
+- **백엔드는 일을 시작하기 전에 runKey 를 선점한다.** `FAILED/ERROR DELIVERY_IN_PROGRESS` 원장을 unique 인덱스로 먼저 넣고,
+  선점에 진 요청(재시도·동시 요청)은 아무것도 하지 않는다. 끝나면 결과로 바꾼다. 중간에 죽으면 진행 중 기록이 남아 보인다.
+- **서버의 접수는 원자적이다.** 접수는 잠금 안에서 임시 폴더에 주문서를 다 받은 뒤 이름 바꾸기로 확정한다. 같은 runKey 재접수는
+  아직 처리 중일 때만 "접수"이고, 끝났거나 실패한 주문이면 `GATEWAY_DUPLICATE`다.
 - **계약 버전.** core 의 `CONTRACT_VERSION`을 주문서에 싣고 deliver 가 자기 값과 다르면 `GATEWAY_CONTRACT_MISMATCH`로
   거절한다 — 러너는 main 최신, 서버는 마지막으로 구운 이미지로 돌기 때문이다. 게이트웨이 이미지 배포 경로에 core·deliver 를 더한다.
 - **구현 순서.** ① 패키지 분리(동작 변화 없음) ② 백엔드 납품 창구·홍보 토큰 ③ deliver·이미지 확장

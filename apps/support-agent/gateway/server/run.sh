@@ -37,10 +37,17 @@ submit() {
   key=$1
   valid_key "$key" || fail GATEWAY_BAD_REQUEST
   mkdir -p jobs
-  # 실패해 남겨 둔 주문은 7일 뒤 지운다.
+  # 접수 검사부터 확정까지 한 번에 하나만 — 두 주문이 동시에 "진행 중 없음"을 보고 함께 들어오지 않게.
+  exec 8>submit.lock
+  flock -w 30 8 || fail GATEWAY_BUSY
+  # 실패해 남겨 둔 주문(과 끊긴 접수의 임시 폴더)은 7일 뒤 지운다.
   find jobs -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null
-  # 응답 유실 뒤 같은 실행이 다시 넣으면 이미 받은 것으로 답한다.
-  [ -d "jobs/$key" ] && answer true null "\"$key\""
+  # 응답 유실 뒤 같은 실행이 다시 넣으면, 아직 처리 중일 때만 받은 것으로 답한다. 끝났거나 실패한 주문은
+  # 다시 돌지 않으므로 "접수"라고 하면 안 된다.
+  if [ -d "jobs/$key" ]; then
+    grep -Eqx 'queued|running' "jobs/$key/status" 2>/dev/null && answer true null "\"$key\""
+    fail GATEWAY_DUPLICATE
+  fi
   for status in jobs/*/status; do
     [ -f "$status" ] && grep -Eqx 'queued|running' "$status" || continue
     if [ -n "$(find "$status" -mmin "-$STALE_MINUTES")" ]; then
@@ -51,14 +58,19 @@ submit() {
     log "멈춘 주문 $stale 을 실패로 둔다"
     notify "❌ GoLe 홍보 주문이 멈춤 · ${STALE_MINUTES}분 넘게 진척 없음 · $stale"
   done
-  mkdir "jobs/$key" || fail GATEWAY_FAILED
-  head -c "$((MAX_ORDER_BYTES + 1))" >"jobs/$key/order.json"
-  if [ "$(wc -c <"jobs/$key/order.json")" -gt "$MAX_ORDER_BYTES" ]; then
-    rm -rf "jobs/$key"
+  # 주문서를 다 받은 뒤에만 보이게 한다. 받는 도중 끊기면 점(.)으로 시작하는 임시 폴더만 남고 접수되지 않는다.
+  incoming="jobs/.incoming-$key"
+  rm -rf "$incoming"
+  mkdir "$incoming" || fail GATEWAY_FAILED
+  head -c "$((MAX_ORDER_BYTES + 1))" >"$incoming/order.json"
+  if [ "$(wc -c <"$incoming/order.json")" -gt "$MAX_ORDER_BYTES" ]; then
+    rm -rf "$incoming"
     fail GATEWAY_BAD_REQUEST
   fi
-  echo queued >"jobs/$key/status"
-  setsid nohup "$0" work "$key" </dev/null >/dev/null 2>&1 &
+  echo queued >"$incoming/status"
+  mv "$incoming" "jobs/$key" || { rm -rf "$incoming"; fail GATEWAY_FAILED; }
+  # 일꾼이 접수 잠금(8)을 물려받으면 다음 접수가 일꾼이 끝날 때까지 막힌다.
+  setsid nohup "$0" work "$key" </dev/null >/dev/null 2>&1 8>&- &
   answer true null "\"$key\""
 }
 

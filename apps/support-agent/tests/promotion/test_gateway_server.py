@@ -122,6 +122,43 @@ def test_submit_sameRunKeyAgain_isAcceptedWithoutASecondWorker(server):
     assert not (fake / "setsid").exists()
 
 
+@pytest.mark.parametrize("status", ["failed", None])
+def test_submit_sameRunKeyThatWillNotRunAgain_isADuplicate(server, status):
+    # 실패했거나(상태 failed) 상태 파일이 없는 주문을 "접수"라고 하면 아무도 처리하지 않는 주문이 된다.
+    home, fake, run, _ = server
+    job = _queued(home)
+    if status is None:
+        (job / "status").unlink()
+    else:
+        (job / "status").write_text(status + "\n")
+    completed, _ = run(ssh="submit gh-1-1", stdin=ORDER)
+
+    assert json.loads(completed.stdout)["error"] == "GATEWAY_DUPLICATE"
+    assert not (fake / "setsid").exists()
+
+
+def test_submit_interruptedReceiving_isNeitherAcceptedNorBusy(server):
+    # 주문서를 받는 도중 끊기면 임시 폴더만 남는다 — 같은 키 재접수와 다른 주문을 막지 않는다.
+    home, fake, run, _ = server
+    leftover = home / "jobs" / ".incoming-gh-1-1"
+    leftover.mkdir(parents=True)
+    (leftover / "order.json").write_text('{"cut')
+    completed, _ = run(ssh="submit gh-1-1", stdin=ORDER)
+
+    assert json.loads(completed.stdout)["ok"] is True
+    assert (home / "jobs" / "gh-1-1" / "order.json").read_text() == ORDER
+    assert not leftover.exists()
+
+
+def test_submit_lockTimeout_isBusy(server):
+    home, fake, run, _ = server
+    (fake / "flock_rc").write_text("1")
+    completed, _ = run(ssh="submit gh-1-1", stdin=ORDER)
+
+    assert json.loads(completed.stdout)["error"] == "GATEWAY_BUSY"
+    assert not (home / "jobs" / "gh-1-1").exists()
+
+
 def test_submit_whileAnotherOrderIsInFlight_isBusy(server):
     home, fake, run, _ = server
     _queued(home, "gh-0-1")
