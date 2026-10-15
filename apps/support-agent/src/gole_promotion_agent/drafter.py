@@ -30,6 +30,7 @@ from gole_promotion_core.order import ImageStage, Order, Shot
 # run.sh 가 주문을 저장하기 전에 거절할 때만 내는 코드(D27·D29). 이 밖의 실패는 서버가 받았는지 모른다.
 SERVER_REFUSALS = frozenset({
     "GATEWAY_BUSY", "GATEWAY_BAD_REQUEST", "GATEWAY_MISCONFIGURED", "GATEWAY_FAILED", "GATEWAY_DUPLICATE",
+    "GATEWAY_DAILY_LIMIT",
 })
 
 

@@ -535,6 +535,7 @@ def test_closeRun_queuedOrDelivered_leavesTheLedgerToTheDelivery(tmp_path, capsy
 @pytest.mark.parametrize("error, recorded", [
     ("GATEWAY_BUSY", True),               # 서버가 저장 전에 거절했다 — 이 실행은 여기서 끝났다
     ("GATEWAY_DUPLICATE", True),
+    ("GATEWAY_DAILY_LIMIT", True),
     ("ssh 실패(종료 코드 255)", False),    # 받았는지 모른다 — 받았다면 납품이 원장을 남긴다
     ("게이트웨이 시간 초과(300초)", False),
     ("DELIVERY_FAILED", False),

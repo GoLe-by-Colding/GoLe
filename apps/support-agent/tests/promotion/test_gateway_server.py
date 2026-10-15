@@ -168,6 +168,21 @@ def test_submit_whileAnotherOrderIsInFlight_isBusy(server):
     assert not (home / "jobs" / "gh-1-1").exists()
 
 
+def test_submit_dailyLimit_countsOnlyTheLast24Hours(server):
+    # 구독 계정 보호: 트리거가 무엇이든 24시간에 3건까지만 받는다.
+    home, _, run, _ = server
+    now = int(time.time())
+    (home / "orders.log").write_text(f"{now - 90000} gh-0-1\n{now - 3600} gh-0-2\n{now - 60} gh-0-3\n")
+    completed, _ = run(ssh="submit gh-1-1", stdin=ORDER)
+    assert json.loads(completed.stdout)["ok"] is True  # 25시간 전 주문은 세지 않는다 — 2건
+    assert (home / "orders.log").read_text().splitlines()[-1].endswith(" gh-1-1")
+
+    (home / "jobs" / "gh-1-1" / "status").write_text("failed\n")  # 실패한 주문도 센다
+    completed, _ = run(ssh="submit gh-1-2", stdin=ORDER)
+    assert json.loads(completed.stdout)["error"] == "GATEWAY_DAILY_LIMIT"
+    assert not (home / "jobs" / "gh-1-2").exists()
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="파일 시각을 되돌리는 os.utime 이 MSYS find -mmin 과 어긋날 수 있다")
 def test_submit_afterAStaleOrder_marksItFailedNotifiesAndAccepts(server):
     home, fake, run, notes = server

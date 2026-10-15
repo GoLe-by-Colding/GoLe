@@ -17,6 +17,8 @@ STATE=${GOLE_GATEWAY_STATE_VOLUME:-gole-gateway-state}
 LOCAL=gole-llm-gateway:local
 # 이 시간보다 오래 queued·running 인 주문은 멈춘 것으로 본다(서버 재부팅·일꾼 사망).
 STALE_MINUTES=${GOLE_GATEWAY_STALE_MINUTES:-120}
+# 구독 계정 보호: 최근 24시간에 받은 주문 수 상한. 수동 실행·스케줄·릴리스가 무엇이든 여기를 지난다.
+DAILY_ORDERS=${GOLE_GATEWAY_DAILY_ORDERS:-3}
 MAX_ORDER_BYTES=67108864
 
 answer() { printf '{"ok":%s,"error":%s,"job":%s,"text":"","structured":null,"images":[],"usage":null}' "$@"; exit 0; }
@@ -58,6 +60,13 @@ submit() {
     log "멈춘 주문 $stale 을 실패로 둔다"
     notify "❌ GoLe 홍보 주문이 멈춤 · ${STALE_MINUTES}분 넘게 진척 없음 · $stale"
   done
+  # 받은 주문(성공·실패 모두)을 orders.log 에 "시각 run_key" 로 남기고 24시간 안의 줄 수로 센다.
+  now=$(date +%s)
+  recent=$(awk -v since="$((now - 86400))" '$1 >= since' orders.log 2>/dev/null | wc -l)
+  if [ "$recent" -ge "$DAILY_ORDERS" ]; then
+    log "하루 주문 상한($DAILY_ORDERS) — $key 거절"
+    fail GATEWAY_DAILY_LIMIT
+  fi
   # 주문서를 다 받은 뒤에만 보이게 한다. 받는 도중 끊기면 점(.)으로 시작하는 임시 폴더만 남고 접수되지 않는다.
   incoming="jobs/.incoming-$key"
   rm -rf "$incoming"
@@ -69,6 +78,7 @@ submit() {
   fi
   echo queued >"$incoming/status"
   mv "$incoming" "jobs/$key" || { rm -rf "$incoming"; fail GATEWAY_FAILED; }
+  printf '%s %s\n' "$now" "$key" >>orders.log
   # 일꾼이 접수 잠금(8)을 물려받으면 다음 접수가 일꾼이 끝날 때까지 막힌다.
   setsid nohup "$0" work "$key" </dev/null >/dev/null 2>&1 8>&- &
   answer true null "\"$key\""

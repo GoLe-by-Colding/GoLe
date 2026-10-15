@@ -767,9 +767,11 @@ GitHub 러너 (ubuntu-latest, environment: production)
   대기 실행은 시작도 못 하고 취소된다(단계가 안 돌아 Discord 알림도 없다) — 그 릴리스의 기능 홍보가 빠진다. main 은
   릴리스 PR 로만 바뀌어 드물므로 받아들인다. Actions 목록의 "취소됨"을 보면 수동 실행에 그 SHA 를 넣어 다시 돌린다.
 - **호출 빈도 상한.** 실행당 기획 1회·제작 1회(D25), 워크플로 동시 실행 1개(`concurrency: promotion-agent`), 기능 홍보는
-  릴리스(SHA)당 1회(D11), 서비스 소개는 월·수·금. 검토 대기 5건 이상이면 시작하지 않는다(D18). `main`은 릴리스
-  PR로만 바뀌어 기능 홍보가 하루 몇 번씩 돌 일이 없으므로 일일 상한은 따로 두지 않는다 — 릴리스가 잦아지면
-  원장(`promotion_runs`)으로 같은 날 실행 수를 세어 건너뛰는 규칙을 더한다.
+  릴리스(SHA)당 1회(D11), 서비스 소개는 월·수·금. 검토 대기 5건 이상이면 시작하지 않는다(D18).
+  > **2026-10-15 — 일일 상한과 끄기 스위치를 더했다.** 수동 실행(`service=true`)은 중복 확인이 없어 누르는 만큼 돈다.
+  > 지인 서버 `run.sh` 가 최근 24시간에 받은 주문을 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3)건까지만 받고 넘으면
+  > `GATEWAY_DAILY_LIMIT` 로 거절한다 — 트리거가 무엇이든 거기를 지나므로 한 곳에서 막는다. 실패한 주문도 센다.
+  > 저장소 변수 `PROMOTION_AGENT_ENABLED=false` 면 워크플로가 모든 트리거에서 잡을 건너뛴다.
 - **남는 위험(코드로 못 막는다).**
   - 구독 계정을 자동화에 쓰는 것은 OpenAI가 "신뢰할 수 있는 개인 자동화"로만 두는 방식이다. 계정 정지는
     예고 없이 올 수 있고, 그동안 실행은 `GATEWAY_FAILED`로 끝난다.
@@ -801,6 +803,7 @@ GitHub 러너 (ubuntu-latest, environment: production)
   | `GATEWAY_IMAGE_UNAVAILABLE` | 서버에 구운 `:local`이 없고 stable 받기·굽기도 실패(D28) | — |
   | `GATEWAY_MISCONFIGURED` | 서버에 `auth.json`이 없거나, CODEX_HOME 에 사람이 쓰던 codex 파일이 있음 | — |
   | `GATEWAY_DUPLICATE` | 같은 runKey 주문이 이미 끝났거나 실패해 다시 돌지 않음(D29) | — |
+  | `GATEWAY_DAILY_LIMIT` | 서버가 최근 24시간에 받은 주문이 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3) 이상(`run.sh` 의 `orders.log`) | — |
 
 - **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(상태 볼륨, D28)의 JSONL 한 줄로 남기고,
   7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.

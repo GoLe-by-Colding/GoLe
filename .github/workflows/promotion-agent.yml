@@ -45,11 +45,13 @@ concurrency:
 jobs:
   draft:
     name: Draft promotion
-    # 배포가 실패했거나 main 이 아니면 홍보할 것이 없다.
+    # 배포가 실패했거나 main 이 아니면 홍보할 것이 없다. 저장소 변수 PROMOTION_AGENT_ENABLED=false 면 모든 트리거를
+    # 건너뛴다 — 구독 계정이 위험할 때 서버에 들어가지 않고 끄는 스위치다(없으면 켜진 것으로 본다).
     if: >-
-      github.event_name != 'workflow_run' ||
+      vars.PROMOTION_AGENT_ENABLED != 'false' &&
+      (github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
+      github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # 운영 봇 계정 자격증명이 여기 있다. main 보호 규칙과 함께 이 환경으로 범위를 좁힌다.
