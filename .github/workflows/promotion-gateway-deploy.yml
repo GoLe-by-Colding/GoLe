@@ -1,7 +1,8 @@
 name: Promotion gateway deploy
 
-# 홍보 LLM 게이트웨이 이미지(apps/support-agent/gateway)가 main 에서 바뀌면 GHCR 에 올린다(promotion-review D26).
-# 지인 서버는 요청마다 `docker run --pull=always ...:stable` 로 받으므로 서버에 접속하는 배포 단계가 없다.
+# 홍보 LLM 게이트웨이 코드 이미지(apps/support-agent/gateway)가 main 에서 바뀌면 GHCR 에 올린다(promotion-review D26·D28).
+# 지인 서버의 run.sh 가 요청마다 :stable 을 받아 바뀌었으면 codex 로그인을 얹어 다시 구우므로 서버에 접속하는 배포 단계가 없다.
+# 이 이미지에는 로그인이 없다 — 로그인은 서버에서만 얹는다.
 # 사람 관문은 main 이다 — main 은 리뷰를 거친 릴리스 PR 로만 바뀐다. 패키지는 공개(public)여야 서버가 로그인 없이 받는다.
 on:
   push:
@@ -35,9 +36,11 @@ jobs:
           image="ghcr.io/$owner/gole-llm-gateway"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker build -t "$image:$GITHUB_SHA" apps/support-agent/gateway
-          # 연기 테스트: 서버와 같은 제약으로 띄우고, 잘못된 engine 은 CLI 를 부르지 않고 고정 문장으로 거절되는지 본다.
+          # 연기 테스트: 잘못된 engine 은 CLI 를 부르지 않고 고정 문장으로 거절되는지 본다. 쓰는 자리(CODEX_HOME·상태 볼륨)만
+          # tmpfs 로 열어, 이미지가 그 밖에 쓰려 하면 여기서 깨지게 한다.
           out="$(printf '{"engine":"smoke","prompt":"ping"}' | docker run --rm -i --read-only --tmpfs /tmp \
-            --tmpfs /home/gateway/.codex:uid=10010,mode=0700 "$image:$GITHUB_SHA")"
+            --tmpfs /home/gateway/.codex:uid=10010,mode=0700 --tmpfs /home/gateway/state:uid=10010,mode=0700 \
+            "$image:$GITHUB_SHA")"
           case "$out" in
             *'"ok": false'*'engine'*) ;;
             *) echo "::error::게이트웨이 이미지 연기 테스트 실패 — stable 은 이전 이미지 그대로다"; exit 1 ;;
