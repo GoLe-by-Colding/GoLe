@@ -771,6 +771,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
   > **2026-10-15 — 일일 상한과 끄기 스위치를 더했다.** 수동 실행(`service=true`)은 중복 확인이 없어 누르는 만큼 돈다.
   > 지인 서버 `run.sh` 가 최근 24시간에 받은 주문을 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3)건까지만 받고 넘으면
   > `GATEWAY_DAILY_LIMIT` 로 거절한다 — 트리거가 무엇이든 거기를 지나므로 한 곳에서 막는다. 실패한 주문도 센다.
+  > 앞 주문을 받은 지 30분(`GOLE_GATEWAY_MIN_GAP_MINUTES`) 안이면 `GATEWAY_TOO_SOON` 이다 — 진행 중 주문은 BUSY 가
+  > 이미 막으므로, 연달아 누른 수동 실행이 앞 주문이 끝난 직후 다시 도는 것을 막는다(러너 간격 최대 약 20분).
   > 저장소 변수 `PROMOTION_AGENT_ENABLED=false` 면 워크플로가 모든 트리거에서 잡을 건너뛴다.
 - **남는 위험(코드로 못 막는다).**
   - 구독 계정을 자동화에 쓰는 것은 OpenAI가 "신뢰할 수 있는 개인 자동화"로만 두는 방식이다. 계정 정지는
@@ -804,6 +806,7 @@ GitHub 러너 (ubuntu-latest, environment: production)
   | `GATEWAY_MISCONFIGURED` | 서버에 `auth.json`이 없거나, CODEX_HOME 에 사람이 쓰던 codex 파일이 있음 | — |
   | `GATEWAY_DUPLICATE` | 같은 runKey 주문이 이미 끝났거나 실패해 다시 돌지 않음(D29) | — |
   | `GATEWAY_DAILY_LIMIT` | 서버가 최근 24시간에 받은 주문이 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3) 이상(`run.sh` 의 `orders.log`) | — |
+  | `GATEWAY_TOO_SOON` | 서버가 앞 주문을 받은 지 `GOLE_GATEWAY_MIN_GAP_MINUTES`(기본 30)분이 안 됨 | — |
 
 - **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(상태 볼륨, D28)의 JSONL 한 줄로 남기고,
   7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.

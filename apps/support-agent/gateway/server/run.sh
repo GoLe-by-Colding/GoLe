@@ -19,6 +19,8 @@ LOCAL=gole-llm-gateway:local
 STALE_MINUTES=${GOLE_GATEWAY_STALE_MINUTES:-120}
 # 구독 계정 보호: 최근 24시간에 받은 주문 수 상한. 수동 실행·스케줄·릴리스가 무엇이든 여기를 지난다.
 DAILY_ORDERS=${GOLE_GATEWAY_DAILY_ORDERS:-3}
+# 앞 주문을 받고 이만큼 지나야 다음 주문을 받는다 — 실수로 연달아 누른 수동 실행이 끝난 직후 다시 도는 것을 막는다.
+MIN_GAP_MINUTES=${GOLE_GATEWAY_MIN_GAP_MINUTES:-30}
 MAX_ORDER_BYTES=67108864
 
 answer() { printf '{"ok":%s,"error":%s,"job":%s,"text":"","structured":null,"images":[],"usage":null}' "$@"; exit 0; }
@@ -66,6 +68,11 @@ submit() {
   if [ "$recent" -ge "$DAILY_ORDERS" ]; then
     log "하루 주문 상한($DAILY_ORDERS) — $key 거절"
     fail GATEWAY_DAILY_LIMIT
+  fi
+  last=$(tail -n 1 orders.log 2>/dev/null | cut -d ' ' -f 1)
+  if [ -n "$last" ] && [ "$((now - last))" -lt "$((MIN_GAP_MINUTES * 60))" ]; then
+    log "앞 주문 뒤 ${MIN_GAP_MINUTES}분이 안 됨 — $key 거절"
+    fail GATEWAY_TOO_SOON
   fi
   # 주문서를 다 받은 뒤에만 보이게 한다. 받는 도중 끊기면 점(.)으로 시작하는 임시 폴더만 남고 접수되지 않는다.
   incoming="jobs/.incoming-$key"
