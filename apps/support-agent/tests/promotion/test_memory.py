@@ -7,9 +7,9 @@ from pydantic import ValidationError
 
 from gole_promotion_agent import memory
 from gole_promotion_core import contract
-from gole_promotion_core.ledger import RunResult, UsageMeter, close_run as _close_run
+from gole_promotion_core.ledger import RunResult, close_run as _close_run
 from gole_promotion_agent.fakes import FakeCamera
-from gole_promotion_core.publisher import BackendPublisher
+from gole_promotion_agent.publisher import BackendPublisher
 
 from .gitrepo import commit
 from .test_drafter import ARGS, DRAFT, ROUTES, SKIP, FakeGateway, FakePublisher, RecordingPublisher, _drafter
@@ -153,7 +153,7 @@ def test_brokenImage_quotingPrivateMemory_doesNotLeakToPublicLogs(tmp_path, caps
     public_log = capsys.readouterr().out
     assert result.outcome == "submitted" and "이미지 제작 실패" in public_log
     assert sentinel not in public_log and "홍보 작업 기억" not in public_log
-    assert all(path.parent.name == "captures" for path in publisher.uploaded[0])
+    assert publisher.uploaded[0] == [(tmp_path / "run" / "captures" / "02-collection.png").read_bytes()]
 
 
 def test_longEditPrompt_failsExplicitlyBeforeCodexInsteadOfTruncating(tmp_path):
@@ -286,7 +286,7 @@ def test_runSummary_neverContainsPrivateMemory(tmp_path, capsys):
     snapshot = {"feedbackIds": ["private-feedback"], "guidelines": [{"content": "비공개 지침"}]}
     result = RunResult("submitted", "SUBMITTED", post_id="post-1", memory_context=snapshot, run_key="shared-key")
 
-    assert _close_run(publisher, tmp_path, UsageMeter(None), result, ARGS) == 0
+    assert _close_run(publisher, tmp_path, [], result, ARGS) == 0
 
     assert publisher.recorded[0]["memoryContext"] == snapshot
     assert publisher.recorded[0]["runKey"] == "shared-key"
@@ -294,7 +294,7 @@ def test_runSummary_neverContainsPrivateMemory(tmp_path, capsys):
     assert "memoryContext" not in public and "비공개 지침" not in public and "private-feedback" not in public
 
 
-def test_publisherMemoryRequests_useAdminHeadersRepeatedRoutesAndExactReflectionPayload():
+def test_publisherMemoryRequests_useAdminHeadersAndRepeatedRoutes():
     calls = []
 
     class Response:
@@ -320,11 +320,9 @@ def test_publisherMemoryRequests_useAdminHeadersRepeatedRoutesAndExactReflection
 
     publisher = BackendPublisher("https://gole.test", "bot", "pw", client=Client())
     context = publisher.memory_context("FEATURE", ["/", "/collection"])
-    payload = {"feedbackIds": ["feedback-1"], "runKey": "same-key", "proposals": []}
 
-    assert context["feedback"] == [] and publisher.reflect(payload) == []
+    assert context["feedback"] == []
     assert calls[0][1]["params"] == [("category", "FEATURE"), ("routes", "/"), ("routes", "/collection")]
-    assert calls[1][1]["json"] == payload
     assert all(kwargs["headers"] == {"Authorization": "Bearer private-session"} for _, kwargs in calls)
 
 

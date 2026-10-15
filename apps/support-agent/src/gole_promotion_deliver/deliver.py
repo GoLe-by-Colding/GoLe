@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 from pydantic import ValidationError
 
-from gole_promotion_core import CONTRACT_VERSION, contract, limits
+from gole_promotion_core import CONTRACT_VERSION, contract
 from gole_promotion_core.gateway import Gateway, GatewayError, decode_png
-from gole_promotion_core.ledger import RunResult, UsageMeter
+from gole_promotion_core.ledger import RunResult, UsageMeter, run_payload
 from gole_promotion_core.order import Order
 
 Post = Callable[[Mapping[str, Any]], "Delivered"]
@@ -21,14 +23,18 @@ Notify = Callable[[str], None]
 CONFIG_INVALID = 2
 DELIVERY_FAILED = 3
 
+_FIXED_CODE = re.compile(r"[A-Z_]+")
+
 
 @dataclass(frozen=True)
 class Delivered:
-    """납품 결과. status 가 None 이면 백엔드에 닿지 못했다."""
+    """납품 결과(백엔드가 남긴 원장 한 줄의 요점). status 가 None 이면 백엔드에 닿지 못했다."""
 
     status: int | None
     outcome: str | None = None
     reason: str | None = None
+    detail: str | None = None
+    post_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,7 +48,7 @@ class _Draft:
 def deliver(order: Order, gateway: Gateway, post: Post, notify: Notify, log: Callable[[str], None] = print) -> int:
     """주문 하나를 끝까지. 백엔드가 받았으면 0, 못 받았으면 DELIVERY_FAILED(서버가 주문을 남겨 둔다). 둘 다 여기서 알린다."""
     meter = UsageMeter(gateway)
-    memory_context = dict(order.memory_context)
+    memory_context = copy.deepcopy(order.memory_context)  # 주문서(러너 쪽 기록)를 고쳐 쓰지 않는다
     reflection, reflection_error, draft = None, None, None
     if order.contract_version != CONTRACT_VERSION:
         result = RunResult("failed", "ERROR", "GATEWAY_CONTRACT_MISMATCH")
@@ -72,6 +78,8 @@ def _work(order: Order, meter: UsageMeter, memory_context: dict[str, Any], log: 
     try:
         response = meter.call(order.plan)
     except GatewayError as error:
+        if _FIXED_CODE.fullmatch(str(error)):
+            log(f"[promotion-deliver] {error}")  # 계정 정지·한도 같은 고정 코드만 로그에 남긴다
         return RunResult("failed", "GATEWAY_FAILED", str(error)), None, None, None
     structured = response.get("structured")
     reflection, reflection_error = _reflection(order, structured)
@@ -98,12 +106,23 @@ def _work(order: Order, meter: UsageMeter, memory_context: dict[str, Any], log: 
         })
         images.append({"data": polished or shot.data} | (
             {"original": shot.data, "edit": edit} if polished is not None else {}))
-    memory_context.setdefault("stages", []).append({
-        "stage": "IMAGE_EDIT", "routes": list(dict.fromkeys(routes)),
-        "feedbackIds": order.image_stage.feedbackIds, "guidelineIds": order.image_stage.guidelineIds,
-    })
+    _remember_image_stage(memory_context, order, routes)
     draft = _Draft(parsed.caption or "", parsed.rationale or "", captures, images)
     return RunResult("submitted", "SUBMITTED"), reflection, reflection_error, draft
+
+
+def _remember_image_stage(memory_context: dict[str, Any], order: Order, routes: list[str]) -> None:
+    """러너의 기획 단계 기록에 제작 단계를 더한다. 같은 반려·지침은 한 번만 남는다."""
+    stage = order.image_stage
+    feedback_ids = memory_context.setdefault("feedbackIds", [])
+    feedback_ids.extend(item for item in stage.feedbackIds if item not in feedback_ids)
+    guidelines = memory_context.setdefault("guidelines", [])
+    known = {item.get("id") for item in guidelines}
+    guidelines.extend(item for item in stage.guidelines if item.get("id") not in known)
+    memory_context.setdefault("stages", []).append({
+        "stage": "IMAGE_EDIT", "routes": list(dict.fromkeys(routes)),
+        "feedbackIds": stage.feedbackIds, "guidelineIds": stage.guidelineIds,
+    })
 
 
 def _reflection(order: Order, structured: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -127,26 +146,18 @@ def _make(meter: UsageMeter, order: Order, original: str, prompt: str, route: st
         })
         data = decode_png(response["images"][0])
     except (GatewayError, KeyError, IndexError, TypeError, ValueError) as error:
-        log(f"[promotion-deliver] 이미지 제작 실패 {route}, 원본을 올림 ({type(error).__name__})")
+        # 모델 오류가 입력 프롬프트(작업 기억)를 인용할 수 있다. 예외 이름과 고정 코드만 남긴다.
+        code = f" {error}" if isinstance(error, GatewayError) and _FIXED_CODE.fullmatch(str(error)) else ""
+        log(f"[promotion-deliver] 이미지 제작 실패 {route}, 원본을 올림 ({type(error).__name__}{code})")
         return None
     return base64.b64encode(data).decode("ascii")
 
 
 def _run(order: Order, result: RunResult, meter: UsageMeter, memory_context: dict[str, Any]) -> dict[str, Any]:
     """원장 한 줄(RecordRunRequest). 초안이 있으면 SUBMITTED 로 보내고, 백엔드가 큐·중복·오류에 따라 바꾼다."""
-    agent_sha = (order.agent_sha or "").lower()
-    return {
-        "runKey": order.run_key,
-        "category": order.category,
-        "sourceCommitSha": order.sha,
-        "outcome": result.outcome.upper(),
-        "reasonCode": result.code,
-        "detail": limits.clean_detail(result.detail),
-        "agentSha": agent_sha if limits.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
-        "runUrl": order.run_url,
-        "calls": meter.calls[: limits.MAX_RUN_CALLS],
-        "memoryContext": memory_context,
-    }
+    run = RunResult(result.outcome, result.code, result.detail, memory_context=memory_context, run_key=order.run_key)
+    env = {"PROMOTION_AGENT_CODE_SHA": order.agent_sha or "", "PROMOTION_AGENT_RUN_URL": order.run_url or ""}
+    return run_payload(run, meter.calls, service=order.category == "SERVICE", sha=order.sha, env=env)
 
 
 def _draft_request(order: Order, draft: _Draft) -> dict[str, Any]:
@@ -173,7 +184,8 @@ def http_post(api_url: str, token: str, timeout: float = 120.0) -> Post:
         try:
             with request.urlopen(req, timeout=timeout) as response:
                 body = json.loads(response.read().decode("utf-8") or "{}")
-                return Delivered(response.status, body.get("outcome"), body.get("reasonCode"))
+                return Delivered(response.status, body.get("outcome"), body.get("reasonCode"),
+                                 body.get("detail"), body.get("promotionPostId"))
         except error.HTTPError as failed:
             return Delivered(failed.code)
         except (error.URLError, OSError, ValueError):

@@ -18,6 +18,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 const BOT_EMAIL = process.env.PROMOTION_AGENT_ADMIN_EMAIL ?? "e2e-promotion-bot@gole.test";
 const BOT_PASSWORD =
   process.env.PROMOTION_AGENT_ADMIN_PASSWORD ?? "e2e-promotion-bot-not-a-real-secret";
+// 납품 창구(promotion-review D29) 토큰. API 는 이 값의 SHA-256(PROMOTION_AGENT_TOKEN_SHA256)만 안다.
+const AGENT_TOKEN = process.env.PROMOTION_AGENT_TOKEN ?? "e2e-promotion-token-not-a-real-secret";
 const CORE_SEED_IDS = [
   "7a45a651-c7a0-307e-a0b7-b3f2abf18317",
   "2f0f999c-0823-3bfd-95fd-0991d9f990de",
@@ -140,6 +142,7 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
             ...process.env,
             PROMOTION_AGENT_ADMIN_EMAIL: BOT_EMAIL,
             PROMOTION_AGENT_ADMIN_PASSWORD: BOT_PASSWORD,
+            PROMOTION_AGENT_TOKEN: AGENT_TOKEN,
           },
           timeout: 60_000,
           maxBuffer: 1024 * 1024,

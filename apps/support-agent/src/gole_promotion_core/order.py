@@ -24,10 +24,12 @@ class Shot(BaseModel):
 
 
 class ImageStage(BaseModel):
-    """제작 단계에 쓴 작업 기억 ID. 원장 memoryContext 의 IMAGE_EDIT 단계로 남는다."""
+    """제작 단계에 쓸 작업 기억. 초안을 실제로 만들 때만 원장 memoryContext 에 더한다 — 건너뛴 실행에는 남지 않는다."""
 
     feedbackIds: list[str] = Field(default_factory=list)
     guidelineIds: list[str] = Field(default_factory=list)
+    # 원장에 남기는 지침 스냅숏(id·kind·content·targets·categories).
+    guidelines: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Order(BaseModel):

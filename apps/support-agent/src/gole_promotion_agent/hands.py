@@ -1,4 +1,4 @@
-"""러너가 외부 세계를 만지는 구현 — git·브라우저. 백엔드 HTTP 는 gole_promotion_core.publisher 에 있다.
+"""러너가 외부 세계를 만지는 구현 — git·브라우저. 백엔드 HTTP 는 gole_promotion_agent.publisher 에 있다.
 
 SDK import는 전부 지연시킨다 — promotion extra 없이도 이 모듈을 import 해 테스트할 수 있어야 한다.
 """

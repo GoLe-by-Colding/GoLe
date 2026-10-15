@@ -1,8 +1,11 @@
-"""초안 한 편. 모델이 무엇을 내든 검증을 통과한 것만 제출되고, 다듬기 실패는 원본으로 대신한다."""
+"""초안 한 편. 모델이 무엇을 내든 검증을 통과한 것만 제출되고, 다듬기 실패는 원본으로 대신한다.
+
+러너(주문서)부터 deliver(기획·제작·납품)까지 실제 코드로 돌린다(D29). 지인 서버 대신 LocalSubmitter 가 deliver 를
+이 프로세스에서 부르고, 백엔드 납품 창구 대신 FakeBackend 가 받는다.
+"""
 
 import base64
 import json
-from pathlib import Path
 
 import pytest
 
@@ -11,9 +14,11 @@ from gole_promotion_core import contract
 from types import SimpleNamespace
 
 from gole_promotion_agent.drafter import Drafter
+from gole_promotion_agent.gateway_client import LocalSubmitter
 from gole_promotion_core.ledger import RunResult, UsageMeter, close_run as _close_run, run_payload
 from gole_promotion_agent.fakes import PIXEL, FakeCamera
 from gole_promotion_core.gateway import GatewayError
+from gole_promotion_deliver.deliver import Delivered
 
 from .gitrepo import commit
 
@@ -49,10 +54,10 @@ class FakePublisher:
     def history(self, limit):
         return ({"status": "PUBLISHED", "caption": "지난 글"},)
 
-    def upload(self, paths):
+    def upload(self, blobs):
         start = sum(len(batch) for batch in self.uploaded)
-        self.uploaded.append([Path(p) for p in paths])
-        return tuple(f"key-{start + i}" for i, _ in enumerate(paths))
+        self.uploaded.append(list(blobs))
+        return tuple(f"key-{start + i}" for i, _ in enumerate(blobs))
 
     def create(self, sha, caption, media_keys, details):
         self.created.append((sha, caption, list(media_keys), details))
@@ -60,6 +65,44 @@ class FakePublisher:
 
     def finalize(self, post_id):
         self.finalized.append(post_id)
+
+
+class FakeBackend:
+    """납품 창구(PromotionDeliveryService)와 같은 순서로 받는다 — 성찰 → 업로드(게시 이미지, 원본) → 초안 → 검토 요청."""
+
+    def __init__(self, publisher):
+        self.publisher = publisher
+        self.payloads = []
+
+    def post(self, payload):
+        self.payloads.append(json.loads(json.dumps(payload)))  # 실제 HTTP 처럼 JSON 으로 오간다
+        run = payload["run"]
+        detail = run.get("detail")
+        if payload.get("reflection"):
+            try:
+                self.publisher.reflect(payload["reflection"])
+            except Exception:  # noqa: BLE001 — 백엔드도 성찰 실패로 초안을 막지 않는다
+                detail = detail or "MEMORY_REFLECTION_FAILED"
+        draft = payload.get("draft")
+        if draft is None:
+            return Delivered(201, run["outcome"], run["reasonCode"], detail)
+        images = draft["images"]
+        keys = list(self.publisher.upload([base64.b64decode(image["data"]) for image in images]))
+        with_original = [image for image in images if image.get("original")]
+        original_keys = iter(self.publisher.upload([base64.b64decode(i["original"]) for i in with_original])
+                             if with_original else ())
+        captures = []
+        for capture, image in zip(draft["captures"], images):
+            if image.get("original"):
+                capture = capture | {"originalMediaKey": next(original_keys), "edit": image["edit"]}
+            captures.append(capture)
+        post_id = self.publisher.create(
+            run["sourceCommitSha"], draft["caption"], keys,
+            {"captures": captures, "rationale": draft["provenance"]["rationale"],
+             "releaseTitle": draft["provenance"]["releaseTitle"]},
+        )
+        self.publisher.finalize(post_id)
+        return Delivered(201, "SUBMITTED", "SUBMITTED", detail, post_id)
 
 
 class FakeGateway:
@@ -92,16 +135,19 @@ SKIP = {"decision": "skip", "skip_reason": "볼 게 없음", "caption": None, "r
 
 
 def _drafter(tmp_path, gateway, publisher, **overrides):
+    """gateway 는 모델 호출 쪽이다. 주문은 LocalSubmitter 가 deliver 로 받아 FakeBackend 에 납품한다."""
+    log = overrides.pop("log", lambda _message: None)
+    submitter = overrides.pop("submitter", None) or LocalSubmitter(gateway, FakeBackend(publisher).post, log=log)
     options = dict(
         repo=tmp_path / "repo",
         run_dir=tmp_path / "run",
         publisher=publisher,
-        gateway=gateway,
+        gateway=submitter,
         camera=FakeCamera(ROUTES),
         routes=ROUTES,
         demo=True,
         service=True,
-        log=lambda _message: None,
+        log=log,
     )
     options.update(overrides)
     return Drafter(**options)
@@ -135,8 +181,8 @@ def test_draft_plansOnThumbnailsThenMakesFromOneOriginal(tmp_path):
 
     # 게시 이미지 1장 + 다듬은 사진의 원본 1장.
     (published,), (original,) = publisher.uploaded
-    assert published.parent.name == "polished" and published.read_bytes() == POLISHED
-    assert original.parent.name == "captures"
+    assert published == POLISHED
+    assert original == (tmp_path / "run" / "captures" / "02-collection.png").read_bytes()
     sha, caption, keys, details = publisher.created[0]
     assert sha is None and keys == ["key-0"]
     (capture,) = details["captures"]
@@ -171,7 +217,7 @@ def test_missingImage_fallsBackToOriginal(tmp_path):
 
     assert result.outcome == "submitted"
     (uploaded,) = publisher.uploaded  # 원본만 올렸으니 원본 업로드는 따로 없다
-    assert [p.parent.name for p in uploaded] == ["captures"]
+    assert uploaded == [(tmp_path / "run" / "captures" / "02-collection.png").read_bytes()]
     (capture,) = publisher.created[0][3]["captures"]
     assert "originalMediaKey" not in capture and capture["polishFailed"]
     assert capture["styleId"] == "royal-blue-brick-mobile"
@@ -197,7 +243,7 @@ def test_accountLimit_logsFixedCodeAndDoesNotSubmitOrRetry(tmp_path):
     result = _drafter(tmp_path, SimpleNamespace(call=fail), publisher, log=logs.append).run()
 
     assert (result.outcome, result.code, result.detail) == ("failed", "GATEWAY_FAILED", "CODEX_USAGE_LIMIT")
-    assert "[promotion-agent] CODEX_USAGE_LIMIT" in logs
+    assert "[promotion-deliver] CODEX_USAGE_LIMIT" in logs
     assert len(calls) == 1
     assert publisher.created == [] and publisher.uploaded == []
 
@@ -210,7 +256,7 @@ def test_freeTextGatewayError_staysOutOfPublicLog(tmp_path):
 
     _drafter(tmp_path, SimpleNamespace(call=fail), FakePublisher(), log=logs.append).run()
 
-    assert logs == []
+    assert not any("codex 실패" in line for line in logs)
 
 
 @pytest.mark.parametrize(
@@ -249,12 +295,6 @@ def test_featureWithoutWebChanges_skipsWithoutCalling(tmp_path, repo):
     result = _drafter(tmp_path, gateway, FakePublisher(), service=False, sha=sha).run()
 
     assert result.outcome == "skipped" and gateway.requests == []
-
-
-def test_choiceIsKeptForTheArtifact(tmp_path):
-    _drafter(tmp_path, FakeGateway(DRAFT), FakePublisher()).run()
-
-    assert json.loads((tmp_path / "run" / "choice.json").read_text(encoding="utf-8"))["pick"]["image"] == 2
 
 
 def test_reusedCaptures_skipCameraAndKeepRouteOrder(tmp_path):
@@ -410,7 +450,7 @@ def test_closeRun_keepsModelTextOutOfPublicOutput(tmp_path, capsys):
     publisher = RecordingPublisher()
     secret = "모델이 쓴 사유: 데모 닉네임 홍길동 때문에 제외"
 
-    code = _close_run(publisher, tmp_path, UsageMeter(None), RunResult("skipped", "MODEL_SKIPPED", secret), ARGS)
+    code = _close_run(publisher, tmp_path, [], RunResult("skipped", "MODEL_SKIPPED", secret), ARGS)
 
     out = capsys.readouterr().out
     assert code == 0 and "[promotion-agent] skipped (MODEL_SKIPPED)" in out
@@ -423,8 +463,70 @@ def test_closeRun_keepsModelTextOutOfPublicOutput(tmp_path, capsys):
 def test_closeRun_ledgerFailure_doesNotChangeTheRunResult(tmp_path, capsys, publisher):
     submitted = RunResult("submitted", "SUBMITTED", post_id="promo-1")
 
-    code = _close_run(publisher, tmp_path, UsageMeter(None), submitted, ARGS)
+    code = _close_run(publisher, tmp_path, [], submitted, ARGS)
 
     assert code == 0
     assert "실행 원장 기록 실패" in capsys.readouterr().out
     assert json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["recorded"] is False
+
+
+class Queue:
+    """지인 서버처럼 주문만 받는다(SshGateway 와 같은 모양)."""
+
+    def __init__(self):
+        self.orders = []
+
+    def submit(self, order):
+        self.orders.append(order)
+        return None
+
+
+def test_serverPath_submitsOneOrderAndTheRunIsOnlyQueued(tmp_path):
+    image_guideline = {"id": "g-image", "kind": "PROCEDURE", "content": "글자를 키운다", "targets": ["IMAGE_EDIT"],
+                       "categories": ["SERVICE"], "sourceFeedbackIds": ["fb-1"], "status": "ACTIVE"}
+    pending = {"id": "fb-1", "category": "SERVICE", "reason": "작음", "snapshot": {}}
+    publisher = FakePublisher(memory_context={"guidelines": [image_guideline], "unreflectedFeedback": [pending]})
+    queue = Queue()
+
+    result = _drafter(tmp_path, None, publisher, submitter=queue, run_key="gh-5-1", run_url="https://github.com/o/r/1",
+                      agent_sha="d" * 40).run()
+
+    assert (result.outcome, result.code) == ("queued", "QUEUED") and publisher.created == []
+    (order,) = queue.orders
+    assert order.run_key == "gh-5-1" and order.category == "SERVICE" and order.data_source == "DEMO"
+    assert order.run_url == "https://github.com/o/r/1" and order.agent_sha == "d" * 40
+    assert [shot.route for shot in order.shots] == ["/", "/collection", "/search"]
+    assert base64.b64decode(order.shots[1].data) == (tmp_path / "run" / "captures" / "02-collection.png").read_bytes()
+    assert len(order.plan["images"]) == 3 and order.plan["json_schema"] == contract.OUTPUT_SCHEMA
+    assert order.make_prefix.startswith(drafting.POLISH_PROMPT) and "글자를 키운다" in order.make_prefix
+    assert order.make_rules == drafting.MAKE_RULES
+    assert order.image_stage.guidelineIds == ["g-image"] and order.reflection_feedback_ids == ["fb-1"]
+    # 기획 단계까지만 러너가 기록한다. 제작 단계는 초안을 실제로 만들 때 서버가 더한다.
+    assert [stage["stage"] for stage in order.memory_context["stages"]] == ["PLAN"]
+
+
+def test_serverRefusal_failsTheRunWithTheFixedCode(tmp_path):
+    logs = []
+
+    class Busy:
+        def submit(self, order):
+            raise GatewayError("GATEWAY_BUSY")
+
+    result = _drafter(tmp_path, None, FakePublisher(), submitter=Busy(), log=logs.append).run()
+
+    assert (result.outcome, result.code, result.detail) == ("failed", "GATEWAY_FAILED", "GATEWAY_BUSY")
+    assert "[promotion-agent] GATEWAY_BUSY" in logs
+
+
+def test_closeRun_queuedOrDelivered_leavesTheLedgerToTheDelivery(tmp_path, capsys):
+    # 러너가 같은 runKey 로 먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다.
+    publisher = RecordingPublisher()
+
+    assert _close_run(publisher, tmp_path, [], RunResult("queued", "QUEUED", run_key="gh-1-1"), ARGS) == 0
+    assert publisher.recorded == []
+    summary = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert summary["outcome"] == "QUEUED" and summary["recorded"] is None and summary["runKey"] == "gh-1-1"
+
+    delivered = RunResult("submitted", "SUBMITTED", post_id="p", run_key="gh-1-1", delivered=True)
+    assert _close_run(publisher, tmp_path, [], delivered, ARGS) == 0
+    assert publisher.recorded == [] and "기록 실패" not in capsys.readouterr().out

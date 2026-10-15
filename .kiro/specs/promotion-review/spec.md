@@ -870,9 +870,12 @@ GitHub 러너 (ubuntu-latest, environment: production)
   고정 코드와 run_key 로 남긴다(D23 — 글·사유는 싣지 않는다). 서버가 통째로 멈추면 결과 알림이 없다 — "접수만 있고
   결과가 없음"으로 사람이 알아챈다. 원장에 접수 상태를 두는 자동 감지는 하지 않는다.
 - **자동 재시도는 없다.** 서비스 소개는 sha 가 없어 중복 확인이 안 된다. 실패한 주문은 7일 뒤 지운다.
-- **패키지를 실행 위치로 나눈다.** `gole_promotion_core`(러너·서버 공용: 출력 계약·성찰 검증·상한·원장·백엔드 클라이언트),
-  `gole_promotion_agent`(러너: 캡처·메모리 조립·프롬프트·주문), `gole_promotion_deliver`(서버). agent 와 deliver 는 서로
-  import 하지 않는다. 문구 길이처럼 프롬프트와 검증이 같이 쓰는 규칙은 core 에 하나만 둔다.
+- **패키지를 실행 위치로 나눈다.** `gole_promotion_core`(러너·서버 공용: 출력 계약·성찰 검증·주문서·상한·원장),
+  `gole_promotion_agent`(러너: 캡처·메모리 조립·프롬프트·주문·백엔드 조회), `gole_promotion_deliver`(서버). core·deliver 는
+  agent 를 import 하지 않는다 — 서버 이미지에 agent 가 없다. 로컬 모드(`PROMOTION_GATEWAY=local`)만 agent 가 deliver 를
+  불러 이 프로세스에서 끝까지 돈다. 문구 블록처럼 프롬프트와 검증이 같이 쓰는 규칙은 core 에 하나만 둔다.
+- **러너는 접수 뒤 원장을 남기지 않는다.** 주문이 접수되면 결과는 `QUEUED`이고 원장은 납품이 남긴다 — 러너가 같은 runKey 로
+  먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다. 접수 전에 끝난 실행(큐 가득·중복·캡처 없음·서버 거절)만 러너가 남긴다.
 - **계약 버전.** core 의 `CONTRACT_VERSION`을 주문서에 싣고 deliver 가 자기 값과 다르면 `GATEWAY_CONTRACT_MISMATCH`로
   거절한다 — 러너는 main 최신, 서버는 마지막으로 구운 이미지로 돌기 때문이다. 게이트웨이 이미지 배포 경로에 core·deliver 를 더한다.
 - **구현 순서.** ① 패키지 분리(동작 변화 없음) ② 백엔드 납품 창구·홍보 토큰 ③ deliver·이미지 확장

@@ -7,13 +7,13 @@
 import ast
 from pathlib import Path
 
-from gole_promotion_agent import captures, drafter, drafting, fakes, gateway_client, hands, memory, policy
-from gole_promotion_core import contract, gateway, ledger, limits, order, publisher
+from gole_promotion_agent import captures, drafter, drafting, fakes, gateway_client, hands, memory, policy, publisher
+from gole_promotion_core import contract, gateway, ledger, limits, order
 from gole_promotion_deliver import __main__ as deliver_main, deliver
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
-AGENT = (captures, drafter, drafting, fakes, gateway_client, hands, memory, policy)
-CORE = (contract, gateway, ledger, limits, order, publisher)
+AGENT = (captures, drafter, drafting, fakes, gateway_client, hands, memory, policy, publisher)
+CORE = (contract, gateway, ledger, limits, order)
 DELIVER = (deliver, deliver_main)
 MODULES = AGENT + CORE + DELIVER
 

@@ -1,5 +1,6 @@
-"""로컬 API와 진짜 러너/gateway, 가짜 CLI를 잇는 Playwright용 실행 도우미.
+"""로컬 API와 진짜 러너/deliver/gateway, 가짜 CLI를 잇는 Playwright용 실행 도우미.
 
+러너가 만든 주문서를 LocalSubmitter 가 deliver 로 처리해 로컬 API 의 납품 창구(D29)에 홍보 토큰으로 보낸다.
 운영 모델과 발행은 호출하지 않는다. requests.json은 로컬 테스트의 비공개 검증 자료다.
 """
 
@@ -21,10 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from PIL import Image  # noqa: E402
 
 from gole_promotion_agent.drafter import Drafter  # noqa: E402
-from gole_promotion_core.ledger import UsageMeter, run_payload  # noqa: E402
 from gole_promotion_agent.fakes import FakeCamera  # noqa: E402
-from gole_promotion_agent.gateway_client import LocalGateway  # noqa: E402
-from gole_promotion_core.publisher import BackendPublisher  # noqa: E402
+from gole_promotion_agent.gateway_client import LocalGateway, LocalSubmitter  # noqa: E402
+from gole_promotion_agent.publisher import BackendPublisher  # noqa: E402
+from gole_promotion_deliver.deliver import http_post  # noqa: E402
 
 PROPOSAL_CONTENT = "화면 글자를 읽을 수 있는 크기로 유지하고 캡션은 짧게 쓴다."
 ROUTES = ("/", "/collection")
@@ -102,22 +103,19 @@ def main() -> int:
         run={"category": "SERVICE", "dataSource": "DEMO"},
     )
     gateway = FakeCliGateway(args.phase, args.run_dir)
-    meter = UsageMeter(gateway)
+    log = lambda message: print(message, file=sys.stderr)  # noqa: E731
+    # 원장은 납품 창구가 남긴다. 러너가 따로 남기면 같은 runKey 라 납품이 버려진다.
+    submitter = LocalSubmitter(gateway, http_post(args.api_url, os.environ["PROMOTION_AGENT_TOKEN"]), log=log)
     result = Drafter(
-        repo=Path.cwd(), run_dir=args.run_dir, publisher=publisher, gateway=meter,
+        repo=Path.cwd(), run_dir=args.run_dir, publisher=publisher, gateway=submitter,
         camera=Camera(ROUTES), routes=ROUTES, demo=True, service=True, run_key=args.run_key,
-        codex_model="fake-codex",
-        log=lambda message: print(message, file=sys.stderr),
+        codex_model="fake-codex", log=log,
     ).run()
-    payload = run_payload(result, meter.calls, service=True, sha=None, env={})
-    status = publisher.record_run(payload)
-    if status not in (200, 201):
-        raise RuntimeError(f"실행 원장 기록 실패: HTTP {status}")
     requests_file = args.run_dir / "requests.json"
     requests_file.write_text(json.dumps(gateway.requests, ensure_ascii=False, indent=2), encoding="utf-8")
     context = result.memory_context or {"feedbackIds": [], "guidelines": [], "stages": []}
     output = {
-        "postId": result.post_id, "runKey": payload["runKey"], "outcome": result.outcome,
+        "postId": result.post_id, "runKey": result.run_key, "outcome": result.outcome,
         "reasonCode": result.code, "requestsFile": str(requests_file.resolve()),
         "feedbackIds": context["feedbackIds"], "guidelines": context["guidelines"], "memoryContext": context,
     }

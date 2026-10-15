@@ -1,15 +1,16 @@
-"""홍보 초안 한 편을 만든다. 러너 안 데모 스택을 찍고, 판단·제작은 게이트웨이의 codex 두 번(기획·제작)에 맡긴다(D25).
+"""홍보 초안 한 편의 주문서를 만들어 지인 서버에 넣는다(promotion-review D29). 러너는 접수까지만 기다린다.
 
-    후보 화면 일괄 캡처 ─▶ codex 기획(축소본): 화면 하나 고르기·캡션·반려 성찰 ─▶ codex 제작(원본 1장): 홍보 이미지
-                       ─▶ 검증 ─▶ BackendPublisher: 성찰 저장, 다듬은 이미지 + 원본 + 지시문 제출(검토 요청)
+    건너뛰기 판정 ─▶ 작업 기억 조회 ─▶ 후보 화면 일괄 캡처 ─▶ 기획 요청(축소본)·제작 지시문 틀 조립 ─▶ 주문서 submit
+    (지인 서버: codex 기획 → 검증·성찰 → codex 제작 → 납품 창구로 원장·초안 제출 — gole_promotion_deliver)
 
-모델은 만들기만 하고 검증·제출은 여기서 한다. 운영 관리자 자격증명은 게이트웨이로 가지 않는다 —
-서버로 가는 것은 데모 화면 캡처와 프롬프트뿐이다.
+운영 관리자 자격증명은 러너에만 있다. 서버로 가는 것은 데모 화면 캡처와 조립을 끝낸 프롬프트뿐이고, 서버는
+납품 창구 하나만 여는 홍보 토큰을 쓴다.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -17,13 +18,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-from pydantic import ValidationError
-
 from gole_promotion_agent import drafting, memory, policy
-from gole_promotion_agent.captures import Shot, _slug, capture_all, thumbnail
-from gole_promotion_core import contract, limits
-from gole_promotion_core.gateway import Gateway, GatewayError, decode_png, encode_png
-from gole_promotion_core.ledger import RunResult, UsageMeter, close_run, execution_run_key
+from gole_promotion_agent.captures import capture_all, thumbnail
+from gole_promotion_agent.gateway_client import Submitter
+from gole_promotion_core import CONTRACT_VERSION, contract, limits
+from gole_promotion_core.gateway import GatewayError
+from gole_promotion_core.ledger import RunResult, close_run, execution_run_key
+from gole_promotion_core.order import ImageStage, Order, Shot
 
 
 class Drafter:
@@ -33,7 +34,7 @@ class Drafter:
         repo: Path,
         run_dir: Path,
         publisher: Any,
-        gateway: Gateway,
+        gateway: Submitter,
         camera: Any | None,  # None 이면 run_dir/captures 의 지난 캡처를 쓴다
         routes: Sequence[str],
         demo: bool,
@@ -41,6 +42,8 @@ class Drafter:
         sha: str | None = None,
         codex_model: str | None = None,
         run_key: str | None = None,
+        run_url: str | None = None,
+        agent_sha: str | None = None,
         log: Callable[[str], None] = print,
     ):
         if not service and not (sha and policy.SHA_PATTERN.match(sha)):
@@ -56,14 +59,14 @@ class Drafter:
         self._sha = sha
         self._codex_model = codex_model
         self.run_key = run_key or execution_run_key(os.environ)
+        self._run_url = run_url
+        self._agent_sha = agent_sha
         self._memory = memory.Context()
         self.memory_usage: dict[str, Any] = {"feedbackIds": [], "guidelines": [], "stages": []}
-        self._memory_error: str | None = None
         self._log = log
 
     def run(self) -> RunResult:
         self.memory_usage = {"feedbackIds": [], "guidelines": [], "stages": []}
-        self._memory_error = None
         try:
             self._memory = memory.Context.model_validate(
                 self._publisher.memory_context("SERVICE" if self._service else "FEATURE", self._routes)
@@ -72,23 +75,9 @@ class Drafter:
             self._log(f"[promotion-agent] MEMORY_CONTEXT_FAILED ({type(error).__name__})")
             return RunResult("failed", "ERROR", "MEMORY_CONTEXT_FAILED", run_key=self.run_key)
         result = self._draft()
-        return replace(
-            result, detail=result.detail or self._memory_error,
-            memory_context=self.memory_usage, run_key=self.run_key,
-        )
-
-    def _reflect(self, structured: Any) -> None:
-        """같은 호출이 낸 성찰 제안을 저장한다. 실패해도 초안은 계속 낸다 — 다음 실행이 미처리 경험을 다시 읽는다."""
-        pending = self._memory.unreflectedFeedback
-        if not pending:
-            return
-        try:
-            proposals = structured.get("reflection") if isinstance(structured, dict) else None
-            reflection = contract.Reflection.model_validate({"proposals": proposals})
-            self._publisher.reflect(reflection.payload([item.id for item in pending], self.run_key))
-        except Exception as error:  # noqa: BLE001 — 다음 실행이 미처리 경험을 다시 읽는다
-            self._memory_error = "MEMORY_REFLECTION_FAILED"
-            self._log(f"[promotion-agent] MEMORY_REFLECTION_FAILED ({type(error).__name__})")
+        # 이 자리에서 납품까지 끝났으면(로컬) 기록은 제작 단계까지 더한 납품 쪽이 정본이다.
+        context = result.memory_context if result.delivered else self.memory_usage
+        return replace(result, memory_context=context, run_key=self.run_key)
 
     def _remember(
         self, stage: str, routes: Sequence[str],
@@ -126,7 +115,7 @@ class Drafter:
         category = "SERVICE" if self._service else "FEATURE"
         plan_feedback, plan_guidelines = self._memory.select(category, ("CAPTION", "SCREEN_SELECTION"))
         image_feedback, image_guidelines = self._memory.select(category, ("IMAGE_EDIT",))
-        # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 호출 전에 잰다.
+        # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 주문 전에 잰다.
         parts = _edit_parts(image_feedback, image_guidelines, "가" * 41)
         if contract.utf16_length("".join(parts.values())) > memory.MAX_EDIT_PROMPT:
             lengths = {name: contract.utf16_length(text) for name, text in parts.items()}
@@ -142,78 +131,43 @@ class Drafter:
                 self._memory, [item.id for item in plan_feedback], [item.id for item in plan_guidelines],
             ),
         )
-        try:
-            # 기획 호출(D25): 고르기용 축소본만 싣고 도구 없이 한 번에 답하게 한다 — 무거운 제작 단계에 후보를 끌고 가지 않는다.
-            response = self._gateway.call({
+        order = Order(
+            contract_version=CONTRACT_VERSION,
+            run_key=self.run_key,
+            category=category,
+            sha=None if self._service else self._sha,
+            data_source="DEMO" if self._demo else "PRODUCTION",
+            run_url=self._run_url,
+            agent_sha=self._agent_sha,
+            release_title=subject or "서비스 소개",
+            model=self._codex_model,
+            # 기획 호출(D25): 고르기용 축소본만 싣고 도구 없이 한 번에 답하게 한다.
+            plan={
                 "engine": "codex", "model": self._codex_model, "reasoning": "medium", "prompt": prompt,
                 "json_schema": contract.OUTPUT_SCHEMA, "images": [thumbnail(shot.path) for shot in shots],
-            })
+            },
+            make_prefix=parts["fixed"] + parts["knowledge"] + parts["procedure"] + parts["episodes"],
+            make_rules=parts["rules"],
+            shots=[
+                Shot(route=shot.route, captured_at=shot.captured_at,
+                     data=base64.b64encode(shot.path.read_bytes()).decode("ascii"))
+                for shot in shots
+            ],
+            memory_context=self.memory_usage,
+            image_stage=ImageStage(
+                feedbackIds=[item.id for item in image_feedback],
+                guidelineIds=[item.id for item in image_guidelines],
+                guidelines=[item.applied_snapshot() for item in image_guidelines],
+            ),
+            reflection_feedback_ids=[item.id for item in self._memory.unreflectedFeedback],
+        )
+        try:
+            finished = self._gateway.submit(order)
         except GatewayError as error:
             if re.fullmatch(r"[A-Z_]+", str(error)):
-                self._log(f"[promotion-agent] {error}")  # 계정 정지·한도 같은 고정 코드만 공개 로그에 남긴다
+                self._log(f"[promotion-agent] {error}")  # 서버 거절(GATEWAY_BUSY 등) 같은 고정 코드만 공개 로그에 남긴다
             return RunResult("failed", "GATEWAY_FAILED", str(error))
-        structured = response.get("structured")
-        (self._run_dir / "choice.json").write_text(json.dumps(structured, ensure_ascii=False, indent=2), encoding="utf-8")
-        self._reflect(structured)
-        try:
-            draft = contract.parse(structured)
-            if any(pick.image > len(shots) for pick in draft.picks):
-                raise ValueError("없는 후보 번호를 골랐다")
-        except (ValidationError, ValueError) as error:
-            # pydantic 오류 문자열에는 모델 출력 일부(input_value)가 들어 있다 — 원장에만 남긴다.
-            return RunResult("failed", "CHOICE_INVALID", str(error))
-        if draft.decision == "skip":
-            return RunResult("skipped", "MODEL_SKIPPED", draft.skip_reason)
-
-        picked = [shots[pick.image - 1] for pick in draft.picks]
-        edit_prompts = ["".join(_edit_parts(image_feedback, image_guidelines, pick.headline).values())
-                        for pick in draft.picks]
-        self._remember("IMAGE_EDIT", [shot.route for shot in picked], image_feedback, image_guidelines)
-        polished = [self._make(shot, prompt) for shot, prompt in zip(picked, edit_prompts)]
-
-        media_keys = list(self._publisher.upload([path or shot.path for shot, path in zip(picked, polished)]))
-        # 다듬은 사진의 원본만 따로 올린다. 검토 화면이 게시 이미지와 나란히 대조한다.
-        originals = [shot.path for shot, path in zip(picked, polished) if path is not None]
-        original_keys = iter(self._publisher.upload(originals) if originals else ())
-        captures = []
-        for pick, shot, path, edit_prompt in zip(draft.picks, picked, polished, edit_prompts):
-            capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at,
-                       "styleId": contract.STYLE_ID, "styleVersion": contract.STYLE_VERSION,
-                       "headline": pick.headline, "polishFailed": path is None}
-            if path is not None:
-                capture |= {"originalMediaKey": next(original_keys), "edit": edit_prompt}
-            captures.append(capture)
-
-        post_id = self._publisher.create(
-            None if self._service else self._sha,
-            draft.caption,
-            media_keys,
-            {
-                "captures": captures,
-                "rationale": draft.rationale,
-                "releaseTitle": subject or "서비스 소개",
-            },
-        )
-        self._publisher.finalize(post_id)
-        return RunResult("submitted", "SUBMITTED", post_id=post_id)
-
-    def _make(self, shot: Shot, prompt: str) -> Path | None:
-        """제작 호출(D25): 고른 원본 한 장을 홍보 이미지로. 실패하면 None — 그 자리는 원본을 그대로 올린다."""
-        try:
-            response = self._gateway.call({
-                "engine": "codex", "model": self._codex_model, "prompt": prompt,
-                "images": [encode_png(shot.path)], "want_images": True,
-            })
-            data = decode_png(response["images"][0])
-        except (GatewayError, KeyError, IndexError, TypeError, ValueError) as error:
-            # 모델 오류가 입력 프롬프트를 인용할 수 있다. 작업 기억 원문은 공개 로그에 싣지 않는다.
-            code = f" {error}" if isinstance(error, GatewayError) and re.fullmatch(r"[A-Z_]+", str(error)) else ""
-            self._log(f"[promotion-agent] 이미지 제작 실패 {shot.route}, 원본을 올림 ({type(error).__name__}{code})")
-            return None
-        destination = self._run_dir / "polished" / f"01-{_slug(shot.route)}.png"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(data)
-        return destination
+        return finished if finished is not None else RunResult("queued", "QUEUED")
 
 
 def _edit_parts(
@@ -248,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from gole_agent_runtime.privacy import reject_external_tracing
     from gole_promotion_agent import gateway_client
     from gole_promotion_agent.hands import AppRouteCatalog, PlaywrightCamera
-    from gole_promotion_core.publisher import BackendPublisher
+    from gole_promotion_agent.publisher import BackendPublisher
 
     reject_external_tracing()
     data_source = os.environ.get("PROMOTION_AGENT_DATA_SOURCE") or "DEMO"
@@ -276,28 +230,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             _required("PROMOTION_AGENT_CAPTURE_SITE").rstrip("/"), routes, capture_login.browser_session
         )
     run_dir = Path(arguments.run_dir)
-    meter = UsageMeter(gateway_client.from_env())
     drafter = Drafter(
         repo=Path(arguments.repo),
         run_dir=run_dir,
         publisher=publisher,
-        gateway=meter,
+        gateway=gateway_client.from_env(),
         camera=camera,
         routes=routes,
         demo=demo,
         service=arguments.service,
         sha=arguments.sha,
         codex_model=os.environ.get("PROMOTION_AGENT_CODEX_MODEL") or None,
+        run_url=os.environ.get("PROMOTION_AGENT_RUN_URL") or None,
+        agent_sha=os.environ.get("PROMOTION_AGENT_CODE_SHA") or None,
     )
     try:
         result = drafter.run()
     except Exception as error:
-        # 예외로 끝나도 그때까지 쓴 사용량은 원장에 남긴다. 예외 문구에는 내부 사정이 섞일 수 있어 이름만 담는다.
-        close_run(publisher, run_dir, meter, RunResult(
+        # 예외로 끝나도 원장에 남긴다. 예외 문구에는 내부 사정이 섞일 수 있어 이름만 담는다.
+        close_run(publisher, run_dir, [], RunResult(
             "failed", "ERROR", type(error).__name__, memory_context=drafter.memory_usage, run_key=drafter.run_key,
         ), arguments)
         raise
-    return close_run(publisher, run_dir, meter, result, arguments)
+    return close_run(publisher, run_dir, [], result, arguments)
 
 
 if __name__ == "__main__":

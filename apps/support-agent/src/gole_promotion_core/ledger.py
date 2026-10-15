@@ -17,12 +17,13 @@ from gole_promotion_core.gateway import Gateway, GatewayError
 class RunResult:
     """실행 결과. 공개 Actions 로그에는 outcome·code 만 나가고 detail 은 관리자 전용 원장에만 간다(D23)."""
 
-    outcome: str  # submitted · skipped · failed
-    code: str  # 원장의 RunReasonCode 와 같은 이름
+    outcome: str  # submitted · skipped · failed · queued(지인 서버가 주문을 받았다, D29)
+    code: str  # 원장의 RunReasonCode 와 같은 이름. 접수만 됐으면 QUEUED
     detail: str | None = None  # 모델이 쓴 사유·내부 오류 요약. 공개 로그에 찍지 않는다
     post_id: str | None = None
     memory_context: Mapping[str, Any] | None = None
     run_key: str | None = None
+    delivered: bool = False  # 납품 창구가 이미 원장을 남겼다 — 러너가 다시 남기지 않는다
 
 
 class UsageMeter:
@@ -60,18 +61,23 @@ class UsageMeter:
         )
 
     def totals(self) -> dict[str, dict[str, Any]]:
-        totals: dict[str, dict[str, Any]] = {}
-        for call in self.calls:
-            total = totals.setdefault(
-                call["engine"] or "unknown",
-                {"calls": 0, "inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "costUsd": None},
-            )
-            total["calls"] += 1
-            for key in ("inputTokens", "cachedInputTokens", "outputTokens"):
-                total[key] += call[key]
-            if call["costUsd"] is not None:
-                total["costUsd"] = (total["costUsd"] or 0) + call["costUsd"]
-        return totals
+        return totals(self.calls)
+
+
+def totals(calls: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """엔진별 호출 수·토큰·비용 합계(Actions 요약용)."""
+    result: dict[str, dict[str, Any]] = {}
+    for call in calls:
+        total = result.setdefault(
+            call["engine"] or "unknown",
+            {"calls": 0, "inputTokens": 0, "cachedInputTokens": 0, "outputTokens": 0, "costUsd": None},
+        )
+        total["calls"] += 1
+        for key in ("inputTokens", "cachedInputTokens", "outputTokens"):
+            total[key] += call[key]
+        if call["costUsd"] is not None:
+            total["costUsd"] = (total["costUsd"] or 0) + call["costUsd"]
+    return result
 
 
 def execution_run_key(env: Mapping[str, str]) -> str:
@@ -104,19 +110,29 @@ def run_payload(
     }
 
 
-def close_run(publisher: Any, run_dir: Path, meter: UsageMeter, result: RunResult, arguments: Any) -> int:
-    """원장에 한 줄 남기고 공개 로그에는 결과·코드만 찍는다. 원장 기록이 실패해도 실행 결과는 바꾸지 않는다."""
-    payload = run_payload(result, meter.calls, service=arguments.service, sha=arguments.sha, env=os.environ)
-    try:
-        status = publisher.record_run(payload)
-        recorded = status in (200, 201)
-    except Exception as error:  # noqa: BLE001 — 기록 실패가 초안 제출을 되돌리면 안 된다
-        status, recorded = type(error).__name__, False
+def close_run(
+    publisher: Any, run_dir: Path, calls: Sequence[Mapping[str, Any]], result: RunResult, arguments: Any,
+) -> int:
+    """원장에 한 줄 남기고 공개 로그에는 결과·코드만 찍는다. 원장 기록이 실패해도 실행 결과는 바꾸지 않는다.
+
+    주문이 접수됐으면(queued) 원장은 지인 서버의 납품이 남기고, 이미 납품까지 끝났으면(delivered) 백엔드가 남겼다 —
+    둘 다 여기서 남기지 않는다. 같은 runKey 를 먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다.
+    """
+    payload = run_payload(result, calls, service=arguments.service, sha=arguments.sha, env=os.environ)
+    if result.outcome == "queued" or result.delivered:
+        status, recorded = None, None if result.outcome == "queued" else True
+    else:
+        try:
+            status = publisher.record_run(payload)
+            recorded = status in (200, 201)
+        except Exception as error:  # noqa: BLE001 — 기록 실패가 초안 제출을 되돌리면 안 된다
+            status, recorded = type(error).__name__, False
     run_dir.mkdir(parents=True, exist_ok=True)
     # Actions 요약이 읽는 파일이다. 공개되므로 모델이 쓴 사유(detail)는 넣지 않는다.
-    summary = {k: v for k, v in payload.items() if k not in {"detail", "memoryContext"}} | {"totals": meter.totals(), "recorded": recorded}
+    summary = {k: v for k, v in payload.items() if k not in {"detail", "memoryContext"}} | {
+        "totals": totals(calls), "recorded": recorded}
     (run_dir / "run.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[promotion-agent] {result.outcome} ({result.code})")
-    if not recorded:
+    if recorded is False:
         print(f"[promotion-agent] 실행 원장 기록 실패: {status}")
     return 1 if result.outcome == "failed" else 0

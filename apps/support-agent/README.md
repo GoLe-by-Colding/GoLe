@@ -252,9 +252,11 @@ lease/token으로 표식을 기록한 뒤에만 원격 Submit을 허용하며, �
 
 ### 실행
 
-서버 없이 이 기기의 `codex`로 같은 흐름을 돌릴 수 있다(`PROMOTION_GATEWAY=local`). 이 기기에 로그인된
-계정의 사용량을 쓰고, 그 계정의 전역 지침(`~/.codex/AGENTS.md`)이 함께 읽힐 수 있다.
-데모 스택(e2e 프로필 API + 웹)이 떠 있어야 하고, 환경 변수는 `.env.example`을 본다.
+서버 없이 이 기기의 `codex`로 같은 흐름을 돌릴 수 있다(`PROMOTION_GATEWAY=local`). 주문서를 지인 서버에 넣는
+대신 이 프로세스에서 deliver 를 돌려 API 의 납품 창구로 보낸다 — `PROMOTION_AGENT_TOKEN`과, 그 SHA-256 을
+`PROMOTION_AGENT_TOKEN_SHA256`으로 받은 API 가 필요하다. 이 기기에 로그인된 계정의 사용량을 쓰고, 그 계정의
+전역 지침(`~/.codex/AGENTS.md`)이 함께 읽힐 수 있다. 데모 스택(e2e 프로필 API + 웹)이 떠 있어야 하고, 환경 변수는
+`.env.example`을 본다.
 
 ```bash
 uv sync --project apps/support-agent --extra promotion
@@ -266,9 +268,10 @@ PYTHONPATH=apps/support-agent/src PROMOTION_GATEWAY=local \
 ```
 
 `playwright`·`httpx`는 `promotion` extra에만 있다. 기본 설치(`uv sync --locked`)로도 테스트가
-전부 돌아야 하며, 그래서 `hands.py`·`gole_promotion_core/publisher.py`의 SDK import는 전부 함수 안에 있다.
-러너·서버가 함께 쓰는 계약·상한·원장·백엔드 클라이언트는 `gole_promotion_core`에 있고, 이 패키지는
-`gole_promotion_agent`를 import하지 않는다(스펙 D29, `test_architecture.py`가 검사).
+전부 돌아야 하며, 그래서 `hands.py`·`publisher.py`의 SDK import는 전부 함수 안에 있다.
+홍보 코드는 실행 위치로 나뉜다(스펙 D29): `gole_promotion_agent`(러너), `gole_promotion_deliver`(지인 서버 이미지),
+`gole_promotion_core`(둘이 함께 쓰는 출력 계약·주문서·상한·원장). core·deliver 는 agent 를 import하지 않는다 —
+서버 이미지에는 agent 가 없다(`test_architecture.py`가 검사). 로컬 모드만 agent 가 deliver 를 불러 쓴다.
 
 ## 배포 이미지의 오프라인 smoke 검사
 
