@@ -711,6 +711,9 @@ GitHub 러너 (ubuntu-latest, environment: production)
 
 ### D26. 게이트웨이는 지인 서버의 일회용 Docker 컨테이너로 돈다 — 구독 계정 격리
 
+> **2026-10-15 — 로그인 위치(볼륨 `gole-codex-home`)와 서버 진입점(forced command 의 `docker run` 한 줄)은 D28이
+> 대체한다.** 컨테이너 제약·HTTP 서버를 두지 않는 것·SSH 키 인증·남는 위험은 그대로다.
+
 **정정 이유.** 게이트웨이가 서버 계정 홈에서 돌아 그 계정의 `~/.codex`(전역 `AGENTS.md`·hooks·설정)가 홍보 결과에
 섞였고, SSH가 비밀번호 인증이라 셸 전체가 열려 있었다.
 
@@ -783,12 +786,46 @@ GitHub 러너 (ubuntu-latest, environment: production)
   | `CODEX_CONTEXT_TOO_LARGE` | 맥락 창 초과 — 프롬프트·첨부를 줄여야 한다 | 없음 |
   | `CODEX_COOLDOWN` | 위 냉각 시간 안이라 CLI를 부르지 않음 | — |
   | `GATEWAY_BUDGET_EXCEEDED` | 최근 24시간 입력 토큰이 `GOLE_GATEWAY_DAILY_INPUT_TOKENS`(기본 200만) 이상 | — |
-  | `GATEWAY_BUSY` | 앞 요청이 30분 넘게 잠금을 쥠 | — |
+  | `GATEWAY_BUSY` | 앞 요청이 30분 넘게 잠금을 쥠(게이트웨이 안 또는 서버 `run.sh`) | — |
+  | `GATEWAY_IMAGE_UNAVAILABLE` | 서버에 구운 `:local`이 없고 stable 받기·굽기도 실패(D28) | — |
+  | `GATEWAY_MISCONFIGURED` | 서버에 `auth.json`이 없거나, CODEX_HOME 에 사람이 쓰던 codex 파일이 있음 | — |
 
-- **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(`CODEX_HOME` 볼륨)의 JSONL 한 줄로 남기고,
+- **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(상태 볼륨, D28)의 JSONL 한 줄로 남기고,
   7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.
 - 표지 문자열은 codex CLI 0.162.1 바이너리의 `CodexErrorInfo` 값·안내 문구에서 확인했다. 실제 한도·만료 상황의
   출력으로는 확인하지 못했으므로 이벤트와 stderr 양쪽을 본다.
+
+### D28. codex 로그인은 지인 서버에서만 굽는 이미지에 둔다 — 상태는 비밀 없는 볼륨에 (D26 일부 정정)
+
+**이유.** 로그인을 볼륨이 아니라 "로그인이 든 이미지"로 다루고 싶다는 결정(2026-10-15). 이미지는 서버 밖으로 나가지
+않으므로 노출 범위는 볼륨과 같다(서버 root 는 둘 다 읽는다). 대신 볼륨이 공짜로 하던 두 가지 — 갱신된 토큰 보존과
+새 코드 반영 — 를 서버 스크립트가 맡는다.
+
+```
+러너 ─SSH(전용 키, forced command)→ /opt/gole-gateway/run.sh
+  GHCR :stable(코드만) ─FROM→ Dockerfile.local + auth.json ─build→ gole-llm-gateway:local (서버에만)
+  docker create -i … -v gole-gateway-state:/home/gateway/state gole-llm-gateway:local
+  → start -ai(요청·응답) → wait → cp auth.json → 바뀌었으면 다시 굽기
+```
+
+- **새 코드.** 요청마다 `docker pull :stable`. 이미지 ID가 `base.digest`와 다르면 요청 전에 다시 굽는다. 받기·굽기가
+  실패해도 이미 구운 `:local`이 있으면 그것으로 돈다. 굽고 나면 `docker image prune -f` — 옛 토큰이 든 레이어와 옛
+  stable 이 남지 않는다(D26의 주간 cron 을 대체).
+- **토큰 갱신.** codex 는 쓰는 동안 `auth.json`을 고쳐 쓴다. 컨테이너를 `--rm` 없이 만들고, 끝나면(SSH 가 끊겨도
+  `docker wait`로 기다려) `auth.json`을 꺼내 지금 것과 다르고 JSON 으로 읽히면 바꿔 넣고 다시 굽는다. 같으면 아무것도
+  하지 않는다. 사람의 재로그인은 갱신 토큰 자체가 무효가 됐을 때(`CODEX_AUTH_REQUIRED`)뿐이다.
+- **`--read-only`를 뺀다.** 토큰을 고쳐 쓰는 곳이 컨테이너 쓰기 층이다. 쓰기 층은 요청이 끝나면 컨테이너와 함께
+  지운다. 나머지 제약(D26)은 그대로다. GHCR 연기 테스트는 여전히 `--read-only`로 쓰는 자리를 확인한다.
+- **상태 볼륨 `gole-gateway-state`.** 잠금·서버 로그·계정 가드 기록(D27)은 요청 사이에 남아야 하므로 볼륨에 둔다.
+  비밀은 없다. 이미지 안 경로(`/home/gateway/state`)로 처음 붙여야 게이트웨이 사용자 소유가 된다.
+- **직렬화.** `run.sh`가 호스트 `flock`(30분)으로 굽기·실행·다시 굽기를 한 번에 하나만 한다. 시간 초과는 `GATEWAY_BUSY`.
+- **`run.sh` 자신의 실패도 게이트웨이 응답 모양의 고정 코드로 낸다**(종료 코드 0) — 러너가 `ssh 실패(종료 코드 N)`가 아니라
+  코드를 원장에 남기게(D27 표). 명령 출력·오류 원문은 서버의 `run.log`에만.
+- **검증.** `tests/promotion/test_gateway_server.py`가 가짜 `docker`·`flock`으로 순서를 고정한다(토큰 그대로·바뀜·깨짐,
+  새 stable, 끊긴 연결, 이미지 없음, 굽기 실패 시 기존 이미지, 거절 코드). 실제 서버에서 갱신 토큰이 언제 바뀌는지는
+  확인하지 못했다 — `auth.json` 수정 시각과 `run.log`의 "토큰 갱신" 줄로 지켜본다.
+- **남는 위험.** D26의 것이 그대로다. 특히 main 의 배포 워크플로가 `:stable`을 바꾸면 그 코드는 서버에서 로그인과 함께
+  돈다. 서버에서 저장소 사본을 꾸리다 `server/auth.json`을 커밋하지 않도록 `.gitignore`에 넣었다.
 
 ## 요구사항 (EARS)
 
@@ -875,7 +912,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - `apps/support-agent/src/gole_promotion_agent/`(Python). 파일 분해는 D20 표를 따른다.
     관측 격리는 `gole_agent_runtime.privacy`를 재사용한다. 엔트리포인트는
     `python -m gole_promotion_agent --repo --run-dir (--sha | --service) [--reuse-captures]`.
-  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 이미지 `Dockerfile`·`config.toml`(D26).
+  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 이미지 `Dockerfile`·`config.toml`(D26),
+    지인 서버 진입점 `server/run.sh`·`Dockerfile.local`(D28).
     줄바꿈은 LF로 고정한다(`.gitattributes`).
   - `apps/support-agent/pyproject.toml` — `[project.optional-dependencies] promotion`에
     Playwright·HTTP 클라이언트를 둔다. 모델 SDK는 없다.

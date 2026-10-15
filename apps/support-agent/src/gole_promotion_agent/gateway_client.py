@@ -1,7 +1,7 @@
 """러너에서 LLM 게이트웨이를 부르는 쪽. 요청 JSON 을 SSH stdin 으로 보내고 stdout JSON 을 받는다.
 
-인증은 authorized_keys 의 forced command 로 묶인 전용 키 하나다(promotion-review D26). 그 키로는 게이트웨이
-컨테이너(`docker run ... gole-llm-gateway:stable`)만 뜨고 셸이 열리지 않는다. 원격 명령은 서버가 무시한다.
+인증은 authorized_keys 의 forced command 로 묶인 전용 키 하나다(promotion-review D26·D28). 그 키로는 서버의
+`run.sh`(게이트웨이 컨테이너 하나)만 돌고 셸이 열리지 않는다. 원격 명령은 서버가 무시한다.
 호스트 키는 known_hosts 로 고정한다 — 처음 보는 서버에는 붙지 않는다(StrictHostKeyChecking=yes).
 
 로컬에서 서버 없이 시험할 때는 PROMOTION_GATEWAY=local 로 같은 처리를 프로세스 안에서 돌린다.

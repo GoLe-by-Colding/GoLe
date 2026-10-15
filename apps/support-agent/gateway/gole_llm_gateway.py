@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """SSH 로 부르는 LLM 게이트웨이. 요청 JSON 을 stdin 으로 받아 codex CLI 를 돌리고 JSON 을 돌려준다.
 
-요청마다 일회용 Docker 컨테이너 하나로 돈다(promotion-review D26). 이미지는 `gateway/Dockerfile`, codex 로그인은
-게이트웨이 전용 볼륨(CODEX_HOME)에만 있다. 서버 설치(한 번):
+요청마다 일회용 Docker 컨테이너 하나로 돈다(promotion-review D26·D28). 코드 이미지는 `gateway/Dockerfile`(GHCR
+`:stable`)이고, 지인 서버가 그 위에 codex 로그인을 얹어 `:local` 을 굽는다. 서버 쪽 진입점은 `server/run.sh` 다.
+서버 설치(한 번, Docker BuildKit 과 flock 이 있어야 한다):
 
-    docker volume create gole-codex-home
-    docker run --rm -it -v gole-codex-home:/home/gateway/.codex --entrypoint codex \\
+    mkdir -p /opt/gole-gateway   # 이 저장소의 gateway/server/{run.sh,Dockerfile.local,.dockerignore} 를 복사
+    docker run --name gole-login -it --entrypoint codex \\
       ghcr.io/gole-by-colding/gole-llm-gateway:stable login --device-auth
-    # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다(한 줄로):
-    # restrict,command="docker run --rm -i --pull=always --log-driver none --cap-drop ALL
-    #   --security-opt no-new-privileges --pids-limit 256 --read-only --tmpfs /tmp --memory 2g --cpus 2
-    #   -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable" ssh-ed25519 AAAA... gole-promotion
-    # restrict 는 포워딩·pty 등 SSH 부가 기능을 앞으로 생길 것까지 끈다. --log-driver none 은 stdout(응답 = 캡션·
-    # 이미지)이 서버 Docker 로그(journald 등)에 남지 않게 한다.
-    # --pull=always 로 새 stable 을 받을 때마다 옛 이미지가 이름 없이 남는다. 서버 cron 에 주 1회 정리를 건다:
-    # 0 4 * * 1 docker image prune -f
+    docker cp gole-login:/home/gateway/.codex/auth.json /opt/gole-gateway/auth.json && docker rm gole-login
+    chmod 600 /opt/gole-gateway/auth.json
+    docker volume create gole-gateway-state
+    # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다:
+    # restrict,command="/opt/gole-gateway/run.sh" ssh-ed25519 AAAA... gole-promotion
+    # restrict 는 포워딩·pty 등 SSH 부가 기능을 앞으로 생길 것까지 끈다.
 
-볼륨은 반드시 위 login 명령(이미지 안 경로에 마운트)으로 처음 채운다. 다른 경로에 먼저 마운트하면 root 소유로
-생겨 게이트웨이 사용자가 쓰지 못한다(2026-10-13 실측). 서버 계정의 ~/.codex 를 볼륨 대신 붙이지 않는다 — 진입점은
-사람이 쓰던 흔적(history.jsonl·AGENTS.md 등)을 보면 지우지 않고 GATEWAY_MISCONFIGURED 로 멈춘다. SSH 가 끊겨도 컨테이너는 진행 중인 codex 호출을 끝까지
-(최대 TIMEOUT_SECONDS) 돌고 사라진다 — 그동안 잠금을 쥐므로 다음 요청은 기다린다.
+run.sh 가 요청마다 stable 을 받아 바뀌었으면 다시 굽고, 끝난 뒤 codex 가 갱신한 auth.json 을 꺼내 바뀌었으면 다시
+굽는다. 옛 이미지 정리(prune)도 그때 한다. 컨테이너 제약(--log-driver none 등)은 run.sh 에 있다.
+상태 볼륨은 이미지 안 경로(/home/gateway/state)로 처음 붙여야 게이트웨이 사용자 소유가 된다(2026-10-13 실측).
+CODEX_HOME 에는 아무것도 붙이지 않는다 — 진입점은 사람이 쓰던 흔적(history.jsonl·AGENTS.md 등)을 보면 지우지 않고
+GATEWAY_MISCONFIGURED 로 멈춘다. SSH 가 끊겨도 컨테이너는 진행 중인 codex 호출을 끝까지(최대 TIMEOUT_SECONDS) 돌고,
+run.sh 는 그것을 기다려 토큰을 회수한다 — 그동안 잠금을 쥐므로 다음 요청은 기다린다.
 
 요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,
         "model"?: str, "reasoning"?: "low"|"medium"|"high", "images"?: [{"data": base64}], "want_images"?: bool}
