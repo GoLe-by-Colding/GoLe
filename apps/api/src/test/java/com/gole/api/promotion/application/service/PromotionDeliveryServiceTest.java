@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -20,9 +19,7 @@ import com.gole.api.promotion.application.port.in.DeliverPromotionDraftUseCase.I
 import com.gole.api.promotion.application.port.in.ManagePromotionMemoryUseCase;
 import com.gole.api.promotion.application.port.in.ManagePromotionMemoryUseCase.ReflectionCommand;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
-import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.RecordRunCommand;
-import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.RecordedRun;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.application.port.out.PromotionMediaPort;
 import com.gole.api.promotion.application.port.out.PromotionRunRepositoryPort;
@@ -34,10 +31,15 @@ import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -51,11 +53,50 @@ class PromotionDeliveryServiceTest {
     private final ManagePromotionPostsUseCase posts = mock(ManagePromotionPostsUseCase.class);
     private final CreatePromotionPostUseCase create = mock(CreatePromotionPostUseCase.class);
     private final SubmitPromotionPostForReviewUseCase submit = mock(SubmitPromotionPostForReviewUseCase.class);
-    private final RecordPromotionRunUseCase runs = mock(RecordPromotionRunUseCase.class);
-    private final PromotionRunRepositoryPort runRepository = mock(PromotionRunRepositoryPort.class);
+    private final InMemoryRuns runs = new InMemoryRuns();
     private final PromotionMediaPort media = mock(PromotionMediaPort.class);
-    private final PromotionDeliveryService service =
-            new PromotionDeliveryService(memory, posts, create, submit, runs, runRepository, media);
+    private final PromotionDeliveryService service = new PromotionDeliveryService(
+            memory,
+            posts,
+            create,
+            submit,
+            runs,
+            () -> UUID.randomUUID().toString(),
+            media,
+            Clock.fixed(Instant.parse("2026-10-15T00:00:00Z"), ZoneOffset.UTC));
+
+    /** runKey unique 인덱스를 흉내 낸다 — 먼저 넣은 쪽만 저장된다. */
+    private static final class InMemoryRuns implements PromotionRunRepositoryPort {
+        private final Map<String, PromotionRun> byKey = new LinkedHashMap<>();
+        private int replaced;
+
+        @Override
+        public Optional<PromotionRun> findByRunKey(String runKey) {
+            return Optional.ofNullable(byKey.get(runKey));
+        }
+
+        @Override
+        public PromotionRun insertIfAbsent(PromotionRun run) {
+            return byKey.computeIfAbsent(run.runKey(), key -> run);
+        }
+
+        @Override
+        public PromotionRun replace(PromotionRun run) {
+            replaced++;
+            byKey.put(run.runKey(), run);
+            return run;
+        }
+
+        @Override
+        public List<PromotionRun> findRecent(int limit) {
+            return List.copyOf(byKey.values());
+        }
+
+        @Override
+        public List<PromotionRun> findAll() {
+            return List.copyOf(byKey.values());
+        }
+    }
 
     private static final Image PNG = new Image(new byte[] {1}, "image/png", "promotion.png");
 
@@ -84,17 +125,15 @@ class PromotionDeliveryServiceTest {
                 Instant.EPOCH);
     }
 
-    private RecordRunCommand recorded() {
-        ArgumentCaptor<RecordRunCommand> captor = ArgumentCaptor.forClass(RecordRunCommand.class);
-        verify(runs).record(captor.capture());
-        return captor.getValue();
+    /** 이 runKey 의 최종 원장. 선점 기록이 결과로 바뀌었는지까지 본다 — 한 runKey 에 기록은 하나다. */
+    private PromotionRun recorded() {
+        assertThat(runs.byKey).hasSize(1);
+        assertThat(runs.replaced).isEqualTo(1);
+        return runs.byKey.get("gh-9-1");
     }
 
     private void emptyQueue() {
-        when(runRepository.findByRunKey("gh-9-1")).thenReturn(Optional.empty());
         when(posts.list(eq(PromotionPostStatus.PENDING_REVIEW), anyInt())).thenReturn(List.of());
-        when(runs.record(any()))
-                .thenReturn(new RecordedRun(stored(RunOutcome.SUBMITTED, RunReasonCode.SUBMITTED), true));
     }
 
     @Test
@@ -226,7 +265,7 @@ class PromotionDeliveryServiceTest {
     @DisplayName("같은 runKey 재납품은 아무것도 하지 않고 처음 원장을 돌려준다 — 초안이 둘 생기지 않는다")
     void deliver_sameRunKey_isIdempotent() {
         PromotionRun first = stored(RunOutcome.SUBMITTED, RunReasonCode.SUBMITTED);
-        when(runRepository.findByRunKey("gh-9-1")).thenReturn(Optional.of(first));
+        runs.insertIfAbsent(first);
 
         PromotionRun result = service.deliver(new DeliveryCommand(
                 BOT,
@@ -236,6 +275,53 @@ class PromotionDeliveryServiceTest {
 
         assertThat(result).isSameAs(first);
         verifyNoInteractions(memory, media, create, submit);
-        verify(runs, never()).record(any());
+        assertThat(runs.replaced).isZero();
+    }
+
+    @Test
+    @DisplayName("앞 요청이 아직 처리 중(선점만 된 상태)이어도 두 번째 요청은 아무것도 하지 않는다 — 동시 재납품")
+    void deliver_whileFirstIsInProgress_doesNothing() {
+        PromotionRun inProgress = new PromotionRun(
+                "run-0",
+                "gh-9-1",
+                PromotionCategory.FEATURE,
+                SHA,
+                RunOutcome.FAILED,
+                RunReasonCode.ERROR,
+                PromotionDeliveryService.IN_PROGRESS,
+                null,
+                null,
+                null,
+                List.of(),
+                Instant.EPOCH);
+        runs.insertIfAbsent(inProgress);
+
+        PromotionRun result = service.deliver(new DeliveryCommand(
+                BOT,
+                run(RunOutcome.SUBMITTED, RunReasonCode.SUBMITTED),
+                null,
+                draft(new DeliveredImage(PNG, null, null))));
+
+        assertThat(result.detail()).isEqualTo(PromotionDeliveryService.IN_PROGRESS);
+        verifyNoInteractions(memory, media, create, submit, posts);
+    }
+
+    @Test
+    @DisplayName("일을 시작하기 전에 runKey 를 선점한다 — 업로드 시점에 이미 진행 중 기록이 있다")
+    void deliver_claimsBeforeAnySideEffect() {
+        emptyQueue();
+        when(media.upload(any(), any(), any(), any())).thenAnswer(invocation -> {
+            assertThat(runs.byKey.get("gh-9-1").detail()).isEqualTo(PromotionDeliveryService.IN_PROGRESS);
+            return "images/raw.png";
+        });
+        when(create.create(any())).thenReturn("post-1");
+
+        service.deliver(new DeliveryCommand(
+                BOT,
+                run(RunOutcome.SUBMITTED, RunReasonCode.SUBMITTED),
+                null,
+                draft(new DeliveredImage(PNG, null, null))));
+
+        assertThat(recorded().outcome()).isEqualTo(RunOutcome.SUBMITTED);
     }
 }

@@ -6,30 +6,35 @@ import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.Cre
 import com.gole.api.promotion.application.port.in.DeliverPromotionDraftUseCase;
 import com.gole.api.promotion.application.port.in.ManagePromotionMemoryUseCase;
 import com.gole.api.promotion.application.port.in.ManagePromotionPostsUseCase;
-import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase;
 import com.gole.api.promotion.application.port.in.RecordPromotionRunUseCase.RecordRunCommand;
 import com.gole.api.promotion.application.port.in.SubmitPromotionPostForReviewUseCase;
 import com.gole.api.promotion.application.port.out.PromotionMediaPort;
+import com.gole.api.promotion.application.port.out.PromotionPostIdGeneratorPort;
 import com.gole.api.promotion.application.port.out.PromotionRunRepositoryPort;
 import com.gole.api.promotion.domain.model.PromotionPostStatus;
 import com.gole.api.promotion.domain.model.PromotionRun;
 import com.gole.api.promotion.domain.model.RunOutcome;
 import com.gole.api.promotion.domain.model.RunReasonCode;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 홍보 초안 납품(promotion-review D29). 기존 유스케이스(성찰·작성·검토 요청·원장)를 러너가 부르던 순서 그대로 묶는다.
+ * 홍보 초안 납품(promotion-review D29). 기존 유스케이스(성찰·작성·검토 요청)를 러너가 부르던 순서 그대로 묶는다.
  *
- * <p>한 트랜잭션으로 묶지 않는다 — 이미지 업로드는 객체 저장소라 되돌릴 수 없고, 러너 경로와 같은 단위로 저장돼야
- * 실패 지점이 같은 모양으로 원장에 남는다. 어디서 실패하든 원장 한 줄은 남긴다.
+ * <p>한 트랜잭션으로 묶지 않는다 — 이미지 업로드는 객체 저장소라 되돌릴 수 없다. 그래서 일을 시작하기 전에 runKey 를
+ * 원장의 unique 인덱스로 먼저 선점한다. 같은 runKey 의 두 번째 요청(응답 유실 뒤 재시도·동시 요청)은 선점에 져서
+ * 아무것도 하지 않고 처음 기록을 돌려받는다. 선점 기록은 {@code FAILED/ERROR DELIVERY_IN_PROGRESS} 로 두었다가 끝나면
+ * 결과로 바꾼다 — 중간에 프로세스가 죽으면 그대로 남아 관리자 화면에서 보인다(초안이 둘 생기는 것보다 낫다).
  */
 @Service
 public class PromotionDeliveryService implements DeliverPromotionDraftUseCase {
+
+    static final String IN_PROGRESS = "DELIVERY_IN_PROGRESS";
 
     private static final Logger log = LoggerFactory.getLogger(PromotionDeliveryService.class);
 
@@ -37,40 +42,48 @@ public class PromotionDeliveryService implements DeliverPromotionDraftUseCase {
     private final ManagePromotionPostsUseCase posts;
     private final CreatePromotionPostUseCase create;
     private final SubmitPromotionPostForReviewUseCase submit;
-    private final RecordPromotionRunUseCase runs;
-    private final PromotionRunRepositoryPort runRepository;
+    private final PromotionRunRepositoryPort runs;
+    private final PromotionPostIdGeneratorPort ids;
     private final PromotionMediaPort media;
+    private final Clock clock;
 
     public PromotionDeliveryService(
             ManagePromotionMemoryUseCase memory,
             ManagePromotionPostsUseCase posts,
             CreatePromotionPostUseCase create,
             SubmitPromotionPostForReviewUseCase submit,
-            RecordPromotionRunUseCase runs,
-            PromotionRunRepositoryPort runRepository,
-            PromotionMediaPort media) {
+            PromotionRunRepositoryPort runs,
+            PromotionPostIdGeneratorPort ids,
+            PromotionMediaPort media,
+            Clock clock) {
         this.memory = memory;
         this.posts = posts;
         this.create = create;
         this.submit = submit;
         this.runs = runs;
-        this.runRepository = runRepository;
+        this.ids = ids;
         this.media = media;
+        this.clock = clock;
     }
 
     @Override
     public PromotionRun deliver(DeliveryCommand command) {
-        Optional<PromotionRun> delivered =
-                runRepository.findByRunKey(command.run().runKey());
-        if (delivered.isPresent()) {
-            return delivered.get();
+        RecordRunCommand requested = command.run();
+        PromotionRun claim = toRun(
+                ids.newId(),
+                result(requested, RunOutcome.FAILED, RunReasonCode.ERROR, IN_PROGRESS, null),
+                Instant.now(clock));
+        PromotionRun claimed = runs.insertIfAbsent(claim);
+        if (!claimed.id().equals(claim.id())) {
+            // 이미 받은 납품이다(재시도·동시 요청). 처음 것이 정본이다.
+            return claimed;
         }
         String reflectionError = reflect(command);
-        RecordRunCommand run = command.draft() == null ? command.run() : submitDraft(command);
+        RecordRunCommand run = command.draft() == null ? requested : submitDraft(command);
         if (reflectionError != null && run.detail() == null) {
             run = result(run, run.outcome(), run.reasonCode(), reflectionError, run.promotionPostId());
         }
-        return runs.record(run).run();
+        return runs.replace(toRun(claim.id(), run, claim.recordedAt()));
     }
 
     /** 성찰 실패는 초안을 막지 않는다 — 다음 실행이 미처리 반려를 다시 읽는다(러너와 같다). */
@@ -139,6 +152,23 @@ public class PromotionDeliveryService implements DeliverPromotionDraftUseCase {
 
     private String upload(String ownerId, Image image) {
         return media.upload(ownerId, image.content(), image.contentType(), image.filename());
+    }
+
+    private static PromotionRun toRun(String id, RecordRunCommand run, Instant recordedAt) {
+        return new PromotionRun(
+                id,
+                run.runKey(),
+                run.category(),
+                run.sourceCommitSha(),
+                run.outcome(),
+                run.reasonCode(),
+                run.detail(),
+                run.promotionPostId(),
+                run.agentSha(),
+                run.runUrl(),
+                run.calls(),
+                recordedAt,
+                run.memoryContext());
     }
 
     private static RecordRunCommand result(

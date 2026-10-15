@@ -42,6 +42,11 @@ public class PromotionRunPersistenceAdapter implements PromotionRunRepositoryPor
     }
 
     @Override
+    public PromotionRun replace(PromotionRun run) {
+        return toDomain(repository.save(toDocument(run)));
+    }
+
+    @Override
     public List<PromotionRun> findRecent(int limit) {
         return repository.findAllByOrderByRecordedAtDesc(PageRequest.of(0, limit)).stream()
                 .map(PromotionRunPersistenceAdapter::toDomain)
