@@ -377,10 +377,12 @@ jobs:
           DISCORD_AVATAR_URL=https://gole.co.kr/icon.svg
           run="$RUNNER_TEMP/promotion/run.json"
           code=""
+          outcome=""
           recorded=""
           run_key=""
           if [ -s "$run" ]; then
             code=$(jq -r '.reasonCode // ""' "$run")
+            outcome=$(jq -r '.outcome // ""' "$run")
             recorded=$(jq -r '.recorded' "$run")
             run_key=$(jq -r '.runKey // ""' "$run")
           fi
@@ -404,6 +406,8 @@ jobs:
             content="⚠️ GoLe 홍보 검토 대기가 가득 차 초안 생성이 멈춤 · 관리자 화면에서 검토 필요 · $link"
           elif [ "$recorded" = "false" ]; then
             content="⚠️ GoLe 홍보 실행 원장 기록 실패 · $kind · $code · $link"
+          elif [ "$outcome" = "SKIPPED" ]; then
+            content="⏭️ GoLe 홍보 초안 건너뜀 · $kind · $code · $link"
           else
             exit 0
           fi

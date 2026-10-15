@@ -71,6 +71,9 @@ def deliver(order: Order, gateway: Gateway, post: Post, notify: Notify, log: Cal
     if delivered.outcome == "FAILED" or delivered.reason == "QUEUE_FULL":
         notify(f"❌ GoLe 홍보 초안 {'실패' if delivered.outcome == 'FAILED' else '보류'} · {kind} · "
                f"{delivered.reason} · {order.run_key}")
+    elif delivered.outcome == "SKIPPED":
+        # 초안 도착은 백엔드가 알린다. 건너뜀만 조용하면 "접수만 있고 결과 없음"(서버 멈춤)과 구분되지 않는다.
+        notify(f"⏭️ GoLe 홍보 초안 건너뜀 · {kind} · {delivered.reason} · {order.run_key}")
     return 0
 
 

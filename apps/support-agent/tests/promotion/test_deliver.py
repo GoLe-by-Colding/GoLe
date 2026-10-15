@@ -104,8 +104,9 @@ def test_planFailure_deliversOnlyTheRunAndNotifiesWhenBackendSaysFailed():
 
 
 def test_skip_and_invalidChoice_sendNoDraft():
-    _, skipped = run(order(), FakeGateway(SKIP))
+    _, skipped = run(order(), FakeGateway(SKIP), Recorder(Delivered(201, "SKIPPED", "MODEL_SKIPPED")))
     assert skipped.payloads[0]["run"]["reasonCode"] == "MODEL_SKIPPED" and "draft" not in skipped.payloads[0]
+    assert len(skipped.notes) == 1 and skipped.notes[0].startswith("⏭️") and "MODEL_SKIPPED" in skipped.notes[0]
 
     _, invalid = run(order(), FakeGateway(DRAFT | {"pick": {"image": 9, "label": "x", "headline": "y"}}))
     assert invalid.payloads[0]["run"]["reasonCode"] == "CHOICE_INVALID" and "draft" not in invalid.payloads[0]
