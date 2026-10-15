@@ -237,6 +237,8 @@ def test_work_refreshedToken_replacesKeyAndRebakesOnce(server):
     _, calls = run("work", "gh-1-1")
 
     assert calls.count("build") == 1 and calls.index("build") > calls.index("cp")
+    # 옛 :local 을 쓰던 컨테이너를 먼저 지워야 prune 이 옛 토큰 이미지를 지운다.
+    assert calls.index("rm") < calls.index("image prune")
     assert (home / "auth.json").read_text() == '{"t":2}'
     assert (fake / "baked").read_text() == '{"t":2}'
     assert not (home / "auth.new").exists()

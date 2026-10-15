@@ -142,6 +142,8 @@ work() {
 
   # 토큰이 바뀌었으면 다시 굽는다. 읽을 수 없는 JSON 이면 지금 열쇠를 지킨다(D28).
   docker cp "$cid:/home/gateway/.codex/auth.json" auth.new 2>>run.log || exit 0
+  # 아래 prune 전에 지운다. 컨테이너가 남아 있으면 그 컨테이너가 쓰는 옛 :local(옛 토큰)을 prune 이 못 지운다.
+  docker rm -f "$cid" >/dev/null 2>&1
   cmp -s auth.new auth.json && exit 0
   if ! docker run --rm -i --network none --entrypoint python3 "$LOCAL" \
       -c 'import json,sys; json.load(sys.stdin)' <auth.new >/dev/null 2>>run.log; then
