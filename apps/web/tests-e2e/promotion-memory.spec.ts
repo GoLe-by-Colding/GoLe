@@ -183,15 +183,21 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       expect(post?.captures[0]?.originalUrl).toBeTruthy();
       expect(post?.captures[0]?.edit).toContain("$imagegen");
       const requests = JSON.parse(readFileSync(result.requestsFile, "utf8")) as ModelRequest[];
-      expect(requests.map((entry) => entry.engine)).toEqual(["codex"]);
-      const [oneCall] = requests;
+      // 실행 하나는 codex 기획 1회 + 제작 1회다(promotion-review D25). 지인 서버의 deliver 가 부른다(D29).
+      expect(requests.map((entry) => entry.engine)).toEqual(["codex", "codex"]);
+      const [plan, make] = requests;
+      const promptOf: Record<string, string | undefined> = {
+        PLAN: plan?.prompt,
+        IMAGE_EDIT: make?.prompt,
+      };
       const stages = result.memoryContext.stages ?? [];
       expect(stages.map((stage) => ({ stage: stage.stage, routes: stage.routes }))).toEqual([
         { stage: "PLAN", routes: ["/", "/collection"] },
         { stage: "IMAGE_EDIT", routes: ["/collection"] },
       ]);
       for (const knowledge of coreKnowledge) {
-        expect(oneCall?.prompt).toContain(knowledge.content);
+        // 단계마다 그 단계의 호출에 실렸다 — 기록(guidelineIds)과 실제 프롬프트가 맞아야 한다.
+        for (const stage of stages) expect(promptOf[stage.stage]).toContain(knowledge.content);
         expect(result.memoryContext.guidelines).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -466,8 +472,9 @@ test.describe("홍보 메모리 실제 백엔드 왕복", () => {
       const appliedRequests = JSON.parse(
         readFileSync(applied.requestsFile, "utf8"),
       ) as ModelRequest[];
-      expect(appliedRequests).toHaveLength(1);
-      expect(appliedRequests[0]?.prompt).toContain(approvedContent);
+      // 기획·제작 두 호출 모두에 실린다 — 확정한 지침의 범위가 CAPTION·SCREEN_SELECTION·IMAGE_EDIT 다(D25).
+      expect(appliedRequests).toHaveLength(2);
+      for (const request of appliedRequests) expect(request.prompt).toContain(approvedContent);
       expect(applied.memoryContext.guidelines).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: guidelineId, content: approvedContent }),
