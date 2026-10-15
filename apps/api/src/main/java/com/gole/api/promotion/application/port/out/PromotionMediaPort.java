@@ -10,4 +10,7 @@ public interface PromotionMediaPort {
 
     /** 검증한 초안에 게시 이미지와 다듬기 전 원본을 공개로 연결한다. */
     void attachToPost(String authorId, String postId, List<String> mediaKeys);
+
+    /** 납품된 이미지를 스테이지에 올리고 스테이지 키를 돌려준다(D29). 형식·크기 검증은 media 가 한다. */
+    String upload(String ownerId, byte[] content, String contentType, String filename);
 }

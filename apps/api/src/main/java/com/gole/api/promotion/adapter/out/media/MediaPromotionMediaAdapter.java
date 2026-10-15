@@ -1,6 +1,8 @@
 package com.gole.api.promotion.adapter.out.media;
 
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.media.application.port.in.UploadImageUseCase;
+import com.gole.api.media.application.port.in.UploadImageUseCase.UploadImageCommand;
 import com.gole.api.media.domain.model.MediaKey;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.application.port.out.PromotionMediaPort;
@@ -12,9 +14,11 @@ import org.springframework.stereotype.Component;
 public class MediaPromotionMediaAdapter implements PromotionMediaPort {
 
     private final ManageMediaAssetsUseCase mediaAssets;
+    private final UploadImageUseCase uploadImage;
 
-    public MediaPromotionMediaAdapter(ManageMediaAssetsUseCase mediaAssets) {
+    public MediaPromotionMediaAdapter(ManageMediaAssetsUseCase mediaAssets, UploadImageUseCase uploadImage) {
         this.mediaAssets = mediaAssets;
+        this.uploadImage = uploadImage;
     }
 
     @Override
@@ -25,5 +29,12 @@ public class MediaPromotionMediaAdapter implements PromotionMediaPort {
     @Override
     public void attachToPost(String authorId, String postId, List<String> mediaKeys) {
         mediaAssets.replaceReferences(authorId, MediaTargetType.PROMOTION_POST, postId, mediaKeys, true);
+    }
+
+    @Override
+    public String upload(String ownerId, byte[] content, String contentType, String filename) {
+        return uploadImage
+                .upload(new UploadImageCommand(ownerId, content, contentType, filename))
+                .key();
     }
 }
