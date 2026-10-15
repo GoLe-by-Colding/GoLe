@@ -21,8 +21,9 @@ from pydantic import ValidationError
 
 from gole_promotion_agent import drafting, memory, policy
 from gole_promotion_agent.captures import Shot, _slug, capture_all, thumbnail
-from gole_promotion_agent.gateway_client import Gateway, GatewayError, decode_png, encode_png
-from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run, execution_run_key
+from gole_promotion_core import contract, limits
+from gole_promotion_core.gateway import Gateway, GatewayError, decode_png, encode_png
+from gole_promotion_core.ledger import RunResult, UsageMeter, close_run, execution_run_key
 
 
 class Drafter:
@@ -83,7 +84,7 @@ class Drafter:
             return
         try:
             proposals = structured.get("reflection") if isinstance(structured, dict) else None
-            reflection = memory.Reflection.model_validate({"proposals": proposals})
+            reflection = contract.Reflection.model_validate({"proposals": proposals})
             self._publisher.reflect(reflection.payload([item.id for item in pending], self.run_key))
         except Exception as error:  # noqa: BLE001 — 다음 실행이 미처리 경험을 다시 읽는다
             self._memory_error = "MEMORY_REFLECTION_FAILED"
@@ -104,7 +105,7 @@ class Drafter:
         })
 
     def _draft(self) -> RunResult:
-        if self._publisher.pending_count() >= policy.MAX_PENDING_REVIEW:
+        if self._publisher.pending_count() >= limits.MAX_PENDING_REVIEW:
             return RunResult("skipped", "QUEUE_FULL")
 
         subject, diff = None, None
@@ -127,8 +128,8 @@ class Drafter:
         image_feedback, image_guidelines = self._memory.select(category, ("IMAGE_EDIT",))
         # 제작 지시문은 검토 화면에 남는다(백엔드 상한). 문구는 모델이 정하므로 가장 긴 자리로 호출 전에 잰다.
         parts = _edit_parts(image_feedback, image_guidelines, "가" * 41)
-        if memory.utf16_length("".join(parts.values())) > memory.MAX_EDIT_PROMPT:
-            lengths = {name: memory.utf16_length(text) for name, text in parts.items()}
+        if contract.utf16_length("".join(parts.values())) > memory.MAX_EDIT_PROMPT:
+            lengths = {name: contract.utf16_length(text) for name, text in parts.items()}
             lengths["total"] = sum(lengths.values())
             return RunResult("failed", "ERROR", "EDIT_PROMPT_TOO_LONG " + json.dumps(lengths))
 
@@ -145,7 +146,7 @@ class Drafter:
             # 기획 호출(D25): 고르기용 축소본만 싣고 도구 없이 한 번에 답하게 한다 — 무거운 제작 단계에 후보를 끌고 가지 않는다.
             response = self._gateway.call({
                 "engine": "codex", "model": self._codex_model, "reasoning": "medium", "prompt": prompt,
-                "json_schema": drafting.OUTPUT_SCHEMA, "images": [thumbnail(shot.path) for shot in shots],
+                "json_schema": contract.OUTPUT_SCHEMA, "images": [thumbnail(shot.path) for shot in shots],
             })
         except GatewayError as error:
             if re.fullmatch(r"[A-Z_]+", str(error)):
@@ -155,7 +156,7 @@ class Drafter:
         (self._run_dir / "choice.json").write_text(json.dumps(structured, ensure_ascii=False, indent=2), encoding="utf-8")
         self._reflect(structured)
         try:
-            draft = drafting.parse(structured)
+            draft = contract.parse(structured)
             if any(pick.image > len(shots) for pick in draft.picks):
                 raise ValueError("없는 후보 번호를 골랐다")
         except (ValidationError, ValueError) as error:
@@ -177,7 +178,7 @@ class Drafter:
         captures = []
         for pick, shot, path, edit_prompt in zip(draft.picks, picked, polished, edit_prompts):
             capture = {"label": pick.label, "route": shot.route, "capturedAt": shot.captured_at,
-                       "styleId": drafting.STYLE_ID, "styleVersion": drafting.STYLE_VERSION,
+                       "styleId": contract.STYLE_ID, "styleVersion": contract.STYLE_VERSION,
                        "headline": pick.headline, "polishFailed": path is None}
             if path is not None:
                 capture |= {"originalMediaKey": next(original_keys), "edit": edit_prompt}
@@ -246,7 +247,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from gole_agent_runtime.privacy import reject_external_tracing
     from gole_promotion_agent import gateway_client
-    from gole_promotion_agent.hands import AppRouteCatalog, BackendPublisher, PlaywrightCamera
+    from gole_promotion_agent.hands import AppRouteCatalog, PlaywrightCamera
+    from gole_promotion_core.publisher import BackendPublisher
 
     reject_external_tracing()
     data_source = os.environ.get("PROMOTION_AGENT_DATA_SOURCE") or "DEMO"

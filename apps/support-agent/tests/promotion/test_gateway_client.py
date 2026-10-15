@@ -6,7 +6,8 @@ import subprocess
 import pytest
 
 from gole_promotion_agent import gateway_client
-from gole_promotion_agent.gateway_client import GatewayError, SshGateway
+from gole_promotion_agent.gateway_client import SshGateway
+from gole_promotion_core.gateway import GatewayError, decode_png
 
 
 def _ssh(stdout=b"", returncode=0, stderr=b""):
@@ -62,7 +63,7 @@ def test_decodePng_rejectsNonPng():
     import base64
 
     with pytest.raises(GatewayError):
-        gateway_client.decode_png({"data": base64.b64encode(b"GIF89a").decode()})
+        decode_png({"data": base64.b64encode(b"GIF89a").decode()})
 
 
 def test_localGateway_turnsAnyFailureIntoGatewayError(monkeypatch):

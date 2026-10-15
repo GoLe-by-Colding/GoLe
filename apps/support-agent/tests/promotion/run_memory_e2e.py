@@ -21,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from PIL import Image  # noqa: E402
 
 from gole_promotion_agent.drafter import Drafter  # noqa: E402
-from gole_promotion_agent.ledger import UsageMeter, run_payload  # noqa: E402
+from gole_promotion_core.ledger import UsageMeter, run_payload  # noqa: E402
 from gole_promotion_agent.fakes import FakeCamera  # noqa: E402
 from gole_promotion_agent.gateway_client import LocalGateway  # noqa: E402
-from gole_promotion_agent.hands import BackendPublisher  # noqa: E402
+from gole_promotion_core.publisher import BackendPublisher  # noqa: E402
 
 PROPOSAL_CONTENT = "화면 글자를 읽을 수 있는 크기로 유지하고 캡션은 짧게 쓴다."
 ROUTES = ("/", "/collection")

@@ -1,4 +1,4 @@
-"""초안 한 편을 만드는 codex 두 번의 호출 — 프롬프트와 출력 계약(D25).
+"""초안 한 편을 만드는 codex 두 번의 호출의 지시문(D25). 출력 계약은 gole_promotion_core.contract 에 있다.
 
 1. 기획: 후보 화면 축소본을 한 번에 보고 화면 하나 고르기·캡션·반려 성찰(구조화 출력, 도구 없음).
 2. 제작: 고른 원본 한 장을 고정 절차로 홍보 이미지로 만든다. 화면 내용은 바꾸지 말라고 고정한다.
@@ -7,99 +7,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
-from gole_promotion_agent import memory, policy
-
-MAX_PICKS = 1
-STYLE_ID = "royal-blue-brick-mobile"
-STYLE_VERSION = 1
-
-
-class Pick(BaseModel):
-    image: int = Field(ge=1, description="후보 이미지 번호(1부터)")
-    # 검토 화면에 사진 이름으로 붙는다. 왜 골랐는지는 rationale 에 쓴다.
-    label: str = Field(min_length=1, max_length=40)
-    headline: str = Field(min_length=1, max_length=40, description="이미지 밖에 넣을 짧은 문구, 최대 40자/두 줄")
-
-    @field_validator("headline", mode="before")
-    @classmethod
-    def _normalize_headline(cls, value: Any) -> Any:
-        if not isinstance(value, str):
-            return value
-        normalized = value.replace("\r\n", "\n").replace("\r", "\n")
-        if any((ord(char) < 32 or 127 <= ord(char) <= 159) and char != "\n" for char in normalized):
-            raise ValueError("문구에 제어문자를 쓰지 않는다")
-        return normalized.strip()
-
-    @model_validator(mode="after")
-    def _headline_valid(self) -> "Pick":
-        if (memory.utf16_length(self.headline) > 40 or len(self.headline.split("\n")) > 2
-                or not all(line.strip() for line in self.headline.split("\n"))):
-            raise ValueError("문구는 빈 줄 없이 최대 40자/두 줄이다")
-        return self
-
-
-class DraftOutput(BaseModel):
-    decision: Literal["draft", "skip"]
-    skip_reason: str | None = Field(default=None, max_length=policy.MAX_RATIONALE)
-    caption: str | None = Field(default=None, min_length=1, max_length=policy.MAX_CAPTION)
-    rationale: str | None = Field(default=None, min_length=1, max_length=policy.MAX_RATIONALE)
-    picks: list[Pick] = Field(default_factory=list, max_length=MAX_PICKS)
-
-    @model_validator(mode="after")
-    def _complete(self) -> "DraftOutput":
-        if self.decision == "skip":
-            if not self.skip_reason:
-                raise ValueError("건너뛰면 skip_reason 이 필요하다")
-        elif not (self.caption and self.rationale and self.picks):
-            raise ValueError("초안에는 caption·rationale·picks 가 모두 필요하다")
-        if len({pick.image for pick in self.picks}) != len(self.picks):
-            raise ValueError("같은 화면을 두 번 고르지 않는다")
-        return self
-
-
-_NULLABLE_TEXT = {"type": ["string", "null"]}
-# codex --output-schema 는 엄격 모드다 — 모든 속성이 required, additionalProperties=false. 길이·개수는 pydantic 이 본다.
-OUTPUT_SCHEMA: Mapping[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["decision", "skip_reason", "caption", "rationale", "pick", "reflection"],
-    "properties": {
-        "decision": {"type": "string", "enum": ["draft", "skip"]},
-        "skip_reason": _NULLABLE_TEXT,
-        "caption": _NULLABLE_TEXT,
-        "rationale": _NULLABLE_TEXT,
-        "pick": {"anyOf": [{"type": "null"}, {
-            "type": "object", "additionalProperties": False, "required": ["image", "label", "headline"],
-            "properties": {"image": {"type": "integer"}, "label": {"type": "string"}, "headline": {"type": "string"}},
-        }]},
-        "reflection": {"type": "array", "items": {
-            "type": "object", "additionalProperties": False,
-            "required": ["kind", "content", "targets", "categories", "sourceFeedbackIds"],
-            "properties": {
-                "kind": {"type": "string", "enum": ["KNOWLEDGE", "PROCEDURE"]},
-                "content": {"type": "string"},
-                "targets": {"type": "array", "items": {"type": "string", "enum": list(memory.ALL_TARGETS)}},
-                "categories": {"type": "array", "items": {"type": "string", "enum": ["FEATURE", "SERVICE"]}},
-                "sourceFeedbackIds": {"type": "array", "items": {"type": "string"}},
-            },
-        }},
-    },
-}
-
-
-def parse(structured: Any) -> DraftOutput:
-    """한 호출의 구조화 출력에서 초안 부분. 성찰(reflection)은 memory.Reflection 이 따로 검증한다."""
-    data = structured if isinstance(structured, dict) else {}
-    pick = data.get("pick")
-    return DraftOutput.model_validate(
-        {key: data.get(key) for key in ("decision", "skip_reason", "caption", "rationale")}
-        | {"picks": [pick] if pick else []}
-    )
-
+from gole_promotion_agent import policy
 
 _SYSTEM = """{tone}
 

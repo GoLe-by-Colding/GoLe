@@ -587,15 +587,22 @@ GitHub 러너 (ubuntu-latest, environment: production)
   프롬프트에 넣는다(D18 — 대화가 한 번이라 동결은 필요 없다), 캡션 1~450자·고른 장 수 상한
   (`MAX_PICKS = 3`)·중복 없는 번호는 코드로 검증한다.
 
+2026-10-15 실행 위치별로 나눴다(D29). `gole_promotion_agent`는 러너, `gole_promotion_core`는 러너·서버 공용이다.
+
 | 파일 | 책임 |
 |---|---|
-| `drafter.py` | 실행 하나: 건너뛰기 판정 → 캡처 → 기획 호출 → 성찰 저장 → 제작 호출 → 제출 |
-| `captures.py` | 후보 화면 촬영·지난 캡처 재사용 검증·고르기용 축소본 |
-| `ledger.py` | 실행 결과·호출별 사용량·원장 한 줄(D23) |
-| `drafting.py` | 출력 계약(`DraftOutput`·JSON 스키마)·프롬프트·다듬기 지시문 |
-| `gateway_client.py` | SSH·로컬 게이트웨이 호출, PNG 인코딩 |
-| `hands.py` | 릴리스 diff, 라우트 열거, Playwright 카메라, 백엔드 HTTP |
-| `policy.py` | 라우트 가드·상한·톤 가이드·이력 렌더링 |
+| `agent/drafter.py` | 실행 하나: 건너뛰기 판정 → 캡처 → 기획 호출 → 성찰 저장 → 제작 호출 → 제출 |
+| `agent/captures.py` | 후보 화면 촬영·지난 캡처 재사용 검증·고르기용 축소본 |
+| `agent/drafting.py` | 기획·제작 지시문(프롬프트) |
+| `agent/memory.py` | 작업 기억 고르기·프롬프트 렌더링·성찰 지시 |
+| `agent/gateway_client.py` | SSH·로컬 게이트웨이 호출 |
+| `agent/hands.py` | 릴리스 diff, 라우트 열거, Playwright 카메라 |
+| `agent/policy.py` | 라우트 가드·diff 상한·톤 가이드·이력 렌더링 |
+| `core/contract.py` | 출력 계약(`DraftOutput`·JSON 스키마)·성찰 검증(`Reflection`) |
+| `core/limits.py` | 러너·서버가 같이 지키는 상한·원장 사유 정리 |
+| `core/ledger.py` | 실행 결과·호출별 사용량·원장 한 줄(D23) |
+| `core/gateway.py` | 게이트웨이 오류·PNG 인코딩 |
+| `core/publisher.py` | 백엔드 HTTP |
 
 ### D21. 데모 스택의 화면을 전부 찍고 모델은 고르기만 한다 — D12의 툴 루프를 정정한다
 

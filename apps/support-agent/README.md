@@ -266,7 +266,9 @@ PYTHONPATH=apps/support-agent/src PROMOTION_GATEWAY=local \
 ```
 
 `playwright`·`httpx`는 `promotion` extra에만 있다. 기본 설치(`uv sync --locked`)로도 테스트가
-전부 돌아야 하며, 그래서 `hands.py`의 SDK import는 전부 함수 안에 있다.
+전부 돌아야 하며, 그래서 `hands.py`·`gole_promotion_core/publisher.py`의 SDK import는 전부 함수 안에 있다.
+러너·서버가 함께 쓰는 계약·상한·원장·백엔드 클라이언트는 `gole_promotion_core`에 있고, 이 패키지는
+`gole_promotion_agent`를 import하지 않는다(스펙 D29, `test_architecture.py`가 검사).
 
 ## 배포 이미지의 오프라인 smoke 검사
 

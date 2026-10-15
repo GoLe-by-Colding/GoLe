@@ -6,10 +6,10 @@ import pytest
 from pydantic import ValidationError
 
 from gole_promotion_agent import memory
-from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run as _close_run
+from gole_promotion_core import contract
+from gole_promotion_core.ledger import RunResult, UsageMeter, close_run as _close_run
 from gole_promotion_agent.fakes import FakeCamera
-from gole_promotion_agent.gateway_client import GatewayError
-from gole_promotion_agent.hands import BackendPublisher
+from gole_promotion_core.publisher import BackendPublisher
 
 from .gitrepo import commit
 from .test_drafter import ARGS, DRAFT, ROUTES, SKIP, FakeGateway, FakePublisher, RecordingPublisher, _drafter
@@ -200,7 +200,7 @@ def test_sameRunnerReexecution_doesNotRetainRetiredGuidelines(tmp_path):
 def test_proposalTrustBoundary_rejectsInvalidModelValues(patch):
     data = {key: value for key, value in guideline().items() if key not in {"id", "status"}}
     with pytest.raises(ValidationError):
-        memory.Proposal.model_validate(data | patch)
+        contract.Proposal.model_validate(data | patch)
 
 
 def test_contextRejectsOverBudgetFeedbackButKeepsAllGuidelines():
@@ -256,7 +256,7 @@ def test_promptSeparatesFactsProceduresAndEpisodes():
 
 
 def test_editBudgetCountsAstralCharactersLikeJava(tmp_path):
-    assert memory.utf16_length("한글😀") == 4
+    assert contract.utf16_length("한글😀") == 4
     publisher = FakePublisher(memory_context={"guidelines": [
         guideline(str(i), content="😀" * 500) for i in range(6)
     ]})
@@ -342,12 +342,11 @@ def test_e2eHelper_passesThroughRealGatewayWithoutLaunchingAnyModelCli(tmp_path)
     import base64
     import io
     from PIL import Image
-    from gole_promotion_agent import drafting
     from .run_memory_e2e import FakeCliGateway, png
 
     gateway = FakeCliGateway("apply", tmp_path)
     response = gateway.call({"engine": "codex", "model": "fake-codex", "prompt": "골라서 만들어",
-                             "json_schema": drafting.OUTPUT_SCHEMA, "want_images": True,
+                             "json_schema": contract.OUTPUT_SCHEMA, "want_images": True,
                              "images": [{"data": base64.b64encode(png()).decode()}] * 2})
 
     assert response["structured"]["decision"] == "draft" and response["text"] == ""

@@ -9,29 +9,19 @@
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping
+
+from gole_promotion_core.gateway import Gateway, GatewayError
 
 GATEWAY_SCRIPT = Path(__file__).resolve().parents[2] / "gateway" / "gole_llm_gateway.py"
 DEFAULT_TIMEOUT_SECONDS = 20 * 60
 # forced command 가 이긴다 — 서버는 이 값을 무시한다. 로그에서 알아보기 위한 이름일 뿐이다.
 REMOTE_COMMAND = "gole-llm-gateway"
-
-
-class GatewayError(RuntimeError):
-    def __init__(self, message: str, usage: Mapping[str, Any] | None = None):
-        super().__init__(message)
-        # 실패한 호출도 토큰을 쓴다. ssh 자체가 실패했으면 None.
-        self.usage = usage
-
-
-class Gateway(Protocol):
-    def call(self, request: Mapping[str, Any]) -> dict[str, Any]: ...
 
 
 def _checked(response: Any) -> dict[str, Any]:
@@ -111,14 +101,3 @@ def from_env(env: Mapping[str, str] | None = None) -> Gateway:
     if not (target and known_hosts and key):
         raise ValueError("PROMOTION_GATEWAY_TARGET·KNOWN_HOSTS_FILE·KEY_FILE 이 필요하다")
     return SshGateway(target, Path(known_hosts), Path(key), port=int(env.get("PROMOTION_GATEWAY_PORT") or 22))
-
-
-def encode_png(path: Path) -> dict[str, str]:
-    return {"data": base64.b64encode(Path(path).read_bytes()).decode("ascii")}
-
-
-def decode_png(image: Mapping[str, Any]) -> bytes:
-    data = base64.b64decode(image["data"], validate=True)
-    if not data.startswith(b"\x89PNG"):
-        raise GatewayError("게이트웨이가 PNG 가 아닌 이미지를 돌려줬다")
-    return data

@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from gole_promotion_agent import policy
-from gole_promotion_agent.gateway_client import Gateway, GatewayError
+from gole_promotion_core import limits
+from gole_promotion_core.gateway import Gateway, GatewayError
 
 
 @dataclass(frozen=True)
@@ -95,11 +95,11 @@ def run_payload(
         "sourceCommitSha": None if service else sha,
         "outcome": result.outcome.upper(),
         "reasonCode": result.code,
-        "detail": policy.clean_detail(result.detail),
+        "detail": limits.clean_detail(result.detail),
         "promotionPostId": result.post_id,
-        "agentSha": agent_sha if agent_sha and policy.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
+        "agentSha": agent_sha if agent_sha and limits.AGENT_SHA_PATTERN.fullmatch(agent_sha) else None,
         "runUrl": env.get("PROMOTION_AGENT_RUN_URL") or None,
-        "calls": list(calls)[: policy.MAX_RUN_CALLS],
+        "calls": list(calls)[: limits.MAX_RUN_CALLS],
         **({"memoryContext": dict(result.memory_context)} if result.memory_context is not None else {}),
     }
 

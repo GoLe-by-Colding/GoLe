@@ -1,15 +1,19 @@
 """홍보 모듈의 경계를 실제로 검사한다.
 
-두뇌는 게이트웨이 뒤의 claude·codex CLI 이고, 이 패키지에 남은 것은 손(캡처·백엔드)과 래퍼다. 지켜야 할 경계는
-"promotion extra 없이도 import 된다"와 "모델 SDK 를 직접 부르지 않는다" 두 가지다.
+두뇌는 게이트웨이 뒤의 codex CLI 이고, 이 패키지들에 남은 것은 손(캡처·백엔드)과 래퍼다. 지켜야 할 경계는
+"promotion extra 없이도 import 된다", "모델 SDK 를 직접 부르지 않는다", "공용 core 는 러너 agent 를 모른다"(D29)다.
 """
 
 import ast
 from pathlib import Path
 
-from gole_promotion_agent import drafter, drafting, fakes, gateway_client, hands, memory, policy
+from gole_promotion_agent import captures, drafter, drafting, fakes, gateway_client, hands, memory, policy
+from gole_promotion_core import contract, gateway, ledger, limits, publisher
 
 SDK_PREFIXES = ("anthropic", "playwright", "httpx", "openai", "grpc", "langgraph", "langchain")
+AGENT = (captures, drafter, drafting, fakes, gateway_client, hands, memory, policy)
+CORE = (contract, gateway, ledger, limits, publisher)
+MODULES = AGENT + CORE
 
 
 def imported_modules(module) -> set[str]:
@@ -33,13 +37,13 @@ def top_level_imports(module) -> set[str]:
 
 def test_no_module_imports_sdks_at_module_level():
     """기본 설치(`uv sync --locked`)로도 테스트가 전부 돌아야 한다."""
-    for module in (drafter, drafting, fakes, gateway_client, hands, memory, policy):
+    for module in MODULES:
         assert not any(name.startswith(SDK_PREFIXES) for name in top_level_imports(module)), module
 
 
 def test_package_never_calls_a_model_sdk_directly():
     """모델 호출은 게이트웨이(CLI)뿐이다. 패키지 안에 모델 SDK 경로가 다시 생기지 않게 한다."""
-    for module in (drafter, drafting, fakes, gateway_client, hands, memory, policy):
+    for module in MODULES:
         assert not any(
             name.startswith(("anthropic", "openai", "langgraph", "langchain"))
             for name in imported_modules(module)
@@ -51,12 +55,15 @@ def test_runner_isolates_external_observability():
     assert "gole_agent_runtime.privacy" in imported_modules(drafter)
 
 
-def test_policy_holds_every_limit():
-    """상한이 코드 여기저기 흩어지지 않게 한 곳에 모은다."""
-    for name in (
-        "MAX_CAPTION",
-        "MAX_RATIONALE",
-        "MAX_PENDING_REVIEW",
-        "MAX_DIFF_CHARS",
-    ):
-        assert isinstance(getattr(policy, name), int)
+def test_core_never_imports_the_runner_package():
+    """서버의 deliver 가 core 만 받아도 돌아야 한다(D29). core 가 agent 를 끌어오면 서버 이미지에 러너 코드가 딸려 간다."""
+    for module in CORE:
+        assert not any(name.startswith("gole_promotion_agent") for name in imported_modules(module)), module
+
+
+def test_limits_live_in_one_place():
+    """러너와 서버가 같이 지키는 상한은 core.limits, 러너만 쓰는 상한은 policy 에 모은다."""
+    for name in ("MAX_CAPTION", "MAX_RATIONALE", "MAX_PENDING_REVIEW", "MAX_RUN_DETAIL", "MAX_RUN_CALLS"):
+        assert isinstance(getattr(limits, name), int)
+        assert not hasattr(policy, name), name
+    assert isinstance(policy.MAX_DIFF_CHARS, int)

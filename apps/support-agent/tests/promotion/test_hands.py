@@ -172,7 +172,7 @@ def test_release_diff_is_capped_by_context_budget_and_says_so(repo: Path, monkey
 
 def test_backend_publisher_sends_capture_notes_and_provenance():
     """검토 화면이 쓸 설명표·출처가 백엔드 생성 요청 계약 모양으로 나간다."""
-    from gole_promotion_agent.hands import BackendPublisher
+    from gole_promotion_core.publisher import BackendPublisher
 
     sent = {}
 

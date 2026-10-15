@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 
 from gole_promotion_agent import drafting
+from gole_promotion_core import contract
 from types import SimpleNamespace
 
 from gole_promotion_agent.drafter import Drafter
-from gole_promotion_agent.ledger import RunResult, UsageMeter, close_run as _close_run, run_payload
+from gole_promotion_core.ledger import RunResult, UsageMeter, close_run as _close_run, run_payload
 from gole_promotion_agent.fakes import PIXEL, FakeCamera
-from gole_promotion_agent.gateway_client import GatewayError
+from gole_promotion_core.gateway import GatewayError
 
 from .gitrepo import commit
 
@@ -120,7 +121,7 @@ def test_draft_plansOnThumbnailsThenMakesFromOneOriginal(tmp_path):
     plan, make = gateway.requests  # 기획 1회 + 제작 1회(D25)
     # 기획: 후보 전부(/terms 제외)를 축소본으로, 도구·이미지 생성 없이, 추론은 낮게.
     assert plan["engine"] == "codex" and not plan.get("want_images") and plan["reasoning"] == "medium"
-    assert plan["json_schema"] == drafting.OUTPUT_SCHEMA and len(plan["images"]) == 3
+    assert plan["json_schema"] == contract.OUTPUT_SCHEMA and len(plan["images"]) == 3
     with Image.open(io.BytesIO(base64.b64decode(plan["images"][0]["data"]))) as thumb:
         assert thumb.width == 195
     prompt = plan["prompt"]
@@ -316,9 +317,9 @@ def test_headlineTrustBoundary_rejectsOversizeOrInvalidText(tmp_path, headline):
 
 
 def test_headlineAcceptsExactlyFortyUtf16UnitsAndTwoLines():
-    assert drafting.Pick(image=1, label="화면", headline="😀" * 20).headline == "😀" * 20
-    assert drafting.Pick(image=1, label="화면", headline="내 취향의 브릭\nGoLe에서").headline.count("\n") == 1
-    assert drafting.Pick(image=1, label="화면", headline=" 하나\r\n둘\n ").headline == "하나\n둘"
+    assert contract.Pick(image=1, label="화면", headline="😀" * 20).headline == "😀" * 20
+    assert contract.Pick(image=1, label="화면", headline="내 취향의 브릭\nGoLe에서").headline.count("\n") == 1
+    assert contract.Pick(image=1, label="화면", headline=" 하나\r\n둘\n ").headline == "하나\n둘"
 
 
 def test_fakeCapturesHaveMobileDimensions(tmp_path):
@@ -334,7 +335,7 @@ def test_editPromptBudget_isCheckedWithLongestHeadlineBeforeCalling(tmp_path, mo
 
     shortest = drafting.POLISH_PROMPT + "\n외부 제목 문구 (JSON 데이터):\n" + json.dumps({"headline": "짧음"}, ensure_ascii=False)
     # 실제 문구가 짧아도 모델이 정할 수 있는 가장 긴 문구가 들어가지 않으면 부르지 않는다.
-    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", memory.utf16_length(shortest) + 1)
+    monkeypatch.setattr(memory, "MAX_EDIT_PROMPT", contract.utf16_length(shortest) + 1)
     publisher, gateway = FakePublisher(), FakeGateway(DRAFT)
 
     result = _drafter(tmp_path, gateway, publisher).run()
