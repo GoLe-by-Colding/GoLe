@@ -1,4 +1,6 @@
-"""`python -m gole_promotion_deliver <order.json>` — 지인 서버의 run.sh 가 주문마다 게이트웨이 컨테이너 안에서 부른다(D29).
+"""`python -m gole_promotion_deliver -` — 지인 서버의 run.sh 가 주문마다 게이트웨이 컨테이너 안에서 부른다(D29).
+
+주문서는 stdin 으로 받는다(`-`). 서버의 주문 폴더는 0700 이라 컨테이너 사용자가 읽을 수 없어 마운트하지 않는다.
 
 환경(서버의 promotion.env → --env-file): PROMOTION_AGENT_API_URL, PROMOTION_AGENT_TOKEN, DISCORD_OPERATIONS_WEBHOOK_URL.
 """
@@ -15,7 +17,7 @@ from pydantic import ValidationError
 
 from gole_promotion_core.gateway import GatewayError
 from gole_promotion_core.order import Order
-from gole_promotion_deliver.deliver import deliver, discord, http_post
+from gole_promotion_deliver.deliver import CONFIG_INVALID, deliver, discord, http_post
 
 GATEWAY_SCRIPT = Path(os.environ.get("GOLE_GATEWAY_SCRIPT", "/opt/gateway/gole_llm_gateway.py"))
 
@@ -44,13 +46,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if len(args) != 1 or not api_url or not token:
         print("[promotion-deliver] 주문서 경로·PROMOTION_AGENT_API_URL·PROMOTION_AGENT_TOKEN 이 필요하다")
         notify("❌ GoLe 홍보 초안 배달 실패 · 서버 설정 누락(promotion.env)")
-        return 2
+        return CONFIG_INVALID
     try:
-        order = Order.model_validate_json(Path(args[0]).read_bytes())
+        raw = sys.stdin.buffer.read() if args[0] == "-" else Path(args[0]).read_bytes()
+        order = Order.model_validate_json(raw)
     except (OSError, ValidationError):
         print("[promotion-deliver] 주문서를 읽지 못함")
         notify("❌ GoLe 홍보 초안 배달 실패 · 주문서를 읽지 못함")
-        return 2
+        return CONFIG_INVALID
     return deliver(order, InProcessGateway(), http_post(api_url, token), notify)
 
 

@@ -17,6 +17,10 @@ from gole_promotion_core.order import Order
 Post = Callable[[Mapping[str, Any]], "Delivered"]
 Notify = Callable[[str], None]
 
+# 종료 코드. run.sh 는 이 둘을 "deliver 가 이미 알렸다"로 읽고, 그 밖의 0 아닌 코드(비정상 종료)만 따로 알린다.
+CONFIG_INVALID = 2
+DELIVERY_FAILED = 3
+
 
 @dataclass(frozen=True)
 class Delivered:
@@ -36,7 +40,7 @@ class _Draft:
 
 
 def deliver(order: Order, gateway: Gateway, post: Post, notify: Notify, log: Callable[[str], None] = print) -> int:
-    """주문 하나를 끝까지. 백엔드가 받았으면 0, 못 받았으면 1(서버가 주문을 남겨 둔다)."""
+    """주문 하나를 끝까지. 백엔드가 받았으면 0, 못 받았으면 DELIVERY_FAILED(서버가 주문을 남겨 둔다). 둘 다 여기서 알린다."""
     meter = UsageMeter(gateway)
     memory_context = dict(order.memory_context)
     reflection, reflection_error, draft = None, None, None
@@ -56,7 +60,7 @@ def deliver(order: Order, gateway: Gateway, post: Post, notify: Notify, log: Cal
     if delivered.status is None or delivered.status >= 300:
         log(f"[promotion-deliver] 납품 실패 status={delivered.status}")
         notify(f"❌ GoLe 홍보 초안 배달 실패 · {kind} · HTTP {delivered.status or '연결 실패'} · {order.run_key}")
-        return 1
+        return DELIVERY_FAILED
     log(f"[promotion-deliver] {delivered.outcome} ({delivered.reason})")
     if delivered.outcome == "FAILED" or delivered.reason == "QUEUE_FULL":
         notify(f"❌ GoLe 홍보 초안 {'실패' if delivered.outcome == 'FAILED' else '보류'} · {kind} · "

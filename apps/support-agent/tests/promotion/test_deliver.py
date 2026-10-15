@@ -6,7 +6,7 @@ import json
 from gole_promotion_core import CONTRACT_VERSION, contract
 from gole_promotion_core.gateway import GatewayError
 from gole_promotion_core.order import Order
-from gole_promotion_deliver.deliver import Delivered, deliver
+from gole_promotion_deliver.deliver import DELIVERY_FAILED, Delivered, deliver
 
 from .test_drafter import DRAFT, POLISHED, SKIP, FakeGateway
 
@@ -119,10 +119,10 @@ def test_contractMismatch_callsNoModel():
     assert recorder.payloads[0]["run"]["detail"] == "GATEWAY_CONTRACT_MISMATCH"
 
 
-def test_unreachableBackend_returns1AndNotifies():
+def test_unreachableBackend_returnsDeliveryFailedAndNotifies():
     code, recorder = run(order(), FakeGateway(DRAFT), Recorder(Delivered(None)))
 
-    assert code == 1
+    assert code == DELIVERY_FAILED
     assert len(recorder.notes) == 1 and "배달 실패" in recorder.notes[0]
 
 

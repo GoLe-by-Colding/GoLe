@@ -20,7 +20,7 @@ find "$CODEX_HOME" -mindepth 1 -maxdepth 1 \
   -exec rm -rf {} +
 cp /opt/gateway/config.toml "$CODEX_HOME/config.toml"
 
-# 인자가 있으면 그 명령(주문 처리: python3 -m gole_promotion_deliver /job/order.json, D29), 없으면 요청 하나를 받는 게이트웨이.
+# 인자가 있으면 그 명령(주문 처리: python3 -m gole_promotion_deliver -, D29), 없으면 요청 하나를 받는 게이트웨이.
 if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
