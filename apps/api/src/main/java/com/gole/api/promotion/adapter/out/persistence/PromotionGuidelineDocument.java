@@ -21,4 +21,6 @@ public record PromotionGuidelineDocument(
         String confirmedBy,
         Instant confirmedAt,
         @Indexed String reflectionRunKey,
-        Long version) {}
+        Long version,
+        String sourceType,
+        String sourceReference) {}

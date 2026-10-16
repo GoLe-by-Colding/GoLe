@@ -834,6 +834,11 @@ export interface PromotionCapture {
   readonly originalUrl: string | null;
   /** 다듬기 지시문. originalUrl 과 함께 온다. */
   readonly edit: string | null;
+  readonly styleId?: string | null;
+  readonly styleVersion?: number | null;
+  readonly headline?: string | null;
+  /** 구버전 캡처의 누락은 실패가 아닌 것으로 취급한다. */
+  readonly polishFailed?: boolean;
 }
 
 export interface PromotionProvenance {
@@ -1046,6 +1051,7 @@ export function saveAdminPromotionPostEvaluation(
 
 export type PromotionMemoryTarget = "CAPTION" | "SCREEN_SELECTION" | "IMAGE_EDIT";
 export type PromotionGuidelineKind = "KNOWLEDGE" | "PROCEDURE";
+export type PromotionGuidelineSourceType = "FEEDBACK" | "CORE_SEED";
 export type PromotionGuidelineStatus = "PROPOSED" | "ACTIVE" | "DISMISSED" | "RETIRED";
 
 export interface AdminPromotionFeedback {
@@ -1082,6 +1088,9 @@ export interface UpdatePromotionGuidelineInput extends Pick<
 
 export interface AdminPromotionGuideline extends PromotionGuidelineSnapshot {
   readonly version: number;
+  /** 구버전 응답의 누락은 반려 기반 지침으로 취급한다. */
+  readonly sourceType?: PromotionGuidelineSourceType;
+  readonly sourceReference?: string | null;
   readonly sourceFeedbackIds: readonly string[];
   readonly status: PromotionGuidelineStatus;
   readonly proposedBy: string;
@@ -1092,9 +1101,18 @@ export interface AdminPromotionGuideline extends PromotionGuidelineSnapshot {
   readonly reflectionRunKey: string;
 }
 
+export interface PromotionRunMemoryStage {
+  readonly stage: "PLAN" | "IMAGE_EDIT";
+  readonly routes: readonly string[];
+  readonly feedbackIds: readonly string[];
+  readonly guidelineIds: readonly string[];
+}
+
 export interface PromotionRunMemoryContext {
   readonly feedbackIds: readonly string[];
   readonly guidelines: readonly PromotionGuidelineSnapshot[];
+  /** 과거 원장은 단계별 기억을 기록하지 않았다. */
+  readonly stages?: readonly PromotionRunMemoryStage[];
 }
 
 export interface AdminPromotionRun {
@@ -1130,6 +1148,12 @@ export function fetchAdminPromotionGuidelines(
     token,
     `/api/admin/promotion-guidelines?${params}`,
   );
+}
+
+export function seedAdminPromotionKnowledge(
+  token: string,
+): Promise<readonly AdminPromotionGuideline[]> {
+  return post<readonly AdminPromotionGuideline[]>(token, "/api/admin/promotion-memory/seed-core");
 }
 
 /** 최근 목록 밖의 오래된 지침 근거도 ID로 조회한다. */

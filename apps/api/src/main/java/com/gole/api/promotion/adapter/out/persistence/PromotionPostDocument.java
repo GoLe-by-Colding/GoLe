@@ -75,7 +75,11 @@ public class PromotionPostDocument {
             String dataSource,
             Instant capturedAt,
             String originalUrl,
-            String edit) {}
+            String edit,
+            String styleId,
+            Integer styleVersion,
+            String headline,
+            Boolean polishFailed) {}
 
     public record ProvenanceDocument(String releaseTitle, String rationale, String runUrl) {}
 

@@ -9,13 +9,15 @@ import java.util.Optional;
 public interface PromotionGuidelineRepositoryPort {
     void insert(PromotionGuideline guideline);
 
+    PromotionGuideline insertIfAbsent(PromotionGuideline guideline);
+
     PromotionGuideline saveIfVersion(PromotionGuideline guideline, long expectedVersion);
 
     Optional<PromotionGuideline> findById(String id);
 
     List<PromotionGuideline> findRecent(PromotionGuidelineStatus status, int limit);
 
-    List<PromotionGuideline> findActive(PromotionCategory category, int limit);
+    List<PromotionGuideline> findActive(PromotionCategory category);
 
     List<PromotionGuideline> findByReflectionRunKey(String runKey);
 }

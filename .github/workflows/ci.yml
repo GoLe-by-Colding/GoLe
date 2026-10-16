@@ -198,6 +198,8 @@ jobs:
           # 메이커-체커 검증용 봇. 사람 ADMIN은 아래 시더가 별도로 만든다(테스트 전용 값).
           PROMOTION_AGENT_ADMIN_EMAIL: e2e-promotion-bot@gole.test
           PROMOTION_AGENT_ADMIN_PASSWORD: e2e-promotion-bot-not-a-real-secret
+          # 홍보 납품 창구(D29) — 아래 E2E 의 PROMOTION_AGENT_TOKEN 값의 SHA-256(테스트 전용 값)
+          PROMOTION_AGENT_TOKEN_SHA256: 840cf71b5533cd1b28611c3b52727719e61b1f2d82a5288a722eb051108ef023
           MONGODB_URI: mongodb://localhost:27017/gole_e2e?replicaSet=rs0
           MONGODB_DATABASE: gole_e2e
           REDIS_DATABASE: "15"
@@ -259,6 +261,7 @@ jobs:
           E2E_PROMOTION_MEMORY: "1"
           PROMOTION_AGENT_ADMIN_EMAIL: e2e-promotion-bot@gole.test
           PROMOTION_AGENT_ADMIN_PASSWORD: e2e-promotion-bot-not-a-real-secret
+          PROMOTION_AGENT_TOKEN: e2e-promotion-token-not-a-real-secret
           GOLE_ADMIN_EMAIL: e2e-admin@gole.test
           GOLE_ADMIN_PASSWORD: e2e-admin-not-a-real-secret
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080

@@ -55,8 +55,30 @@ class PromotionPostPersistenceAdapterTest {
     @Test
     @DisplayName("종류·설명표·출처가 저장했다 읽어도 그대로다")
     void contextSurvivesRoundTrip() {
-        var capture = new PromotionCapture("필터 열린 목록", "/market", "필터 클릭", CaptureDataSource.DEMO, Instant.EPOCH);
-        var polished = new PromotionCapture("검색", "/search", "", CaptureDataSource.DEMO, Instant.EPOCH)
+        var capture = new PromotionCapture(
+                "필터 열린 목록",
+                "/market",
+                "필터 클릭",
+                CaptureDataSource.DEMO,
+                Instant.EPOCH,
+                null,
+                null,
+                "royal-blue-brick-mobile",
+                1,
+                "세트 번호로 찾아보세요",
+                true);
+        var polished = new PromotionCapture(
+                        "검색",
+                        "/search",
+                        "",
+                        CaptureDataSource.DEMO,
+                        Instant.EPOCH,
+                        null,
+                        null,
+                        "royal-blue-brick-mobile",
+                        1,
+                        "내 취향의 브릭",
+                        false)
                 .withOriginal("/api/v1/media/images/raw.png", "목업에 넣음");
         var context = new PromotionPostContext(
                 PromotionCategory.SERVICE,

@@ -4,9 +4,11 @@ import com.gole.api.account.application.port.in.ManageAccountsUseCase;
 import com.gole.api.account.application.port.out.AccountRepositoryPort;
 import com.gole.api.account.application.port.out.SessionStorePort;
 import com.gole.api.account.domain.model.Account;
+import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.BadRequestException;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
@@ -43,6 +45,17 @@ public class AccountAdminService implements ManageAccountsUseCase {
         return accountRepository.findRecent(emailQuery, clamp(limit)).stream()
                 .map(AccountAdminService::toSummary)
                 .toList();
+    }
+
+    @Override
+    public Optional<AccountSummary> findByEmail(String email) {
+        Email normalized;
+        try {
+            normalized = new Email(email);
+        } catch (IllegalArgumentException invalid) {
+            return Optional.empty();
+        }
+        return accountRepository.findByEmail(normalized).map(AccountAdminService::toSummary);
     }
 
     @Override

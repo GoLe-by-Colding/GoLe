@@ -129,6 +129,92 @@ test.describe("홍보 Agent 검토 복구", () => {
     });
   });
 
+  test("홍보 제작 스타일과 이미지 문구를 원본 비교 자료에 표시하고 실패와 구형 캡처를 구분한다", async ({
+    page,
+  }) => {
+    const capture = {
+      label: "모바일 매물 탐색",
+      route: "/market",
+      actions: "",
+      dataSource: "DEMO",
+      capturedAt: "2026-10-11T00:00:00Z",
+      originalUrl: null,
+      edit: null,
+    };
+    const prompt = "전체 편집 지시문 첫 줄\n원본 화면과 글자를 보존하는 마지막 줄";
+    await page.route(/\/api\/admin\/promotion-posts(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            ...draft,
+            status: "PENDING_REVIEW",
+            mediaUrls: ["/polished-mobile.png", "/fallback-mobile.png", "/legacy-mobile.png"],
+            captures: [
+              {
+                ...capture,
+                originalUrl: "/original-mobile.png",
+                edit: prompt,
+                styleId: "royal-blue-brick-mobile",
+                styleVersion: 1,
+                headline: "레고의 다음 주인을 찾아요",
+                polishFailed: false,
+              },
+              {
+                ...capture,
+                styleId: "royal-blue-brick-mobile",
+                styleVersion: 1,
+                headline: "모바일에서 쉽게 거래해요",
+                polishFailed: true,
+              },
+              capture,
+            ],
+          },
+        ],
+      }),
+    );
+    await page.goto("/admin/promotion");
+    await page.getByRole("button", { name: "검토 자료", exact: true }).click();
+    const panel = page.getByRole("region", { name: "홍보 초안 검토 자료", exact: true });
+    await expect(
+      panel.getByText("제작 스타일: 서비스 소개 · 로열블루 브릭 · 모바일 · 버전 1", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      panel.getByText("이미지 문구: 레고의 다음 주인을 찾아요", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("img", { name: "모바일 매물 탐색 (원본 캡처)", exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("img", {
+        name: "모바일 매물 탐색 (게시될 이미지 (AI로 다듬음))",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      panel.getByText(`AI로 다듬은 이미지입니다. 지시문: ${prompt}`, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByText("이미지 제작에 실패해 원본 캡처를 사용했습니다.", { exact: true }),
+    ).toHaveCount(0);
+    await panel.getByRole("button", { name: "다음 사진", exact: true }).click();
+    await expect(
+      panel.getByText("이미지 문구: 모바일에서 쉽게 거래해요", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByText("이미지 제작에 실패해 원본 캡처를 사용했습니다.", { exact: true }),
+    ).toBeVisible();
+    await expect(panel.getByText(/AI로 다듬은 이미지입니다/)).toHaveCount(0);
+    await panel.getByRole("button", { name: "다음 사진", exact: true }).click();
+    await expect(panel.getByText(/^제작 스타일:/)).toHaveCount(0);
+    await expect(panel.getByText(/^이미지 문구:/)).toHaveCount(0);
+    await expect(
+      panel.getByText("이미지 제작에 실패해 원본 캡처를 사용했습니다.", { exact: true }),
+    ).toHaveCount(0);
+    await expect(panel.getByText(/3. 모바일 매물 탐색/)).toBeVisible();
+  });
+
   test("필터 변경 전의 늦은 응답이 현재 목록을 덮어쓰지 않는다", async ({ page }) => {
     let releasePending: () => void = () => {};
     const pending = new Promise<void>((resolve) => {
@@ -266,6 +352,94 @@ test.describe("홍보 피드백 메모리", () => {
     );
   });
 
+  test("초기 지식 제안을 준비하고 재실행해도 기존 수정과 제안자 제한을 유지한다", async ({
+    page,
+  }) => {
+    let seeded = false;
+    let calls = 0;
+    const seed = {
+      ...proposal,
+      id: "core-seed-brand-color-v1",
+      kind: "KNOWLEDGE",
+      content: "GoLe의 브랜드 색은 블루와 골드다.",
+      sourceType: "CORE_SEED",
+      sourceReference: ".kiro/steering/brand-identity.md@promotion-core-v1",
+      sourceFeedbackIds: [],
+      proposedBy: "admin-1",
+      reflectionRunKey: "seed-core-v1",
+    };
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: seeded ? [seed] : [] }),
+    );
+    await page.route("**/api/admin/promotion-memory/seed-core", (route) => {
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().postData()).toBeNull();
+      seeded = true;
+      calls += 1;
+      return route.fulfill({ json: [seed] });
+    });
+    await page.goto("/admin/promotion");
+    await page.getByRole("button", { name: "초기 지식 제안 준비", exact: true }).click();
+    const card = page.getByRole("group", { name: `홍보 지침 ${seed.id}`, exact: true });
+    await expect(
+      card.getByText(`근거 문서: ${seed.sourceReference}`, { exact: true }),
+    ).toBeVisible();
+    await expect(card.getByRole("button", { name: "수정 후 확정", exact: true })).toBeDisabled();
+    seed.content = "보존해야 할 기존 수정 내용";
+    seed.version = 1;
+    await page.getByRole("button", { name: "초기 지식 제안 준비", exact: true }).click();
+    await expect(card.getByLabel("지침 내용", { exact: true })).toHaveValue(seed.content);
+    await expect(card.getByRole("button", { name: "수정 후 확정", exact: true })).toBeDisabled();
+    expect(calls).toBe(2);
+  });
+
+  test("다른 관리자가 초기 지식을 수정하고 저장된 버전으로 확정한다", async ({ page }) => {
+    let seed = {
+      ...proposal,
+      id: "core-seed-brand-color-v1",
+      kind: "KNOWLEDGE",
+      sourceType: "CORE_SEED",
+      sourceReference: ".kiro/steering/brand-identity.md@promotion-core-v1",
+      sourceFeedbackIds: [],
+      proposedBy: "another-admin",
+      reflectionRunKey: "seed-core-v1",
+    };
+    const operations: string[] = [];
+    await page.route(/\/api\/admin\/promotion-guidelines(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [seed] }),
+    );
+    await page.route(`**/api/admin/promotion-guidelines/${seed.id}`, (route) => {
+      const input = route.request().postDataJSON();
+      expect(input.expectedVersion).toBe(0);
+      expect(input.content).toBe("검토한 브랜드 지식");
+      operations.push("patch");
+      seed = { ...seed, content: input.content, version: 1 };
+      return route.fulfill({ json: seed });
+    });
+    await page.route(`**/api/admin/promotion-guidelines/${seed.id}/activate`, (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1 });
+      operations.push("activate");
+      seed = { ...seed, status: "ACTIVE", version: 2 };
+      return route.fulfill({ json: seed });
+    });
+    await page.goto("/admin/promotion");
+    await page.getByLabel("지침 내용", { exact: true }).fill("검토한 브랜드 지식");
+    await page.getByRole("button", { name: "수정 후 확정", exact: true }).click();
+    await expect(page.getByText("지침을 확정했습니다. 다음 실행부터 적용됩니다.")).toBeVisible();
+    expect(operations).toEqual(["patch", "activate"]);
+  });
+
+  test("초기 지식 준비 실패는 오류를 표시하고 다시 시도할 수 있다", async ({ page }) => {
+    await page.route("**/api/admin/promotion-memory/seed-core", (route) =>
+      route.fulfill({ status: 503, json: { code: "UNAVAILABLE", message: "초기 지식 준비 실패" } }),
+    );
+    await page.goto("/admin/promotion");
+    const button = page.getByRole("button", { name: "초기 지식 제안 준비", exact: true });
+    await button.click();
+    await expect(page.getByRole("alert").filter({ hasText: "초기 지식 준비 실패" })).toBeVisible();
+    await expect(button).toBeEnabled();
+  });
+
   test("제안 내용과 범위를 저장한 다음 확정하고 활성 해제한다", async ({ page }) => {
     let guideline = { ...proposal };
     const operations: string[] = [];
@@ -304,6 +478,7 @@ test.describe("홍보 피드백 메모리", () => {
       await route.fulfill({ json: guideline });
     });
     await page.goto("/admin/promotion");
+    await expect(page.getByText("근거 반려 기록:", { exact: true })).toBeVisible();
     await page.getByLabel("지침 내용", { exact: true }).fill("화면 글자를 크게 유지한다.");
     await page.getByRole("checkbox", { name: "글 작성", exact: true }).check();
     await page.getByRole("checkbox", { name: "서비스 홍보", exact: true }).uncheck();
@@ -500,6 +675,68 @@ test.describe("홍보 피드백 메모리", () => {
     await expect(page.getByText("feedback-1 (근거 조회 실패)", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "메모리 새로고침", exact: true }).click();
     await expect.poll(() => lookups).toBe(2);
+  });
+
+  test("실행 원장에서 단계별 기억을 구분하고 구형 원장도 함께 표시한다", async ({ page }) => {
+    await page.route(/\/api\/admin\/promotion-runs(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: "run-stage",
+            runKey: "stage-run",
+            outcome: "SUBMITTED",
+            reasonCode: "SUBMITTED",
+            recordedAt: "2026-10-11T00:00:00Z",
+            memoryContext: {
+              feedbackIds: ["feedback-plan", "feedback-image"],
+              guidelines: [{ ...proposal, content: "실행 당시 전체 지침" }],
+              stages: [
+                {
+                  stage: "PLAN",
+                  routes: [],
+                  feedbackIds: ["feedback-plan"],
+                  guidelineIds: ["knowledge-plan"],
+                },
+                {
+                  stage: "IMAGE_EDIT",
+                  routes: ["/market"],
+                  feedbackIds: ["feedback-image"],
+                  guidelineIds: ["knowledge-image", "procedure-image"],
+                },
+              ],
+            },
+          },
+          {
+            id: "run-legacy",
+            runKey: "legacy-memory-run",
+            outcome: "SKIPPED",
+            reasonCode: "MODEL_SKIPPED",
+            recordedAt: "2026-10-08T00:00:00Z",
+            memoryContext: {
+              feedbackIds: [],
+              guidelines: [{ ...proposal, content: "과거 지침 스냅샷" }],
+            },
+          },
+        ],
+      }),
+    );
+    await page.goto("/admin/promotion");
+    await page.getByText(/^실행에 사용한 기억 · 최근/).click();
+    const plan = page.getByRole("group", { name: "실행 기억 stage-run PLAN", exact: true });
+    await expect(plan.getByText("화면 선택·캡션", { exact: true })).toBeVisible();
+    await expect(plan.getByText("화면 경로: 없음", { exact: true })).toBeVisible();
+    await expect(plan.getByText("반려 기록: feedback-plan", { exact: true })).toBeVisible();
+    await expect(plan.getByText("적용 지침: knowledge-plan", { exact: true })).toBeVisible();
+    const image = page.getByRole("group", { name: "실행 기억 stage-run IMAGE_EDIT", exact: true });
+    await expect(image.getByText("이미지 편집", { exact: true })).toBeVisible();
+    await expect(image.getByText("화면 경로: /market", { exact: true })).toBeVisible();
+    await expect(image.getByText("반려 기록: feedback-image", { exact: true })).toBeVisible();
+    await expect(
+      image.getByText("적용 지침: knowledge-image, procedure-image", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/실행 당시 전체 지침/)).toBeVisible();
+    await expect(page.getByText(/과거 지침 스냅샷/)).toBeVisible();
+    await expect(page.getByRole("group", { name: /^실행 기억 legacy-memory-run/ })).toHaveCount(0);
   });
 
   test("반려 당시 원본과 과거 실행의 지침 내용을 현재 상태와 독립적으로 표시한다", async ({

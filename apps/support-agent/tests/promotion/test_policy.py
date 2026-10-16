@@ -53,6 +53,9 @@ def test_capture_chrome_script_hides_operator_only_elements():
 
     assert policy.CAPTURE_HIDE_ATTRIBUTE in script
     assert "display:none !important" in script
+    assert "nextjs-portal" in script
+    assert 'decision: "denied"' in script
+    assert "gole.analytics-consent.v1" in script
 
 
 def test_history_carries_history_including_rejections():

@@ -1,0 +1,8 @@
+# 빌드 맥락(apps/support-agent)에서 게이트웨이 이미지에 넣을 것만 연다. .venv·테스트·다른 에이전트 코드는 보내지 않는다.
+*
+!gateway/gole_llm_gateway.py
+!gateway/config.toml
+!gateway/entrypoint.sh
+!src/gole_promotion_core/**
+!src/gole_promotion_deliver/**
+**/__pycache__

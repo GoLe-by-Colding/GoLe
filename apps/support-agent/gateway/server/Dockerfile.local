@@ -1,0 +1,5 @@
+# 지인 서버에서만 굽는 게이트웨이 이미지(promotion-review D28). run.sh 가 이 폴더(/opt/gole-gateway)에서 빌드한다.
+# GHCR 의 코드 이미지 위에 codex 로그인 하나만 얹는다. 이 이미지는 어디에도 올리지 않는다.
+ARG BASE=ghcr.io/gole-by-colding/gole-llm-gateway:stable
+FROM ${BASE}
+COPY --chown=10010:10010 --chmod=0600 auth.json /home/gateway/.codex/auth.json

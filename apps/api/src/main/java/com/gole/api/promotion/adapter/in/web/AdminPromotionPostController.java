@@ -234,7 +234,13 @@ public class AdminPromotionPostController {
                                             capture.route(),
                                             capture.actions(),
                                             capture.dataSource(),
-                                            capture.capturedAt()))
+                                            capture.capturedAt(),
+                                            null,
+                                            null,
+                                            capture.styleId(),
+                                            capture.styleVersion(),
+                                            capture.headline(),
+                                            Boolean.TRUE.equals(capture.polishFailed())))
                                     .toList(),
                     provenance == null
                             ? null
@@ -263,7 +269,22 @@ public class AdminPromotionPostController {
             @NotNull CaptureDataSource dataSource,
             @NotNull Instant capturedAt,
             @Size(max = 80) String originalMediaKey,
-            @Size(max = 6000) String edit) {}
+            @Size(max = 6000) String edit,
+            @Size(max = 80) String styleId,
+            @Min(1) Integer styleVersion,
+            @Size(max = 40) String headline,
+            Boolean polishFailed) {
+        public CaptureRequest(
+                String label,
+                String route,
+                String actions,
+                CaptureDataSource dataSource,
+                Instant capturedAt,
+                String originalMediaKey,
+                String edit) {
+            this(label, route, actions, dataSource, capturedAt, originalMediaKey, edit, null, null, null, false);
+        }
+    }
 
     public record ProvenanceRequest(
             @Size(max = 500) String releaseTitle,

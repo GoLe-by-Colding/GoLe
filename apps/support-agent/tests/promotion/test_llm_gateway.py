@@ -4,6 +4,8 @@ import ast
 import io
 import base64
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +26,7 @@ PNG_B64 = base64.b64encode(PNG).decode()
 def _isolated_server_state(tmp_path, monkeypatch):
     """테스트가 실제 서버 로그(~/.cache)를 더럽히거나 실제 codex 이미지 폴더를 지우지 않게 한다."""
     monkeypatch.setattr(gateway, "LOG_PATH", tmp_path / "gw.log")
+    monkeypatch.setattr(gateway, "USAGE_PATH", tmp_path / "usage.jsonl")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
 
 
@@ -48,21 +51,20 @@ def test_gateway_uses_only_stdlib():
     assert all(name == "__future__" or name.split(".")[0] in sys.stdlib_module_names for name in modules)
 
 
-def test_claude_returnsStructuredOutputAndOnlyReadsInbox(tmp_path):
-    payload = {"type": "result", "subtype": "success", "is_error": False,
-               "result": "{}", "structured_output": {"decision": "skip"}}
-    runner, calls = _recording(json.dumps(payload))
+def test_codex_returnsStructuredOutputAndAttachesInbox(tmp_path):
+    def write_output(command, kwargs):
+        Path(command[command.index("-o") + 1]).write_text('{"decision": "skip"}', encoding="utf-8")
+
+    runner, calls = _recording(on_call=write_output)
 
     response = gateway.handle(
-        {"engine": "claude", "prompt": "골라", "json_schema": {"type": "object"},
-         "images": [{"data": PNG_B64}]},
+        {"engine": "codex", "prompt": "골라", "json_schema": {"type": "object"}, "images": [{"data": PNG_B64}]},
         runner=runner, root=tmp_path,
     )
 
     assert response["ok"] and response["structured"] == {"decision": "skip"}
     command = calls[0]["command"]
-    assert "Read(./in/**)" in command and "dontAsk" in command
-    assert "in/img-01.png" in calls[0]["input"]
+    assert command[command.index("-i") + 1].endswith("img-01.png") and "in/img-01.png" in calls[0]["input"]
     assert list(tmp_path.iterdir()) == []  # 임시 폴더를 남기지 않는다
 
 
@@ -86,8 +88,124 @@ def test_codex_returnsGeneratedImages(tmp_path):
     command = calls[0]["command"]
     # 프롬프트는 stdin 으로 간다 — 인자에 두면 Windows shim 이 깨뜨려 -i 첨부까지 사라졌다.
     assert "다듬어" in calls[0]["input"] and not any("다듬어" in a for a in command)
+    assert calls[0]["input"].startswith("$imagegen\n")
+    assert "내장 image_gen" in calls[0]["input"]
+    assert "API/CLI 이미지 생성으로 대체하지 않는다" in calls[0]["input"]
     assert command[command.index("-i") + 1].endswith("img-01.png")
     assert command[command.index("-s") + 1] == "workspace-write"
+
+
+@pytest.mark.parametrize("makes_image", [True, False])
+def test_codexOneCall_returnsStructuredAndImagesButNoFreeText(tmp_path, makes_image):
+    # D25: 고르기·성찰·제작을 한 번에. 이미지가 없어도 구조화 출력은 돌려준다 — 호출 쪽이 원본을 쓴다.
+    def write_output(command, kwargs):
+        if makes_image:
+            (Path(kwargs["cwd"]) / "out" / "pick-1.png").write_bytes(PNG)
+        Path(command[command.index("-o") + 1]).write_text('{"decision": "skip"}', encoding="utf-8")
+
+    runner, calls = _recording(on_call=write_output)
+
+    response = gateway.handle(
+        {"engine": "codex", "prompt": "골라서 만들어", "want_images": True,
+         "json_schema": {"type": "object"}, "images": [{"data": PNG_B64}] * 2},
+        runner=runner, root=tmp_path,
+    )
+
+    assert response["ok"] and response["structured"] == {"decision": "skip"} and response["text"] == ""
+    assert len(response["images"]) == (1 if makes_image else 0)
+    assert "--output-schema" in calls[0]["command"]
+
+
+def test_codexUsageLimit_reportsFixedCode(tmp_path):
+    runner = lambda command, **kw: subprocess.CompletedProcess(  # noqa: E731
+        command, 1, "", "ERROR: You've hit your usage limit. Try again later."
+    )
+
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and response["error"] == "CODEX_USAGE_LIMIT"
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,code", [
+    (1, json.dumps({"type": "error", "codex_error_info": "usage_limit_exceeded"}), "", "CODEX_USAGE_LIMIT"),
+    (1, "", "stream error: rate_limit_exceeded", "CODEX_RATE_LIMIT"),
+    (1, "", "Your authentication session could not be refreshed automatically.", "CODEX_AUTH_REQUIRED"),
+    (1, "", "Error: Not logged in", "CODEX_AUTH_REQUIRED"),
+    (1, json.dumps({"type": "turn.failed", "error": {"message": "server_overloaded"}}), "", "CODEX_OVERLOADED"),
+    (0, json.dumps({"type": "turn.failed", "error": {"message": "context_window_exceeded"}}), "", "CODEX_CONTEXT_TOO_LARGE"),
+])
+def test_codexFailures_areClassifiedIntoFixedCodes(tmp_path, returncode, stdout, stderr, code):
+    runner = lambda command, **kw: subprocess.CompletedProcess(command, returncode, stdout, stderr)  # noqa: E731
+
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
+
+    assert not response["ok"] and response["error"] == code
+
+
+class _Clock:
+    def __init__(self):
+        self.t = 1_000_000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _recorded(guard, ok=True, error=None, input_tokens=0):
+    guard.record({"ok": ok, "error": error, "usage": {"input_tokens": input_tokens, "output_tokens": 1}})
+
+
+def test_accountGuard_coolsDownAfterAccountErrorsThenAllowsAgain(tmp_path, monkeypatch):
+    clock = _Clock()
+    guard = gateway._AccountGuard(tmp_path / "usage.jsonl", now=clock)
+    _recorded(guard, ok=False, error="CODEX_USAGE_LIMIT", input_tokens=10)
+
+    assert guard.refusal() == "CODEX_COOLDOWN"
+    clock.t += gateway.COOLDOWN_SECONDS["CODEX_USAGE_LIMIT"]
+    assert guard.refusal() is None
+    _recorded(guard, ok=False, error="codex 실패(종료 코드 1)")  # 코드 결함은 계정을 쉬게 하지 않는다
+    assert guard.refusal() is None
+
+
+def test_accountGuard_refusesOverDailyBudgetAndForgetsAfterADay(tmp_path, monkeypatch):
+    monkeypatch.setattr(gateway, "DAILY_INPUT_TOKENS", 100)
+    clock = _Clock()
+    guard = gateway._AccountGuard(tmp_path / "usage.jsonl", now=clock)
+    _recorded(guard, input_tokens=60)
+    assert guard.refusal() is None
+    _recorded(guard, input_tokens=40)
+
+    assert guard.refusal() == "GATEWAY_BUDGET_EXCEEDED"
+    clock.t += 24 * 3600
+    assert guard.refusal() is None
+
+
+def test_accountGuard_keepsOnlyAWeekOfRecords(tmp_path):
+    clock = _Clock()
+    path = tmp_path / "usage.jsonl"
+    guard = gateway._AccountGuard(path, now=clock)
+    _recorded(guard, input_tokens=1)
+    clock.t += gateway.KEEP_SECONDS
+    _recorded(guard, input_tokens=2)
+
+    assert [json.loads(line)["input"] for line in path.read_text(encoding="utf-8").splitlines()] == [2]
+
+
+def test_main_refusesWithoutCallingTheCliWhileCoolingDown(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(gateway, "LOCK_PATH", tmp_path / "gw.lock")
+    calls = []
+
+    def limited(request):
+        calls.append(request)
+        return {"ok": False, "error": "CODEX_USAGE_LIMIT", "usage": {"input_tokens": 5}}
+
+    monkeypatch.setattr(gateway, "handle", limited)
+    for _ in range(2):
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"codex","prompt":"x"}')))
+        gateway.main()
+
+    first, second = (json.loads(line) for line in capsys.readouterr().out.replace("}{", "}\n{").splitlines())
+    assert first["error"] == "CODEX_USAGE_LIMIT" and second["error"] == "CODEX_COOLDOWN"
+    assert len(calls) == 1
 
 
 def test_codex_sandboxWithoutShell_takesImageFromGeneratedFolderAndCleansIt(tmp_path, monkeypatch):
@@ -171,69 +289,6 @@ def test_codexFailureWithoutImages_stillReportsUsage(tmp_path, monkeypatch):
     assert "--json" in calls[0]
 
 
-def test_claude_reportsUsageIncludingCacheAndCost(tmp_path):
-    stdout = json.dumps({
-        "subtype": "success", "is_error": False, "result": "ok", "duration_ms": 2498,
-        "total_cost_usd": 0.214875,
-        "usage": {"input_tokens": 2, "cache_creation_input_tokens": 24467,
-                  "cache_read_input_tokens": 95255, "output_tokens": 4},
-        "modelUsage": {"claude-opus-5-5": {"inputTokens": 2}},
-    })
-    runner, _ = _recording(stdout=stdout)
-
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
-
-    assert response["usage"] == {
-        "engine": "claude", "model": "claude-opus-5-5",
-        "input_tokens": 2 + 24467 + 95255, "cached_input_tokens": 95255, "output_tokens": 4,
-        "cost_usd": 0.214875, "duration_ms": 2498,
-    }
-
-
-def test_claude_apiError_reportsReasonAndStatusButNotCliText(tmp_path):
-    # claude CLI 2.1.296 실측: API 오류는 subtype=success 그대로 is_error 만 켜진다.
-    stdout = json.dumps({
-        "type": "result", "subtype": "success", "is_error": True,
-        "result": "Invalid API key · sk-ant-secret /home/friend/.claude",
-        "terminal_reason": "api_error", "api_error_status": 401,
-        "usage": {"input_tokens": 0, "output_tokens": 0},
-    })
-    runner, _ = _recording(stdout=stdout)
-
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
-
-    assert not response["ok"]
-    assert response["error"] == "claude 실패: success · api_error · HTTP 401"
-    log = (tmp_path / "gw.log").read_text(encoding="utf-8")
-    assert response["error"] in log
-    for output in (json.dumps(response, ensure_ascii=False), log):
-        assert "sk-ant" not in output
-        assert "/home/friend" not in output
-        assert "Invalid API key" not in output
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"subtype": "success; rm -rf ~", "terminal_reason": "sk-ant-secret", "api_error_status": "401"},
-        {"subtype": None, "terminal_reason": None, "api_error_status": True},
-        {"api_error_status": 99999},
-        {"subtype": ["success"], "terminal_reason": {"private": "/home/friend"}, "api_error_status": 401.0},
-        {"subtype": {"secret": "sk-ant-secret"}, "terminal_reason": ["api_error"]},
-    ],
-)
-def test_claude_failure_dropsUnknownReasonFields(tmp_path, fields):
-    runner, _ = _recording(stdout=json.dumps({"is_error": True, **fields}))
-
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
-
-    assert response["error"] == "claude 실패: 알 수 없음"
-    log = (tmp_path / "gw.log").read_text(encoding="utf-8")
-    assert "sk-ant-secret" not in log
-    assert "/home/friend" not in log
-    assert "rm -rf" not in log
-
-
 def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     runner, _ = _recording()
 
@@ -247,10 +302,10 @@ def test_codex_withoutImagesWhenAsked_fails(tmp_path):
     "request_",
     [
         {"engine": "bash", "prompt": "x"},
-        {"engine": "claude", "prompt": ""},
-        {"engine": "claude", "prompt": "x", "images": [{"data": base64.b64encode(b"GIF89a").decode()}]},
-        {"engine": "claude", "prompt": "x", "want_images": True},
-        {"engine": "claude", "prompt": "x", "images": [{"data": PNG_B64}] * 13},
+        {"engine": "claude", "prompt": "x"},  # D25: codex 하나만 받는다
+        {"engine": "codex", "prompt": ""},
+        {"engine": "codex", "prompt": "x", "images": [{"data": base64.b64encode(b"GIF89a").decode()}]},
+        {"engine": "codex", "prompt": "x", "images": [{"data": PNG_B64}] * 25},
     ],
 )
 def test_badRequests_neverRunACli(tmp_path, request_):
@@ -265,7 +320,7 @@ def test_timeout_isReportedNotRaised(tmp_path):
     def runner(command, **kwargs):
         raise subprocess.TimeoutExpired(command, 1)
 
-    response = gateway.handle({"engine": "claude", "prompt": "x"}, runner=runner, root=tmp_path)
+    response = gateway.handle({"engine": "codex", "prompt": "x"}, runner=runner, root=tmp_path)
 
     assert not response["ok"] and "시간 초과" in response["error"]
 
@@ -308,7 +363,7 @@ def test_unexpectedError_isGenericInResponse(tmp_path, monkeypatch, capsys):
         raise RuntimeError("C:/Users/friend/secret-path")
 
     monkeypatch.setattr(gateway, "handle", boom)
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"claude","prompt":"x"}')))
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"engine":"codex","prompt":"x"}')))
 
     gateway.main()
 
@@ -322,21 +377,63 @@ def test_flagLikeModel_isRejectedBeforeAnyCli(tmp_path, model):
     runner, calls = _recording()
 
     with pytest.raises(gateway.BadRequest):
-        gateway.handle({"engine": "claude", "prompt": "x", "model": model}, runner=runner, root=tmp_path)
+        gateway.handle({"engine": "codex", "prompt": "x", "model": model}, runner=runner, root=tmp_path)
     assert calls == []
 
 
-def test_system_isPassedAsFileNotArgument(tmp_path):
-    seen = {}
+def test_reasoning_isPassedAsConfigOverrideOnlyFromTheAllowedList(tmp_path):
+    runner, calls = _recording()
 
-    def runner(command, **kwargs):
-        flag = command.index("--append-system-prompt-file")
-        seen["text"] = Path(command[flag + 1]).read_text(encoding="utf-8")
-        seen["command"] = command
-        return subprocess.CompletedProcess(command, 0, json.dumps({"subtype": "success", "result": "ok"}), "")
+    gateway.handle({"engine": "codex", "prompt": "x", "reasoning": "medium"}, runner=runner, root=tmp_path)
 
-    gateway.handle({"engine": "claude", "prompt": "x", "system": "--tools Bash", "model": "sonnet"}, runner=runner, root=tmp_path)
+    command = calls[0]["command"]
+    assert command[command.index("-c") + 1] == 'model_reasoning_effort="medium"'
+    with pytest.raises(gateway.BadRequest):
+        gateway.handle({"engine": "codex", "prompt": "x", "reasoning": 'high"\nsandbox_mode="x'}, runner=runner, root=tmp_path)
+    assert len(calls) == 1
 
-    assert seen["text"] == "--tools Bash"
-    assert "--tools Bash" not in seen["command"]
-    assert seen["command"][seen["command"].index("--model") + 1] == "sonnet"
+
+def test_systemAndPrompt_goThroughStdinNotArguments(tmp_path):
+    runner, calls = _recording()
+
+    gateway.handle({"engine": "codex", "prompt": "x", "system": "--dangerously-bypass-approvals-and-sandbox",
+                    "model": "gpt-6.1-sol"}, runner=runner, root=tmp_path)
+
+    command = calls[0]["command"]
+    assert "--dangerously-bypass-approvals-and-sandbox" not in command
+    assert calls[0]["input"].startswith("--dangerously-bypass-approvals-and-sandbox\n\nx")
+    assert command[command.index("-m") + 1] == "gpt-6.1-sol"
+
+
+ENTRYPOINT = GATEWAY / "entrypoint.sh"
+
+
+def _entrypoint(codex_home):
+    sh = shutil.which("sh")
+    if sh is None:
+        pytest.skip("sh 가 없다")
+    return subprocess.run([sh, str(ENTRYPOINT)], env={**os.environ, "CODEX_HOME": str(codex_home)},
+                          capture_output=True, text=True, encoding="utf-8")
+
+
+def test_entrypoint_refuses_human_codex_home_without_deleting(tmp_path):
+    # 볼륨 대신 사람이 쓰던 ~/.codex 를 붙인 경우 — 정리가 그 기록을 날리면 안 된다.
+    home = tmp_path / "codex"
+    home.mkdir()
+    (home / "history.jsonl").write_text("{}\n")
+    (home / "state.sqlite").write_text("x")
+    completed = _entrypoint(home)
+    assert json.loads(completed.stdout)["error"] == "GATEWAY_MISCONFIGURED"
+    assert completed.returncode == 0
+    assert (home / "history.jsonl").exists() and (home / "state.sqlite").exists()
+
+
+def test_entrypoint_wipes_state_but_keeps_login(tmp_path):
+    home = tmp_path / "codex"
+    home.mkdir()
+    for name in ("auth.json", "installation_id", "gateway.lock", "gole-llm-gateway-usage.jsonl", "state.sqlite"):
+        (home / name).write_text("x")
+    (home / "skills").mkdir()
+    _entrypoint(home)  # 이미지 밖이라 config 복사에서 멈춘다 — 정리는 그 전에 끝난다
+    # 잠금·가드 기록은 상태 볼륨으로 옮겼다(D28). CODEX_HOME 에 있으면 남기지 않는다.
+    assert sorted(p.name for p in home.iterdir()) == ["auth.json", "installation_id"]

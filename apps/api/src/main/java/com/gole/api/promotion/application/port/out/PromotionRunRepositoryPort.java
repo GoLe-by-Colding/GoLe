@@ -15,6 +15,9 @@ public interface PromotionRunRepositoryPort {
      */
     PromotionRun insertIfAbsent(PromotionRun run);
 
+    /** 같은 id 의 기록을 덮어쓴다. 납품(D29)이 먼저 선점해 둔 기록을 결과로 바꿀 때만 쓴다. */
+    PromotionRun replace(PromotionRun run);
+
     List<PromotionRun> findRecent(int limit);
 
     /** 지표 집계용 — 실행은 주 몇 건 수준이라 애플리케이션 레이어에서 reduce 한다. */

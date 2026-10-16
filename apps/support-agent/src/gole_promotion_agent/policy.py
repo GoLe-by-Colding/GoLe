@@ -1,4 +1,4 @@
-"""캡처 가드·자원 상한·프롬프트 재료. 코드로 거는 규칙은 전부 여기 있다."""
+"""러너의 캡처 가드·diff 상한·프롬프트 재료. 러너와 서버가 같이 지키는 상한은 gole_promotion_core.limits 에 있다."""
 
 from __future__ import annotations
 
@@ -15,30 +15,14 @@ SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 MAX_DIFF_CHARS = 120_000
 DIFF_TRUNCATED_NOTICE = "\n\n[잘림] 변경이 너무 커서 여기까지만 보여준다. 나머지는 읽을 수 없다."
 
-# 캡션 (스펙 D13)
-MAX_CAPTION = 450
-MAX_RATIONALE = 300
-
 # 캡처 (스펙 D12)
 INTERACTION_TIMEOUT_SECONDS = 5.0
 NAVIGATION_TIMEOUT_SECONDS = 30.0
 READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+CAPTURE_VIEWPORT = {"width": 390, "height": 844}
+CAPTURE_MANIFEST_VERSION = 2
 
-# 게이트 (스펙 D18)
-MAX_PENDING_REVIEW = 5
-# 실행 원장(D23). 서버도 같은 상한으로 다시 자르고 검증한다 — 신뢰 경계 양쪽에서 막는다.
-MAX_RUN_DETAIL = 300
-MAX_RUN_CALLS = 20
-AGENT_SHA_PATTERN = re.compile(r"[0-9a-f]{7,40}")
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
-
-
-def clean_detail(text: str | None) -> str | None:
-    """모델이 쓴 사유를 원장에 담을 모양으로: 제어문자 제거, 공백 정리, 글자 단위 300자. 비면 None."""
-    if text is None:
-        return None
-    cleaned = " ".join(_CONTROL.sub(" ", str(text)).split())
-    return cleaned[:MAX_RUN_DETAIL] or None
+# 프롬프트에 싣는 최근 글 수 (스펙 D18). 러너와 서버가 같이 지키는 상한은 gole_promotion_core.limits 에 있다.
 HISTORY_LIMIT = 10
 
 FORBIDDEN_ROUTE = re.compile(
@@ -87,7 +71,7 @@ SESSION_FIELDS = ("accountId", "sessionToken", "role", "onboardingRequired")
 # 홍보물에 나오면 안 되는 요소를 가리는 표식. 클래스명·DOM 구조에 기대지 않으려고
 # `apps/web` 쪽에 이 속성을 직접 단다 — 리팩터링해도 캡처가 조용히 깨지지 않는다.
 CAPTURE_HIDE_ATTRIBUTE = "data-promotion-hide"
-CAPTURE_HIDE_CSS = f"[{CAPTURE_HIDE_ATTRIBUTE}]{{display:none !important}}"
+CAPTURE_HIDE_CSS = f"[{CAPTURE_HIDE_ATTRIBUTE}],nextjs-portal{{display:none !important}}"
 
 
 def session_init_script(session: Mapping[str, Any]) -> str:
@@ -116,6 +100,9 @@ def capture_chrome_script() -> str:
     css = json.dumps(CAPTURE_HIDE_CSS)
     return f"""
 (() => {{
+  window.localStorage.setItem("gole.analytics-consent.v1", JSON.stringify({{
+    version: 1, decision: "denied", updatedAt: new Date().toISOString()
+  }}));
   const apply = () => {{
     if (document.getElementById({style_id})) return;
     const root = document.head || document.documentElement;

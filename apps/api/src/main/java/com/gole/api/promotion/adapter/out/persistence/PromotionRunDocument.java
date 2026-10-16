@@ -42,7 +42,11 @@ public class PromotionRunDocument {
             Double costUsd,
             Long durationMs) {}
 
-    public record MemoryContextDocument(List<String> feedbackIds, List<GuidelineSnapshotDocument> guidelines) {}
+    public record MemoryContextDocument(
+            List<String> feedbackIds, List<GuidelineSnapshotDocument> guidelines, List<StageSnapshotDocument> stages) {}
+
+    public record StageSnapshotDocument(
+            String stage, List<String> routes, List<String> feedbackIds, List<String> guidelineIds) {}
 
     public record GuidelineSnapshotDocument(
             String id, String kind, String content, List<String> targets, List<String> categories) {}

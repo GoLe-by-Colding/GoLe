@@ -1,16 +1,36 @@
 #!/usr/bin/env python3
-"""SSH 로 부르는 LLM 게이트웨이. 요청 JSON 을 stdin 으로 받아 claude/codex CLI 를 돌리고 JSON 을 돌려준다.
+"""LLM 게이트웨이. 요청 JSON 하나를 받아 codex CLI 를 돌리고 JSON 을 돌려준다(stdin/stdout 또는 call()).
 
-서버의 CLI 는 사용자 본인 계정으로 로그인돼 있다. 서버에는 이 파일과 run.sh 만 둔다(표준 라이브러리만
-쓴다). 설치:
+지인 서버의 일회용 Docker 컨테이너 안에서 돈다(promotion-review D26·D28·D29). 주문 하나를 처리하는
+`gole_promotion_deliver` 가 같은 컨테이너에서 call() 로 기획·제작 두 번을 부른다. 코드 이미지는 `gateway/Dockerfile`
+(GHCR `:stable`)이고, 지인 서버가 그 위에 codex 로그인을 얹어 `:local` 을 굽는다. 서버 진입점은 `server/run.sh` 다.
+서버 설치(한 번. docker(BuildKit), flock·setsid(util-linux), curl 이 있어야 한다):
 
-    mkdir -p ~/gole-llm-gateway && cp gole_llm_gateway.py run.sh ~/gole-llm-gateway/
-    chmod +x ~/gole-llm-gateway/run.sh
+    mkdir -p /opt/gole-gateway   # 이 저장소의 gateway/server/{run.sh,Dockerfile.local,.dockerignore} 를 복사
+    docker run --name gole-login -it --entrypoint codex \\
+      ghcr.io/gole-by-colding/gole-llm-gateway:stable login --device-auth
+    docker cp gole-login:/home/gateway/.codex/auth.json /opt/gole-gateway/auth.json && docker rm gole-login
+    chmod 600 /opt/gole-gateway/auth.json
+    docker volume create gole-gateway-state
+    # 납품 설정(0600). 토큰은 여기서 만들고, 그 SHA-256 만 운영 백엔드의 PROMOTION_AGENT_TOKEN_SHA256 에 넣는다:
+    #   TOKEN=$(openssl rand -hex 32); printf '%s' "$TOKEN" | sha256sum
+    # /opt/gole-gateway/promotion.env
+    #   PROMOTION_AGENT_API_URL=https://gole.co.kr
+    #   PROMOTION_AGENT_TOKEN=<TOKEN>
+    #   DISCORD_OPERATIONS_WEBHOOK_URL=<운영 채널 웹훅>
     # ~/.ssh/authorized_keys 에 전용 키를 forced command 로 한 줄 추가한다:
-    # command="~/gole-llm-gateway/run.sh",no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA... gole-promotion
+    # restrict,command="/opt/gole-gateway/run.sh" ssh-ed25519 AAAA... gole-promotion
+    # restrict 는 포워딩·pty 등 SSH 부가 기능을 앞으로 생길 것까지 끈다.
 
-요청:  {"engine": "claude"|"codex", "prompt": str, "system"?: str, "json_schema"?: obj,
-        "model"?: str, "images"?: [{"data": base64}], "want_images"?: bool}
+run.sh 는 `submit <run_key>` 로 주문서를 받아 jobs/ 에 두고 바로 "접수"로 답한 뒤, 백그라운드에서 stable 을 받아
+바뀌었으면 다시 굽고 deliver 컨테이너를 돌린다. 끝나면 codex 가 갱신한 auth.json 을 꺼내 바뀌었으면 다시 굽는다.
+옛 이미지 정리(prune)도 그때 한다. 컨테이너 제약(--log-driver none 등)은 run.sh 에 있다.
+상태 볼륨은 이미지 안 경로(/home/gateway/state)로 처음 붙여야 게이트웨이 사용자 소유가 된다(2026-10-13 실측).
+CODEX_HOME 에는 아무것도 붙이지 않는다 — 진입점은 사람이 쓰던 흔적(history.jsonl·AGENTS.md 등)을 보면 지우지 않고
+GATEWAY_MISCONFIGURED 로 멈춘다.
+
+요청:  {"engine": "codex", "prompt": str, "system"?: str, "json_schema"?: obj,
+        "model"?: str, "reasoning"?: "low"|"medium"|"high", "images"?: [{"data": base64}], "want_images"?: bool}
 응답:  {"ok": bool, "text": str, "structured": obj|null, "images": [{"name", "data"}], "error"?: str,
         "usage": {engine, model, input_tokens, cached_input_tokens, output_tokens, cost_usd, duration_ms}|null}
 
@@ -38,22 +58,30 @@ from typing import Any, Callable
 
 MAX_REQUEST_BYTES = 64 * 1024 * 1024
 MAX_PROMPT_CHARS = 200_000
-MAX_IMAGES = 12
+MAX_IMAGES = 24  # 홍보 후보 화면(현재 11장) 전부를 한 호출에 싣는다
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TIMEOUT_SECONDS = int(os.environ.get("GOLE_GATEWAY_TIMEOUT", "900"))
 LOCK_WAIT_SECONDS = 30 * 60
 LOCK_PATH = Path(os.environ.get("GOLE_GATEWAY_LOCK", Path.home() / ".cache" / "gole-llm-gateway.lock"))
 LOG_PATH = Path(os.environ.get("GOLE_GATEWAY_LOG", Path.home() / ".cache" / "gole-llm-gateway.log"))
+# 계정 가드(D27). 기록은 잠금 파일 옆(Docker 에서는 상태 볼륨, D28)에 둔다.
+USAGE_PATH = Path(os.environ.get("GOLE_GATEWAY_USAGE", LOCK_PATH.parent / "gole-llm-gateway-usage.jsonl"))
+DAILY_INPUT_TOKENS = int(os.environ.get("GOLE_GATEWAY_DAILY_INPUT_TOKENS", "2000000"))
+_COOLDOWN_HOURS = float(os.environ.get("GOLE_GATEWAY_COOLDOWN_HOURS", "6"))
+# 이 코드로 끝난 호출 뒤에는 그만큼 CLI 를 부르지 않는다 — 한도·로그인 문제에 계정을 다시 두드리지 않게.
+COOLDOWN_SECONDS = {
+    "CODEX_USAGE_LIMIT": _COOLDOWN_HOURS * 3600,
+    "CODEX_AUTH_REQUIRED": _COOLDOWN_HOURS * 3600,
+    "CODEX_RATE_LIMIT": 30 * 60,
+}
+KEEP_SECONDS = 7 * 24 * 3600
 # 모델 이름은 CLI 인자로 들어간다. "-" 로 시작하면 옵션으로 읽힐 수 있어 첫 글자를 영숫자로 묶는다.
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 # codex 세션 ID 는 파일 경로 조각이 되므로 UUID 모양만 받는다. --json 이 아니면 stderr 머리에 찍힌다.
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 SESSION_ID_PATTERN = re.compile(rf"^session id: ({UUID_PATTERN.pattern})$", re.MULTILINE)
 CONFIG_MODEL_PATTERN = re.compile(r'model\s*=\s*"([A-Za-z0-9][A-Za-z0-9._:-]{0,63})"')
-# claude 실패 응답에 그대로 싣는 값. 목록 밖의 문자열은 버린다 — 공개 Actions 로그로 나가기 때문이다.
-CLAUDE_SUBTYPES = frozenset({"success", "error_max_turns", "error_during_execution", "error_max_structured_output_retries"})
-CLAUDE_TERMINAL_REASONS = frozenset({"api_error", "max_turns", "prompt_too_long", "aborted"})
-# 응답에 싣는 모델 이름. claude 는 여러 모델을 쓰면 쉼표로 잇는다.
+# 응답에 싣는 모델 이름.
 MODEL_LIST_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:,-]{0,255}")
 
 Runner = Callable[..., subprocess.CompletedProcess]
@@ -106,87 +134,6 @@ def _attachment_note(paths: list[Path], workdir: Path) -> str:
     return f"\n\n첨부 이미지(순서대로):\n{listed}"
 
 
-def _claude(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Runner) -> dict[str, Any]:
-    if request.get("want_images"):
-        raise BadRequest("claude 는 이미지를 만들지 못한다 — codex 를 쓴다")
-    command = [
-        _binary("GOLE_GATEWAY_CLAUDE_BIN", "claude"),
-        "-p",
-        "--output-format",
-        "json",
-        "--no-session-persistence",
-        "--strict-mcp-config",
-        "--tools",
-        "Read",
-        "--allowedTools",
-        "Read(./in/**)",
-        "--permission-mode",
-        "dontAsk",
-    ]
-    if request.get("json_schema"):
-        command += ["--json-schema", json.dumps(request["json_schema"], ensure_ascii=False)]
-    if request.get("system"):
-        # 값이 "-" 로 시작해도 옵션으로 읽히지 않게 파일로 넘긴다.
-        system_file = workdir / "system.md"
-        system_file.write_text(str(request["system"]), encoding="utf-8")
-        command += ["--append-system-prompt-file", str(system_file)]
-    if request.get("model"):
-        command += ["--model", request["model"]]
-    completed = runner(
-        command,
-        cwd=str(workdir),
-        input=str(request["prompt"]) + _attachment_note(paths, workdir),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=TIMEOUT_SECONDS,
-    )
-    try:
-        result = json.loads(completed.stdout)
-    except (TypeError, ValueError):
-        _log(f"claude 출력 해석 실패 rc={completed.returncode} stderr={(completed.stderr or '')[-2000:]!r}")
-        return {"ok": False, "error": f"claude 출력 해석 실패(종료 코드 {completed.returncode})"}
-    tokens = result.get("usage") or {}
-    cached = _count(tokens.get("cache_read_input_tokens"))
-    usage = _usage(
-        "claude",
-        ",".join(result.get("modelUsage") or {}) or request.get("model"),
-        # claude 의 input_tokens 는 캐시를 뺀 값이다. codex 처럼 캐시를 포함한 전체 입력으로 맞춘다.
-        input_tokens=_count(tokens.get("input_tokens")) + cached + _count(tokens.get("cache_creation_input_tokens")),
-        cached_input_tokens=cached,
-        output_tokens=_count(tokens.get("output_tokens")),
-        cost_usd=result.get("total_cost_usd"),
-        duration_ms=result.get("duration_ms"),
-    )
-    if result.get("is_error") or result.get("subtype") != "success":
-        # API 오류(인증 만료·사용량 한도·과부하)는 subtype 이 success 그대로라 subtype 만으로는 가려지지
-        # 않는다. 응답과 서버 로그 모두 검증한 사유 코드·HTTP 상태만 남긴다.
-        error = _claude_error(result)
-        _log(error)
-        return {"ok": False, "error": error, "usage": usage}
-    return {
-        "ok": True,
-        "text": result.get("result") or "",
-        "structured": result.get("structured_output"),
-        "usage": usage,
-    }
-
-
-def _claude_error(result: dict[str, Any]) -> str:
-    """공개 로그로 나가는 claude 실패 문장. 알려진 코드와 숫자만 싣는다 — CLI 출력 원문은 비밀·경로를 담을 수 있다."""
-    parts = []
-    subtype = result.get("subtype")
-    if isinstance(subtype, str) and subtype in CLAUDE_SUBTYPES:
-        parts.append(subtype)
-    reason = result.get("terminal_reason")
-    if isinstance(reason, str) and reason in CLAUDE_TERMINAL_REASONS:
-        parts.append(reason)
-    status = result.get("api_error_status")
-    if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
-        parts.append(f"HTTP {status}")
-    return "claude 실패: " + (" · ".join(parts) or "알 수 없음")
-
-
 def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Runner) -> dict[str, Any]:
     last = workdir / "last-message.txt"
     command = [
@@ -209,10 +156,15 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         command += ["--output-schema", str(schema)]
     if request.get("model"):
         command += ["-m", request["model"]]
+    if request.get("reasoning"):
+        # 고르기처럼 가벼운 호출은 추론을 낮춰 사용량을 아낀다. 값은 handle 이 목록으로 거른다.
+        command += ["-c", f'model_reasoning_effort="{request["reasoning"]}"']
     prompt = str(request["prompt"])
     if request.get("system"):
         prompt = f"{request['system']}\n\n{prompt}"
     if request.get("want_images"):
+        prompt = ("$imagegen\n내장 image_gen 도구로 지시한 첨부 이미지를 편집한다. "
+                  "도구를 사용할 수 없으면 실패로 종료하고 API/CLI 이미지 생성으로 대체하지 않는다.\n\n" + prompt)
         prompt += "\n\n만든 이미지는 out/ 폴더에 PNG 파일로 저장한다."
     # 프롬프트는 인자가 아니라 stdin 으로 준다. 인자로 주면 셸 shim(Windows 의 codex.cmd)이 괄호·따옴표
     # 섞인 문장을 깨뜨려 뒤의 -i 까지 사라진다 — 모델이 "첨부 이미지가 없다"고 답한다.
@@ -239,9 +191,13 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         output_tokens=_count(tokens.get("output_tokens")),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
-    if completed.returncode != 0:
-        _log(f"codex rc={completed.returncode} stderr={(completed.stderr or completed.stdout or '')[-2000:]!r}")
-        return {"ok": False, "error": f"codex 실패(종료 코드 {completed.returncode})", "usage": usage}
+    failed = [e for e in events if e.get("type") in ("turn.failed", "error")]
+    if completed.returncode != 0 or any(e.get("type") == "turn.failed" for e in events):
+        detail = "\n".join([*(json.dumps(e, ensure_ascii=False) for e in failed), completed.stderr or ""])
+        _log(f"codex rc={completed.returncode} detail={(detail or completed.stdout or '')[-2000:]!r}")
+        # 계정 문제(한도·로그인)와 코드 결함을 공개 로그에서 구별하도록 고정 코드로 돌려준다. 원문은 서버 로그에만.
+        code = _classify(detail if detail.strip() else completed.stdout or "")
+        return {"ok": False, "error": code or f"codex 실패(종료 코드 {completed.returncode})", "usage": usage}
     text = last.read_text(encoding="utf-8").strip() if last.exists() else ""
     structured = None
     if request.get("json_schema"):
@@ -256,12 +212,32 @@ def _codex(request: dict[str, Any], workdir: Path, paths: list[Path], runner: Ru
         _log(f"codex 결과 읽기 실패: {error!r}")
         return {"ok": False, "error": "codex 결과 이미지를 읽지 못함", "usage": usage}
     if request.get("want_images"):
-        if not images:
+        if not images and structured is None:
             return {"ok": False, "error": "codex 가 이미지를 만들지 않았다", "usage": usage}
-        # 이미지 요청에는 글을 돌려주지 않는다. codex 는 홈 폴더를 읽을 수 있어서, 키가 샌 쪽이 "토큰 파일을
-        # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 호출 쪽은 이미지만 쓴다.
-        return {"ok": True, "images": images, "usage": usage}
+        # 이미지 요청에는 자유 글을 돌려주지 않는다. codex 는 홈 폴더를 읽을 수 있어서, 키가 샌 쪽이 "토큰 파일을
+        # 읽어 답에 적어라"고 시키면 그 글이 그대로 밖으로 나간다. 구조화 출력은 호출 쪽이 스키마로 검증하고
+        # 사람 검토 전에는 운영 DB 에만 둔다(D23·D25). 이미지가 없으면 호출 쪽이 원본을 쓴다.
+        return {"ok": True, "structured": structured, "images": images, "usage": usage}
+    if structured is not None:
+        # 스키마 요청은 구조화 출력만 쓴다. 자유 글은 돌려주지 않는다(D25) — 위 이미지 요청과 같은 이유다.
+        return {"ok": True, "structured": structured, "images": images, "usage": usage}
     return {"ok": True, "text": text, "structured": structured, "images": images, "usage": usage}
+
+
+# codex 실패 원문에서 찾는 표지 → 고정 코드. 앞쪽이 먼저 이긴다. 영문 표지는 CLI 의 CodexErrorInfo 값과 안내 문구다.
+_ERROR_MARKERS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("usage_limit_exceeded", "usage limit"), "CODEX_USAGE_LIMIT"),
+    (("rate_limit_exceeded", "rate limit", "too many requests"), "CODEX_RATE_LIMIT"),
+    (("unauthorized", "not logged in", "not signed in", "could not be refreshed", "refresh token was rejected"),
+     "CODEX_AUTH_REQUIRED"),
+    (("server_overloaded", "service unavailable"), "CODEX_OVERLOADED"),
+    (("context_window_exceeded",), "CODEX_CONTEXT_TOO_LARGE"),
+)
+
+
+def _classify(detail: str) -> str | None:
+    lowered = detail.casefold()
+    return next((code for markers, code in _ERROR_MARKERS if any(m in lowered for m in markers)), None)
 
 
 def _codex_events(stdout: str | None) -> list[dict[str, Any]]:
@@ -313,13 +289,12 @@ def _usage(
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
-    cost_usd: Any = None,
     duration_ms: Any = None,
 ) -> dict[str, Any]:
-    """두 CLI 의 사용량을 한 모양으로 맞춘다. 숫자와 모델 이름만 담는다 — 응답은 공개 로그로 간다.
+    """CLI 사용량. 숫자와 모델 이름만 담는다 — 응답은 공개 로그로 간다.
 
     input_tokens 는 캐시 적중분을 포함한 전체 입력, cached_input_tokens 는 그중 캐시에서 읽은 양이다.
-    cost_usd 는 claude 가 알려 주는 API 환산 금액이다(구독이라 실제 청구액이 아니다). codex 는 None.
+    cost_usd 는 원장 계약(ModelCall)의 자리다. codex 는 금액을 알려 주지 않아 늘 None 이다.
     """
     return {
         "engine": engine,
@@ -327,7 +302,7 @@ def _usage(
         "input_tokens": input_tokens,
         "cached_input_tokens": cached_input_tokens,
         "output_tokens": output_tokens,
-        "cost_usd": float(cost_usd) if isinstance(cost_usd, (int, float)) and cost_usd >= 0 else None,
+        "cost_usd": None,
         "duration_ms": duration_ms if isinstance(duration_ms, int) and duration_ms >= 0 else None,
     }
 
@@ -371,14 +346,16 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
     if not isinstance(request, dict):
         raise BadRequest("요청은 JSON 객체다")
     engine = request.get("engine")
-    if engine not in ("claude", "codex"):
-        raise BadRequest("engine 은 claude 또는 codex")
+    if engine != "codex":
+        raise BadRequest("engine 은 codex 뿐이다")
     prompt = request.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         raise BadRequest(f"prompt 는 1~{MAX_PROMPT_CHARS}자 문자열")
     model = request.get("model")
     if model is not None and not (isinstance(model, str) and MODEL_PATTERN.fullmatch(model)):
         raise BadRequest("model 은 영문·숫자·._:- 로 된 이름이어야 한다")
+    if request.get("reasoning") is not None and request["reasoning"] not in ("low", "medium", "high"):
+        raise BadRequest("reasoning 은 low·medium·high 중 하나")
     if request.get("system") is not None and not isinstance(request["system"], str):
         raise BadRequest("system 은 문자열이다")
     if request.get("json_schema") is not None and not isinstance(request["json_schema"], dict):
@@ -388,9 +365,8 @@ def handle(request: Any, *, runner: Runner = subprocess.run, root: Path | None =
         (workdir / "in").mkdir()
         (workdir / "out").mkdir()
         paths = _images(request, workdir / "in")
-        call = _claude if engine == "claude" else _codex
         try:
-            response = call(request, workdir, paths, runner)
+            response = _codex(request, workdir, paths, runner)
         except subprocess.TimeoutExpired:
             return {"ok": False, "error": f"{engine} 시간 초과({TIMEOUT_SECONDS}초)"}
         except OSError as error:  # CLI 를 찾지 못함 등 — 경로가 드러나므로 서버 로그에만
@@ -423,7 +399,7 @@ class _Lock:
                 return self
             except BlockingIOError:
                 if time.monotonic() > deadline:
-                    raise TimeoutError("다른 요청이 끝나지 않았다")
+                    raise TimeoutError("GATEWAY_BUSY")
                 time.sleep(2)
 
     def __exit__(self, *exc: Any) -> None:
@@ -431,25 +407,94 @@ class _Lock:
             self._handle.close()
 
 
+class _AccountGuard:
+    """구독 계정을 지킨다(D27). 호출 기록을 볼륨에 남기고, 예산을 넘었거나 계정 오류 직후면 CLI 를 부르지 않는다.
+
+    호출 쪽이 무엇이든(러너 재시도·수동 실행) 같은 계정을 두드리는 곳은 여기 하나라 여기서 막는다.
+    _Lock 안에서만 쓰므로 기록 파일에 경합이 없다.
+    """
+
+    def __init__(self, path: Path, *, now: Callable[[], float] = time.time):
+        self._path = path
+        self._now = now
+
+    def _records(self) -> list[dict[str, Any]]:
+        try:
+            lines = self._path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        records = []
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(record, dict) and isinstance(record.get("t"), (int, float)):
+                records.append(record)
+        return records
+
+    def refusal(self) -> str | None:
+        """지금 CLI 를 부르면 안 되는 이유(고정 코드). 불러도 되면 None."""
+        now, records = self._now(), self._records()
+        # 막은 요청은 기록하지 않으므로 마지막 줄이 마지막으로 CLI 를 부른 결과다.
+        if records and now - records[-1]["t"] < COOLDOWN_SECONDS.get(records[-1].get("code"), 0):
+            return "CODEX_COOLDOWN"
+        spent = sum(_count(r.get("input")) for r in records if now - r["t"] < 24 * 3600)
+        return "GATEWAY_BUDGET_EXCEEDED" if spent >= DAILY_INPUT_TOKENS else None
+
+    def record(self, response: dict[str, Any]) -> None:
+        now = self._now()
+        usage = response.get("usage") or {}
+        error = response.get("error")
+        kept = [r for r in self._records() if now - r["t"] < KEEP_SECONDS]
+        kept.append({
+            "t": now, "code": None if response.get("ok") else (error if error in _CODES else "FAILED"),
+            "input": _count(usage.get("input_tokens")), "output": _count(usage.get("output_tokens")),
+        })
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text("".join(json.dumps(r) + "\n" for r in kept), encoding="utf-8")
+
+
+_CODES = {code for _, code in _ERROR_MARKERS}
+
+
 def _failure(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message, "text": "", "structured": None, "images": [], "usage": None}
 
 
+def call(request: Any) -> dict[str, Any]:
+    """요청 하나를 잠금·계정 가드 안에서 처리한다. 언제나 응답 JSON 을 돌려준다 — 같은 컨테이너의 deliver(D29)도 이걸 부른다."""
+    try:
+        with _Lock():
+            guard = _AccountGuard(USAGE_PATH)
+            refusal = guard.refusal()
+            if refusal:
+                _log(f"계정 가드가 막음: {refusal}")
+                return _failure(refusal)
+            response = handle(request)
+            guard.record(response)
+            return response
+    except BadRequest as error:  # 우리가 쓴 문장이라 그대로 돌려줘도 된다
+        return _failure(str(error))
+    except TimeoutError as error:  # 잠금 대기 초과
+        return _failure(str(error))
+    except ValueError:  # 요청 모양 오류
+        return _failure("요청을 처리하지 못함")
+    except Exception:  # noqa: BLE001 — 호출 쪽은 언제나 JSON 을 받아야 한다
+        _log("게이트웨이 오류\n" + traceback.format_exc())
+        return _failure("게이트웨이 오류(서버 로그 참고)")
+
+
 def main() -> int:
     raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
-    try:
-        if len(raw) > MAX_REQUEST_BYTES:
-            raise BadRequest("요청이 너무 크다")
-        request = json.loads(raw.decode("utf-8"))
-        with _Lock():
-            response = handle(request)
-    except BadRequest as error:  # 우리가 쓴 문장이라 그대로 돌려줘도 된다
-        response = _failure(str(error))
-    except (ValueError, TimeoutError) as error:  # JSON 형식 오류·잠금 대기 초과
-        response = _failure("요청을 처리하지 못함" if isinstance(error, ValueError) else str(error))
-    except Exception:  # noqa: BLE001 — 클라이언트는 언제나 JSON 을 받아야 한다
-        _log("게이트웨이 오류\n" + traceback.format_exc())
-        response = _failure("게이트웨이 오류(서버 로그 참고)")
+    if len(raw) > MAX_REQUEST_BYTES:
+        response = _failure("요청이 너무 크다")
+    else:
+        try:
+            request = json.loads(raw.decode("utf-8"))
+        except ValueError:
+            request = None
+        response = _failure("요청을 처리하지 못함") if request is None else call(request)
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

@@ -121,18 +121,21 @@ export type { AdminExceptionEntry, AdminShipmentFacts, AdminOrderContacts } from
 export type {
   PromotionMemoryTarget,
   PromotionGuidelineKind,
+  PromotionGuidelineSourceType,
   PromotionGuidelineStatus,
   AdminPromotionFeedback,
   UpdatePromotionGuidelineInput,
   PromotionGuidelineSnapshot,
   AdminPromotionGuideline,
   PromotionRunMemoryContext,
+  PromotionRunMemoryStage,
   AdminPromotionRun,
 } from "./api/admin-api";
 export {
   fetchAdminPromotionFeedback,
   fetchAdminPromotionFeedbackById,
   fetchAdminPromotionGuidelines,
+  seedAdminPromotionKnowledge,
   updateAdminPromotionGuideline,
   activateAdminPromotionGuideline,
   dismissAdminPromotionGuideline,

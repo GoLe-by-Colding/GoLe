@@ -21,9 +21,45 @@ public record PromotionGuideline(
         String confirmedBy,
         Instant confirmedAt,
         String reflectionRunKey,
-        long version) {
+        long version,
+        PromotionGuidelineSourceType sourceType,
+        String sourceReference) {
 
     public static final int MAX_CONTENT = 1000;
+
+    public PromotionGuideline(
+            String id,
+            PromotionGuidelineKind kind,
+            String content,
+            List<PromotionMemoryTarget> targets,
+            List<PromotionCategory> categories,
+            List<String> sourceFeedbackIds,
+            PromotionGuidelineStatus status,
+            String proposedBy,
+            Instant createdAt,
+            Instant updatedAt,
+            String confirmedBy,
+            Instant confirmedAt,
+            String reflectionRunKey,
+            long version) {
+        this(
+                id,
+                kind,
+                content,
+                targets,
+                categories,
+                sourceFeedbackIds,
+                status,
+                proposedBy,
+                createdAt,
+                updatedAt,
+                confirmedBy,
+                confirmedAt,
+                reflectionRunKey,
+                version,
+                PromotionGuidelineSourceType.FEEDBACK,
+                null);
+    }
 
     public PromotionGuideline {
         Objects.requireNonNull(id, "id");
@@ -35,9 +71,20 @@ public record PromotionGuideline(
         targets = List.copyOf(targets);
         categories = List.copyOf(categories);
         sourceFeedbackIds = List.copyOf(sourceFeedbackIds);
+        sourceType = sourceType == null ? PromotionGuidelineSourceType.FEEDBACK : sourceType;
+        if (sourceType == PromotionGuidelineSourceType.CORE_SEED) {
+            if (kind != PromotionGuidelineKind.KNOWLEDGE
+                    || !sourceFeedbackIds.isEmpty()
+                    || sourceReference == null
+                    || sourceReference.isBlank()
+                    || sourceReference.length() > 300) {
+                throw new IllegalArgumentException("core knowledge requires its document reference");
+            }
+        } else if (sourceFeedbackIds.isEmpty() || sourceReference != null) {
+            throw new IllegalArgumentException("feedback knowledge requires feedback references");
+        }
         if (targets.isEmpty()
                 || categories.isEmpty()
-                || sourceFeedbackIds.isEmpty()
                 || targets.size() > PromotionMemoryTarget.values().length
                 || categories.size() > PromotionCategory.values().length
                 || sourceFeedbackIds.size() > 3
@@ -74,7 +121,9 @@ public record PromotionGuideline(
                 confirmedBy,
                 confirmedAt,
                 reflectionRunKey,
-                Math.incrementExact(version));
+                Math.incrementExact(version),
+                sourceType,
+                sourceReference);
     }
 
     public PromotionGuideline activate(String actorId, Instant now) {
@@ -97,7 +146,9 @@ public record PromotionGuideline(
                 actorId,
                 now,
                 reflectionRunKey,
-                Math.incrementExact(version));
+                Math.incrementExact(version),
+                sourceType,
+                sourceReference);
     }
 
     public PromotionGuideline dismiss(Instant now) {
@@ -125,7 +176,9 @@ public record PromotionGuideline(
                 confirmedBy,
                 confirmedAt,
                 reflectionRunKey,
-                Math.incrementExact(version));
+                Math.incrementExact(version),
+                sourceType,
+                sourceReference);
     }
 
     private void requireStatus(PromotionGuidelineStatus expected) {

@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.media.application.port.in.UploadImageUseCase;
 import com.gole.api.media.domain.model.MediaTargetType;
 import com.gole.api.promotion.adapter.out.media.MediaPromotionMediaAdapter;
 import com.gole.api.promotion.application.port.in.CreatePromotionPostUseCase.CaptureOriginal;
@@ -64,7 +65,7 @@ class PromotionPostServiceTest {
             repository,
             idGenerator,
             publishPort,
-            new MediaPromotionMediaAdapter(mediaAssets),
+            new MediaPromotionMediaAdapter(mediaAssets, mock(UploadImageUseCase.class)),
             operationalEvents,
             clock,
             feedback,
@@ -148,7 +149,7 @@ class PromotionPostServiceTest {
                 repo,
                 idGenerator,
                 publishPort,
-                new MediaPromotionMediaAdapter(mediaAssets),
+                new MediaPromotionMediaAdapter(mediaAssets, mock(UploadImageUseCase.class)),
                 operationalEvents,
                 clock,
                 feedback,

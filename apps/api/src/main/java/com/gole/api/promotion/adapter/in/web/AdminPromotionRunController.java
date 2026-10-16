@@ -131,8 +131,9 @@ public class AdminPromotionRunController {
     }
 
     public record MemoryContextRequest(
-            @Size(max = 3) List<@NotBlank @Size(max = 80) String> feedbackIds,
-            @Size(max = 8) List<@NotNull @Valid GuidelineSnapshotRequest> guidelines) {
+            @Size(max = 6) List<@NotBlank @Size(max = 80) String> feedbackIds,
+            List<@NotNull @Valid GuidelineSnapshotRequest> guidelines,
+            @Size(max = 2) List<@NotNull @Valid StageSnapshotRequest> stages) {
         PromotionMemoryContext toDomain() {
             return new PromotionMemoryContext(
                     feedbackIds,
@@ -140,7 +141,22 @@ public class AdminPromotionRunController {
                             ? List.of()
                             : guidelines.stream()
                                     .map(GuidelineSnapshotRequest::toDomain)
+                                    .toList(),
+                    stages == null
+                            ? List.of()
+                            : stages.stream()
+                                    .map(StageSnapshotRequest::toDomain)
                                     .toList());
+        }
+    }
+
+    public record StageSnapshotRequest(
+            @NotNull PromotionMemoryContext.Stage stage,
+            @NotNull @Size(max = 30) List<@NotBlank @Size(max = 300) String> routes,
+            @NotNull @Size(max = 3) List<@NotBlank @Size(max = 80) String> feedbackIds,
+            @NotNull List<@NotBlank @Size(max = 80) String> guidelineIds) {
+        PromotionMemoryContext.StageSnapshot toDomain() {
+            return new PromotionMemoryContext.StageSnapshot(stage, routes, feedbackIds, guidelineIds);
         }
     }
 
