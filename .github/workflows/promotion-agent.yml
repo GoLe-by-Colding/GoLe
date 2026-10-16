@@ -340,6 +340,7 @@ jobs:
             fi
             # 모델 호출·사용량은 지인 서버의 납품이 원장(관리자 화면)에 남긴다(D29). 이 실행은 주문까지만 한다.
             jq -r '"결과: **\(.outcome)** (`\(.reasonCode)`)"
+              + (if .gatewayCode then " · 서버 코드 `\(.gatewayCode)`" else "" end)
               + (if .outcome == "QUEUED"
                  then " · 지인 서버가 주문 `\(.runKey)` 을 받았다. 초안·원장·실패 알림은 서버가 남긴다" else "" end)
               + "\n\n실행 원장: " + (if .recorded == null then "이 실행은 남기지 않았다 — 지인 서버가 주문을 받았다면 납품이 남긴다"
@@ -380,11 +381,13 @@ jobs:
           run="$RUNNER_TEMP/promotion/run.json"
           code=""
           outcome=""
+          gateway_code=""
           recorded=""
           run_key=""
           if [ -s "$run" ]; then
             code=$(jq -r '.reasonCode // ""' "$run")
             outcome=$(jq -r '.outcome // ""' "$run")
+            gateway_code=$(jq -r '.gatewayCode // ""' "$run")
             recorded=$(jq -r '.recorded' "$run")
             run_key=$(jq -r '.runKey // ""' "$run")
           fi
@@ -394,7 +397,9 @@ jobs:
           fi
           link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if [ "$JOB_STATUS" = "failure" ] || [ "$JOB_STATUS" = "cancelled" ]; then
-            if [ -n "$code" ]; then
+            if [ -n "$gateway_code" ]; then
+              reason="$code($gateway_code)"
+            elif [ -n "$code" ]; then
               reason="$code"
             elif [ "$JOB_STATUS" = "cancelled" ]; then
               reason="시간 초과·취소"

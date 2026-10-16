@@ -552,6 +552,9 @@ def test_submitFailure_recordsTheLedgerOnlyWhenTheServerSurelyRefused(tmp_path, 
 
     assert _close_run(publisher, tmp_path, [], result, ARGS) == 1  # 어느 쪽이든 잡은 실패로 알린다
     assert bool(publisher.recorded) is recorded
+    # 고정 코드만 공개 요약(알림)에 싣는다. ssh 오류 문장은 싣지 않는다.
+    summary = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert summary["gatewayCode"] == (error if error.isupper() else None)
 
 
 def test_captionIsMeasuredInUtf16LikeTheBackend():

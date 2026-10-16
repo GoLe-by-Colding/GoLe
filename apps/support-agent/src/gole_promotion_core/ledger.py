@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,8 +132,12 @@ def close_run(
             status, recorded = type(error).__name__, False
     run_dir.mkdir(parents=True, exist_ok=True)
     # Actions 요약이 읽는 파일이다. 공개되므로 모델이 쓴 사유(detail)는 넣지 않는다.
+    # 게이트웨이·지인 서버의 고정 코드(GATEWAY_DAILY_LIMIT·CODEX_USAGE_LIMIT 등)는 글이 아니라 실어도 된다 — 알림이
+    # GATEWAY_FAILED 만 보여 주면 원인을 보려고 로그를 열어야 한다.
+    detail = result.detail or ""
+    gateway_code = detail if result.code == "GATEWAY_FAILED" and re.fullmatch(r"[A-Z_]+", detail) else None
     summary = {k: v for k, v in payload.items() if k not in {"detail", "memoryContext"}} | {
-        "totals": totals(calls), "recorded": recorded}
+        "totals": totals(calls), "recorded": recorded, "gatewayCode": gateway_code}
     (run_dir / "run.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[promotion-agent] {result.outcome} ({result.code})")
     if recorded is False:
