@@ -19,7 +19,7 @@
   "dependencies": {
     "@gole/core": "workspace:*",
     "@portone/browser-sdk": "^0.1.13",
-    "@sentry/nextjs": "10.74.0",
+    "@sentry/nextjs": "11.5.0",
     "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0"
