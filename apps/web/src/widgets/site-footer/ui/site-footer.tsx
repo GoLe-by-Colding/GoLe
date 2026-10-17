@@ -8,6 +8,7 @@ const NAV: ReadonlyArray<{ readonly href: string; readonly label: string }> = [
   { href: "/search", label: "탐색" },
   { href: "/prices", label: "시세" },
   { href: "/community", label: "커뮤니티" },
+  { href: "/parts", label: "부품 요청" },
   { href: "/chat", label: "대화" },
   { href: "/collection", label: "컬렉션" },
 ];
@@ -27,7 +28,7 @@ export async function SiteFooter() {
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
   const paymentsOpen = sellerTradingOpen && launch.features.payments && isPaymentRuntimeAvailable();
   return (
-    <footer className="mt-20 border-t border-brand-800 bg-brand-950 text-white">
+    <footer className="mt-10 border-t border-brand-800 bg-brand-950 text-white sm:mt-16 lg:mt-20">
       <Container width="xl">
         <div className="flex flex-col gap-7 py-12">
           <div className="flex flex-wrap items-center justify-between gap-4">
