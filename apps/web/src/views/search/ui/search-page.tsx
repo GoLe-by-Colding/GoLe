@@ -162,7 +162,8 @@ export async function SearchPage(props: SearchPageProps) {
           </Text>
         </div>
         <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
-          <ListingFilterBar initial={initial} />
+          {/* URL에서 필터를 빼거나 뒤로 가면 입력 초안도 같은 조건으로 다시 만든다. */}
+          <ListingFilterBar key={JSON.stringify(initial)} initial={initial} />
         </div>
         {result.status === "failed" ? null : (
           <SearchSetShortcut sets={querySets} listingCount={listings.length} />

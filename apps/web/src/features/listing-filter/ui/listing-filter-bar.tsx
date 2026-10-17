@@ -137,6 +137,8 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls="listing-filter-details"
             className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 sm:hidden"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -185,6 +187,7 @@ export function ListingFilterBar({ initial }: ListingFilterBarProps) {
 
         {/* 상세 필터: 모바일은 토글, 데스크톱은 항상 노출 */}
         <div
+          id="listing-filter-details"
           className={`grid grid-cols-2 gap-2 border-t border-neutral-100 px-3 pb-3 pt-2 sm:flex sm:flex-wrap sm:items-end sm:gap-2 ${
             open ? "grid" : "hidden sm:flex"
           }`}

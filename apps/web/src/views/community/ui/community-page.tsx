@@ -29,14 +29,19 @@ export async function CommunityPage() {
   return (
     <Container width="xl">
       <div className="flex flex-col gap-6 pt-8 pb-16">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-col gap-1">
             <Heading level={1}>커뮤니티</Heading>
             <Text tone="secondary">
               자랑·리뷰·질문·팁·창작(MOC)·이스터에그까지, 브릭 이야기를 나눠요
             </Text>
           </div>
-          <LinkButton href="/community/new">글쓰기</LinkButton>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <LinkButton href="/parts" variant="secondary">
+              부품 요청
+            </LinkButton>
+            <LinkButton href="/community/new">글쓰기</LinkButton>
+          </div>
         </div>
 
         {result.status === "failed" ? (

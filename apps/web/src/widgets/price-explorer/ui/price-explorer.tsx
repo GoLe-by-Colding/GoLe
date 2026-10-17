@@ -174,8 +174,8 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
   const periodLabel = PERIODS.find((item) => item.value === period)!.label;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-      <div className="flex flex-col gap-2 lg:sticky lg:top-20 lg:self-start">
+    <div className="grid gap-4 sm:gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col gap-2 lg:sticky lg:top-20 lg:self-start">
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-bold text-neutral-900">세트 시세</span>
           <select
@@ -191,7 +191,23 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
             ))}
           </select>
         </div>
-        <ol className="flex max-h-[360px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 lg:max-h-[560px]">
+        {/* 긴 세트 목록이 모바일 첫 화면을 채우지 않도록 같은 선택 상태를 select로 제공한다. */}
+        <select
+          aria-label="시세 볼 세트"
+          value={current.setNumber}
+          onChange={(event) => handleSelect(event.target.value)}
+          className="h-12 w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 text-base font-semibold text-neutral-900 lg:hidden"
+        >
+          {sorted.map((item) => (
+            <option key={item.setNumber} value={item.setNumber}>
+              {item.name} · #{item.setNumber}
+            </option>
+          ))}
+        </select>
+        <ol
+          aria-label="세트 시세 목록"
+          className="hidden max-h-[560px] flex-col gap-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-2 lg:flex"
+        >
           {sorted.map((item) => {
             const active = item.setNumber === current.setNumber;
             const itemLatest = lastPrice(item);
@@ -237,8 +253,8 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
         </ol>
       </div>
 
-      <Card padded className="flex flex-col gap-5">
-        <div className="flex items-center gap-3">
+      <Card padded className="flex min-w-0 flex-col gap-5">
+        <div className="flex flex-wrap items-center gap-3">
           <MediaImage
             src={current.imageUrl}
             alt=""
@@ -246,9 +262,11 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
             fallback="SET"
             fallbackClassName="text-[10px] tracking-wide"
           />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-lg font-bold text-neutral-900">{current.name}</span>
-            <span className="font-mono text-xs text-neutral-500">
+          <div className="flex min-w-0 flex-1 basis-36 flex-col gap-1">
+            <h2 className="break-words text-lg font-bold leading-snug text-neutral-900">
+              {current.name}
+            </h2>
+            <span className="break-words font-mono text-xs text-neutral-500">
               #{current.setNumber} · {current.theme}
             </span>
           </div>
@@ -357,13 +375,16 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
             </div>
 
             {series.length >= 2 ? (
-              <dl className="grid grid-cols-3 divide-x divide-neutral-200 border-y border-neutral-200">
+              <dl className="grid divide-y divide-neutral-200 border-y border-neutral-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 {[
                   { label: "거래량", value: `${series.length}건` },
                   { label: "기간 고가", value: high === null ? "—" : formatKrw(high) },
                   { label: "기간 저가", value: low === null ? "—" : formatKrw(low) },
                 ].map((item) => (
-                  <div key={item.label} className="flex flex-col gap-0.5 px-3 py-3">
+                  <div
+                    key={item.label}
+                    className="flex items-baseline justify-between gap-3 px-3 py-2.5 sm:flex-col sm:items-start sm:gap-0.5 sm:py-3"
+                  >
                     <dt className="text-xs text-neutral-400">{item.label}</dt>
                     <dd className="text-sm font-bold tabular-nums text-neutral-900">
                       {item.value}
