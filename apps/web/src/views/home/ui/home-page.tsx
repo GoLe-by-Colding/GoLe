@@ -82,7 +82,7 @@ export async function HomePage() {
       ? [{ label: "활성 매물", value: `${stats.listings.toLocaleString("ko-KR")}개` }]
       : []),
     ...(stats.txCount > 0
-      ? [{ label: "누적 체결", value: `${stats.txCount.toLocaleString("ko-KR")}건` }]
+      ? [{ label: "인기 상위 10세트 체결", value: `${stats.txCount.toLocaleString("ko-KR")}건` }]
       : []),
   ];
 
