@@ -222,7 +222,7 @@ export async function HomePage() {
       </section>
 
       <Container width="xl">
-        <div className="flex flex-col gap-20 pt-16 pb-24">
+        <div className="flex flex-col gap-12 pt-10 pb-16 sm:gap-16 sm:pt-12 lg:gap-20 lg:pt-16 lg:pb-24">
           {/* Trending */}
           <section className="flex flex-col gap-6">
             <SectionHeader
@@ -281,7 +281,7 @@ export async function HomePage() {
             </section>
           ) : null}
 
-          <section className="rounded-lg border border-brand-200 bg-brand-50 px-10 py-12 max-sm:px-6">
+          <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-8 sm:px-10 sm:py-12">
             <div className="flex flex-wrap items-center justify-between gap-6">
               <div className="flex flex-col gap-2">
                 <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
