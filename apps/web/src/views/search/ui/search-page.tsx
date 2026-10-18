@@ -156,10 +156,11 @@ export async function SearchPage(props: SearchPageProps) {
       <div className="flex flex-col gap-6 pt-8 pb-16">
         <div className="flex flex-col gap-1">
           <Heading level={1}>상품 탐색</Heading>
-          <Text tone="secondary">
-            지금 거래 가능한 브릭 상품{" "}
-            <span className="font-bold text-brand-600">{listings.length}</span>개
-          </Text>
+          {result.status === "ready" ? (
+            <Text tone="secondary">
+              공개된 브릭 상품 <span className="font-bold text-brand-600">{listings.length}</span>개
+            </Text>
+          ) : null}
         </div>
         <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
           <ListingFilterBar initial={initial} />
@@ -190,7 +191,7 @@ export async function SearchPage(props: SearchPageProps) {
             description={
               hasFilters
                 ? "필터를 초기화하거나 커뮤니티에서 다른 브릭 이야기를 찾아보세요."
-                : "판매자 확인 절차가 준비되는 동안 시세와 커뮤니티 콘텐츠를 먼저 이용할 수 있어요."
+                : "시세와 커뮤니티 콘텐츠를 둘러보거나 나중에 다시 확인해 주세요."
             }
             action={
               <div className="flex flex-wrap justify-center gap-2">
