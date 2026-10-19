@@ -631,6 +631,61 @@ test.describe("매물 상세 — 제안가 구매·인라인 제안·받은 제�
     expect(orderBodies[1]).not.toHaveProperty("offerId");
   });
 
+  test("연락처 입력 중 제안이 만료되면 정가 주문을 다시 확인한다", async ({ page }) => {
+    const launchResponse = await page.request.get(`${apiBaseUrl}/api/v1/config/launch`);
+    const launch = (await launchResponse.json()) as {
+      stage: number;
+      features: { payments: boolean };
+      sellerIdentityVerificationReady: boolean;
+    };
+    test.skip(
+      !(launch.sellerIdentityVerificationReady && launch.features.payments && launch.stage >= 2),
+      "결제가 닫힌 단계에서는 구매 버튼이 없다",
+    );
+    const listing = await findSeedListing(page);
+    await page.clock.install();
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          offer({
+            id: "expiring-offer",
+            listingId: listing.id,
+            sellerId: listing.sellerId,
+            price: listing.price - 1000,
+            status: "accepted",
+            respondedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + HOUR).toISOString(),
+          }),
+        ],
+      }),
+    );
+    const orderBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orderBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ status: 201, json: { id: "order-after-expiry" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.clock.fastForward(HOUR + 1000);
+    await page.getByRole("button", { name: "주문하기" }).click();
+
+    await expect(
+      page.getByText("선택한 제안이 만료되거나 변경됐어요.", { exact: false }),
+    ).toContainText("정가 주문을 원하면 다시 확인해 주세요");
+    expect(orderBodies).toHaveLength(0);
+    await expect(
+      page.getByText(`정가 ${listing.price.toLocaleString("ko-KR")}원으로 주문해요.`),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "정가로 주문하기" }).click();
+    await expect(page).toHaveURL(/\/orders\/order-after-expiry$/);
+    expect(orderBodies).toHaveLength(1);
+    expect(orderBodies[0]).not.toHaveProperty("offerId");
+  });
+
   test("인라인 거래 대화에서 가격을 제안한다", async ({ page }) => {
     const listing = await findSeedListing(page);
     await seedSession(page, BUYER_ID);

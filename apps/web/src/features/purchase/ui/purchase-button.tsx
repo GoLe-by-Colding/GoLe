@@ -57,6 +57,7 @@ export function PurchaseButton({
   // 구매하기 → 연락처 확인 → 주문 생성. 배송 문제가 생기면 연락할 번호가 필요하다(R8.1).
   const [phoneStep, setPhoneStep] = useState(false);
   const [buyerPhone, setBuyerPhone] = useState("");
+  const [selectedOffer, setSelectedOffer] = useState<{ id: string; amount: number } | null>(null);
   // 서버가 제안을 거부하면 이 화면에서는 정가 주문으로 넘어간다.
   const [offerRejected, setOfferRejected] = useState(false);
   const isOwnListing = session?.accountId === sellerId;
@@ -78,6 +79,11 @@ export function PurchaseButton({
     }
     setError(undefined);
     setBuyerPhone(readStoredPhone());
+    setSelectedOffer(
+      usableOffer === null || offerAmount === null
+        ? null
+        : { id: usableOffer.id, amount: offerAmount },
+    );
     setPhoneStep(true);
   }
 
@@ -86,7 +92,18 @@ export function PurchaseButton({
     if (!session || submitting) return;
     setError(undefined);
     setSubmitting(true);
-    const offerId = usableOffer?.id;
+    const currentOffer =
+      session === null
+        ? null
+        : findUsableAcceptedOffer(offers ?? [], listingId, session.accountId, Date.now());
+    if (selectedOffer !== null && !offerRejected && currentOffer?.id !== selectedOffer.id) {
+      setOfferRejected(true);
+      setError("선택한 제안이 만료되거나 변경됐어요. 정가 주문을 원하면 다시 확인해 주세요.");
+      reloadOffers();
+      setSubmitting(false);
+      return;
+    }
+    const offerId = offerRejected ? undefined : selectedOffer?.id;
     try {
       const phone = buyerPhone.trim();
       const order = await placeOrder(listingId, session.accountId, phone || undefined, offerId);
@@ -133,10 +150,14 @@ export function PurchaseButton({
   if (phoneStep) {
     return (
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        {offerAmount !== null ? (
+        {selectedOffer !== null && !offerRejected ? (
           <Text size="sm" tone="secondary">
-            판매자가 수락한 제안가 {formatWon(offerAmount)}으로 주문해요. (정가{" "}
+            판매자가 수락한 제안가 {formatWon(selectedOffer.amount)}으로 주문해요. (정가{" "}
             {formatWon(listingPrice)})
+          </Text>
+        ) : offerRejected ? (
+          <Text size="sm" tone="secondary">
+            정가 {formatWon(listingPrice)}으로 주문해요.
           </Text>
         ) : null}
         <Field
