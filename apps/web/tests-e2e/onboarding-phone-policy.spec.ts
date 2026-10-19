@@ -48,3 +48,22 @@ test("로컬 호환 정책에서는 미완료 전화 인증을 4단계 중 두 �
   await expect(page.getByText("2/4 단계")).toBeVisible();
   await expect(page.getByRole("list", { name: "전체 4단계 중 2단계" })).toBeVisible();
 });
+
+test("코드 발송 뒤 번호를 바꾸면 이전 번호의 코드 입력을 폐기한다", async ({ page }) => {
+  await mockOnboardingStatus(page, true);
+  await page.route("**/api/v1/accounts/me/onboarding/phone/verification", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ phoneNumber: "01012345678" });
+    await route.fulfill({ json: { maskedPhoneNumber: "010-****-5678", expiresInSeconds: 300 } });
+  });
+
+  await page.goto("/onboarding");
+  await page.getByRole("textbox", { name: "휴대폰 번호" }).fill("010-1234-5678");
+  await page.getByRole("button", { name: "인증 코드 받기" }).click();
+  await expect(page.getByRole("textbox", { name: "인증 코드" })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "휴대폰 번호" }).fill("010-9876-5432");
+
+  await expect(page.getByRole("textbox", { name: "인증 코드" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "인증하고 다음" })).toHaveCount(0);
+  await expect(page.getByText("010-****-5678로 카카오톡 인증 코드를 보냈습니다.")).toHaveCount(0);
+});

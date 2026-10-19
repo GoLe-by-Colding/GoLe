@@ -130,7 +130,8 @@ local/dev/test/e2e에서만 동작하며 OTP 원문은 별도 로컬 옵트인 �
       거부한다.
 - [x] R4. `POST /api/v1/accounts/me/onboarding/phone/verification`이 D2/D4 규칙(형식·유일성·
       쿨다운·일일 한도)을 통과한 뒤 D3 경로로 OTP를 발송한다.
-- [x] R5. `POST /api/v1/accounts/me/onboarding/phone/verification/confirm`이 코드를 대조하고
+- [x] R5. `POST /api/v1/accounts/me/onboarding/phone/verification/confirm`이 요청 본문의
+      `phoneNumber`를 발송 시 Redis challenge에 묶인 번호와 대조한 뒤 코드를 확인한다.
       성공 시 `phoneVerifiedAt`을 저장한다. 5회 오답 시 해당 OTP를 무효화한다.
 - [x] R6. `PUT /api/v1/accounts/me/onboarding/interest-tags`가 D8 목록 대비 1~5개 범위를
       검증한 뒤 저장한다.
