@@ -23,6 +23,9 @@ public class AccountDocument {
 
     private String passwordHash;
 
+    /** null은 이 필드가 생기기 전 계정이다. 가입 정책 기록으로 최초 자격을 복원한다. */
+    private Boolean passwordLoginEnabled;
+
     private String status;
 
     private String role;
@@ -119,6 +122,52 @@ public class AccountDocument {
             Instant privacyConsentedAt,
             Instant marketingConsentedAt,
             boolean legacyExempt) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationCodeHash,
+                verificationCodeIssuedAt,
+                verificationFailedAttempts,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                suspendedReason,
+                nickname,
+                nicknameNormalized,
+                phoneNumber,
+                phoneVerifiedAt,
+                interestTags,
+                privacyConsentedAt,
+                marketingConsentedAt,
+                legacyExempt,
+                null);
+    }
+
+    public AccountDocument(
+            String id,
+            String email,
+            String passwordHash,
+            String status,
+            String role,
+            String verificationCodeHash,
+            Instant verificationCodeIssuedAt,
+            int verificationFailedAttempts,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason,
+            String nickname,
+            String nicknameNormalized,
+            String phoneNumber,
+            Instant phoneVerifiedAt,
+            Set<String> interestTags,
+            Instant privacyConsentedAt,
+            Instant marketingConsentedAt,
+            boolean legacyExempt,
+            Boolean passwordLoginEnabled) {
         this.nickname = nickname;
         this.nicknameNormalized = nicknameNormalized;
         this.phoneNumber = phoneNumber;
@@ -130,6 +179,7 @@ public class AccountDocument {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.passwordLoginEnabled = passwordLoginEnabled;
         this.status = status;
         this.role = role;
         this.verificationCodeHash = verificationCodeHash;
@@ -151,6 +201,10 @@ public class AccountDocument {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public Boolean getPasswordLoginEnabled() {
+        return passwordLoginEnabled;
     }
 
     public String getStatus() {

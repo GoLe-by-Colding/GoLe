@@ -11,6 +11,7 @@ import com.gole.api.account.domain.model.Nickname;
 import com.gole.api.account.domain.model.OnboardingProfile;
 import com.gole.api.account.domain.model.PasswordHash;
 import com.gole.api.account.domain.model.PhoneNumber;
+import com.gole.api.account.domain.model.PolicyAcceptance;
 import com.gole.api.account.domain.model.Role;
 import com.gole.api.common.exception.ConflictException;
 import java.time.Instant;
@@ -193,7 +194,8 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 onboarding.interestTags().isEmpty() ? null : Set.copyOf(onboarding.interestTags()),
                 onboarding.privacyConsentedAt(),
                 onboarding.marketingConsentedAt(),
-                onboarding.legacyExempt());
+                onboarding.legacyExempt(),
+                account.isPasswordLoginEnabled());
     }
 
     private Account toDomain(AccountDocument document) {
@@ -210,7 +212,19 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 document.getFailureWindowStartedAt(),
                 document.getLockedUntil(),
                 document.getSuspendedReason(),
-                toOnboardingProfile(document));
+                toOnboardingProfile(document),
+                passwordLoginEnabled(document));
+    }
+
+    private boolean passwordLoginEnabled(AccountDocument document) {
+        if (document.getPasswordLoginEnabled() != null) {
+            return document.getPasswordLoginEnabled();
+        }
+        Query firstSignup = Query.query(Criteria.where("accountId").is(document.getId()))
+                .with(Sort.by(Sort.Direction.ASC, "acceptedAt"))
+                .limit(1);
+        PolicyAcceptanceDocument acceptance = mongoTemplate.findOne(firstSignup, PolicyAcceptanceDocument.class);
+        return acceptance == null || PolicyAcceptance.Channel.EMAIL.name().equals(acceptance.getChannel());
     }
 
     /**

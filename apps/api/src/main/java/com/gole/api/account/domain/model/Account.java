@@ -23,6 +23,7 @@ public final class Account {
     private final String id;
     private final Email email;
     private PasswordHash passwordHash;
+    private boolean passwordLoginEnabled;
     private AccountStatus status;
     private Role role;
     private EmailVerificationChallenge verificationChallenge; // nullable (검증 완료 시 제거)
@@ -125,9 +126,41 @@ public final class Account {
             Instant lockedUntil,
             String suspendedReason,
             OnboardingProfile onboarding) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationChallenge,
+                verificationFailedAttempts,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                suspendedReason,
+                onboarding,
+                true);
+    }
+
+    /** 영속성 복원용 전체 생성자(비밀번호 자격 상태 포함). */
+    public Account(
+            String id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Role role,
+            EmailVerificationChallenge verificationChallenge,
+            int verificationFailedAttempts,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason,
+            OnboardingProfile onboarding,
+            boolean passwordLoginEnabled) {
         this.id = Objects.requireNonNull(id, "id");
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
+        this.passwordLoginEnabled = passwordLoginEnabled;
         this.status = Objects.requireNonNull(status, "status");
         this.role = Objects.requireNonNull(role, "role");
         this.verificationChallenge = verificationChallenge;
@@ -154,6 +187,24 @@ public final class Account {
      */
     public static Account provisioned(String id, Email email, PasswordHash passwordHash, Role role) {
         return new Account(id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
+    }
+
+    /** 소셜 가입은 임의 해시를 보관하지만 이메일 비밀번호 로그인을 허용하지 않는다. */
+    public static Account socialProvisioned(String id, Email email, PasswordHash passwordHash) {
+        return new Account(
+                id,
+                email,
+                passwordHash,
+                AccountStatus.VERIFIED,
+                Role.USER,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
+                OnboardingProfile.empty(),
+                false);
     }
 
     /**
@@ -375,6 +426,16 @@ public final class Account {
      */
     public void upgradePasswordHash(PasswordHash newHash) {
         this.passwordHash = Objects.requireNonNull(newHash, "newHash");
+    }
+
+    /** 이메일로 소유를 확인한 비밀번호 재설정은 소셜 전용 계정에도 새 로그인 자격을 만든다. */
+    public void establishPassword(PasswordHash newHash) {
+        upgradePasswordHash(newHash);
+        passwordLoginEnabled = true;
+    }
+
+    public boolean isPasswordLoginEnabled() {
+        return passwordLoginEnabled;
     }
 
     public boolean isVerified() {

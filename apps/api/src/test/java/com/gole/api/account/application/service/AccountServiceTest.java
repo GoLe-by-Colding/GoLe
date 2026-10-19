@@ -146,6 +146,17 @@ class AccountServiceTest {
     }
 
     @Test
+    void signIn_rejectsSocialOnlyAccountEvenWhenPlaceholderHashMatches() {
+        Account account = Account.socialProvisioned(
+                "social-1", new Email("social@gole.test"), new PasswordHash("plain:placeholder"));
+        repository.save(account);
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("social@gole.test", "placeholder")))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThat(account.getFailedAttempts()).isZero();
+    }
+
+    @Test
     void register_rejectsDuplicateEmail() {
         service.register(registerCommand("a@b.com", "password1"));
         assertThatThrownBy(() -> service.register(registerCommand("A@b.com", "password2")))

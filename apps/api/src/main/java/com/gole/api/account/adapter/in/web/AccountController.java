@@ -186,7 +186,8 @@ public class AccountController {
                 session.email(),
                 session.role().name(),
                 session.onboardingRequired(),
-                session.nickname());
+                session.nickname(),
+                session.passwordChangeAvailable());
     }
 
     @Operation(summary = "로그아웃", description = "브라우저 쿠키 또는 Bearer 토큰에 연결된 서버 세션을 폐기하고 쿠키를 삭제합니다.")

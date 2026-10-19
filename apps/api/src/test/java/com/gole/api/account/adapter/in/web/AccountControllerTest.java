@@ -77,14 +77,15 @@ class AccountControllerTest {
     @Test
     void me_returnsNickname_whenOnboardingHasSetOne() throws Exception {
         when(getCurrentSessionUseCase.resolve("token-1"))
-                .thenReturn(
-                        Optional.of(new CurrentSession("account-1", "member@gole.test", Role.USER, false, "구글가입자")));
+                .thenReturn(Optional.of(
+                        new CurrentSession("account-1", "member@gole.test", Role.USER, false, "구글가입자", false)));
 
         mvc.perform(get("/api/v1/accounts/me").header(HttpHeaders.AUTHORIZATION, "Bearer token-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountId").value("account-1"))
                 .andExpect(jsonPath("$.email").value("member@gole.test"))
-                .andExpect(jsonPath("$.nickname").value("구글가입자"));
+                .andExpect(jsonPath("$.nickname").value("구글가입자"))
+                .andExpect(jsonPath("$.passwordChangeAvailable").value(false));
     }
 
     @Test
@@ -96,7 +97,8 @@ class AccountControllerTest {
         // 필드가 null로 내려오는 쪽에 맞춰져 있으므로 그것을 그대로 못박는다.
         mvc.perform(get("/api/v1/accounts/me").header(HttpHeaders.AUTHORIZATION, "Bearer token-2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nickname").value(nullValue()));
+                .andExpect(jsonPath("$.nickname").value(nullValue()))
+                .andExpect(jsonPath("$.passwordChangeAvailable").value(true));
     }
 
     @Test

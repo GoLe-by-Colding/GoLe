@@ -112,6 +112,29 @@ class AccountPasswordServiceTest {
     }
 
     @Test
+    void socialOnlyAccountCannotChangeUnknownPasswordButCanEstablishOneByEmailReset() {
+        Account account = Account.socialProvisioned(
+                "social-1", new Email("social@gole.test"), hasher.hash("unavailable-random-password"));
+        accounts.save(account);
+        sessions.store("token-1", account.getId(), Role.USER, Duration.ofDays(7));
+
+        assertThatThrownBy(() -> service.change(
+                        new ChangePasswordCommand(account.getId(), "unavailable-random-password", "new-password")))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("code")
+                .isEqualTo("PASSWORD_CHANGE_UNAVAILABLE");
+        assertThat(sessions.resolve("token-1")).isPresent();
+        assertThat(account.isPasswordLoginEnabled()).isFalse();
+
+        service.request(new RequestPasswordResetCommand("social@gole.test"));
+        service.confirm(new ConfirmPasswordResetCommand("social@gole.test", "123456", "new-password"));
+
+        assertThat(account.isPasswordLoginEnabled()).isTrue();
+        assertThat(hasher.matches("new-password", account.getPasswordHash())).isTrue();
+        assertThat(sessions.resolve("token-1")).isEmpty();
+    }
+
+    @Test
     void resetRequestDoesNotRevealUnknownOrSuspendedAccount() {
         service.request(new RequestPasswordResetCommand("unknown@gole.test"));
         Account suspended = verified("account-2", "suspended@gole.test", "old-password");

@@ -72,6 +72,9 @@ public class AccountPasswordService
                 .findById(command.accountId())
                 .orElseThrow(() -> new BadRequestException("ACCOUNT_NOT_FOUND", "계정을 찾을 수 없습니다"));
         account.ensureNotSuspended();
+        if (!account.isPasswordLoginEnabled()) {
+            throw new BadRequestException("PASSWORD_CHANGE_UNAVAILABLE", "소셜 로그인 계정에 설정된 비밀번호가 없습니다");
+        }
 
         if (!passwordHasher.matches(command.currentPassword(), account.getPasswordHash())) {
             throw new BadRequestException("CURRENT_PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다");
@@ -143,7 +146,7 @@ public class AccountPasswordService
             throw invalidReset();
         }
 
-        account.upgradePasswordHash(passwordHasher.hash(command.newPassword()));
+        account.establishPassword(passwordHasher.hash(command.newPassword()));
         account.recordSuccessfulSignIn();
         accountRepository.save(account);
         sessionStore.revokeAllForAccount(account.getId());
