@@ -20,7 +20,7 @@ public final class BidDtos {
      */
     public record PlaceBidRequest(String setNumber, String condition, Long price, Integer durationDays) {}
 
-    public record FillBidRequest(String listingId) {}
+    public record FillBidRequest(String listingId, Long targetPrice) {}
 
     /**
      * @param status 만료를 반영한 유효 상태(active·canceled·filled·expired)

@@ -1,6 +1,7 @@
 package com.gole.api.bid;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.gole.api.bid.application.port.in.FillBidUseCase;
 import com.gole.api.bid.application.port.in.FillBidUseCase.FillResult;
@@ -121,6 +122,30 @@ class BidPersistenceIntegrationTest {
         assertThat(stored.status()).isEqualTo(BidStatus.FILLED);
         assertThat(stored.offerId()).isEqualTo(winner.offerId());
         assertThat(stored.filledListingId()).isEqualTo(winner.listingId());
+    }
+
+    @Test
+    void fillWithPrice_keepsListingAndBidUnchangedOnStalePriceThenCommitsTogether() {
+        bids.insert(Bid.place("bid-1", "buyer-1", "10307", BidCondition.NEW_SEALED, 330_000, 30, Instant.now()));
+        listings.save(listing("listing-1", "seller-1"));
+
+        assertThatThrownBy(() -> fillBid.fillWithPrice("10307", "listing-1", "seller-1", 340_000))
+                .isInstanceOf(ConflictException.class)
+                .extracting(error -> ((ConflictException) error).getCode())
+                .isEqualTo(BidErrors.PRICE_CHANGED);
+        assertThat(listings.findById("listing-1").orElseThrow().getPrice().amount())
+                .isEqualTo(280_000);
+        assertThat(bids.findById("bid-1").orElseThrow().status()).isEqualTo(BidStatus.ACTIVE);
+        assertThat(mongo.getDb().getCollection("offers").countDocuments()).isZero();
+
+        FillResult result = fillBid.fillWithPrice("10307", "listing-1", "seller-1", 330_000);
+        assertThat(result.bidPrice()).isEqualTo(330_000);
+        assertThat(listings.findById("listing-1").orElseThrow().getPrice().amount())
+                .isEqualTo(330_000);
+        assertThat(bids.findById("bid-1").orElseThrow().status()).isEqualTo(BidStatus.FILLED);
+        assertThat(mongo.getDb().getCollection("offers").countDocuments()).isEqualTo(1);
+        assertThat(mongo.getDb().getCollection("offers").find().first().getLong("listingPriceAtOffer"))
+                .isEqualTo(330_000L);
     }
 
     @Test

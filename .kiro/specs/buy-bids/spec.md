@@ -31,7 +31,7 @@ KREAM식 입찰은 체결 즉시 결제가 일어나야 한다. GoLe는 운영 �
 - D6. `GET /api/v1/bids/book/{setNumber}` — 공개. `{setNumber, conditions: [{condition, highestPrice|null,
   bidCount, levels: [{price, count}]}]}`. 다섯 상태 모두를 순서대로 담고, `levels`는 가격 내림차순 상위 5단.
   유효 `ACTIVE`만 센다. **입찰자 식별자는 내보내지 않는다.**
-- D7. `POST /api/v1/bids/book/{setNumber}/fill {listingId}` — 판매자가 최고 입찰가에 판다.
+- D7. `POST /api/v1/bids/book/{setNumber}/fill {listingId, targetPrice?}` — 판매자가 최고 입찰가에 판다.
   - 매물이 본인의 `ACTIVE` 매물이고 `catalogSetNumber == setNumber`여야 한다(아니면 403
     `LISTING_ACCESS_DENIED` / 409 `BID_LISTING_MISMATCH`). 상태는 매물 상태를 쓴다.
   - 그 `(세트, 상태)`의 유효 `ACTIVE` 중 **본인 입찰을 뺀** 최고가, 동가면 먼저 건 입찰을 고른다. 없으면
@@ -39,6 +39,10 @@ KREAM식 입찰은 체결 즉시 결제가 일어나야 한다. GoLe는 운영 �
   - `ACTIVE → FILLED` 원자 전이(경합에 지면 다음 후보로, 최대 3회). 그다음
     `CreateAcceptedOfferUseCase.createAccepted(listingId, sellerId, bidderId, bidPrice, BID)`.
     제안 생성이 실패하면 입찰을 `ACTIVE`로 되돌리고 오류를 그대로 낸다.
+  - `targetPrice`를 주면 그 가격이 실제 체결 입찰가와 같고 현재 판매가보다 높을 때만 판매가를 올린다.
+    판매가 수정·입찰 체결·수락 제안 생성은 같은 Mongo 트랜잭션으로 확정한다. 입찰가나 판매가가
+    달라졌으면 409 `BID_PRICE_CHANGED`를 돌리고 어느 것도 변경하지 않는다. `targetPrice`를 생략하면
+    기존 판매가 그대로 체결한다.
   - 입찰자에게 `BID_FILLED`: `판매자가 입찰가 {가격}원에 {세트} 판매를 수락했어요. 72시간 안에 진행해 주세요`,
     링크 `/listings/{listingId}`, 키 `bid-filled:{bidId}`.
   - 응답 `{bidPrice, offerId, listingId}`. `@RequiresOnboarding @RequiresVerifiedSellerIdentity`.

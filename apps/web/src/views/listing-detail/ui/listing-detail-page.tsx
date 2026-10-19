@@ -180,7 +180,11 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
             sellerId={listing.sellerId}
             seller={
               <ListingSellerPanel listing={listing}>
-                <SellerOfferSections listing={listing} paymentsOpen={paymentsOpen} />
+                <SellerOfferSections
+                  listing={listing}
+                  paymentsOpen={paymentsOpen}
+                  sellerTradingOpen={sellerTradingOpen}
+                />
               </ListingSellerPanel>
             }
           />
