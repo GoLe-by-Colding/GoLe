@@ -24,6 +24,29 @@ async function openSecurityPage(page: Page, passwordChangeAvailable: boolean): P
       },
     }),
   );
+  await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({ json: { required: false, legacyExempt: true } }),
+  );
+  await page.route("**/api/v1/accounts/me/third-party-provision-consents/current", (route) =>
+    route.fulfill({
+      json: { noticeVersion: "2026-09-04", consented: false, lastDecisionAt: null },
+    }),
+  );
+  await page.route("**/api/v1/config/launch", (route) =>
+    route.fulfill({
+      json: {
+        stage: 2,
+        tradeMode: "MANUAL_SETTLEMENT",
+        features: { payments: true, reviews: true, partnerPayout: false },
+        sellerIdentityVerificationReady: true,
+        emailAuthenticationAvailable: true,
+        updatedAt: null,
+      },
+    }),
+  );
   await page.goto("/profile/security");
 }
 

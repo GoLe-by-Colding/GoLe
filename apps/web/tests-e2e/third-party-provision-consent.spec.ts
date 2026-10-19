@@ -33,6 +33,18 @@ async function seedSession(page: Page): Promise<void> {
 }
 
 async function mockPageShell(page: Page, rooms: readonly unknown[] = []): Promise<void> {
+  await page.route("**/api/v1/accounts/me", (route) =>
+    route.fulfill({
+      json: {
+        accountId: SESSION.accountId,
+        email: "member@gole.test",
+        role: "USER",
+        onboardingRequired: false,
+        nickname: null,
+        passwordChangeAvailable: true,
+      },
+    }),
+  );
   await page.route(/\/api\/v1\/users\/[^/]+\/notifications\/unread-count(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { unreadCount: 0 } }),
   );

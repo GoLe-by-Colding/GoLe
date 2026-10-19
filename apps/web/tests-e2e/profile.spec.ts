@@ -37,7 +37,13 @@ async function mockProfileApis(page: Page): Promise<void> {
   );
   await page.route("**/api/v1/accounts/me", (route) =>
     route.fulfill({
-      json: { accountId: "acc-1", email: "seller@gole.test", role: "USER", nickname: "레고매니아" },
+      json: {
+        accountId: "acc-1",
+        email: "seller@gole.test",
+        role: "USER",
+        nickname: "레고매니아",
+        passwordChangeAvailable: true,
+      },
     }),
   );
   // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다 — 목킹 안 하면 실제
