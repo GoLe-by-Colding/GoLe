@@ -4,15 +4,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.gole.api.account.adapter.out.security.BCryptPasswordHasherAdapter;
+import com.gole.api.account.adapter.out.security.Sha256PasswordHasherAdapter;
+import com.gole.api.account.application.port.in.SignInUseCase.SignInCommand;
+import com.gole.api.account.application.port.out.SessionStorePort;
+import com.gole.api.account.application.port.out.VerificationCodeSenderPort;
+import com.gole.api.account.application.service.AccountService;
+import com.gole.api.account.application.service.OnboardingProperties;
+import com.gole.api.account.application.service.PolicyAcceptanceService;
+import com.gole.api.account.application.service.SessionPolicyProperties;
+import com.gole.api.account.config.EmailAuthenticationAvailability;
 import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.EmailVerificationChallenge;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 
@@ -25,27 +39,48 @@ class AccountPersistenceAdapterTest {
     private final AccountPersistenceAdapter adapter = new AccountPersistenceAdapter(repository, mongo);
 
     @Test
-    @DisplayName("이전 소셜 가입 계정은 최초 정책 동의 채널에서 비밀번호 자격 없음으로 복원한다")
-    void findById_restoresLegacySocialPasswordState() {
-        when(repository.findById("account-1")).thenReturn(Optional.of(document(null, null)));
+    @DisplayName("이전 소셜 가입자가 설정한 비밀번호로 로그인하면 자격과 해시를 그대로 저장한다")
+    void signIn_preservesLegacySocialPasswordAndPersistsEnabledState() {
+        var hasher = new BCryptPasswordHasherAdapter(new Sha256PasswordHasherAdapter());
+        String passwordHash = hasher.hash("previously-reset-password").value();
+        AccountDocument legacy = new AccountDocument(
+                "account-1", "user@gole.test", passwordHash, "VERIFIED", "USER", null, null, 0, 0, null, null, null);
+        when(repository.findByEmail("user@gole.test")).thenReturn(Optional.of(legacy));
+        when(repository.save(any(AccountDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(mongo.findOne(any(Query.class), eq(PolicyAcceptanceDocument.class)))
                 .thenReturn(new PolicyAcceptanceDocument(
                         "policy-1", "account-1", "v1", "v1", true, true, true, "SOCIAL_GOOGLE", ISSUED_AT));
+        AccountService service = new AccountService(
+                adapter,
+                hasher,
+                mock(VerificationCodeSenderPort.class),
+                () -> "123456",
+                () -> "unused-account-id",
+                account -> "session-token",
+                mock(SessionStorePort.class),
+                Clock.fixed(ISSUED_AT, ZoneOffset.UTC),
+                new SessionPolicyProperties(),
+                mock(PolicyAcceptanceService.class),
+                new OnboardingProperties(),
+                new EmailAuthenticationAvailability("test", false));
 
-        assertThat(adapter.findById("account-1").orElseThrow().isPasswordLoginEnabled())
-                .isFalse();
+        assertThat(service.signIn(new SignInCommand("user@gole.test", "previously-reset-password"))
+                        .sessionToken())
+                .isEqualTo("session-token");
+        ArgumentCaptor<AccountDocument> saved = ArgumentCaptor.forClass(AccountDocument.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getPasswordLoginEnabled()).isTrue();
+        assertThat(saved.getValue().getPasswordHash()).isEqualTo(passwordHash);
+        verifyNoInteractions(mongo);
     }
 
     @Test
-    @DisplayName("이전 이메일 가입 계정은 소셜 로그인을 병행해도 비밀번호 자격을 유지한다")
+    @DisplayName("필드가 없는 이전 계정은 정책 이력 조회 없이 비밀번호 자격을 유지한다")
     void findById_restoresLegacyEmailPasswordState() {
         when(repository.findById("account-1")).thenReturn(Optional.of(document(null, null)));
-        when(mongo.findOne(any(Query.class), eq(PolicyAcceptanceDocument.class)))
-                .thenReturn(new PolicyAcceptanceDocument(
-                        "policy-1", "account-1", "v1", "v1", true, true, true, "EMAIL", ISSUED_AT));
-
         assertThat(adapter.findById("account-1").orElseThrow().isPasswordLoginEnabled())
                 .isTrue();
+        verifyNoInteractions(mongo);
     }
 
     @Test

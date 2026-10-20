@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class AccountPasswordServiceTest {
@@ -112,10 +113,12 @@ class AccountPasswordServiceTest {
     }
 
     @Test
-    void socialOnlyAccountCannotChangeUnknownPasswordButCanEstablishOneByEmailReset() {
+    @DisplayName("새 소셜 전용 계정은 비밀번호 변경과 재설정을 요청해도 자격과 세션을 유지한다")
+    void socialOnlyAccountCannotChangeOrRequestPasswordReset() {
         Account account = Account.socialProvisioned(
                 "social-1", new Email("social@gole.test"), hasher.hash("unavailable-random-password"));
         accounts.save(account);
+        int savesBeforeRequest = accounts.saveCalls;
         sessions.store("token-1", account.getId(), Role.USER, Duration.ofDays(7));
 
         assertThatThrownBy(() -> service.change(
@@ -123,15 +126,45 @@ class AccountPasswordServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .extracting("code")
                 .isEqualTo("PASSWORD_CHANGE_UNAVAILABLE");
-        assertThat(sessions.resolve("token-1")).isPresent();
-        assertThat(account.isPasswordLoginEnabled()).isFalse();
-
         service.request(new RequestPasswordResetCommand("social@gole.test"));
-        service.confirm(new ConfirmPasswordResetCommand("social@gole.test", "123456", "new-password"));
 
-        assertThat(account.isPasswordLoginEnabled()).isTrue();
-        assertThat(hasher.matches("new-password", account.getPasswordHash())).isTrue();
-        assertThat(sessions.resolve("token-1")).isEmpty();
+        assertThat(sender.resetCount).isZero();
+        assertThat(resets.find(account.getEmail())).isEmpty();
+        assertThat(account.isPasswordLoginEnabled()).isFalse();
+        assertThat(hasher.matches("unavailable-random-password", account.getPasswordHash()))
+                .isTrue();
+        assertThat(accounts.saveCalls).isEqualTo(savesBeforeRequest);
+        assertThat(sessions.resolve("token-1")).isPresent();
+        assertThat(sessions.revokeAllCalls).isZero();
+    }
+
+    @Test
+    @DisplayName("소셜 전용 계정은 이미 발급된 올바른 재설정 코드로도 비밀번호 자격을 만들지 못한다")
+    void socialOnlyAccountCannotConfirmPreviouslyIssuedResetChallenge() {
+        Account account = Account.socialProvisioned(
+                "social-1", new Email("social@gole.test"), hasher.hash("unavailable-random-password"));
+        accounts.save(account);
+        int savesBeforeConfirmation = accounts.saveCalls;
+        sessions.store("token-1", account.getId(), Role.USER, Duration.ofDays(7));
+        resets.store(
+                account.getEmail(),
+                new Challenge(account.getId(), hasher.hash("123456").value(), clock.instant(), 0),
+                Duration.ofMinutes(10));
+
+        assertThatThrownBy(() ->
+                        service.confirm(new ConfirmPasswordResetCommand("social@gole.test", "123456", "new-password")))
+                .isInstanceOf(BadRequestException.class)
+                .extracting("code")
+                .isEqualTo("PASSWORD_RESET_INVALID");
+
+        assertThat(resets.find(account.getEmail())).isEmpty();
+        assertThat(account.isPasswordLoginEnabled()).isFalse();
+        assertThat(hasher.matches("unavailable-random-password", account.getPasswordHash()))
+                .isTrue();
+        assertThat(accounts.saveCalls).isEqualTo(savesBeforeConfirmation);
+        assertThat(sessions.resolve("token-1")).isPresent();
+        assertThat(sessions.revokeAllCalls).isZero();
+        assertThat(sender.resetCount).isZero();
     }
 
     @Test
@@ -171,8 +204,10 @@ class AccountPasswordServiceTest {
         service.confirm(new ConfirmPasswordResetCommand("member@gole.test", "123456", "new-password"));
 
         assertThat(hasher.matches("new-password", account.getPasswordHash())).isTrue();
+        assertThat(account.isPasswordLoginEnabled()).isTrue();
         assertThat(resets.find(account.getEmail())).isEmpty();
         assertThat(sessions.resolve("token-1")).isEmpty();
+        assertThat(sessions.revokeAllCalls).isEqualTo(1);
         assertThatThrownBy(() -> service.confirm(
                         new ConfirmPasswordResetCommand("member@gole.test", "123456", "another-password")))
                 .isInstanceOf(BadRequestException.class)
@@ -215,9 +250,11 @@ class AccountPasswordServiceTest {
 
     private static final class InMemoryAccountRepository implements AccountRepositoryPort {
         private final Map<String, Account> values = new HashMap<>();
+        private int saveCalls;
 
         void clear() {
             values.clear();
+            saveCalls = 0;
         }
 
         @Override
@@ -227,6 +264,7 @@ class AccountPasswordServiceTest {
 
         @Override
         public Account save(Account account) {
+            saveCalls++;
             values.put(account.getEmail().value(), account);
             return account;
         }

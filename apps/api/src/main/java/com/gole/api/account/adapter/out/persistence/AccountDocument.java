@@ -23,7 +23,7 @@ public class AccountDocument {
 
     private String passwordHash;
 
-    /** null은 이 필드가 생기기 전 계정이다. 가입 정책 기록으로 최초 자격을 복원한다. */
+    /** null은 이 필드가 생기기 전 계정이다. 이미 설정한 비밀번호 자격을 유지한다. */
     private Boolean passwordLoginEnabled;
 
     private String status;

@@ -102,7 +102,10 @@ public class AccountPasswordService
         }
 
         var account = accountRepository.findByEmail(email);
-        if (account.isEmpty() || !account.get().isVerified() || account.get().isSuspended()) {
+        if (account.isEmpty()
+                || !account.get().isVerified()
+                || account.get().isSuspended()
+                || !account.get().isPasswordLoginEnabled()) {
             resetStore.delete(email);
             return;
         }
@@ -135,7 +138,10 @@ public class AccountPasswordService
 
         Account account =
                 accountRepository.findById(challenge.accountId()).orElseThrow(AccountPasswordService::invalidReset);
-        if (!account.getEmail().equals(email) || !account.isVerified() || account.isSuspended()) {
+        if (!account.getEmail().equals(email)
+                || !account.isVerified()
+                || account.isSuspended()
+                || !account.isPasswordLoginEnabled()) {
             resetStore.delete(email);
             throw invalidReset();
         }
@@ -146,7 +152,7 @@ public class AccountPasswordService
             throw invalidReset();
         }
 
-        account.establishPassword(passwordHasher.hash(command.newPassword()));
+        account.upgradePasswordHash(passwordHasher.hash(command.newPassword()));
         account.recordSuccessfulSignIn();
         accountRepository.save(account);
         sessionStore.revokeAllForAccount(account.getId());

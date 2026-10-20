@@ -23,7 +23,7 @@ public final class Account {
     private final String id;
     private final Email email;
     private PasswordHash passwordHash;
-    private boolean passwordLoginEnabled;
+    private final boolean passwordLoginEnabled;
     private AccountStatus status;
     private Role role;
     private EmailVerificationChallenge verificationChallenge; // nullable (검증 완료 시 제거)
@@ -181,9 +181,7 @@ public final class Account {
     /**
      * 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다.
      *
-     * <p>구글 소셜 신규가입({@code SocialAccountProvisioner})도 이 팩토리를 함께 쓴다 — 그쪽은
-     * 온보딩 D7에 따라 legacyExempt=false(일반 온보딩 대상)여야 하므로, 여기서 면제를
-     * 기본값으로 바꾸면 안 된다. 운영 계정 전용 면제는 {@link #operationalBootstrap}을 쓴다.
+     * <p>운영 계정 전용 온보딩 면제는 {@link #operationalBootstrap}을 쓴다.
      */
     public static Account provisioned(String id, Email email, PasswordHash passwordHash, Role role) {
         return new Account(id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
@@ -426,12 +424,6 @@ public final class Account {
      */
     public void upgradePasswordHash(PasswordHash newHash) {
         this.passwordHash = Objects.requireNonNull(newHash, "newHash");
-    }
-
-    /** 이메일로 소유를 확인한 비밀번호 재설정은 소셜 전용 계정에도 새 로그인 자격을 만든다. */
-    public void establishPassword(PasswordHash newHash) {
-        upgradePasswordHash(newHash);
-        passwordLoginEnabled = true;
     }
 
     public boolean isPasswordLoginEnabled() {
