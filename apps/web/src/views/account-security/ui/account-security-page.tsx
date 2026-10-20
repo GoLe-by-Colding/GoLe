@@ -324,15 +324,7 @@ export function AccountSecurityPage() {
           ) : !currentPasswordStatus.available ? (
             <div className="flex flex-col gap-2 text-sm text-neutral-700">
               <p>소셜 로그인으로 만든 계정에는 변경할 비밀번호가 없습니다.</p>
-              {emailAuthenticationAvailable ? (
-                <p>
-                  이메일로 비밀번호를 설정하려면{" "}
-                  <a className="underline" href="/forgot-password">
-                    비밀번호 재설정
-                  </a>
-                  을 이용해 주세요.
-                </p>
-              ) : null}
+              <p>가입할 때 사용한 소셜 서비스로 로그인해 주세요.</p>
             </div>
           ) : (
             <form className="flex flex-col gap-4" onSubmit={submit} noValidate>

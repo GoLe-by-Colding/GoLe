@@ -56,6 +56,8 @@ test("소셜 전용 계정은 현재 비밀번호 변경 폼을 볼 수 없다",
   await expect(
     page.getByText("소셜 로그인으로 만든 계정에는 변경할 비밀번호가 없습니다."),
   ).toBeVisible();
+  await expect(page.getByText("가입할 때 사용한 소셜 서비스로 로그인해 주세요.")).toBeVisible();
+  await expect(page.locator('a[href="/forgot-password"]')).toHaveCount(0);
   await expect(page.getByLabel("현재 비밀번호")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "비밀번호 변경" })).toHaveCount(0);
 });
