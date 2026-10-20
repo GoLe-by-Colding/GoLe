@@ -92,14 +92,29 @@ export function PurchaseButton({
     if (!session || submitting) return;
     setError(undefined);
     setSubmitting(true);
-    const currentOffer =
-      session === null
-        ? null
-        : findUsableAcceptedOffer(offers ?? [], listingId, session.accountId, Date.now());
-    if (selectedOffer !== null && !offerRejected && currentOffer?.id !== selectedOffer.id) {
-      setOfferRejected(true);
-      setError("선택한 제안이 만료되거나 변경됐어요. 정가 주문을 원하면 다시 확인해 주세요.");
+    const currentOffers = offers ?? [];
+    const rejectOffer = (message: string) => {
+      const nextOffer = findUsableAcceptedOffer(
+        currentOffers.filter((offer) => offer.id !== selectedOffer?.id),
+        listingId,
+        session.accountId,
+        Date.now(),
+      );
+      if (nextOffer !== null) setPhoneStep(false);
+      else setOfferRejected(true);
+      setError(
+        `${message} ${nextOffer !== null ? "남은 제안가를 다시 확인해 주세요." : "정가 주문을 원하면 다시 확인해 주세요."}`,
+      );
       reloadOffers();
+    };
+    const currentOffer = findUsableAcceptedOffer(
+      currentOffers.filter((offer) => offer.id === selectedOffer?.id),
+      listingId,
+      session.accountId,
+      Date.now(),
+    );
+    if (selectedOffer !== null && !offerRejected && currentOffer === null) {
+      rejectOffer("선택한 제안이 만료되거나 변경됐어요.");
       setSubmitting(false);
       return;
     }
@@ -119,12 +134,7 @@ export function PurchaseButton({
         cause instanceof ApiError &&
         cause.code === OFFER_ERROR.NOT_USABLE
       ) {
-        // 서버가 예약을 풀었으므로 같은 매물을 정가로 다시 주문할 수 있다(O16).
-        setOfferRejected(true);
-        setError(
-          `${offerErrorMessage(cause, "order")} 정가 ${formatWon(listingPrice)}으로 주문할 수 있어요.`,
-        );
-        reloadOffers();
+        rejectOffer(offerErrorMessage(cause, "order"));
       } else {
         setError(cause instanceof ApiError ? cause.message : "주문 생성 중 오류가 발생했습니다.");
       }
