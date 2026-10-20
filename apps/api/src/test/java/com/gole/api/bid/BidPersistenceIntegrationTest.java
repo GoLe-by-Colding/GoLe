@@ -2,11 +2,14 @@ package com.gole.api.bid;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
+import static org.mockito.Mockito.doAnswer;
 
 import com.gole.api.bid.application.port.in.FillBidUseCase;
 import com.gole.api.bid.application.port.in.FillBidUseCase.FillResult;
 import com.gole.api.bid.application.port.in.PlaceBidUseCase;
 import com.gole.api.bid.application.port.in.PlaceBidUseCase.PlaceBidCommand;
+import com.gole.api.bid.application.port.out.BidOfferPort;
 import com.gole.api.bid.application.port.out.BidRepositoryPort;
 import com.gole.api.bid.domain.exception.BidErrors;
 import com.gole.api.bid.domain.exception.DuplicateActiveBidException;
@@ -36,12 +39,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockReset;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -91,6 +97,9 @@ class BidPersistenceIntegrationTest {
 
     @Autowired
     MongoTemplate mongo;
+
+    @MockitoSpyBean(reset = MockReset.BEFORE)
+    BidOfferPort offers;
 
     @BeforeEach
     void clean() {
@@ -146,6 +155,48 @@ class BidPersistenceIntegrationTest {
         assertThat(mongo.getDb().getCollection("offers").countDocuments()).isEqualTo(1);
         assertThat(mongo.getDb().getCollection("offers").find().first().getLong("listingPriceAtOffer"))
                 .isEqualTo(330_000L);
+    }
+
+    @Test
+    @DisplayName("가격 인상과 입찰 체결 후 실제 수락 제안 저장 직후 실패하면 세 원장을 모두 되돌린다")
+    void fillWithPrice_rollsBackListingBidAndOfferWhenFailureFollowsOfferInsert() {
+        bids.insert(Bid.place("bid-1", "buyer-1", "10307", BidCondition.NEW_SEALED, 330_000, 30, Instant.now()));
+        listings.save(listing("listing-1", "seller-1"));
+        IllegalStateException failure = new IllegalStateException("수락 제안 저장 직후 실패");
+        doAnswer(invocation -> {
+                    String offerId = (String) invocation.callRealMethod();
+                    assertThat(mongo.findById(offerId, Document.class, "offers"))
+                            .containsEntry("status", "ACCEPTED");
+                    assertThat(bids.findById("bid-1").orElseThrow().status()).isEqualTo(BidStatus.FILLED);
+                    assertThat(listings.findById("listing-1")
+                                    .orElseThrow()
+                                    .getPrice()
+                                    .amount())
+                            .isEqualTo(330_000);
+                    throw failure;
+                })
+                .when(offers)
+                .createAccepted("listing-1", "seller-1", "buyer-1", 330_000);
+
+        assertThatThrownBy(() -> fillBid.fillWithPrice("10307", "listing-1", "seller-1", 330_000))
+                .isSameAs(failure);
+
+        Bid stored = bids.findById("bid-1").orElseThrow();
+        assertSoftly(softly -> {
+            softly.assertThat(listings.findById("listing-1")
+                            .orElseThrow()
+                            .getPrice()
+                            .amount())
+                    .as("롤백 후 판매가")
+                    .isEqualTo(280_000);
+            softly.assertThat(stored.status()).isEqualTo(BidStatus.ACTIVE);
+            softly.assertThat(stored.closedAt()).isNull();
+            softly.assertThat(stored.filledListingId()).isNull();
+            softly.assertThat(stored.offerId()).isNull();
+            softly.assertThat(mongo.getDb().getCollection("offers").countDocuments())
+                    .as("롤백 후 제안 수")
+                    .isZero();
+        });
     }
 
     @Test
