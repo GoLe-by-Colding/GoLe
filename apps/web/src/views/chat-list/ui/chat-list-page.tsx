@@ -395,16 +395,14 @@ export function ChatListPage() {
         });
         const previous = resolvedConversationRef.current;
         if (
-          resolvedConversationOwnerIdRef.current !== sessionAccountId ||
-          previous?.kind !== "LISTING" ||
-          previous.room.id !== activeListingRoomId ||
+          resolvedConversationOwnerIdRef.current === sessionAccountId &&
+          previous?.kind === "LISTING" &&
+          previous.room.id === activeListingRoomId &&
           !sameConfirmationState(previous.room, response.listingRoom)
         ) {
           const conversation: Conversation = { kind: "LISTING", room: response.listingRoom };
           resolvedConversationRef.current = conversation;
-          resolvedConversationOwnerIdRef.current = sessionAccountId;
           setResolvedConversation(conversation);
-          setResolvedConversationOwnerId(sessionAccountId);
         }
       } catch {
         // 기존 상태를 유지하고 다음 주기에 다시 묻는다.

@@ -488,6 +488,49 @@ test.describe("채팅 UX", () => {
     });
   });
 
+  test("다른 매물방을 폴링해도 최근 목록 밖의 딥링크 대화를 다시 열 수 있다", async ({ page }) => {
+    const mock = await mockChatDeepLinkApis(page, { includeResolvedRoomInList: false });
+    const recentRoom = {
+      id: "room-recent-listing",
+      listingId: "listing-recent",
+      buyerId: "account-me",
+      sellerId: "account-recent-seller",
+      createdAt: "2026-08-30T10:00:00Z",
+      lastMessageAt: "2026-08-30T10:00:00Z",
+      buyerConfirmedAt: null,
+      sellerConfirmedAt: null,
+      directTradeCompletedAt: null,
+    };
+    await page.route("**/api/v1/chat/rooms", (route) => route.fulfill({ json: [recentRoom] }));
+    await page.route("**/api/v1/chat/rooms/room-recent-listing", (route) =>
+      route.fulfill({
+        json: {
+          kind: "LISTING",
+          listingRoom: { ...recentRoom, sellerConfirmedAt: "2026-08-30T10:05:00Z" },
+          socialRoom: null,
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/chat?room=room-listing");
+    const messages = page.getByRole("log", { name: "대화 메시지" });
+    await expect(messages).toContainText("직거래 확인 알림에서 이어진 대화");
+    await expect(page).toHaveURL(/\/chat$/);
+
+    await page.getByRole("button", { name: /account-recent-seller/ }).click();
+    await expect(messages).toContainText("개인 대화");
+    await expect(page.getByText("상대방이 거래 완료를 확인했어요")).toBeVisible({
+      timeout: 6_000,
+    });
+
+    const previousLoads = mock.requestedMessageRoomIds.filter((id) => id === "room-listing").length;
+    await page.getByRole("button", { name: /account-seller/ }).click();
+    await expect(messages).toContainText("직거래 확인 알림에서 이어진 대화");
+    expect(
+      mock.requestedMessageRoomIds.filter((id) => id === "room-listing").length,
+    ).toBeGreaterThan(previousLoads);
+  });
+
   test("확인 대화상자가 열린 사이 상대 상태가 바뀌면 최신 상태로 다시 확인한다", async ({
     page,
   }) => {
