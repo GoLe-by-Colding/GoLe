@@ -13,7 +13,7 @@
 |---|---|
 | 배포·서버·pm2·CD를 건드릴 때 | `.kiro/steering/deploy.md` |
 | 커밋 형식·레이어 분리·SDD 절차의 세부가 필요할 때 | `.kiro/steering/dev-conventions.md` |
-| 색·타이포·톤 등 UI를 새로 만들 때 | `.kiro/steering/brand-identity.md` |
+| 색·타이포·톤 등 UI를 새로 만들 때 | `.kiro/steering/brand-identity.md` · `.kiro/steering/design-workflow.md` |
 | 이미지 업로드·버킷·공개 URL을 만질 때 | `.kiro/steering/minio.md` |
 | 기능 하나의 요구사항·설계 근거를 확인할 때 | `.kiro/specs/<기능>/` |
 | 작업 결과를 팀 문서에 남길 때 | `GoLe-obsidian` 볼트 (아래 "기록") |
