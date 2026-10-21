@@ -44,7 +44,8 @@
         }
       ],
       "expo-secure-store",
-      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }]
+      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }],
+      "@portone/react-native-sdk"
     ],
     "experiments": {
       "typedRoutes": true,
