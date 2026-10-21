@@ -6,6 +6,7 @@ export type OrderStatus =
   | "payment_pending"
   | "payment_review"
   | "payment_failed"
+  | "cancelled"
   | "funds_held"
   | "disputed"
   | "completed"
@@ -42,6 +43,7 @@ export interface Order {
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
+  cancelled: "주문 취소",
   payment_pending: "결제 대기",
   payment_review: "결제 확인 필요",
   payment_failed: "결제 실패",

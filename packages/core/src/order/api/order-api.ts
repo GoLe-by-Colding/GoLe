@@ -100,6 +100,11 @@ export function completeOrder(orderId: string): Promise<Order> {
   return apiRequest<Order>(`/api/v1/orders/${orderId}/completion`, { method: "POST" });
 }
 
+/** PG 미승인 확인 뒤 결제 대기 주문을 취소하고 매물 예약을 해제한다. */
+export function cancelOrder(orderId: string): Promise<Order> {
+  return apiRequest<Order>(`/api/v1/orders/${orderId}/cancellation`, { method: "POST" });
+}
+
 export function refundOrder(orderId: string): Promise<Order> {
   return apiRequest<Order>(`/api/v1/orders/${orderId}/refund`, { method: "POST" });
 }
