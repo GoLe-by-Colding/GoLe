@@ -468,9 +468,15 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
       await switchTo(page, E2E_BUYER);
       await page.goto(`/parts/${createdId}`);
       await page.getByRole("button", { name: "도와줄게요", exact: true }).click();
-      await expect(
-        page.getByPlaceholder("메시지 입력… (Enter 전송, Shift+Enter 줄바꿈)"),
-      ).toHaveValue(
+      const consent = page.getByRole("dialog", { name: "제3자 제공 동의가 필요합니다" });
+      const composer = page.getByPlaceholder("메시지 입력… (Enter 전송, Shift+Enter 줄바꿈)");
+      // 새 CI 시드에는 동의가 없다. 로컬에 남은 동의 기록이나 다른 검사 실행 순서에 기대지 않는다.
+      await expect(consent.or(composer).first()).toBeVisible();
+      if (await consent.isVisible()) {
+        await consent.getByRole("checkbox", { name: /개인정보 제3자 제공에 동의합니다/ }).check();
+        await consent.getByRole("button", { name: "동의하고 계속" }).click();
+      }
+      await expect(composer).toHaveValue(
         `부품 요청 「${title}」(#${setNumber}) 보고 연락드려요. 이 부품 가지고 있어요.`,
       );
       // 초안까지만 확인한다. 같은 시드 회원 사이의 기존 방과 메시지는 보존한다.
