@@ -98,7 +98,7 @@ export function SiteHeader() {
       <Container width="xl">
         <div className="flex h-16 items-center gap-4 xl:gap-8">
           <Link href="/" className="inline-flex items-center text-xl text-neutral-900">
-            <Logo size={32} className="text-xl" />
+            <Logo size={40} className="text-2xl" />
           </Link>
           {/*
             브레이크포인트는 실제 콘텐츠 폭 기준이다. 로고 + 메뉴 7개 + 검색창 + 액션까지
@@ -209,13 +209,13 @@ export function SiteHeader() {
             >
               <span className="relative block h-4 w-5">
                 <span
-                  className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 rotate-45" : "top-0"}`}
+                  className={`absolute left-0 top-1.5 block h-0.5 w-5 bg-current transition-transform motion-reduce:transition-none ${menuOpen ? "rotate-45" : "-translate-y-1.5"}`}
                 />
                 <span
                   className={`absolute left-0 top-1.5 block h-0.5 w-5 bg-current transition-opacity ${menuOpen ? "opacity-0" : "opacity-100"}`}
                 />
                 <span
-                  className={`absolute left-0 block h-0.5 w-5 bg-current transition-all ${menuOpen ? "top-1.5 -rotate-45" : "top-3"}`}
+                  className={`absolute left-0 top-1.5 block h-0.5 w-5 bg-current transition-transform motion-reduce:transition-none ${menuOpen ? "-rotate-45" : "translate-y-1.5"}`}
                 />
               </span>
             </button>

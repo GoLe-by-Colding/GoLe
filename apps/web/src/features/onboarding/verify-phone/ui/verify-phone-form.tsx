@@ -45,6 +45,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
   }, [resendAfter]);
 
   async function handleSend() {
+    if (sending || submitting || resendAfter > 0) return;
     const invalid = validatePhoneNumber(phoneNumber);
     if (invalid !== null) {
       setError(invalid);
@@ -69,6 +70,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!sent || sending || submitting || !/^\d{6}$/.test(code)) return;
     setError(undefined);
     setSubmitting(true);
     try {
@@ -108,7 +110,14 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
             value={phoneNumber}
             placeholder="010-1234-5678"
             aria-describedby={describedBy}
-            onChange={(e) => setPhoneNumber(e.target.value)}
+            disabled={sending || submitting}
+            onChange={(e) => {
+              setPhoneNumber(e.target.value);
+              setSent(false);
+              setCode("");
+              setNotice(undefined);
+              setError(undefined);
+            }}
             required
           />
         )}
@@ -125,7 +134,8 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
               placeholder="000000"
               maxLength={6}
               aria-describedby={describedBy}
-              onChange={(e) => setCode(e.target.value)}
+              disabled={sending || submitting}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               required
             />
           )}
@@ -133,7 +143,12 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
       ) : null}
 
       {sent ? (
-        <Button type="submit" size="lg" fullWidth disabled={submitting}>
+        <Button
+          type="submit"
+          size="lg"
+          fullWidth
+          disabled={submitting || sending || !/^\d{6}$/.test(code)}
+        >
           {submitting ? "확인 중..." : "인증하고 다음"}
         </Button>
       ) : null}
@@ -143,7 +158,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
         variant={sent ? "ghost" : "primary"}
         size="lg"
         fullWidth
-        disabled={sending || resendAfter > 0 || phoneNumber.trim() === ""}
+        disabled={sending || submitting || resendAfter > 0 || phoneNumber.trim() === ""}
         onClick={handleSend}
       >
         {sending

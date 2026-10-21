@@ -1,4 +1,5 @@
 import * as PortOne from "@portone/browser-sdk/v2";
+import { requestAppPayment, usesAppPayment } from "./app-payment";
 import type { PaymentRequest, PaymentResponse } from "@portone/browser-sdk/v2";
 import {
   requireCardCustomer,
@@ -123,7 +124,10 @@ export function buildPortOnePaymentRequest(
 
 /** 결제창 성공 응답 뒤에도 반드시 서버의 PortOne 원장 검증을 거쳐야 한다. */
 export async function requestPortOnePayment(params: PortOnePayParams): Promise<void> {
-  const result = await PortOne.requestPayment(buildPortOnePaymentRequest(params));
+  const request = buildPortOnePaymentRequest(params);
+  const result = await (usesAppPayment()
+    ? requestAppPayment(request)
+    : PortOne.requestPayment(request));
   if (result === undefined) {
     throw new Error(
       "결제창 응답을 확인하지 못했습니다. 중복 결제하지 말고 주문 상태를 확인해 주세요.",

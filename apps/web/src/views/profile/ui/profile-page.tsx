@@ -15,6 +15,7 @@ import { deleteListing, fetchMyListings, type Listing } from "@entities/listing"
 import { fetchLaunchConfig, SAFE_LAUNCH_CONFIG, type LaunchConfig } from "@entities/launch";
 import { fetchMe, useSession, type Me } from "@entities/user";
 import { MyBidsPanel } from "@features/buy-bid";
+import { LoginPrompt } from "@widgets/login-prompt";
 import { BumpListingButton, EditListingLink } from "@features/manage-listing";
 import { formatKrw } from "@shared/lib";
 import { ApiError } from "@shared/api";
@@ -23,7 +24,8 @@ import {
   Badge,
   Button,
   Card,
-  Container,
+  PageLayout,
+  PageHeader,
   EmptyState,
   Heading,
   LinkButton,
@@ -168,13 +170,15 @@ export function ProfilePage() {
 
   if (!session) {
     return (
-      <Container width="sm">
-        <div className="flex flex-col items-start gap-4 pt-12 pb-16">
-          <Heading level={1}>내 정보</Heading>
-          <Text tone="secondary">로그인이 필요합니다.</Text>
-          <LinkButton href="/login?returnTo=%2Fprofile">로그인하러 가기</LinkButton>
-        </div>
-      </Container>
+      <PageLayout width="sm">
+        <PageHeader title="내 정보" description="내 거래와 컬렉션을 한곳에서 관리하세요." />
+        <LoginPrompt
+          title="나의 브릭 생활을 이어가세요"
+          description="구매·판매 내역, 관심 매물과 계정 설정을 확인할 수 있어요."
+          returnTo="/profile"
+          label="로그인하러 가기"
+        />
+      </PageLayout>
     );
   }
 
@@ -250,145 +254,203 @@ export function ProfilePage() {
   }
 
   return (
-    <Container width="sm">
-      <div className="flex flex-col gap-6 pt-10 pb-16">
-        {/* 아바타 + 기본 */}
-        <div className="flex items-center gap-4">
-          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-50 text-xl font-extrabold text-brand-700">
-            {/* 닉네임이 있으면 그 첫 글자가, 없으면 이메일 첫 글자가 사람이 알아보는 단서다.
+    <PageLayout width="sm">
+      <PageHeader title="내 정보" description="거래 내역과 계정 설정을 관리하세요." />
+      {/* 아바타 + 기본 */}
+      <div className="flex items-center gap-4">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-50 text-xl font-extrabold text-brand-700">
+          {/* 닉네임이 있으면 그 첫 글자가, 없으면 이메일 첫 글자가 사람이 알아보는 단서다.
                 UUID 첫 글자는 의미가 없다. */}
-            {(nickname ?? email ?? accountId).slice(0, 1).toUpperCase()}
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            {me.status === "loading" ? (
-              <Skeleton className="h-7 w-52 rounded-md" />
-            ) : (
-              <Heading level={2} className="truncate">
-                {nickname ?? email ?? shortenId(accountId)}
-              </Heading>
-            )}
-            {/* flex-col의 기본 stretch가 배지를 줄 끝까지 늘린다. 배지는 내용만큼만 차지해야 한다. */}
-            <Badge tone={session.role === "ADMIN" ? "brand" : "neutral"} className="self-start">
-              {session.role === "ADMIN" ? "관리자" : "일반 회원"}
-            </Badge>
-          </div>
+          {(nickname ?? email ?? accountId).slice(0, 1).toUpperCase()}
         </div>
-
-        {/* 탭 */}
-        <div className="grid grid-cols-5 border-b border-neutral-200">
-          {TABS.map((t) => (
-            <button key={t} type="button" className={tabClass(t)} onClick={() => setTab(t)}>
-              {TAB_LABEL[t]}
-            </button>
-          ))}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          {me.status === "loading" ? (
+            <Skeleton className="h-7 w-52 rounded-md" />
+          ) : (
+            <Heading level={2} className="truncate">
+              {nickname ?? email ?? shortenId(accountId)}
+            </Heading>
+          )}
+          {/* flex-col의 기본 stretch가 배지를 줄 끝까지 늘린다. 배지는 내용만큼만 차지해야 한다. */}
+          <Badge tone={session.role === "ADMIN" ? "brand" : "neutral"} className="self-start">
+            {session.role === "ADMIN" ? "관리자" : "일반 회원"}
+          </Badge>
         </div>
+      </div>
 
-        {/* 내 정보 */}
-        {tab === "info" && (
-          <div className="flex flex-col gap-4">
-            <Card padded className="flex flex-col divide-y divide-neutral-100">
-              <InfoRow label="닉네임">
-                {me.status === "loading" ? (
-                  <Skeleton className="h-5 w-48 rounded" />
-                ) : me.status === "failed" ? (
-                  /* 닉네임과 이메일은 같은 /me 한 번으로 채워진다. 두 줄 모두 실패 안내와
+      {/* 탭 */}
+      <div className="grid grid-cols-5 border-b border-neutral-200">
+        {TABS.map((t) => (
+          <button key={t} type="button" className={tabClass(t)} onClick={() => setTab(t)}>
+            {TAB_LABEL[t]}
+          </button>
+        ))}
+      </div>
+
+      {/* 내 정보 */}
+      {tab === "info" && (
+        <div className="flex flex-col gap-4">
+          <Card padded className="flex flex-col divide-y divide-neutral-100">
+            <InfoRow label="닉네임">
+              {me.status === "loading" ? (
+                <Skeleton className="h-5 w-48 rounded" />
+              ) : me.status === "failed" ? (
+                /* 닉네임과 이메일은 같은 /me 한 번으로 채워진다. 두 줄 모두 실패 안내와
                      재시도 버튼을 띄우면 같은 요청에 대한 경고가 두 번 겹친다. 안내는 바로
                      아래 이메일 줄이 대표로 맡고 여기는 빈자리 표시만 남긴다. */
-                  <p className="text-neutral-400">—</p>
-                ) : /* null·undefined·빈 문자열을 모두 "아직 없음"으로 본다 — 서버가 필드를
+                <p className="text-neutral-400">—</p>
+              ) : /* null·undefined·빈 문자열을 모두 "아직 없음"으로 본다 — 서버가 필드를
                       생략해도 빈 줄이 아니라 설정 안내가 나와야 한다. */
-                me.data.nickname ? (
-                  <p className="text-neutral-900">{me.data.nickname}</p>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Text tone="secondary" size="sm">
-                      아직 설정하지 않았어요
-                    </Text>
-                    <Link
-                      href="/onboarding"
-                      className="font-semibold text-brand-700 underline-offset-4 hover:underline"
-                    >
-                      닉네임 설정하기
-                    </Link>
-                  </div>
-                )}
-              </InfoRow>
-
-              <InfoRow label="이메일">
-                {me.status === "loading" ? (
-                  <Skeleton className="h-5 w-48 rounded" />
-                ) : me.status === "failed" ? (
-                  <InlineFailure onRetry={reload} />
-                ) : (
-                  <p className="text-neutral-900">{me.data.email}</p>
-                )}
-              </InfoRow>
-
-              <InfoRow label="계정 ID">
+              me.data.nickname ? (
+                <p className="text-neutral-900">{me.data.nickname}</p>
+              ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-mono text-sm text-neutral-700" title={accountId}>
-                    {shortenId(accountId)}
-                  </p>
-                  <Button variant="ghost" size="sm" onClick={copyAccountId}>
-                    {copied ? "복사됨" : "복사"}
-                  </Button>
+                  <Text tone="secondary" size="sm">
+                    아직 설정하지 않았어요
+                  </Text>
+                  <Link
+                    href="/onboarding"
+                    className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                  >
+                    닉네임 설정하기
+                  </Link>
                 </div>
-              </InfoRow>
+              )}
+            </InfoRow>
 
-              <InfoRow label="계정 보안">
-                <Link
-                  href="/profile/security"
-                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
-                >
-                  비밀번호 변경
-                </Link>
-              </InfoRow>
+            <InfoRow label="이메일">
+              {me.status === "loading" ? (
+                <Skeleton className="h-5 w-48 rounded" />
+              ) : me.status === "failed" ? (
+                <InlineFailure onRetry={reload} />
+              ) : (
+                <p className="text-neutral-900">{me.data.email}</p>
+              )}
+            </InfoRow>
 
-              <InfoRow label="알림 설정">
-                <Link
-                  href="/profile/notifications"
-                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
-                >
-                  받을 알림 고르기
-                </Link>
-              </InfoRow>
+            <InfoRow label="계정 ID">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-mono text-sm text-neutral-700" title={accountId}>
+                  {shortenId(accountId)}
+                </p>
+                <Button variant="ghost" size="sm" onClick={copyAccountId}>
+                  {copied ? "복사됨" : "복사"}
+                </Button>
+              </div>
+            </InfoRow>
 
-              <InfoRow label="개인정보 권리">
-                <Link
-                  href="/chat?compose=support&category=PRIVACY_ACCESS"
-                  className="font-semibold text-brand-700 underline-offset-4 hover:underline"
-                >
-                  열람·정정·삭제·처리정지 요청
-                </Link>
-              </InfoRow>
-            </Card>
+            <InfoRow label="계정 보안">
+              <Link
+                href="/profile/security"
+                className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              >
+                비밀번호 변경
+              </Link>
+            </InfoRow>
 
-            {/* 헤더에도 로그아웃이 있다. 여기서는 눈에 덜 띄게 두고 오른쪽으로 뺀다. */}
-            <div className="flex justify-end">
-              <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                로그아웃
-              </Button>
-            </div>
+            <InfoRow label="알림 설정">
+              <Link
+                href="/profile/notifications"
+                className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              >
+                받을 알림 고르기
+              </Link>
+            </InfoRow>
+
+            <InfoRow label="개인정보 권리">
+              <Link
+                href="/chat?compose=support&category=PRIVACY_ACCESS"
+                className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              >
+                열람·정정·삭제·처리정지 요청
+              </Link>
+            </InfoRow>
+          </Card>
+
+          {/* 헤더에도 로그아웃이 있다. 여기서는 눈에 덜 띄게 두고 오른쪽으로 뺀다. */}
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              로그아웃
+            </Button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 구매 내역 */}
-        {tab === "orders" && (
-          <div className="flex flex-col gap-3">
-            {orders.status === "loading" ? (
-              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
-            ) : orders.status === "failed" ? (
+      {/* 구매 내역 */}
+      {tab === "orders" && (
+        <div className="flex flex-col gap-3">
+          {orders.status === "loading" ? (
+            [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+          ) : orders.status === "failed" ? (
+            <PanelFailure onRetry={reload} />
+          ) : orders.data.length === 0 ? (
+            <PanelEmpty
+              icon={<ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+              message="구매 내역이 없어요"
+            />
+          ) : (
+            orders.data.map((o) => (
+              <Link
+                key={o.id}
+                href={`/orders/${o.id}${o.status === "completed" && launch.features.reviews ? "#review" : ""}`}
+                className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-mono text-xs text-neutral-400">{o.id.slice(0, 8)}</span>
+                  <span className="text-base font-semibold tabular-nums text-neutral-900">
+                    {formatKrw(o.amount)}
+                  </span>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Badge
+                    tone={
+                      o.status === "completed"
+                        ? "success"
+                        : o.status === "payment_review" || o.status === "refund_pending"
+                          ? "warning"
+                          : o.status === "refunded" || o.status === "payment_failed"
+                            ? "danger"
+                            : "brand"
+                    }
+                  >
+                    {orderStatusLabel(o.status)}
+                  </Badge>
+                  {o.status === "completed" && launch.features.reviews ? (
+                    <span className="text-xs font-semibold text-brand-600">후기 작성</span>
+                  ) : null}
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* 판매 관리 — 받은 주문(발송 대기)과 정산 예정액. 판매자 루프의 진입점이다. */}
+      {tab === "sales" && (
+        <div className="flex flex-col gap-8">
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <Heading level={2} className="text-lg">
+                받은 주문
+              </Heading>
+              <Text tone="muted" size="sm">
+                주문을 눌러 운송장을 등록하세요
+              </Text>
+            </div>
+            {sales.status === "loading" ? (
+              [1, 2].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+            ) : sales.status === "failed" ? (
               <PanelFailure onRetry={reload} />
-            ) : orders.data.length === 0 ? (
+            ) : sales.data.length === 0 ? (
               <PanelEmpty
-                icon={<ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
-                message="구매 내역이 없어요"
+                icon={<PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+                message="아직 받은 주문이 없어요"
               />
             ) : (
-              orders.data.map((o) => (
+              sales.data.map((o) => (
                 <Link
                   key={o.id}
-                  href={`/orders/${o.id}${o.status === "completed" && launch.features.reviews ? "#review" : ""}`}
+                  href={`/orders/${o.id}`}
                   className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
                 >
                   <div className="flex flex-col gap-0.5">
@@ -397,260 +459,196 @@ export function ProfilePage() {
                       {formatKrw(o.amount)}
                     </span>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge
-                      tone={
-                        o.status === "completed"
-                          ? "success"
-                          : o.status === "payment_review" || o.status === "refund_pending"
-                            ? "warning"
-                            : o.status === "refunded" || o.status === "payment_failed"
-                              ? "danger"
-                              : "brand"
-                      }
-                    >
-                      {orderStatusLabel(o.status)}
-                    </Badge>
-                    {o.status === "completed" && launch.features.reviews ? (
-                      <span className="text-xs font-semibold text-brand-600">후기 작성</span>
-                    ) : null}
-                  </div>
+                  <Badge tone={o.status === "completed" ? "success" : "warning"}>
+                    {orderStatusLabel(o.status)}
+                  </Badge>
                 </Link>
               ))
             )}
-          </div>
-        )}
+          </section>
 
-        {/* 판매 관리 — 받은 주문(발송 대기)과 정산 예정액. 판매자 루프의 진입점이다. */}
-        {tab === "sales" && (
-          <div className="flex flex-col gap-8">
+          {showSettlements ? (
             <section className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between gap-3">
                 <Heading level={2} className="text-lg">
-                  받은 주문
+                  정산
                 </Heading>
                 <Text tone="muted" size="sm">
-                  주문을 눌러 운송장을 등록하세요
+                  {settlementDescription}
                 </Text>
               </div>
-              {sales.status === "loading" ? (
+              {settlements.status === "loading" ? (
                 [1, 2].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
-              ) : sales.status === "failed" ? (
+              ) : settlements.status === "failed" ? (
                 <PanelFailure onRetry={reload} />
-              ) : sales.data.length === 0 ? (
+              ) : settlements.data.length === 0 ? (
                 <PanelEmpty
-                  icon={<PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
-                  message="아직 받은 주문이 없어요"
+                  icon={<ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+                  message="정산 예정 금액이 없어요"
                 />
               ) : (
-                sales.data.map((o) => (
-                  <Link
-                    key={o.id}
-                    href={`/orders/${o.id}`}
-                    className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3.5 hover:bg-neutral-50"
+                settlements.data.map((row) => (
+                  <div
+                    key={row.orderId}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3.5"
                   >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs text-neutral-400">{o.id.slice(0, 8)}</span>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <Link
+                        href={`/orders/${row.orderId}`}
+                        className="font-mono text-xs text-neutral-400 hover:text-brand-600"
+                      >
+                        {row.orderId.slice(0, 8)}
+                      </Link>
                       <span className="text-base font-semibold tabular-nums text-neutral-900">
-                        {formatKrw(o.amount)}
+                        {formatKrw(row.payout)}
+                      </span>
+                      <span className="text-xs text-neutral-500 tabular-nums">
+                        거래액 {formatKrw(row.grossAmount)} · 수수료 {formatKrw(row.fee)}
                       </span>
                     </div>
-                    <Badge tone={o.status === "completed" ? "success" : "warning"}>
-                      {orderStatusLabel(o.status)}
-                    </Badge>
-                  </Link>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <SettlementStatus row={row} />
+                    </div>
+                  </div>
                 ))
               )}
             </section>
+          ) : null}
+        </div>
+      )}
 
-            {showSettlements ? (
-              <section className="flex flex-col gap-3">
-                <div className="flex items-baseline justify-between gap-3">
-                  <Heading level={2} className="text-lg">
-                    정산
-                  </Heading>
-                  <Text tone="muted" size="sm">
-                    {settlementDescription}
-                  </Text>
-                </div>
-                {settlements.status === "loading" ? (
-                  [1, 2].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
-                ) : settlements.status === "failed" ? (
-                  <PanelFailure onRetry={reload} />
-                ) : settlements.data.length === 0 ? (
-                  <PanelEmpty
-                    icon={
-                      <ShoppingBagIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />
-                    }
-                    message="정산 예정 금액이 없어요"
-                  />
-                ) : (
-                  settlements.data.map((row) => (
-                    <div
-                      key={row.orderId}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3.5"
-                    >
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <Link
-                          href={`/orders/${row.orderId}`}
-                          className="font-mono text-xs text-neutral-400 hover:text-brand-600"
-                        >
-                          {row.orderId.slice(0, 8)}
-                        </Link>
-                        <span className="text-base font-semibold tabular-nums text-neutral-900">
-                          {formatKrw(row.payout)}
-                        </span>
-                        <span className="text-xs text-neutral-500 tabular-nums">
-                          거래액 {formatKrw(row.grossAmount)} · 수수료 {formatKrw(row.fee)}
-                        </span>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <SettlementStatus row={row} />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </section>
-            ) : null}
+      {/* 내 매물 */}
+      {tab === "listings" && (
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <LinkButton href="/sell" size="sm">
+              매물 등록
+            </LinkButton>
           </div>
-        )}
-
-        {/* 내 매물 */}
-        {tab === "listings" && (
-          <div className="flex flex-col gap-3">
-            <div className="flex justify-end">
-              <LinkButton href="/sell" size="sm">
-                매물 등록
-              </LinkButton>
-            </div>
-            {listingNotice ? (
-              <p
-                role="status"
-                className="rounded-lg bg-success-soft px-4 py-3 text-sm text-success"
-              >
-                {listingNotice}
-              </p>
-            ) : null}
-            {listings.status === "loading" ? (
-              [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
-            ) : listings.status === "failed" ? (
-              <PanelFailure onRetry={reload} />
-            ) : listings.data.length === 0 ? (
-              <PanelEmpty
-                icon={<PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
-                message="등록한 매물이 없어요"
-                action={
-                  <LinkButton href="/sell" size="sm">
-                    첫 매물 등록하기
-                  </LinkButton>
-                }
-              />
-            ) : (
-              listings.data.map((l) => {
-                const confirmingStop = pendingListingStop === l.id;
-                const stopping = stoppingListing === l.id;
-                const stopError =
-                  listingStopError?.listingId === l.id ? listingStopError.message : null;
-                return (
-                  <article
-                    key={l.id}
-                    className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
+          {listingNotice ? (
+            <p role="status" className="rounded-lg bg-success-soft px-4 py-3 text-sm text-success">
+              {listingNotice}
+            </p>
+          ) : null}
+          {listings.status === "loading" ? (
+            [1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+          ) : listings.status === "failed" ? (
+            <PanelFailure onRetry={reload} />
+          ) : listings.data.length === 0 ? (
+            <PanelEmpty
+              icon={<PackageIcon className="h-8 w-8 text-neutral-400" strokeWidth={1.5} />}
+              message="등록한 매물이 없어요"
+              action={
+                <LinkButton href="/sell" size="sm">
+                  첫 매물 등록하기
+                </LinkButton>
+              }
+            />
+          ) : (
+            listings.data.map((l) => {
+              const confirmingStop = pendingListingStop === l.id;
+              const stopping = stoppingListing === l.id;
+              const stopError =
+                listingStopError?.listingId === l.id ? listingStopError.message : null;
+              return (
+                <article
+                  key={l.id}
+                  className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
+                >
+                  <Link
+                    href={`/listings/${l.id}`}
+                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-neutral-50"
                   >
-                    <Link
-                      href={`/listings/${l.id}`}
-                      className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-neutral-50"
-                    >
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-medium text-neutral-900">{l.title}</span>
-                        <span className="text-sm tabular-nums text-neutral-500">
-                          {formatKrw(l.price)}
-                        </span>
-                      </div>
-                      <Badge
-                        tone={
-                          l.status === "active"
-                            ? "success"
-                            : l.status === "reserved"
-                              ? "warning"
-                              : l.status === "sold"
-                                ? "neutral"
-                                : "danger"
-                        }
-                      >
-                        {l.status === "active"
-                          ? "판매중"
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate font-medium text-neutral-900">{l.title}</span>
+                      <span className="text-sm tabular-nums text-neutral-500">
+                        {formatKrw(l.price)}
+                      </span>
+                    </div>
+                    <Badge
+                      tone={
+                        l.status === "active"
+                          ? "success"
                           : l.status === "reserved"
-                            ? "예약중"
+                            ? "warning"
                             : l.status === "sold"
-                              ? "판매완료"
-                              : "삭제됨"}
-                      </Badge>
-                    </Link>
-                    {l.status === "active" ? (
-                      <div className="border-t border-neutral-100 px-4 py-3">
-                        {confirmingStop ? (
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-sm text-neutral-700">
-                              판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.
-                            </p>
-                            <div className="flex shrink-0 gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={stopping}
-                                onClick={() => setPendingListingStop(null)}
-                              >
-                                취소
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                disabled={stopping}
-                                onClick={() => void stopListing(l.id)}
-                              >
-                                {stopping ? "중지 중…" : "중지하기"}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-start gap-2">
-                            <EditListingLink listingId={l.id} />
-                            <BumpListingButton listing={l} onBumped={handleListingBumped} />
+                              ? "neutral"
+                              : "danger"
+                      }
+                    >
+                      {l.status === "active"
+                        ? "판매중"
+                        : l.status === "reserved"
+                          ? "예약중"
+                          : l.status === "sold"
+                            ? "판매완료"
+                            : "삭제됨"}
+                    </Badge>
+                  </Link>
+                  {l.status === "active" ? (
+                    <div className="border-t border-neutral-100 px-4 py-3">
+                      {confirmingStop ? (
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-sm text-neutral-700">
+                            판매를 중지하면 검색에서 사라지고 되돌릴 수 없어요.
+                          </p>
+                          <div className="flex shrink-0 gap-2">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="ml-auto"
-                              onClick={() => {
-                                setPendingListingStop(l.id);
-                                setListingStopError(null);
-                                setListingNotice(null);
-                              }}
+                              disabled={stopping}
+                              onClick={() => setPendingListingStop(null)}
                             >
-                              판매 중지
+                              취소
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              disabled={stopping}
+                              onClick={() => void stopListing(l.id)}
+                            >
+                              {stopping ? "중지 중…" : "중지하기"}
                             </Button>
                           </div>
-                        )}
-                        {stopError ? (
-                          <p role="alert" className="mt-2 text-sm text-danger">
-                            {stopError}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })
-            )}
-          </div>
-        )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-start gap-2">
+                          <EditListingLink listingId={l.id} />
+                          <BumpListingButton listing={l} onBumped={handleListingBumped} />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="ml-auto"
+                            onClick={() => {
+                              setPendingListingStop(l.id);
+                              setListingStopError(null);
+                              setListingNotice(null);
+                            }}
+                          >
+                            판매 중지
+                          </Button>
+                        </div>
+                      )}
+                      {stopError ? (
+                        <p role="alert" className="mt-2 text-sm text-danger">
+                          {stopError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
+        </div>
+      )}
 
-        {/* 입찰 — 탭을 열 때 처음 읽는다. */}
-        {tab === "bids" && <MyBidsPanel />}
-      </div>
-    </Container>
+      {/* 입찰 — 탭을 열 때 처음 읽는다. */}
+      {tab === "bids" && <MyBidsPanel />}
+    </PageLayout>
   );
 }
 
