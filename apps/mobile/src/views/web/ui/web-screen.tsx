@@ -13,9 +13,16 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import {
+  parseAppPaymentRequest,
+  type AppPaymentRequest,
+  type AppPaymentResult,
+} from "@gole/core/lib";
 import { useDevicePushToken, webPushTokenScript } from "@/features/push-notifications";
 import { releaseSplash } from "@/shared/lib";
 import { themes } from "@/shared/theme";
+import { paymentBridgeScript, paymentResultScript } from "../model/payment";
+import { PaymentModal } from "./payment-modal";
 import {
   appNavigationMessage,
   appTabScript,
@@ -90,12 +97,27 @@ export function WebScreen({
   const loading = useRef(true);
   // 실제 문서 로드가 시작될 때마다 1씩 는다. 목적지를 보낸 뒤 새 문서가 끝까지 열렸는지 가리는 데 쓴다.
   const documentId = useRef(0);
+  const focused = useRef(false);
+  const paymentInFlight = useRef<{ request: AppPaymentRequest; document: number } | null>(null);
+  const [payment, setPayment] = useState<AppPaymentRequest | null>(null);
   // 아직 도착을 확인하지 못한 목적지. 그 목적지의 문서가 성공적으로 열릴 때까지 지우지 않는다 —
   // 로드 전·로드 중이면 기다렸다 보내고, 보낸 로드가 실패하면 다시 시도가 이 목적지를 연다.
   const pending = useRef<PendingTarget | null>(null);
   const pushToken = useDevicePushToken();
   const pushScript = pushToken === null ? null : webPushTokenScript(pushToken);
-  const injected = `${appTabScript(tab ?? null)}${pushScript ?? ""}`;
+  const injected = `${appTabScript(tab ?? null)}${paymentBridgeScript}${pushScript ?? ""}`;
+
+  const finishPayment = useCallback(
+    (result: AppPaymentResult) => {
+      const active = paymentInFlight.current;
+      if (active === null || active.request.requestId !== result.requestId) return;
+      paymentInFlight.current = null;
+      setPayment(null);
+      if (active.document === documentId.current)
+        web.current?.injectJavaScript(paymentResultScript(result, origin));
+    },
+    [origin],
+  );
 
   const openTab = useCallback(
     (request: TabRequest) => {
@@ -214,6 +236,7 @@ export function WebScreen({
 
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
       // 별도 WebView 탭에서 로그인/로그아웃한 뒤 기존 웹 세션 구독을 깨운다.
       // 입력 중인 폼을 보존하고, 인증 토큰은 읽거나 주입하지 않는다.
       const notifyFocus = () =>
@@ -228,6 +251,7 @@ export function WebScreen({
         return true;
       });
       return () => {
+        focused.current = false;
         listener.remove();
         appStateListener.remove();
       };
@@ -253,6 +277,7 @@ export function WebScreen({
           <Text style={styles.message}>외부 앱을 열지 못했습니다. 눌러서 닫기</Text>
         </Pressable>
       ) : null}
+      {payment === null ? null : <PaymentModal request={payment} onResult={finishPayment} />}
       {error ? (
         <View style={styles.failure}>
           <Text accessibilityRole="header" style={styles.title}>
@@ -294,6 +319,7 @@ export function WebScreen({
           // 웹이 로그인 계정으로 푸시 토큰을 등록한다. 신뢰 원점만 이 WebView 에 뜬다(아래 탐색 정책).
           // 탭 이름과 푸시 토큰은 모두 JSON 상수다. 웹 내용을 실행하거나 세션·쿠키를 읽지 않는다.
           injectedJavaScriptBeforeContentLoaded={injected}
+          injectedJavaScript={injected}
           // 모든 탐색을 아래 정책에서 판정한다. WebView의 자동 외부 앱 열기를 막는다.
           originWhitelist={["*"]}
           onShouldStartLoadWithRequest={(request) => {
@@ -311,6 +337,30 @@ export function WebScreen({
             return false;
           }}
           onMessage={({ nativeEvent }) => {
+            const paymentRequest = parseAppPaymentRequest(
+              nativeEvent.data,
+              nativeEvent.url,
+              origin,
+            );
+            if (paymentRequest !== null && focused.current) {
+              if (paymentInFlight.current !== null) {
+                web.current?.injectJavaScript(
+                  paymentResultScript(
+                    {
+                      requestId: paymentRequest.requestId,
+                      paymentId: paymentRequest.payment.paymentId,
+                      code: "PAYMENT_IN_PROGRESS",
+                      message: "이미 열려 있는 결제창을 확인해 주세요.",
+                    },
+                    origin,
+                  ),
+                );
+                return;
+              }
+              paymentInFlight.current = { request: paymentRequest, document: documentId.current };
+              setPayment(paymentRequest);
+              return;
+            }
             // ① 웹 링크가 부탁한 탭 이동. 정확한 원점과 고정된 모양이 아니면 버린다.
             const request = appNavigationMessage(nativeEvent.data, nativeEvent.url, origin);
             if (request === null) return;
@@ -350,6 +400,11 @@ export function WebScreen({
             if (!nativeEvent.loading) return;
             loading.current = true;
             documentId.current += 1;
+            // 원래 주문 문서가 사라지면 늦은 PG 응답을 다른 문서로 전달하지 않는다.
+            if (paymentInFlight.current !== null) {
+              paymentInFlight.current = null;
+              setPayment(null);
+            }
           }}
           onLoadProgress={({ nativeEvent }) => {
             // 진행률 1은 로드가 멈췄다는 뜻이다 — 완료뿐 아니라 이 화면이 다른 탭으로 넘기며 막은 이동처럼

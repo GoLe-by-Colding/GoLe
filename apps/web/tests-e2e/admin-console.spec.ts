@@ -1401,7 +1401,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     );
   });
 
-  test("마스코트는 기본 제공 고래 12벌 중 하나를 사유·확인 후 적용하고 같은 탭 헤더에 바로 반영한다", async ({
+  test("마스코트는 기본 제공 고래 13벌 중 하나를 사유·확인 후 적용하고 같은 탭 헤더에 바로 반영한다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1451,7 +1451,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.goto("/admin/mascot");
     await expect(page.getByRole("heading", { name: "마스코트", exact: true })).toBeVisible();
     const presets = page.getByRole("heading", { name: "기본 제공 고래" }).locator("xpath=../..");
-    await expect(presets.getByRole("button", { pressed: false })).toHaveCount(11);
+    await expect(presets.getByRole("button", { pressed: false })).toHaveCount(12);
     await expect(presets.getByRole("button", { pressed: true })).toContainText("옆모습 브릭 고래");
 
     const apply = page.getByRole("button", { name: "이 마스코트 적용" });
@@ -1478,6 +1478,35 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasPageOverflow).toBe(false);
+  });
+
+  test("다른 탭에서 마스코트를 바꿔도 창으로 돌아오면 최신 그림을 받는다", async ({ page }) => {
+    let changed = false;
+    let offline = false;
+    await page.route("**/api/v1/config/mascot", (route) =>
+      route.fulfill({
+        status: offline ? 503 : 200,
+        json: {
+          revision: changed ? 2 : 1,
+          asset: { kind: "PRESET", id: changed ? "baby-round" : "side-brick", name: "검증용 고래" },
+        },
+      }),
+    );
+    await page.goto("/search");
+    const mark = page.locator("header a svg").first();
+    await expect(mark).toHaveAttribute("viewBox", "0 0 235.8 132.2");
+    changed = true;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(mark).toHaveAttribute("viewBox", "0 0 223.3 172.3");
+    // 일시적인 조회 실패로 적용된 그림을 기본 고래로 되돌리지 않는다.
+    offline = true;
+    const failed = page.waitForResponse("**/api/v1/config/mascot");
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await (await failed).finished();
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+    await expect(mark).toHaveAttribute("viewBox", "0 0 223.3 172.3");
   });
 
   test("좁은 화면에서 카탈로그 폼은 한 열로 흐르고 표 스크롤은 카드 안에 머문다", async ({
@@ -2018,7 +2047,7 @@ test.describe("관리자 API 가드", () => {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
     expect(editor.status()).toBe(200);
-    expect((await editor.json()).presets).toHaveLength(12);
+    expect((await editor.json()).presets).toHaveLength(13);
     await ctx.dispose();
   });
 });
