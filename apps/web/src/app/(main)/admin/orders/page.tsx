@@ -11,6 +11,8 @@ const STATUSES = new Set([
   "COMPLETED",
   "REFUNDED",
   "PAYMENT_FAILED",
+  "CANCELLED",
+  "DISPUTED",
 ]);
 
 export default async function Page({

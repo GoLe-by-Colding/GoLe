@@ -172,7 +172,7 @@ test.describe("내 정보", () => {
     await expect(page.getByText("아직 설정하지 않았어요")).toBeVisible();
     await expect(page.getByRole("link", { name: "닉네임 설정하기" })).toHaveAttribute(
       "href",
-      "/onboarding",
+      "/onboarding?returnTo=%2Fprofile",
     );
     // 닉네임이 없을 때는 이메일이 제목 자리를 대신한다.
     await expect(page.getByRole("heading", { name: "seller@gole.test" })).toBeVisible();

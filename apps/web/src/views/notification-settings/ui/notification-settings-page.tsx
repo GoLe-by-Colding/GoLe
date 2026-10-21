@@ -8,7 +8,7 @@ import {
   type NotificationPreferenceChanges,
   type NotificationPreferenceKey,
 } from "@entities/notification";
-import { useSession } from "@entities/user";
+import { loadSession, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { cn, loginHrefWithReturnTo } from "@shared/lib";
 import {
@@ -62,24 +62,19 @@ function withEnabled(
  * 알림 수신 설정 — 분류 단위로 켜고 끈다. (notification-preferences P2·P3)
  *
  * 스위치는 낙관적으로 바로 뒤집고, 저장이 실패하면 그 분류만 되돌린다. 여러 분류를 연달아 누르면
- * 응답이 순서대로 오지 않을 수 있어서, 서버 응답을 반영할 때 아직 저장 중인 분류는 화면 값을 지킨다.
+ * 같은 화면의 응답이 역전되지 않도록 요청은 순서대로 보낸다. 응답을 반영할 때 아직 저장 중인
+ * 다른 분류는 화면 값을 지켜 사용자가 연달아 바꾼 설정을 잃지 않는다.
  */
 export function NotificationSettingsPage() {
   const { session } = useSession();
   const accountId = session?.accountId ?? null;
   const [loaded, setLoaded] = useState<LoadState | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [pendingKeys, setPendingKeys] = useState<ReadonlySet<NotificationPreferenceKey>>(
-    () => new Set(),
-  );
+  const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
   /** 저장 중인 분류와 그 낙관값. 렌더와 무관한 비동기 경합 판정용이라 ref로 둔다. */
-  const inFlightRef = useRef(new Map<NotificationPreferenceKey, boolean>());
-  const accountIdRef = useRef(accountId);
-
-  useEffect(() => {
-    accountIdRef.current = accountId;
-  }, [accountId]);
+  const inFlightRef = useRef(new Map<string, boolean>());
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (accountId === null) return;
@@ -110,15 +105,16 @@ export function NotificationSettingsPage() {
 
   async function toggle(category: NotificationPreferenceCategory) {
     if (accountId === null || category.mandatory) return;
-    if (inFlightRef.current.has(category.key)) return;
     const owner = accountId;
     const key = category.key;
+    const operationKey = `${owner}:${key}`;
+    if (inFlightRef.current.has(operationKey)) return;
     const next = !category.enabled;
     const changes: NotificationPreferenceChanges = {};
     changes[key] = next;
 
-    inFlightRef.current.set(key, next);
-    setPendingKeys((current) => new Set(current).add(key));
+    inFlightRef.current.set(operationKey, next);
+    setPendingKeys((current) => new Set(current).add(operationKey));
     setSaveError(null);
     setLoaded((current) =>
       current?.accountId === owner && current.status === "ready"
@@ -126,25 +122,30 @@ export function NotificationSettingsPage() {
         : current,
     );
 
+    const request = saveQueue.current.then(() =>
+      loadSession()?.accountId === owner ? updateNotificationPreferences(owner, changes) : null,
+    );
+    // 앞 요청이 실패해도 다음 분류 저장은 계속한다.
+    saveQueue.current = request.catch(() => undefined);
     try {
-      const categories = await updateNotificationPreferences(owner, changes);
-      inFlightRef.current.delete(key);
-      if (accountIdRef.current !== owner) return;
+      const categories = await request;
+      inFlightRef.current.delete(operationKey);
+      if (categories === null || loadSession()?.accountId !== owner) return;
       setLoaded((current) =>
         current?.accountId === owner
           ? {
               accountId: owner,
               status: "ready",
               categories: categories.map((item) => {
-                const optimistic = inFlightRef.current.get(item.key);
+                const optimistic = inFlightRef.current.get(`${owner}:${item.key}`);
                 return optimistic === undefined ? item : { ...item, enabled: optimistic };
               }),
             }
           : current,
       );
     } catch (cause) {
-      inFlightRef.current.delete(key);
-      if (accountIdRef.current !== owner) return;
+      inFlightRef.current.delete(operationKey);
+      if (loadSession()?.accountId !== owner) return;
       setLoaded((current) =>
         current?.accountId === owner && current.status === "ready"
           ? { ...current, categories: withEnabled(current.categories, key, !next) }
@@ -156,7 +157,7 @@ export function NotificationSettingsPage() {
     } finally {
       setPendingKeys((current) => {
         const rest = new Set(current);
-        rest.delete(key);
+        rest.delete(operationKey);
         return rest;
       });
     }
@@ -223,7 +224,7 @@ export function NotificationSettingsPage() {
                 <PreferenceRow
                   key={category.key}
                   category={category}
-                  pending={pendingKeys.has(category.key)}
+                  pending={pendingKeys.has(`${accountId}:${category.key}`)}
                   onToggle={() => void toggle(category)}
                 />
               ))}

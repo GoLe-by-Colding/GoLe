@@ -309,7 +309,7 @@ export function ProfilePage() {
                     아직 설정하지 않았어요
                   </Text>
                   <Link
-                    href="/onboarding"
+                    href="/onboarding?returnTo=%2Fprofile"
                     className="font-semibold text-brand-700 underline-offset-4 hover:underline"
                   >
                     닉네임 설정하기

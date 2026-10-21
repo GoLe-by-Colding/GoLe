@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchComments,
   fetchPost,
@@ -44,14 +44,17 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
   const [commentsError, setCommentsError] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [commentActionError, setCommentActionError] = useState<string | null>(null);
+  const commentsRequest = useRef(0);
   const dialog = useDialog();
 
   const loadComments = useCallback(async () => {
+    const request = ++commentsRequest.current;
     setCommentsError(false);
     try {
-      setComments(await fetchComments(postId));
+      const data = await fetchComments(postId);
+      if (request === commentsRequest.current) setComments(data);
     } catch {
-      setCommentsError(true);
+      if (request === commentsRequest.current) setCommentsError(true);
     }
   }, [postId]);
 
@@ -71,8 +74,8 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
         if (active) {
           setPost(data);
           setPostStatus("ready");
+          await loadComments();
         }
-        await loadComments();
       } catch (cause) {
         if (active) {
           setPostStatus(cause instanceof ApiError && cause.status === 404 ? "missing" : "error");
@@ -81,6 +84,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
     })();
     return () => {
       active = false;
+      commentsRequest.current += 1;
       window.clearTimeout(timer);
     };
   }, [postId, postAttempt, loadComments]);
@@ -144,8 +148,6 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
     );
   }
 
-  const cover = post.imageUrls[0];
-
   async function handleDeleteComment(comment: Comment): Promise<void> {
     const confirmed = await dialog.confirm({
       title: "댓글 삭제",
@@ -158,6 +160,7 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
     setCommentActionError(null);
     try {
       await deleteComment(postId, comment.id);
+      commentsRequest.current += 1;
       setComments((current) => current.filter((candidate) => candidate.id !== comment.id));
     } catch {
       setCommentActionError("댓글을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.");
@@ -187,11 +190,22 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
           </Badge>
         </div>
         <PostAuthorActions post={post} onUpdated={setPost} />
-        {cover !== undefined ? (
-          <Card padded={false} className="overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="w-full object-cover bg-neutral-100" src={cover} alt="" />
-          </Card>
+        {post.imageUrls.length > 0 ? (
+          <ul aria-label="게시글 사진" className="flex flex-col gap-3">
+            {post.imageUrls.map((url, index) => (
+              <li key={`${url}-${index}`}>
+                <Card padded={false} className="overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="w-full object-cover bg-neutral-100"
+                    src={url}
+                    alt={`게시글 사진 ${index + 1} / ${post.imageUrls.length}`}
+                    loading={index === 0 ? "eager" : "lazy"}
+                  />
+                </Card>
+              </li>
+            ))}
+          </ul>
         ) : null}
         <p className="whitespace-pre-wrap leading-relaxed text-neutral-800">{post.content}</p>
         {post.imageUrls.length > 0 ? (
@@ -260,7 +274,16 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
               {commentActionError}
             </Text>
           )}
-          <CommentForm postId={post.id} onAdded={() => void loadComments()} />
+          <CommentForm
+            postId={post.id}
+            onAdded={(comment) => {
+              setComments((current) => [
+                ...current.filter((candidate) => candidate.id !== comment.id),
+                comment,
+              ]);
+              void loadComments();
+            }}
+          />
         </div>
       </div>
       {dialog.element}

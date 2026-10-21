@@ -124,7 +124,15 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               </Link>
             ) : null}
             {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
-            {!isAvailable ? <Badge tone="danger">거래완료</Badge> : null}
+            {!isAvailable ? (
+              <Badge tone={listing.status === "reserved" ? "warning" : "neutral"}>
+                {listing.status === "reserved"
+                  ? "예약 중"
+                  : listing.status === "deleted"
+                    ? "판매 중지"
+                    : "거래완료"}
+              </Badge>
+            ) : null}
           </div>
           <Heading level={1}>{listing.title}</Heading>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -213,6 +221,7 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
                 sellerId={listing.sellerId}
                 listingPrice={listing.price}
                 available={isAvailable}
+                unavailableLabel={listing.status === "reserved" ? "예약 중" : "거래완료"}
               />
             ) : (
               <div className="flex flex-col gap-1.5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3">
@@ -236,6 +245,23 @@ export async function ListingDetailPage({ listingId, openChat = false }: Listing
               paymentsOpen={paymentsOpen}
               initialOpen={openChat}
             />
+          ) : null}
+          {!isAvailable ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-4">
+              <p className="text-sm text-neutral-600">
+                {listing.status === "reserved"
+                  ? "주문이 진행 중인 매물이에요. 거래 당사자는 내 정보의 구매·판매 내역과 기존 대화에서 이어갈 수 있어요."
+                  : "거래 내역과 기존 대화는 계속 확인할 수 있어요."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <LinkButton href="/profile" size="sm" variant="secondary">
+                  내 거래 내역
+                </LinkButton>
+                <LinkButton href="/chat" size="sm" variant="ghost">
+                  기존 대화 보기
+                </LinkButton>
+              </div>
+            </div>
           ) : null}
           <div className="flex flex-wrap items-start gap-2">
             <ListingViewerSwitch

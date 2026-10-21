@@ -84,16 +84,19 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
     return (
       <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
         <Textarea
+          aria-label="게시글 내용 수정"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={5}
-          maxLength={2000}
+          maxLength={5000}
+          disabled={busy}
         />
         {error !== null ? <p className="text-sm text-danger">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"
             size="sm"
+            disabled={busy}
             onClick={() => {
               setEditing(false);
               setDraft(post.content);
@@ -114,7 +117,12 @@ export function PostAuthorActions({ post, onUpdated }: PostAuthorActionsProps) {
     <div className="flex items-center gap-3">
       <button
         type="button"
-        onClick={() => setEditing(true)}
+        onClick={() => {
+          setDraft(post.content);
+          setError(null);
+          setEditing(true);
+        }}
+        disabled={busy}
         className="text-sm font-medium text-neutral-500 transition-colors hover:text-brand-600"
       >
         수정

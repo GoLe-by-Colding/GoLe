@@ -24,6 +24,7 @@ export interface PurchaseButtonProps {
   /** 지금 매물가. 수락 제안으로 주문할 때 실제 금액(`min(제안가, 매물가)`)과 정가 안내에 쓴다. */
   readonly listingPrice: number;
   readonly available: boolean;
+  readonly unavailableLabel?: string;
 }
 
 /** 마지막으로 쓴 CS 연락처를 기억해 다음 구매에서 미리 채운다. */
@@ -48,6 +49,7 @@ export function PurchaseButton({
   sellerId,
   listingPrice,
   available,
+  unavailableLabel = "거래완료",
 }: PurchaseButtonProps) {
   const router = useRouter();
   const { session } = useSession();
@@ -224,7 +226,7 @@ export function PurchaseButton({
   return (
     <div className="flex flex-col gap-2">
       <Button size="lg" disabled={!available || submitting} onClick={handleClick}>
-        {available ? "구매하기" : "거래완료"}
+        {available ? "구매하기" : unavailableLabel}
       </Button>
       {error ? <span className="text-sm text-danger">{error}</span> : null}
     </div>

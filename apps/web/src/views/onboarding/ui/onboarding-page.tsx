@@ -21,7 +21,7 @@ import { VerifyPhoneForm } from "@features/onboarding/verify-phone";
 import { AuthCard } from "@widgets/auth-layout";
 import { ApiError } from "@shared/api";
 import { loginHrefWithReturnTo, resolveReturnTo } from "@shared/lib";
-import { LinkButton, Text } from "@shared/ui";
+import { Button, LinkButton, Text } from "@shared/ui";
 import { stepTitle } from "../model/steps";
 
 /**
@@ -60,6 +60,7 @@ function OnboardingContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
   const [sellerReady, setSellerReady] = useState(false);
   const forSeller = searchParams.get("purpose") === "seller";
   const requirePhone = forSeller && sellerReady;
@@ -90,7 +91,7 @@ function OnboardingContent() {
         setError(cause instanceof ApiError ? cause.message : "온보딩 정보를 불러오지 못했습니다.");
       });
     return () => controller.abort();
-  }, [forSeller]);
+  }, [forSeller, attempt]);
 
   // 이미 온보딩을 마친 계정이 주소로 직접 들어온 경우 되돌려보낸다.
   //
@@ -112,6 +113,15 @@ function OnboardingContent() {
       <OnboardingShell subtitle="잠시 후 다시 시도해 주세요.">
         <div className="flex flex-col gap-4">
           <Text tone="secondary">{error}</Text>
+          <Button
+            onClick={() => {
+              setError(undefined);
+              setStatus(null);
+              setAttempt((current) => current + 1);
+            }}
+          >
+            다시 시도
+          </Button>
           <LinkButton href={loginHrefWithReturnTo(returnTo ?? (forSeller ? "/sell" : "/profile"))}>
             로그인 화면으로
           </LinkButton>

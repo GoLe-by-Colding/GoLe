@@ -16,7 +16,7 @@ import {
 } from "@entities/admin";
 import { useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Badge, Button, Card, Heading, Input, Text } from "@shared/ui";
+import { Badge, Button, Card, Heading, Input, Text, useDialog } from "@shared/ui";
 import { formatDateTime } from "../model/labels";
 import { PaymentReadinessPanel } from "./payment-readiness-panel";
 import { AdminStatus, AdminTable } from "./table";
@@ -70,6 +70,7 @@ const READINESS_CHECKS: readonly {
 
 /** 배포 없이 서비스 개방 단계를 바꾸되, 실제 결제·정산 모드와의 모순은 서버가 거부한다. */
 export function AdminLaunchView() {
+  const dialog = useDialog();
   const { session } = useSession();
   const token = session?.sessionToken ?? null;
   const [config, setConfig] = useState<AdminLaunchConfig | null>(null);
@@ -152,12 +153,23 @@ export function AdminLaunchView() {
   }
 
   async function changeReadiness(check: AdminLaunchReadinessKey, confirmed: boolean) {
-    if (token === null) return;
+    if (token === null || busy !== null) return;
     const value = requiredReason();
     if (value === null) return;
     setBusy(`readiness-${check}`);
     setError(undefined);
     try {
+      if (!confirmed) {
+        const item = READINESS_CHECKS.find((entry) => entry.key === check);
+        const accepted = await dialog.confirm({
+          title: "운영 준비 확인을 취소할까요?",
+          description: `${item?.title ?? check} 승인을 취소합니다. 현재 단계의 필수 항목이면 Stage 1로 낮아지고 신규 결제가 닫힙니다. 변경 사유: ${value}`,
+          confirmLabel: "승인 취소하기",
+          cancelLabel: "돌아가기",
+          tone: "danger",
+        });
+        if (!accepted) return;
+      }
       setConfig(await setAdminLaunchReadiness(token, check, confirmed, value));
       setReason("");
       setHistory(await fetchAdminLaunchHistory(token, 50));
@@ -173,6 +185,7 @@ export function AdminLaunchView() {
 
   return (
     <div className="motion-safe:animate-rise-in flex flex-col gap-7 break-keep">
+      {dialog.element}
       <div>
         <Heading level={2}>출시 단계</Heading>
         <Text tone="muted" size="sm" className="mt-1">
