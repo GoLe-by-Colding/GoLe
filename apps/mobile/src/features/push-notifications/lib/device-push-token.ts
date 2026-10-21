@@ -27,6 +27,13 @@ export async function getDevicePushToken(): Promise<DevicePushToken | null> {
   }
 
   try {
+    // Android 13 이상은 채널이 먼저 있어야 알림 권한 프롬프트를 표시할 수 있다.
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "GoLe 알림",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
     const existing = await Notifications.getPermissionsAsync();
     const granted =
       existing.granted ||
