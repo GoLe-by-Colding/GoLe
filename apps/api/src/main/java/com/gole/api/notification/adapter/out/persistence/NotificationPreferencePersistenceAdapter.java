@@ -3,14 +3,23 @@ package com.gole.api.notification.adapter.out.persistence;
 import com.gole.api.notification.application.port.out.NotificationPreferenceRepositoryPort;
 import com.gole.api.notification.domain.model.NotificationCategory;
 import com.gole.api.notification.domain.model.NotificationPreferences;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.Date;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
@@ -45,6 +54,40 @@ public class NotificationPreferencePersistenceAdapter implements NotificationPre
                 preferences.getAccountId(),
                 preferences.getDisabled().stream().map(Enum::name).sorted().toList(),
                 preferences.getUpdatedAt())));
+    }
+
+    @Override
+    public NotificationPreferences update(String accountId, Map<NotificationCategory, Boolean> changes, Instant now) {
+        List<String> enabled = changes.entrySet().stream()
+                .filter(Map.Entry::getValue)
+                .map(entry -> entry.getKey().name())
+                .toList();
+        List<String> disabled = changes.entrySet().stream()
+                .filter(entry -> !entry.getValue())
+                .map(entry -> entry.getKey().name())
+                .toList();
+        Document current = new Document("$ifNull", List.of("$disabledCategories", List.of()));
+        Document kept = new Document("$setDifference", List.of(current, enabled));
+        Document next = new Document("$setUnion", List.of(kept, disabled));
+        AggregationUpdate update = AggregationUpdate.from(List.of(context ->
+                new Document("$set", new Document("disabledCategories", next).append("updatedAt", Date.from(now)))));
+        Query query = Query.query(Criteria.where("_id").is(accountId));
+        NotificationPreferenceDocument stored;
+        try {
+            stored = mongoTemplate.findAndModify(
+                    query,
+                    update,
+                    FindAndModifyOptions.options().upsert(true).returnNew(true),
+                    NotificationPreferenceDocument.class);
+        } catch (DuplicateKeyException simultaneousFirstSave) {
+            // 같은 계정의 첫 저장끼리 경합하면 먼저 만들어진 문서에 변경분을 다시 합친다.
+            stored = mongoTemplate.findAndModify(
+                    query,
+                    update,
+                    FindAndModifyOptions.options().returnNew(true),
+                    NotificationPreferenceDocument.class);
+        }
+        return toDomain(Objects.requireNonNull(stored, "notification preferences update result"));
     }
 
     @Override

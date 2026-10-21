@@ -44,6 +44,14 @@ class InMemoryNotificationPreferences implements NotificationPreferenceRepositor
     }
 
     @Override
+    public synchronized NotificationPreferences update(
+            String accountId, Map<NotificationCategory, Boolean> changes, Instant now) {
+        return save(find(accountId)
+                .orElseGet(() -> NotificationPreferences.defaults(accountId))
+                .update(changes, now));
+    }
+
+    @Override
     public Set<String> findAccountsDisabling(NotificationCategory category, Collection<String> accountIds) {
         throwIfFailing();
         return accountIds.stream()

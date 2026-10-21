@@ -10,6 +10,7 @@ import com.gole.api.launch.application.port.in.GetLaunchConfigUseCase;
 import com.gole.api.launch.domain.model.LaunchConfig;
 import com.gole.api.launch.domain.model.LaunchFeature;
 import com.gole.api.launch.domain.model.LaunchStage;
+import com.gole.api.order.adapter.in.web.OrderCancellationController;
 import com.gole.api.order.adapter.in.web.OrderController;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -45,6 +46,7 @@ class LaunchGateInterceptorTest {
             case "/api/v1/orders" -> "/api/v1/orders";
             case "/api/v1/orders/order-1/payment" -> "/api/v1/orders/{orderId}/payment";
             case "/api/v1/orders/order-1/completion" -> "/api/v1/orders/{orderId}/completion";
+            case "/api/v1/orders/order-1/cancellation" -> "/api/v1/orders/{orderId}/cancellation";
             case "/api/v1/orders/order-1/refund" -> "/api/v1/orders/{orderId}/refund";
             case "/api/v1/orders/order-1/dispute" -> "/api/v1/orders/{orderId}/dispute";
             case "/api/v1/orders/order-1/shipment/tracking" -> "/api/v1/orders/{orderId}/shipment/tracking";
@@ -87,6 +89,10 @@ class LaunchGateInterceptorTest {
             assertThat(interceptor.preHandle(request("POST", "/api/v1/orders/order-1/refund"), response, new Object()))
                     .as("단계 %s의 환불", directStage)
                     .isTrue();
+            assertThat(interceptor.preHandle(
+                            request("POST", "/api/v1/orders/order-1/cancellation"), response, new Object()))
+                    .as("단계 %s의 미결제 주문 취소", directStage)
+                    .isTrue();
             assertThat(interceptor.preHandle(request("POST", "/api/v1/orders/order-1/dispute"), response, new Object()))
                     .as("단계 %s의 분쟁", directStage)
                     .isTrue();
@@ -104,6 +110,7 @@ class LaunchGateInterceptorTest {
                 "/api/v1/orders", true,
                 "/api/v1/orders/{orderId}/payment", true,
                 "/api/v1/orders/{orderId}/completion", false,
+                "/api/v1/orders/{orderId}/cancellation", false,
                 "/api/v1/orders/{orderId}/refund", false,
                 "/api/v1/orders/{orderId}/dispute", false);
 
@@ -241,13 +248,20 @@ class LaunchGateInterceptorTest {
     }
 
     private static Set<String> orderPostMappings() {
-        RequestMapping root = OrderController.class.getAnnotation(RequestMapping.class);
+        Set<String> mappings = new LinkedHashSet<>();
+        mappings.addAll(orderPostMappings(OrderController.class));
+        mappings.addAll(orderPostMappings(OrderCancellationController.class));
+        return mappings;
+    }
+
+    private static Set<String> orderPostMappings(Class<?> controller) {
+        RequestMapping root = controller.getAnnotation(RequestMapping.class);
         String base = Stream.concat(Arrays.stream(root.value()), Arrays.stream(root.path()))
                 .filter(value -> !value.isBlank())
                 .findFirst()
                 .orElseThrow();
         Set<String> mappings = new LinkedHashSet<>();
-        Arrays.stream(OrderController.class.getDeclaredMethods()).forEach(method -> {
+        Arrays.stream(controller.getDeclaredMethods()).forEach(method -> {
             PostMapping mapping = method.getAnnotation(PostMapping.class);
             if (mapping == null) {
                 return;

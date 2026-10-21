@@ -229,6 +229,7 @@ public final class Account {
 
     /** 이메일 인증. 만료(1.5)/불일치 시 예외, 성공 시 VERIFIED 전이(1.4). */
     public void verify(String candidateCode, Instant now, BiPredicate<String, String> hashMatcher) {
+        ensureNotSuspended();
         if (status == AccountStatus.VERIFIED) {
             return; // 멱등
         }
@@ -282,10 +283,14 @@ public final class Account {
     /**
      * 정지 해제. (admin-console 요구사항 6.6)
      *
-     * <p>정지 해제 즉시 로그인할 수 있어야 하므로 실패 카운터·일시 잠금도 함께 초기화한다.
+     * <p>인증 challenge는 인증 성공 시에만 제거되므로 남아 있으면 미인증 상태로 복귀한다.
+     * 정지 해제가 이메일 인증을 대신하지 않으며, 정지된 계정의 실패 카운터·일시 잠금만 초기화한다.
      */
     public void reinstate() {
-        this.status = AccountStatus.VERIFIED;
+        if (status != AccountStatus.SUSPENDED) {
+            return;
+        }
+        this.status = verificationChallenge == null ? AccountStatus.VERIFIED : AccountStatus.UNVERIFIED;
         this.suspendedReason = null;
         recordSuccessfulSignIn();
     }

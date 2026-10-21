@@ -28,7 +28,9 @@ public class NotificationPreferenceService implements ManageNotificationPreferen
 
     @Override
     public NotificationPreferences update(String accountId, Map<NotificationCategory, Boolean> changes) {
-        NotificationPreferences next = get(accountId).update(changes, Instant.now(clock));
-        return repository.save(next);
+        Instant now = Instant.now(clock);
+        // 필수 분류 등 도메인 규칙을 검증한 뒤, 저장 시점의 값에 변경분만 적용한다.
+        NotificationPreferences.defaults(accountId).update(changes, now);
+        return repository.update(accountId, changes, now);
     }
 }
