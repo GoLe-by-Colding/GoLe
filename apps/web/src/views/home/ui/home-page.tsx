@@ -70,7 +70,7 @@ export async function HomePage() {
       ? [{ label: "활성 매물", value: `${listings.length.toLocaleString("ko-KR")}개` }]
       : []),
     ...(txCount > 0
-      ? [{ label: "인기 세트 체결", value: `${txCount.toLocaleString("ko-KR")}건` }]
+      ? [{ label: "인기 상위 10세트 체결", value: `${txCount.toLocaleString("ko-KR")}건` }]
       : []),
   ];
 

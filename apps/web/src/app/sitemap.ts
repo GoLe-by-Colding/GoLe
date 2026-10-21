@@ -25,6 +25,33 @@ async function fetchJson<T>(path: string): Promise<T | null> {
   }
 }
 
+type CommunityPost = { id: string; createdAt?: string };
+type CommunityPage = {
+  items: CommunityPost[];
+  nextCursor: { beforeCreatedAt: string; beforeId: string } | null;
+};
+
+async function fetchCommunityPosts(): Promise<CommunityPost[]> {
+  const posts: CommunityPost[] = [];
+  let cursor: CommunityPage["nextCursor"] = null;
+
+  do {
+    const query = new URLSearchParams({ limit: "50" });
+    if (cursor) {
+      query.set("beforeCreatedAt", cursor.beforeCreatedAt);
+      query.set("beforeId", cursor.beforeId);
+    }
+    const page = await fetchJson<CommunityPage>(`/api/v1/community/posts/page?${query}`);
+    if (!page) {
+      break;
+    }
+    posts.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+
+  return posts;
+}
+
 /**
  * sitemap.xml — 공개 색인 대상.
  *
@@ -55,7 +82,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }>
   >("/api/v1/listings");
 
-  const listingRoutes: MetadataRoute.Sitemap = (listings ?? []).slice(0, 100).map((l) => ({
+  const listingRoutes: MetadataRoute.Sitemap = (listings ?? []).map((l) => ({
     url: `${env.siteUrl}/listings/${l.id}`,
     lastModified: validDate(l.createdAt),
     changeFrequency: "weekly" as const,
@@ -66,15 +93,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sellerIds = [
     ...new Set((listings ?? []).map((l) => l.sellerId).filter((id): id is string => Boolean(id))),
   ];
-  const shopRoutes: MetadataRoute.Sitemap = sellerIds.slice(0, 100).map((sellerId) => ({
+  const shopRoutes: MetadataRoute.Sitemap = sellerIds.map((sellerId) => ({
     url: `${env.siteUrl}/shops/${sellerId}`,
     changeFrequency: "weekly" as const,
     priority: 0.5,
   }));
 
-  const posts =
-    await fetchJson<ReadonlyArray<{ id: string; createdAt?: string }>>("/api/v1/community/posts");
-  const communityRoutes: MetadataRoute.Sitemap = (posts ?? []).slice(0, 100).map((p) => ({
+  const posts = await fetchCommunityPosts();
+  const communityRoutes: MetadataRoute.Sitemap = posts.map((p) => ({
     url: `${env.siteUrl}/community/${p.id}`,
     lastModified: validDate(p.createdAt),
     changeFrequency: "weekly" as const,
