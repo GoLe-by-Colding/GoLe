@@ -23,6 +23,7 @@ public final class Account {
     private final String id;
     private final Email email;
     private PasswordHash passwordHash;
+    private final boolean passwordLoginEnabled;
     private AccountStatus status;
     private Role role;
     private EmailVerificationChallenge verificationChallenge; // nullable (검증 완료 시 제거)
@@ -125,9 +126,41 @@ public final class Account {
             Instant lockedUntil,
             String suspendedReason,
             OnboardingProfile onboarding) {
+        this(
+                id,
+                email,
+                passwordHash,
+                status,
+                role,
+                verificationChallenge,
+                verificationFailedAttempts,
+                failedAttempts,
+                failureWindowStartedAt,
+                lockedUntil,
+                suspendedReason,
+                onboarding,
+                true);
+    }
+
+    /** 영속성 복원용 전체 생성자(비밀번호 자격 상태 포함). */
+    public Account(
+            String id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Role role,
+            EmailVerificationChallenge verificationChallenge,
+            int verificationFailedAttempts,
+            int failedAttempts,
+            Instant failureWindowStartedAt,
+            Instant lockedUntil,
+            String suspendedReason,
+            OnboardingProfile onboarding,
+            boolean passwordLoginEnabled) {
         this.id = Objects.requireNonNull(id, "id");
         this.email = Objects.requireNonNull(email, "email");
         this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash");
+        this.passwordLoginEnabled = passwordLoginEnabled;
         this.status = Objects.requireNonNull(status, "status");
         this.role = Objects.requireNonNull(role, "role");
         this.verificationChallenge = verificationChallenge;
@@ -148,12 +181,28 @@ public final class Account {
     /**
      * 운영 시드/부트스트랩용: 인증 완료 상태로 지정 권한 계정을 생성한다.
      *
-     * <p>구글 소셜 신규가입({@code SocialAccountProvisioner})도 이 팩토리를 함께 쓴다 — 그쪽은
-     * 온보딩 D7에 따라 legacyExempt=false(일반 온보딩 대상)여야 하므로, 여기서 면제를
-     * 기본값으로 바꾸면 안 된다. 운영 계정 전용 면제는 {@link #operationalBootstrap}을 쓴다.
+     * <p>운영 계정 전용 온보딩 면제는 {@link #operationalBootstrap}을 쓴다.
      */
     public static Account provisioned(String id, Email email, PasswordHash passwordHash, Role role) {
         return new Account(id, email, passwordHash, AccountStatus.VERIFIED, role, null, 0, null, null);
+    }
+
+    /** 소셜 가입은 임의 해시를 보관하지만 이메일 비밀번호 로그인을 허용하지 않는다. */
+    public static Account socialProvisioned(String id, Email email, PasswordHash passwordHash) {
+        return new Account(
+                id,
+                email,
+                passwordHash,
+                AccountStatus.VERIFIED,
+                Role.USER,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
+                OnboardingProfile.empty(),
+                false);
     }
 
     /**
@@ -375,6 +424,10 @@ public final class Account {
      */
     public void upgradePasswordHash(PasswordHash newHash) {
         this.passwordHash = Objects.requireNonNull(newHash, "newHash");
+    }
+
+    public boolean isPasswordLoginEnabled() {
+        return passwordLoginEnabled;
     }
 
     public boolean isVerified() {

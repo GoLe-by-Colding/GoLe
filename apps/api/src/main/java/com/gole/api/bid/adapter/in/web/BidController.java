@@ -113,6 +113,10 @@ public class BidController {
         if (request.listingId() == null || request.listingId().isBlank()) {
             throw new BadRequestException("INVALID_PARAMETER", "listingId가 필요합니다");
         }
-        return FillBidResponse.from(fillBid.fill(setNumber, request.listingId(), AuthenticatedUser.id(http)));
+        String sellerId = AuthenticatedUser.id(http);
+        return FillBidResponse.from(
+                request.targetPrice() == null
+                        ? fillBid.fill(setNumber, request.listingId(), sellerId)
+                        : fillBid.fillWithPrice(setNumber, request.listingId(), sellerId, request.targetPrice()));
     }
 }

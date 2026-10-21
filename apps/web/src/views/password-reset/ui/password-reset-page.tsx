@@ -125,7 +125,9 @@ function PasswordResetContent() {
     return (
       <form className="flex flex-col gap-5" onSubmit={requestCode} noValidate>
         <p className="text-sm leading-relaxed text-neutral-600">
-          가입할 때 사용한 이메일을 입력하세요. 계정 유무와 관계없이 같은 안내를 보여드려요.
+          이메일과 비밀번호로 로그인하던 계정의 이메일을 입력하세요. 소셜 로그인만 사용하는 계정은
+          가입할 때 사용한 소셜 서비스로 로그인해 주세요. 계정 유무와 관계없이 같은 안내를
+          보여드려요.
         </p>
         {error ? (
           <p role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger">

@@ -25,6 +25,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 구매 입찰 유스케이스. (buy-bids D2~D7, D9)
@@ -155,6 +156,16 @@ public class BidService
      */
     @Override
     public FillResult fill(String setNumber, String listingId, String sellerId) {
+        return fill(setNumber, listingId, sellerId, null);
+    }
+
+    @Override
+    @Transactional
+    public FillResult fillWithPrice(String setNumber, String listingId, String sellerId, long targetPrice) {
+        return fill(setNumber, listingId, sellerId, targetPrice);
+    }
+
+    private FillResult fill(String setNumber, String listingId, String sellerId, Long targetPrice) {
         BidListing listing = listings.get(listingId);
         if (!listing.sellerId().equals(sellerId)) {
             throw BidErrors.listingAccessDenied();
@@ -170,11 +181,17 @@ public class BidService
         Instant now = Instant.now(clock);
         requireNoOpenFill(listing.listingId(), now);
         for (Bid candidate : bids.findFillCandidates(setNumber, condition, sellerId, now, MAX_FILL_ATTEMPTS)) {
+            if (targetPrice != null && (targetPrice != candidate.price() || targetPrice <= listing.price())) {
+                throw BidErrors.priceChanged();
+            }
             Optional<Bid> won = bids.transition(candidate, candidate.fill(listingId, now));
             if (won.isEmpty()) {
                 continue; // 다른 판매자가 먼저 채웠거나 입찰자가 취소했다
             }
             Bid filled = won.orElseThrow();
+            if (targetPrice != null) {
+                listings.raisePriceTo(listingId, sellerId, listing.price(), targetPrice);
+            }
             String offerId = createOfferOrReopen(filled, listing, sellerId);
             recordOffer(filled, offerId);
             notifier.bidFilled(filled.bidderId(), filled.id(), listingId, filled.price(), setLabel(setNumber));

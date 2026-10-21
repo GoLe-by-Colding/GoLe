@@ -10,6 +10,8 @@ import com.gole.api.common.exception.ConflictException;
  */
 public class ListingConflictException extends ConflictException {
 
+    public static final String PRICE_CHANGED = "LISTING_PRICE_CHANGED";
+
     private ListingConflictException(String code, String message) {
         super(code, message);
     }
@@ -27,5 +29,10 @@ public class ListingConflictException extends ConflictException {
     /** 판매 중이 아닌 매물은 끌올할 수 없다. */
     public static ListingConflictException notBumpable() {
         return new ListingConflictException("LISTING_NOT_BUMPABLE", "판매 중인 매물만 끌올할 수 있습니다");
+    }
+
+    /** 입찰 체결 중 판매가가 이미 바뀌었거나 요청한 가격이 현재 판매가보다 높지 않다. */
+    public static ListingConflictException priceChanged() {
+        return new ListingConflictException(PRICE_CHANGED, "판매가가 바뀌었습니다. 다시 확인해 주세요");
     }
 }

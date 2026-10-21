@@ -10,18 +10,10 @@ import {
   type BidBookCondition,
   type FillBidResult,
 } from "@entities/bid";
-import {
-  conditionLabel,
-  formatWon,
-  listingMutationErrorMessage,
-  updateListing,
-  type Listing,
-} from "@entities/listing";
+import { conditionLabel, formatWon, type Listing } from "@entities/listing";
 import { Button, useDialog } from "@shared/ui";
-import { draftFromListing, draftToInput } from "../model/listing-draft";
 
 export interface SellToBidSectionProps {
-  /** 입찰가에 맞춰 판매가를 올릴 때 수정 본문(제목·사진 등)을 그대로 다시 보내야 해서 전체를 받는다. */
   readonly listing: Listing;
   /** 판매에 성공하면 부른다. 받은 제안 목록이 새 수락 제안을 바로 보이게 한다. */
   readonly onFilled?: (result: FillBidResult) => void;
@@ -42,7 +34,7 @@ interface BookRow {
  *
  * 주문 금액은 `min(입찰가, 판매가)`다(price-offer O17). 그래서 입찰가가 판매가보다 높으면 "입찰가에
  * 판매"라고만 쓰면 판매자는 입찰가를 받는다고 오해한다(2026-10-09 로컬 QA). 이때는 판매가를 입찰가로
- * 올린 뒤 체결하는 것을 주 동작으로, 지금 판매가 그대로 체결하는 것을 보조 동작으로 둔다.
+ * 올리면서 체결하는 것을 주 동작으로, 지금 판매가 그대로 체결하는 것을 보조 동작으로 둔다.
  */
 export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   const router = useRouter();
@@ -55,7 +47,7 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<FillBidResult | null>(null);
-  /** 입찰가에 맞춰 올린 판매가. 올리지 않고 팔았으면 null. */
+  /** 체결과 함께 입찰가로 올린 판매가. 올리지 않고 팔았으면 null. */
   const [raisedPrice, setRaisedPrice] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dialog = useDialog();
@@ -85,7 +77,7 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
   const bidAboveAsk = highest !== null && highest > listing.price;
 
   /**
-   * @param raiseTo 체결 전에 판매가를 이 값으로 올린다. null이면 지금 판매가 그대로 체결한다.
+   * @param raiseTo 체결과 함께 판매가를 이 값으로 올린다. null이면 지금 판매가 그대로 체결한다.
    */
   async function handleFill(raiseTo: number | null) {
     if (busy || setNumber === null || highest === null) return;
@@ -107,33 +99,16 @@ export function SellToBidSection({ listing, onFilled }: SellToBidSectionProps) {
     if (!confirmed) return;
     setBusy(true);
     setError(null);
-    if (raiseTo !== null) {
-      try {
-        await updateListing(
-          listing.id,
-          draftToInput({ ...draftFromListing(listing), price: String(raiseTo) }),
-        );
-        setRaisedPrice(raiseTo);
-      } catch (cause) {
-        setError(listingMutationErrorMessage(cause, "edit"));
-        setBusy(false);
-        return;
-      }
-    }
     try {
-      const filled = await fillBid(setNumber, listing.id);
+      const filled = await fillBid(setNumber, listing.id, raiseTo ?? undefined);
+      setRaisedPrice(raiseTo);
       setResult(filled);
       onFilled?.(filled);
     } catch (cause) {
-      setError(
-        raiseTo !== null
-          ? `판매가는 ${formatWon(raiseTo)}으로 올렸지만 판매하지 못했어요. ${bidErrorMessage(cause, "fill")}`
-          : bidErrorMessage(cause, "fill"),
-      );
+      setError(bidErrorMessage(cause, "fill"));
       setNonce((current) => current + 1);
     } finally {
       setBusy(false);
-      // 올린 판매가를 상단 가격·패널에 반영한다(서버 렌더 매물 정보).
       if (raiseTo !== null) router.refresh();
     }
   }

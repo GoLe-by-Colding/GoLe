@@ -126,6 +126,7 @@ export function ChatListPage() {
   const resolvedConversationOwnerIdRef = useRef<string | null>(null);
   const blockedAccountIdsRef = useRef<readonly string[] | null>(null);
   const unreadMutationVersionRef = useRef(0);
+  const tradeMutationVersionRef = useRef(0);
   const sessionAccountIdRef = useRef(sessionAccountId);
   const handledRoomRequestRef = useRef<string | null>(null);
   const suppressDefaultSelectionRef = useRef(requestedRoomId.length > 0);
@@ -342,6 +343,84 @@ export function ChatListPage() {
     () => conversations.find((conversation) => conversation.room.id === selectedId) ?? null,
     [conversations, selectedId],
   );
+  const knownPeerIds = useMemo(() => {
+    if (sessionAccountId === null || blockedAccountIds === null) return [];
+    return [
+      ...new Set(
+        conversations
+          .filter(
+            (conversation) =>
+              conversation.kind === "LISTING" || conversation.room.type !== "SUPPORT",
+          )
+          .flatMap(conversationMemberIds),
+      ),
+    ].filter((id) => id !== sessionAccountId && !blockedAccountIds.includes(id));
+  }, [blockedAccountIds, conversations, sessionAccountId]);
+  const activeListingRoomId =
+    directTradeOpen && selected?.kind === "LISTING" && selected.room.directTradeCompletedAt === null
+      ? selected.room.id
+      : null;
+
+  useEffect(() => {
+    if (activeListingRoomId === null || sessionAccountId === null) return;
+    let active = true;
+    let running = false;
+    const refreshConfirmation = async () => {
+      if (running || document.visibilityState !== "visible") return;
+      running = true;
+      const mutationVersion = tradeMutationVersionRef.current;
+      try {
+        const response = await fetchChatRoom(activeListingRoomId);
+        if (
+          !active ||
+          response.kind !== "LISTING" ||
+          mutationVersion !== tradeMutationVersionRef.current
+        )
+          return;
+        setListingRooms((current) => {
+          if (current === null) return current;
+          if (
+            !current.some(
+              (room) =>
+                room.id === activeListingRoomId &&
+                !sameConfirmationState(room, response.listingRoom),
+            )
+          )
+            return current;
+          const next = current.map((room) =>
+            room.id === activeListingRoomId ? response.listingRoom : room,
+          );
+          listingRoomsRef.current = next;
+          return next;
+        });
+        const previous = resolvedConversationRef.current;
+        if (
+          resolvedConversationOwnerIdRef.current === sessionAccountId &&
+          previous?.kind === "LISTING" &&
+          previous.room.id === activeListingRoomId &&
+          !sameConfirmationState(previous.room, response.listingRoom)
+        ) {
+          const conversation: Conversation = { kind: "LISTING", room: response.listingRoom };
+          resolvedConversationRef.current = conversation;
+          setResolvedConversation(conversation);
+        }
+      } catch {
+        // 기존 상태를 유지하고 다음 주기에 다시 묻는다.
+      } finally {
+        running = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshConfirmation(), 3_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshConfirmation();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [activeListingRoomId, sessionAccountId]);
 
   useEffect(() => {
     if (requestedRoomId.length === 0) {
@@ -532,7 +611,8 @@ export function ChatListPage() {
     if (
       selected?.kind !== "SOCIAL" ||
       selected.room.type !== "GROUP" ||
-      inviteAccountId.trim().length === 0
+      !knownPeerIds.includes(inviteAccountId) ||
+      selected.room.memberIds.includes(inviteAccountId)
     ) {
       return;
     }
@@ -556,7 +636,7 @@ export function ChatListPage() {
       setInviteOpen(false);
     } catch (cause) {
       if (isThirdPartyProvisionConsentCancelledError(cause)) return;
-      setRoomActionError("초대할 수 없는 계정입니다. 계정 ID와 차단 상태를 확인해 주세요.");
+      setRoomActionError("초대할 수 없는 사용자입니다. 차단 상태를 확인해 주세요.");
     }
   }
 
@@ -564,8 +644,33 @@ export function ChatListPage() {
     if (selected?.kind !== "LISTING" || tradeBusy || selected.room.directTradeCompletedAt !== null)
       return;
     setTradeBusy(true);
+    tradeMutationVersionRef.current += 1;
     setRoomActionError(undefined);
     try {
+      const latest = await fetchChatRoom(selected.room.id);
+      if (latest.kind !== "LISTING") {
+        setRoomActionError("거래방 상태를 확인하지 못했습니다. 다시 시도해 주세요.");
+        return;
+      }
+      const latestRoom = latest.listingRoom;
+      if (!sameConfirmationState(latestRoom, selected.room)) {
+        setListingRooms((current) => {
+          const next = (current ?? []).map((room) =>
+            room.id === latestRoom.id ? latestRoom : room,
+          );
+          listingRoomsRef.current = next;
+          return next;
+        });
+        if (resolvedConversationRef.current?.room.id === latestRoom.id) {
+          const conversation: Conversation = { kind: "LISTING", room: latestRoom };
+          resolvedConversationRef.current = conversation;
+          setResolvedConversation(conversation);
+        }
+        setRoomActionError(
+          "거래 확인 상태가 바뀌었습니다. 최신 상태를 확인한 뒤 다시 눌러 주세요.",
+        );
+        return;
+      }
       const mine =
         selected.room.buyerId === myId
           ? selected.room.buyerConfirmedAt
@@ -586,9 +691,10 @@ export function ChatListPage() {
       }
     } catch {
       setRoomActionError(
-        "거래 완료 상태를 바꾸지 못했습니다. 매물 상태와 공개 단계를 확인해 주세요.",
+        "거래 완료 상태를 확인하거나 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.",
       );
     } finally {
+      tradeMutationVersionRef.current += 1;
       setTradeBusy(false);
     }
   }
@@ -678,6 +784,8 @@ export function ChatListPage() {
             onClose={() => setComposer(null)}
             onCreated={addSocialRoom}
             runWithConsent={runWithConsent}
+            knownPeerIds={knownPeerIds}
+            nameOf={nameOf}
           />
         ) : null}
 
@@ -844,7 +952,10 @@ export function ChatListPage() {
                       <>
                         <button
                           type="button"
-                          onClick={() => setInviteOpen((open) => !open)}
+                          onClick={() => {
+                            setInviteAccountId("");
+                            setInviteOpen((open) => !open);
+                          }}
                           className="rounded-md px-2 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                         >
                           멤버 초대
@@ -930,20 +1041,23 @@ export function ChatListPage() {
                   </div>
                 ) : null}
                 {inviteOpen && selected.kind === "SOCIAL" && selected.room.type === "GROUP" ? (
-                  <div className="motion-safe:animate-rise-in flex flex-wrap items-end gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
-                    <label className="min-w-[220px] flex-1 text-xs font-semibold text-neutral-600">
-                      초대할 계정 ID
-                      <input
-                        value={inviteAccountId}
-                        onChange={(event) => setInviteAccountId(event.target.value)}
-                        placeholder="계정 ID를 입력하세요"
-                        className="mt-1 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand-400"
-                      />
-                    </label>
+                  <div className="motion-safe:animate-rise-in flex flex-col gap-2 border-b border-brand-100 bg-brand-50/60 px-4 py-3 sm:px-5">
+                    <PeerPicker
+                      label="초대할 대화 상대"
+                      candidates={knownPeerIds.filter(
+                        (id) => !selected.room.memberIds.includes(id),
+                      )}
+                      selected={inviteAccountId ? [inviteAccountId] : []}
+                      onToggle={(id) => setInviteAccountId((current) => (current === id ? "" : id))}
+                      nameOf={nameOf}
+                    />
                     <Button
                       size="sm"
                       onClick={() => void inviteSelectedGroup()}
-                      disabled={inviteAccountId.trim().length === 0}
+                      disabled={
+                        !knownPeerIds.includes(inviteAccountId) ||
+                        selected.room.memberIds.includes(inviteAccountId)
+                      }
                     >
                       초대하기
                     </Button>
@@ -1067,6 +1181,8 @@ function ConversationComposer({
   onClose,
   onCreated,
   runWithConsent,
+  knownPeerIds,
+  nameOf,
 }: {
   readonly mode: ComposerMode;
   readonly initialPeerId: string;
@@ -1074,13 +1190,15 @@ function ConversationComposer({
   readonly onClose: () => void;
   readonly onCreated: (room: SocialChatRoom) => void;
   readonly runWithConsent: ConsentRunner;
+  readonly knownPeerIds: readonly string[];
+  readonly nameOf: NameOf;
 }) {
   const [peerId, setPeerId] = useState(initialPeerId);
   const [category, setCategory] = useState(initialSupportCategory);
   const [title, setTitle] = useState(
     mode === "SUPPORT" ? SUPPORT_CATEGORY_LABEL[initialSupportCategory] : "",
   );
-  const [members, setMembers] = useState("");
+  const [members, setMembers] = useState<readonly string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -1096,12 +1214,8 @@ function ConversationComposer({
           await runWithConsent(() => createDirectRoom(peerId.trim()), "SOCIAL_DIRECT_CHAT"),
         );
       } else if (mode === "GROUP") {
-        const memberIds = members
-          .split(/[\s,]+/)
-          .map((value) => value.trim())
-          .filter(Boolean);
         onCreated(
-          await runWithConsent(() => createGroupRoom(title.trim(), memberIds), "SOCIAL_GROUP_CHAT"),
+          await runWithConsent(() => createGroupRoom(title.trim(), members), "SOCIAL_GROUP_CHAT"),
         );
       } else {
         onCreated(await createSupportRoom(title.trim(), message.trim(), category));
@@ -1147,18 +1261,23 @@ function ConversationComposer({
         />
       ) : null}
       {mode === "GROUP" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3">
           <LabeledInput
             label="방 이름"
             value={title}
             onChange={setTitle}
             placeholder="예: 테크닉 조립 모임"
           />
-          <LabeledInput
-            label="초대할 계정 ID 2명 이상"
-            value={members}
-            onChange={setMembers}
-            placeholder="쉼표 또는 공백으로 구분"
+          <PeerPicker
+            label="초대할 대화 상대 (2명 이상)"
+            candidates={knownPeerIds}
+            selected={members}
+            onToggle={(id) =>
+              setMembers((current) =>
+                current.includes(id) ? current.filter((member) => member !== id) : [...current, id],
+              )
+            }
+            nameOf={nameOf}
           />
         </div>
       ) : null}
@@ -1224,11 +1343,71 @@ function ConversationComposer({
         </p>
       ) : null}
       <div className="flex justify-end">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || (mode === "GROUP" && members.length < 2)}>
           {busy ? "만드는 중" : mode === "SUPPORT" ? "문의 시작" : "대화 시작"}
         </Button>
       </div>
     </form>
+  );
+}
+
+function PeerPicker({
+  label,
+  candidates,
+  selected,
+  onToggle,
+  nameOf,
+}: {
+  readonly label: string;
+  readonly candidates: readonly string[];
+  readonly selected: readonly string[];
+  readonly onToggle: (id: string) => void;
+  readonly nameOf: NameOf;
+}) {
+  const [query, setQuery] = useState("");
+  const matches = candidates.filter((id) =>
+    nameOf(id, `대화 상대 ${id.replaceAll("-", "").slice(0, 8)}`)
+      .toLocaleLowerCase()
+      .includes(query.trim().toLocaleLowerCase()),
+  );
+
+  return (
+    <div className="min-w-0 flex-1">
+      <label className="block text-xs font-semibold text-neutral-600">
+        {label}
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="대화 상대 이름 검색"
+          className="mt-1 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand-400"
+        />
+      </label>
+      <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto" aria-label={label}>
+        {matches.length === 0 ? (
+          <p className="text-xs text-neutral-500">
+            {candidates.length === 0
+              ? "대화 상대가 없습니다. 매물·커뮤니티에서 대화를 시작한 뒤 초대해 주세요."
+              : "검색 결과가 없습니다."}
+          </p>
+        ) : (
+          matches.map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={selected.includes(id)}
+              onClick={() => onToggle(id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                selected.includes(id)
+                  ? "border-brand-600 bg-brand-600 text-white"
+                  : "border-neutral-200 bg-white text-neutral-700 hover:border-brand-400"
+              }`}
+            >
+              {nameOf(id, `대화 상대 ${id.replaceAll("-", "").slice(0, 8)}`)}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1326,6 +1505,14 @@ function conversationSubtitle(conversation: Conversation, myId: string): string 
 
 function partnerId(room: ChatRoom, myId: string): string {
   return room.buyerId === myId ? room.sellerId : room.buyerId;
+}
+
+function sameConfirmationState(left: ChatRoom, right: ChatRoom): boolean {
+  return (
+    left.buyerConfirmedAt === right.buyerConfirmedAt &&
+    left.sellerConfirmedAt === right.sellerConfirmedAt &&
+    left.directTradeCompletedAt === right.directTradeCompletedAt
+  );
 }
 
 function activityAt(conversation: Conversation): string {

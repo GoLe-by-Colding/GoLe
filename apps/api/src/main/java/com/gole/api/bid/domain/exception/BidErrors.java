@@ -23,6 +23,7 @@ public final class BidErrors {
     public static final String NOT_FOUND = "BID_NOT_FOUND";
     public static final String LISTING_ACCESS_DENIED = "LISTING_ACCESS_DENIED";
     public static final String LISTING_ALREADY_FILLED = "BID_LISTING_ALREADY_FILLED";
+    public static final String PRICE_CHANGED = "BID_PRICE_CHANGED";
 
     private BidErrors() {}
 
@@ -75,6 +76,10 @@ public final class BidErrors {
     /** 이 매물로 이미 체결한 입찰의 수락 제안이 아직 살아 있다. 매물 하나는 입찰 하나만 받는다. */
     public static ConflictException listingAlreadyFilled() {
         return new ConflictException(LISTING_ALREADY_FILLED, "이 매물은 이미 입찰자와 체결돼 진행 중입니다. 그 제안이 끝나면 다음 입찰을 받을 수 있습니다");
+    }
+
+    public static ConflictException priceChanged() {
+        return new ConflictException(PRICE_CHANGED, "입찰가나 판매가가 바뀌었습니다. 다시 확인해 주세요");
     }
 
     public static ForbiddenException listingAccessDenied() {

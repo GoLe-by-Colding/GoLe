@@ -9,5 +9,8 @@ public interface FillBidUseCase {
 
     FillResult fill(String setNumber, String listingId, String sellerId);
 
+    /** 판매가를 체결 입찰가로 올리는 경우 가격 수정·체결·제안을 함께 확정한다. */
+    FillResult fillWithPrice(String setNumber, String listingId, String sellerId, long targetPrice);
+
     record FillResult(String bidId, long bidPrice, String offerId, String listingId) {}
 }

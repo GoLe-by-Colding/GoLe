@@ -94,6 +94,7 @@ export const BID_ERROR = {
   LISTING_ACCESS_DENIED: "LISTING_ACCESS_DENIED",
   /** 이 매물로 이미 체결한 입찰의 제안이 아직 진행 중이다. 매물 하나는 입찰 하나만 받는다. */
   LISTING_ALREADY_FILLED: "BID_LISTING_ALREADY_FILLED",
+  PRICE_CHANGED: "BID_PRICE_CHANGED",
 } as const;
 
 export type BidErrorCode = (typeof BID_ERROR)[keyof typeof BID_ERROR];

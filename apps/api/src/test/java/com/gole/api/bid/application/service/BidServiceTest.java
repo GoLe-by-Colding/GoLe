@@ -42,6 +42,7 @@ class BidServiceTest {
     private InMemoryBidRepository bids;
     private MutableClock clock;
     private Map<String, BidListing> listings;
+    private BidListingPort listingPort;
     private RecordingOffers offers;
     private RecordingNotifier notifier;
     private BidService service;
@@ -57,12 +58,32 @@ class BidServiceTest {
         BidCatalogPort catalog = setNumber -> setNumber.equals("10307") || setNumber.equals("75192")
                 ? Optional.of(setNumber.equals("10307") ? "에펠탑" : "밀레니엄 팔콘")
                 : Optional.empty();
-        BidListingPort listingPort = listingId -> {
-            BidListing listing = listings.get(listingId);
-            if (listing == null) {
-                throw new NotFoundException("LISTING_NOT_FOUND", "매물을 찾을 수 없습니다");
+        listingPort = new BidListingPort() {
+            @Override
+            public BidListing get(String listingId) {
+                BidListing listing = listings.get(listingId);
+                if (listing == null) {
+                    throw new NotFoundException("LISTING_NOT_FOUND", "매물을 찾을 수 없습니다");
+                }
+                return listing;
             }
-            return listing;
+
+            @Override
+            public void raisePriceTo(String listingId, String sellerId, long expectedPrice, long targetPrice) {
+                BidListing listing = get(listingId);
+                if (listing.price() != expectedPrice || !listing.sellerId().equals(sellerId)) {
+                    throw BidErrors.priceChanged();
+                }
+                listings.put(
+                        listingId,
+                        new BidListing(
+                                listing.listingId(),
+                                sellerId,
+                                listing.setNumber(),
+                                listing.conditionKey(),
+                                targetPrice,
+                                true));
+            }
         };
         service = new BidService(
                 bids, () -> "bid-" + ids.incrementAndGet(), catalog, listingPort, offers, notifier, clock);
@@ -136,7 +157,7 @@ class BidServiceTest {
             bids.insert(Bid.place("seed-" + i, "buyer-1", "set-" + i, BidCondition.USED_GOOD, 1_000, 30, T0));
         }
         BidService limited = new BidService(
-                bids, () -> "bid-new", setNumber -> Optional.of("세트"), id -> null, offers, notifier, clock);
+                bids, () -> "bid-new", setNumber -> Optional.of("세트"), listingPort, offers, notifier, clock);
 
         assertThat(codeOf(() -> limited.place(new PlaceBidCommand("buyer-1", "10307", "used_good", 1_000, 30))))
                 .isEqualTo(BidErrors.LIMIT_EXCEEDED);
@@ -168,7 +189,7 @@ class BidServiceTest {
         };
         racing.insert(winner);
         BidService racingService = new BidService(
-                racing, () -> "bid-loser", setNumber -> Optional.of("세트"), id -> null, offers, notifier, clock);
+                racing, () -> "bid-loser", setNumber -> Optional.of("세트"), listingPort, offers, notifier, clock);
 
         Bid result = racingService.place(new PlaceBidCommand("buyer-1", "10307", "new_sealed", 270_000, 30));
 
@@ -216,7 +237,7 @@ class BidServiceTest {
         racing.insert(filledMeanwhile);
         racing.insert(repricedMeanwhile);
         BidService racingService = new BidService(
-                racing, () -> "unused", setNumber -> Optional.of("세트"), id -> null, offers, notifier, clock);
+                racing, () -> "unused", setNumber -> Optional.of("세트"), listingPort, offers, notifier, clock);
 
         assertThat(codeOf(() -> racingService.cancel("bid-a", "buyer-1"))).isEqualTo(BidErrors.NOT_ACTIVE);
         racingService.cancel("bid-b", "buyer-1");
@@ -279,6 +300,24 @@ class BidServiceTest {
         assertThat(filled.status()).isEqualTo(BidStatus.FILLED);
         assertThat(filled.offerId()).isEqualTo("offer-1");
         assertThat(notifier.filled).containsExactly("buyer-early|listing-1|260000|에펠탑(10307)");
+    }
+
+    @Test
+    @DisplayName("판매가 인상 체결은 실제 입찰가와 일치할 때만 가격·입찰·제안을 함께 처리한다")
+    void fillWithPrice_rejectsChangedPriceBeforeMutating() {
+        Bid bid = place("buyer-1", "new_sealed", 330_000);
+        sellerListing("listing-1", "seller-1", "10307", "new_sealed", true);
+
+        assertThat(codeOf(() -> service.fillWithPrice("10307", "listing-1", "seller-1", 340_000)))
+                .isEqualTo(BidErrors.PRICE_CHANGED);
+        assertThat(listings.get("listing-1").price()).isEqualTo(280_000);
+        assertThat(bids.store.get(bid.id()).status()).isEqualTo(BidStatus.ACTIVE);
+        assertThat(offers.calls).isEmpty();
+
+        FillResult result = service.fillWithPrice("10307", "listing-1", "seller-1", 330_000);
+        assertThat(result.bidPrice()).isEqualTo(330_000);
+        assertThat(listings.get("listing-1").price()).isEqualTo(330_000);
+        assertThat(offers.calls).containsExactly("listing-1|seller-1|buyer-1|330000");
     }
 
     @Test

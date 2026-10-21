@@ -161,6 +161,12 @@ public class OnboardingService
                 .orElseThrow(() ->
                         new VerificationException("PHONE_VERIFICATION_CODE_MISSING", "인증 코드가 만료되었습니다. 다시 요청해 주세요"));
 
+        PhoneNumber phoneNumber = new PhoneNumber(command.phoneNumber());
+        if (!phoneNumber.value().equals(challenge.phoneNumber())) {
+            throw new VerificationException(
+                    "PHONE_VERIFICATION_NUMBER_MISMATCH", "인증 코드를 받은 번호와 다릅니다. 새 번호로 코드를 요청해 주세요");
+        }
+
         if (!codeMatches(command.code(), challenge.storedCode())) {
             PhoneVerificationChallenge retried = challenge.withOneMoreAttempt();
             if (retried.attempts() >= MAX_CONFIRM_ATTEMPTS) {
@@ -173,7 +179,6 @@ public class OnboardingService
             throw new VerificationException("PHONE_VERIFICATION_CODE_MISMATCH", "인증 코드가 일치하지 않습니다");
         }
 
-        PhoneNumber phoneNumber = new PhoneNumber(challenge.phoneNumber());
         // 발송 시점 이후 다른 계정이 같은 번호를 인증했을 수 있다. 저장 직전에 한 번 더 본다.
         requirePhoneNotTaken(phoneNumber, account.getId());
 

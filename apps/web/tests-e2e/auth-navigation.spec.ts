@@ -434,6 +434,15 @@ test.describe("Auth navigation", () => {
     await page.getByRole("link", { name: "비밀번호를 잊으셨나요?" }).click();
     await expect(page).toHaveURL(/\/forgot-password\?returnTo=%2Fcollection/);
 
+    await expect(
+      page.getByText("이메일과 비밀번호로 로그인하던 계정의 이메일을 입력하세요.", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("가입할 때 사용한 소셜 서비스로 로그인해 주세요.", { exact: false }),
+    ).toBeVisible();
+
     await page.getByLabel("이메일").fill("member@gole.test");
     await page.getByRole("button", { name: "재설정 코드 받기" }).click();
     await expect(page.getByRole("status")).toContainText("가입된 이메일이라면");

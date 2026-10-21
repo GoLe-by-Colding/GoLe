@@ -122,15 +122,18 @@ async function mockChatDeepLinkApis(
     readonly roomResolveFailureStatus?: number;
     readonly roomResolveRetryAfter?: string;
     readonly counterpartyConfirmed?: boolean;
+    readonly includeExtraPeer?: boolean;
   } = {},
 ): Promise<{
   requestedMessageRoomIds: string[];
   roomResolveAttempts: () => number;
   tradeConfirmations: () => number;
+  setCounterpartyConfirmed: (confirmed: boolean) => void;
 }> {
   const requestedMessageRoomIds: string[] = [];
   let roomResolveAttempts = 0;
   let tradeConfirmations = 0;
+  let counterpartyConfirmed = options.counterpartyConfirmed ?? false;
   await page.route("**/api/v1/chat/rooms", (route) =>
     route.fulfill({
       json:
@@ -145,7 +148,7 @@ async function mockChatDeepLinkApis(
                 createdAt: "2026-08-30T08:00:00Z",
                 lastMessageAt: "2026-08-30T08:00:00Z",
                 buyerConfirmedAt: null,
-                sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
+                sellerConfirmedAt: counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
                 directTradeCompletedAt: null,
               },
             ],
@@ -167,6 +170,23 @@ async function mockChatDeepLinkApis(
           supportStatus: null,
           assigneeId: null,
         },
+        ...(options.includeExtraPeer
+          ? [
+              {
+                id: "room-extra",
+                type: "DIRECT",
+                memberIds: ["account-me", "account-collector"],
+                ownerId: null,
+                title: null,
+                listingId: null,
+                createdAt: "2026-08-30T09:00:00Z",
+                lastMessageAt: "2026-08-30T09:00:00Z",
+                closedAt: null,
+                supportStatus: null,
+                assigneeId: null,
+              },
+            ]
+          : []),
       ],
     }),
   );
@@ -209,7 +229,7 @@ async function mockChatDeepLinkApis(
           createdAt: "2026-08-30T08:00:00Z",
           lastMessageAt: "2026-08-30T08:00:00Z",
           buyerConfirmedAt: null,
-          sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
+          sellerConfirmedAt: counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
           directTradeCompletedAt: null,
         },
         socialRoom: null,
@@ -233,8 +253,8 @@ async function mockChatDeepLinkApis(
         createdAt: "2026-08-30T08:00:00Z",
         lastMessageAt: "2026-08-30T08:00:00Z",
         buyerConfirmedAt: "2026-08-30T09:10:00Z",
-        sellerConfirmedAt: options.counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
-        directTradeCompletedAt: options.counterpartyConfirmed ? "2026-08-30T09:10:00Z" : null,
+        sellerConfirmedAt: counterpartyConfirmed ? "2026-08-30T09:05:00Z" : null,
+        directTradeCompletedAt: counterpartyConfirmed ? "2026-08-30T09:10:00Z" : null,
       },
     });
   });
@@ -263,6 +283,9 @@ async function mockChatDeepLinkApis(
     requestedMessageRoomIds,
     roomResolveAttempts: () => roomResolveAttempts,
     tradeConfirmations: () => tradeConfirmations,
+    setCounterpartyConfirmed: (confirmed) => {
+      counterpartyConfirmed = confirmed;
+    },
   };
 }
 
@@ -452,6 +475,142 @@ test.describe("채팅 UX", () => {
 
     await expect.poll(mock.tradeConfirmations).toBe(1);
     await expect(page.getByRole("status")).toContainText("양쪽이 확인해 거래가 완료됐어요");
+  });
+
+  test("열린 매물 대화에서 상대방 확인 상태를 다시 읽어 표시한다", async ({ page }) => {
+    const mock = await mockChatDeepLinkApis(page, { includeResolvedRoomInList: false });
+    await page.goto("/chat?room=room-listing");
+    await expect(page.getByText("상대방 확인을 기다리고 있어요")).toBeVisible();
+
+    mock.setCounterpartyConfirmed(true);
+    await expect(page.getByText("상대방이 거래 완료를 확인했어요")).toBeVisible({
+      timeout: 6_000,
+    });
+  });
+
+  test("다른 매물방을 폴링해도 최근 목록 밖의 딥링크 대화를 다시 열 수 있다", async ({ page }) => {
+    const mock = await mockChatDeepLinkApis(page, { includeResolvedRoomInList: false });
+    const recentRoom = {
+      id: "room-recent-listing",
+      listingId: "listing-recent",
+      buyerId: "account-me",
+      sellerId: "account-recent-seller",
+      createdAt: "2026-08-30T10:00:00Z",
+      lastMessageAt: "2026-08-30T10:00:00Z",
+      buyerConfirmedAt: null,
+      sellerConfirmedAt: null,
+      directTradeCompletedAt: null,
+    };
+    await page.route("**/api/v1/chat/rooms", (route) => route.fulfill({ json: [recentRoom] }));
+    await page.route("**/api/v1/chat/rooms/room-recent-listing", (route) =>
+      route.fulfill({
+        json: {
+          kind: "LISTING",
+          listingRoom: { ...recentRoom, sellerConfirmedAt: "2026-08-30T10:05:00Z" },
+          socialRoom: null,
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/chat?room=room-listing");
+    const messages = page.getByRole("log", { name: "대화 메시지" });
+    await expect(messages).toContainText("직거래 확인 알림에서 이어진 대화");
+    await expect(page).toHaveURL(/\/chat$/);
+
+    await page.getByRole("button", { name: /account-recent-seller/ }).click();
+    await expect(messages).toContainText("개인 대화");
+    await expect(page.getByText("상대방이 거래 완료를 확인했어요")).toBeVisible({
+      timeout: 6_000,
+    });
+
+    const previousLoads = mock.requestedMessageRoomIds.filter((id) => id === "room-listing").length;
+    await page.getByRole("button", { name: /account-seller/ }).click();
+    await expect(messages).toContainText("직거래 확인 알림에서 이어진 대화");
+    expect(
+      mock.requestedMessageRoomIds.filter((id) => id === "room-listing").length,
+    ).toBeGreaterThan(previousLoads);
+  });
+
+  test("확인 대화상자가 열린 사이 상대 상태가 바뀌면 최신 상태로 다시 확인한다", async ({
+    page,
+  }) => {
+    const mock = await mockChatDeepLinkApis(page, { includeResolvedRoomInList: false });
+    await page.goto("/chat?room=room-listing");
+    await page.getByRole("button", { name: "거래 완료" }).click();
+    const dialog = page.getByRole("dialog", { name: "거래 완료를 확인할까요?" });
+    await expect(dialog).toBeVisible();
+
+    mock.setCounterpartyConfirmed(true);
+    await dialog.getByRole("button", { name: "거래 완료 확인" }).click();
+    await expect(
+      page.getByText("거래 확인 상태가 바뀌었습니다. 최신 상태를 확인한 뒤 다시 눌러 주세요."),
+    ).toBeVisible();
+    expect(mock.tradeConfirmations()).toBe(0);
+
+    await page.getByRole("button", { name: "거래 완료" }).click();
+    await page
+      .getByRole("dialog", { name: "이 거래를 최종 완료할까요?" })
+      .getByRole("button", { name: "판매 완료 확정" })
+      .click();
+    await expect.poll(mock.tradeConfirmations).toBe(1);
+  });
+
+  test("그룹 생성과 초대에서 기존 대화 상대를 이름으로 찾아 선택한다", async ({ page }) => {
+    await mockChatDeepLinkApis(page, { includeExtraPeer: true });
+    let createdMembers: string[] = [];
+    let invitedMember: string | null = null;
+    await page.route("**/api/v1/chat/social/rooms/group", async (route) => {
+      createdMembers = (route.request().postDataJSON() as { memberIds: string[] }).memberIds;
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: "room-group",
+          type: "GROUP",
+          memberIds: ["account-me", ...createdMembers],
+          ownerId: "account-me",
+          title: "테크닉 모임",
+          listingId: null,
+          createdAt: "2026-08-30T09:00:00Z",
+          lastMessageAt: "2026-08-30T09:00:00Z",
+          closedAt: null,
+          supportStatus: null,
+          assigneeId: null,
+        },
+      });
+    });
+    await page.route("**/api/v1/chat/social/rooms/room-group/members", async (route) => {
+      invitedMember = (route.request().postDataJSON() as { accountId: string }).accountId;
+      await route.fulfill({
+        json: {
+          id: "room-group",
+          type: "GROUP",
+          memberIds: ["account-me", ...createdMembers, invitedMember],
+          ownerId: "account-me",
+          title: "테크닉 모임",
+          listingId: null,
+          createdAt: "2026-08-30T09:00:00Z",
+          lastMessageAt: "2026-08-30T09:00:00Z",
+          closedAt: null,
+          supportStatus: null,
+          assigneeId: null,
+        },
+      });
+    });
+    await page.goto("/chat");
+    await page.getByRole("button", { name: "그룹 만들기" }).click();
+    await expect(page.getByText("초대할 계정 ID 2명 이상")).toHaveCount(0);
+    await page.getByRole("textbox", { name: "방 이름" }).fill("테크닉 모임");
+    await page.getByRole("textbox", { name: "초대할 대화 상대 (2명 이상)" }).fill("account");
+    await page.getByRole("button", { name: "대화 상대 accountp" }).click();
+    await page.getByRole("button", { name: "대화 상대 accounts" }).click();
+    await page.getByRole("button", { name: "대화 시작" }).click();
+    await expect.poll(() => createdMembers).toEqual(["account-peer", "account-seller"]);
+
+    await page.getByRole("button", { name: "멤버 초대" }).click();
+    await page.getByRole("textbox", { name: "초대할 대화 상대" }).fill("accountc");
+    await page.getByRole("button", { name: "대화 상대 accountc" }).click();
+    await page.getByRole("button", { name: "초대하기" }).click();
+    await expect.poll(() => invitedMember).toBe("account-collector");
   });
 
   test("다른 화면이 넘긴 초안을 그 방 입력창에 한 번만 채우고 주소에서 지운다", async ({

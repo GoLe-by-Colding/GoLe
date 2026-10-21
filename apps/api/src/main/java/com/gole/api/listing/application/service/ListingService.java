@@ -8,6 +8,7 @@ import com.gole.api.listing.application.port.in.DeleteListingUseCase;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.application.port.in.MarkListingSoldUseCase;
 import com.gole.api.listing.application.port.in.ModerateListingUseCase;
+import com.gole.api.listing.application.port.in.RaiseListingPriceUseCase;
 import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
 import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase;
@@ -54,6 +55,7 @@ public class ListingService
                 DeleteListingUseCase,
                 ModerateListingUseCase,
                 ReviseListingUseCase,
+                RaiseListingPriceUseCase,
                 BumpListingUseCase {
 
     private final ListingRepositoryPort listingRepository;
@@ -168,6 +170,28 @@ public class ListingService
         }
         return new RevisionResult(
                 listing, priceChange.dropped(), priceChange.before().amount());
+    }
+
+    @Override
+    @Transactional
+    public void raisePriceTo(String listingId, String sellerId, long expectedPrice, long targetPrice) {
+        Listing listing = requireOwnedBy(listingId, sellerId);
+        if (listing.getPrice().amount() != expectedPrice || targetPrice <= expectedPrice) {
+            throw ListingConflictException.priceChanged();
+        }
+        listing.revise(
+                new ListingRevision(
+                        listing.getTitle(),
+                        listing.getDescription(),
+                        Money.won(targetPrice),
+                        listing.getCondition(),
+                        listing.getDisclosure(),
+                        listing.getPhotoUrls(),
+                        listing.getInterestTag()),
+                Instant.now(clock));
+        if (!listingRepository.updateIfActive(listing)) {
+            throw lostRace(listingId, Listing::requireEditable);
+        }
     }
 
     /**
