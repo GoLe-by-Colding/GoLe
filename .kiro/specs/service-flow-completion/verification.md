@@ -1,4 +1,4 @@
-# 통합 검증 — 2026-10-21~22
+# 통합 검증 — 2026-10-21~23
 
 ## 코드와 실행 환경
 
@@ -67,6 +67,17 @@
 - 기존 주문의 취소·환불·배송 등 후속 조치는 신규 결제가 닫혀도 허용한다. 공개 잠금·실결제 설정·main은 변경하지 않았다.
 
 ## 최종 반영
+
+10월 23일 재동기화에서 팀원의 새 PR #244/#245 원본을 `55cf2009`·`6743a46d`로 통합했다.
+전화 인증 회귀는 같은 테스트의 위치만 달라 한 번 보존했고, 홈·검색은 팀원의 최신 집계 문구를
+새 공통 레이아웃 위에 유지했다. 후기 재시도와 집계 회귀도 함께 포함했다.
+
+CI `39848776867`은 E2E 387 통과·1 실패·10 스킵이었다. 부품 요청의 작성자 동의가 저장된
+snapshot에서 `현재 상태: 동의함 · 날짜`를 확인하고 날짜를 포함한 정확 일치 선택자를 고쳤다.
+같은 실행의 audit은 새 Next/Sentry 보안 공지로 실패해 Next·eslint-config-next 16.4.1 및
+Sentry Next SDK 10.75.2로 올렸다. 근거는 [Next 공식 공지](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw),
+[Sentry 공식 공지](https://github.com/getsentry/sentry-javascript/security/advisories/GHSA-mchm-gjx6-7h55)다.
+최종 CI·dev 병합은 PR #249와 팀 볼트 `10_개발일지/승찬/2026-10-23/2026-10-23.md`에서 확인한다.
 
 PR [#249](https://github.com/GoLe-by-Colding/GoLe/pull/249)의 첫 CI `39675336176`은
 Frontend·Backend·Mobile·Support agent·Infra를 통과했다. E2E는 387 통과·1 실패·10 스킵이며

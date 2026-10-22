@@ -471,7 +471,7 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
 
       // 채팅은 양쪽 동의가 필요하다. 요청자도 실제 설정 화면에서 선택한 뒤 요청으로 돌아온다.
       await page.getByRole("link", { name: "도움 채팅 받기 설정" }).click();
-      await expect(page.getByText(/^현재 상태: 동의(함|하지 않음)$/)).toBeVisible();
+      await expect(page.getByText(/^현재 상태: 동의(함|하지 않음)( ·|$)/)).toBeVisible();
       const requesterConsent = page.getByRole("checkbox", {
         name: /개인정보 제3자 제공에 동의합니다/,
       });
@@ -479,7 +479,7 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
         await requesterConsent.check();
         await page.getByRole("button", { name: "동의하기", exact: true }).click();
       }
-      await expect(page.getByText("현재 상태: 동의함", { exact: true })).toBeVisible();
+      await expect(page.getByText(/^현재 상태: 동의함( ·|$)/)).toBeVisible();
       await page.getByRole("button", { name: "뒤로 가기", exact: true }).click();
       await expect(page).toHaveURL(`/parts/${createdId}`);
 
