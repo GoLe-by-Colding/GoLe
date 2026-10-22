@@ -34,7 +34,7 @@ export function EmptyState({
   description,
   details = [],
   action,
-  animated = true,
+  animated = false,
   className,
 }: EmptyStateProps) {
   if (variant === "inline") {
@@ -61,33 +61,30 @@ export function EmptyState({
 
   return (
     <section
-      className={cn(
-        "rounded-xl border border-neutral-200/70 bg-neutral-50 px-6 py-8 sm:px-9 sm:py-10",
-        className,
-      )}
+      className={cn("overflow-hidden rounded-2xl border border-neutral-200/70 bg-white", className)}
     >
-      <div className="grid items-center gap-7 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-10">
-        <div className="flex items-center justify-center">
+      <div className="grid sm:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="flex items-center justify-center bg-brand-50 px-6 py-8 sm:py-10">
           <Logo
-            size={160}
+            size={144}
             showWordmark={false}
             spout
             className={animated ? "origin-[50%_62%] motion-safe:animate-mascot-float" : ""}
           />
         </div>
 
-        <div className="flex min-w-0 flex-col items-start gap-4">
+        <div className="flex min-w-0 flex-col items-start gap-4 p-6 sm:p-8">
           {eyebrow ? (
             <span className="border-l-2 border-accent-400 pl-3 text-sm font-semibold text-brand-700">
               {eyebrow}
             </span>
           ) : null}
           <div className="flex flex-col gap-2">
-            <Heading level={2} className="text-2xl">
+            <Heading level={2} className="text-2xl break-keep">
               {title}
             </Heading>
             {description ? (
-              <Text tone="secondary" className="max-w-[42ch] leading-relaxed">
+              <Text tone="secondary" className="max-w-[42ch] leading-relaxed break-keep">
                 {description}
               </Text>
             ) : null}

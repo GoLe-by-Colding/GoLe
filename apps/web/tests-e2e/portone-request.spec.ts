@@ -157,14 +157,17 @@ test.describe("PortOne request contract", () => {
 
   test("mobile return verifies the payment on the server", async ({ page }) => {
     let verificationCalls = 0;
+    await page.route("**/api/v1/orders/order-redirect", (route) =>
+      route.fulfill({ json: { id: "order-redirect", status: "payment_pending" } }),
+    );
     await page.route("**/api/v1/orders/order-redirect/payment", async (route) => {
       verificationCalls += 1;
-      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+      await route.fulfill({ json: { id: "order-redirect", status: "funds_held" } });
     });
 
     await page.goto("/payments/portone/return?paymentId=order-redirect");
     await expect(page.getByRole("heading", { name: "결제 확인 완료" })).toBeVisible();
-    await expect(page.getByText("PortOne 원장을 서버에서 다시 확인합니다.")).toBeVisible();
+    await expect(page.getByText("결제 내역을 확인한 뒤 주문 상태에 반영합니다.")).toBeVisible();
     expect(verificationCalls).toBe(1);
   });
 

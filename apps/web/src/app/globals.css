@@ -63,9 +63,6 @@
   --color-info-soft: #dbeafe;
 
   /* ─── Typography ─── */
-  --font-sans:
-    "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Noto Sans KR", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 
   /* ─── Radius ─── */
@@ -175,6 +172,12 @@
   }
 }
 
+/* next/font가 자체 제공하는 파일과 연결한다. 이름만 선언하고 기기 기본 글꼴로 빠지지 않는다. */
+@theme inline {
+  --font-sans: var(--font-gole-body), "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-display: var(--font-gole-display), var(--font-gole-body), system-ui, sans-serif;
+}
+
 @layer base {
   html {
     /* 관리자 디자인 토큰이 덮는 기준 글자 크기. */
@@ -196,7 +199,7 @@
   h4 {
     /* leading-* 는 --tw-leading 을 남겨 제목에 붙은 text-* 유틸리티의 행간까지 1.15로 묶는다.
        유틸리티가 행간을 정하도록 기본값은 변수 없는 임의 속성으로 둔다. */
-    @apply [line-height:1.15] font-bold tracking-tight text-neutral-900;
+    @apply font-display [line-height:1.2] font-bold tracking-tight text-balance text-neutral-900;
   }
 
   ::selection {

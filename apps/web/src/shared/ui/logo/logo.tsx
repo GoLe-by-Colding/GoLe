@@ -42,7 +42,11 @@ export function Logo({
   const active = useMascot();
   return (
     <span
-      className={cn("inline-flex items-center gap-1.5 font-extrabold tracking-tight", className)}
+      translate="no"
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap font-display font-extrabold tracking-[-0.045em]",
+        className,
+      )}
     >
       <MascotMark
         artwork={mascot ?? active}
@@ -99,7 +103,9 @@ function MascotMark({ artwork, size, maxHeight, spout, tone }: MarkProps) {
       className={cn(
         "shrink-0 overflow-visible",
         // 몸 색을 변수로 받는 그림은 몸만 희게, 색이 박힌 옛 그림은 흰 실루엣으로 그린다.
-        inverse && art.themable && "[--gole-mark-body:var(--color-white)]",
+        inverse &&
+          art.themable &&
+          "[--gole-mark-body:var(--color-white)] [--gole-mark-face:var(--color-brand-950)] [--gole-mark-glint:var(--color-white)]",
         inverse && !art.themable && "brightness-0 invert",
       )}
     >

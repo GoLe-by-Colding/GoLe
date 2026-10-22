@@ -17,19 +17,26 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
 ];
 
 /** 서버가 내려준 현재 정책에 맞는 실제 위저드 단계. 누락된 구버전 응답은 안전하게 4단계로 본다. */
-export function onboardingSteps(status: OnboardingStatus): readonly OnboardingStep[] {
-  return status.phoneVerificationRequired === false
+export function onboardingSteps(
+  status: OnboardingStatus,
+  requirePhone = false,
+): readonly OnboardingStep[] {
+  return status.phoneVerificationRequired === false && !requirePhone
     ? ONBOARDING_STEPS.filter((step) => step !== "phone")
     : ONBOARDING_STEPS;
 }
 
 /** 상태 응답에서 해당 단계의 완료 여부를 읽는다. */
-export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep): boolean {
+export function isStepCompleted(
+  status: OnboardingStatus,
+  step: OnboardingStep,
+  requirePhone = false,
+): boolean {
   switch (step) {
     case "nickname":
       return status.nicknameCompleted;
     case "phone":
-      return status.phoneVerificationRequired === false || status.phoneCompleted;
+      return (status.phoneVerificationRequired === false && !requirePhone) || status.phoneCompleted;
     case "interestTags":
       return status.interestTagsCompleted;
     case "consent":
@@ -44,13 +51,20 @@ export function isStepCompleted(status: OnboardingStatus, step: OnboardingStep):
  *
  * 각 단계가 성공 즉시 서버에 저장되므로(D1) 이탈 후 다시 들어와도 같은 지점에서 재개된다.
  */
-export function nextIncompleteStep(status: OnboardingStatus): OnboardingStep | null {
-  return onboardingSteps(status).find((step) => !isStepCompleted(status, step)) ?? null;
+export function nextIncompleteStep(
+  status: OnboardingStatus,
+  requirePhone = false,
+): OnboardingStep | null {
+  return (
+    onboardingSteps(status, requirePhone).find(
+      (step) => !isStepCompleted(status, step, requirePhone),
+    ) ?? null
+  );
 }
 
 /** 현재 정책의 모든 단계가 끝났는지. 면제(legacyExempt) 여부와는 무관한 순수 판정이다. */
-export function isOnboardingComplete(status: OnboardingStatus): boolean {
-  return nextIncompleteStep(status) === null;
+export function isOnboardingComplete(status: OnboardingStatus, requirePhone = false): boolean {
+  return nextIncompleteStep(status, requirePhone) === null;
 }
 
 /** 한 단계를 완료 처리한 새 상태를 만든다. 재조회 없이 다음 단계로 넘어가기 위한 것이다. */

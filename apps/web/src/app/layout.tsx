@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { Suspense, type ReactNode } from "react";
 // 서버 모듈 그래프의 코어 부트스트랩. 클라이언트 그래프는 아래 <CoreBootstrap />가 맡는다.
 import "@shared/config/bootstrap";
@@ -9,6 +10,19 @@ import { JsonLd } from "@shared/ui";
 import { DesignTheme } from "@shared/ui/design-theme";
 import { SiteMascot } from "@shared/ui/logo";
 import "./globals.css";
+
+const bodyFont = localFont({
+  src: "./fonts/SUIT-Variable.woff2",
+  variable: "--font-gole-body",
+  display: "swap",
+  weight: "100 900",
+});
+const displayFont = localFont({
+  src: "./fonts/SUITE-Variable.woff2",
+  variable: "--font-gole-display",
+  display: "swap",
+  weight: "300 900",
+});
 
 const SITE_NAME = "GoLe";
 const SITE_TITLE = "GoLe — 브릭 중고거래 플랫폼";
@@ -105,7 +119,11 @@ function StructuredData() {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="ko" data-scroll-behavior="smooth">
+    <html
+      lang="ko"
+      data-scroll-behavior="smooth"
+      className={`${bodyFont.variable} ${displayFont.variable}`}
+    >
       <body>
         <CoreBootstrap />
         <DesignTheme />

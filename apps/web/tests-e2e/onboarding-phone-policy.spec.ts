@@ -67,3 +67,74 @@ test("코드 발송 뒤 번호를 바꾸면 이전 번호의 코드 입력을 �
   await expect(page.getByRole("button", { name: "인증하고 다음" })).toHaveCount(0);
   await expect(page.getByText("010-****-5678로 카카오톡 인증 코드를 보냈습니다.")).toHaveCount(0);
 });
+
+async function sellerReady(page: Page, ready = true) {
+  await page.route("**/api/v1/config/launch", (route) =>
+    route.fulfill({
+      json: {
+        stage: 1,
+        tradeMode: "DIRECT_CHAT",
+        updatedAt: null,
+        sellerIdentityVerificationReady: ready,
+        emailAuthenticationAvailable: true,
+        features: { payments: false, reviews: false, partnerPayout: false },
+      },
+    }),
+  );
+}
+
+test("세트에서 판매를 시작하면 로그인 링크에도 세트 번호를 보존한다", async ({ page }) => {
+  await sellerReady(page);
+  await page.goto("/sell?setNumber=10307");
+  await expect(page.getByRole("link", { name: "로그인하러 가기" })).toHaveAttribute(
+    "href",
+    "/login?returnTo=%2Fsell%3FsetNumber%3D10307",
+  );
+});
+
+test("일반 가입 전화인증이 선택이어도 판매자는 인증하고 원래 세트로 돌아온다", async ({ page }) => {
+  await sellerReady(page);
+  let verified = false;
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: false,
+        nicknameCompleted: true,
+        nickname: "판매자",
+        phoneVerificationRequired: false,
+        phoneCompleted: verified,
+        maskedPhoneNumber: null,
+        interestTagsCompleted: true,
+        interestTags: ["technic"],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
+  await page.route("**/api/v1/accounts/me/onboarding/phone/verification", (route) =>
+    route.fulfill({ json: { maskedPhoneNumber: "010-****-1234", expiresInSeconds: 300 } }),
+  );
+  await page.route("**/api/v1/accounts/me/onboarding/phone/verification/confirm", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ phoneNumber: "01011111234", code: "123456" });
+    verified = true;
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto("/onboarding?purpose=seller&returnTo=%2Fsell%3FsetNumber%3D10307");
+  await expect(page.getByRole("heading", { name: "휴대폰 번호를 인증해 주세요" })).toBeVisible();
+  await page.getByLabel("휴대폰 번호", { exact: true }).fill("01011111234");
+  await page.getByRole("button", { name: "인증 코드 받기", exact: true }).click();
+  await expect(page.getByRole("button", { name: "인증하고 다음" })).toBeDisabled();
+  await page.getByLabel("인증 코드", { exact: true }).fill("123456");
+  await page.getByRole("button", { name: "인증하고 다음" }).click();
+  await expect(page).toHaveURL(/\/sell\?setNumber=10307$/);
+  expect(verified).toBe(true);
+});
+
+test("판매자 인증 준비 전에는 쿼리만 바꿔 전화 인증을 열 수 없다", async ({ page }) => {
+  await sellerReady(page, false);
+  await mockOnboardingStatus(page, false);
+  await page.goto("/onboarding?purpose=seller&returnTo=%2Fsell");
+  await expect(page.getByRole("heading", { name: "판매자 인증 준비 중" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "인증 코드 받기" })).toHaveCount(0);
+});
