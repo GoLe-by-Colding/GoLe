@@ -50,6 +50,52 @@ test("샵 조회 실패는 빈 샵과 구분하고, 후기 실패에도 상품�
   await expect(page.getByText("후기 없음")).toHaveCount(0);
 });
 
+test("후기 재시도는 설정을 다시 조회하지 않고 실패 후에도 다시 복구할 수 있다", async ({
+  page,
+}) => {
+  let configUnavailable = false;
+  let configRequests = 0;
+  let ratingAvailable = false;
+  let ratingRequests = 0;
+  await page.route("**/api/v1/config/launch", (route) => {
+    configRequests += 1;
+    return route.fulfill(
+      configUnavailable ? { status: 503, json: { code: "UNAVAILABLE" } } : { json: launch },
+    );
+  });
+  await page.route(`**/api/v1/shops/${sellerId}`, (route) => route.fulfill({ json: [] }));
+  await page.route(`**/api/v1/sellers/${sellerId}/rating`, (route) => {
+    ratingRequests += 1;
+    return route.fulfill(
+      ratingAvailable
+        ? { json: { sellerId, average: 0, count: 0 } }
+        : { status: 503, json: { code: "UNAVAILABLE" } },
+    );
+  });
+  await page.route(`**/api/v1/sellers/${sellerId}/reviews`, (route) => route.fulfill({ json: [] }));
+
+  await page.goto(`/shops/${sellerId}`);
+  const main = page.getByRole("main");
+  const error = main.getByText("후기를 불러오지 못했어요.", { exact: true });
+  const retry = main.getByRole("button", { name: "다시 시도", exact: true });
+  await expect(error).toBeVisible();
+  const initialConfigRequests = configRequests;
+  const initialRatingRequests = ratingRequests;
+  configUnavailable = true;
+
+  await retry.click();
+  await expect.poll(() => ratingRequests).toBeGreaterThan(initialRatingRequests);
+  await expect(error).toBeVisible();
+  await expect(retry).toBeVisible();
+  expect(configRequests).toBe(initialConfigRequests);
+
+  ratingAvailable = true;
+  await retry.click();
+  await expect(main.getByText("아직 등록된 후기가 없습니다.", { exact: true })).toBeVisible();
+  await expect(error).toHaveCount(0);
+  expect(configRequests).toBe(initialConfigRequests);
+});
+
 test("성공한 빈 샵은 빈 상태로 표시한다", async ({ page }) => {
   await page.route("**/api/v1/config/launch", (route) =>
     route.fulfill({ json: { ...launch, features: { ...launch.features, reviews: false } } }),

@@ -6,6 +6,8 @@
 
 ## 공통 화면 구성
 
+판매자 샵의 출시 설정은 `sellerId`별 진입 시 별도 effect에서 조회한다. 후기 effect는 확인한 `reviewsOpen`과 `sellerId`·재시도 횟수에만 의존하며 평점·후기 API를 조회한다. 각 effect의 종료 후 응답 무시 처리는 유지한다.
+
 - `shared/ui/page`의 PageLayout은 컨테이너 폭·상하 여백·섹션 간격을, PageHeader는 h1·설명·주요 액션의 반응형 정렬을 소유한다.
 - `widgets/login-prompt`는 기존 EmptyState·LinkButton·옆모습 고래로 로그인 안내를 조합한다. 복귀 경로는 기존 shared/lib로 검증한다.
 - 브릭 필터 편집기의 개별 버튼·카드·결과 대기도 Button·Card·EmptyState를 사용한다. 변환 API·동의·한도·공개 잠금은 유지한다.

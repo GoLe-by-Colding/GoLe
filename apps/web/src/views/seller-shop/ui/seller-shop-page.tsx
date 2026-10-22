@@ -88,11 +88,18 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
 
   useEffect(() => {
     let active = true;
+    void fetchLaunchConfig().then((launch) => {
+      if (active) setReviewsOpen(launch.features.reviews);
+    });
+    return () => {
+      active = false;
+    };
+  }, [sellerId]);
+
+  useEffect(() => {
+    if (!reviewsOpen) return;
+    let active = true;
     void (async () => {
-      const launch = await fetchLaunchConfig();
-      if (!active) return;
-      setReviewsOpen(launch.features.reviews);
-      if (!launch.features.reviews) return;
       try {
         const [ratingSummary, reviewList] = await Promise.all([
           fetchSellerRating(sellerId),
@@ -109,7 +116,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
     return () => {
       active = false;
     };
-  }, [sellerId, reviewRetry]);
+  }, [sellerId, reviewsOpen, reviewRetry]);
 
   return (
     <Container width="xl">
