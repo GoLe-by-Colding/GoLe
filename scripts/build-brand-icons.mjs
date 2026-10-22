@@ -19,7 +19,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MARK_PATH = "apps/web/src/shared/ui/logo/mark.svg";
 /** 정본 경로를 그대로 복사해 쓰는 파일. 마크를 고치면 여기도 같이 고쳐야 한다. */
 const COPIES = [
-  "apps/web/src/shared/ui/logo/presets/side-brick.tsx",
+  "apps/web/src/shared/ui/logo/presets/side-brick-soft.tsx",
   "apps/web/src/app/opengraph-image.tsx",
 ];
 
@@ -30,7 +30,7 @@ const WHITE = "#FFFFFF";
 const GOLD_ON_BRAND = "#FACC15";
 /** 눈·미소. 흰 고래 위에서도 웹 로고와 같은 brand-950이다. */
 const FACE = "#131E4F";
-/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`presets/side-brick.tsx`와 같다). */
+/** 정본 경로 이름. gold·body·top·face·glint 순서로 그린다(`presets/side-brick-soft.tsx`와 같다). */
 const PARTS = ["gold", "body", "top", "face", "glint"];
 
 // ── 정본 읽기 ──
@@ -66,9 +66,9 @@ function checkCopies(mark) {
 // ── 배치 ──
 /**
  * 마크를 캔버스 가운데에 목표 너비로 앉힌다. 옆모습 브릭 고래는 머리·몸이 왼쪽에 무겁고 꼬리 플레이트가
- * 가늘어(무게중심 너비 45.1%), 스터드 줄이 위에 있어(높이 46.8%) 경계 상자 중심에 두면 눈에는 왼쪽 위로
- * 쏠려 보인다. 그래서 마크 너비의 2.4%만큼 오른쪽, 높이의 1.6%만큼 아래로 옮긴다 — 무게중심과 상자 중심
- * 차이의 절반이다(2026-10-09 옆모습 마크 실측).
+ * 가늘고 스터드 줄이 위에 있어 경계 상자 중심에 두면 눈에는 왼쪽 위로 쏠려 보인다.
+ * 2026-10-09에 정한 광학 보정(너비 2.4% 오른쪽·높이 1.6% 아래)을 2026-10-21 개정에도 유지한다.
+ * 실제 안전 영역은 생성한 PNG의 불투명 픽셀로 다시 검사한다.
  */
 const NUDGE_X = 0.024;
 const NUDGE_Y = 0.016;
@@ -102,7 +102,7 @@ const solid = (canvas, fill) => `  <rect width="${canvas}" height="${canvas}" fi
 /**
  * Android 어댑티브는 108dp 캔버스 중 지름 66dp 원만 어떤 마스크에서도 남는다.
  * 옆모습 마크는 가로로 길어(235.8:132.2) 가장 먼 점이 V 꼬리 플레이트 끝이다. 폭 58dp에서 최원점이
- * 약 31.3dp로 세이프존 안이다(60dp면 32.4dp로 여유가 없다). 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
+ * 약 31.6dp로 세이프존 안이다. 생성 후 PNG를 실측해 33dp를 넘으면 멈춘다.
  */
 const FG_WIDTH = 58;
 /** iOS 1024² 캔버스에서 마크 폭. 가로로 긴 마크라 정면 마크(640)보다 넓혀 시각 무게를 맞춘다. */

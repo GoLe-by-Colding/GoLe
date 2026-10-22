@@ -164,7 +164,7 @@ test.describe("Seller fee disclosure", () => {
     await expect(page.getByRole("button", { name: "상품 등록" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "본인확인 진행하기" })).toHaveAttribute(
       "href",
-      "/onboarding",
+      "/onboarding?purpose=seller&returnTo=%2Fsell",
     );
   });
 });

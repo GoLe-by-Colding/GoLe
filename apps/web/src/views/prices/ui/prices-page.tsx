@@ -1,6 +1,6 @@
 import { fetchFeaturedLegoSets, fetchLegoSetByNumber, type LegoSet } from "@entities/lego-set";
 import { fetchPriceSnapshot, type PricePoint, type PriceSnapshot } from "@entities/pricing";
-import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
+import { PageLayout, PageHeader, EmptyState, LinkButton } from "@shared/ui";
 import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
 
 type PriceBoardLoadResult =
@@ -62,53 +62,51 @@ export async function PricesPage({ initialSetNumber }: PricesPageProps) {
       : `/prices?set=${encodeURIComponent(initialSetNumber)}`;
 
   return (
-    <Container width="xl">
-      <div className="flex flex-col gap-6 pt-8 pb-16">
-        <div className="flex flex-col gap-1">
-          <Heading level={1}>시세</Heading>
-          <Text tone="secondary">미개봉 체결가 추이와 상태별 추정 시세 · 빠른 판매/구매 추정</Text>
-        </div>
+    <PageLayout width="xl">
+      <PageHeader
+        title="시세"
+        description="미개봉 체결가 추이와 상태별 추정 시세 · 빠른 판매/구매 추정"
+      />
 
-        {board.status === "failed" ? (
-          <EmptyState
-            variant="inline"
-            title="시세판을 불러오지 못했어요"
-            description="카탈로그 연결이 잠시 지연되고 있어요. 다시 확인하거나 다른 공개 콘텐츠를 둘러보세요."
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href={retryHref} size="sm" variant="secondary">
-                  다시 확인
-                </LinkButton>
-                <LinkButton href="/community" size="sm" variant="ghost">
-                  커뮤니티 보기
-                </LinkButton>
-              </div>
-            }
-          />
-        ) : board.items.length === 0 ? (
-          <EmptyState
-            variant="inline"
-            title="아직 공개된 시세 세트가 없어요"
-            description="카탈로그가 준비되는 동안 브릭 이야기와 공개된 상품을 먼저 둘러볼 수 있어요."
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href="/community" size="sm">
-                  커뮤니티 보기
-                </LinkButton>
-                <LinkButton href="/search" size="sm" variant="secondary">
-                  상품 탐색
-                </LinkButton>
-              </div>
-            }
-          />
-        ) : (
-          <PriceExplorer
-            key={initialSetNumber ?? "default"}
-            items={board.items}
-            initialSetNumber={initialSetNumber}
-          />
-        )}
-      </div>
-    </Container>
+      {board.status === "failed" ? (
+        <EmptyState
+          variant="inline"
+          title="시세판을 불러오지 못했어요"
+          description="카탈로그 연결이 잠시 지연되고 있어요. 다시 확인하거나 다른 공개 콘텐츠를 둘러보세요."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <LinkButton href={retryHref} size="sm" variant="secondary">
+                다시 확인
+              </LinkButton>
+              <LinkButton href="/community" size="sm" variant="ghost">
+                커뮤니티 보기
+              </LinkButton>
+            </div>
+          }
+        />
+      ) : board.items.length === 0 ? (
+        <EmptyState
+          variant="inline"
+          title="아직 공개된 시세 세트가 없어요"
+          description="카탈로그가 준비되는 동안 브릭 이야기와 공개된 상품을 먼저 둘러볼 수 있어요."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <LinkButton href="/community" size="sm">
+                커뮤니티 보기
+              </LinkButton>
+              <LinkButton href="/search" size="sm" variant="secondary">
+                상품 탐색
+              </LinkButton>
+            </div>
+          }
+        />
+      ) : (
+        <PriceExplorer
+          key={initialSetNumber ?? "default"}
+          items={board.items}
+          initialSetNumber={initialSetNumber}
+        />
+      )}
+    </PageLayout>
   );
 }

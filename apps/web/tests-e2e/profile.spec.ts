@@ -261,7 +261,7 @@ test.describe("내 정보", () => {
 
     await page.goto("/profile");
 
-    await expect(page.getByText("로그인이 필요합니다.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "나의 브릭 생활을 이어가세요" })).toBeVisible();
     await expect(page.getByRole("link", { name: "로그인하러 가기" })).toHaveAttribute(
       "href",
       "/login?returnTo=%2Fprofile",

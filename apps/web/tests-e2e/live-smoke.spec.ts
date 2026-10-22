@@ -142,7 +142,7 @@ test.describe("gole.co.kr read-only live smoke", () => {
   });
 
   for (const [path, heading] of [
-    ["/", "브릭을 가장 합리적으로"],
+    ["/", "다음 브릭을 만나는 곳."],
     ["/search", "상품 탐색"],
     ["/prices", "시세"],
     ["/community", "커뮤니티"],
