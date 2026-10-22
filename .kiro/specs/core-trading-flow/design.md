@@ -1,6 +1,12 @@
 # 설계
 
+## 탐색·홈 지표 문구
+
+검색의 `ready` 상태에서만 `검색 결과 N개`를 표시한다. 홈은 `loadTrending()`이 조회한 최대 8세트의 `tradeCount` 합계를 그대로 사용한다. 합계가 표시될 때 집계 기준 설명도 함께 표시하고, 서버의 최근 30일 우선·전체 기간 대체 및 출처 정책은 변경하지 않는다.
+
 ## 공통 화면 구성
+
+판매자 샵의 출시 설정은 `sellerId`별 진입 시 별도 effect에서 조회한다. 후기 effect는 확인한 `reviewsOpen`과 `sellerId`·재시도 횟수에만 의존하며 평점·후기 API를 조회한다. 각 effect의 종료 후 응답 무시 처리는 유지한다.
 
 - `shared/ui/page`의 PageLayout은 컨테이너 폭·상하 여백·섹션 간격을, PageHeader는 h1·설명·주요 액션의 반응형 정렬을 소유한다.
 - `widgets/login-prompt`는 기존 EmptyState·LinkButton·옆모습 고래로 로그인 안내를 조합한다. 복귀 경로는 기존 shared/lib로 검증한다.

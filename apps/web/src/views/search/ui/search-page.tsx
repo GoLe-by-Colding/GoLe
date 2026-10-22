@@ -158,7 +158,7 @@ export async function SearchPage(props: SearchPageProps) {
         description={
           result.status === "ready" ? (
             <>
-              공개된 브릭 상품 <span className="font-bold text-brand-600">{listings.length}</span>개
+              검색 결과 <span className="font-bold text-brand-600">{listings.length}</span>개
             </>
           ) : undefined
         }
