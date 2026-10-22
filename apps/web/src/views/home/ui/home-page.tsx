@@ -70,7 +70,7 @@ export async function HomePage() {
       ? [{ label: "활성 매물", value: `${listings.length.toLocaleString("ko-KR")}개` }]
       : []),
     ...(txCount > 0
-      ? [{ label: "인기 세트 체결", value: `${txCount.toLocaleString("ko-KR")}건` }]
+      ? [{ label: "거래 상위 세트 체결 합계", value: `${txCount.toLocaleString("ko-KR")}건` }]
       : []),
   ];
 
@@ -112,6 +112,12 @@ export async function HomePage() {
                     </div>
                   ))}
                 </dl>
+              ) : null}
+              {txCount > 0 ? (
+                <p className="text-xs leading-relaxed text-neutral-500">
+                  체결 기록 수 상위 최대 8세트의 합계예요. 최근 30일 기준이며, 이 기간에 기록이
+                  없으면 전체 기간을 집계해요.
+                </p>
               ) : null}
             </div>
             <div className="relative hidden aspect-[1.3] items-center justify-center overflow-hidden rounded-2xl bg-brand-50 lg:flex">
