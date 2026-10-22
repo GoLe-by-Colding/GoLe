@@ -383,7 +383,7 @@ export function AccountSecurityPage() {
             </form>
           )}
         </Card>
-        <Card padded className="flex flex-col gap-4">
+        <Card padded id="third-party-consent" className="flex scroll-mt-24 flex-col gap-4">
           <div className="flex flex-col gap-1">
             <Heading level={2}>개인정보 제3자 제공 동의</Heading>
             <Text tone="secondary">

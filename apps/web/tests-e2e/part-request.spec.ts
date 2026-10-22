@@ -320,6 +320,10 @@ test.describe("부품 요청 상세", () => {
 
     await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
     await expect(page.getByRole("button", { name: "도와줄게요" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "도움 채팅 받기 설정" })).toHaveAttribute(
+      "href",
+      "/profile/security#third-party-consent",
+    );
 
     // 확인 모달에서 취소하면 마감 요청을 보내지 않는다.
     await page.getByRole("button", { name: "마감", exact: true }).click();
@@ -464,6 +468,20 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
       await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
       await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
+
+      // 채팅은 양쪽 동의가 필요하다. 요청자도 실제 설정 화면에서 선택한 뒤 요청으로 돌아온다.
+      await page.getByRole("link", { name: "도움 채팅 받기 설정" }).click();
+      await expect(page.getByText(/^현재 상태: 동의(함|하지 않음)$/)).toBeVisible();
+      const requesterConsent = page.getByRole("checkbox", {
+        name: /개인정보 제3자 제공에 동의합니다/,
+      });
+      if (await requesterConsent.isVisible()) {
+        await requesterConsent.check();
+        await page.getByRole("button", { name: "동의하기", exact: true }).click();
+      }
+      await expect(page.getByText("현재 상태: 동의함", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "뒤로 가기", exact: true }).click();
+      await expect(page).toHaveURL(`/parts/${createdId}`);
 
       await switchTo(page, E2E_BUYER);
       await page.goto(`/parts/${createdId}`);

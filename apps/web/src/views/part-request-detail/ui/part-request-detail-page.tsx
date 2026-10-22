@@ -152,6 +152,21 @@ export function PartRequestDetailPage({ requestId }: PartRequestDetailPageProps)
                   : "마감된 요청이에요. 필요 없으면 삭제할 수 있어요."}
               </p>
             </div>
+            {request.status === "open" ? (
+              <div className="flex flex-col items-start gap-2">
+                <p className="text-sm leading-relaxed text-neutral-600">
+                  도움 채팅을 받으려면 요청자도 개인정보 제3자 제공에 동의해야 해요. 계정 보안에서
+                  안내를 확인하고 선택할 수 있어요.
+                </p>
+                <LinkButton
+                  href="/profile/security#third-party-consent"
+                  variant="secondary"
+                  size="sm"
+                >
+                  도움 채팅 받기 설정
+                </LinkButton>
+              </div>
+            ) : null}
             <PartRequestOwnerActions
               request={request}
               onClosed={(closed) => setLoad({ status: "ready", request: closed })}
