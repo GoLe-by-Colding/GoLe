@@ -38,9 +38,13 @@ export interface SellerShopPageProps {
 export function SellerShopPage({ sellerId }: SellerShopPageProps) {
   const { session } = useSession();
   const [listings, setListings] = useState<readonly ListingSummary[]>([]);
+  const [shopStatus, setShopStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [shopRetry, setShopRetry] = useState(0);
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [reviews, setReviews] = useState<readonly Review[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [reviewRetry, setReviewRetry] = useState(0);
   const nameOf = useDisplayNames([sellerId, ...reviews.map((review) => review.reviewerId)]);
   const [priceNotes, setPriceNotes] = useState<Readonly<Record<string, string>>>({});
 
@@ -67,26 +71,52 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
 
   useEffect(() => {
     let active = true;
-    void (async () => {
-      try {
-        const [shop, launch] = await Promise.all([fetchSellerShop(sellerId), fetchLaunchConfig()]);
-        const [ratingSummary, reviewList] = launch.features.reviews
-          ? await Promise.all([fetchSellerRating(sellerId), fetchSellerReviews(sellerId)])
-          : ([null, []] as const);
+    void fetchSellerShop(sellerId)
+      .then((shop) => {
         if (active) {
           setListings(shop);
-          setRating(ratingSummary);
-          setReviews(reviewList);
-          setReviewsOpen(launch.features.reviews);
+          setShopStatus("ready");
         }
+      })
+      .catch(() => {
+        if (active) setShopStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [sellerId, shopRetry]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchLaunchConfig().then((launch) => {
+      if (active) setReviewsOpen(launch.features.reviews);
+    });
+    return () => {
+      active = false;
+    };
+  }, [sellerId]);
+
+  useEffect(() => {
+    if (!reviewsOpen) return;
+    let active = true;
+    void (async () => {
+      try {
+        const [ratingSummary, reviewList] = await Promise.all([
+          fetchSellerRating(sellerId),
+          fetchSellerReviews(sellerId),
+        ]);
+        if (!active) return;
+        setRating(ratingSummary);
+        setReviews(reviewList);
+        setReviewStatus("ready");
       } catch {
-        /* ignore */
+        if (active) setReviewStatus("error");
       }
     })();
     return () => {
       active = false;
     };
-  }, [sellerId]);
+  }, [sellerId, reviewsOpen, reviewRetry]);
 
   return (
     <Container width="xl">
@@ -95,8 +125,10 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
           <div className="flex min-w-0 flex-col gap-1">
             <Heading level={1}>{nameOf(sellerId)} 님의 샵</Heading>
             <div className="flex items-center gap-3">
-              <Text tone="secondary">판매 중인 상품 {listings.length}개</Text>
-              {reviewsOpen && rating !== null && rating.count > 0 ? (
+              {shopStatus === "ready" ? (
+                <Text tone="secondary">판매 중인 상품 {listings.length}개</Text>
+              ) : null}
+              {reviewsOpen && reviewStatus === "ready" && rating !== null && rating.count > 0 ? (
                 <Badge tone="warning" data-testid="seller-rating">
                   <span
                     className="inline-flex items-center gap-1"
@@ -108,7 +140,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                     </span>
                   </span>
                 </Badge>
-              ) : reviewsOpen ? (
+              ) : reviewsOpen && reviewStatus === "ready" ? (
                 <Text tone="muted">후기 없음</Text>
               ) : null}
             </div>
@@ -127,7 +159,23 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
           </div>
         </div>
 
-        {listings.length === 0 ? (
+        {shopStatus === "loading" ? (
+          <Text tone="muted">판매 중인 상품을 불러오는 중이에요.</Text>
+        ) : shopStatus === "error" ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Text tone="muted">상품 목록을 불러오지 못했어요.</Text>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setShopStatus("loading");
+                setShopRetry((value) => value + 1);
+              }}
+            >
+              다시 시도
+            </Button>
+          </div>
+        ) : listings.length === 0 ? (
           <Text tone="muted">판매 중인 상품이 없습니다.</Text>
         ) : (
           // 검색 목록과 같은 기준: 360px 이상 휴대폰은 2열, 320px급은 1열.
@@ -151,7 +199,23 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                 후기 작성·게시·평점·삭제 기준
               </Link>
             </div>
-            {reviews.length === 0 ? (
+            {reviewStatus === "loading" ? (
+              <Text tone="muted">후기를 불러오는 중이에요.</Text>
+            ) : reviewStatus === "error" ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Text tone="muted">후기를 불러오지 못했어요.</Text>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setReviewStatus("loading");
+                    setReviewRetry((value) => value + 1);
+                  }}
+                >
+                  다시 시도
+                </Button>
+              </div>
+            ) : reviews.length === 0 ? (
               <Text tone="muted">아직 등록된 후기가 없습니다.</Text>
             ) : (
               <ul className="flex flex-col gap-3">

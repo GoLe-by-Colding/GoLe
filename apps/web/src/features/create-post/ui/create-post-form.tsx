@@ -11,6 +11,8 @@ export interface CreatePostFormProps {
 }
 
 const MAX_IMAGES = 5;
+// CommunityDtos의 작성·수정 본문 상한과 동일하다.
+const MAX_CONTENT_LENGTH = 5000;
 
 export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
   const [content, setContent] = useState("");
@@ -56,12 +58,21 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
     event.preventDefault();
     if (uploadLock.current || submitLock.current) return;
     setError(undefined);
+    const trimmedContent = content.trim();
+    if (trimmedContent.length === 0) {
+      setError("내용을 입력해 주세요.");
+      return;
+    }
+    if (trimmedContent.length > MAX_CONTENT_LENGTH) {
+      setError(`내용은 ${MAX_CONTENT_LENGTH.toLocaleString()}자까지 입력해 주세요.`);
+      return;
+    }
     submitLock.current = true;
     setSubmitting(true);
     try {
       const post = await publishPost({
         authorId,
-        content,
+        content: trimmedContent,
         imageKeys: images.map((image) => image.key),
         topic,
       });
@@ -82,7 +93,12 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
       ) : null}
       <Field label="주제">
         {({ inputId }) => (
-          <Select id={inputId} value={topic} onChange={(e) => setTopic(e.target.value as PostType)}>
+          <Select
+            id={inputId}
+            value={topic}
+            disabled={submitting}
+            onChange={(e) => setTopic(e.target.value as PostType)}
+          >
             {POST_TOPICS.map((t) => (
               <option key={t.key} value={t.key}>
                 {t.label}
@@ -91,7 +107,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
           </Select>
         )}
       </Field>
-      <Field label="내용">
+      <Field label="내용" hint={`${content.length}/${MAX_CONTENT_LENGTH.toLocaleString()}자`}>
         {({ inputId, describedBy }) => (
           <Textarea
             id={inputId}
@@ -99,6 +115,8 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
             placeholder="자랑·리뷰·질문·팁·창작(MOC)·이스터에그 등 무엇이든 공유해보세요."
             aria-describedby={describedBy}
             onChange={(e) => setContent(e.target.value)}
+            maxLength={MAX_CONTENT_LENGTH}
+            disabled={submitting}
             required
           />
         )}
@@ -138,6 +156,7 @@ export function CreatePostForm({ authorId, onCreated }: CreatePostFormProps) {
                       type="button"
                       onClick={() => removeImage(image.key)}
                       aria-label={`이미지 ${index + 1} 삭제`}
+                      disabled={submitting || uploading}
                       className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900/80 text-sm text-white"
                     >
                       ×

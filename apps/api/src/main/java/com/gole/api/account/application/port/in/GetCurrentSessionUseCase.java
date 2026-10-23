@@ -17,11 +17,21 @@ public interface GetCurrentSessionUseCase {
      * @param nickname 온보딩에서 설정한 표시 이름. 아직 설정 전이면 {@code null}. 같은 이유로
      *     세션 해석에 편승해 실어 보낸다.
      */
-    record CurrentSession(String accountId, String email, Role role, boolean onboardingRequired, String nickname) {
+    record CurrentSession(
+            String accountId,
+            String email,
+            Role role,
+            boolean onboardingRequired,
+            String nickname,
+            boolean passwordChangeAvailable) {
+
+        public CurrentSession(String accountId, String email, Role role, boolean onboardingRequired, String nickname) {
+            this(accountId, email, role, onboardingRequired, nickname, true);
+        }
 
         /** 온보딩 판정이 필요 없는 호출부(권한 가드 등)를 위한 축약 생성자. */
         public CurrentSession(String accountId, String email, Role role) {
-            this(accountId, email, role, false, null);
+            this(accountId, email, role, false, null, true);
         }
     }
 }

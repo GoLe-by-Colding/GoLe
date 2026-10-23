@@ -44,6 +44,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -126,6 +127,41 @@ class AccountServiceTest {
     }
 
     @Test
+    @DisplayName("미인증 계정은 관리자 정지 해제 후에도 인증해야 로그인할 수 있음")
+    void reinstate_requiresVerificationBeforeSignIn() {
+        service.register(registerCommand("pending@gole.test", "password1"));
+        Account account = repository.findByEmail(new Email("pending@gole.test")).orElseThrow();
+        account.suspend("운영 검토");
+        account.reinstate();
+        repository.save(account);
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("pending@gole.test", "password1")))
+                .isInstanceOf(AccountNotVerifiedException.class);
+
+        service.verify(new VerifyEmailCommand("pending@gole.test", "123456"));
+        assertThat(service.signIn(new SignInCommand("pending@gole.test", "password1"))
+                        .sessionToken())
+                .isNotBlank();
+    }
+
+    @Test
+    @DisplayName("정지된 가입 대기 계정의 이메일 인증은 정지 상태를 보존함")
+    void verify_cannotReinstateSuspendedUnverifiedAccount() {
+        service.register(registerCommand("pending@gole.test", "password1"));
+        Account account = repository.findByEmail(new Email("pending@gole.test")).orElseThrow();
+        account.suspend("운영 검토");
+        repository.save(account);
+
+        assertThatThrownBy(() -> service.verify(new VerifyEmailCommand("pending@gole.test", "123456")))
+                .isInstanceOf(AccountSuspendedException.class);
+
+        assertThat(account.isSuspended()).isTrue();
+        assertThat(account.getVerificationChallenge()).isNotNull();
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("pending@gole.test", "password1")))
+                .isInstanceOf(AccountSuspendedException.class);
+    }
+
+    @Test
     void register_rejectsShortPassword() {
         assertThatThrownBy(() -> service.register(registerCommand("a@b.com", "short")))
                 .isInstanceOf(WeakPasswordException.class);
@@ -143,6 +179,17 @@ class AccountServiceTest {
 
         assertThatThrownBy(() -> service.signIn(new SignInCommand("a@b.com", "x".repeat(73))))
                 .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void signIn_rejectsSocialOnlyAccountEvenWhenPlaceholderHashMatches() {
+        Account account = Account.socialProvisioned(
+                "social-1", new Email("social@gole.test"), new PasswordHash("plain:placeholder"));
+        repository.save(account);
+
+        assertThatThrownBy(() -> service.signIn(new SignInCommand("social@gole.test", "placeholder")))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThat(account.getFailedAttempts()).isZero();
     }
 
     @Test

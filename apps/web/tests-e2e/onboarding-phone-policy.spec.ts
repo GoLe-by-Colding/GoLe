@@ -97,7 +97,7 @@ test("일반 가입 전화인증이 선택이어도 판매자는 인증하고 �
     route.fulfill({ json: { maskedPhoneNumber: "010-****-1234", expiresInSeconds: 300 } }),
   );
   await page.route("**/api/v1/accounts/me/onboarding/phone/verification/confirm", (route) => {
-    expect(route.request().postDataJSON()).toEqual({ code: "123456" });
+    expect(route.request().postDataJSON()).toEqual({ phoneNumber: "01011111234", code: "123456" });
     verified = true;
     return route.fulfill({ status: 204 });
   });
@@ -118,4 +118,23 @@ test("판매자 인증 준비 전에는 쿼리만 바꿔 전화 인증을 열 �
   await page.goto("/onboarding?purpose=seller&returnTo=%2Fsell");
   await expect(page.getByRole("heading", { name: "판매자 인증 준비 중" })).toBeVisible();
   await expect(page.getByRole("button", { name: "인증 코드 받기" })).toHaveCount(0);
+});
+
+test("코드 발송 뒤 번호를 바꾸면 이전 번호의 코드 입력을 폐기한다", async ({ page }) => {
+  await mockOnboardingStatus(page, true);
+  await page.route("**/api/v1/accounts/me/onboarding/phone/verification", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ phoneNumber: "01012345678" });
+    await route.fulfill({ json: { maskedPhoneNumber: "010-****-5678", expiresInSeconds: 300 } });
+  });
+
+  await page.goto("/onboarding");
+  await page.getByRole("textbox", { name: "휴대폰 번호" }).fill("010-1234-5678");
+  await page.getByRole("button", { name: "인증 코드 받기" }).click();
+  await expect(page.getByRole("textbox", { name: "인증 코드" })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "휴대폰 번호" }).fill("010-9876-5432");
+
+  await expect(page.getByRole("textbox", { name: "인증 코드" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "인증하고 다음" })).toHaveCount(0);
+  await expect(page.getByText("010-****-5678로 카카오톡 인증 코드를 보냈습니다.")).toHaveCount(0);
 });

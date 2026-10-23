@@ -28,17 +28,19 @@ class ListingBidListingAdapterTest {
     }
 
     private static BidListing get(Listing listing) {
-        ListingBidListingAdapter adapter = new ListingBidListingAdapter(new GetListingUseCase() {
-            @Override
-            public Listing getById(String listingId) {
-                return listing;
-            }
+        ListingBidListingAdapter adapter = new ListingBidListingAdapter(
+                new GetListingUseCase() {
+                    @Override
+                    public Listing getById(String listingId) {
+                        return listing;
+                    }
 
-            @Override
-            public Listing getPublicById(String listingId) {
-                return listing;
-            }
-        });
+                    @Override
+                    public Listing getPublicById(String listingId) {
+                        return listing;
+                    }
+                },
+                (listingId, sellerId, expectedPrice, targetPrice) -> {});
         return adapter.get(listing.getId());
     }
 

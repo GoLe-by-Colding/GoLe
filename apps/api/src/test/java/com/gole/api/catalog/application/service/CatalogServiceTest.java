@@ -249,6 +249,14 @@ class CatalogServiceTest {
         }
 
         @Override
+        public LegoSet insert(LegoSet set, boolean featured) {
+            if (stored != null && stored.getSetNumber().equals(set.getSetNumber())) {
+                throw new com.gole.api.catalog.domain.exception.LegoSetAlreadyExistsException(set.getSetNumber());
+            }
+            return set;
+        }
+
+        @Override
         public LegoSet save(LegoSet set, boolean featured) {
             return set;
         }

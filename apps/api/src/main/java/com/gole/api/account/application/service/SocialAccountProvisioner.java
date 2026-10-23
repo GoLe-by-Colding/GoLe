@@ -7,7 +7,6 @@ import com.gole.api.account.domain.model.Account;
 import com.gole.api.account.domain.model.AuthProvider;
 import com.gole.api.account.domain.model.Email;
 import com.gole.api.account.domain.model.PolicyAcceptance.Channel;
-import com.gole.api.account.domain.model.Role;
 import com.gole.api.account.domain.model.SignupPolicyAcceptance;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -39,7 +38,7 @@ public class SocialAccountProvisioner {
         policyAcceptances.validate(signupPolicyAcceptance);
         String id = identifiers.newAccountId();
         var hash = passwordHasher.hash(UUID.randomUUID().toString());
-        Account saved = accounts.save(Account.provisioned(id, email, hash, Role.USER));
+        Account saved = accounts.save(Account.socialProvisioned(id, email, hash));
         policyAcceptances.record(saved.getId(), signupPolicyAcceptance, Channel.social(provider));
         return saved;
     }

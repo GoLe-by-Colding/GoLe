@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { notifyNotificationsChanged } from "@features/notification-bell";
 import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   type Notification,
 } from "@entities/notification";
-import { useSession } from "@entities/user";
+import { loadSession, useSession } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { loginHrefWithReturnTo } from "@shared/lib";
 import {
@@ -64,6 +65,7 @@ export function NotificationsPage() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [readError, setReadError] = useState<{ accountId: string; message: string } | null>(null);
 
   useEffect(() => {
     if (accountId === null) {
@@ -97,16 +99,19 @@ export function NotificationsPage() {
   }, [accountId, reloadKey]);
 
   async function handleReadAll() {
-    if (accountId === null) {
+    if (accountId === null || busy) {
       return;
     }
     setBusy(true);
-    setError(undefined);
+    setReadError(null);
     try {
       await markAllNotificationsRead(accountId);
+      notifyNotificationsChanged(accountId);
+      if (loadSession()?.accountId !== accountId) return;
       setItems((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch (cause) {
-      setError(notificationErrorMessage(cause));
+      if (loadSession()?.accountId === accountId)
+        setReadError({ accountId, message: notificationErrorMessage(cause) });
     } finally {
       setBusy(false);
     }
@@ -114,15 +119,19 @@ export function NotificationsPage() {
 
   function handleClickItem(n: Notification) {
     if (accountId !== null && !n.read) {
+      setReadError(null);
       setItems((current) =>
         current.map((item) => (item.id === n.id ? { ...item, read: true } : item)),
       );
-      void markNotificationRead(accountId, n.id).catch((cause: unknown) => {
-        setItems((current) =>
-          current.map((item) => (item.id === n.id ? { ...item, read: false } : item)),
-        );
-        setError(notificationErrorMessage(cause));
-      });
+      void markNotificationRead(accountId, n.id)
+        .then(() => notifyNotificationsChanged(accountId))
+        .catch((cause: unknown) => {
+          if (loadSession()?.accountId !== accountId) return;
+          setItems((current) =>
+            current.map((item) => (item.id === n.id ? { ...item, read: false } : item)),
+          );
+          setReadError({ accountId, message: notificationErrorMessage(cause) });
+        });
     }
   }
 
@@ -158,6 +167,12 @@ export function NotificationsPage() {
             </LinkButton>
           </div>
         </div>
+
+        {readError?.accountId === accountId ? (
+          <p role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger">
+            {readError.message}
+          </p>
+        ) : null}
 
         {visibleLoading ? (
           <div className="flex flex-col gap-3">

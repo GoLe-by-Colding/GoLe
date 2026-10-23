@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   completeOrder,
+  cancelOrder,
   DISPUTE_REASON_LABEL,
   fetchOrderContacts,
   fetchOrder,
@@ -47,6 +48,7 @@ import {
   LinkButton,
   Skeleton,
   Text,
+  useDialog,
 } from "@shared/ui";
 import { OpenDisputeButton } from "@features/open-dispute";
 import { RegisterWaybillForm } from "@features/register-waybill";
@@ -61,7 +63,7 @@ const AUTO_REFRESH_STATUSES: ReadonlySet<OrderStatus> = new Set([
 const AUTO_REFRESH_INTERVAL_MS = 5_000;
 const AUTO_REFRESH_MAX_ATTEMPTS = 12;
 
-type ConfirmationAction = "complete" | "refund";
+type ConfirmationAction = "complete" | "refund" | "cancel";
 
 type InitialLoadFailureKind =
   "unauthenticated" | "forbidden" | "not_found" | "retryable" | "unavailable";
@@ -179,7 +181,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  const actionDialog = useDialog();
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   // 결제수단 선택. 카드 채널이 설정되지 않았으면 선택 UI 자체를 노출하지 않는다.
@@ -349,15 +351,36 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
     }
   }, [orderId]);
 
-  const confirmOrderAction = useCallback(async () => {
-    const selected = confirmation;
-    setConfirmation(null);
-    if (selected === "complete") {
-      await run(completeOrder);
-    } else if (selected === "refund") {
-      await run(refundOrder);
+  async function confirmOrderAction(action: ConfirmationAction) {
+    if (busy || order === null || session?.accountId !== order.buyerId) return;
+    const completing = action === "complete";
+    const cancelling = action === "cancel";
+    const confirmed = await actionDialog.confirm({
+      title: completing
+        ? "구매를 확정할까요?"
+        : cancelling
+          ? "주문을 취소할까요?"
+          : "환불을 요청할까요?",
+      description: completing
+        ? "상품을 정상적으로 받았는지 확인해 주세요. 구매를 확정하면 판매자 정산이 시작되어 되돌리기 어렵습니다."
+        : cancelling
+          ? "결제 승인이 없음을 확인한 뒤 주문을 취소하고 매물 예약을 해제합니다. 결제가 진행 중이면 취소되지 않으며 최신 상태를 안내해요."
+          : "구매 확정 전 주문만 환불할 수 있습니다. 요청 후 결제수단에 반영되기까지 시간이 걸릴 수 있습니다.",
+      confirmLabel: completing ? "상품을 받았어요" : cancelling ? "주문 취소" : "환불 요청",
+      cancelLabel: "돌아가기",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    await run(completing ? completeOrder : cancelling ? cancelOrder : refundOrder);
+    // 거절된 취소도 승인·검토 상태를 갱신했을 수 있으므로 최신 원장을 보여 준다.
+    if (cancelling) {
+      try {
+        setOrder(await fetchOrder(orderId));
+      } catch {
+        /* 원래 조치 오류를 보존한다. */
+      }
     }
-  }, [confirmation, run]);
+  }
 
   // 결제: 로컬·테스트의 명시적 스텁만 결제창 없이 진행한다. 그 외 모드는 PortOne 결제창
   // 성공 후 서버가 원장을 검증한다(payOrder). 설정 누락·운영 스텁은 API로 우회하지 않는다.
@@ -370,7 +393,18 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
       setError(undefined);
       setBusy(true);
       try {
-        const current = await fetchOrder(orderId);
+        const [current, launch] = await Promise.all([fetchOrder(orderId), fetchLaunchConfig()]);
+        setOrder(current);
+        const currentlyOpen = launch.features.payments && isPaymentRuntimeAvailable();
+        setPaymentsOpen(currentlyOpen);
+        if (current.status !== "payment_pending") {
+          setError("주문 상태가 변경됐어요. 최신 상태를 확인해 주세요.");
+          return;
+        }
+        if (!currentlyOpen) {
+          setError("현재 신규 결제가 일시 중지되어 있습니다. 주문 상태는 보존됩니다.");
+          return;
+        }
         if (env.paymentMode !== "stub") {
           if (!isPortOneEnabled()) {
             throw new Error(
@@ -606,11 +640,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         */}
         {paymentsOpen && order.status === "payment_pending" && !paymentAttempted ? (
           <OrderStatusNotice
-            title="아직 결제하지 않았어요"
+            title={isSeller ? "구매자의 결제를 기다리고 있어요" : "아직 결제하지 않았어요"}
             description={
-              cardAvailable
-                ? "결제수단을 고르고 결제하기를 누르면 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
-                : "아래 결제하기를 누르면 카카오페이 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+              isSeller
+                ? "구매자의 결제가 확인되면 이 화면에서 운송장을 등록할 수 있어요. 아직 상품을 발송하지 마세요."
+                : cardAvailable
+                  ? "결제수단을 고르고 결제하기를 누르면 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
+                  : "아래 결제하기를 누르면 카카오페이 결제창이 열립니다. 결제 전까지 매물은 다른 사람이 살 수 없도록 보관됩니다."
             }
             refreshing={refreshing}
             onRefresh={refreshOrder}
@@ -699,6 +735,35 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </div>
         ) : null}
 
+        {order.status === "cancelled" ? (
+          <Card padded className="flex flex-col gap-3">
+            <Text weight="semibold">주문이 취소됐어요</Text>
+            <Text size="sm" tone="secondary">
+              매물 예약을 해제했어요. 취소 이후 결제 승인이 확인되면 환불 상태를 안내합니다.
+            </Text>
+            <LinkButton href={`/listings/${order.listingId}`} size="sm" variant="secondary">
+              매물 다시 보기
+            </LinkButton>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={refreshing}
+              onClick={() => void refreshOrder()}
+            >
+              {refreshing ? "확인 중..." : "주문 상태 다시 확인"}
+            </Button>
+          </Card>
+        ) : null}
+        {isBuyer && order.status === "payment_pending" ? (
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void confirmOrderAction("cancel")}
+          >
+            주문 취소
+          </Button>
+        ) : null}
+
         {/* ── 배송 (shipping-and-fees) ── */}
         {isSeller && order.status === "funds_held" ? (
           <Card padded className="flex flex-col gap-4">
@@ -735,7 +800,8 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </Card>
         ) : null}
 
-        {!isSeller &&
+        {(isBuyer || isSeller) &&
+        !(isSeller && order.status === "funds_held") &&
         shipmentLoadState === "ready" &&
         shipment !== null &&
         order.status !== "payment_pending" ? (
@@ -749,10 +815,30 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           </Card>
         ) : null}
 
-        {!isSeller && shipmentLoadState === "error" && order.status !== "payment_pending" ? (
+        {(isBuyer || isSeller) &&
+        !(isSeller && order.status === "funds_held") &&
+        shipmentLoadState === "error" &&
+        order.status !== "payment_pending" ? (
           <Card padded className="flex flex-col gap-4">
             <Text weight="semibold">배송 현황</Text>
             <ShipmentLoadFailure retrying={shipmentRetrying} onRetry={() => void retryShipment()} />
+          </Card>
+        ) : null}
+
+        {isBuyer && order.status === "funds_held" && shipmentLoadState === "absent" ? (
+          <Card padded className="flex flex-col items-start gap-3">
+            <Text weight="semibold">판매자의 발송을 기다리고 있어요</Text>
+            <Text size="sm" tone="secondary">
+              판매자가 운송장을 등록하면 배송 현황을 확인할 수 있어요.
+            </Text>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={shipmentRetrying}
+              onClick={() => void retryShipment()}
+            >
+              {shipmentRetrying ? "확인 중..." : "배송 상태 새로고침"}
+            </Button>
           </Card>
         ) : null}
 
@@ -798,7 +884,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
           )}
         </Card>
 
-        {paymentsOpen && order.status === "payment_pending" && !isSeller ? (
+        {paymentsOpen && order.status === "payment_pending" && isBuyer ? (
           <div className="flex flex-col gap-4">
             {cardAvailable ? (
               <fieldset className="flex flex-col gap-2" disabled={busy}>
@@ -908,13 +994,13 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         ) : null}
 
         <div className="flex gap-3">
-          {order.status === "funds_held" && !isSeller ? (
+          {order.status === "funds_held" && isBuyer ? (
             <>
               <Button
                 size="lg"
                 fullWidth
                 disabled={busy}
-                onClick={() => setConfirmation("complete")}
+                onClick={() => void confirmOrderAction("complete")}
               >
                 구매 확정
               </Button>
@@ -924,7 +1010,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
                   size="lg"
                   variant="secondary"
                   disabled={busy}
-                  onClick={() => setConfirmation("refund")}
+                  onClick={() => void confirmOrderAction("refund")}
                 >
                   환불
                 </Button>
@@ -973,13 +1059,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
         ) : null}
       </div>
 
-      {confirmation !== null ? (
-        <OrderActionConfirmation
-          action={confirmation}
-          onCancel={() => setConfirmation(null)}
-          onConfirm={() => void confirmOrderAction()}
-        />
-      ) : null}
+      {actionDialog.element}
       <ThirdPartyProvisionConsentDialog {...thirdPartyConsentDialog} />
     </Container>
   );
@@ -1077,60 +1157,6 @@ function OrderStatusNotice({
             운영팀 문의
           </LinkButton>
         ) : null}
-      </div>
-    </div>
-  );
-}
-
-interface OrderActionConfirmationProps {
-  readonly action: ConfirmationAction;
-  readonly onCancel: () => void;
-  readonly onConfirm: () => void;
-}
-
-function OrderActionConfirmation({ action, onCancel, onConfirm }: OrderActionConfirmationProps) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onCancel]);
-
-  const completing = action === "complete";
-  const title = completing ? "구매를 확정할까요?" : "환불을 요청할까요?";
-  const description = completing
-    ? "상품을 정상적으로 받았는지 확인해 주세요. 구매를 확정하면 판매자 정산이 시작되어 되돌리기 어렵습니다."
-    : "구매 확정 전 주문만 환불할 수 있습니다. 요청 후 결제수단에 반영되기까지 시간이 걸릴 수 있습니다.";
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/45 px-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="order-confirmation-title"
-        aria-describedby="order-confirmation-description"
-        className="flex w-full max-w-sm flex-col gap-5 rounded-2xl bg-white p-6 shadow-2xl"
-      >
-        <div className="flex flex-col gap-2">
-          <Heading level={2} id="order-confirmation-title">
-            {title}
-          </Heading>
-          <p
-            id="order-confirmation-description"
-            className="text-sm leading-relaxed text-neutral-600"
-          >
-            {description}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button fullWidth variant="secondary" autoFocus onClick={onCancel}>
-            돌아가기
-          </Button>
-          <Button fullWidth variant={completing ? "primary" : "danger"} onClick={onConfirm}>
-            {completing ? "상품을 받았어요" : "환불 요청"}
-          </Button>
-        </div>
       </div>
     </div>
   );

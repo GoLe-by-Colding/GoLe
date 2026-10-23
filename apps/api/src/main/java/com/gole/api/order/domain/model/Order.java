@@ -385,6 +385,26 @@ public final class Order {
         transitionTo(OrderStatus.PAYMENT_FAILED, now);
     }
 
+    /** PG 미승인을 확인한 결제 대기 주문만 취소한다. */
+    public void cancel(Instant now) {
+        if (status == OrderStatus.CANCELLED) return;
+        requireStatus(OrderStatus.PAYMENT_PENDING, "cancelled");
+        transitionTo(OrderStatus.CANCELLED, now);
+    }
+
+    /** 취소 이후 도착한 승인은 판매·정산하지 않고 즉시 환불 대상으로 보존한다. */
+    public void requestLatePaymentRefund(Instant now, PaymentMethod method, PaymentEvidenceKind evidenceKind) {
+        requireStatus(OrderStatus.CANCELLED, "refund-pending");
+        paymentMethod = method == null ? PaymentMethod.UNKNOWN : method;
+        paymentEvidenceKind = evidenceKind == null ? PaymentEvidenceKind.UNVERIFIED : evidenceKind;
+        transitionTo(OrderStatus.REFUND_PENDING, now);
+    }
+
+    /** 취소 때 이미 예약을 해제했으므로 이후 환불은 같은 매물의 새 예약을 해제하면 안 된다. */
+    public boolean wasCancelledBeforePayment() {
+        return history.stream().anyMatch(change -> change.status() == OrderStatus.CANCELLED);
+    }
+
     /** 금액 불일치·알 수 없는 PG 상태를 자동 실패 처리하지 않고 운영 검토함으로 보낸다. */
     public void flagPaymentReview(Instant now) {
         requireStatus(OrderStatus.PAYMENT_PENDING, "payment-review");

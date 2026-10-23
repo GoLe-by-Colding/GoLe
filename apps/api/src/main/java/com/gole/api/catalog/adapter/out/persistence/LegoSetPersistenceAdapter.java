@@ -3,6 +3,7 @@ package com.gole.api.catalog.adapter.out.persistence;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort;
 import com.gole.api.catalog.application.port.out.CatalogAdminPort.StoredLegoSet;
 import com.gole.api.catalog.application.port.out.LoadLegoSetPort;
+import com.gole.api.catalog.domain.exception.LegoSetAlreadyExistsException;
 import com.gole.api.catalog.domain.model.LegoSet;
 import java.util.HashSet;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -26,6 +28,15 @@ public class LegoSetPersistenceAdapter implements LoadLegoSetPort, CatalogAdminP
 
     public LegoSetPersistenceAdapter(LegoSetMongoRepository repository) {
         this.repository = repository;
+    }
+
+    @Override
+    public LegoSet insert(LegoSet set, boolean featured) {
+        try {
+            return repository.insert(LegoSetDocument.fromDomain(set, featured)).toDomain();
+        } catch (DuplicateKeyException duplicate) {
+            throw new LegoSetAlreadyExistsException(set.getSetNumber());
+        }
     }
 
     @Override

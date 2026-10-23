@@ -175,6 +175,16 @@ class BidControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
+
+        when(fill.fillWithPrice("10307", "listing-2", "seller-1", 300_000))
+                .thenReturn(new FillResult("bid-2", 300_000, "offer-2", "listing-2"));
+        mvc.perform(post("/api/v1/bids/book/10307/fill")
+                        .requestAttr(UserAuthInterceptor.ATTR_ACCOUNT_ID, "seller-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listingId\":\"listing-2\",\"targetPrice\":300000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bidPrice").value(300_000))
+                .andExpect(jsonPath("$.offerId").value("offer-2"));
     }
 
     @Test

@@ -1,10 +1,13 @@
 package com.gole.api.order.application.service;
 
+import com.gole.api.common.exception.ConflictException;
+import com.gole.api.common.exception.ForbiddenException;
 import com.gole.api.common.operations.OperationalEvent;
 import com.gole.api.common.operations.OperationalEvent.Category;
 import com.gole.api.common.operations.OperationalEvent.Level;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.operations.OperationalSignal;
+import com.gole.api.order.application.port.in.CancelOrderUseCase;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.ConfirmRefundUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
@@ -20,6 +23,7 @@ import com.gole.api.order.application.port.out.OrderIdGeneratorPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
+import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.RefundResult;
 import com.gole.api.order.application.port.out.SellerNotifierPort;
 import com.gole.api.order.application.port.out.SettlementPort;
@@ -50,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OrderService
         implements PlaceOrderUseCase,
+                CancelOrderUseCase,
                 PayOrderUseCase,
                 CompleteOrderUseCase,
                 RefundOrderUseCase,
@@ -187,8 +192,38 @@ public class OrderService
         OrderStatus previousStatus = order.getStatus();
         PaymentVerification verification = paymentGateway.verifyPayment(orderId, order.getAmount());
         OrderStatus status = paymentTransitions.applyPaymentVerification(orderId, verification, Instant.now(clock));
+        if (status == OrderStatus.REFUND_PENDING && getById(orderId).wasCancelledBeforePayment()) {
+            refund(orderId);
+            return getById(orderId).getStatus();
+        }
         publishPaymentDecision(orderId, previousStatus, status);
         return status;
+    }
+
+    @Override
+    public void cancel(CancelOrderCommand command) {
+        Order order = getById(command.orderId());
+        if (!order.getBuyerId().equals(command.buyerId())) {
+            throw new ForbiddenException("ORDER_ACCESS_DENIED", "본인의 주문만 취소할 수 있습니다");
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED) return;
+        if (order.getStatus() != OrderStatus.PAYMENT_PENDING) {
+            throw new ConflictException("ORDER_CANCELLATION_NOT_ALLOWED", "결제 대기 주문만 취소할 수 있습니다. 최신 주문 상태를 확인해 주세요");
+        }
+        PaymentVerification verification =
+                paymentGateway.verifyPaymentForCancellation(order.getId(), order.getAmount());
+        if (verification.result() == PaymentVerificationResult.NOT_FOUND
+                || verification.result() == PaymentVerificationResult.FAILED) {
+            paymentTransitions.cancelUnpaidOrder(order.getId(), Instant.now(clock));
+            return;
+        }
+        OrderStatus status =
+                paymentTransitions.applyPaymentVerification(order.getId(), verification, Instant.now(clock));
+        if (status == OrderStatus.REFUND_PENDING && getById(order.getId()).wasCancelledBeforePayment()) {
+            refund(order.getId());
+        }
+        throw new ConflictException(
+                "ORDER_CANCELLATION_NOT_ALLOWED", "결제가 진행 중이거나 승인 여부를 확인하고 있어 취소하지 않았습니다. 최신 주문 상태를 확인해 주세요");
     }
 
     @Override
@@ -339,7 +374,7 @@ public class OrderService
         publishPaymentEvent(
                 Level.SUCCESS,
                 "환불 완료",
-                "PG 원장에서 전액 환불을 확인하고 매물 선점을 해제했습니다.",
+                "PG 원장에서 전액 환불을 확인하고 주문 원장에 반영했습니다.",
                 orderId,
                 OrderStatus.REFUNDED,
                 occurredAt);

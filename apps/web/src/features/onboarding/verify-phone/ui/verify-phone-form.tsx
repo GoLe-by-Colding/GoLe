@@ -28,7 +28,8 @@ const RESEND_COOLDOWN_SECONDS = 60;
 export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sentPhoneNumber, setSentPhoneNumber] = useState<string | null>(null);
+  const sent = sentPhoneNumber !== null;
   const [error, setError] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [sending, setSending] = useState(false);
@@ -55,8 +56,9 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
     setNotice(undefined);
     setSending(true);
     try {
-      const sentTo = await requestPhoneVerification(normalizePhoneNumber(phoneNumber));
-      setSent(true);
+      const requestedPhoneNumber = normalizePhoneNumber(phoneNumber);
+      const sentTo = await requestPhoneVerification(requestedPhoneNumber);
+      setSentPhoneNumber(requestedPhoneNumber);
       setNotice(`${sentTo.maskedPhoneNumber}로 카카오톡 인증 코드를 보냈습니다.`);
       setResendAfter(RESEND_COOLDOWN_SECONDS);
     } catch (cause) {
@@ -70,11 +72,11 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sent || sending || submitting || !/^\d{6}$/.test(code)) return;
+    if (sentPhoneNumber === null || sending || submitting || !/^\d{6}$/.test(code)) return;
     setError(undefined);
     setSubmitting(true);
     try {
-      await confirmPhoneVerification(code);
+      await confirmPhoneVerification(sentPhoneNumber, code);
       onCompleted();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "인증 중 오류가 발생했습니다.");
@@ -113,7 +115,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
             disabled={sending || submitting}
             onChange={(e) => {
               setPhoneNumber(e.target.value);
-              setSent(false);
+              setSentPhoneNumber(null);
               setCode("");
               setNotice(undefined);
               setError(undefined);

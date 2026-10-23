@@ -7,6 +7,7 @@ import {
   changePassword,
   clearAccountBrowserStorage,
   clearSession,
+  fetchMe,
   fetchThirdPartyProvisionConsentStatus,
   requestAccountDeletion,
   requestAccountDeletionVerification,
@@ -57,6 +58,11 @@ export function AccountSecurityPage() {
   const [emailAuthenticationAvailable, setEmailAuthenticationAvailable] = useState<boolean | null>(
     null,
   );
+  const [passwordStatus, setPasswordStatus] = useState<{
+    accountId: string;
+    available: boolean;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,6 +73,34 @@ export function AccountSecurityPage() {
     });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (sessionAccountId === null) return;
+    let active = true;
+    void fetchMe("")
+      .then((me) => {
+        if (!active) return;
+        setPasswordStatus({
+          accountId: sessionAccountId,
+          available: me.accountId === sessionAccountId && me.passwordChangeAvailable,
+          ...(me.accountId === sessionAccountId
+            ? {}
+            : { error: "계정 상태를 확인할 수 없습니다. 새로고침 후 다시 시도해 주세요." }),
+        });
+      })
+      .catch(() => {
+        if (active) {
+          setPasswordStatus({
+            accountId: sessionAccountId,
+            available: false,
+            error: "계정 상태를 확인할 수 없습니다. 새로고침 후 다시 시도해 주세요.",
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [sessionAccountId]);
 
   useEffect(() => {
     if (sessionAccountId === null) return;
@@ -108,9 +142,12 @@ export function AccountSecurityPage() {
     );
   }
   const currentAccountId = session.accountId;
+  const currentPasswordStatus =
+    passwordStatus?.accountId === currentAccountId ? passwordStatus : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (currentPasswordStatus?.available !== true) return;
     setError(null);
     if (newPassword !== confirmation) {
       setError("새 비밀번호가 서로 일치하지 않습니다.");
@@ -271,65 +308,82 @@ export function AccountSecurityPage() {
         <BackButton fallbackHref="/profile" />
         <div className="flex flex-col gap-2">
           <Heading level={1}>계정 보안</Heading>
-          <Text tone="secondary">변경하면 현재 기기를 포함한 모든 기기에서 로그아웃됩니다.</Text>
+          {currentPasswordStatus?.available ? (
+            <Text tone="secondary">변경하면 현재 기기를 포함한 모든 기기에서 로그아웃됩니다.</Text>
+          ) : null}
         </div>
         <Card padded>
-          <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
-            {error ? (
-              <p role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger">
-                {error}
-              </p>
-            ) : null}
-            <Field label="현재 비밀번호">
-              {({ inputId, describedBy }) => (
-                <Input
-                  id={inputId}
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  aria-describedby={describedBy}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  required
-                />
-              )}
-            </Field>
-            <Field label="새 비밀번호" hint="8자 이상, UTF-8 기준 72바이트 이하">
-              {({ inputId, describedBy }) => (
-                <Input
-                  id={inputId}
-                  type="password"
-                  autoComplete="new-password"
-                  value={newPassword}
-                  aria-describedby={describedBy}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  required
-                />
-              )}
-            </Field>
-            <Field label="새 비밀번호 확인">
-              {({ inputId, describedBy }) => (
-                <Input
-                  id={inputId}
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmation}
-                  aria-describedby={describedBy}
-                  onChange={(event) => setConfirmation(event.target.value)}
-                  required
-                />
-              )}
-            </Field>
-            <Button
-              type="submit"
-              size="lg"
-              fullWidth
-              disabled={submitting || currentPassword.length === 0 || newPassword.length < 8}
-            >
-              {submitting ? "변경 중…" : "비밀번호 변경"}
-            </Button>
-          </form>
+          {currentPasswordStatus === null ? (
+            <p role="status" className="text-sm text-neutral-500">
+              계정 보안 상태를 확인하는 중…
+            </p>
+          ) : currentPasswordStatus.error ? (
+            <p role="alert" className="text-sm text-danger">
+              {currentPasswordStatus.error}
+            </p>
+          ) : !currentPasswordStatus.available ? (
+            <div className="flex flex-col gap-2 text-sm text-neutral-700">
+              <p>소셜 로그인으로 만든 계정에는 변경할 비밀번호가 없습니다.</p>
+              <p>가입할 때 사용한 소셜 서비스로 로그인해 주세요.</p>
+            </div>
+          ) : (
+            <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+              {error ? (
+                <p role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger">
+                  {error}
+                </p>
+              ) : null}
+              <Field label="현재 비밀번호">
+                {({ inputId, describedBy }) => (
+                  <Input
+                    id={inputId}
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    aria-describedby={describedBy}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label="새 비밀번호" hint="8자 이상, UTF-8 기준 72바이트 이하">
+                {({ inputId, describedBy }) => (
+                  <Input
+                    id={inputId}
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    aria-describedby={describedBy}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label="새 비밀번호 확인">
+                {({ inputId, describedBy }) => (
+                  <Input
+                    id={inputId}
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmation}
+                    aria-describedby={describedBy}
+                    onChange={(event) => setConfirmation(event.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Button
+                type="submit"
+                size="lg"
+                fullWidth
+                disabled={submitting || currentPassword.length === 0 || newPassword.length < 8}
+              >
+                {submitting ? "변경 중…" : "비밀번호 변경"}
+              </Button>
+            </form>
+          )}
         </Card>
-        <Card padded className="flex flex-col gap-4">
+        <Card padded id="third-party-consent" className="flex scroll-mt-24 flex-col gap-4">
           <div className="flex flex-col gap-1">
             <Heading level={2}>개인정보 제3자 제공 동의</Heading>
             <Text tone="secondary">

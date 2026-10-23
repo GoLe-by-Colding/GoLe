@@ -1,5 +1,6 @@
 package com.gole.api.order.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -7,7 +8,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.gole.api.common.operations.OperationalEventPublisher;
+import com.gole.api.order.adapter.out.payment.StubPaymentGatewayAdapter;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
@@ -209,5 +212,59 @@ class PaymentReconciliationSchedulerTest {
                 events,
                 Clock.fixed(now, ZoneOffset.UTC),
                 Duration.ofMinutes(10));
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("취소 후 지연 승인 웹훅이 유실돼도 순환 조회에서 환불로 회수한다")
+    void reconcilesCancelledOrdersWithoutReleasingReservations() {
+        Instant now = Instant.parse("2026-10-21T00:00:00Z");
+        Order order = Order.place("cancelled", "listing", "buyer", "seller", null, "new_sealed", 10000, now);
+        order.cancel(now);
+        OrderRepositoryPort orders = mock(OrderRepositoryPort.class);
+        PaymentGatewayPort gateway = mock(PaymentGatewayPort.class);
+        OrderPaymentTransitionService transitions = mock(OrderPaymentTransitionService.class);
+        RefundOrderUseCase refunds = mock(RefundOrderUseCase.class);
+        when(orders.findByStatusAfterId(OrderStatus.CANCELLED, null)).thenReturn(List.of(order));
+        PaymentVerification approval = PaymentVerification.of(PaymentVerificationResult.PAID);
+        when(gateway.verifyPaymentForCancellation("cancelled", 10000)).thenReturn(approval);
+        when(transitions.applyPaymentVerification("cancelled", approval, now)).thenReturn(OrderStatus.REFUND_PENDING);
+        var scheduler = new PaymentReconciliationScheduler(
+                orders,
+                gateway,
+                transitions,
+                refunds,
+                mock(OperationalEventPublisher.class),
+                Clock.fixed(now, ZoneOffset.UTC),
+                Duration.ofMinutes(10));
+        scheduler.reconcileStalePayments();
+        verify(refunds).refund("cancelled");
+        verify(transitions, never())
+                .expireMissingPayment(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("취소 주문 순환 조회는 스텁에서도 승인을 만들어내지 않고 취소를 유지한다")
+    void reconcileCancelled_stubLookupPreservesCancellation() {
+        Instant now = Instant.parse("2026-10-21T00:00:00Z");
+        Order order = Order.place("cancelled", "listing", "buyer", "seller", null, "new_sealed", 10000, now);
+        order.cancel(now);
+        OrderRepositoryPort orders = mock(OrderRepositoryPort.class);
+        ListingReservationPort listings = mock(ListingReservationPort.class);
+        RefundOrderUseCase refunds = mock(RefundOrderUseCase.class);
+        when(orders.findById("cancelled")).thenReturn(java.util.Optional.of(order));
+        when(orders.findByStatusAfterId(OrderStatus.CANCELLED, null)).thenReturn(List.of(order));
+        var scheduler = scheduler(
+                orders,
+                new StubPaymentGatewayAdapter("e2e"),
+                new OrderPaymentTransitionService(orders, listings),
+                refunds,
+                mock(OperationalEventPublisher.class),
+                now);
+
+        scheduler.reconcileStalePayments();
+        scheduler.reconcileStalePayments();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verifyNoInteractions(listings, refunds);
     }
 }

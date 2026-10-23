@@ -196,6 +196,10 @@ public class AccountService
         account.ensureNotSuspended(); // admin-console 요구사항 6.4
         account.ensureNotLocked(now); // 요구사항 1.8
 
+        if (!account.isPasswordLoginEnabled()) {
+            throw new InvalidCredentialsException();
+        }
+
         if (!passwordHasher.matches(command.rawPassword(), account.getPasswordHash())) {
             account.recordFailedSignIn(now); // 1.7 + 1.8 누적
             accountRepository.save(account);
@@ -252,7 +256,8 @@ public class AccountService
                         account.isOnboardingRequired(onboardingProperties.phoneVerificationRequired()),
                         account.getOnboarding().hasNickname()
                                 ? account.getNickname().value()
-                                : null));
+                                : null,
+                        account.isPasswordLoginEnabled()));
     }
 
     @Override

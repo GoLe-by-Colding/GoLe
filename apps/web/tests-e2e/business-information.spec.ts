@@ -50,13 +50,13 @@ test("푸터에 사업자 정보와 실제 연락 링크를 모두 노출한다"
 
 test("약관과 개인정보처리방침이 동일한 운영 주체를 안내한다", async ({ page }) => {
   await page.goto("/terms");
-  const terms = page.locator("article");
+  const terms = page.getByRole("article");
   await expect(terms).toContainText(`상호: ${BUSINESS.name}`);
   await expect(terms).toContainText(`대표: ${BUSINESS.representative}`);
   await expect(terms).toContainText(`사업자등록번호: ${BUSINESS.registrationNumber}`);
 
   await page.goto("/privacy");
-  const privacy = page.locator("article");
+  const privacy = page.getByRole("article");
   await expect(privacy).toContainText(BUSINESS.name);
   await expect(privacy).toContainText(`개인정보 보호책임자: ${BUSINESS.representative}`);
   const contactLinks = privacy.getByRole("link", { name: BUSINESS.contactEmail });
@@ -79,7 +79,7 @@ test("공개 약관에서 불만·분쟁 기준과 법정 안내 기한을 사�
 
 test("개인정보처리방침이 실제 처리 항목·위탁·국외이전·파기 절차를 안내한다", async ({ page }) => {
   await page.goto("/privacy");
-  const privacy = page.locator("article");
+  const privacy = page.getByRole("article");
 
   await expect(privacy).toContainText("닉네임");
   await expect(privacy).toContainText("관심 태그");
@@ -145,7 +145,7 @@ test("공개 법적 문서가 자기 URL을 canonical로 사용한다", async ({
 
 test("후기 운영정책이 작성·게시·평점·삭제·이의제기 기준을 공개한다", async ({ page }) => {
   await page.goto("/review-policy");
-  const policy = page.locator("article");
+  const policy = page.getByRole("article");
 
   await expect(policy.getByRole("heading", { name: "1. 작성 권한과 수집 방법" })).toBeVisible();
   await expect(policy).toContainText("완료 상태가 된 주문의 구매자만");

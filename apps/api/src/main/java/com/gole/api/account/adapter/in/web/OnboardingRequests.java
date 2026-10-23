@@ -21,6 +21,7 @@ public final class OnboardingRequests {
             @NotBlank @Size(max = 20) String phoneNumber) {}
 
     public record ConfirmPhoneVerificationRequest(
+            @NotBlank @Size(max = 20) String phoneNumber,
             @NotBlank @Pattern(regexp = "\\d{6}") String code) {}
 
     /** 태그는 표시 문구가 아니라 {@code GET /api/v1/account/interest-tags}가 준 {@code key}로 보낸다. */

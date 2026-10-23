@@ -13,6 +13,7 @@ test.describe("Search & listing detail", () => {
   test("탐색 페이지에 필터(카테고리 포함)와 목록이 보인다", async ({ page }) => {
     await page.goto("/search");
     await expect(page.getByRole("heading", { name: "상품 탐색" })).toBeVisible();
+    await expect(page.getByRole("main").getByText(/^검색 결과 \d+개$/)).toBeVisible();
     await expect(page.getByLabel("카테고리")).toBeVisible();
     await expect(page.getByTestId("listing-card").first()).toBeVisible();
   });

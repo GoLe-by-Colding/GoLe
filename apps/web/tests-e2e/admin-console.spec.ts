@@ -1597,6 +1597,44 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByText("검색 결과 1개 / 조회 2개")).toBeVisible();
   });
 
+  test("카탈로그 중복 등록 거절은 작성 내용과 원본 목록을 보존한다", async ({ page }) => {
+    await page.route("**/api/admin/catalog/sets**", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 409,
+          json: {
+            code: "LEGO_SET_ALREADY_EXISTS",
+            message: "이미 등록된 세트 번호입니다. 기존 세트의 수정 기능을 이용해 주세요: 10307",
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: [
+          {
+            setNumber: "10307",
+            name: "에펠탑",
+            theme: "Icons",
+            pieceCount: 10001,
+            releaseYear: 2022,
+            retirementStatus: "ACTIVE",
+            imageUrl: null,
+            featured: true,
+          },
+        ],
+      });
+    });
+    await page.goto("/admin/catalog");
+    await page.getByLabel("세트 번호", { exact: true }).fill("10307");
+    await page.getByLabel("이름", { exact: true }).fill("수정하지 않은 원본");
+    await page.getByLabel("테마", { exact: true }).fill("Icons");
+    await page.getByRole("button", { name: "세트 등록", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("이미 등록된 세트 번호");
+    await expect(page.getByLabel("이름", { exact: true })).toHaveValue("수정하지 않은 원본");
+    await expect(page.getByRole("table").getByText("에펠탑", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").getByRole("button", { name: "추천 해제" })).toBeVisible();
+  });
+
   test("결제·판매자 지급이 준비되지 않으면 Stage 2 상향을 잠근다", async ({ page }) => {
     await page.route("**/api/admin/overview", async (route) => {
       await route.fulfill({
@@ -1757,6 +1795,27 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     }
 
     await expect(paymentStage.getByRole("button", { name: "전환" })).toBeEnabled();
+
+    const paymentApproval = page.getByRole("group", { name: "결제·웹훅·환불 실거래" });
+    await page.getByLabel("변경 사유").fill("결제 승인 증빙 재확인");
+    await paymentApproval.getByRole("button", { name: "확인 취소" }).click();
+    const confirmation = page.getByRole("alertdialog", { name: "운영 준비 확인을 취소할까요?" });
+    await expect(confirmation).toContainText("Stage 1로 낮아지고 신규 결제가 닫힙니다");
+    await confirmation.getByRole("button", { name: "돌아가기" }).click();
+    await expect(paymentApproval.getByRole("button", { name: "확인 취소" })).toBeEnabled();
+    expect(submitted).toHaveLength(3);
+    await expect(page.getByLabel("변경 사유")).toHaveValue("결제 승인 증빙 재확인");
+
+    await paymentApproval.getByRole("button", { name: "확인 취소" }).click();
+    await confirmation.getByRole("button", { name: "승인 취소하기" }).click();
+    await expect(paymentApproval.getByText("미확인", { exact: true })).toBeVisible();
+    expect(submitted).toHaveLength(4);
+    expect(submitted.at(-1)).toEqual({
+      check: "paymentFlow",
+      confirmed: false,
+      reason: "결제 승인 증빙 재확인",
+    });
+    await expect(paymentStage.getByRole("button", { name: "전환" })).toBeDisabled();
   });
 
   test("결제 진단 API가 실패해도 긴급 단계 하향 통로를 유지한다", async ({ page }) => {
@@ -1917,6 +1976,36 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect.poll(() => markedPaid).toBe(true);
     await expect(page.getByText("해당 상태의 정산이 없습니다.")).toBeVisible();
   });
+
+  for (const [status, label] of [
+    ["CANCELLED", "주문취소"],
+    ["DISPUTED", "분쟁중"],
+  ] as const) {
+    test(`${label} 주문의 직접 링크가 필터와 목록에 유지된다`, async ({ page }) => {
+      const requestedStatuses: string[] = [];
+      await page.route("**/api/admin/orders**", async (route) => {
+        requestedStatuses.push(new URL(route.request().url()).searchParams.get("status") ?? "");
+        await route.fulfill({
+          json: [
+            {
+              id: `order-${status.toLowerCase()}`,
+              status,
+              amount: 280_000,
+              buyerId: "buyer-1",
+              sellerId: "seller-1",
+              catalogSetNumber: "10307",
+              createdAt: "2026-08-09T01:00:00Z",
+            },
+          ],
+        });
+      });
+
+      await page.goto(`/admin/orders?status=${status}`);
+      await expect(page.getByRole("combobox", { name: "주문 상태 필터" })).toHaveValue(status);
+      await expect(page.getByRole("table").getByText(label, { exact: true })).toBeVisible();
+      expect(requestedStatuses).toContain(status);
+    });
+  }
 
   test("결제 확인 필요 주문을 PG 원장과 재조정한다", async ({ page }) => {
     await page.route("**/api/admin/orders**", async (route) => {

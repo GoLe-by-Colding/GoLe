@@ -4,6 +4,7 @@ type TestOrderStatus =
   | "payment_pending"
   | "payment_review"
   | "payment_failed"
+  | "cancelled"
   | "funds_held"
   | "completed"
   | "refund_pending"
@@ -32,6 +33,7 @@ async function fulfillOrder(route: Route, status: TestOrderStatus, id = "order-u
 }
 
 async function openOrder(page: Page, id: string, status: TestOrderStatus) {
+  await seedSession(page, "buyer-ux");
   await page.route(`**/api/v1/orders/${id}`, (route) => fulfillOrder(route, status, id));
   await page.goto(`/orders/${id}`);
   await expect(page.getByTestId("order-status")).toBeVisible();
@@ -275,6 +277,7 @@ test.describe("Order detail recovery UX", () => {
       );
     });
 
+    await seedSession(page, "buyer-ux");
     await page.goto("/orders/order-review");
     await expect(page.getByText("운영팀이 결제를 확인하고 있어요", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "운영팀 문의" })).toHaveAttribute(
@@ -304,6 +307,7 @@ test.describe("Order detail recovery UX", () => {
     });
     await page.clock.install();
 
+    await seedSession(page, "buyer-ux");
     await page.goto("/orders/order-auto-refresh");
     await expect(page.getByTestId("order-status")).toHaveText("결제 확인 필요");
     reconciliationCompleted = true;
@@ -323,10 +327,11 @@ test.describe("Order detail recovery UX", () => {
       await fulfillOrder(route, "completed", "order-complete");
     });
 
+    await seedSession(page, "buyer-ux");
     await page.goto("/orders/order-complete");
     await page.getByRole("button", { name: "구매 확정" }).click();
 
-    const dialog = page.getByRole("dialog", { name: "구매를 확정할까요?" });
+    const dialog = page.getByRole("alertdialog", { name: "구매를 확정할까요?" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("판매자 정산이 시작되어 되돌리기 어렵습니다.")).toBeVisible();
     expect(completionCalls).toBe(0);
@@ -336,7 +341,7 @@ test.describe("Order detail recovery UX", () => {
     expect(completionCalls).toBe(0);
 
     await page.getByRole("button", { name: "구매 확정" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "상품을 받았어요" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "상품을 받았어요" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
     expect(completionCalls).toBe(1);
   });
@@ -351,10 +356,11 @@ test.describe("Order detail recovery UX", () => {
       await fulfillOrder(route, "refund_pending", "order-refund");
     });
 
+    await seedSession(page, "buyer-ux");
     await page.goto("/orders/order-refund");
     await page.getByRole("button", { name: "환불", exact: true }).click();
 
-    const dialog = page.getByRole("dialog", { name: "환불을 요청할까요?" });
+    const dialog = page.getByRole("alertdialog", { name: "환불을 요청할까요?" });
     await expect(dialog).toBeVisible();
     expect(refundCalls).toBe(0);
     await dialog.getByRole("button", { name: "환불 요청" }).click();
@@ -378,5 +384,174 @@ test.describe("Order detail recovery UX", () => {
       "/chat?compose=support",
     );
     await expect(page.getByRole("button", { name: "결제하기" })).toHaveCount(0);
+  });
+
+  test("미결제 취소는 공통 모달에서 확인하고 취소 상태로 돌아온다", async ({ page }) => {
+    let cancelled = false;
+    let calls = 0;
+    await page.route("**/api/v1/orders/order-cancel", (route) =>
+      fulfillOrder(route, cancelled ? "cancelled" : "payment_pending", "order-cancel"),
+    );
+    await page.route("**/api/v1/orders/order-cancel/cancellation", async (route) => {
+      calls++;
+      cancelled = true;
+      await fulfillOrder(route, "cancelled", "order-cancel");
+    });
+    await seedSession(page, "buyer-ux");
+    await page.goto("/orders/order-cancel");
+    await page.getByRole("button", { name: "주문 취소", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: "주문을 취소할까요?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "돌아가기" })).toBeFocused();
+    expect(calls).toBe(0);
+    await dialog.getByRole("button", { name: "주문 취소", exact: true }).click();
+    await expect(page.getByTestId("order-status")).toHaveText("주문 취소");
+    await expect(page.getByRole("link", { name: "매물 다시 보기" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "결제하기" })).toHaveCount(0);
+    expect(calls).toBe(1);
+  });
+
+  test("취소 뒤 늦게 승인된 결제의 환불 상태를 직접 다시 확인할 수 있다", async ({ page }) => {
+    let refunded = false;
+    await page.route("**/api/v1/orders/order-late-refund", (route) =>
+      fulfillOrder(route, refunded ? "refunded" : "cancelled", "order-late-refund"),
+    );
+    await seedSession(page, "buyer-ux");
+    await page.goto("/orders/order-late-refund");
+    await expect(page.getByTestId("order-status")).toHaveText("주문 취소");
+    refunded = true;
+    await page.getByRole("button", { name: "주문 상태 다시 확인" }).click();
+    await expect(page.getByTestId("order-status")).toHaveText("환불됨");
+    await expect(page.getByRole("button", { name: "결제하기" })).toHaveCount(0);
+  });
+
+  test("승인과 경합해 취소가 거절되면 최신 승인 상태를 보여 준다", async ({ page }) => {
+    let approved = false;
+    await page.route("**/api/v1/orders/order-cancel-race", (route) =>
+      fulfillOrder(route, approved ? "funds_held" : "payment_pending", "order-cancel-race"),
+    );
+    await page.route("**/api/v1/orders/order-cancel-race/cancellation", async (route) => {
+      approved = true;
+      await fulfillApiError(route, 409, "결제가 승인되어 취소하지 않았습니다");
+    });
+    await seedSession(page, "buyer-ux");
+    await page.goto("/orders/order-cancel-race");
+    await page.getByRole("button", { name: "주문 취소", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "주문 취소", exact: true })
+      .click();
+    await expect(page.getByTestId("order-status")).toHaveText("결제 완료(정산 대기)");
+    await expect(page.getByRole("alert").filter({ hasText: "결제가 승인되어" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "주문 취소", exact: true })).toHaveCount(0);
+  });
+
+  test("판매자는 결제 대기 주문을 취소하거나 대신 결제하지 못한다", async ({ page }) => {
+    await seedSession(page, "seller-ux");
+    await page.route("**/api/v1/orders/order-seller-pending", (route) =>
+      fulfillOrder(route, "payment_pending", "order-seller-pending"),
+    );
+    await page.goto("/orders/order-seller-pending");
+    await expect(page.getByTestId("order-status")).toHaveText("결제 대기");
+    await expect(page.getByRole("button", { name: "주문 취소", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "결제하기" })).toHaveCount(0);
+  });
+
+  test("결제 버튼을 누른 사이 취소된 주문에는 승인 요청을 보내지 않는다", async ({ page }) => {
+    let cancelled = false;
+    let approvals = 0;
+    await page.route("**/api/v1/orders/order-pay-race", (route) =>
+      fulfillOrder(route, cancelled ? "cancelled" : "payment_pending", "order-pay-race"),
+    );
+    await page.route("**/api/v1/orders/order-pay-race/payment", (route) => {
+      approvals++;
+      return fulfillOrder(route, "funds_held", "order-pay-race");
+    });
+    await seedSession(page, "buyer-ux");
+    await page.goto("/orders/order-pay-race");
+    await expect(page.getByRole("button", { name: "결제하기" })).toBeVisible();
+    cancelled = true;
+    await page.getByRole("button", { name: "결제하기" }).click();
+    await expect(page.getByTestId("order-status")).toHaveText("주문 취소");
+    expect(approvals).toBe(0);
+  });
+
+  test("화면을 연 뒤 결제가 잠기면 결제 요청을 보내지 않는다", async ({ page }) => {
+    await seedSession(page, "buyer-ux");
+    await page.route("**/api/v1/orders/order-closed", (route) =>
+      fulfillOrder(route, "payment_pending", "order-closed"),
+    );
+    let approvals = 0;
+    await page.route("**/api/v1/orders/order-closed/payment", (route) => {
+      approvals++;
+      return fulfillOrder(route, "funds_held", "order-closed");
+    });
+    await page.goto("/orders/order-closed");
+    await expect(page.getByRole("button", { name: "결제하기" })).toBeVisible();
+    await page.route("**/api/v1/config/launch", (route) =>
+      route.fulfill({
+        json: {
+          stage: 0,
+          tradeMode: "DIRECT_CHAT",
+          features: { payments: false, reviews: false, partnerPayout: false },
+          sellerIdentityVerificationReady: true,
+          updatedAt: null,
+        },
+      }),
+    );
+    await page.getByRole("button", { name: "결제하기" }).click();
+    await expect(page.getByText("신규 결제가 일시 중지됐어요")).toBeVisible();
+    await expect(page.getByRole("button", { name: "주문 취소", exact: true })).toBeVisible();
+    expect(approvals).toBe(0);
+  });
+
+  const deliveredShipment = {
+    orderId: "order-shipped",
+    carrier: "cj_logistics",
+    carrierLabel: "CJ대한통운",
+    waybillNumber: "123456789012",
+    status: "delivered",
+    rawStatus: "배달 완료",
+    registeredAt: "2026-10-20T00:00:00Z",
+    deliveredAt: "2026-10-21T00:00:00Z",
+    lastTrackedAt: null,
+    history: [],
+  };
+
+  test("판매자는 구매확정 뒤에도 배송 내역을 볼 수 있다", async ({ page }) => {
+    await seedSession(page, "seller-ux");
+    await page.route("**/api/v1/orders/order-shipped", (route) =>
+      fulfillOrder(route, "completed", "order-shipped"),
+    );
+    await page.route("**/api/v1/orders/order-shipped/shipment", (route) =>
+      route.fulfill({ json: deliveredShipment }),
+    );
+    await page.goto("/orders/order-shipped");
+    await expect(page.getByText("123456789012")).toBeVisible();
+    await expect(
+      page.getByRole("list", { name: "배송 진행 상태" }).getByText("배송 완료", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "운송장 등록" })).toHaveCount(0);
+  });
+
+  test("발송 대기 구매자는 새로고침으로 배송 내역을 받고 환불 대신 분쟁 동선을 본다", async ({
+    page,
+  }) => {
+    await seedSession(page, "buyer-ux");
+    let shipped = false;
+    await page.route("**/api/v1/orders/order-shipped", (route) =>
+      fulfillOrder(route, "funds_held", "order-shipped"),
+    );
+    await page.route("**/api/v1/orders/order-shipped/shipment", (route) =>
+      shipped
+        ? route.fulfill({ json: deliveredShipment })
+        : fulfillApiError(route, 404, "not found"),
+    );
+    await page.goto("/orders/order-shipped");
+    await expect(page.getByRole("button", { name: "환불", exact: true })).toBeVisible();
+    shipped = true;
+    await page.getByRole("button", { name: "배송 상태 새로고침" }).click();
+    await expect(page.getByText("123456789012")).toBeVisible();
+    await expect(page.getByRole("button", { name: "환불", exact: true })).toHaveCount(0);
   });
 });

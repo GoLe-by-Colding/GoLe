@@ -305,12 +305,12 @@ export function requestPhoneVerification(
 /**
  * 전화번호 인증코드 확인(R5). 성공 시 서버가 phoneVerifiedAt을 저장한다.
  *
- * 번호는 서버가 발송 시점에 세션과 함께 들고 있으므로 코드만 보낸다.
+ * 발송한 번호를 함께 보내 서버의 challenge와 일치하는지 확인한다.
  */
-export function confirmPhoneVerification(code: string): Promise<void> {
+export function confirmPhoneVerification(phoneNumber: string, code: string): Promise<void> {
   return apiRequest<void>(`${ONBOARDING_BASE}/phone/verification/confirm`, {
     method: "POST",
-    body: { code },
+    body: { phoneNumber, code },
   });
 }
 

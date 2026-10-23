@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // PG 결제 자체가 아닌, 서버 주문 상태에 대한 복귀 화면의 계약을 검증한다.
 for (const [status, heading] of [
+  ["cancelled", "주문 취소"],
   ["payment_review", "결제 검토 중"],
   ["payment_pending", "결제 확인 중"],
   ["refund_pending", "환불 처리 중"],

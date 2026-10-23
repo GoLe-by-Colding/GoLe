@@ -33,6 +33,12 @@ interface Result {
 }
 
 const orderResults: Record<OrderStatus, Result> = {
+  cancelled: {
+    kind: "cancelled",
+    title: "주문 취소",
+    description:
+      "취소된 주문이에요. 결제를 다시 시도하지 말고 주문 상세에서 처리 상태를 확인해 주세요.",
+  },
   funds_held: {
     kind: "verified",
     title: "결제 확인 완료",

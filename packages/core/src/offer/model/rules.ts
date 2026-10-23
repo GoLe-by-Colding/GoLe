@@ -32,7 +32,7 @@ export function isOfferUsable(offer: PriceOffer, nowMs: number): boolean {
 }
 
 /**
- * 이 구매자가 이 매물에 쓸 수 있는 가장 최근 수락 제안. 채팅 제안과 입찰 체결 제안을 구분하지 않는다
+ * 이 구매자가 이 매물에 쓸 수 있는 먼저 보낸 수락 제안. 채팅 제안과 입찰 체결 제안을 구분하지 않는다
  * (buy-bids: "구매 쪽은 제안·입찰 출신을 구분하지 않는다").
  */
 export function findUsableAcceptedOffer(
@@ -41,15 +41,19 @@ export function findUsableAcceptedOffer(
   buyerId: string,
   nowMs: number,
 ): PriceOffer | null {
-  let latest: PriceOffer | null = null;
+  let earliest: PriceOffer | null = null;
   for (const offer of offers) {
     if (offer.listingId !== listingId || offer.buyerId !== buyerId) continue;
     if (!isOfferUsable(offer, nowMs)) continue;
-    if (latest === null || Date.parse(offer.createdAt) > Date.parse(latest.createdAt)) {
-      latest = offer;
+    if (
+      earliest === null ||
+      Date.parse(offer.createdAt) < Date.parse(earliest.createdAt) ||
+      (Date.parse(offer.createdAt) === Date.parse(earliest.createdAt) && offer.id < earliest.id)
+    ) {
+      earliest = offer;
     }
   }
-  return latest;
+  return earliest;
 }
 
 /**

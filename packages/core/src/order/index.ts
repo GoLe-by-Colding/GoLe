@@ -7,6 +7,7 @@ export {
   placeOrder,
   payOrder,
   completeOrder,
+  cancelOrder,
   refundOrder,
   openDispute,
   fetchOrder,

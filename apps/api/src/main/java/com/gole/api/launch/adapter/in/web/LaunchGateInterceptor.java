@@ -103,6 +103,7 @@ public class LaunchGateInterceptor implements HandlerInterceptor {
             case "/api/v1/orders", "/api/v1/orders/{orderId}/payment" -> WriteOperation.PAYMENT_CREATION;
             case "/api/v1/reviews", "/api/v1/reviews/{reviewId}/reply" -> WriteOperation.REVIEW_CREATION;
             case "/api/v1/orders/{orderId}/completion",
+                    "/api/v1/orders/{orderId}/cancellation",
                     "/api/v1/orders/{orderId}/refund",
                     "/api/v1/orders/{orderId}/dispute",
                     "/api/v1/orders/{orderId}/shipment/tracking" -> WriteOperation.EXISTING_TRANSACTION;

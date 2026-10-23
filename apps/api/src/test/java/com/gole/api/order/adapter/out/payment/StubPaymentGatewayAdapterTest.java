@@ -9,6 +9,15 @@ import org.junit.jupiter.api.Test;
 class StubPaymentGatewayAdapterTest {
 
     @Test
+    @org.junit.jupiter.api.DisplayName("취소 조회는 결제 승인을 시뮬레이션하지 않는다")
+    void cancellationLookup_doesNotSimulatePaymentApproval() {
+        var adapter = new StubPaymentGatewayAdapter("e2e");
+        assertThat(adapter.verifyPaymentForCancellation("order-cancel", 1000).result())
+                .isEqualTo(
+                        com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerificationResult.NOT_FOUND);
+    }
+
+    @Test
     void localStubKeepsDeterministicDeveloperFlow() {
         StubPaymentGatewayAdapter adapter = new StubPaymentGatewayAdapter("local");
 
@@ -28,6 +37,8 @@ class StubPaymentGatewayAdapterTest {
             assertThatThrownBy(() -> adapter.preparePayment("order-1", 10_000))
                     .isInstanceOf(PaymentGatewayUnavailableException.class);
             assertThatThrownBy(() -> adapter.verifyPayment("order-1", 10_000))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> adapter.verifyPaymentForCancellation("order-1", 10_000))
                     .isInstanceOf(PaymentGatewayUnavailableException.class);
             assertThatThrownBy(() -> adapter.refund("order-1", 10_000))
                     .isInstanceOf(PaymentGatewayUnavailableException.class);

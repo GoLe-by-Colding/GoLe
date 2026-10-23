@@ -8,7 +8,7 @@
 - S3 WHEN 프론트가 `GET /api/v1/auth/oauth/providers`를 호출하면, 시스템은 설정된(활성) provider 목록을 반환해야 한다.
 - S4 WHEN `POST /api/v1/auth/oauth/{provider}/authorize-url` (JSON 본문 `redirectUri`, 선택적 회원가입 정책 동의값·`returnTo`)를 호출하면, 시스템은 provider 동의 화면 URL을 반환해야 한다. state는 서버가 발급하며, 정책 동의값은 access log에 남지 않도록 쿼리스트링이 아닌 요청 본문으로만 받는다.
 - S5 WHEN `POST /api/v1/auth/oauth/{provider}/callback {code, redirectUri, state}`를 호출하면, 시스템은 state를 검증한 뒤 code로 provider 토큰을 교환하고 프로필(email, providerId, emailVerified)을 조회해야 한다.
-- S6 WHEN 프로필 이메일로 기존 계정이 있으면 그 계정으로, 없으면 새 계정(VERIFIED·USER·임의 비밀번호)을 생성하여 로그인 처리(find-or-create)하고, 기존과 동일한 불투명 세션 토큰을 발급해야 한다.
+- S6 WHEN 프로필 이메일로 기존 계정이 있으면 그 계정으로, 없으면 새 계정(VERIFIED·USER·로그인에 쓸 수 없는 임의 비밀번호 해시)을 생성하여 로그인 처리(find-or-create)하고, 기존과 동일한 불투명 세션 토큰을 발급해야 한다.
 - S7 IF provider가 이메일을 제공하지 않으면, 시스템은 400 `OAUTH_EMAIL_UNAVAILABLE`로 거부해야 한다.
 - S8 IF provider 식별자가 google/kakao/naver가 아니면, 400으로 거부해야 한다.
 - S9 프론트는 활성 provider 버튼을 보여주고, 콜백 페이지에서 code/state를 받아 세션을 저장한 뒤 홈(또는 서버가 검증한 복귀 경로)으로 이동해야 한다. CSRF 방지를 위한 state는 서버가 발급·검증하므로 프론트는 콜백에서 받은 값을 그대로 전달만 한다.
@@ -18,6 +18,7 @@
 - S13 시스템은 OAuth 인가 요청에 대해 클라이언트별(버스트·시간당)·전역(버스트·일간) 레이트리밋을 적용해야 한다.
 - S14 authorize-url 요청에 `returnTo`가 포함되면, 시스템은 이를 검증·정제해 state에 결박하고 콜백 응답에 그대로 돌려줘야 한다. 안전하지 않은 값(절대 URL, `/login`·`/signup`·`/verify`·`/auth`·`/onboarding` 하위 경로 등)은 폐기한다.
 - S15 시스템은 OAuth code가 돌아올 redirectUri를 서버의 정확한 허용목록과 대조해야 하며, 목록에 없으면 400 `OAUTH_REDIRECT_URI_INVALID`로 거부해야 한다. 운영 환경에서는 이 허용목록이 apex 콜백 3종(`https://gole.co.kr/auth/callback/{google,kakao,naver}`)과 정확히 일치하지 않으면 앱 기동 자체가 실패해야 한다.
+- S16 새 소셜 가입 계정은 `passwordLoginEnabled=false`로 생성하며 이메일 로그인·비밀번호 변경·재설정을 허용하지 않는다. `/api/v1/accounts/me`는 `passwordChangeAvailable=false`를 내려 화면에서 변경 폼을 숨긴다. 재설정 요청에는 계정 존재 여부와 동일한 일반 응답을 반환하되 메일과 인증 코드를 발급하지 않고, 이미 발급된 유효 코드도 확인 단계에서 거절한다. 필드가 없는 기존 계정은 최초 가입 채널과 무관하게 기존 비밀번호 자격을 유지하며 로그인·변경·재설정과 세션 폐기 정책을 그대로 적용한다.
 
 ## Design
 - 백엔드(account 컨텍스트, 헥사고날):
@@ -25,7 +26,7 @@
   - port-in `SocialLoginUseCase`: `enabledProviders()`, `authorizeUrl(provider, redirectUri, signupPolicyAcceptance, returnTo) -> AuthorizeUrlResult{url, state}`, `login(SocialLoginCommand{provider, code, redirectUri, state}) -> SocialLoginResult{accountId, sessionToken, role, newAccount, onboardingRequired, returnTo}`.
   - port-out `SocialIdentityProviderPort`: `isConfigured(provider)`, `authorizeUrl(...)`, `fetchProfile(provider, code, redirectUri) -> SocialProfile{provider, providerId, email, emailVerified}`.
   - port-out `OAuthStateStorePort`: `save(state, OAuthStateContext{provider, redirectUri, signupPolicyAcceptance, returnTo}, ttl)`, `consume(state) -> Optional<OAuthStateContext>`(1회 소비).
-  - service `SocialAuthService`: `authorizeUrl`에서 리다이렉트 URI 허용목록 검증(`OAuthRedirectUriPolicy`) → (있으면) 정책 동의 검증 → 서버가 state를 발급해 `OAuthStateStorePort`에 저장 → provider 포트로 동의 화면 URL 생성. `login`에서 state를 1회 소비해 provider/redirectUri 일치 검증(CSRF) → 리다이렉트 URI 재검증 → provider 포트로 프로필 취득 → 이메일 없음/미인증이면 거부 → `AccountRepositoryPort.findByEmail` or `SocialAccountProvisioner.provision`(임의 비밀번호 해시로 신규 계정 생성 + 정책 동의 기록, 동일 Mongo 트랜잭션) → 정지 계정 거부(`ensureNotSuspended`) → `SessionTokenPort.issue` + `SessionStorePort.store`(기존 로그인과 동일 TTL) → 구글 신규가입만 `onboardingRequired` 판정. **Account 애그리거트/암호 정책 무수정**.
+  - service `SocialAuthService`: `authorizeUrl`에서 리다이렉트 URI 허용목록 검증(`OAuthRedirectUriPolicy`) → (있으면) 정책 동의 검증 → 서버가 state를 발급해 `OAuthStateStorePort`에 저장 → provider 포트로 동의 화면 URL 생성. `login`에서 state를 1회 소비해 provider/redirectUri 일치 검증(CSRF) → 리다이렉트 URI 재검증 → provider 포트로 프로필 취득 → 이메일 없음/미인증이면 거부 → `AccountRepositoryPort.findByEmail` or `SocialAccountProvisioner.provision`(비밀번호 로그인 불가 상태로 신규 계정 생성 + 정책 동의 기록, 동일 Mongo 트랜잭션) → 정지 계정 거부(`ensureNotSuspended`) → `SessionTokenPort.issue` + `SessionStorePort.store`(기존 로그인과 동일 TTL) → 구글 신규가입만 `onboardingRequired` 판정. `passwordLoginEnabled`가 없는 기존 문서는 `true`로 읽고 다음 저장에서 명시한다. 가입 정책 채널은 현재 비밀번호 설정 여부를 증명하지 않으므로 자격 판정에 사용하지 않는다. 비밀번호 재설정은 자격이 이미 있는 계정의 해시만 갱신한다.
   - `OAuthRedirectUriPolicy`: `gole.oauth.allowed-redirect-uris`(콤마 구분)로 구성한 정확한 URI 허용목록. `gole.environment`가 로컬/개발 계열(`local`/`development`/`dev`/`test`/`e2e`)이 아니면 허용목록이 apex 콜백 3종과 정확히 일치해야 하며, 아니면 기동 시 `IllegalStateException`으로 실패한다.
   - `OAuthTransactionCookie`: `authorizeUrl` 응답 시 발급한 state를 `gole_oauth_transaction`(HttpOnly, `SameSite=Lax`, path `/api/v1/auth/oauth`) 쿠키로 요청 브라우저에 결박. 콜백에서 요청 본문의 state와 상수시간(`MessageDigest.isEqual`) 비교해 일치해야만 진행하고, 성공·실패 무관하게 1회 사용 후 쿠키를 지운다. 서버측 Redis state 검증과 별개의 CSRF 이중 방어다.
   - `OAuthReturnTo`: `returnTo`를 동일 오리진 상대경로로만 허용(절대 URL·`\`·dot-segment·제어문자·`/login`·`/signup`·`/verify`·`/auth`·`/onboarding` 하위 경로 거부)하고 정제된 값만 state에 결박.
