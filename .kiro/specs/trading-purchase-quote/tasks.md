@@ -8,6 +8,7 @@
 - [x] 웹 format:check·lint·typecheck·fsd:lint·별도 캐시 build 통과
 - [x] Orca 320·375·768·1440px 주문 폼·안내·버튼 검수 — 가로 넘침 0px
 - [x] `codex review` 읽기 전용 검토 — 새로 도입된 재현 가능한 결함 없음
+- [x] `feature/` 브랜치 별칭을 PR 규약·개발 문서에 반영 — 실제 워크플로 셸 16/16 및 actionlint 통과
 - [ ] 감독자 전달 및 분리된 기능 브랜치에서 dev 반영
 
 검증은 WEB 3003/API 8093의 읽기 전용 fixture와 주문 POST 응답 가로채기로 수행했다. 실제 API 인증·주문 쓰기·PG 결제·실기기는 이 검증에 포함하지 않는다. 기존 WEB 3000/API 8090 및 결제·공개 잠금을 유지한다.

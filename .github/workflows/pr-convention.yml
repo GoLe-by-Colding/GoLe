@@ -23,6 +23,7 @@ jobs:
           set -uo pipefail
           fail=0
           TYPES='feat|fix|refactor|chore|docs|test|perf|ci'
+          BRANCH_TYPES="feature|$TYPES"
           note() { printf '::error title=%s::%s\n' "$1" "$2"; fail=1; }
 
           # 1. 제목 — <type>(<scope>): 설명  또는  <type>: 설명
@@ -30,12 +31,12 @@ jobs:
             note "PR 제목" "\"$TITLE\" 은 '<type>(<scope>): 설명' 형식이 아니다. 쓸 수 있는 type: feat fix refactor chore docs test perf ci. 예) feat(web): 관심 테마 선택 폼을 추가함. '기능:' '수정:' 같은 한국어 분류 제목은 2026-09-12 에 폐기했다 (AGENTS.md)."
           fi
 
-          # 2. 브랜치 이름 — <type>/<kebab-case>
+          # 2. 브랜치 이름 — <type>/<kebab-case>. feature는 브랜치에서만 feat의 별칭이다.
           case "$BRANCH" in
             dev|main|dependabot/*) ;;
             *)
-              if ! grep -qE "^($TYPES)/[a-z0-9][a-z0-9._-]*$" <<<"$BRANCH"; then
-                note "브랜치 이름" "\"$BRANCH\" 는 '<type>/<kebab-case>' 형식이 아니다. 예) feat/card-payment, fix/profile-stuck-loading. temp·tmp·도구가 자동 생성한 이름(<계정>/...)은 쓰지 않는다."
+              if ! grep -qE "^($BRANCH_TYPES)/[a-z0-9][a-z0-9._-]*$" <<<"$BRANCH"; then
+                note "브랜치 이름" "\"$BRANCH\" 는 '<type>/<kebab-case>' 형식이 아니다. 예) feature/card-payment, fix/profile-stuck-loading. 기존 feat/도 허용한다. temp·tmp·도구가 자동 생성한 이름(<계정>/...)은 쓰지 않는다."
               fi
               ;;
           esac
