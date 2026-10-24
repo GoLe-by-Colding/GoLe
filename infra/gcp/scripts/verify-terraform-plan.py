@@ -25,6 +25,32 @@ SNAPSHOT_ATTACHMENT_RESOURCE = (
     "google_compute_disk_resource_policy_attachment.daily_boot_disk_snapshots"
 )
 
+# CLI 기대값도 검토된 전체 조합에 묶어 임의 계정·예산·기간 승인을 막는다.
+REVIEWED_BUDGET_PERIODS: dict[
+    tuple[str, str, str, str, str], dict[str, dict[str, int]]
+] = {
+    (
+        "project-72a52bf1-06aa-4519-b2c",
+        "336721527881",
+        "01B490-1BC53A-33E611",
+        "b645c912-d766-43fc-8923-bff70ecfe8d8",
+        "370000",
+    ): {
+        "start_date": {"day": 1, "month": 9, "year": 2026},
+        "end_date": {"day": 28, "month": 10, "year": 2026},
+    },
+    (
+        "project-72a52bf1-06aa-4519-b2c",
+        "336721527881",
+        "013E1F-1D7BF5-E66D50",
+        "e987694c-e6bc-48ed-90fa-942a74e56e04",
+        "370000",
+    ): {
+        "start_date": {"day": 24, "month": 10, "year": 2026},
+        "end_date": {"day": 22, "month": 1, "year": 2027},
+    },
+}
+
 REQUIRED_EXISTING_RESOURCES = {
     "google_project_service.compute",
     "google_project_service.resource_manager",
@@ -646,6 +672,16 @@ def _validate_budget_state(
     allow_project_recipients_disabled: bool,
     allow_missing_notification_route: bool = False,
 ) -> None:
+    expected_period = REVIEWED_BUDGET_PERIODS.get((
+        expected_project_id,
+        expected_project_number,
+        expected_billing_account_id,
+        expected_budget_id,
+        expected_budget_amount_krw,
+    ))
+    if expected_period is None:
+        raise PlanPolicyError("unreviewed billing budget contract")
+
     expected_resource_id = (
         f"billingAccounts/{expected_billing_account_id}/budgets/{expected_budget_id}"
     )
@@ -669,6 +705,12 @@ def _validate_budget_state(
 
     budget_filter = _single_block(state, "budget_filter")
     custom_period = _single_block(budget_filter, "custom_period")
+    for key, expected_date in expected_period.items():
+        actual_date = _single_block(custom_period, key)
+        if actual_date != expected_date or any(
+            type(value) is not int for value in actual_date.values()
+        ):
+            raise PlanPolicyError("billing budget scope or period changed")
     if (
         budget_filter.get("calendar_period") != ""
         or budget_filter.get("credit_types") != []
@@ -678,10 +720,6 @@ def _validate_budget_state(
         or budget_filter.get("resource_ancestors") != []
         or budget_filter.get("services") != []
         or budget_filter.get("subaccounts") != []
-        or _single_block(custom_period, "start_date")
-        != {"day": 1, "month": 9, "year": 2026}
-        or _single_block(custom_period, "end_date")
-        != {"day": 28, "month": 10, "year": 2026}
     ):
         raise PlanPolicyError("billing budget scope or period changed")
 
