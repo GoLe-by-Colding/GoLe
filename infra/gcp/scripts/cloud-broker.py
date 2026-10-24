@@ -138,7 +138,7 @@ class Policy:
         ):
             if value.tzinfo is None:
                 raise BrokerError("broker timestamps require timezones")
-        if not self.vm_cost_start < self.rate_transition_at < self.stop_at <= self.deadline:
+        if not self.vm_cost_start <= self.rate_transition_at < self.stop_at <= self.deadline:
             raise BrokerError("broker time policy order is invalid")
         if not Decimal("0") < self.max_runtime <= Decimal("1350"):
             raise BrokerError("broker runtime limit is invalid")
@@ -188,6 +188,23 @@ class Policy:
             "BUDGET_AMOUNT_KRW": "370000",
             "BUDGET_PERIOD_START": "2026-09-01",
         }
+        # 실제 결제 이전이 확인된 계정/예산만 새 비용 기간을 사용할 수 있다.
+        # 기존 가격 상한을 유지하고 관측된 수동 스냅샷 2개를 모두 계산한다.
+        self.migrated_billing = raw["EXPECTED_BILLING_ACCOUNT_ID"] == "013E1F-1D7BF5-E66D50"
+        if self.migrated_billing:
+            exact.update({
+                "PROJECT_ID": "project-72a52bf1-06aa-4519-b2c",
+                "EXPECTED_BUDGET_ID": "e987694c-e6bc-48ed-90fa-942a74e56e04",
+                "VM_COST_START": "2026-10-24T00:00:00+09:00",
+                "RATE_TRANSITION_AT": "2026-10-24T00:00:00+09:00",
+                "HIGH_RATE_HOURLY_COST_KRW": "153.390555330",
+                "HARD_STOP_AT": "2026-12-03T00:00:00+09:00",
+                "MAX_RUNTIME_HOURS": "960",
+                "ALL_IN_LIMIT_KRW": "340000",
+                "MANUAL_SNAPSHOT_HOURLY_COST_KRW": "26.027340000",
+                "CREDIT_DEADLINE": "2027-01-22T00:00:00+09:00",
+                "BUDGET_PERIOD_START": "2026-10-24",
+            })
         if any(raw.get(key) != value for key, value in exact.items()):
             raise BrokerError("broker policy differs from the reviewed cost arm")
         if not re.fullmatch(
@@ -267,6 +284,12 @@ class Policy:
 class Cloud:
     def __init__(self, policy: Policy) -> None:
         self.policy = policy
+        # 구 계정의 누적 비용/경고는 원본 파일에 보존한다. 새 계정 파일이
+        # 존재하면 다시 초기화하지 않으며, 네트워크 누계는 기간 간에도 유지한다.
+        self.state_path = (
+            STATE_PATH.with_name("state-013E1F-1D7BF5-E66D50-2026-10-24.json")
+            if policy.migrated_billing else STATE_PATH
+        )
         self.token = ""
         self.expires_at = 0.0
         self.lock = threading.Lock()
@@ -295,15 +318,29 @@ class Cloud:
                 self._write_state()
 
     def _read_state(self) -> tuple[Decimal, int, int, set[str], bool, bool]:
-        if not STATE_PATH.exists() and not STATE_PATH.is_symlink():
+        if (
+            self.policy.migrated_billing
+            and not self.state_path.exists()
+            and not self.state_path.is_symlink()
+        ):
+            if not STATE_PATH.is_file() or STATE_PATH.is_symlink():
+                raise BrokerError("previous billing period state is required")
+            _latest, last_raw, cumulative, _alerts, needs_meter, _schema = self._read_state_at(STATE_PATH)
+            if needs_meter:
+                raise BrokerError("previous billing period requires a durable network meter")
+            return Decimal("0"), last_raw, cumulative, set(), False, True
+        return self._read_state_at(self.state_path)
+
+    def _read_state_at(self, path: pathlib.Path) -> tuple[Decimal, int, int, set[str], bool, bool]:
+        if not path.exists() and not path.is_symlink():
             return Decimal("0"), 0, 0, set(), True, False
-        if STATE_PATH.is_symlink() or not STATE_PATH.is_file():
+        if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
             raise BrokerError("broker state metadata is invalid")
         try:
-            raw = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
             if set(raw) == {"latest_billing"}:
                 latest = Decimal(str(raw["latest_billing"]))
-                if latest < 0:
+                if not latest.is_finite() or latest < 0:
                     raise BrokerError("broker legacy billing state is invalid")
                 return latest, 0, 0, set(), True, False
             old_keys = {"latest_billing", "last_tx_raw", "cumulative_tx_bytes"}
@@ -313,7 +350,7 @@ class Cloud:
             latest = Decimal(str(raw["latest_billing"]))
             last_raw = int(raw["last_tx_raw"])
             cumulative = int(raw["cumulative_tx_bytes"])
-            if latest < 0 or last_raw < 0 or cumulative < last_raw:
+            if not latest.is_finite() or latest < 0 or last_raw < 0 or cumulative < last_raw:
                 raise BrokerError("broker state values are invalid")
             alert_values = raw.get("deadline_alerts", [])
             if (
@@ -363,10 +400,10 @@ class Cloud:
         return changed
 
     def _write_state(self) -> None:
-        STATE_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if STATE_PATH.parent.is_symlink() or (STATE_PATH.parent.stat().st_mode & 0o077):
+        self.state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if self.state_path.parent.is_symlink() or (self.state_path.parent.stat().st_mode & 0o077):
             raise BrokerError("broker state directory permissions are invalid")
-        temporary = STATE_PATH.with_suffix(".tmp")
+        temporary = self.state_path.with_suffix(".tmp")
         payload = json.dumps(
             {
                 "latest_billing": str(self.latest_billing),
@@ -392,8 +429,8 @@ class Cloud:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        os.replace(temporary, STATE_PATH)
-        directory = os.open(STATE_PATH.parent, os.O_RDONLY | os.O_DIRECTORY)
+        os.replace(temporary, self.state_path)
+        directory = os.open(self.state_path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
         finally:
