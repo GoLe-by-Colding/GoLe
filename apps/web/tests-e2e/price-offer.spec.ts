@@ -567,6 +567,31 @@ test.describe("매물 상세 — 제안가 구매·인라인 제안·받은 제�
     "실제 API가 렌더하는 상세 화면 — 로컬 백엔드 전용",
   );
 
+  test("초기 HTML에서는 구매를 막고 화면 준비 뒤 첫 클릭으로 연락처를 연다", async ({ page }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
+    let releaseScripts = () => {};
+    const scriptsReady = new Promise<void>((resolve) => {
+      releaseScripts = resolve;
+    });
+    await page.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+      await scriptsReady;
+      await route.continue();
+    });
+
+    try {
+      await page.goto(`/listings/${listing.id}`, { waitUntil: "commit" });
+      await expect(page.getByRole("button", { name: "주문 금액 확인 중…" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "구매하기", exact: true })).toHaveCount(0);
+    } finally {
+      releaseScripts();
+    }
+    await page.getByRole("button", { name: "구매하기", exact: true }).click();
+    await expect(page.getByLabel("CS 연락처")).toBeVisible();
+  });
+
   test("제안 조회가 늦어도 정가 주문을 먼저 열지 않고 확인한 제안가로 주문한다", async ({
     page,
   }) => {

@@ -71,7 +71,8 @@ export function PurchaseButton({
   } = useListingOffers(listingId, {
     enabled: session !== null && !isOwnListing && available,
   });
-  const checkingOffers = session !== null && available && (offers === null || now === null);
+  // 초기 HTML에서도 비활성으로 둔다. 세션이 준비되기 전 클릭이 가드에 막혀 사라지지 않게 한다.
+  const checkingOffers = available && (now === null || (session !== null && offers === null));
   const quoteUnavailable = checkingOffers || offersFailed;
   const usableOffer =
     session === null || offerRejected
@@ -196,7 +197,9 @@ export function PurchaseButton({
     </div>
   ) : checkingOffers ? (
     <Text size="sm" tone="secondary" role="status">
-      판매자가 수락한 제안이 있는지 확인하고 있어요.
+      {now === null
+        ? "주문 화면을 준비하고 있어요."
+        : "판매자가 수락한 제안이 있는지 확인하고 있어요."}
     </Text>
   ) : null;
 
