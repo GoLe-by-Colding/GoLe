@@ -64,9 +64,15 @@ export function PurchaseButton({
   const [offerRejected, setOfferRejected] = useState(false);
   const isOwnListing = session?.accountId === sellerId;
   // 제안 조회는 세션이 필요하다. 비로그인·본인 매물·판매 끝난 매물이면 묻지 않는다.
-  const { offers, reload: reloadOffers } = useListingOffers(listingId, {
+  const {
+    offers,
+    failed: offersFailed,
+    reload: reloadOffers,
+  } = useListingOffers(listingId, {
     enabled: session !== null && !isOwnListing && available,
   });
+  const checkingOffers = session !== null && available && (offers === null || now === null);
+  const quoteUnavailable = checkingOffers || offersFailed;
   const usableOffer =
     session === null || offerRejected
       ? null
@@ -79,6 +85,7 @@ export function PurchaseButton({
       router.push(loginHrefForCurrentPage());
       return;
     }
+    if (!available || quoteUnavailable) return;
     setError(undefined);
     setBuyerPhone(readStoredPhone());
     setSelectedOffer(
@@ -91,10 +98,29 @@ export function PurchaseButton({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!session || submitting) return;
+    if (!session || submitting || !available || quoteUnavailable) return;
     setError(undefined);
     setSubmitting(true);
     const currentOffers = offers ?? [];
+    // 정가를 확인한 뒤 합의가 도착하면 낮아진 금액과 제안 적용을 먼저 보여 준다.
+    // 이미 선택한 제안은 다른 제안이 도착해도 그대로 유지한다.
+    if (selectedOffer === null && !offerRejected) {
+      const arrivedOffer = findUsableAcceptedOffer(
+        currentOffers,
+        listingId,
+        session.accountId,
+        Date.now(),
+      );
+      if (arrivedOffer !== null) {
+        setSelectedOffer({
+          id: arrivedOffer.id,
+          amount: offerOrderAmount(arrivedOffer.price, listingPrice),
+        });
+        setError("판매자가 수락한 제안이 도착했어요. 변경된 주문 금액을 확인해 주세요.");
+        setSubmitting(false);
+        return;
+      }
+    }
     const rejectOffer = (message: string) => {
       const nextOffer = findUsableAcceptedOffer(
         currentOffers.filter((offer) => offer.id !== selectedOffer?.id),
@@ -159,19 +185,40 @@ export function PurchaseButton({
     );
   }
 
-  if (phoneStep) {
+  const quoteNotice = offersFailed ? (
+    <div className="flex flex-col items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+      <Text size="sm" role="alert" className="break-keep">
+        적용할 가격 제안을 확인하지 못했어요. 주문 금액을 다시 확인해 주세요.
+      </Text>
+      <Button size="sm" type="button" variant="secondary" onClick={reloadOffers}>
+        제안 다시 확인
+      </Button>
+    </div>
+  ) : checkingOffers ? (
+    <Text size="sm" tone="secondary" role="status">
+      판매자가 수락한 제안이 있는지 확인하고 있어요.
+    </Text>
+  ) : null;
+
+  if (phoneStep && available) {
+    const amount = selectedOffer !== null && !offerRejected ? selectedOffer.amount : listingPrice;
     return (
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        {selectedOffer !== null && !offerRejected ? (
-          <Text size="sm" tone="secondary">
-            판매자가 수락한 제안가 {formatWon(selectedOffer.amount)}으로 주문해요. (정가{" "}
-            {formatWon(listingPrice)})
+      <form
+        onSubmit={handleSubmit}
+        className="flex min-w-0 w-full flex-col gap-4"
+        aria-label="주문 금액 확인"
+      >
+        <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+          <p className="text-sm font-medium text-neutral-600">주문 금액</p>
+          <p className="mt-1 break-words text-2xl font-bold tabular-nums tracking-tight text-neutral-900">
+            {formatWon(amount)}
+          </p>
+          <Text size="sm" tone="secondary" className="mt-2 break-keep">
+            {selectedOffer !== null && !offerRejected
+              ? `판매자가 수락한 제안가 ${formatWon(selectedOffer.amount)}으로 주문해요. (정가 ${formatWon(listingPrice)})`
+              : `정가 ${formatWon(listingPrice)}으로 주문해요.`}
           </Text>
-        ) : offerRejected ? (
-          <Text size="sm" tone="secondary">
-            정가 {formatWon(listingPrice)}으로 주문해요.
-          </Text>
-        ) : null}
+        </div>
         <Field
           label="CS 연락처"
           hint="배송 문제가 생겼을 때 연락받을 번호예요. 판매자에게는 마스킹되어 보입니다."
@@ -190,20 +237,41 @@ export function PurchaseButton({
             />
           )}
         </Field>
+        {quoteNotice}
         {error ? (
           <Text size="sm" className="text-danger" role="alert">
             {error}
           </Text>
         ) : null}
         <div className="flex gap-2">
-          <Button size="lg" fullWidth type="submit" disabled={submitting}>
+          <Button size="lg" fullWidth type="submit" disabled={submitting || quoteUnavailable}>
             {submitting ? "처리 중..." : offerRejected ? "정가로 주문하기" : "주문하기"}
           </Button>
-          <Button size="lg" variant="ghost" type="button" onClick={() => setPhoneStep(false)}>
+          <Button
+            size="lg"
+            variant="ghost"
+            type="button"
+            disabled={submitting}
+            onClick={() => setPhoneStep(false)}
+          >
             취소
           </Button>
         </div>
+        <Text size="sm" tone="secondary">
+          주문 후 다음 화면에서 결제를 진행해요.
+        </Text>
       </form>
+    );
+  }
+
+  if (available && quoteUnavailable) {
+    return (
+      <div className="flex flex-col gap-3">
+        <Button size="lg" disabled>
+          {offersFailed ? "주문 금액 확인 필요" : "주문 금액 확인 중…"}
+        </Button>
+        {quoteNotice}
+      </div>
     );
   }
 
@@ -218,7 +286,11 @@ export function PurchaseButton({
           판매자가 수락한 가격이에요 · 정가 {formatWon(listingPrice)}
           {timeLeft === null ? "" : ` · ${timeLeft}`}
         </span>
-        {error ? <span className="text-sm text-danger">{error}</span> : null}
+        {error ? (
+          <span role="alert" className="text-sm text-danger">
+            {error}
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -228,7 +300,11 @@ export function PurchaseButton({
       <Button size="lg" disabled={!available || submitting} onClick={handleClick}>
         {available ? "구매하기" : unavailableLabel}
       </Button>
-      {error ? <span className="text-sm text-danger">{error}</span> : null}
+      {error ? (
+        <span role="alert" className="text-sm text-danger">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
