@@ -1,4 +1,5 @@
 .git
+.codex
 .github
 .kiro
 .next
@@ -8,8 +9,8 @@ apps/api/.gradle
 apps/api/build
 apps/web/.next
 apps/web/node_modules
-playwright-report
-test-results
+**/playwright-report
+**/test-results
 *.log
 .env
 .env.*
