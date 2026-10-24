@@ -18,14 +18,22 @@ export interface ListingCardProps {
 /**
  * 탐색 목록 카드. 모바일 2열(카드 폭 약 150px)에서도 비교가 되도록 위계를 고정한다 —
  * 세트 번호(식별) → 제목(2줄) → 가격(가장 굵게, 줄바꿈 금지) → 상태·고지 배지.
- * 상태 등급·구성·부품 누락·예약중은 구매 판단에 필요한 고지라 폭이 좁아도 숨기지 않고 줄을 바꾼다.
+ * 상태 등급·구성·부품 누락·거래 상태는 구매 판단에 필요한 고지라 폭이 좁아도 숨기지 않는다.
  */
 export function ListingCard({ listing, priceNote }: ListingCardProps) {
   const cover = listing.photoUrls[0];
+  const statusLabel =
+    listing.status === "reserved"
+      ? "예약 중"
+      : listing.status === "sold"
+        ? "판매 완료"
+        : listing.status === "deleted"
+          ? "판매 종료"
+          : null;
 
   return (
     <Card interactive padded={false} className="flex h-full flex-col" data-testid="listing-card">
-      <div className="overflow-hidden">
+      <div className="relative overflow-hidden border-b border-neutral-100">
         <MediaImage
           className="aspect-[4/3] w-full bg-neutral-100 object-cover"
           src={cover === undefined ? null : thumbnailUrl(cover, 480)}
@@ -33,14 +41,22 @@ export function ListingCard({ listing, priceNote }: ListingCardProps) {
           loading="lazy"
           fallback="이미지 준비 중"
         />
-      </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:gap-2 sm:p-4">
-        {listing.catalogSetNumber !== null ? (
-          <span className="text-[11px] font-medium tabular-nums text-neutral-400 sm:text-xs">
-            #{listing.catalogSetNumber}
+        {statusLabel !== null ? (
+          <span className="absolute left-2 top-2 rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-white">
+            {statusLabel}
           </span>
         ) : null}
-        <span className="line-clamp-2 text-sm font-semibold leading-snug text-neutral-900 sm:text-[15px]">
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:gap-2 sm:p-4">
+        <div className="flex min-h-4 items-center gap-1 text-xs font-medium text-neutral-600">
+          {listing.category !== "set" || listing.catalogSetNumber === null ? (
+            <span className="shrink-0">{LISTING_CATEGORY_LABEL[listing.category]}</span>
+          ) : null}
+          {listing.catalogSetNumber !== null ? (
+            <span className="truncate tabular-nums">#{listing.catalogSetNumber}</span>
+          ) : null}
+        </div>
+        <span className="line-clamp-2 min-h-[2.75em] text-sm font-semibold leading-snug text-neutral-900 sm:text-[15px]">
           {listing.title}
         </span>
         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
@@ -48,22 +64,25 @@ export function ListingCard({ listing, priceNote }: ListingCardProps) {
             {formatPriceKrw(listing.price)}
           </span>
           {priceDropAmount(listing) !== null ? (
-            <span className="whitespace-nowrap text-xs font-semibold text-success">가격 내림</span>
+            <span className="whitespace-nowrap text-xs font-semibold text-brand-700">
+              가격 내림
+            </span>
           ) : null}
         </div>
         {priceNote === undefined ? null : (
-          <span className="text-[11px] leading-snug break-keep text-neutral-500 sm:text-xs">
-            {priceNote}
-          </span>
+          <span className="text-xs leading-relaxed break-keep text-neutral-600">{priceNote}</span>
         )}
-        <div className="mt-auto flex flex-wrap gap-1 pt-1">
-          {listing.status === "reserved" ? <Badge tone="warning">예약중</Badge> : null}
-          {listing.category !== "set" ? (
-            <Badge tone="brand">{LISTING_CATEGORY_LABEL[listing.category]}</Badge>
+        <div className="mt-auto flex flex-col items-start gap-2 pt-2">
+          <p className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs leading-relaxed text-neutral-600">
+            <span>{conditionLabel(listing.condition)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{completenessLabel(listing.completeness)}</span>
+          </p>
+          {listing.hasMissingParts ? (
+            <Badge tone="neutral" className="bg-warning-soft text-neutral-800">
+              부품 누락
+            </Badge>
           ) : null}
-          <Badge tone="neutral">{conditionLabel(listing.condition)}</Badge>
-          <Badge tone="brand">{completenessLabel(listing.completeness)}</Badge>
-          {listing.hasMissingParts ? <Badge tone="warning">부품 누락</Badge> : null}
         </div>
       </div>
     </Card>
