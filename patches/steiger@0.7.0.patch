@@ -1,0 +1,35 @@
+diff --git a/dist/app.d.ts b/dist/app.d.ts
+index c25a309244337243521ab62fd9dc49f667c36428..93d4387a4a6a89a930e8b65a7afb281e0888afcf 100644
+--- a/dist/app.d.ts
++++ b/dist/app.d.ts
+@@ -1,6 +1,6 @@
+ import * as effector from 'effector';
+ import * as url from 'url';
+-import * as zod from 'zod';
++import * as zod from 'zod/v3';
+ 
+ interface File {
+     type: 'file';
+diff --git a/dist/chunk-Q6YAZP6J.mjs b/dist/chunk-Q6YAZP6J.mjs
+index 98753374043c3891278ee884a3b0fb7876adbd3a..56bd0d31b4d45b258644cbb33f3b3261bfb9a645 100644
+--- a/dist/chunk-Q6YAZP6J.mjs
++++ b/dist/chunk-Q6YAZP6J.mjs
+@@ -9,7 +9,7 @@ import chokidar from 'chokidar';
+ import * as find from 'empathic/find';
+ import { isGitIgnored } from 'globby';
+ import { produce } from 'immer';
+-import z from 'zod';
++import z from 'zod/v3';
+ import { isEqual as isEqual$1 } from 'lodash-es';
+ import micromatch from 'micromatch';
+ import { access, stat } from 'fs/promises';
+diff --git a/src/models/config/validate-config.ts b/src/models/config/validate-config.ts
+index e25453d0330c682dc1fe00f2b1bef81fc89a312f..aedd0e781b52f1c8fec34543de0b6a2010a9312f 100644
+--- a/src/models/config/validate-config.ts
++++ b/src/models/config/validate-config.ts
+@@ -1,4 +1,4 @@
+-import z from 'zod'
++import z from 'zod/v3'
+ 
+ import { BaseRuleOptions, Config, Plugin, Rule } from '@steiger/types'
+ 

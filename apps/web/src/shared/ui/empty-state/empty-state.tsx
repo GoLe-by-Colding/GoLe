@@ -7,7 +7,7 @@ import { Heading, Text } from "../typography";
 export interface EmptyStateProps {
   /**
    * `panel` — 화면 전체가 비었을 때 쓰는 마스코트형. 로그인 유도·첫 시작처럼 다음 행동이 분명한 자리.
-   * `inline` — 목록 한 칸이 비었을 때 쓰는 점선 상자. 주변 UI를 밀어내지 않는다.
+   * `inline` — 목록 한 칸이 비었을 때 쓰는 간결한 안내. 주변 UI를 밀어내지 않는다.
    */
   readonly variant?: "panel" | "inline";
   /** `inline`에서 제목 위에 놓을 아이콘. `panel`은 마스코트를 쓰므로 무시된다. */
@@ -41,16 +41,16 @@ export function EmptyState({
     return (
       <div
         className={cn(
-          "flex flex-col items-center gap-2 rounded-xl border border-dashed border-neutral-300 px-6 py-14 text-center",
+          "flex flex-col items-center gap-3 rounded-xl border border-neutral-200 bg-white px-6 py-12 text-center",
           className,
         )}
       >
         {icon}
-        <Text tone="secondary" weight="medium">
+        <Heading level={2} className="text-xl">
           {title}
-        </Text>
+        </Heading>
         {description ? (
-          <Text tone="muted" size="sm">
+          <Text tone="secondary" size="sm" className="max-w-[42ch] break-keep leading-relaxed">
             {description}
           </Text>
         ) : null}

@@ -38,13 +38,20 @@
       "postcss@<9.0.0": "8.5.23",
       "sharp@<0.35.5": "0.35.5",
       "shell-quote@<1.11.0": "1.11.0",
-      "source-map-js@<1.2.2": "1.2.2"
+      "source-map-js@<1.2.2": "1.2.2",
+      "zod@<4.6.7": "4.6.7"
     },
     "auditConfig": {
       "ignoreGhsas": [
         "GHSA-vfj7-8cjw-p6xm",
         "GHSA-86w9-cpqp-85rv"
       ]
+    },
+    "patchedDependencies": {
+      "zod@4.6.7": "patches/zod@4.6.7.patch",
+      "steiger@0.7.0": "patches/steiger@0.7.0.patch",
+      "zod-validation-error@3.5.4": "patches/zod-validation-error@3.5.4.patch",
+      "@expo/cli@57.0.28": "patches/@expo__cli@57.0.28.patch"
     }
   },
   "packageManager": "pnpm@10.30.3"

@@ -1,0 +1,54 @@
+diff --git a/v3/index.d.mts b/v3/index.d.mts
+index 4fea8b44fec6ef35ae155e2ac0baa44f8cda2616..3e72ebf0e64c87c571b1c96f5a9b6b9abf35d6f7 100644
+--- a/v3/index.d.mts
++++ b/v3/index.d.mts
+@@ -1,4 +1,4 @@
+-import * as zod from 'zod';
++import * as zod from 'zod/v3';
+ 
+ interface ErrorOptions {
+     cause?: unknown;
+diff --git a/v3/index.d.ts b/v3/index.d.ts
+index 4fea8b44fec6ef35ae155e2ac0baa44f8cda2616..3e72ebf0e64c87c571b1c96f5a9b6b9abf35d6f7 100644
+--- a/v3/index.d.ts
++++ b/v3/index.d.ts
+@@ -1,4 +1,4 @@
+-import * as zod from 'zod';
++import * as zod from 'zod/v3';
+ 
+ interface ErrorOptions {
+     cause?: unknown;
+diff --git a/v3/index.js b/v3/index.js
+index 08e0013cb74cd6001b466335b06e2b635f316cc0..54fc1c586a5a81773f2ba914643f4eb1d9117c80 100644
+--- a/v3/index.js
++++ b/v3/index.js
+@@ -82,10 +82,10 @@ function isValidationErrorLike(err) {
+ }
+ 
+ // lib/v3/fromZodIssue.ts
+-var zod2 = __toESM(require("zod"));
++var zod2 = __toESM(require("zod/v3"));
+ 
+ // lib/v3/MessageBuilder.ts
+-var zod = __toESM(require("zod"));
++var zod = __toESM(require("zod/v3"));
+ 
+ // lib/utils/NonEmptyArray.ts
+ function isNonEmptyArray(value) {
+diff --git a/v3/index.mjs b/v3/index.mjs
+index 5b1566e3ff8e238b9d29cd017a037696ba1e1019..c6afb8ae7a31284684310b1ea74fcc912164fb5c 100644
+--- a/v3/index.mjs
++++ b/v3/index.mjs
+@@ -37,10 +37,10 @@ function isValidationErrorLike(err) {
+ }
+ 
+ // lib/v3/fromZodIssue.ts
+-import * as zod2 from "zod";
++import * as zod2 from "zod/v3";
+ 
+ // lib/v3/MessageBuilder.ts
+-import * as zod from "zod";
++import * as zod from "zod/v3";
+ 
+ // lib/utils/NonEmptyArray.ts
+ function isNonEmptyArray(value) {
