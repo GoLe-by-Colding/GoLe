@@ -40,6 +40,9 @@ case "$command_name" in
     printf 'poweroff\n' >> /tmp/poweroff-calls
     ;;
   disable)
+    if [ "$mode" = migration-race ]; then
+      touch /etc/gole/deployment.transaction
+    fi
     if [ "$mode" = legacy-disable-failure ]; then
       exit 41
     fi
@@ -204,6 +207,16 @@ grep -Fq 'compatible budget relay must be healthy' /tmp/migration-health.out
 printf 'healthy\n' > /tmp/relay-health
 run_migrated_prefix
 [ ! -e /tmp/poweroff-calls ]
+
+reset_case migration-race
+if run_migrated_prefix > /tmp/migration-race.out 2>&1; then
+  echo 'bootstrap ignored a transaction created during runner quiesce' >&2
+  exit 1
+fi
+grep -Fq 'finish the pending production transaction' /tmp/migration-race.out
+assert_one_poweroff migration-race
+[ ! -e /etc/gole/infra.env ]
+[ ! -e /etc/gole/cloud-broker.conf ]
 
 echo 'Bootstrap runner quiesce fail-closed runtime test passed.'
 CONTAINER_TEST

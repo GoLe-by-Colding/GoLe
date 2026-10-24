@@ -72,6 +72,26 @@ if [ -n "$GCP_PROJECT_ID" ] && [[ ! "$GCP_PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a
   echo "GCP_PROJECT_ID is invalid" >&2
   exit 1
 fi
+billing_migration_pending=0
+verify_billing_migration_preconditions() {
+  if [ ! -f /etc/gole/deployed.sha ] || [ -L /etc/gole/deployed.sha ] ||
+    [ "$(stat -c '%U:%G:%a' /etc/gole/deployed.sha)" != "root:root:644" ] ||
+    [ "$(cat /etc/gole/deployed.sha)" != "$BOOTSTRAP_SOURCE_SHA" ]; then
+    echo "deploy the reviewed compatibility release under the previous cost arm before billing migration" >&2
+    exit 1
+  fi
+  for pending in /etc/gole/deployment.transaction /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction; do
+    if [ -e "$pending" ] || [ -L "$pending" ]; then
+      echo "finish the pending production transaction before billing migration" >&2
+      exit 1
+    fi
+  done
+  if [ "$(docker inspect --format '{{.State.Health.Status}}' gole-budget-relay 2>/dev/null || true)" != healthy ]; then
+    echo "compatible budget relay must be healthy before billing migration" >&2
+    exit 1
+  fi
+}
+
 # 새 결제 계정은 2026-10-24 검증한 기간/예산에만 재무장한다.
 reviewed_start=2026-09-01T19:57:05+09:00
 reviewed_stop=2026-10-28T01:50:00+09:00
@@ -115,22 +135,8 @@ if [ "$GCP_EXPECTED_BILLING_ACCOUNT_ID" = "013E1F-1D7BF5-E66D50" ]; then
   # 정상 CD해 LKG까지 호환 버전으로 만든 뒤 최초 결제 기간을 전환한다.
   if [ ! -e /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ] &&
     [ ! -L /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ]; then
-    if [ ! -f /etc/gole/deployed.sha ] || [ -L /etc/gole/deployed.sha ] ||
-      [ "$(stat -c '%U:%G:%a' /etc/gole/deployed.sha)" != "root:root:644" ] ||
-      [ "$(cat /etc/gole/deployed.sha)" != "$BOOTSTRAP_SOURCE_SHA" ]; then
-      echo "deploy the reviewed compatibility release under the previous cost arm before billing migration" >&2
-      exit 1
-    fi
-    for pending in /etc/gole/deployment.transaction /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction; do
-      if [ -e "$pending" ] || [ -L "$pending" ]; then
-        echo "finish the pending production transaction before billing migration" >&2
-        exit 1
-      fi
-    done
-    if [ "$(docker inspect --format '{{.State.Health.Status}}' gole-budget-relay 2>/dev/null || true)" != healthy ]; then
-      echo "compatible budget relay must be healthy before billing migration" >&2
-      exit 1
-    fi
+    billing_migration_pending=1
+    verify_billing_migration_preconditions
   fi
 fi
 if [ "$GCP_VM_COST_START" != "$reviewed_start" ] ||
@@ -412,6 +418,12 @@ if [ -e "$standard_runner_file" ] || [ -L "$standard_runner_file" ]; then
     install -m 0644 -o root -g root "$runner_unit_candidate" "$standard_runner_file"
     rm -f -- "$runner_unit_candidate"
   fi
+fi
+
+# 첫 검사 직후 시작된 CD가 journal을 남겼는지도 runner 정지 후 다시 확인한다.
+# 여기서 실패하면 기존 env/broker를 바꾸지 않고 기존 fail-closed 복구 경로를 따른다.
+if [ "$billing_migration_pending" -eq 1 ]; then
+  verify_billing_migration_preconditions
 fi
 
 # Detect the one live legacy relay only after every repository runner is
