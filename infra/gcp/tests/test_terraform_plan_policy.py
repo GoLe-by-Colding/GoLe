@@ -3,7 +3,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 
@@ -21,6 +24,12 @@ PROJECT_NUMBER = "336721527881"
 BILLING_ACCOUNT_ID = "01B490-1BC53A-33E611"
 BUDGET_ID = "b645c912-d766-43fc-8923-bff70ecfe8d8"
 BUDGET_AMOUNT_KRW = "370000"
+MIGRATED_BILLING_ACCOUNT_ID = "013E1F-1D7BF5-E66D50"
+MIGRATED_BUDGET_ID = "e987694c-e6bc-48ed-90fa-942a74e56e04"
+MIGRATED_EXPECTATIONS = {
+    "expected_billing_account_id": MIGRATED_BILLING_ACCOUNT_ID,
+    "expected_budget_id": MIGRATED_BUDGET_ID,
+}
 RUNTIME_EMAIL = f"gole-production-runtime@{PROJECT_ID}.iam.gserviceaccount.com"
 STARTUP_SCRIPT = "#!/usr/bin/env bash\nset -euo pipefail\n# independently reviewed fixture\n"
 STARTUP_SHA256 = hashlib.sha256(STARTUP_SCRIPT.encode()).hexdigest()
@@ -329,19 +338,170 @@ def firewall(name: str, priority: int, sources: list[str], tags: list[str], *, a
     }
 
 
+def budget_change(plan: dict) -> dict:
+    return next(
+        item["change"] for item in plan["resource_changes"]
+        if item["address"] == MODULE.BUDGET_RESOURCE
+    )
+
+
+def migrated_plan() -> dict:
+    # 이미 채택된 호스트에서 신규 Budget import 후 metadata만 바꾸는 plan이다.
+    plan = safe_plan()
+    for item in plan["resource_changes"]:
+        change = item["change"]
+        if item["address"] == MODULE.BUDGET_RESOURCE:
+            state = change["after"]
+            state["billing_account"] = MIGRATED_BILLING_ACCOUNT_ID
+            state["name"] = MIGRATED_BUDGET_ID
+            state["id"] = (
+                f"billingAccounts/{MIGRATED_BILLING_ACCOUNT_ID}/budgets/{MIGRATED_BUDGET_ID}"
+            )
+            state["budget_filter"][0]["custom_period"] = [{
+                "start_date": [{"day": 24, "month": 10, "year": 2026}],
+                "end_date": [{"day": 22, "month": 1, "year": 2027}],
+            }]
+        change["before"] = copy.deepcopy(change["after"])
+        change["actions"] = ["no-op"]
+        if item["address"] == MODULE.INSTANCE_RESOURCE:
+            change["after"]["metadata"]["gole-budget-id"] = MIGRATED_BUDGET_ID
+            change["actions"] = ["update"]
+    return plan
+
+
+def validation_options(**overrides: str) -> dict[str, str]:
+    return {
+        "expected_static_ip_name": STATIC_NAME,
+        "expected_static_ip": STATIC_IP,
+        "expected_project_id": PROJECT_ID,
+        "expected_project_number": PROJECT_NUMBER,
+        "expected_billing_account_id": BILLING_ACCOUNT_ID,
+        "expected_budget_id": BUDGET_ID,
+        "expected_budget_amount_krw": BUDGET_AMOUNT_KRW,
+        "expected_startup_script_sha256": STARTUP_SHA256,
+        **overrides,
+    }
+
+
 class ExistingPlanPolicyTest(unittest.TestCase):
-    def validate(self, plan: dict) -> None:
-        MODULE.validate_existing_plan(
-            plan,
-            expected_static_ip_name=STATIC_NAME,
-            expected_static_ip=STATIC_IP,
-            expected_project_id=PROJECT_ID,
-            expected_project_number=PROJECT_NUMBER,
-            expected_billing_account_id=BILLING_ACCOUNT_ID,
-            expected_budget_id=BUDGET_ID,
-            expected_budget_amount_krw=BUDGET_AMOUNT_KRW,
-            expected_startup_script_sha256=STARTUP_SHA256,
-        )
+    def validate(self, plan: dict, **overrides: str) -> None:
+        MODULE.validate_existing_plan(plan, **validation_options(**overrides))
+
+    def test_allows_reviewed_periods_with_noop_budget_and_notification_repairs(self) -> None:
+        for factory, expectations in ((safe_plan, {}), (migrated_plan, MIGRATED_EXPECTATIONS)):
+            for repair in ("none", "recipients", "missing", "empty"):
+                with self.subTest(period=factory.__name__, repair=repair):
+                    plan = factory()
+                    budget = budget_change(plan)
+                    if repair == "recipients":
+                        budget["before"]["all_updates_rule"][0]["enable_project_level_recipients"] = False
+                    elif repair in ("missing", "empty"):
+                        budget["before"]["all_updates_rule"] = None if repair == "missing" else []
+                    if repair != "none":
+                        budget["actions"] = ["update"]
+                    self.validate(plan, **expectations)
+
+    def test_rejects_mixed_extended_or_malformed_periods_before_and_after(self) -> None:
+        old_period = budget_state()["budget_filter"][0]["custom_period"][0]
+        new_period = budget_change(migrated_plan())["after"]["budget_filter"][0]["custom_period"][0]
+        for factory, expectations, other in (
+            (safe_plan, {}, new_period),
+            (migrated_plan, MIGRATED_EXPECTATIONS, old_period),
+        ):
+            for location in ("before", "after"):
+                for mutation in ("opposite", "mixed_start", "mixed_end", "extended", "float", "boolean", "string"):
+                    with self.subTest(period=factory.__name__, location=location, mutation=mutation):
+                        plan = factory()
+                        budget = budget_change(plan)
+                        period = budget[location]["budget_filter"][0]["custom_period"][0]
+                        if mutation == "opposite":
+                            period.update(copy.deepcopy(other))
+                        elif mutation in ("mixed_start", "mixed_end"):
+                            key = "start_date" if mutation == "mixed_start" else "end_date"
+                            period[key] = copy.deepcopy(other[key])
+                        elif mutation == "extended":
+                            period["end_date"][0]["day"] += 1
+                        elif mutation == "float":
+                            period["end_date"][0]["month"] = float(period["end_date"][0]["month"])
+                        elif mutation == "boolean":
+                            if factory is safe_plan:
+                                period["start_date"][0]["day"] = True
+                            else:
+                                period["end_date"][0]["month"] = True
+                        else:
+                            period["start_date"][0]["year"] = "2026"
+                        budget["actions"] = ["update"]
+                        with self.assertRaisesRegex(MODULE.PlanPolicyError, "scope or period"):
+                            self.validate(plan, **expectations)
+
+    def test_rejects_unreviewed_identity_even_when_plan_and_expectations_match(self) -> None:
+        for factory, expectations, other_account, other_budget in (
+            (safe_plan, {}, MIGRATED_BILLING_ACCOUNT_ID, MIGRATED_BUDGET_ID),
+            (migrated_plan, MIGRATED_EXPECTATIONS, BILLING_ACCOUNT_ID, BUDGET_ID),
+        ):
+            options = validation_options(**expectations)
+            for key, replacement in (
+                ("expected_project_id", "project-unreviewed-123"),
+                ("expected_project_number", "999999999999"),
+                ("expected_billing_account_id", "000000-000000-000000"),
+                ("expected_budget_id", "00000000-0000-0000-0000-000000000000"),
+                ("expected_budget_amount_krw", "370001"),
+                ("expected_billing_account_id", other_account),
+                ("expected_budget_id", other_budget),
+            ):
+                with self.subTest(period=factory.__name__, key=key, replacement=replacement):
+                    plan = json.loads(json.dumps(factory()).replace(options[key], replacement))
+                    changed = {**expectations, key: replacement}
+                    with self.assertRaisesRegex(MODULE.PlanPolicyError, "reviewed billing budget contract"):
+                        self.validate(plan, **changed)
+
+    def test_rejects_new_budget_identity_scope_amount_or_route_before_and_after(self) -> None:
+        for location in ("before", "after"):
+            for mutation in ("account", "budget", "amount", "project", "credits", "topic"):
+                with self.subTest(location=location, mutation=mutation):
+                    plan = migrated_plan()
+                    state = budget_change(plan)[location]
+                    if mutation == "account":
+                        state["billing_account"] = BILLING_ACCOUNT_ID
+                    elif mutation == "budget":
+                        state["name"] = BUDGET_ID
+                    elif mutation == "amount":
+                        state["amount"][0]["specified_amount"][0]["units"] = "999999"
+                    elif mutation == "project":
+                        state["budget_filter"][0]["projects"] = ["projects/999999999999"]
+                    elif mutation == "credits":
+                        state["budget_filter"][0]["credit_types_treatment"] = "INCLUDE_ALL_CREDITS"
+                    else:
+                        state["all_updates_rule"][0]["pubsub_topic"] = "projects/foreign/topics/billing"
+                    with self.assertRaises(MODULE.PlanPolicyError):
+                        self.validate(plan, **MIGRATED_EXPECTATIONS)
+
+    def test_rejects_old_budget_metadata_with_new_billing_period(self) -> None:
+        plan = migrated_plan()
+        instance = next(item for item in plan["resource_changes"] if item["address"] == MODULE.INSTANCE_RESOURCE)
+        instance["change"]["after"]["metadata"]["gole-budget-id"] = BUDGET_ID
+        with self.assertRaisesRegex(MODULE.PlanPolicyError, "Budget identity metadata"):
+            self.validate(plan, **MIGRATED_EXPECTATIONS)
+
+    def test_cli_accepts_exact_periods_and_rejects_mixing_without_echoing_payload(self) -> None:
+        for factory, expectations in ((safe_plan, {}), (migrated_plan, MIGRATED_EXPECTATIONS)):
+            for valid in (True, False):
+                with self.subTest(period=factory.__name__, valid=valid):
+                    plan = factory()
+                    if not valid:
+                        budget_change(plan)["after"]["budget_filter"][0]["custom_period"][0]["end_date"][0]["day"] += 1
+                    plan["fixture_payload"] = "plan-private-fixture-not-a-real-secret"
+                    arguments = [sys.executable, str(SCRIPT), "--existing"]
+                    for key, value in validation_options(**expectations).items():
+                        arguments.extend(["--" + key.replace("_", "-"), value])
+                    result = subprocess.run(arguments, input=json.dumps(plan), text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0 if valid else 1, result.stderr)
+                    self.assertNotIn("plan-private-fixture-not-a-real-secret", result.stdout + result.stderr)
+                    self.assertNotIn(MIGRATED_BUDGET_ID, result.stdout + result.stderr)
+                    if valid:
+                        self.assertIn("안전 계약을 통과", result.stdout)
+                    else:
+                        self.assertIn("scope or period", result.stderr)
 
     def test_allows_in_place_vm_update_and_new_snapshot_policy(self) -> None:
         self.validate(safe_plan())
