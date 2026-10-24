@@ -481,7 +481,7 @@ class Config:
                     "GCP_HARD_STOP_BUDGET_DISPLAY_NAME cannot be empty"
                 )
             if (
-                vm_cost_start >= rate_transition_at
+                vm_cost_start > rate_transition_at
                 or rate_transition_at >= stop_at
                 or stop_at > deadline
             ):
