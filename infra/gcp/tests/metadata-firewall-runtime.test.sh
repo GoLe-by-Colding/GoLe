@@ -49,9 +49,12 @@ for family in ("v4", "v6"):
             raise AssertionError("missing terminal metadata rule")
         for protocol in ("udp", "tcp"):
             assert verdict(protocol, 53, 1001) == "RETURN", (family, prefix, protocol)
-        for port in (80, 443, 5353):
+        for port in (80, 123, 443, 5353):
             assert verdict("tcp", port, 1001) == blocked, (family, prefix, port)
         assert verdict("udp", 5353, 1001) == blocked
+        # 호스트 IPv4 NTP만 허용한다. 컨테이너와 다른 프로토콜은 차단한다.
+        ntp_expected = "RETURN" if family == "v4" and prefix == "GOLE_MO_" else blocked
+        assert verdict("udp", 123, 1001) == ntp_expected, (family, prefix, "NTP")
 PY
 
 grep -Eq 'v4 -w -t raw -A GOLE_MI_[0-9]+_[0-9]+ -d 169\.254\.169\.254/32 -j DROP' "$FIREWALL_LOG"
