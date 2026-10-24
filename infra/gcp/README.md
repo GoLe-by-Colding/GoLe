@@ -1520,6 +1520,13 @@ VM·데이터·서비스 계정·35.216.80.123·gole.co.kr은 유지한다. 신�
 - Terraform budget resource는 새 budget을 import해 관리한다. 이전 state를0600으로 백업하고
   exact budget address만 교체한 후 plan에서 VM/disk/IP 삭제·교체0건을 확인한다. 새 결제 계정
   연결 권한과 Terraform state 권한은 별개이므로 기존 운영자 인증을 무조건 제거하지 않는다.
+- `verify-terraform-plan.py`는 프로젝트 ID `project-72a52bf1-06aa-4519-b2c`, 번호
+  `336721527881`, 계정·Budget ID·370000 KRW 전체 조합으로 기간을 선택한다. 신규 계정과
+  Budget은 2026-10-24~2027-01-22만, 구 계정 `01B490-1BC53A-33E611`과 Budget
+  `b645c912-d766-43fc-8923-bff70ecfe8d8`은 2026-09-01~2026-10-28만 허용한다.
+  before/after 모두 같은 정확한 기간이어야 하며, 구·신 식별자나 날짜 혼합·기간 연장·
+  미검토 프로젝트는 CLI 기대값을 함께 바꿔도 거부한다. 기간 우회 옵션은 없으며 기존 알림
+  복구만 허용한다. 검증 범위는 [예산 기간 검증 스펙](../../.kiro/specs/gcp-plan-billing-period/design.md)을 따른다.
 
 실행 근거와 진행 상태는 `.kiro/specs/gcp-billing-migration/` 및 GoLe-obsidian의
 `02_아키텍처/03_인프라/GCP 계정 이전과 크레딧 만료 대응`을 따른다.
