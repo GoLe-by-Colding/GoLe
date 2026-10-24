@@ -1512,8 +1512,11 @@ VM·데이터·서비스 계정·35.216.80.123·gole.co.kr은 유지한다. 신�
   `state-013E1F-1D7BF5-E66D50-2026-10-24.json`은 이전 `state.json`의 네트워크 누계를
   이어받고, 구 비용·경고 파일을 보존한다. 새 기간 재시작/파일 손상으로 누적값을 초기화하지 않는다.
 - bootstrap/Compose validator는 구·신 exact 계약을 모두 검증한다. 새 계정 날짜만 넣거나
-  watchdog를 끄는 방식은 허용하지 않는다. 성공한 main push CI SHA의 bootstrap을 적용한 뒤
-  CD로 relay를 반영하고 GitHub repository variables mirror를 맞춘다.
+  watchdog를 끄는 방식은 허용하지 않는다. 먼저 성공한 main push CI SHA를 **구 비용 arm으로
+  정상 CD**해 LKG를 새 Compose/relay 호환 버전으로 만든다. 그 다음 같은 SHA의 bootstrap을
+  신규 arm으로 적용하고 repository variables mirror를 맞춘 뒤 동일 SHA CD를 다시 실행한다.
+  최초 신규 arm bootstrap은 deployed.sha가 source SHA와 다르면 runner/환경 변경 전에 거부한다.
+  기존 root helper가 새 앱 CD를 거부하면 먼저 같은 SHA bootstrap을 **구 arm**으로 설치한다.
 - Terraform budget resource는 새 budget을 import해 관리한다. 이전 state를0600으로 백업하고
   exact budget address만 교체한 후 plan에서 VM/disk/IP 삭제·교체0건을 확인한다. 새 결제 계정
   연결 권한과 Terraform state 권한은 별개이므로 기존 운영자 인증을 무조건 제거하지 않는다.

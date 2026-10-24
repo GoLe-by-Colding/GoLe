@@ -6,7 +6,7 @@
 - [x] 외부 프로젝트 소유자 초대·수락
 - [x] 새 예산 및 알림 경로 준비
 - [x] 프로젝트 결제 전환·서비스 검증
-- [x] 새 비용 기간·구 이력 보존 구현 및 로컬 검증 (infra Python135·relay27·bootstrap contract·runner runtime·ShellCheck·Terraform validate)
+- [x] 새 비용 기간·구 이력 보존 구현 및 로컬 검증 (infra Python136·relay27·bootstrap contract·runner runtime·ShellCheck·Terraform validate)
 - [ ] 검증된 비용 정책 운영 반영
 - [x] 구 결제 연결 0개 확인·닫기
 - [ ] 옵시디언 결과 및 후속 점검 기록·커밋·원격 반영

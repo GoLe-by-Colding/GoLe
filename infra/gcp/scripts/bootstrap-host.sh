@@ -111,6 +111,27 @@ if [ "$GCP_EXPECTED_BILLING_ACCOUNT_ID" = "013E1F-1D7BF5-E66D50" ]; then
   runtime_danger=936
   high_rate=153.390555330
   manual_snapshot_rate=26.027340000
+  # 구 Compose/relay는 새 기간을 해석하지 못한다. 먼저 이 SHA를 구 arm으로
+  # 정상 CD해 LKG까지 호환 버전으로 만든 뒤 최초 결제 기간을 전환한다.
+  if [ ! -e /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ] &&
+    [ ! -L /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ]; then
+    if [ ! -f /etc/gole/deployed.sha ] || [ -L /etc/gole/deployed.sha ] ||
+      [ "$(stat -c '%U:%G:%a' /etc/gole/deployed.sha)" != "root:root:644" ] ||
+      [ "$(cat /etc/gole/deployed.sha)" != "$BOOTSTRAP_SOURCE_SHA" ]; then
+      echo "deploy the reviewed compatibility release under the previous cost arm before billing migration" >&2
+      exit 1
+    fi
+    for pending in /etc/gole/deployment.transaction /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction; do
+      if [ -e "$pending" ] || [ -L "$pending" ]; then
+        echo "finish the pending production transaction before billing migration" >&2
+        exit 1
+      fi
+    done
+    if [ "$(docker inspect --format '{{.State.Health.Status}}' gole-budget-relay 2>/dev/null || true)" != healthy ]; then
+      echo "compatible budget relay must be healthy before billing migration" >&2
+      exit 1
+    fi
+  fi
 fi
 if [ "$GCP_VM_COST_START" != "$reviewed_start" ] ||
   [ "$GCP_HARD_STOP_AT" != "$reviewed_stop" ] ||

@@ -90,6 +90,7 @@ run_prefix() {
     GCP_RUNTIME_RATE_TRANSITION_AT=2026-09-06T00:00:00+09:00 \
     GCP_EXPECTED_BUDGET_ID=00000000-0000-4000-8000-000000000001 \
     GCP_EXPECTED_BILLING_ACCOUNT_ID=ABCDEF-123456-ABCDEF \
+    "$@" \
     bash /tmp/bootstrap-runner-prefix.sh
 }
 
@@ -158,6 +159,51 @@ run_prefix
 [ -e /tmp/standard-stopped ]
 [ ! -e /tmp/poweroff-calls ]
 grep -Fqx "stop $standard_service" /tmp/systemctl.calls
+
+run_migrated_prefix() {
+  run_prefix \
+    GCP_PROJECT_ID=project-72a52bf1-06aa-4519-b2c \
+    GCP_VM_COST_START=2026-10-24T00:00:00+09:00 \
+    GCP_HARD_STOP_AT=2026-12-03T00:00:00+09:00 \
+    GCP_CREDIT_DEADLINE=2027-01-22T00:00:00+09:00 \
+    GCP_RUNTIME_RATE_TRANSITION_AT=2026-10-24T00:00:00+09:00 \
+    GCP_EXPECTED_BUDGET_ID=e987694c-e6bc-48ed-90fa-942a74e56e04 \
+    GCP_EXPECTED_BILLING_ACCOUNT_ID=013E1F-1D7BF5-E66D50
+}
+
+reset_case success
+if run_migrated_prefix > /tmp/migration-order.out 2>&1; then
+  echo 'bootstrap accepted migration before compatible LKG deployment' >&2
+  exit 1
+fi
+grep -Fq 'deploy the reviewed compatibility release' /tmp/migration-order.out
+[ ! -e /tmp/systemctl.calls ]
+[ ! -e /tmp/poweroff-calls ]
+printf '%s\n' "$bootstrap_sha" > /etc/gole/deployed.sha
+chmod 0644 /etc/gole/deployed.sha
+touch /etc/gole/deployment.transaction
+if run_migrated_prefix > /tmp/migration-pending.out 2>&1; then
+  echo 'bootstrap accepted an unfinished production transaction' >&2
+  exit 1
+fi
+grep -Fq 'finish the pending production transaction' /tmp/migration-pending.out
+[ ! -e /tmp/systemctl.calls ]
+rm /etc/gole/deployment.transaction
+cat > /test-bin/docker <<'EOF'
+#!/bin/sh
+cat /tmp/relay-health
+EOF
+chmod 0755 /test-bin/docker
+printf 'unhealthy\n' > /tmp/relay-health
+if run_migrated_prefix > /tmp/migration-health.out 2>&1; then
+  echo 'bootstrap accepted an unhealthy compatibility relay' >&2
+  exit 1
+fi
+grep -Fq 'compatible budget relay must be healthy' /tmp/migration-health.out
+[ ! -e /tmp/systemctl.calls ]
+printf 'healthy\n' > /tmp/relay-health
+run_migrated_prefix
+[ ! -e /tmp/poweroff-calls ]
 
 echo 'Bootstrap runner quiesce fail-closed runtime test passed.'
 CONTAINER_TEST

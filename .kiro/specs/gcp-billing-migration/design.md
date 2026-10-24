@@ -39,3 +39,7 @@
 - 960h·네트워크30GiB·수동2개·정지 뒤 disk/IP/manual 유지 및 scheduled72h tail을 모두 포함한 VAT10% 상한이 34만원 미만인지 회귀 검증한다. 잔여 약67626원은 가격변동/추가SKU/보고지연 여유다.
 - 현재 확인된 Catalog 단가는 기존 상한보다 낮지만 할인/스냅샷 압축/무료 IP 시간을 크레딧 연장 근거로 쓰지 않는다. 정상 사용료가 게시되면 별도 검토로 비용 추정을 조정할 수 있으며 자동 연장은 하지 않는다.
 - Terraform의 budget address는 기존 state를 비밀 출력 없이 백업한 후 새 계정 Budget을 import한다. 삭제/재생성 0건 plan 검토 후 VM metadata만 갱신한다. 데이터·IP·기존 owner를 제거하지 않는다.
+
+## 배포 순서와 복구 (독립 리뷰 반영)
+
+구 운영 Compose는 high/transition/manual 값을 상수로 가지므로 신규 infra.env를 먼저 적용하면 LKG 검증이 실패한다. 먼저 신규 main SHA를 구 비용 arm으로 CD해 deployed.sha와 새 Compose/relay 이미지를 확정한다. 구 helper 호환 문제가 있으면 신규 main SHA bootstrap을 구 arm으로 먼저 적용한다. 그 다음 같은 SHA bootstrap을 신규 arm으로 실행하고 변수 mirror·동일 SHA CD를 적용한다. 최초 신규 arm은 deployed.sha 불일치 시 quiesce 전에 거부한다. 신규 기간 초기화 영수증을 먼저 fsync해 새 state 삭제/초기 쓰기 실패를 기간 재시작으로 처리하지 않는다.

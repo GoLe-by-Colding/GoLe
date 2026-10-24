@@ -124,6 +124,13 @@ class CloudBrokerPolicyTest(unittest.TestCase):
         with self.assertRaises(self.module.BrokerError):
             self.module.Cloud(self.migrated_policy())
 
+    def test_deleted_new_period_state_fails_closed_instead_of_reinitializing(self):
+        self.module.Cloud(self.policy)
+        new = self.module.Cloud(self.migrated_policy())
+        new.state_path.unlink()
+        with self.assertRaisesRegex(self.module.BrokerError, "initialized billing period"):
+            self.module.Cloud(self.migrated_policy())
+
     def test_new_period_rejects_wrong_identity_or_relaxed_limits(self):
         for key, value in {
             "EXPECTED_BUDGET_ID": "b645c912-d766-43fc-8923-bff70ecfe8d8",

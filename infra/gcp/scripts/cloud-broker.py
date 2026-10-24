@@ -323,11 +323,33 @@ class Cloud:
             and not self.state_path.exists()
             and not self.state_path.is_symlink()
         ):
+            marker = self.state_path.with_suffix(".initialized")
+            if marker.exists() or marker.is_symlink():
+                raise BrokerError("initialized billing period state is missing")
             if not STATE_PATH.is_file() or STATE_PATH.is_symlink():
                 raise BrokerError("previous billing period state is required")
             _latest, last_raw, cumulative, _alerts, needs_meter, _schema = self._read_state_at(STATE_PATH)
             if needs_meter:
                 raise BrokerError("previous billing period requires a durable network meter")
+            # 최초 초기화 영수증을 먼저 fsync한다. 파일 삭제나 첫 쓰기 도중
+            # 크래시를 '새 기간 시작'으로 오인해 비용/트래픽을 재설정하지 않는다.
+            if STATE_PATH.parent.is_symlink() or STATE_PATH.parent.stat().st_mode & 0o077:
+                raise BrokerError("broker state directory permissions are invalid")
+            descriptor = os.open(
+                marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+            )
+            try:
+                receipt = b"013E1F-1D7BF5-E66D50:2026-10-24\n"
+                if os.write(descriptor, receipt) != len(receipt):
+                    raise BrokerError("billing migration receipt write failed")
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            directory = os.open(STATE_PATH.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
             return Decimal("0"), last_raw, cumulative, set(), False, True
         return self._read_state_at(self.state_path)
 
