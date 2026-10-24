@@ -1,73 +1,22 @@
-"""초안 한 편을 만드는 두 번의 모델 호출 — 프롬프트와 출력 계약.
+"""초안 한 편을 만드는 codex 두 번의 호출의 지시문(D25). 출력 계약은 gole_promotion_core.contract 에 있다.
 
-1. Claude: 미리 찍어 둔 후보 화면들을 한 번에 보고, 올릴 화면을 고르고 캡션을 쓴다(구조화 출력).
-2. Codex: 고른 실제 화면을 홍보 이미지로 다듬는다(생성형 편집). 화면 내용은 바꾸지 말라고 고정한다.
-
-규칙(톤·데모 안내·최근 글)은 `policy` 에서 가져온다. 검증의 정본은 아래 pydantic 모델이다.
+1. 기획: 후보 화면 축소본을 한 번에 보고 화면 하나 고르기·캡션·반려 성찰(구조화 출력, 도구 없음).
+2. 제작: 고른 원본 한 장을 고정 절차로 홍보 이미지로 만든다. 화면 내용은 바꾸지 말라고 고정한다.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, Sequence
-
-from pydantic import BaseModel, Field, model_validator
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from gole_promotion_agent import policy
-
-MAX_PICKS = 3
-
-
-class Pick(BaseModel):
-    image: int = Field(ge=1, description="후보 이미지 번호(1부터)")
-    # 검토 화면에 사진 이름으로 붙는다. 왜 골랐는지는 rationale 에 쓴다.
-    label: str = Field(min_length=1, max_length=40)
-
-
-class DraftOutput(BaseModel):
-    decision: Literal["draft", "skip"]
-    skip_reason: str | None = Field(default=None, max_length=policy.MAX_RATIONALE)
-    caption: str | None = Field(default=None, min_length=1, max_length=policy.MAX_CAPTION)
-    rationale: str | None = Field(default=None, min_length=1, max_length=policy.MAX_RATIONALE)
-    picks: list[Pick] = Field(default_factory=list, max_length=MAX_PICKS)
-
-    @model_validator(mode="after")
-    def _complete(self) -> "DraftOutput":
-        if self.decision == "skip":
-            if not self.skip_reason:
-                raise ValueError("건너뛰면 skip_reason 이 필요하다")
-        elif not (self.caption and self.rationale and self.picks):
-            raise ValueError("초안에는 caption·rationale·picks 가 모두 필요하다")
-        if len({pick.image for pick in self.picks}) != len(self.picks):
-            raise ValueError("같은 화면을 두 번 고르지 않는다")
-        return self
-
-
-OUTPUT_SCHEMA: Mapping[str, Any] = {
-    "type": "object",
-    "properties": {
-        "decision": {"type": "string", "enum": ["draft", "skip"]},
-        "skip_reason": {"type": "string"},
-        "caption": {"type": "string", "maxLength": policy.MAX_CAPTION},
-        "rationale": {"type": "string", "maxLength": policy.MAX_RATIONALE},
-        "picks": {
-            "type": "array",
-            "maxItems": MAX_PICKS,
-            "items": {
-                "type": "object",
-                "properties": {"image": {"type": "integer"}, "label": {"type": "string", "maxLength": 40}},
-                "required": ["image", "label"],
-            },
-        },
-    },
-    "required": ["decision"],
-}
 
 _SYSTEM = """{tone}
 
 너는 GoLe 홍보 초안 에이전트다. {mission}
 
-첨부 이미지는 방금 찍은 GoLe 의 실제 화면들이다. 이미지 목록에 번호와 화면 경로가 있다.
-Read 로 이미지를 **모두 열어 실제로 무엇이 보이는지 확인한 뒤** 판단한다.
+첨부 이미지는 방금 찍은 GoLe 의 실제 모바일 화면들이다. 후보 목록에 번호와 화면 경로가 있다.
+첨부 이미지를 **모두 보고 실제로 무엇이 보이는지 확인한 뒤** 판단한다.
 
 {screen_note}
 
@@ -75,13 +24,8 @@ Read 로 이미지를 **모두 열어 실제로 무엇이 보이는지 확인한
 - 캡션은 **네가 이미지에서 직접 본 화면**에 근거해 쓴다. 화면에 없는 기능을 말하지 않는다.
 - 다른 이용자의 닉네임·프로필 사진·매물 사진이 크게 잡힌 화면은 고르지 않는다.
 - "아직 없어요" 같은 **빈 상태 화면은 고르지 않는다** — 그것은 그 기능의 모습이 아니다.
-- 고른 화면은 디자이너가 브라우저 목업에 넣어 다듬는다. 화면 자체가 홍보 이미지의 주인공이다.
+- 고른 화면 한 장이 홍보 이미지의 주인공이다. 다음 단계가 그 화면을 휴대폰 목업에 넣어 만든다.
 - 보여줄 만한 것이 없으면 억지로 만들지 말고 건너뛴다.
-
-결과는 구조화 출력으로 낸다:
-- 초안: decision="draft", caption, rationale(왜 이 화면들을 골랐는지 검토자가 읽을 한두 문장),
-  picks(올릴 순서대로 최대 {max_picks}장. image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색").
-- 건너뜀: decision="skip", skip_reason.
 
 {history}"""
 
@@ -96,12 +40,7 @@ _SERVICE_MISSION = (
 )
 
 # 작업 기억을 붙인 실제 지시문을 검토 화면에 남긴다. 백엔드 상한은 6000자다.
-POLISH_PROMPT = (
-    "첨부 이미지는 GoLe(레고 중고거래) 웹앱의 실제 화면 캡처다. 이것을 SNS 홍보용 정사각형 이미지로 다듬어라. "
-    "화면을 살짝 기울인 브라우저 창 목업에 넣고, 코발트 블루(#2f56e6) 배경과 부드러운 그림자를 더한다. "
-    "화면 안의 글자·숫자·버튼·아이콘·배치는 **원본과 똑같이** 유지한다. 새 글자·로고·워터마크를 넣지 않는다. "
-    "레고 로고나 미니피규어를 그리지 않는다."
-)
+POLISH_PROMPT = (Path(__file__).parent / "procedures" / "royal-blue-brick-mobile-v1.md").read_text(encoding="utf-8")
 
 
 def system_prompt(history: Sequence[Mapping[str, Any]], demo: bool, service: bool) -> str:
@@ -109,7 +48,6 @@ def system_prompt(history: Sequence[Mapping[str, Any]], demo: bool, service: boo
         tone=policy.tone_guide(),
         mission=_SERVICE_MISSION if service else _FEATURE_MISSION,
         screen_note=policy.screen_note(demo),
-        max_picks=MAX_PICKS,
         history=policy.render_history(history),
     )
 
@@ -127,3 +65,32 @@ def task_prompt(
         )
     )
     return f"{head}\n\n후보 화면(첨부 이미지와 같은 순서):\n{listed}"
+
+
+_PLAN_TASKS = """
+
+## 작업 1 — 화면 하나 고르기·캡션
+{task}
+
+- 초안: decision="draft", skip_reason=null, caption,
+  rationale(이 화면을 고른 이유만 검토자가 읽을 한두 문장으로. 작업 과정은 쓰지 않는다),
+  pick(image 는 후보 번호, label 은 검토자가 볼 짧은 사진 이름 — 예: "매물 탐색",
+  headline 은 화면 밖에 크게 넣을 문구. 두 줄로 나누고 한 줄은 15자 안쪽, 전체 40자 이하.
+  화면에서 확인한 가치만 쓰고 근거 없는 기능·수치·성과를 말하지 않는다).
+- 건너뜀: decision="skip", skip_reason, caption·rationale·pick 은 null.
+
+## 작업 2 — 반려 성찰 (reflection 필드)
+{reflection}
+
+이미지는 만들지 않는다 — 고른 화면은 다음 단계가 따로 제작한다. 첨부 이미지는 고르기용 축소본이다.
+도구·셸을 쓰지 말고 첨부 이미지만 보고 곧바로 스키마에 맞는 JSON 하나만 낸다."""
+
+# 제작 호출 끝에 붙는 고정 지시. 확인 단계마다 맥락 전체가 다시 실려 토큰이 커진다(D25 실측).
+MAKE_RULES = "\n\n셸 명령·파일 목록 확인·저장 결과 재확인 없이 이미지를 만들고 바로 끝낸다."
+
+
+def plan_prompt(system: str, memory_block: str, task: str, reflection: str | None) -> str:
+    """기획 호출(고르기·캡션·성찰)의 지시문. reflection 이 None 이면 성찰할 반려가 없다."""
+    return system + memory_block + _PLAN_TASKS.format(
+        task=task, reflection=reflection or "미처리 반려가 없다. reflection=[] 로 낸다.",
+    )

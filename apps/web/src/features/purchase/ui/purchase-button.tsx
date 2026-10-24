@@ -24,6 +24,7 @@ export interface PurchaseButtonProps {
   /** 지금 매물가. 수락 제안으로 주문할 때 실제 금액(`min(제안가, 매물가)`)과 정가 안내에 쓴다. */
   readonly listingPrice: number;
   readonly available: boolean;
+  readonly unavailableLabel?: string;
 }
 
 /** 마지막으로 쓴 CS 연락처를 기억해 다음 구매에서 미리 채운다. */
@@ -48,6 +49,7 @@ export function PurchaseButton({
   sellerId,
   listingPrice,
   available,
+  unavailableLabel = "거래완료",
 }: PurchaseButtonProps) {
   const router = useRouter();
   const { session } = useSession();
@@ -57,6 +59,7 @@ export function PurchaseButton({
   // 구매하기 → 연락처 확인 → 주문 생성. 배송 문제가 생기면 연락할 번호가 필요하다(R8.1).
   const [phoneStep, setPhoneStep] = useState(false);
   const [buyerPhone, setBuyerPhone] = useState("");
+  const [selectedOffer, setSelectedOffer] = useState<{ id: string; amount: number } | null>(null);
   // 서버가 제안을 거부하면 이 화면에서는 정가 주문으로 넘어간다.
   const [offerRejected, setOfferRejected] = useState(false);
   const isOwnListing = session?.accountId === sellerId;
@@ -78,6 +81,11 @@ export function PurchaseButton({
     }
     setError(undefined);
     setBuyerPhone(readStoredPhone());
+    setSelectedOffer(
+      usableOffer === null || offerAmount === null
+        ? null
+        : { id: usableOffer.id, amount: offerAmount },
+    );
     setPhoneStep(true);
   }
 
@@ -86,7 +94,33 @@ export function PurchaseButton({
     if (!session || submitting) return;
     setError(undefined);
     setSubmitting(true);
-    const offerId = usableOffer?.id;
+    const currentOffers = offers ?? [];
+    const rejectOffer = (message: string) => {
+      const nextOffer = findUsableAcceptedOffer(
+        currentOffers.filter((offer) => offer.id !== selectedOffer?.id),
+        listingId,
+        session.accountId,
+        Date.now(),
+      );
+      if (nextOffer !== null) setPhoneStep(false);
+      else setOfferRejected(true);
+      setError(
+        `${message} ${nextOffer !== null ? "남은 제안가를 다시 확인해 주세요." : "정가 주문을 원하면 다시 확인해 주세요."}`,
+      );
+      reloadOffers();
+    };
+    const currentOffer = findUsableAcceptedOffer(
+      currentOffers.filter((offer) => offer.id === selectedOffer?.id),
+      listingId,
+      session.accountId,
+      Date.now(),
+    );
+    if (selectedOffer !== null && !offerRejected && currentOffer === null) {
+      rejectOffer("선택한 제안이 만료되거나 변경됐어요.");
+      setSubmitting(false);
+      return;
+    }
+    const offerId = offerRejected ? undefined : selectedOffer?.id;
     try {
       const phone = buyerPhone.trim();
       const order = await placeOrder(listingId, session.accountId, phone || undefined, offerId);
@@ -102,12 +136,7 @@ export function PurchaseButton({
         cause instanceof ApiError &&
         cause.code === OFFER_ERROR.NOT_USABLE
       ) {
-        // 서버가 예약을 풀었으므로 같은 매물을 정가로 다시 주문할 수 있다(O16).
-        setOfferRejected(true);
-        setError(
-          `${offerErrorMessage(cause, "order")} 정가 ${formatWon(listingPrice)}으로 주문할 수 있어요.`,
-        );
-        reloadOffers();
+        rejectOffer(offerErrorMessage(cause, "order"));
       } else {
         setError(cause instanceof ApiError ? cause.message : "주문 생성 중 오류가 발생했습니다.");
       }
@@ -133,10 +162,14 @@ export function PurchaseButton({
   if (phoneStep) {
     return (
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        {offerAmount !== null ? (
+        {selectedOffer !== null && !offerRejected ? (
           <Text size="sm" tone="secondary">
-            판매자가 수락한 제안가 {formatWon(offerAmount)}으로 주문해요. (정가{" "}
+            판매자가 수락한 제안가 {formatWon(selectedOffer.amount)}으로 주문해요. (정가{" "}
             {formatWon(listingPrice)})
+          </Text>
+        ) : offerRejected ? (
+          <Text size="sm" tone="secondary">
+            정가 {formatWon(listingPrice)}으로 주문해요.
           </Text>
         ) : null}
         <Field
@@ -193,7 +226,7 @@ export function PurchaseButton({
   return (
     <div className="flex flex-col gap-2">
       <Button size="lg" disabled={!available || submitting} onClick={handleClick}>
-        {available ? "구매하기" : "거래완료"}
+        {available ? "구매하기" : unavailableLabel}
       </Button>
       {error ? <span className="text-sm text-danger">{error}</span> : null}
     </div>

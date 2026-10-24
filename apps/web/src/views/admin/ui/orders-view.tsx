@@ -19,6 +19,7 @@ const STATUSES = [
   "COMPLETED",
   "REFUNDED",
   "PAYMENT_FAILED",
+  "CANCELLED",
 ];
 
 /** 주문 모니터링과 결제 원장 재조정. 운영자 개입 환불은 구매자·판매자 흐름에서 처리한다. */

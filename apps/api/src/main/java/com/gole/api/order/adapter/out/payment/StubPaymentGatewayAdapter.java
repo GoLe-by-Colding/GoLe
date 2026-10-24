@@ -54,6 +54,12 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
+    public PaymentVerification verifyPaymentForCancellation(String orderId, long amount) {
+        requireStubAllowed(orderId);
+        return PaymentVerification.of(PaymentVerificationResult.NOT_FOUND);
+    }
+
+    @Override
     public RefundResult refund(String orderId, long amount) {
         requireStubAllowed(orderId);
         String transactionId = newTransactionId(orderId);

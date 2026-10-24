@@ -6,6 +6,8 @@ import base64
 from pathlib import Path
 from typing import Sequence
 
+from gole_promotion_agent import policy
+
 # 1x1 PNG. 실제 촬영 대신 형식만 맞춘 파일을 남긴다.
 PIXEL = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -25,7 +27,11 @@ class FakeCamera:
         self.calls.append(route)
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(PIXEL)
+        from PIL import Image
+
+        Image.new("RGB", (policy.CAPTURE_VIEWPORT["width"], policy.CAPTURE_VIEWPORT["height"]), "#1D4ED8").save(
+            destination, format="PNG",
+        )
 
     def close(self) -> None:
         return None

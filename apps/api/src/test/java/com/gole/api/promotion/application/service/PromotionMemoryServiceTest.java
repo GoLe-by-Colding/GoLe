@@ -23,6 +23,20 @@ class PromotionMemoryServiceTest {
     private final PromotionMemoryService memory =
             new PromotionMemoryService(feedback, guidelines, ids, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
 
+    @Test
+    @DisplayName("초기 지식은 인증 제안자에게 귀속되고 조건부 삽입만 한다")
+    void seedCore_insertsReviewedProposalsOnly() {
+        when(guidelines.insertIfAbsent(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var result = memory.seedCore("maker");
+        assertThat(result).hasSize(3).allSatisfy(seed -> {
+            assertThat(seed.proposedBy()).isEqualTo("maker");
+            assertThat(seed.status()).isEqualTo(PromotionGuidelineStatus.PROPOSED);
+            assertThat(seed.sourceType()).isEqualTo(PromotionGuidelineSourceType.CORE_SEED);
+        });
+        verify(guidelines, times(3)).insertIfAbsent(any());
+        verify(guidelines, never()).insert(any());
+    }
+
     private PromotionFeedback source(String id, String runKey) {
         return new PromotionFeedback(
                 id,
@@ -170,11 +184,11 @@ class PromotionMemoryServiceTest {
     }
 
     @Test
-    @DisplayName("기억 조회는 반려 3건/활성 지침 8개 예산을 지키고 경로 입력을 검증한다")
+    @DisplayName("기억 조회는 반려 3건과 모든 활성 지침을 요청하고 경로 입력을 검증한다")
     void context_boundsQueriesAndValidatesRoutes() {
         memory.context(PromotionCategory.SERVICE, List.of("/market"));
         verify(feedback).findRelevant(PromotionCategory.SERVICE, List.of("/market"), 3);
-        verify(guidelines).findActive(PromotionCategory.SERVICE, 8);
+        verify(guidelines).findActive(PromotionCategory.SERVICE);
         verify(feedback).findUnreflected(3);
         assertThatThrownBy(() -> memory.context(PromotionCategory.SERVICE, List.of("https://other.test")))
                 .isInstanceOf(IllegalArgumentException.class);

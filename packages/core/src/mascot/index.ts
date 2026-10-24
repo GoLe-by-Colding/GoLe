@@ -6,6 +6,7 @@ import { apiRequest } from "../runtime";
  * <p>그림은 각 플랫폼이 가진다(웹 `shared/ui/logo/presets/`). 키 목록은 서버 `MascotPresets`와 같아야 한다.
  */
 export const MASCOT_PRESET_KEYS = [
+  "side-brick-soft",
   "side-brick",
   "side-brick-original",
   "baby-round",
@@ -26,19 +27,26 @@ export interface MascotPresetMeta {
   readonly key: MascotPresetKey;
   readonly name: string;
   readonly description: string;
-  /** 그림을 처음 넣은 커밋과 날짜. 다시 그리지 않고 그때 SVG를 그대로 옮겼다. */
+  /** 그림의 출처 커밋(새 디자인은 개정 표기)과 날짜. 과거 프리셋의 원본 SVG는 보존한다. */
   readonly commit: string;
   readonly date: string;
 }
 
-export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick";
+export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick-soft";
 
 export const MASCOT_PRESETS: readonly MascotPresetMeta[] = [
+  {
+    key: "side-brick-soft",
+    name: "미소 브릭 고래",
+    description: "옆모습과 스터드 세 개를 유지하고, 또렷한 눈과 작은 미소·들린 꼬리로 다듬은 고래.",
+    commit: "2026-10-21 디자인 개정",
+    date: "2026-10-21",
+  },
   {
     key: "side-brick",
     name: "옆모습 브릭 고래",
     description:
-      "지금 기본 고래. 원본 옆모습을 둥글게 다듬고 가운데 골드 스터드에서 분수가 솟는다.",
+      "2026-10-09 버전. 원본 옆모습을 둥글게 다듬고 가운데 골드 스터드에서 분수가 솟는다.",
     commit: "5cc1f3da",
     date: "2026-10-09",
   },
@@ -158,7 +166,7 @@ export interface ActiveMascot {
 export const DEFAULT_MASCOT: PresetMascot = Object.freeze({
   kind: "PRESET",
   id: DEFAULT_MASCOT_KEY,
-  name: "옆모습 브릭 고래",
+  name: "미소 브릭 고래",
 });
 
 export const DEFAULT_ACTIVE_MASCOT: ActiveMascot = Object.freeze({

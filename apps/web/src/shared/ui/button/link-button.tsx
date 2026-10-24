@@ -18,6 +18,7 @@ export interface LinkButtonProps {
   readonly onClick?: () => void;
   readonly target?: "_blank" | "_self";
   readonly rel?: string;
+  readonly download?: string;
   readonly children: ReactNode;
 }
 
@@ -33,6 +34,7 @@ export function LinkButton({
   onClick,
   target,
   rel,
+  download,
   children,
 }: LinkButtonProps) {
   return (
@@ -41,6 +43,7 @@ export function LinkButton({
       {...(onClick ? { onClick } : {})}
       {...(target ? { target } : {})}
       {...(rel ? { rel } : {})}
+      {...(download === undefined ? {} : { download })}
       className={cn(
         BUTTON_BASE,
         BUTTON_VARIANT[variant],

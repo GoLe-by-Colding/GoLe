@@ -72,16 +72,80 @@ if [ -n "$GCP_PROJECT_ID" ] && [[ ! "$GCP_PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a
   echo "GCP_PROJECT_ID is invalid" >&2
   exit 1
 fi
-if [[ ! "$GCP_VM_COST_START" =~ ^2026-09-01T19:57:05\+09:00$ ]] ||
-  [[ ! "$GCP_HARD_STOP_AT" =~ ^2026-10-28T01:50:00\+09:00$ ]] ||
-  [[ ! "$GCP_CREDIT_DEADLINE" =~ ^2026-10-28T23:59:59\+09:00$ ]]; then
+billing_migration_pending=0
+verify_billing_migration_preconditions() {
+  if [ ! -f /etc/gole/deployed.sha ] || [ -L /etc/gole/deployed.sha ] ||
+    [ "$(stat -c '%U:%G:%a' /etc/gole/deployed.sha)" != "root:root:644" ] ||
+    [ "$(cat /etc/gole/deployed.sha)" != "$BOOTSTRAP_SOURCE_SHA" ]; then
+    echo "deploy the reviewed compatibility release under the previous cost arm before billing migration" >&2
+    exit 1
+  fi
+  for pending in /etc/gole/deployment.transaction /etc/gole/gole.env.transaction /etc/gole/nginx.conf.transaction; do
+    if [ -e "$pending" ] || [ -L "$pending" ]; then
+      echo "finish the pending production transaction before billing migration" >&2
+      exit 1
+    fi
+  done
+  if [ "$(docker inspect --format '{{.State.Health.Status}}' gole-budget-relay 2>/dev/null || true)" != healthy ]; then
+    echo "compatible budget relay must be healthy before billing migration" >&2
+    exit 1
+  fi
+}
+
+# 새 결제 계정은 2026-10-24 검증한 기간/예산에만 재무장한다.
+reviewed_start=2026-09-01T19:57:05+09:00
+reviewed_stop=2026-10-28T01:50:00+09:00
+reviewed_deadline=2026-10-28T23:59:59+09:00
+reviewed_transition=2026-09-06T00:00:00+09:00
+credit_amount=395600.60
+credit_deadline_date=2026-10-28
+all_in_limit=350000
+cost_warning=330000
+cost_danger=340000
+cost_period_start=2026-09-01
+cost_arm=2026-09-e2-standard-2-ipv4-v3
+runtime_limit=1350
+runtime_warning=1250
+runtime_danger=1320
+high_rate=240.749900000
+manual_snapshot_rate=13.013670000
+if [ "$GCP_EXPECTED_BILLING_ACCOUNT_ID" = "013E1F-1D7BF5-E66D50" ]; then
+  if [ "$GCP_PROJECT_ID" != "project-72a52bf1-06aa-4519-b2c" ] ||
+    [ "$GCP_EXPECTED_BUDGET_ID" != "e987694c-e6bc-48ed-90fa-942a74e56e04" ]; then
+    echo "migrated billing project/budget identity is invalid" >&2
+    exit 1
+  fi
+  reviewed_start=2026-10-24T00:00:00+09:00
+  reviewed_transition=$reviewed_start
+  reviewed_stop=2026-12-03T00:00:00+09:00
+  reviewed_deadline=2027-01-22T00:00:00+09:00
+  credit_amount=407626
+  credit_deadline_date=2027-01-21
+  all_in_limit=340000
+  cost_warning=320000
+  cost_danger=330000
+  cost_period_start=2026-10-24
+  cost_arm=2026-10-billing-013E1F-v1
+  runtime_limit=960
+  runtime_warning=840
+  runtime_danger=936
+  high_rate=153.390555330
+  manual_snapshot_rate=26.027340000
+  # 구 Compose/relay는 새 기간을 해석하지 못한다. 먼저 이 SHA를 구 arm으로
+  # 정상 CD해 LKG까지 호환 버전으로 만든 뒤 최초 결제 기간을 전환한다.
+  if [ ! -e /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ] &&
+    [ ! -L /var/lib/gole-cloud-broker/state-013E1F-1D7BF5-E66D50-2026-10-24.json ]; then
+    billing_migration_pending=1
+    verify_billing_migration_preconditions
+  fi
+fi
+if [ "$GCP_VM_COST_START" != "$reviewed_start" ] ||
+  [ "$GCP_HARD_STOP_AT" != "$reviewed_stop" ] ||
+  [ "$GCP_CREDIT_DEADLINE" != "$reviewed_deadline" ] ||
+  [ "$GCP_RUNTIME_RATE_TRANSITION_AT" != "$reviewed_transition" ]; then
   echo "cost broker timestamps must match the reviewed production arm" >&2
   exit 1
 fi
-[[ "$GCP_RUNTIME_RATE_TRANSITION_AT" =~ ^2026-09-06T00:00:00\+09:00$ ]] || {
-  echo "runtime rate transition must match the reviewed resize gate" >&2
-  exit 1
-}
 [[ "$GCP_EXPECTED_BUDGET_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || {
   echo "expected Billing Budget ID is invalid" >&2
   exit 1
@@ -354,6 +418,12 @@ if [ -e "$standard_runner_file" ] || [ -L "$standard_runner_file" ]; then
     install -m 0644 -o root -g root "$runner_unit_candidate" "$standard_runner_file"
     rm -f -- "$runner_unit_candidate"
   fi
+fi
+
+# 첫 검사 직후 시작된 CD가 journal을 남겼는지도 runner 정지 후 다시 확인한다.
+# 여기서 실패하면 기존 env/broker를 바꾸지 않고 기존 fail-closed 복구 경로를 따른다.
+if [ "$billing_migration_pending" -eq 1 ]; then
+  verify_billing_migration_preconditions
 fi
 
 # Detect the one live legacy relay only after every repository runner is
@@ -637,30 +707,33 @@ printf '%s\n' \
   "MINIO_ROOT_PASSWORD=$minio_password" \
   'GCP_BUDGET_PUBSUB_SUBSCRIPTION=gole-billing-budget-discord' \
   "GCP_PROJECT_ID=$GCP_PROJECT_ID" \
-  'GCP_CREDIT_AMOUNT_KRW=395600.60' \
-  'GCP_CREDIT_DEADLINE=2026-10-28' \
+  "GCP_CREDIT_AMOUNT_KRW=$credit_amount" \
+  "GCP_CREDIT_DEADLINE=$credit_deadline_date" \
   'GCP_FIXED_HOURLY_COST_KRW=153.390555330' \
+  "GCP_HIGH_RATE_HOURLY_COST_KRW=$high_rate" \
+  "GCP_RUNTIME_RATE_TRANSITION_AT=$GCP_RUNTIME_RATE_TRANSITION_AT" \
+  "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW=$manual_snapshot_rate" \
   'GCP_HARD_STOP_ENABLED=true' \
   'GCP_HARD_STOP_DRY_RUN=false' \
   'GCP_HARD_STOP_BILLING_COST_KRW=320000' \
   'GCP_HARD_STOP_MIN_RESERVE_KRW=75000' \
-  'GCP_HARD_STOP_ALL_IN_COST_KRW=350000' \
-  'GCP_COST_GUARD_WARNING_KRW=330000' \
-  'GCP_COST_GUARD_DANGER_KRW=340000' \
+  "GCP_HARD_STOP_ALL_IN_COST_KRW=$all_in_limit" \
+  "GCP_COST_GUARD_WARNING_KRW=$cost_warning" \
+  "GCP_COST_GUARD_DANGER_KRW=$cost_danger" \
   'GCP_HARD_STOP_NETWORK_GIB=30' \
   'GCP_COST_GUARD_NETWORK_WARNING_GIB=15' \
   'GCP_COST_GUARD_NETWORK_DANGER_GIB=25' \
-  'GCP_HARD_STOP_MAX_RUNTIME_HOURS=1350' \
-  'GCP_COST_GUARD_RUNTIME_WARNING_HOURS=1250' \
-  'GCP_COST_GUARD_RUNTIME_DANGER_HOURS=1320' \
+  "GCP_HARD_STOP_MAX_RUNTIME_HOURS=$runtime_limit" \
+  "GCP_COST_GUARD_RUNTIME_WARNING_HOURS=$runtime_warning" \
+  "GCP_COST_GUARD_RUNTIME_DANGER_HOURS=$runtime_danger" \
   'GCP_HARD_STOP_EXPECTED_BUDGET_KRW=370000' \
   "GCP_HARD_STOP_BUDGET_ID=$GCP_EXPECTED_BUDGET_ID" \
   "GCP_HARD_STOP_BILLING_ACCOUNT_ID=$GCP_EXPECTED_BILLING_ACCOUNT_ID" \
   'GCP_HARD_STOP_BUDGET_DISPLAY_NAME=GoLe production credit guard' \
-  'GCP_HARD_STOP_PERIOD_START=2026-09-01' \
+  "GCP_HARD_STOP_PERIOD_START=$cost_period_start" \
   "GCP_VM_COST_START=$GCP_VM_COST_START" \
   "GCP_HARD_STOP_AT=$GCP_HARD_STOP_AT" \
-  'GCP_HARD_STOP_ARM_ID=2026-09-e2-standard-2-ipv4-v3' \
+  "GCP_HARD_STOP_ARM_ID=$cost_arm" \
   'GCP_INSTANCE_ZONE=asia-northeast3-a' \
   'GCP_INSTANCE_NAME=gole-production' \
   'GCP_VAT_RATE=0.10' \
@@ -789,17 +862,17 @@ printf '%s\n' \
   'SUBSCRIPTION=gole-billing-budget-discord' \
   "VM_COST_START=$GCP_VM_COST_START" \
   "HARD_STOP_AT=$GCP_HARD_STOP_AT" \
-  'MAX_RUNTIME_HOURS=1350' \
+  "MAX_RUNTIME_HOURS=$runtime_limit" \
   'FIXED_HOURLY_COST_KRW=153.390555330' \
-  'HIGH_RATE_HOURLY_COST_KRW=240.749900000' \
+  "HIGH_RATE_HOURLY_COST_KRW=$high_rate" \
   "RATE_TRANSITION_AT=$GCP_RUNTIME_RATE_TRANSITION_AT" \
   'EXPECTED_MACHINE_TYPE=e2-standard-2' \
   'SNAPSHOT_MAX_HOURLY_COST_KRW=39.041010000' \
   'SNAPSHOT_RETENTION_HOURS=72' \
-  'MANUAL_SNAPSHOT_HOURLY_COST_KRW=13.013670000' \
+  "MANUAL_SNAPSHOT_HOURLY_COST_KRW=$manual_snapshot_rate" \
   'STOPPED_RESOURCE_HOURLY_COST_KRW=45.725095000' \
   "CREDIT_DEADLINE=$GCP_CREDIT_DEADLINE" \
-  'ALL_IN_LIMIT_KRW=350000' \
+  "ALL_IN_LIMIT_KRW=$all_in_limit" \
   'BILLING_LIMIT_KRW=320000' \
   'NETWORK_LIMIT_GIB=30' \
   'NETWORK_PERIOD_BASELINE_BYTES=536870912' \
@@ -807,7 +880,7 @@ printf '%s\n' \
   'VAT_RATE=0.10' \
   'BUDGET_DISPLAY_NAME=GoLe production credit guard' \
   'BUDGET_AMOUNT_KRW=370000' \
-  'BUDGET_PERIOD_START=2026-09-01' \
+  "BUDGET_PERIOD_START=$cost_period_start" \
   "EXPECTED_BUDGET_ID=$GCP_EXPECTED_BUDGET_ID" \
   "EXPECTED_BILLING_ACCOUNT_ID=$GCP_EXPECTED_BILLING_ACCOUNT_ID" > "$broker_config"
 chown root:root "$broker_config"

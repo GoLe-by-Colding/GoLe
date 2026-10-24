@@ -9,6 +9,7 @@ import {
   fetchAdminPromotionGuidelines,
   fetchAdminPromotionRuns,
   retireAdminPromotionGuideline,
+  seedAdminPromotionKnowledge,
   updateAdminPromotionGuideline,
   type AdminPromotionFeedback,
   type AdminPromotionGuideline,
@@ -171,11 +172,40 @@ export function PromotionMemoryPanel({
     }
   }
 
+  async function prepareCoreKnowledge() {
+    if (token === null || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError(undefined);
+    setNotice("");
+    try {
+      await seedAdminPromotionKnowledge(token);
+      setStatus("ALL");
+      setRevision((value) => value + 1);
+      setNotice(
+        "초기 지식 제안을 준비했습니다. 기존 제안은 유지되며 다른 관리자가 확정해야 적용됩니다.",
+      );
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "초기 지식 제안을 준비하지 못했습니다.");
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
   return (
     <section aria-label="홍보 피드백 메모리" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Heading level={3}>홍보 지침</Heading>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy || token === null}
+            onClick={() => void prepareCoreKnowledge()}
+          >
+            초기 지식 제안 준비
+          </Button>
           <label className="flex items-center gap-2 text-sm">
             지침 상태
             <Select
@@ -205,8 +235,8 @@ export function PromotionMemoryPanel({
         </div>
       </div>
       <Text size="sm" tone="muted">
-        반려 사례에서 나온 제안은 다른 관리자가 확정해야 적용됩니다. 활성 지침은 해제할 수 있으며,
-        이전 실행에 사용한 내용은 남습니다.
+        초기 지식과 반려 사례에서 나온 제안은 다른 관리자가 확정해야 적용됩니다. 활성 지침은 해제할
+        수 있으며, 이전 실행에 사용한 내용은 남습니다.
       </Text>
       <AdminStatus error={error} loading={data === null && error === undefined} />
       {sourceErrors.length > 0 ? (
@@ -241,7 +271,13 @@ export function PromotionMemoryPanel({
                 onAction={act}
               />
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-neutral-500">
-                <span>근거 반려 기록:</span>
+                {guideline.sourceType === "CORE_SEED" ? (
+                  <span className="break-words">
+                    근거 문서: {guideline.sourceReference || "근거 없음"}
+                  </span>
+                ) : (
+                  <span>근거 반려 기록:</span>
+                )}
                 {guideline.sourceFeedbackIds.map((id) =>
                   data.feedback.some((feedback) => feedback.id === id) ? (
                     <a
@@ -294,6 +330,25 @@ export function PromotionMemoryPanel({
                 <p className="break-words">
                   반려 기록: {run.memoryContext?.feedbackIds.join(", ") || "없음"}
                 </p>
+                {(run.memoryContext?.stages ?? []).map((stage) => (
+                  <div
+                    key={stage.stage}
+                    role="group"
+                    aria-label={`실행 기억 ${run.runKey} ${stage.stage}`}
+                    className="mt-2 rounded-lg border border-neutral-200 p-2"
+                  >
+                    <p className="font-medium">
+                      {stage.stage === "PLAN" ? "화면 선택·캡션" : "이미지 편집"}
+                    </p>
+                    <p className="break-words">화면 경로: {stage.routes.join(", ") || "없음"}</p>
+                    <p className="break-words">
+                      반려 기록: {stage.feedbackIds.join(", ") || "없음"}
+                    </p>
+                    <p className="break-words">
+                      적용 지침: {stage.guidelineIds.join(", ") || "없음"}
+                    </p>
+                  </div>
+                ))}
                 {(run.memoryContext?.guidelines ?? []).map((guideline) => (
                   <div key={guideline.id} className="mt-1">
                     <p className="whitespace-pre-wrap break-words">

@@ -68,6 +68,8 @@ export interface Me {
   readonly onboardingRequired: boolean;
   /** 온보딩에서 설정한 표시 이름. 아직 설정 전이면 null. */
   readonly nickname: string | null;
+  /** 현재 비밀번호를 이용한 변경을 할 수 있는 계정인가. */
+  readonly passwordChangeAvailable: boolean;
 }
 
 export type AccountDeletionStatus = "BLOCKED" | "READY" | "COMPLETED";

@@ -37,7 +37,13 @@ async function mockProfileApis(page: Page): Promise<void> {
   );
   await page.route("**/api/v1/accounts/me", (route) =>
     route.fulfill({
-      json: { accountId: "acc-1", email: "seller@gole.test", role: "USER", nickname: "레고매니아" },
+      json: {
+        accountId: "acc-1",
+        email: "seller@gole.test",
+        role: "USER",
+        nickname: "레고매니아",
+        passwordChangeAvailable: true,
+      },
     }),
   );
   // (main) 레이아웃의 OnboardingBanner도 같은 이유로 격리한다 — 목킹 안 하면 실제
@@ -166,7 +172,7 @@ test.describe("내 정보", () => {
     await expect(page.getByText("아직 설정하지 않았어요")).toBeVisible();
     await expect(page.getByRole("link", { name: "닉네임 설정하기" })).toHaveAttribute(
       "href",
-      "/onboarding",
+      "/onboarding?returnTo=%2Fprofile",
     );
     // 닉네임이 없을 때는 이메일이 제목 자리를 대신한다.
     await expect(page.getByRole("heading", { name: "seller@gole.test" })).toBeVisible();
@@ -261,7 +267,7 @@ test.describe("내 정보", () => {
 
     await page.goto("/profile");
 
-    await expect(page.getByText("로그인이 필요합니다.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "나의 브릭 생활을 이어가세요" })).toBeVisible();
     await expect(page.getByRole("link", { name: "로그인하러 가기" })).toHaveAttribute(
       "href",
       "/login?returnTo=%2Fprofile",

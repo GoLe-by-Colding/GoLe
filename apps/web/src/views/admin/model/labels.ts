@@ -4,10 +4,12 @@ export const ORDER_STATUS_LABEL: Readonly<Record<string, string>> = {
   PAYMENT_PENDING: "결제대기",
   PAYMENT_REVIEW: "결제확인필요",
   FUNDS_HELD: "자금보유",
+  DISPUTED: "분쟁중",
   REFUND_PENDING: "환불처리중",
   COMPLETED: "완료",
   REFUNDED: "환불",
   PAYMENT_FAILED: "결제실패",
+  CANCELLED: "주문취소",
 };
 
 export const LISTING_STATUS_LABEL: Readonly<Record<string, string>> = {
@@ -147,6 +149,7 @@ export const AUDIT_TYPE_LABEL: Readonly<Record<string, string>> = {
   PROMOTION_POST_REJECT: "홍보 게시 반려",
   PROMOTION_POST_PUBLISH: "홍보 게시 발행",
   PROMOTION_GUIDELINE_EDIT: "홍보 지침 수정",
+  PROMOTION_GUIDELINE_SEED: "홍보 초기 지식 제안",
   PROMOTION_GUIDELINE_ACTIVATE: "홍보 지침 확정",
   PROMOTION_GUIDELINE_DISMISS: "홍보 지침 기각",
   PROMOTION_GUIDELINE_RETIRE: "홍보 지침 해제",
@@ -175,6 +178,7 @@ export const AUDIT_TYPE_TONE: Readonly<Record<string, BadgeTone>> = {
   PROMOTION_POST_REJECT: "danger",
   PROMOTION_POST_PUBLISH: "brand",
   PROMOTION_GUIDELINE_EDIT: "brand",
+  PROMOTION_GUIDELINE_SEED: "brand",
   PROMOTION_GUIDELINE_ACTIVATE: "success",
   PROMOTION_GUIDELINE_DISMISS: "neutral",
   PROMOTION_GUIDELINE_RETIRE: "warning",

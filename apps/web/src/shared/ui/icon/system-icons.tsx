@@ -34,6 +34,31 @@ export function BrickIcon(props: IconProps) {
   );
 }
 
+export function HomeIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" />
+    </IconFrame>
+  );
+}
+
+export function UserIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <circle cx="12" cy="7" r="4" />
+      <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+    </IconFrame>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </IconFrame>
+  );
+}
+
 export function MessageCircleIcon(props: IconProps) {
   return (
     <IconFrame {...props}>

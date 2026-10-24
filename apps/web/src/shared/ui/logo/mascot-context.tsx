@@ -33,13 +33,25 @@ export function MascotProvider({
     const refresh = () => {
       const requested = ++generation;
       void fetchActiveMascot().then((next) => {
-        if (alive && requested === generation) setActive(next);
+        if (alive && requested === generation) {
+          // 조회 실패의 기본값(revision 0)으로 이미 적용된 관리자 에셋을 덮지 않는다.
+          setActive((current) => (next.revision === 0 && current.revision > 0 ? current : next));
+        }
       });
     };
+    // 서버 캐시·다른 탭에서 적용한 그림을 오래 들고 있지 않는다.
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh();
     window.addEventListener(MASCOT_PUBLISHED_EVENT, refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       alive = false;
       window.removeEventListener(MASCOT_PUBLISHED_EVENT, refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
 

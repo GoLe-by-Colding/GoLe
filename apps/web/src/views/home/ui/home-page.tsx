@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
 import { fetchFeed, type Post } from "@entities/community";
 import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
 import { fetchLaunchConfig } from "@entities/launch";
+import { fetchActiveListings, ListingCard, type Listing } from "@entities/listing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
-import { cn } from "@shared/lib";
-import { env, isPaymentRuntimeAvailable } from "@shared/config";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
 import { PriceTicker } from "./price-ticker";
 
@@ -36,193 +36,138 @@ async function loadCommunity(): Promise<readonly Post[]> {
   }
 }
 
-async function loadStats(): Promise<{ listings: number; txCount: number }> {
+async function loadListings(): Promise<readonly Listing[] | null> {
   try {
-    const [listingsRes, trendingRes] = await Promise.all([
-      fetch(`${env.apiBaseUrl}/api/v1/listings`, { cache: "no-store" }),
-      fetch(`${env.apiBaseUrl}/api/v1/pricing/trending?limit=10`, { cache: "no-store" }),
-    ]);
-    const listings = listingsRes.ok ? ((await listingsRes.json()) as unknown[]).length : 0;
-    const trending = trendingRes.ok
-      ? ((await trendingRes.json()) as Array<{ tradeCount: number }>)
-      : [];
-    const txCount = trending.reduce((sum, s) => sum + s.tradeCount, 0);
-    return { listings, txCount };
+    return await fetchActiveListings();
   } catch {
-    return { listings: 0, txCount: 0 };
+    return null;
   }
 }
 
-/** 짧은 브랜드 라인과 제목으로 구성한 섹션 헤더. 골드는 히어로 제목과 고래 스터드에만 남긴다. */
+/** 실제 목록의 제목과 다음 이동을 같은 기준선에 놓는다. */
 function SectionHeader({ title, aside }: { readonly title: string; readonly aside?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-4">
-      <div className="flex flex-col gap-2">
-        <span aria-hidden="true" className="h-0.5 w-8 bg-brand-500" />
-        <Heading level={2}>{title}</Heading>
-      </div>
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <Heading level={2}>{title}</Heading>
       {aside}
     </div>
   );
 }
 
 export async function HomePage() {
-  const [featured, trending, community, stats, launch] = await Promise.all([
+  const [featured, trending, community, listings, launch] = await Promise.all([
     loadFeatured(),
     loadTrending(),
     loadCommunity(),
-    loadStats(),
+    loadListings(),
     fetchLaunchConfig(),
   ]);
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
-  const paymentsOpen = sellerTradingOpen && launch.features.payments && isPaymentRuntimeAvailable();
+  const txCount = trending.reduce((sum, set) => sum + set.tradeCount, 0);
   // 데이터가 없는 칸을 마케팅 문구로 채우면 "실시간"이라는 라벨이 거짓이 된다.
   const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
-    ...(stats.listings > 0
-      ? [{ label: "활성 매물", value: `${stats.listings.toLocaleString("ko-KR")}개` }]
+    ...(listings !== null && listings.length > 0
+      ? [{ label: "활성 매물", value: `${listings.length.toLocaleString("ko-KR")}개` }]
       : []),
-    ...(stats.txCount > 0
-      ? [{ label: "누적 체결", value: `${stats.txCount.toLocaleString("ko-KR")}건` }]
+    ...(txCount > 0
+      ? [{ label: "거래 상위 세트 체결 합계", value: `${txCount.toLocaleString("ko-KR")}건` }]
       : []),
   ];
 
-  // 히어로 CTA. 넓은 화면은 우측 레일(분수 → 지표 → CTA) 끝에, 모바일은 문구 바로 아래에 같은 것을 둔다.
-  // 처음 온 사람에게도 참이어야 하므로 보조 CTA는 로그인·대화 이력과 무관한 공개 화면으로만 보낸다
-  // ("대화 이어가기"는 대화가 없는 신규 방문자에게 거짓이었다).
-  const heroActions = (
-    <div className="flex flex-col gap-3 xl:flex-row">
-      <LinkButton href="/search" variant="primary" size="lg" fullWidth>
-        상품 둘러보기
-      </LinkButton>
-      <LinkButton
-        href={sellerTradingOpen ? "/prices" : "/community"}
-        variant="secondary"
-        size="lg"
-        fullWidth
-      >
-        {sellerTradingOpen ? "시세 확인하기" : "커뮤니티 둘러보기"}
-      </LinkButton>
-    </div>
-  );
-
   return (
     <div className="flex flex-col">
-      {/*
-        밝은 히어로 — 흰 바탕에 연한 블루 레일, 코발트 CTA, 골드는 제목 밑줄과 고래 스터드 두 곳뿐이다
-        (brand-identity: 흰색 기반·accent 화면당 1~2곳). 짙은 남색 히어로는 무겁고, 그 위의 brand-500
-        고래는 대비가 3:1이라 캐릭터가 묻혔다. 연한 레일 위 기본 brand-600 고래는 약 6:1이다.
-      */}
       <section className="bg-white">
         <Container width="xl">
-          <div className="grid gap-10 py-16 min-[960px]:grid-cols-[minmax(0,1.25fr)_minmax(330px,0.75fr)] min-[960px]:items-center min-[960px]:gap-8 xl:gap-12 max-sm:gap-8 max-sm:py-10">
-            <div className="flex flex-col gap-7 max-sm:gap-6">
-              {/* 모바일은 레일의 큰 고래가 CTA 아래로 밀리므로, 작은 고래를 첫 줄 오른쪽에 둔다.
-                  320px 폭에서는 아이브로가 두 줄이 되므로 어절 단위로 고르게 나눠 "브릭" 한 단어만 남지 않게 한다. */}
-              <div className="flex items-end justify-between gap-4">
-                <span className="border-l-2 border-brand-500 pl-3 text-sm font-semibold text-balance break-keep text-brand-700">
-                  깊은 바다에서 건져 올린 브릭
-                </span>
-                <Logo
-                  size={104}
-                  showWordmark={false}
-                  spout
-                  className="origin-[50%_62%] motion-safe:animate-mascot-float shrink-0 sm:hidden"
-                />
+          <div className="grid items-center gap-10 py-10 sm:py-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-16 lg:py-16">
+            <div className="flex min-w-0 flex-col items-start gap-5 sm:gap-6">
+              <div className="flex w-full items-center justify-between gap-4">
+                <p className="text-sm font-semibold break-keep text-brand-700">
+                  레고를 좋아하는 사람들의 마켓
+                </p>
+                <Logo size={64} showWordmark={false} className="lg:hidden" />
               </div>
-              <h1 className="max-w-[18ch] text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.05] tracking-[-0.03em] text-neutral-900">
-                브릭을{" "}
-                <span className="relative isolate inline-block text-brand-700">
-                  가장 합리적으로
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 bottom-[0.04em] -z-10 h-[0.3em] rounded-sm bg-accent-300"
-                  />
-                </span>
+              <h1 className="text-[clamp(2.5rem,5vw,4.25rem)] font-extrabold leading-[1.12] tracking-[-0.035em]">
+                다음 브릭을 <span className="block">만나는 곳.</span>
               </h1>
-              {/*
-                두 문장을 block으로 두어 넓은 화면에서만 줄을 나눈다. `<br>`를 숨기는 방식은
-                모바일에서 공백까지 함께 사라져 "컬렉션.흩어져"로 붙어버린다.
-              */}
-              <p className="max-w-[44ch] text-lg leading-relaxed text-neutral-600">
-                <span className="block max-sm:inline">
-                  {paymentsOpen
-                    ? "체결가 기반 시세 · 안전결제 · 셀러 샵 · 컬렉션."
-                    : sellerTradingOpen
-                      ? "체결가 기반 시세 · 판매자 직거래 · 셀러 샵 · 컬렉션."
-                      : "체결가 기반 시세 · 브릭 탐색 · 커뮤니티 · 컬렉션."}
-                </span>{" "}
-                <span className="block max-sm:inline">흩어져 있던 브릭 거래를 한곳에서.</span>
+              <p className="max-w-[38ch] text-base leading-relaxed break-keep text-neutral-600 sm:text-lg">
+                갖고 싶던 세트를 찾고, 소중히 모은 브릭을 새로운 주인에게 전해 주세요.
               </p>
-              {/* 한 칸짜리 모바일 레이아웃에서는 우측 레일이 문구 아래로 내려가 CTA가 첫 화면 밖으로
-                  밀린다(402×874에서 폴드보다 109px 아래). 모바일만 CTA를 문구 바로 아래에 둔다. */}
-              <div className="sm:hidden">{heroActions}</div>
-            </div>
-
-            {/* 우측 레일 — 분수(브릭이 솟는다) → 라이브 지표(지금 얼마나 도는가) →
-                CTA(그래서 무엇을 하는가) 순으로 한 줄기 시선을 만든다. 모바일에서는 고래·CTA가 문구 쪽에
-                있으므로 지표만 남고, 지표도 없으면 빈 상자가 되지 않게 레일을 숨긴다. */}
-            <div
-              className={cn(
-                "flex *:motion-safe:animate-hero-flow *:nth-2:motion-safe:animate-hero-flow-2 *:nth-3:motion-safe:animate-hero-flow-3 min-w-0 flex-col gap-5 rounded-[1.75rem] border border-brand-100 bg-brand-50 p-5 sm:max-[959px]:grid sm:max-[959px]:grid-cols-[minmax(260px,0.8fr)_minmax(260px,1.2fr)] sm:max-[959px]:items-center sm:p-6",
-                liveStats.length === 0 && "max-sm:hidden",
-              )}
-            >
-              <div className="relative flex min-h-48 items-center justify-center sm:max-[959px]:row-span-2 max-sm:hidden">
-                <span
-                  aria-hidden="true"
-                  className="absolute right-[8%] bottom-3 left-[8%] h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent"
-                />
-                <Logo
-                  size={256}
-                  showWordmark={false}
-                  spout
-                  className="origin-[50%_62%] motion-safe:animate-mascot-float"
-                />
+              <div className="flex flex-wrap gap-2 pt-1 sm:gap-3">
+                <LinkButton href="/search" variant="primary">
+                  상품 둘러보기
+                </LinkButton>
+                <LinkButton href={sellerTradingOpen ? "/prices" : "/community"} variant="secondary">
+                  {sellerTradingOpen ? "시세 확인하기" : "커뮤니티 보기"}
+                </LinkButton>
               </div>
-
               {liveStats.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  <div
-                    aria-label={sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
-                    className="divide-y divide-brand-100 border-y border-brand-100"
-                  >
-                    <div className="flex items-center gap-2 py-2.5">
-                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                      <span className="text-xs font-semibold tracking-wide text-brand-700">
-                        {sellerTradingOpen ? "실시간 거래 현황" : "공개 콘텐츠 현황"}
-                      </span>
+                <dl
+                  aria-label="공개 거래 현황"
+                  className="flex flex-wrap gap-x-6 gap-y-2 pt-2 text-sm"
+                >
+                  {liveStats.map((stat) => (
+                    <div key={stat.label} className="flex items-baseline gap-2">
+                      <dt className="text-neutral-500">{stat.label}</dt>
+                      <dd className="font-semibold tabular-nums text-neutral-800">{stat.value}</dd>
                     </div>
-                    {liveStats.map((stat) => (
-                      <div
-                        key={stat.label}
-                        className="flex items-baseline justify-between gap-4 py-3"
-                      >
-                        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-                          {stat.label}
-                        </span>
-                        <span className="text-base font-bold tracking-tight text-neutral-900">
-                          {stat.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* 지표 바로 아래에 붙여, 어느 레이아웃에서도 "어느 숫자"인지 위치어 없이 읽힌다. */}
-                  <p className="text-sm leading-relaxed text-neutral-600">
-                    가격은 감이 아니라 체결 기록에서 나옵니다.
-                  </p>
-                </div>
+                  ))}
+                </dl>
               ) : null}
-
-              <div className="max-sm:hidden">{heroActions}</div>
+              {txCount > 0 ? (
+                <p className="text-xs leading-relaxed text-neutral-500">
+                  체결 기록 수 상위 최대 8세트의 합계예요. 최근 30일 기준이며, 이 기간에 기록이
+                  없으면 전체 기간을 집계해요.
+                </p>
+              ) : null}
+            </div>
+            <div className="relative hidden aspect-[1.3] items-center justify-center overflow-hidden rounded-2xl bg-brand-50 lg:flex">
+              <Logo size={300} showWordmark={false} spout />
+              <span className="absolute inset-x-0 bottom-7 text-center font-display text-base font-bold text-brand-700">
+                브릭으로 이어지는 취향
+              </span>
             </div>
           </div>
         </Container>
-
         <PriceTicker items={trending} />
       </section>
 
       <Container width="xl">
-        <div className="flex flex-col gap-20 pt-16 pb-24">
+        <div className="flex flex-col gap-12 pt-10 pb-16 sm:gap-16 sm:pt-12 lg:gap-20 lg:pt-16 lg:pb-24">
+          <section className="flex flex-col gap-6" aria-label="최근 판매 매물">
+            <SectionHeader
+              title="방금 올라온 매물"
+              aside={
+                <LinkButton href="/search" variant="ghost" size="sm">
+                  전체 보기
+                </LinkButton>
+              }
+            />
+            {listings === null ? (
+              <EmptyState
+                variant="inline"
+                title="매물을 불러오지 못했어요"
+                description="잠시 후 상품 탐색에서 다시 확인해 주세요."
+              />
+            ) : listings.length === 0 ? (
+              <EmptyState
+                variant="inline"
+                title="첫 매물을 기다리고 있어요."
+                action={
+                  <LinkButton href="/sell" variant="secondary">
+                    판매 시작하기
+                  </LinkButton>
+                }
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3 sm:gap-5">
+                {listings.slice(0, 6).map((listing) => (
+                  <Link key={listing.id} href={`/listings/${listing.id}`}>
+                    <ListingCard listing={listing} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
           {/* Trending */}
           <section className="flex flex-col gap-6">
             <SectionHeader
@@ -281,7 +226,7 @@ export async function HomePage() {
             </section>
           ) : null}
 
-          <section className="rounded-lg border border-brand-200 bg-brand-50 px-10 py-12 max-sm:px-6">
+          <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-8 sm:px-10 sm:py-12">
             <div className="flex flex-wrap items-center justify-between gap-6">
               <div className="flex flex-col gap-2">
                 <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
@@ -291,7 +236,7 @@ export async function HomePage() {
                 </h2>
                 <p className="text-neutral-600">
                   {sellerTradingOpen
-                    ? "사진 5장이면 등록 끝 — 시세 기반 추천가로 빠르게 판매됩니다."
+                    ? "브릭의 상태와 사진을 남기고, 다음 컬렉터를 만나보세요."
                     : "신규 판매 등록은 본인확인 준비가 끝난 뒤 열립니다. 지금은 브릭을 탐색하고 커뮤니티에서 의견을 나눌 수 있어요."}
                 </p>
               </div>

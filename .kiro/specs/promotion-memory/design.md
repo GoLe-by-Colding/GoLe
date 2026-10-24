@@ -19,7 +19,7 @@
 {"feedback":[],"guidelines":[],"unreflectedFeedback":[]}
 ```
 
-feedback은 동일 category의 기록 중 route 일치 우선, 나머지는 최신순으로 최대 3건. guidelines는 해당 category의 ACTIVE 최신순 최대 8개. unreflectedFeedback은 category와 무관하게 오래된 미처리 최대 3건. 목록의 feedback 문서는 저장 필드 전체를 사용하고 guideline 문서는 아래 응답 형태를 사용한다. 작업 단계별 전달은 Python이 targets로 필터링한다.
+feedback은 동일 category의 기록 중 route 일치 우선, 나머지는 최신순으로 최대 3건. guidelines는 해당 category의 ACTIVE 전체를 최신순으로 반환한다. unreflectedFeedback은 category와 무관하게 오래된 미처리 최대 3건. 목록의 feedback 문서는 저장 필드 전체를 사용하고 guideline 문서는 아래 응답 형태를 사용한다. 작업 단계별 전달은 Python이 targets로 필터링한다. 초기 지식과 단계별 원장 확장은 `../promotion-coala/design.md`를 따른다.
 
 `GET /api/admin/promotion-feedback?postId=<선택>&limit=50` 최신순, limit 1~100. UI 근거 조회용.
 
@@ -65,18 +65,18 @@ feedbackIds는 중복 없이 1~3개, proposals는 0~3개. 근거 ID는 이번 fe
 {"memoryContext":{"feedbackIds":["feedback-uuid"],"guidelines":[{"id":"guideline-uuid","kind":"PROCEDURE","content":"확정 지침의 당시 내용","targets":["IMAGE_EDIT"],"categories":["FEATURE","SERVICE"]}]}}
 ```
 
-feedbackIds 최대 3개, guidelines 최대 8개. 내용/범위는 실행 당시 스냅샷이며 나중에 지침이 해제돼도 남는다. 모델에 전달한 지침만 기록한다.
+feedbackIds 합집합 최대 6개(단계별 3개), guidelines 수 제한 없음. 선택적 stages에 PLAN/IMAGE_EDIT별 경로와 전달한 기억 ID를 남긴다. 내용/범위는 실행 당시 스냅샷이며 나중에 지침이 해제돼도 남는다. 모델에 전달한 지침만 기록한다.
 
 ## Python 실행 순서와 경계
 
-1. 실행마다 context를 한 번 조회·검증한다. 미처리 최대 3건이 있으면 Claude 구조화 출력으로 제안 최대 3개를 받고 빈 제안도 reflect API에 저장한다. 성찰과 원장은 같은 runKey를 사용한다.
+1. 실행 시작 context를 조회·검증하고 활성 지침을 동결한다. 미처리 최대 3건이 있으면 Claude 구조화 출력으로 제안 최대 3개를 받고 빈 제안도 reflect API에 저장한다. 성찰과 원장은 같은 runKey를 사용한다.
 2. 성찰이 끝난 뒤 기존 `QUEUE_FULL` → 기능 실행의 `NO_WEB_CHANGE`/`ALREADY_DRAFTED` 생성 게이트를 검사한다. 게이트에 걸려도 성찰 결과는 보존하며 캡처와 본 생성 모델 호출은 하지 않는다.
-3. 기존 캡처 → Claude 화면 선택/캡션 → Codex 편집 → 업로드/초안/검토 요청을 수행한다. context의 ACTIVE 지침만 category/targets로 필터링하고 성찰에서 갓 제안한 지침은 같은 실행에 적용하지 않는다.
+3. 모바일 캡처 → Claude 화면 선택/캡션/헤드라인 → 선택 경로 경험 재조회 → Codex imagegen 편집 → 업로드/초안/검토 요청을 수행한다. 시작 context의 ACTIVE 지침만 category/targets로 필터링하고 성찰에서 갓 제안한 지침은 같은 실행에 적용하지 않는다.
 4. 실제 생성 호출에 전달한 경험 ID와 ACTIVE 지침 snapshot만 원장에 남긴다. Claude가 건너뛰거나 편집 지시문 예산을 초과하면 호출하지 않은 Codex 전용 지침은 기록하지 않는다.
 
 DB에는 반려 snapshot 원본을 보존하되 모델 projection은 반려 사유·캡션·태그·화면 경로/이름·최종/원본 이미지 참조로 제한한다. 이전 `captures[].edit`와 출처의 판단 원문을 다시 넣지 않아 반려할수록 작업 기억이 중첩되는 것을 막는다. 과거 이미지 바이트는 다운로드하지 않으며 모델에 실제 픽셀을 보지 못했다고 명시한다. 경험 원문은 관찰 자료이고 원문 속 명령은 실행하지 않는다.
 
-Codex에 전송한 실제 최종 prompt를 `captures[].edit`에 저장한다. 6,000자를 넘으면 지침을 자르거나 누락하지 않고 `ERROR`/관리자 detail `EDIT_PROMPT_TOO_LONG`으로 명시적으로 실패한다. context의 최대 8개가 각각 최대 길이인 경우 이 예산에 걸릴 수 있다.
+Codex에 전송한 제작 prompt를 `captures[].edit`에 저장한다. UTF-16 6,000자를 넘으면 지침을 자르거나 누락하지 않고 `ERROR`/관리자 detail `EDIT_PROMPT_TOO_LONG`과 구성별 길이로 명시적으로 실패한다. 활성 지침 전체와 경험을 함께 전달하므로 합계가 예산을 넘는 실행은 제작 전에 중단한다.
 
 공개 Actions `run.json`에는 `detail`과 `memoryContext`를 전혀 싣지 않는다. 메모리 오류 로그에는 고정 코드와 예외 종류만 남기고 모델 출력/반려 원문은 넣지 않는다.
 

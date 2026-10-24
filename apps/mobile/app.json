@@ -38,13 +38,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#1D4ED8",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 288
         }
       ],
       "expo-secure-store",
-      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }]
+      ["expo-notifications", { "icon": "./assets/images/notification-icon.png" }],
+      "@portone/react-native-sdk"
     ],
     "experiments": {
       "typedRoutes": true,

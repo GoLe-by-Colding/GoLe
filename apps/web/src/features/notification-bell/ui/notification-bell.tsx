@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchUnreadCount } from "@entities/notification";
 import { useSession } from "@entities/user";
 import { BellIcon } from "@shared/ui";
+import { subscribeNotificationsChanged } from "../model/notification-changes";
 
 const POLL_MS = 30_000;
 
@@ -15,27 +16,32 @@ const POLL_MS = 30_000;
 export function NotificationBell() {
   const { session } = useSession();
   const accountId = session?.accountId ?? null;
-  const [count, setCount] = useState(0);
+  const [loaded, setLoaded] = useState<{ accountId: string; count: number } | null>(null);
+  const count = loaded?.accountId === accountId ? loaded.count : 0;
 
   useEffect(() => {
     if (accountId === null) {
       return; // 비로그인 시 컴포넌트가 null을 렌더하므로 카운트 갱신 불필요
     }
     let active = true;
+    let generation = 0;
     const load = async (): Promise<void> => {
+      const request = ++generation;
       try {
         const n = await fetchUnreadCount(accountId);
-        if (active) {
-          setCount(n);
+        if (active && request === generation) {
+          setLoaded({ accountId, count: n });
         }
       } catch {
         /* 폴링 실패는 무시 */
       }
     };
     void load();
+    const unsubscribe = subscribeNotificationsChanged(accountId, () => void load());
     const timer = setInterval(() => void load(), POLL_MS);
     return () => {
       active = false;
+      unsubscribe();
       clearInterval(timer);
     };
   }, [accountId]);

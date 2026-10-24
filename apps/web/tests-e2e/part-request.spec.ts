@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { E2E_SELLER, signInAs } from "./support/e2e-session";
+import { E2E_BUYER, E2E_SELLER, signInAs, switchTo } from "./support/e2e-session";
 
 /**
  * 부족 부품 요청(.kiro/specs/wanted-parts F1).
@@ -320,6 +320,10 @@ test.describe("부품 요청 상세", () => {
 
     await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
     await expect(page.getByRole("button", { name: "도와줄게요" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "도움 채팅 받기 설정" })).toHaveAttribute(
+      "href",
+      "/profile/security#third-party-consent",
+    );
 
     // 확인 모달에서 취소하면 마감 요청을 보내지 않는다.
     await page.getByRole("button", { name: "마감", exact: true }).click();
@@ -414,8 +418,12 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
     "실제 API가 렌더하는 세트 상세 — 로컬 백엔드 전용(쓰기 발생)",
   );
 
-  test("세트 상세에서 요청을 올리면 게시판에 보이고, 작성자가 마감·삭제한다", async ({ page }) => {
+  test("세트 상세 요청은 게시판·도움 채팅으로 이어지고 작성자가 마감·삭제한다", async ({
+    page,
+  }) => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+    const headers = { Authorization: `Bearer ${E2E_SELLER.sessionToken}` };
+    let createdId: string | undefined;
     // 카탈로그에 실제로 있는 세트여야 한다(W2: 없으면 404). 홈 추천 세트는 카탈로그에서 나온다.
     const response = await page.request.get(`${apiBaseUrl}/api/v1/catalog/sets/featured`);
     expect(response.ok()).toBeTruthy();
@@ -423,46 +431,108 @@ test.describe("부품 요청 — 세트 상세 진입부터 삭제까지", () =>
     const setNumber = featured[0]?.setNumber;
     expect(setNumber, "카탈로그 추천 세트가 하나 이상 필요합니다").toBeTruthy();
 
-    await signInAs(page, E2E_SELLER);
-    await page.goto(`/sets/${setNumber}`);
+    const sessionResponse = await page.request.get(`${apiBaseUrl}/api/v1/accounts/me`, {
+      headers,
+    });
+    expect(sessionResponse.ok(), "부품 요청에 사용할 실제 시드 세션이 필요합니다").toBeTruthy();
+    expect(await sessionResponse.json()).toMatchObject({ accountId: E2E_SELLER.accountId });
 
-    const entry = page.getByTestId("set-part-requests");
-    await expect(
-      entry.getByRole("link", { name: /^부품 요청 (\d+건( 이상)?|보기)$/ }),
-    ).toHaveAttribute("href", `/parts?set=${setNumber}`);
-    await entry.getByRole("link", { name: "부품 요청하기" }).click();
+    try {
+      await signInAs(page, E2E_SELLER);
+      await page.goto(`/sets/${setNumber}`);
 
-    await expect(page.getByLabel("세트 번호 (선택)")).toHaveValue(setNumber ?? "");
-    const partNumber = `e2e${Date.now() % 1_000_000}`;
-    await page.getByLabel("1번째 부품 번호").fill(partNumber);
-    await page.getByLabel("1번째 부품 색상").fill("검정");
-    await page.getByLabel("1번째 부품 수량").fill("2");
-    await page.getByRole("button", { name: "부품 요청 올리기" }).click();
+      const entry = page.getByTestId("set-part-requests");
+      await expect(
+        entry.getByRole("link", { name: /^부품 요청 (\d+건( 이상)?|보기)$/ }),
+      ).toHaveAttribute("href", `/parts?set=${setNumber}`);
+      await entry.getByRole("link", { name: "부품 요청하기" }).click();
+      // 이동 실패와 로그인 복원·필드 렌더 실패를 구분한다. 각 단정의 기본 timeout은 유지한다.
+      await expect(page).toHaveURL(`/parts/new?set=${setNumber}`);
 
-    const title = `${partNumber} 검정 2개`;
-    await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
+      await expect(page.getByLabel("세트 번호 (선택)")).toHaveValue(setNumber ?? "");
+      const partNumber = `e2e${Date.now() % 1_000_000}`;
+      await page.getByLabel("1번째 부품 번호").fill(partNumber);
+      await page.getByLabel("1번째 부품 색상").fill("검정");
+      await page.getByLabel("1번째 부품 수량").fill("2");
+      const createdResponse = page.waitForResponse(
+        (response) =>
+          response.url() === `${apiBaseUrl}/api/v1/part-requests` &&
+          response.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "부품 요청 올리기" }).click();
+      const created = await createdResponse;
+      expect(created.status()).toBe(201);
+      createdId = ((await created.json()) as { id: string }).id;
 
-    await page.goto(`/parts?set=${setNumber}`);
-    await page.getByRole("link", { name: title }).click();
-    // 게시판 목록도 제목을 heading으로 그린다. 상세로 넘어간 것을 주소로 먼저 확인해야, 아래 "마감"이
-    // 게시판의 상태 필터 버튼을 누르지 않는다.
-    await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
-    await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
+      const title = `${partNumber} 검정 2개`;
+      await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
+      await expect(page.getByRole("heading", { name: title })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
 
-    await page.getByRole("button", { name: "마감", exact: true }).click();
-    await page
-      .getByRole("alertdialog", { name: "요청 마감" })
-      .getByRole("button", { name: "마감" })
-      .click();
-    await expect(page.getByText("마감된 요청이에요. 필요 없으면 삭제할 수 있어요.")).toBeVisible();
-    await page.getByRole("button", { name: "삭제", exact: true }).click();
-    await page
-      .getByRole("alertdialog", { name: "요청 삭제" })
-      .getByRole("button", { name: "삭제" })
-      .click();
-    await expect(page).toHaveURL(/\/parts\?status=mine$/);
-    await expect(page.getByRole("link", { name: title })).toHaveCount(0);
+      // 채팅은 양쪽 동의가 필요하다. 요청자도 실제 설정 화면에서 선택한 뒤 요청으로 돌아온다.
+      await page.getByRole("link", { name: "도움 채팅 받기 설정" }).click();
+      await expect(page.getByText(/^현재 상태: 동의(함|하지 않음)( ·|$)/)).toBeVisible();
+      const requesterConsent = page.getByRole("checkbox", {
+        name: /개인정보 제3자 제공에 동의합니다/,
+      });
+      if (await requesterConsent.isVisible()) {
+        await requesterConsent.check();
+        await page.getByRole("button", { name: "동의하기", exact: true }).click();
+      }
+      await expect(page.getByText(/^현재 상태: 동의함( ·|$)/)).toBeVisible();
+      await page.getByRole("button", { name: "뒤로 가기", exact: true }).click();
+      await expect(page).toHaveURL(`/parts/${createdId}`);
+
+      await switchTo(page, E2E_BUYER);
+      await page.goto(`/parts/${createdId}`);
+      await page.getByRole("button", { name: "도와줄게요", exact: true }).click();
+      const consent = page.getByRole("dialog", { name: "제3자 제공 동의가 필요합니다" });
+      const composer = page.getByPlaceholder("메시지 입력… (Enter 전송, Shift+Enter 줄바꿈)");
+      // 새 CI 시드에는 동의가 없다. 로컬에 남은 동의 기록이나 다른 검사 실행 순서에 기대지 않는다.
+      await expect(consent.or(composer).first()).toBeVisible();
+      if (await consent.isVisible()) {
+        await consent.getByRole("checkbox", { name: /개인정보 제3자 제공에 동의합니다/ }).check();
+        await consent.getByRole("button", { name: "동의하고 계속" }).click();
+      }
+      await expect(composer).toHaveValue(
+        `부품 요청 「${title}」(#${setNumber}) 보고 연락드려요. 이 부품 가지고 있어요.`,
+      );
+      // 초안까지만 확인한다. 같은 시드 회원 사이의 기존 방과 메시지는 보존한다.
+      await switchTo(page, E2E_SELLER);
+
+      await page.goto(`/parts?set=${setNumber}`);
+      await page.getByRole("link", { name: title }).click();
+      // 게시판 목록도 제목을 heading으로 그린다. 상세로 넘어간 것을 주소로 먼저 확인해야, 아래 "마감"이
+      // 게시판의 상태 필터 버튼을 누르지 않는다.
+      await expect(page).toHaveURL(/\/parts\/[^/?]+$/);
+      await expect(page.getByRole("heading", { name: "내 요청 관리" })).toBeVisible();
+
+      await page.getByRole("button", { name: "마감", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: "요청 마감" })
+        .getByRole("button", { name: "마감" })
+        .click();
+      await expect(
+        page.getByText("마감된 요청이에요. 필요 없으면 삭제할 수 있어요."),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "삭제", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: "요청 삭제" })
+        .getByRole("button", { name: "삭제" })
+        .click();
+      await expect(page).toHaveURL(/\/parts\?status=mine$/);
+      await expect(page.getByRole("link", { name: title })).toHaveCount(0);
+      const deleted = await page.request.get(`${apiBaseUrl}/api/v1/part-requests/${createdId}`);
+      expect(deleted.status()).toBe(404);
+      createdId = undefined;
+    } finally {
+      if (createdId !== undefined) {
+        const cleanup = await page.request.delete(
+          `${apiBaseUrl}/api/v1/part-requests/${createdId}`,
+          { headers },
+        );
+        expect([204, 404]).toContain(cleanup.status());
+      }
+    }
   });
 });

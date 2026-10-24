@@ -26,7 +26,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "group overflow-hidden rounded-lg border border-neutral-200 bg-white",
+        "group overflow-hidden rounded-xl border border-neutral-200 bg-white",
         ELEVATION[elevation],
         interactive &&
           "cursor-pointer transition-colors duration-150 hover:border-brand-300 hover:bg-neutral-50/30",

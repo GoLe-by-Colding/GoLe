@@ -14,8 +14,21 @@ import {
   type LegoSet,
 } from "@entities/lego-set";
 import { fetchPriceSnapshotForPage } from "@entities/pricing";
-import { ListingFilterBar, type ListingFilterValues } from "@features/listing-filter";
-import { Container, EmptyState, Heading, LinkButton, Text } from "@shared/ui";
+import {
+  ListingFilterBar,
+  filterPriceError,
+  parseFilterPrice,
+  type ListingFilterValues,
+} from "@features/listing-filter";
+import {
+  PageLayout,
+  PageHeader,
+  EmptyState,
+  LinkButton,
+  RefreshButton,
+  AlertCircleIcon,
+  SearchIcon,
+} from "@shared/ui";
 import { buildPriceNotes, ListingGrid, priceNoteSetNumbers } from "@widgets/listing-grid";
 import { SearchSetShortcut } from "./search-set-shortcut";
 
@@ -41,14 +54,6 @@ function parseCategory(value: string | undefined): ListingCategory | undefined {
 
 function parseSort(value: string | undefined): ListingSort {
   return SORTS.find((s) => s === value) ?? "newest";
-}
-
-function parsePrice(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === "") {
-    return undefined;
-  }
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
 type ListingLoadResult =
@@ -79,18 +84,6 @@ async function loadPriceNotes(listings: readonly Listing[]): Promise<Record<stri
   return buildPriceNotes(listings, Object.fromEntries(entries));
 }
 
-function searchHref(params: SearchListingsParams): string {
-  const query = new URLSearchParams();
-  if (params.query) query.set("query", params.query);
-  if (params.condition) query.set("condition", params.condition);
-  if (params.category) query.set("category", params.category);
-  if (params.minPrice !== undefined) query.set("minPrice", String(params.minPrice));
-  if (params.maxPrice !== undefined) query.set("maxPrice", String(params.maxPrice));
-  if (params.sort !== undefined && params.sort !== "newest") query.set("sort", params.sort);
-  const suffix = query.toString();
-  return suffix.length === 0 ? "/search" : `/search?${suffix}`;
-}
-
 /** 바로가기로 보일 세트 수. 결과 목록을 밀어내지 않게 적게 둔다. */
 const MAX_QUERY_SETS = 3;
 
@@ -119,11 +112,20 @@ export async function SearchPage(props: SearchPageProps) {
   const condition = parseCondition(props.condition);
   const category = parseCategory(props.category);
   const sort = parseSort(props.sort);
-  const minPrice = parsePrice(props.minPrice);
-  const maxPrice = parsePrice(props.maxPrice);
+  const minPrice = parseFilterPrice(props.minPrice);
+  const maxPrice = parseFilterPrice(props.maxPrice);
+  const initial: ListingFilterValues = {
+    query: props.query?.trim() ?? "",
+    condition: condition ?? "",
+    category: category ?? "",
+    minPrice: props.minPrice ?? "",
+    maxPrice: props.maxPrice ?? "",
+    sort,
+  };
+  const priceError = filterPriceError(initial);
 
   const params: SearchListingsParams = {
-    ...(props.query ? { query: props.query } : {}),
+    ...(initial.query ? { query: initial.query } : {}),
     ...(condition ? { condition } : {}),
     ...(category ? { category } : {}),
     ...(minPrice !== undefined ? { minPrice } : {}),
@@ -131,7 +133,10 @@ export async function SearchPage(props: SearchPageProps) {
     sort,
   };
 
-  const [result, querySets] = await Promise.all([loadListings(params), loadQuerySets(props.query)]);
+  const [result, querySets] =
+    priceError === null
+      ? await Promise.all([loadListings(params), loadQuerySets(initial.query)])
+      : [{ status: "invalid" as const, listings: [] }, []];
   const { listings } = result;
   const priceNotes = await loadPriceNotes(listings);
   const hasFilters =
@@ -142,77 +147,74 @@ export async function SearchPage(props: SearchPageProps) {
     maxPrice !== undefined ||
     sort !== "newest";
 
-  const initial: ListingFilterValues = {
-    query: props.query ?? "",
-    condition: condition ?? "",
-    category: category ?? "",
-    minPrice: props.minPrice ?? "",
-    maxPrice: props.maxPrice ?? "",
-    sort,
-  };
-
   return (
-    <Container width="xl">
-      <div className="flex flex-col gap-6 pt-8 pb-16">
-        <div className="flex flex-col gap-1">
-          <Heading level={1}>상품 탐색</Heading>
-          <Text tone="secondary">
-            지금 거래 가능한 브릭 상품{" "}
-            <span className="font-bold text-brand-600">{listings.length}</span>개
-          </Text>
-        </div>
-        <div className="sticky top-16 z-10 -mx-4 bg-neutral-50 px-4 py-2 sm:-mx-2 sm:px-2">
-          <ListingFilterBar initial={initial} />
-        </div>
-        {result.status === "failed" ? null : (
-          <SearchSetShortcut sets={querySets} listingCount={listings.length} />
-        )}
-        {result.status === "failed" ? (
-          <EmptyState
-            variant="inline"
-            title="상품 목록을 불러오지 못했어요"
-            description="목록 연결이 잠시 지연되고 있어요. 다시 확인하거나 공개된 브릭 이야기를 먼저 둘러보세요."
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href={searchHref(params)} size="sm" variant="secondary">
-                  다시 확인
-                </LinkButton>
-                <LinkButton href="/community" size="sm" variant="ghost">
-                  커뮤니티 보기
-                </LinkButton>
-              </div>
-            }
-          />
-        ) : listings.length === 0 ? (
-          <EmptyState
-            variant="inline"
-            title={hasFilters ? "조건에 맞는 상품이 없어요" : "아직 공개된 상품이 없어요"}
-            description={
-              hasFilters
-                ? "필터를 초기화하거나 커뮤니티에서 다른 브릭 이야기를 찾아보세요."
-                : "판매자 확인 절차가 준비되는 동안 시세와 커뮤니티 콘텐츠를 먼저 이용할 수 있어요."
-            }
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                {hasFilters ? (
-                  <LinkButton href="/search" size="sm" variant="secondary">
-                    필터 초기화
-                  </LinkButton>
-                ) : (
-                  <LinkButton href="/prices" size="sm" variant="secondary">
-                    시세 보기
-                  </LinkButton>
-                )}
-                <LinkButton href="/community" size="sm" variant="ghost">
-                  커뮤니티 보기
-                </LinkButton>
-              </div>
-            }
-          />
-        ) : (
-          <ListingGrid key={JSON.stringify(params)} listings={listings} priceNotes={priceNotes} />
-        )}
+    <PageLayout width="xl">
+      <PageHeader title="상품 탐색" description="내 선반에 더하고 싶은 브릭을 찾아보세요." />
+      <div>
+        {/* URL에서 필터를 빼거나 뒤로 가면 입력 초안도 같은 조건으로 다시 만든다. */}
+        <ListingFilterBar key={JSON.stringify(initial)} initial={initial} />
       </div>
-    </Container>
+      {result.status === "ready" ? (
+        <div className="flex items-center gap-4 text-sm text-neutral-600">
+          <p className="shrink-0">
+            검색 결과{" "}
+            <span className="font-bold tabular-nums text-neutral-900">{listings.length}</span>개
+          </p>
+          <span aria-hidden="true" className="h-px flex-1 bg-neutral-200" />
+        </div>
+      ) : null}
+      {result.status !== "ready" ? null : (
+        <SearchSetShortcut sets={querySets} listingCount={listings.length} />
+      )}
+      {result.status === "invalid" ? (
+        <EmptyState
+          variant="inline"
+          icon={<AlertCircleIcon className="size-7 text-danger" />}
+          title="가격 범위를 확인해 주세요"
+          description="위의 가격을 수정하면 원하는 조건으로 다시 찾을 수 있어요."
+        />
+      ) : result.status === "failed" ? (
+        <EmptyState
+          variant="inline"
+          icon={<AlertCircleIcon className="size-7 text-neutral-600" />}
+          title="상품 목록을 불러오지 못했어요"
+          description="검색 조건은 그대로예요. 잠시 후 다시 불러와 주세요."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <RefreshButton variant="secondary" />
+            </div>
+          }
+        />
+      ) : listings.length === 0 ? (
+        <EmptyState
+          variant="inline"
+          icon={<SearchIcon className="size-7 text-brand-600" />}
+          title={hasFilters ? "조건에 맞는 상품이 없어요" : "아직 공개된 상품이 없어요"}
+          description={
+            hasFilters
+              ? "검색어를 짧게 바꾸거나 가격과 상태 조건을 조금 넓혀보세요."
+              : "새로운 브릭을 기다리는 동안 세트별 시세를 둘러보세요."
+          }
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              {hasFilters ? (
+                <LinkButton href="/search" size="sm" variant="secondary">
+                  전체 상품 보기
+                </LinkButton>
+              ) : (
+                <LinkButton href="/prices" size="sm" variant="secondary">
+                  시세 보기
+                </LinkButton>
+              )}
+              <LinkButton href="/community" size="sm" variant="ghost">
+                커뮤니티 보기
+              </LinkButton>
+            </div>
+          }
+        />
+      ) : (
+        <ListingGrid key={JSON.stringify(params)} listings={listings} priceNotes={priceNotes} />
+      )}
+    </PageLayout>
   );
 }

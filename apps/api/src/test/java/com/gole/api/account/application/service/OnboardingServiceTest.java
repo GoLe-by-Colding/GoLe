@@ -206,7 +206,7 @@ class OnboardingServiceTest {
         assertThat(phoneVerifications.find(ACCOUNT_ID).orElseThrow().storedCode())
                 .isEqualTo("123456");
         // 평문 경로에서도 확인 단계는 그대로 성공해야 한다.
-        devService.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "123456"));
+        devService.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456"));
         assertThat(accounts.findById(ACCOUNT_ID).orElseThrow().getPhoneNumber())
                 .isEqualTo(new PhoneNumber("01012345678"));
     }
@@ -335,7 +335,7 @@ class OnboardingServiceTest {
     void confirmPersistsVerifiedPhoneAndClearsTheChallenge() {
         service.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"));
 
-        service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "123456"));
+        service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456"));
 
         Account saved = accounts.findById(ACCOUNT_ID).orElseThrow();
         assertThat(saved.getPhoneNumber()).isEqualTo(new PhoneNumber("01012345678"));
@@ -344,8 +344,27 @@ class OnboardingServiceTest {
     }
 
     @Test
+    void confirmRejectsCodeForAnotherPhoneWithoutConsumingOriginalChallenge() {
+        service.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"));
+
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01098765432", "123456")))
+                .isInstanceOf(VerificationException.class)
+                .extracting("code")
+                .isEqualTo("PHONE_VERIFICATION_NUMBER_MISMATCH");
+        assertThat(accounts.findById(ACCOUNT_ID).orElseThrow().getPhoneVerifiedAt())
+                .isNull();
+        assertThat(phoneVerifications.find(ACCOUNT_ID).orElseThrow().attempts()).isZero();
+
+        service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456"));
+        assertThat(accounts.findById(ACCOUNT_ID).orElseThrow().getPhoneNumber())
+                .isEqualTo(new PhoneNumber("01012345678"));
+    }
+
+    @Test
     void confirmWithoutAnIssuedCodeIsRejected() {
-        assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "123456")))
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456")))
                 .isInstanceOf(VerificationException.class)
                 .hasMessageContaining("만료");
     }
@@ -356,19 +375,22 @@ class OnboardingServiceTest {
         service.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"));
 
         for (int attempt = 1; attempt <= 4; attempt++) {
-            assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "000000")))
+            assertThatThrownBy(() ->
+                            service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "000000")))
                     .isInstanceOf(VerificationException.class)
                     .hasMessageContaining("일치하지 않습니다");
         }
         assertThat(phoneVerifications.find(ACCOUNT_ID)).isPresent();
 
-        assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "000000")))
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "000000")))
                 .isInstanceOf(VerificationException.class)
                 .hasMessageContaining("시도가 초과");
         assertThat(phoneVerifications.find(ACCOUNT_ID)).isEmpty();
 
         // 무효화된 뒤에는 정답을 넣어도 통과하지 못한다.
-        assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "123456")))
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456")))
                 .isInstanceOf(VerificationException.class);
         assertThat(accounts.findById(ACCOUNT_ID).orElseThrow().getPhoneVerifiedAt())
                 .isNull();
@@ -377,7 +399,8 @@ class OnboardingServiceTest {
     @Test
     void wrongAttemptsDoNotExtendTheCodeLifetime() {
         service.request(new RequestPhoneVerificationCommand(ACCOUNT_ID, "01012345678"));
-        assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "000000")))
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "000000")))
                 .isInstanceOf(VerificationException.class);
 
         phoneVerifications.advance(Duration.ofMinutes(5).plusSeconds(1));
@@ -392,7 +415,8 @@ class OnboardingServiceTest {
         other.markPhoneVerified(new PhoneNumber("01012345678"), clock.instant());
         accounts.save(other);
 
-        assertThatThrownBy(() -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "123456")))
+        assertThatThrownBy(
+                        () -> service.confirm(new ConfirmPhoneVerificationCommand(ACCOUNT_ID, "01012345678", "123456")))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -443,7 +467,7 @@ class OnboardingServiceTest {
     private void completeOnboarding(String accountId) {
         service.setNickname(new SetNicknameCommand(accountId, "고레마스터"));
         service.request(new RequestPhoneVerificationCommand(accountId, "01012345678"));
-        service.confirm(new ConfirmPhoneVerificationCommand(accountId, "123456"));
+        service.confirm(new ConfirmPhoneVerificationCommand(accountId, "01012345678", "123456"));
         service.select(new SelectInterestTagsCommand(accountId, Set.of("technic")));
         service.submit(new SubmitConsentCommand(accountId, true, false));
     }

@@ -32,6 +32,11 @@ public interface PaymentGatewayPort {
     /** PG 원장을 조회해 결제의 최종/진행 상태를 검증한다. */
     PaymentVerification verifyPayment(String orderId, long amount);
 
+    /** 취소용 읽기 조회. 로컬 승인 시뮬레이션도 이 호출로 결제를 새로 승인해서는 안 된다. */
+    default PaymentVerification verifyPaymentForCancellation(String orderId, long amount) {
+        return verifyPayment(orderId, amount);
+    }
+
     /**
      * 환불 처리. PG가 비동기 접수만 한 경우 REQUESTED를 반환한다.
      *

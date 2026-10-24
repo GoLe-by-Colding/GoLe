@@ -1,0 +1,26 @@
+diff --git a/build/src/start/server/DevToolsPlugin.schema.js b/build/src/start/server/DevToolsPlugin.schema.js
+index 54992f4105a342261d0e10ba8852f7b72419ba4b..9038f06416866ae35c6eb543a29f69cbf9a10a49 100644
+--- a/build/src/start/server/DevToolsPlugin.schema.js
++++ b/build/src/start/server/DevToolsPlugin.schema.js
+@@ -17,7 +17,7 @@ _export(exports, {
+     }
+ });
+ function _zod() {
+-    const data = require("zod");
++    const data = require("zod/v3");
+     _zod = function() {
+         return data;
+     };
+diff --git a/build/src/start/server/createMCPDevToolsExtensionSchema.js b/build/src/start/server/createMCPDevToolsExtensionSchema.js
+index 03e2492254cc2c030033bfed2f5659f0b820504e..834537c9bfa45c410e2b4f01bcf395029ea31185 100644
+--- a/build/src/start/server/createMCPDevToolsExtensionSchema.js
++++ b/build/src/start/server/createMCPDevToolsExtensionSchema.js
+@@ -9,7 +9,7 @@ Object.defineProperty(exports, "createMCPDevToolsExtensionSchema", {
+     }
+ });
+ function _zod() {
+-    const data = require("zod");
++    const data = require("zod/v3");
+     _zod = function() {
+         return data;
+     };

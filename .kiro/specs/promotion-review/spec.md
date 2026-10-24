@@ -539,6 +539,9 @@ leasing이 아니며(D17), egress가 필요한 작업을 "문의 원문은 밖�
 
 ### D20. GitHub 러너에서 돌고, 모델은 SSH LLM 게이트웨이의 CLI로 부른다 — D10·D16·D17을 정정한다
 
+> **2026-10-12 — 모델 호출 구성은 D25, 게이트웨이 실행 위치는 D26이 대체한다.** 러너·트리거·자격증명
+> 경계·검증 원칙은 유지한다.
+
 **정정 이유.** 운영 VM 경로는 여유 메모리 900 MB 위에서 Chromium과 장기 대화를 함께 돌려야 했고,
 그래서 체크포인트·재개·3단 제출 체인이 필요했다. 모델은 API 키로 불렀는데 크레딧이 비어 있는
 동안 실행되지 않았다. 둘 다 "돌려볼 수 없는 설계는 고칠 수 없다"(D16)는 같은 문제였다.
@@ -562,6 +565,13 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - claude는 `--tools Read`와 입력 폴더 한정 `--allowedTools`, `--permission-mode dontAsk`로
     돈다. codex는 작업 폴더 한정 `workspace-write` 샌드박스다.
   - 실패 응답에는 짧은 문장만 싣고 상세는 서버의 `~/.cache/gole-llm-gateway.log`(0600)에 남긴다.
+    Claude가 `subtype=success`와 `is_error=true`를 함께 반환해도 실패다. 오류의 `result`·`errors`와
+    stderr는 길이를 제한해 비공개 서버 로그에 남기며, 응답에는 종료 코드만 담는다. JSON 결과가 성공이어도
+    CLI 종료 코드가 0이 아니면 성공으로 처리하지 않는다.
+    `Your account is on hold` 오류는 사용량 한도와 구별해 `CLAUDE_ACCOUNT_ON_HOLD` 고정 코드로 돌려준다.
+    계정 제한 해제는 소유자가 진행하며, 계정·조직 정보를 포함할 수 있는 이의제기 URL은 응답에 싣지 않는다.
+    러너는 이 고정 코드만 공개 로그에 남기고 원장의 결과는 `GATEWAY_FAILED`로 유지한다. 제한 상태의
+    Claude 호출을 반복하거나 초안을 제출하지 않는다.
   - 응답에는 사용량(`usage`: 토큰 수·claude API 환산 금액·모델 이름·소요 시간)을 싣는다. 숫자와 모델
     이름뿐이라 공개 로그에 나가도 된다. 실패한 호출에도 싣는다 — 실패도 토큰을 쓴다.
     공개 저장소라 Actions 로그를 누구나 읽기 때문이다. codex 이미지 요청은 글 응답을 돌려주지
@@ -577,13 +587,22 @@ GitHub 러너 (ubuntu-latest, environment: production)
   프롬프트에 넣는다(D18 — 대화가 한 번이라 동결은 필요 없다), 캡션 1~450자·고른 장 수 상한
   (`MAX_PICKS = 3`)·중복 없는 번호는 코드로 검증한다.
 
+2026-10-15 실행 위치별로 나눴다(D29). `gole_promotion_agent`는 러너, `gole_promotion_core`는 러너·서버 공용이다.
+
 | 파일 | 책임 |
 |---|---|
-| `drafter.py` | 실행 하나: 건너뛰기 판정 → 캡처 → 고르기 → 다듬기 → 제출 |
-| `drafting.py` | 출력 계약(`DraftOutput`·JSON 스키마)·프롬프트·다듬기 지시문 |
-| `gateway_client.py` | SSH·로컬 게이트웨이 호출, PNG 인코딩 |
-| `hands.py` | 릴리스 diff, 라우트 열거, Playwright 카메라, 백엔드 HTTP |
-| `policy.py` | 라우트 가드·상한·톤 가이드·이력 렌더링 |
+| `agent/drafter.py` | 실행 하나: 건너뛰기 판정 → 캡처 → 기획 호출 → 성찰 저장 → 제작 호출 → 제출 |
+| `agent/captures.py` | 후보 화면 촬영·지난 캡처 재사용 검증·고르기용 축소본 |
+| `agent/drafting.py` | 기획·제작 지시문(프롬프트) |
+| `agent/memory.py` | 작업 기억 고르기·프롬프트 렌더링·성찰 지시 |
+| `agent/gateway_client.py` | SSH·로컬 게이트웨이 호출 |
+| `agent/hands.py` | 릴리스 diff, 라우트 열거, Playwright 카메라 |
+| `agent/policy.py` | 라우트 가드·diff 상한·톤 가이드·이력 렌더링 |
+| `core/contract.py` | 출력 계약(`DraftOutput`·JSON 스키마)·성찰 검증(`Reflection`) |
+| `core/limits.py` | 러너·서버가 같이 지키는 상한·원장 사유 정리 |
+| `core/ledger.py` | 실행 결과·호출별 사용량·원장 한 줄(D23) |
+| `core/gateway.py` | 게이트웨이 오류·PNG 인코딩 |
+| `core/publisher.py` | 백엔드 HTTP |
 
 ### D21. 데모 스택의 화면을 전부 찍고 모델은 고르기만 한다 — D12의 툴 루프를 정정한다
 
@@ -600,6 +619,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
   아티팩트(90일)를 받아 쓴다. 화면은 다음 릴리스 전까지 같기 때문이다. 받을 것이 없을 때만 찍는다.
 
 ### D22. 고른 화면은 생성형으로 다듬고, 원본을 나란히 검토한다
+
+> **2026-10-13 — 다듬기는 D25의 제작 호출 한 번(고른 원본 1장)으로 한다.** 원본 대조·실패 시 원본 사용은 유지한다.
 
 캡처 원본은 홍보물로 밋밋하다. codex의 이미지 생성으로 브라우저 목업·브랜드 배경을 입히되,
 지시문(`drafting.POLISH_PROMPT`)이 **글자·숫자·버튼을 원본과 같게, 새 글자 금지**를 요구한다.
@@ -625,6 +646,13 @@ GitHub 러너 (ubuntu-latest, environment: production)
   (`gh-<run_id>-<attempt>`)가 unique 라 재시도해도 1줄이고, 처음 기록을 덮어쓰지 않는다.
 - **모델이 쓴 글은 신뢰하지 않는 입력이다.** `detail` 은 러너와 서버 양쪽에서 제어문자를 지우고
   300자(글자 단위)로 자른다. 관리자만 읽는다(`/api/admin/**`).
+- **게이트웨이 claude 실패 문장은 허용 목록 코드와 숫자만 싣는다(2026-10-11).** claude CLI 는 API 오류
+  (인증 만료·사용량 한도·과부하)를 `subtype=success`·`is_error=true` 로 돌려줘 `claude 실패: success` 만
+  남았고 원인을 가릴 수 없었다(run 38145786323). 이제 `subtype`·`terminal_reason`(허용 목록)과
+  `api_error_status`(100~599 정수)만 잇는다(`claude 실패: success · api_error · HTTP 401`). CLI 원문은
+  응답과 게이트웨이 서버 로그 어디에도 추가하지 않는다. 잘못된 타입·미등록 코드도 버린다.
+  **2026-10-13 — claude 경로가 지워져(D25) 더는 쓰이지 않는다.** 같은 원칙(허용 목록 코드만, 원문은 서버 로그)은
+  codex 실패의 고정 코드(D27)가 잇는다.
 - **원장 기록이 실패해도 실행 결과는 바꾸지 않는다.** 이미 낸 초안을 되돌리지 않고, Actions 요약에
   "기록 실패"를 남긴다.
 - **공개 Actions 에 남는 것**: 결과·사유 코드, 호출별 토큰·모델·시간, 검토 화면 링크. 캡션·고른 이유·
@@ -634,7 +662,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
 - **사람이 손대야 할 때만 운영 Discord 로 알린다.** 초안이 검토 큐에 들어오면 백엔드(`submit`)가, 실행이
   실패·취소되거나 `QUEUE_FULL`·원장 기록 실패면 워크플로 마지막 단계가 알린다. 실패의 절반(시크릿·데모
   스택·시간 초과)은 원장에 닿기 전에 죽으므로 실패 판정은 워크플로가 한다. 실리는 것은 고정 문구·사유
-  코드·초안 ID·링크뿐이다 — 캡션·`detail` 은 싣지 않는다. 정상 건너뛰기는 알리지 않는다.
+  코드·초안 ID·링크뿐이다 — 캡션·`detail` 은 싣지 않는다. 건너뛰기도 사유 코드로 알린다(2026-10-15 — D29 이후 결과 알림이
+  없으면 서버가 멈춘 것과 구분되지 않는다).
 
 ### D24. 6시간 발행 간격은 문서 하나의 "발행 슬롯"을 원자적으로 잡아 지킨다 — 개별 발행도 포함
 
@@ -652,6 +681,227 @@ GitHub 러너 (ubuntu-latest, environment: production)
   반나절을 잃지 않게 한다. **외부 발행 뒤 저장이 실패하면 돌려주지 않는다** — 이미 나갔으므로 돌려주면 또 나간다.
 - 남는 구멍: 외부 발행 성공 뒤 저장 전에 프로세스가 죽으면 글이 `APPROVED`로 남아 6시간 뒤 다시 나갈 수
   있다. 실제 어댑터의 멱등성(외부 ID 선기록·중간 상태)과 엮이므로 T1에서 함께 닫는다.
+
+### D25. 실행 하나는 codex 기획 1회 + 제작 1회로 끝낸다 (D20·D22 일부 정정)
+
+**정정 이유.** 실행 하나가 claude 성찰 1회 + claude 고르기 1회 + codex 다듬기 최대 3회를 불렀다. 구독 계정을
+자동화에 쓰는 이상 사용량이 곧 정책 위험이고, claude 계정은 2026-10 정지(`CLAUDE_ACCOUNT_ON_HOLD`)로 실행
+3건이 연달아 실패했다.
+
+**구조를 정한 실측(2026-10-13, 같은 캡처 11장·같은 기억, gpt-6.1-sol).** `codex exec`은 한 호출 안에서 모델을
+여러 번 부르고 매번 맥락 전체를 다시 싣는다. 그래서 무거운 이미지 생성 단계에 후보 11장을 끌고 가지 않는
+것이 가장 크게 줄였다.
+
+| 방식 | 입력 토큰(캐시) | 시간 |
+|---|---|---|
+| 한 호출에 고르기·성찰·제작 + 원본 11장 | 515,434 (422,656) | 330초 |
+| 같은 한 호출 + 후보 6장·확인 단계 금지 | 313,906 (273,408) | 132초 |
+| **기획(축소본 11장, 도구 없음) + 제작(원본 1장)** | **198,823 (156,160)** | 167초 |
+
+세 방식 모두 같은 화면·같은 수준의 캡션과 이미지를 냈다(원본 화면 보존, 반려 기억 준수). 각 1회 측정이다.
+
+- **엔진은 codex 하나다.** claude 경로(게이트웨이 분기·`PROMOTION_AGENT_CLAUDE_MODEL`)는 지운다.
+- **한 장만 고른다**(`MAX_PICKS = 1`). 백엔드 계약(최대 3장)은 그대로 둔다.
+- **기획 호출**: 후보 화면 축소본(폭 195px) 전부 + 말투·규칙·이력 + `CAPTION`·`SCREEN_SELECTION` 기억 +
+  미처리 반려 성찰. 이미지 생성·도구·셸을 쓰지 않고 곧바로 엄격한 JSON 스키마
+  (`decision`·`skip_reason`·`caption`·`rationale`·`pick`·`reflection`) 하나를 낸다. 추론은 `medium`.
+- **제작 호출**: 고른 원본 한 장 + 고정 절차(`procedures/royal-blue-brick-mobile-v1.md`) + `IMAGE_EDIT` 기억 +
+  문구 + "확인 단계 없이 바로 끝낸다". 이 지시문이 그대로 `captures[].edit`이 된다 — 검토자는 실제로 보낸 것을 본다.
+  문구는 두 줄·한 줄 15자 안쪽으로 쓰게 한다(한 줄 문구가 이미지에서 세 줄로 깨졌다).
+- **작업 기억은 실행 시작 때 한 번 조회해 동결한다.** 고른 뒤 다시 조회하지 않는다. 원장 `memoryContext.stages`에는
+  `PLAN`(전체 후보 경로, 기획 기억)과 `IMAGE_EDIT`(고른 경로, 제작 기억)을 남긴다. 반려 경험은 기획 프롬프트에
+  한 번만 싣고 성찰 작업은 ID로 가리킨다.
+- **성찰은 초안을 만드는 실행에서만 한다.** 검토 대기 5건·웹 변경 없음·중복으로 건너뛴 실행은 모델을 부르지
+  않으므로 성찰도 다음 실행으로 미룬다. 성찰 저장이 실패해도 초안 제출은 계속한다(`MEMORY_REFLECTION_FAILED`).
+- **제작이 실패해도 초안은 낸다.** 원본을 게시 이미지로 쓴다(D22). 계정 오류 코드(D27)는 공개 로그에 코드만 남긴다.
+- **응답은 구조화 출력과 이미지뿐이다.** 게이트웨이는 스키마·이미지 요청에 자유 글(`text`)을 돌려주지 않는다.
+  구조화 필드도 모델이 쓴 글이므로 사람 검토 전에는 운영 DB에만 둔다(D23).
+
+### D26. 게이트웨이는 지인 서버의 일회용 Docker 컨테이너로 돈다 — 구독 계정 격리
+
+> **2026-10-15 — 로그인 위치(볼륨 `gole-codex-home`)와 서버 진입점(forced command 의 `docker run` 한 줄)은 D28이
+> 대체한다.** 컨테이너 제약·HTTP 서버를 두지 않는 것·SSH 키 인증·남는 위험은 그대로다.
+
+**정정 이유.** 게이트웨이가 서버 계정 홈에서 돌아 그 계정의 `~/.codex`(전역 `AGENTS.md`·hooks·설정)가 홍보 결과에
+섞였고, SSH가 비밀번호 인증이라 셸 전체가 열려 있었다.
+
+```
+러너 ─SSH(전용 키, forced command)→ 지인 서버
+  docker run --rm -i --pull=always --log-driver none --cap-drop ALL --security-opt no-new-privileges
+    --pids-limit 256 --read-only --tmpfs /tmp --memory 2g --cpus 2
+    -v gole-codex-home:/home/gateway/.codex ghcr.io/gole-by-colding/gole-llm-gateway:stable
+    └ gole_llm_gateway.py (stdin JSON → codex exec → stdout JSON)
+```
+
+- **HTTP 서버를 띄우지 않는다.** 요청마다 컨테이너 하나가 뜨고 끝나면 지워진다. 포트·TLS·토큰 인증을 새로
+  만들지 않고 기존 stdin/stdout 계약을 그대로 쓴다.
+- **CODEX_HOME은 이 게이트웨이 전용 볼륨이다.** 볼륨에는 `auth.json`과 잠금 파일만 두고, `config.toml`은 이미지에
+  굽는다(전역 지침·hooks 없음). 로그인은 볼륨 안에서 `codex login --device-auth`로 새로 한다 — 호스트의
+  `~/.codex`를 복사하지 않는다. 같은 계정이라도 세션이 따로라 서로의 토큰 갱신이 상대를 무효화하지 않는다.
+- **동시 실행은 볼륨의 파일 잠금으로 하나만.** 토큰 갱신도 함께 직렬화된다.
+- **요청마다 띄우고 내리는 데서 확인한 것(2026-10-13, 로컬 Docker 실측).**
+  - 컨테이너 기동 비용은 약 1초다. 읽기 전용 루트에서도 codex가 돈다(쓰는 곳은 `CODEX_HOME`과 `/tmp`뿐).
+  - codex는 실행마다 상태 DB(state·logs·memories·goals)·스킬·셸 스냅숏을 `CODEX_HOME`에 쌓는다(1회 약 38MB).
+    진입점이 매번 `auth.json`·`installation_id`·게이트웨이 잠금·로그·가드 기록만 남기고 지운다 — 요청끼리 이어받는
+    것이 없고 볼륨이 자라지 않는다. 내장 `imagegen` 스킬은 기동 때 다시 깔린다. `memories` 기능은 설정으로 끈다.
+  - 미로그인 실호출은 `401 Unauthorized`로 끝나고 `CODEX_AUTH_REQUIRED`로 분류됐다(D27 표지 실측 확인).
+  - 볼륨은 이미지 안 경로로 처음 마운트해야 게이트웨이 사용자 소유가 된다. 다른 경로로 먼저 마운트하면 root 소유다.
+  - `--pull=always`는 새 `stable`마다 옛 이미지를 남긴다 — 서버 cron으로 주 1회 `docker image prune -f`.
+    GHCR이 응답하지 않으면 그 실행은 실패한다(다음 실행이 다시 받는다).
+  - SSH가 끊겨도(Actions 취소) 컨테이너는 진행 중인 codex 호출을 최대 `TIMEOUT_SECONDS`까지 마치고 사라진다.
+    그동안 잠금을 쥐므로 다음 요청은 기다린다.
+- **지인 서버를 지키는 것(2026-10-13 점검).**
+  - 진입점의 정리는 볼륨을 비운다. 서버 계정의 `~/.codex`를 볼륨 대신 붙이면 그 기록·설정이 지워지므로, 사람이 쓰던
+    흔적(`history.jsonl`·`AGENTS.md`·`AGENTS.override.md`·`hooks.json`)이 보이면 아무것도 지우지 않고
+    `GATEWAY_MISCONFIGURED`를 돌려준다. `codex exec`는 이 파일들을 만들지 않는다(컨테이너 실측).
+  - `--log-driver none`: 응답(캡션·이미지)이 stdout으로 나가므로, 서버 Docker가 journald 등으로 로그를 모으면 거기 남는다.
+  - `--cap-drop ALL`·`no-new-privileges`·`--pids-limit 256`: codex에 필요 없는 권한과 프로세스 폭주를 막는다.
+    이 플래그로 미로그인 실호출까지 정상 동작했다(`CODEX_AUTH_REQUIRED`).
+- **배포는 이미지다.** `gateway/**`가 바뀌면 워크플로가 GHCR(공개)에 `:sha`·`:stable`로 올린다. 서버는 요청마다
+  `--pull=always`로 받는다. 서버에 파일을 써 넣던 설치 스크립트(`install-remote.sh`·`run.sh`)는 지운다.
+- **SSH는 키 인증만.** `authorized_keys`의 forced command로 위 `docker run` 한 줄만 허용한다
+  (`restrict` — 포워딩·pty 등 부가 기능을 앞으로 생길 것까지 끈다). 비밀번호 경로(`sshpass`·
+  `PROMOTION_GATEWAY_PASSWORD`)는 지운다. 그 사용자는 docker 그룹이 필요하다 — 사실상 호스트 root이므로,
+  서버 주인이 꺼리면 sudoers에 이 명령 한 줄만 허용한다.
+- **밀린 실행은 하나만 남는다.** GitHub 동시성 그룹은 실행 중 1개 + 대기 1개다. 실행 중에 릴리스가 두 번 더 오면 앞의
+  대기 실행은 시작도 못 하고 취소된다(단계가 안 돌아 Discord 알림도 없다) — 그 릴리스의 기능 홍보가 빠진다. main 은
+  릴리스 PR 로만 바뀌어 드물므로 받아들인다. Actions 목록의 "취소됨"을 보면 수동 실행에 그 SHA 를 넣어 다시 돌린다.
+- **호출 빈도 상한.** 실행당 기획 1회·제작 1회(D25), 워크플로 동시 실행 1개(`concurrency: promotion-agent`), 기능 홍보는
+  릴리스(SHA)당 1회(D11), 서비스 소개는 월·수·금. 검토 대기 5건 이상이면 시작하지 않는다(D18).
+  > **2026-10-15 — 일일 상한과 끄기 스위치를 더했다.** 수동 실행(`service=true`)은 중복 확인이 없어 누르는 만큼 돈다.
+  > 지인 서버 `run.sh` 가 최근 24시간에 받은 주문을 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3)건까지만 받고 넘으면
+  > `GATEWAY_DAILY_LIMIT` 로 거절한다 — 트리거가 무엇이든 거기를 지나므로 한 곳에서 막는다. 실패한 주문도 센다.
+  > 앞 주문을 받은 지 30분(`GOLE_GATEWAY_MIN_GAP_MINUTES`) 안이면 `GATEWAY_TOO_SOON` 이다 — 진행 중 주문은 BUSY 가
+  > 이미 막으므로, 연달아 누른 수동 실행이 앞 주문이 끝난 직후 다시 도는 것을 막는다(러너 간격 최대 약 20분).
+  > 저장소 변수 `PROMOTION_AGENT_ENABLED=false` 면 워크플로가 모든 트리거에서 잡을 건너뛴다.
+- **남는 위험(코드로 못 막는다).**
+  - 구독 계정을 자동화에 쓰는 것은 OpenAI가 "신뢰할 수 있는 개인 자동화"로만 두는 방식이다. 계정 정지는
+    예고 없이 올 수 있고, 그동안 실행은 `GATEWAY_FAILED`로 끝난다.
+  - 서버에 이미 로그인된 계정이 지인 개인 계정이면 계정 공유다. 어느 계정을 쓰는지 운영 문서에 적는다.
+  - GHCR `:stable`에 올릴 수 있는 쪽(main의 배포 워크플로)은 지인 서버에서 코드를 돌리고 볼륨의 `auth.json`을 읽을 수
+    있다. 이 경계는 main 보호 규칙뿐이다 — 서버 주인에게 알린다.
+  - 호스트 root는 볼륨의 `auth.json`을 읽을 수 있다. 컨테이너는 서버 계정 홈과의 섞임을 막을 뿐 서버 주인을 막지는 않는다.
+  - codex는 컨테이너 안의 `auth.json`을 읽을 수 있다. 응답의 구조화 필드는 사람 검토 전에는 운영 DB에만 있다(D23).
+
+### D27. 계정 가드는 게이트웨이가 가진다 — 고정 오류 코드·예산·냉각
+
+**이유.** 같은 구독 계정을 두드리는 곳은 게이트웨이 하나다. 러너 재시도·수동 실행·다른 워크플로가 무엇이든 계정을
+지키는 판단은 계정을 가진 쪽에 둔다. 백엔드 원장·사유 코드는 바꾸지 않는다 — 러너는 고정 코드를 `GATEWAY_FAILED`의
+`detail`로 남기고 공개 로그에는 코드만 찍는다(D23).
+
+- **고정 오류 코드.** codex 실패 원문(`--json`의 `error`·`turn.failed` 이벤트와 stderr)을 다음으로 분류한다.
+  원문은 서버 로그에만 남는다.
+
+  | 코드 | 언제 | 냉각 |
+  |---|---|---|
+  | `CODEX_USAGE_LIMIT` | 구독 사용량 한도 | `GOLE_GATEWAY_COOLDOWN_HOURS`(기본 6시간) |
+  | `CODEX_AUTH_REQUIRED` | 로그인 만료·미로그인 — 사람이 볼륨에서 다시 로그인해야 한다 | 같음 |
+  | `CODEX_RATE_LIMIT` | 일시적 속도 제한 | 30분 |
+  | `CODEX_OVERLOADED` | 서버 과부하 | 없음 |
+  | `CODEX_CONTEXT_TOO_LARGE` | 맥락 창 초과 — 프롬프트·첨부를 줄여야 한다 | 없음 |
+  | `CODEX_COOLDOWN` | 위 냉각 시간 안이라 CLI를 부르지 않음 | — |
+  | `GATEWAY_BUDGET_EXCEEDED` | 최근 24시간 입력 토큰이 `GOLE_GATEWAY_DAILY_INPUT_TOKENS`(기본 200만) 이상 | — |
+  | `GATEWAY_BUSY` | 앞 요청이 30분 넘게 잠금을 쥠(게이트웨이 안 또는 서버 `run.sh`) | — |
+  | `GATEWAY_IMAGE_UNAVAILABLE` | 서버에 구운 `:local`이 없고 stable 받기·굽기도 실패(D28) | — |
+  | `GATEWAY_MISCONFIGURED` | 서버에 `auth.json`이 없거나, CODEX_HOME 에 사람이 쓰던 codex 파일이 있음 | — |
+  | `GATEWAY_DUPLICATE` | 같은 runKey 주문이 이미 끝났거나 실패해 다시 돌지 않음(D29) | — |
+  | `GATEWAY_DAILY_LIMIT` | 서버가 최근 24시간에 받은 주문이 `GOLE_GATEWAY_DAILY_ORDERS`(기본 3) 이상(`run.sh` 의 `orders.log`) | — |
+  | `GATEWAY_TOO_SOON` | 서버가 앞 주문을 받은 지 `GOLE_GATEWAY_MIN_GAP_MINUTES`(기본 30)분이 안 됨 | — |
+
+- **기록.** 호출마다 시각·결과 코드·입력/출력 토큰을 잠금 파일 옆(상태 볼륨, D28)의 JSONL 한 줄로 남기고,
+  7일보다 오래된 줄은 지운다. 막은 요청은 기록하지 않는다 — 마지막 줄이 언제나 마지막으로 CLI를 부른 결과다.
+- 표지 문자열은 codex CLI 0.162.1 바이너리의 `CodexErrorInfo` 값·안내 문구에서 확인했다. 실제 한도·만료 상황의
+  출력으로는 확인하지 못했으므로 이벤트와 stderr 양쪽을 본다.
+
+### D28. codex 로그인은 지인 서버에서만 굽는 이미지에 둔다 — 상태는 비밀 없는 볼륨에 (D26 일부 정정)
+
+> **2026-10-15 — 요청 흐름(러너가 SSH 로 호출하고 응답을 기다림)은 D29가 대체한다.** `run.sh`는 주문을 접수만 하고
+> 백그라운드에서 deliver 를 돌린다. 이미지 굽기·토큰 회수·상태 볼륨은 이 결정 그대로다.
+
+**이유.** 로그인을 볼륨이 아니라 "로그인이 든 이미지"로 다루고 싶다는 결정(2026-10-15). 이미지는 서버 밖으로 나가지
+않으므로 노출 범위는 볼륨과 같다(서버 root 는 둘 다 읽는다). 대신 볼륨이 공짜로 하던 두 가지 — 갱신된 토큰 보존과
+새 코드 반영 — 를 서버 스크립트가 맡는다.
+
+```
+러너 ─SSH(전용 키, forced command)→ /opt/gole-gateway/run.sh
+  GHCR :stable(코드만) ─FROM→ Dockerfile.local + auth.json ─build→ gole-llm-gateway:local (서버에만)
+  docker create -i … -v gole-gateway-state:/home/gateway/state gole-llm-gateway:local
+  → start -ai(요청·응답) → wait → cp auth.json → 바뀌었으면 다시 굽기
+```
+
+- **새 코드.** 요청마다 `docker pull :stable`. 이미지 ID가 `base.digest`와 다르면 요청 전에 다시 굽는다. 받기·굽기가
+  실패해도 이미 구운 `:local`이 있으면 그것으로 돈다. 굽고 나면 `docker image prune -f` — 옛 토큰이 든 레이어와 옛
+  stable 이 남지 않는다(D26의 주간 cron 을 대체).
+- **토큰 갱신.** codex 는 쓰는 동안 `auth.json`을 고쳐 쓴다. 컨테이너를 `--rm` 없이 만들고, 끝나면(SSH 가 끊겨도
+  `docker wait`로 기다려) `auth.json`을 꺼내 지금 것과 다르고 JSON 으로 읽히면 바꿔 넣고 다시 굽는다. 같으면 아무것도
+  하지 않는다. 사람의 재로그인은 갱신 토큰 자체가 무효가 됐을 때(`CODEX_AUTH_REQUIRED`)뿐이다.
+- **`--read-only`를 뺀다.** 토큰을 고쳐 쓰는 곳이 컨테이너 쓰기 층이다. 쓰기 층은 요청이 끝나면 컨테이너와 함께
+  지운다. 나머지 제약(D26)은 그대로다. GHCR 연기 테스트는 여전히 `--read-only`로 쓰는 자리를 확인한다.
+- **상태 볼륨 `gole-gateway-state`.** 잠금·서버 로그·계정 가드 기록(D27)은 요청 사이에 남아야 하므로 볼륨에 둔다.
+  비밀은 없다. 이미지 안 경로(`/home/gateway/state`)로 처음 붙여야 게이트웨이 사용자 소유가 된다.
+- **직렬화.** `run.sh`가 호스트 `flock`(30분)으로 굽기·실행·다시 굽기를 한 번에 하나만 한다. 시간 초과는 `GATEWAY_BUSY`.
+- **게이트웨이 배포는 홍보 실행과 동시성 그룹을 나눈다.** 같은 그룹이면 대기 칸이 하나라, 배포가 기다리는 사이 다음
+  홍보 실행이 오면 배포가 시작도 못 하고 취소돼 `:stable`이 옛 코드로 남는다(알림 없음). 진행 중인 초안은 `run.sh`의
+  잠금이 지키고 이미지는 요청을 시작할 때 받으므로, stable 이 바뀌어도 도는 호출에는 닿지 않는다. 기획과 제작 호출
+  사이에 버전이 바뀔 수는 있다 — 요청/응답 계약이 같아 받아들인다.
+- **`run.sh` 자신의 실패도 게이트웨이 응답 모양의 고정 코드로 낸다**(종료 코드 0) — 러너가 `ssh 실패(종료 코드 N)`가 아니라
+  코드를 원장에 남기게(D27 표). 명령 출력·오류 원문은 서버의 `run.log`에만.
+- **검증.** `tests/promotion/test_gateway_server.py`가 가짜 `docker`·`flock`으로 순서를 고정한다(토큰 그대로·바뀜·깨짐,
+  새 stable, 끊긴 연결, 이미지 없음, 굽기 실패 시 기존 이미지, 거절 코드). 실제 서버에서 갱신 토큰이 언제 바뀌는지는
+  확인하지 못했다 — `auth.json` 수정 시각과 `run.log`의 "토큰 갱신" 줄로 지켜본다.
+- **남는 위험.** D26의 것이 그대로다. 특히 main 의 배포 워크플로가 `:stable`을 바꾸면 그 코드는 서버에서 로그인과 함께
+  돈다. 서버에서 저장소 사본을 꾸리다 `server/auth.json`을 커밋하지 않도록 `.gitignore`에 넣었다.
+  `docker image prune`은 옛 `:local` 이미지만 지운다 — 옛 `auth.json`이 든 BuildKit 빌드 캐시는 서버에 남을 수 있다(Codex 크로스
+  체크 지적). 서버 밖으로 나가는 경로는 없고 서버 root 는 지금의 `auth.json`도 읽으므로 받아들인다. 서버의 다른 빌드 캐시까지
+  지우는 `docker builder prune`은 지인 서버라 걸지 않는다.
+
+### D29. 지인 서버가 초안을 검토 큐에 직접 배달한다 — 러너는 주문만 넣고 끝난다 (D20·D25 일부 정정)
+
+**이유.** 러너가 SSH 를 연 채 codex 두 번(2~15분)을 기다리는 구조를 걷어낸다는 결정(2026-10-15). 러너는 주문서를
+넣고 바로 끝나고, 서버가 기획 → 검증 → 제작까지 한 뒤 결과를 **납품 창구 하나**로 보낸다. 운영 ADMIN 계정은
+서버로 보내지 않고, 그 창구에서만 통하는 **홍보 토큰**을 새로 만든다.
+
+```
+러너   큐·중복 확인 → 메모리 조회 → 캡처 → 프롬프트·제작 틀 조립 ─SSH {op:submit, 주문서}─▶ "접수" → 종료
+서버   run.sh submit: 주문 저장 → 일꾼(setsid) → :local 컨테이너에서 gole_promotion_deliver
+         기획 codex → 검증 → 제작 codex → 결과 한 묶음(원장·성찰·초안·이미지)
+         ──HTTPS POST /api/internal/promotion-agent/deliveries (홍보 토큰)──▶ 백엔드
+백엔드  같은 runKey 면 처음 원장 반환 → 성찰 저장 → 큐·중복 다시 확인 → 업로드 → 초안·검토 요청 → 원장
+```
+
+- **메모리 조회와 프롬프트 조립은 러너에 남긴다.** 토큰이 작업 기억 전체를 언제든 읽게 하지 않는다 — 서버는 주문서에
+  실린 이번 실행 몫만 본다.
+- **납품 창구 하나 (2026-10-15 정정).** 처음에는 토큰을 봇 세션처럼 풀어 홍보 경로 7개를 열려 했다. 그러려면 계정
+  컨텍스트의 세션 해석과 모든 API 앞 가드를 고쳐야 해, 하나만 빠져도 뚫린다. 대신 `/api/internal/promotion-agent/deliveries`
+  하나만 열고(`PromotionAgentTokenInterceptor`, 이 경로에는 다른 세션 가드가 없다) promotion 의 `DeliverPromotionDraftUseCase`가
+  기존 유스케이스(성찰·작성·검토 요청·원장)를 러너가 부르던 순서로 묶는다. 큐·중복 확인이 백엔드에서 납품 순간에 일어난다.
+- **홍보 토큰.** 백엔드는 SHA-256 만 안다(`PROMOTION_AGENT_TOKEN_SHA256`). 비거나 형식이 틀리면 창구가 닫힌다. 맞으면
+  봇 ADMIN 계정(`PROMOTION_AGENT_ADMIN_EMAIL`)으로 행세해 작성자·성찰 제안자·메이커-체커(D4)가 지금과 같고, 그 계정이 ADMIN 이
+  아니거나 정지됐으면 막는다. 새면 검토 큐에 초안이 쌓이는 정도다 — 승인·발행·지침 확정은 사람이 한다.
+- **같은 runKey 재납품은 아무것도 하지 않는다.** 응답이 유실돼 deliver 가 다시 보내도 초안이 둘 생기지 않는다. 납품 중 실패는
+  `FAILED/ERROR`(예외 이름만 detail)로 원장에 남는다. 업로드는 객체 저장소라 한 트랜잭션으로 묶지 않는다.
+- **실패는 Discord 로 안다.** 러너는 접수 때 `🧾 홍보 주문 접수 · run_key`를 남기고, 서버는 실패·원장 기록 실패·작업 실패를
+  고정 코드와 run_key 로 남긴다(D23 — 글·사유는 싣지 않는다). 모델이 건너뛰면 `⏭️ 건너뜀 · 사유 코드`, 초안이 들어오면 백엔드의
+  "검토 대기" 알림이 결과다. 서버가 통째로 멈추면 결과 알림이 없다 — "접수만 있고
+  결과가 없음"으로 사람이 알아챈다. 원장에 접수 상태를 두는 자동 감지는 하지 않는다.
+- **자동 재시도는 없다.** 서비스 소개는 sha 가 없어 중복 확인이 안 된다. 실패한 주문은 7일 뒤 지운다.
+- **패키지를 실행 위치로 나눈다.** `gole_promotion_core`(러너·서버 공용: 출력 계약·성찰 검증·주문서·상한·원장),
+  `gole_promotion_agent`(러너: 캡처·메모리 조립·프롬프트·주문·백엔드 조회), `gole_promotion_deliver`(서버). core·deliver 는
+  agent 를 import 하지 않는다 — 서버 이미지에 agent 가 없다. 로컬 모드(`PROMOTION_GATEWAY=local`)만 agent 가 deliver 를
+  불러 이 프로세스에서 끝까지 돈다. 문구 블록처럼 프롬프트와 검증이 같이 쓰는 규칙은 core 에 하나만 둔다.
+- **러너는 접수 뒤 원장을 남기지 않는다.** 주문이 접수되면 결과는 `QUEUED`이고 원장은 납품이 남긴다 — 러너가 같은 runKey 로
+  먼저 남기면 납품 창구가 그 기록을 보고 납품을 버린다. 접수 전에 끝난 실행(큐 가득·중복·캡처 없음)과 서버가 **저장 전에
+  분명히 거절한** 실행(`GATEWAY_BUSY`·`BAD_REQUEST`·`MISCONFIGURED`·`FAILED`·`DUPLICATE`)만 러너가 남긴다. SSH 응답 유실·시간
+  초과처럼 서버가 받았는지 모르는 실패는 잡을 실패로 알리되 원장은 남기지 않는다 — 받았다면 납품이 남긴다(2026-10-15
+  Codex 크로스 체크 지적).
+- **백엔드는 일을 시작하기 전에 runKey 를 선점한다.** `FAILED/ERROR DELIVERY_IN_PROGRESS` 원장을 unique 인덱스로 먼저 넣고,
+  선점에 진 요청(재시도·동시 요청)은 아무것도 하지 않는다. 끝나면 결과로 바꾼다. 중간에 죽으면 진행 중 기록이 남아 보인다.
+- **서버의 접수는 원자적이다.** 접수는 잠금 안에서 임시 폴더에 주문서를 다 받은 뒤 이름 바꾸기로 확정한다. 같은 runKey 재접수는
+  아직 처리 중일 때만 "접수"이고, 끝났거나 실패한 주문이면 `GATEWAY_DUPLICATE`다.
+- **계약 버전.** core 의 `CONTRACT_VERSION`을 주문서에 싣고 deliver 가 자기 값과 다르면 `GATEWAY_CONTRACT_MISMATCH`로
+  거절한다 — 러너는 main 최신, 서버는 마지막으로 구운 이미지로 돌기 때문이다. 게이트웨이 이미지 배포 경로에 core·deliver 를 더한다.
+- **구현 순서.** ① 패키지 분리(동작 변화 없음) ② 백엔드 납품 창구·홍보 토큰 ③ deliver·이미지 확장
+  ④ `run.sh` submit/일꾼·Discord ⑤ 러너 주문 전환·접수 알림·워크플로 ⑥ 문서·서버 이전.
 
 ## 요구사항 (EARS)
 
@@ -680,9 +930,9 @@ GitHub 러너 (ubuntu-latest, environment: production)
 - P12 WHEN 실행이 화면을 찍으면, 시스템은 그 SHA로 띄운 데모 스택에서 비홍보·로그인·결제·
   `/admin`·개인 라우트를 뺀 공개 라우트를 한 번씩 찍어야 하고, `GET`/`HEAD`/`OPTIONS` 외
   네트워크 요청을 막아야 한다. 데모 데이터면 시세 화면을 찍지 않아야 한다(D12·D21).
-- P13 WHEN 게이트웨이가 고른 결과를 돌려주면, 시스템은 캡션 1~450자, 고른 장 수 1~3, 없는
+- P13 WHEN 게이트웨이가 고른 결과를 돌려주면, 시스템은 캡션 1~450자, 고른 장 수 1(D25), 없는
   번호·중복 번호 금지를 코드로 검증하고 통과한 초안만 업로드 → 생성 → 검토요청해야 한다
-  (D13·D15·D20).
+  (D13·D15·D20·D25).
 - P14 WHEN 에이전트가 초안 제출 권한을 얻기 위해 로그인하면, 시스템은 봇 전용 ADMIN 계정의
   일반 로그인 흐름을 사용하고 그 자격증명과 세션 토큰을 게이트웨이로 보내지 않아야 한다.
   해당 계정이 자신이 만든 초안을 승인·반려하려 하면 P5와 동일하게 403으로 거부해야 한다
@@ -738,13 +988,14 @@ GitHub 러너 (ubuntu-latest, environment: production)
   - `apps/support-agent/src/gole_promotion_agent/`(Python). 파일 분해는 D20 표를 따른다.
     관측 격리는 `gole_agent_runtime.privacy`를 재사용한다. 엔트리포인트는
     `python -m gole_promotion_agent --repo --run-dir (--sha | --service) [--reuse-captures]`.
-  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 PATH를 잡는 `run.sh`.
-    외부 서버에 커밋을 고정해 내려받아 설치한다. 줄바꿈은 LF로 고정한다(`.gitattributes`).
+  - `apps/support-agent/gateway/` — 게이트웨이 `gole_llm_gateway.py`와 이미지 `Dockerfile`·`config.toml`(D26),
+    지인 서버 진입점 `server/run.sh`·`Dockerfile.local`(D28).
+    줄바꿈은 LF로 고정한다(`.gitattributes`).
   - `apps/support-agent/pyproject.toml` — `[project.optional-dependencies] promotion`에
     Playwright·HTTP 클라이언트를 둔다. 모델 SDK는 없다.
   - `.github/workflows/promotion-agent.yml` — 트리거·데모 스택·SSH 준비·실행·아티팩트(D20·D21).
     시크릿(`production` 환경): `PROMOTION_GATEWAY_TARGET`, `PROMOTION_GATEWAY_KNOWN_HOSTS`,
-    `PROMOTION_GATEWAY_KEY` 또는 `PROMOTION_GATEWAY_PASSWORD`, `PROMOTION_AGENT_ADMIN_EMAIL`·
+    `PROMOTION_GATEWAY_SSH_KEY`, `PROMOTION_AGENT_ADMIN_EMAIL`·
     `PROMOTION_AGENT_ADMIN_PASSWORD`. 변수: `PROMOTION_GATEWAY_PORT`(22가 아닐 때).
   - 운영 봇 계정은 `AdminAccountSeeder`가 `gole.env`의 `PROMOTION_AGENT_ADMIN_*`로 없을 때만
     만든다. 캡처는 데모 스택의 e2e 관리자로 하므로 운영 봇에는 전화 인증이 필요 없다.
@@ -781,8 +1032,8 @@ GitHub 러너 (ubuntu-latest, environment: production)
 
 - 웹 변경이 없는 릴리스, 이미 초안이 있는 릴리스, 검토 대기 5건이면 **캡처도 모델 호출도 없이**
   건너뛴다(D11·D18/P11·P15).
-- 비홍보 화면을 뺀 모든 후보 화면을 **한 번의 claude 요청**에 싣고, 고른 장만 codex로 다듬는다
-  (D21/P12).
+- 비홍보 화면을 뺀 모든 후보 화면을 축소본으로 **codex 기획 요청 한 번**에 싣고, 고른 원본 한 장만
+  제작 요청으로 보낸다(D21·D25/P12).
 - 다듬기가 실패한 장은 원본이 게시 이미지가 되고 원본 대조 필드가 붙지 않는다(D22/P17).
 - 없는 번호·중복 번호·캡션 길이 위반은 제출 전에 실패한다(D20/P13).
 - 지난 캡처 재사용은 카메라를 부르지 않고 라우트 순서를 지키며, 매니페스트가 없으면

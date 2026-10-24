@@ -25,7 +25,7 @@ variable "budget_period_start" {
     month = number
     day   = number
   })
-  default = { year = 2026, month = 9, day = 1 }
+  default = { year = 2026, month = 10, day = 24 }
 }
 
 variable "budget_period_end" {
@@ -34,7 +34,7 @@ variable "budget_period_end" {
     month = number
     day   = number
   })
-  default = { year = 2026, month = 10, day = 28 }
+  default = { year = 2027, month = 1, day = 22 }
 }
 
 variable "region" {
@@ -142,21 +142,21 @@ variable "operator_email" {
 variable "vm_cost_start" {
   type        = string
   description = "Reviewed start of this credit/runtime arm, including timezone"
-  default     = "2026-09-01T19:57:05+09:00"
+  default     = "2026-10-24T00:00:00+09:00"
 
   validation {
-    condition     = var.vm_cost_start == "2026-09-01T19:57:05+09:00"
-    error_message = "vm_cost_start must match the reviewed September 2026 production arm."
+    condition     = var.vm_cost_start == "2026-10-24T00:00:00+09:00"
+    error_message = "vm_cost_start must match the reviewed October 2026 billing migration arm."
   }
 }
 
 variable "hard_stop_at" {
   type        = string
   description = "Absolute local shutdown deadline derived from the all-in cost ceiling"
-  default     = "2026-10-28T01:50:00+09:00"
+  default     = "2026-12-03T00:00:00+09:00"
 
   validation {
-    condition     = var.hard_stop_at == "2026-10-28T01:50:00+09:00"
+    condition     = var.hard_stop_at == "2026-12-03T00:00:00+09:00"
     error_message = "hard_stop_at must match the reviewed IPv4-inclusive cost arm."
   }
 }
@@ -164,10 +164,10 @@ variable "hard_stop_at" {
 variable "runtime_rate_transition_at" {
   type        = string
   description = "Latest reviewed instant at which the VM must be e2-standard-2"
-  default     = "2026-09-06T00:00:00+09:00"
+  default     = "2026-10-24T00:00:00+09:00"
 
   validation {
-    condition     = var.runtime_rate_transition_at == "2026-09-06T00:00:00+09:00"
+    condition     = var.runtime_rate_transition_at == "2026-10-24T00:00:00+09:00"
     error_message = "runtime_rate_transition_at must match the reviewed resize gate."
   }
 }
@@ -175,10 +175,10 @@ variable "runtime_rate_transition_at" {
 variable "credit_deadline" {
   type        = string
   description = "Credit expiry endpoint used for retained disk and snapshot tail projection"
-  default     = "2026-10-28T23:59:59+09:00"
+  default     = "2027-01-22T00:00:00+09:00"
 
   validation {
-    condition     = var.credit_deadline == "2026-10-28T23:59:59+09:00"
+    condition     = var.credit_deadline == "2027-01-22T00:00:00+09:00"
     error_message = "credit_deadline must match the reviewed credit expiry."
   }
 }

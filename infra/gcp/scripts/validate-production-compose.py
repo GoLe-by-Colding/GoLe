@@ -666,6 +666,29 @@ def validate(
         protected_environment = (
             {} if allow_legacy_adoption else EXPECTED_ENVIRONMENT_VALUES.get(name, {})
         )
+        if name == "budget-relay" and not allow_legacy_adoption and environment.get(
+            "GCP_HARD_STOP_BILLING_ACCOUNT_ID"
+        ) == "013E1F-1D7BF5-E66D50":
+            protected_environment = {
+                **protected_environment,
+                "GCP_PROJECT_ID": "project-72a52bf1-06aa-4519-b2c",
+                "GCP_HARD_STOP_BUDGET_ID": "e987694c-e6bc-48ed-90fa-942a74e56e04",
+                "GCP_CREDIT_AMOUNT_KRW": "407626",
+                "GCP_CREDIT_DEADLINE": "2027-01-21",
+                "GCP_VM_COST_START": "2026-10-24T00:00:00+09:00",
+                "GCP_RUNTIME_RATE_TRANSITION_AT": "2026-10-24T00:00:00+09:00",
+                "GCP_HIGH_RATE_HOURLY_COST_KRW": "153.390555330",
+                "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW": "26.027340000",
+                "GCP_HARD_STOP_AT": "2026-12-03T00:00:00+09:00",
+                "GCP_HARD_STOP_MAX_RUNTIME_HOURS": "960",
+                "GCP_HARD_STOP_ALL_IN_COST_KRW": "340000",
+                "GCP_COST_GUARD_WARNING_KRW": "320000",
+                "GCP_COST_GUARD_DANGER_KRW": "330000",
+                "GCP_COST_GUARD_RUNTIME_WARNING_HOURS": "840",
+                "GCP_COST_GUARD_RUNTIME_DANGER_HOURS": "936",
+                "GCP_HARD_STOP_PERIOD_START": "2026-10-24",
+                "GCP_HARD_STOP_ARM_ID": "2026-10-billing-013E1F-v1",
+            }
         for key, expected_value in protected_environment.items():
             reject(
                 str(environment.get(key)) != expected_value,

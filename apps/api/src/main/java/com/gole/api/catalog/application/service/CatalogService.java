@@ -66,7 +66,7 @@ public class CatalogService
                 command.releaseYear(),
                 command.retirementStatus(),
                 CatalogImagePath.requireSafeInput(command.imageUrl()));
-        return catalogAdminPort.save(set, command.featured()).getSetNumber();
+        return catalogAdminPort.insert(set, command.featured()).getSetNumber();
     }
 
     @Override

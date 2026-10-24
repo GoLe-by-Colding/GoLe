@@ -147,8 +147,27 @@ export function PromotionReviewPanel({
                   화면 <span className="font-mono">{capture.route}</span>
                   {capture.actions !== "" ? ` · ${capture.actions}` : ""}
                 </p>
+                {capture.styleId ? (
+                  <p className="break-words text-neutral-600">
+                    제작 스타일:{" "}
+                    {capture.styleId === "royal-blue-brick-mobile"
+                      ? "서비스 소개 · 로열블루 브릭 · 모바일"
+                      : capture.styleId}
+                    {capture.styleVersion != null ? ` · 버전 ${capture.styleVersion}` : ""}
+                  </p>
+                ) : null}
+                {capture.headline ? (
+                  <p className="whitespace-pre-wrap break-words text-neutral-700">
+                    이미지 문구: {capture.headline}
+                  </p>
+                ) : null}
+                {capture.polishFailed ? (
+                  <p className="rounded-md bg-amber-50 px-2 py-1 text-amber-800">
+                    이미지 제작에 실패해 원본 캡처를 사용했습니다.
+                  </p>
+                ) : null}
                 {capture.originalUrl ? (
-                  <p className="rounded-md bg-violet-50 px-2 py-1 text-violet-800">
+                  <p className="whitespace-pre-wrap break-words rounded-md bg-violet-50 px-2 py-1 text-violet-800">
                     AI로 다듬은 이미지입니다. 지시문: {capture.edit}
                   </p>
                 ) : null}

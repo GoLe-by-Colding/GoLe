@@ -1,5 +1,6 @@
-"""로컬 API와 진짜 러너/gateway, 가짜 CLI를 잇는 Playwright용 실행 도우미.
+"""로컬 API와 진짜 러너/deliver/gateway, 가짜 CLI를 잇는 Playwright용 실행 도우미.
 
+러너가 만든 주문서를 LocalSubmitter 가 deliver 로 처리해 로컬 API 의 납품 창구(D29)에 홍보 토큰으로 보낸다.
 운영 모델과 발행은 호출하지 않는다. requests.json은 로컬 테스트의 비공개 검증 자료다.
 """
 
@@ -20,10 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from PIL import Image  # noqa: E402
 
-from gole_promotion_agent.drafter import Drafter, UsageMeter, run_payload  # noqa: E402
+from gole_promotion_agent.drafter import Drafter  # noqa: E402
 from gole_promotion_agent.fakes import FakeCamera  # noqa: E402
-from gole_promotion_agent.gateway_client import LocalGateway  # noqa: E402
-from gole_promotion_agent.hands import BackendPublisher  # noqa: E402
+from gole_promotion_agent.gateway_client import LocalGateway, LocalSubmitter  # noqa: E402
+from gole_promotion_agent.publisher import BackendPublisher  # noqa: E402
+from gole_promotion_deliver.deliver import http_post  # noqa: E402
 
 PROPOSAL_CONTENT = "화면 글자를 읽을 수 있는 크기로 유지하고 캡션은 짧게 쓴다."
 ROUTES = ("/", "/collection")
@@ -39,7 +41,7 @@ def local_api_url(value: str) -> str:
 
 def png() -> bytes:
     out = io.BytesIO()
-    Image.new("RGB", (320, 240), "#2f56e6").save(out, format="PNG")
+    Image.new("RGB", (390, 844), "#1D4ED8").save(out, format="PNG")
     return out.getvalue()
 
 
@@ -60,26 +62,22 @@ class FakeCliGateway:
         self.requests.append(dict(request))
 
         def runner(command, **kwargs):
-            if request["engine"] == "claude":
-                if "proposals" in request.get("json_schema", {}).get("properties", {}):
-                    feedback = json.loads(request["prompt"].split("\n", 1)[1])["feedback"]
-                    proposals = [] if self.phase != "propose" else [{
-                        "kind": "PROCEDURE", "content": PROPOSAL_CONTENT,
-                        "targets": ["CAPTION", "SCREEN_SELECTION", "IMAGE_EDIT"],
-                        "categories": ["FEATURE", "SERVICE"], "sourceFeedbackIds": [feedback[0]["id"]],
-                    }]
-                    structured = {"proposals": proposals}
-                else:
-                    structured = {
-                        "decision": "draft", "caption": "갖고 있는 레고 세트를 한곳에 모아 보세요.",
-                        "rationale": "컬렉션 화면의 기능을 소개함", "picks": [{"image": 2, "label": "컬렉션"}],
-                    }
-                return subprocess.CompletedProcess(command, 0, json.dumps({
-                    "subtype": "success", "structured_output": structured, "result": "",
-                    "usage": {"input_tokens": 10, "output_tokens": 5},
-                }, ensure_ascii=False), "")
+            # codex 한 번(D25): 구조화 출력(-o 파일)과 out/ 의 이미지를 함께 낸다.
+            pending = re.search(r'"feedbackIds": (\[[^\]]*\])', request["prompt"])
+            feedback_ids = json.loads(pending.group(1)) if pending else []
+            proposals = [] if self.phase != "propose" or not feedback_ids else [{
+                "kind": "PROCEDURE", "content": PROPOSAL_CONTENT,
+                "targets": ["CAPTION", "SCREEN_SELECTION", "IMAGE_EDIT"],
+                "categories": ["FEATURE", "SERVICE"], "sourceFeedbackIds": feedback_ids[:1],
+            }]
+            structured = {
+                "decision": "draft", "skip_reason": None, "caption": "갖고 있는 레고 세트를 한곳에 모아 보세요.",
+                "rationale": "컬렉션 화면의 기능을 소개함",
+                "pick": {"image": 2, "label": "컬렉션", "headline": "내 레고 세트, 한곳에"},
+                "reflection": proposals,
+            }
             (Path(kwargs["cwd"]) / "out" / "polished.png").write_bytes(png())
-            Path(command[command.index("-o") + 1]).write_text("완료", encoding="utf-8")
+            Path(command[command.index("-o") + 1]).write_text(json.dumps(structured, ensure_ascii=False), encoding="utf-8")
             events = json.dumps({"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 5}})
             return subprocess.CompletedProcess(command, 0, events, "")
 
@@ -105,22 +103,19 @@ def main() -> int:
         run={"category": "SERVICE", "dataSource": "DEMO"},
     )
     gateway = FakeCliGateway(args.phase, args.run_dir)
-    meter = UsageMeter(gateway)
+    log = lambda message: print(message, file=sys.stderr)  # noqa: E731
+    # 원장은 납품 창구가 남긴다. 러너가 따로 남기면 같은 runKey 라 납품이 버려진다.
+    submitter = LocalSubmitter(gateway, http_post(args.api_url, os.environ["PROMOTION_AGENT_TOKEN"]), log=log)
     result = Drafter(
-        repo=Path.cwd(), run_dir=args.run_dir, publisher=publisher, gateway=meter,
+        repo=Path.cwd(), run_dir=args.run_dir, publisher=publisher, gateway=submitter,
         camera=Camera(ROUTES), routes=ROUTES, demo=True, service=True, run_key=args.run_key,
-        claude_model="fake-claude", codex_model="fake-codex",
-        log=lambda message: print(message, file=sys.stderr),
+        codex_model="fake-codex", log=log,
     ).run()
-    payload = run_payload(result, meter.calls, service=True, sha=None, env={})
-    status = publisher.record_run(payload)
-    if status not in (200, 201):
-        raise RuntimeError(f"실행 원장 기록 실패: HTTP {status}")
     requests_file = args.run_dir / "requests.json"
     requests_file.write_text(json.dumps(gateway.requests, ensure_ascii=False, indent=2), encoding="utf-8")
-    context = result.memory_context or {"feedbackIds": [], "guidelines": []}
+    context = result.memory_context or {"feedbackIds": [], "guidelines": [], "stages": []}
     output = {
-        "postId": result.post_id, "runKey": payload["runKey"], "outcome": result.outcome,
+        "postId": result.post_id, "runKey": result.run_key, "outcome": result.outcome,
         "reasonCode": result.code, "requestsFile": str(requests_file.resolve()),
         "feedbackIds": context["feedbackIds"], "guidelines": context["guidelines"], "memoryContext": context,
     }

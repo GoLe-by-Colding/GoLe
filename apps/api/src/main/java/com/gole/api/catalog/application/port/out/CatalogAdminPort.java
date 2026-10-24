@@ -10,6 +10,9 @@ public interface CatalogAdminPort {
 
     record StoredLegoSet(LegoSet set, boolean featured) {}
 
+    /** 신규 등록. 같은 번호가 있으면 기존 값을 유지하고 도메인 충돌을 던진다. */
+    LegoSet insert(LegoSet set, boolean featured);
+
     /** 세트를 저장(신규/갱신)한다. featured 는 홈 추천 노출 여부. */
     LegoSet save(LegoSet set, boolean featured);
 

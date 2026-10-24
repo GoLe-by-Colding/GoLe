@@ -21,6 +21,19 @@ async function insideTicker(link: Locator, frame: Locator): Promise<boolean> {
 }
 
 test.describe("Home", () => {
+  test("홈 체결 합계의 순위·기간·전체 기간 대체 기준을 밝힌다", async ({ page }) => {
+    await page.goto("/");
+
+    const main = page.getByRole("main");
+    await expect(main.getByText("거래 상위 세트 체결 합계", { exact: true })).toBeVisible();
+    await expect(
+      main.getByText(
+        "체결 기록 수 상위 최대 8세트의 합계예요. 최근 30일 기준이며, 이 기간에 기록이 없으면 전체 기간을 집계해요.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+  });
+
   test("브릭 브랜드 메타데이터와 히어로가 렌더된다", async ({ page }) => {
     await page.goto("/");
 
@@ -35,7 +48,7 @@ test.describe("Home", () => {
     );
 
     // 히어로 헤드라인(브랜드 카피)
-    await expect(page.getByRole("heading", { name: "브릭을 가장 합리적으로" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /다음 브릭을.*만나는 곳/ })).toBeVisible();
   });
 
   test("지금 뜨는 세트의 평균이 모든 상태의 체결가 평균임을 밝힌다", async ({ page }) => {

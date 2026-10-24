@@ -13,6 +13,8 @@ import com.gole.api.listing.application.port.in.GetListingUseCase;
 import com.gole.api.listing.domain.model.ItemCondition;
 import com.gole.api.listing.domain.model.ListingStatus;
 import com.gole.api.media.application.port.in.ManageMediaAssetsUseCase;
+import com.gole.api.order.application.port.in.CancelOrderUseCase;
+import com.gole.api.order.application.port.in.CancelOrderUseCase.CancelOrderCommand;
 import com.gole.api.order.application.port.in.CompleteOrderUseCase;
 import com.gole.api.order.application.port.in.GetOrderUseCase;
 import com.gole.api.order.application.port.in.ManageSettlementsUseCase;
@@ -22,6 +24,7 @@ import com.gole.api.order.application.port.in.PayOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase;
 import com.gole.api.order.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import com.gole.api.order.application.port.in.RefundOrderUseCase;
+import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.domain.exception.ItemUnavailableException;
 import com.gole.api.order.domain.exception.OrderStateException;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -38,12 +41,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -81,6 +86,12 @@ class OrderConcurrencyIntegrationTest {
 
     @Autowired
     PlaceOrderUseCase placeOrder;
+
+    @Autowired
+    CancelOrderUseCase cancelOrder;
+
+    @MockitoSpyBean
+    OrderRepositoryPort orderRepository;
 
     @Autowired
     PayOrderUseCase payOrder;
@@ -125,6 +136,89 @@ class OrderConcurrencyIntegrationTest {
                 com.gole.api.listing.domain.model.ConditionDisclosure.basic(),
                 List.of(stagedPhoto("seller-x")),
                 "10307"));
+    }
+
+    @Test
+    @DisplayName("미결제 취소는 저장된 예약을 복원하며 새 구매자가 주문할 수 있다")
+    void cancel_restoresReservationAndAllowsAnotherBuyer() {
+        String listingId = createActiveListing();
+        String first = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-first"));
+        cancelOrder.cancel(new CancelOrderCommand(first, "buyer-first"));
+        cancelOrder.cancel(new CancelOrderCommand(first, "buyer-first"));
+        assertThat(getOrder.getById(first).getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.ACTIVE);
+        String next = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-next"));
+        assertThat(getOrder.getById(next).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.RESERVED);
+    }
+
+    @Test
+    @DisplayName("취소 후 타 구매자 재예약 중 지연 승인과 중복 웹훅은 새 예약을 해제하지 않는다")
+    void cancel_lateApprovalRefundPreservesNewReservation() {
+        String listingId = createActiveListing();
+        String cancelled = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-first"));
+        cancelOrder.cancel(new CancelOrderCommand(cancelled, "buyer-first"));
+        String next = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-next"));
+
+        // 스텁의 승인 조회로 취소 전 열려 있던 PG 창의 지연 승인 웹훅을 재현한다.
+        payOrder.pay(cancelled);
+        payOrder.pay(cancelled);
+
+        assertThat(getOrder.getById(cancelled).getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        assertThat(getOrder.getById(cancelled).wasCancelledBeforePayment()).isTrue();
+        assertThat(getOrder.getById(next).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+        assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.RESERVED);
+    }
+
+    @Test
+    @DisplayName("취소 주문 저장 직후 실패하면 실제 Mongo 주문과 매물 예약을 함께 롤백한다")
+    void cancel_failureAfterSave_rollsBackOrderAndReservation() {
+        String listingId = createActiveListing();
+        String id = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-first"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+                    invocation.callRealMethod();
+                    throw new IllegalStateException("취소 저장 직후 실패");
+                })
+                .when(orderRepository)
+                .save(org.mockito.ArgumentMatchers.argThat(
+                        order -> order.getId().equals(id) && order.getStatus() == OrderStatus.CANCELLED));
+        try {
+            assertThatThrownBy(() -> cancelOrder.cancel(new CancelOrderCommand(id, "buyer-first")))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(getOrder.getById(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+            assertThat(getListing.getById(listingId).getStatus()).isEqualTo(ListingStatus.RESERVED);
+        } finally {
+            reset(orderRepository);
+        }
+    }
+
+    @Test
+    @DisplayName("취소와 승인 동시 요청도 자금 또는 복원된 예약 중 한 상태로 수렴한다")
+    void cancel_racingApproval_keepsOrderAndReservationConsistent() throws Exception {
+        for (int attempt = 0; attempt < 4; attempt++) {
+            String listingId = createActiveListing();
+            String id = placeOrder.place(new PlaceOrderCommand(listingId, "buyer-race"));
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<Boolean> cancellation = pool.submit(
+                        () -> runAfter(start, () -> cancelOrder.cancel(new CancelOrderCommand(id, "buyer-race"))));
+                Future<Boolean> approval = pool.submit(() -> runAfter(start, () -> payOrder.pay(id)));
+                start.countDown();
+                cancellation.get(30, TimeUnit.SECONDS);
+                approval.get(30, TimeUnit.SECONDS);
+                // PG 재전송으로 낙관적 락 패자의 지연 승인을 다시 처리한다.
+                payOrder.pay(id);
+                OrderStatus status = getOrder.getById(id).getStatus();
+                assertThat(status).isIn(OrderStatus.FUNDS_HELD, OrderStatus.REFUNDED);
+                assertThat(getListing.getById(listingId).getStatus())
+                        .isEqualTo(status == OrderStatus.FUNDS_HELD ? ListingStatus.RESERVED : ListingStatus.ACTIVE);
+                assertThat(settlements.list(null, 100))
+                        .noneMatch(summary -> summary.orderId().equals(id));
+            } finally {
+                pool.shutdownNow();
+            }
+        }
     }
 
     private String stagedPhoto(String ownerId) {

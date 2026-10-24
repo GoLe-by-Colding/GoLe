@@ -40,9 +40,9 @@ class MascotServiceTest {
     }
 
     @Test
-    @DisplayName("기본 제공 마스코트는 12벌이고 기본값은 옆모습 브릭 고래다")
-    void presets_listTwelveWithSideBrickDefault() {
-        assertThat(MascotPresets.KEYS).hasSize(12).first().isEqualTo("side-brick");
+    @DisplayName("기본 제공 마스코트는 13벌이고 이전 12벌을 보존하며 기본값은 미소 브릭 고래다")
+    void presets_keepPreviousVersionsWithSoftSideBrickDefault() {
+        assertThat(MascotPresets.KEYS).hasSize(13).first().isEqualTo("side-brick-soft");
         assertThat(MascotPresets.KEYS).doesNotHaveDuplicates();
         assertThat(MascotSelection.initial().assetId()).isEqualTo(MascotPresets.DEFAULT_KEY);
     }
@@ -70,7 +70,7 @@ class MascotServiceTest {
 
         assertThatThrownBy(() -> service.publish(3, "baby-round", "reason", "admin"))
                 .isInstanceOf(ConflictException.class);
-        assertThatThrownBy(() -> service.publish(0, "side-brick", "reason", "admin"))
+        assertThatThrownBy(() -> service.publish(0, MascotPresets.DEFAULT_KEY, "reason", "admin"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("이미 적용 중");
         assertThatThrownBy(() -> service.publish(0, "gone", "reason", "admin")).isInstanceOf(BadRequestException.class);
@@ -171,7 +171,7 @@ class MascotServiceTest {
         assertThat(active.width()).isEqualTo(400);
 
         when(repository.findAsset("u-1")).thenReturn(Optional.empty());
-        assertThat(service.active()).isEqualTo(ActiveMascot.preset(3, "side-brick", "옆모습 브릭 고래"));
+        assertThat(service.active()).isEqualTo(ActiveMascot.preset(3, "side-brick-soft", "미소 브릭 고래"));
     }
 
     @Test

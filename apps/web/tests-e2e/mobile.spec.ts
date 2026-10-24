@@ -90,6 +90,43 @@ test.describe("Mobile responsive", () => {
     await chips.getByRole("link", { name: "중고-양호 필터 빼기" }).click();
     await expect(page).toHaveURL(/\/search\?category=set&minPrice=10000&sort=price_asc$/);
     await expect(page.getByRole("list", { name: "적용된 필터" }).getByRole("link")).toHaveCount(3);
+    // 칩만 사라지고 입력 초안은 남으면 다음 검색 때 제거한 조건이 되살아난다.
+    await page.getByRole("button", { name: /필터\s*3/ }).click();
+    await expect(page.getByLabel("상태", { exact: true })).toHaveValue("");
+    await page.getByRole("button", { name: "이 조건으로 검색" }).click();
+    await expect(page).toHaveURL(/\/search\?category=set&minPrice=10000&sort=price_asc$/);
+  });
+
+  test("모바일 시세는 세트를 바꾸면 가격 카드와 공유 주소를 함께 바꾼다", async ({ page }) => {
+    await page.goto("/prices?set=10307");
+    const picker = page.getByRole("combobox", { name: "시세 볼 세트" });
+    await expect(picker).toBeVisible();
+    await expect(picker).toHaveValue("10307");
+    await expect(page.getByRole("list", { name: "세트 시세 목록" })).toBeHidden();
+    const selected = page.getByRole("heading", { name: "에펠탑", exact: true });
+    await expect(selected).toBeVisible();
+    expect((await selected.boundingBox())!.y).toBeLessThan(page.viewportSize()!.height / 2);
+
+    await picker.selectOption("75192");
+    await expect(page).toHaveURL(/\/prices\?set=75192$/);
+    await expect(
+      page.getByRole("heading", { name: "밀레니엄 팰컨 UCS", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "세트·매물 보기" })).toHaveAttribute(
+      "href",
+      "/sets/75192#set-listings-heading",
+    );
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+  });
+
+  test("커뮤니티에서 부품 요청 게시판과 작성 화면으로 이동한다", async ({ page }) => {
+    await page.goto("/community");
+    await page.getByRole("main").getByRole("link", { name: "부품 요청", exact: true }).click();
+    await expect(page).toHaveURL(/\/parts$/);
+    await expect(page.getByRole("heading", { name: "부품 요청", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "부품 요청하기", exact: true }).first().click();
+    await expect(page).toHaveURL(/\/parts\/new/);
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
   });
 
   test("모바일에서 데스크톱 인라인 네비는 숨겨진다", async ({ page }) => {

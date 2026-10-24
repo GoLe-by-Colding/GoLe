@@ -2,8 +2,11 @@
 
 import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { fetchLaunchConfig } from "@entities/launch";
 import {
   fetchOnboardingStatus,
+  loadSession,
+  saveSession,
   isOnboardingComplete,
   nextIncompleteStep,
   onboardingSteps,
@@ -17,8 +20,8 @@ import { SetNicknameForm } from "@features/onboarding/set-nickname";
 import { VerifyPhoneForm } from "@features/onboarding/verify-phone";
 import { AuthCard } from "@widgets/auth-layout";
 import { ApiError } from "@shared/api";
-import { resolveReturnTo } from "@shared/lib";
-import { LinkButton, Text } from "@shared/ui";
+import { loginHrefWithReturnTo, resolveReturnTo } from "@shared/lib";
+import { Button, LinkButton, Text } from "@shared/ui";
 import { stepTitle } from "../model/steps";
 
 /**
@@ -57,24 +60,38 @@ function OnboardingContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
+  const [sellerReady, setSellerReady] = useState(false);
+  const forSeller = searchParams.get("purpose") === "seller";
+  const requirePhone = forSeller && sellerReady;
 
   // 사용자가 넘겨준 값이므로 형태 검증을 통과한 경로만 쓴다(오픈 리다이렉트 방어).
   const returnTo = resolveReturnTo(searchParams.get("returnTo"));
 
   const finish = useCallback(() => {
+    const session = loadSession();
+    if (session !== null && session.onboardingRequired)
+      saveSession({ ...session, onboardingRequired: false });
     router.replace(returnTo ?? "/");
   }, [router, returnTo]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchOnboardingStatus(controller.signal)
-      .then(setStatus)
+    void Promise.all([
+      fetchOnboardingStatus(controller.signal),
+      forSeller ? fetchLaunchConfig(controller.signal) : Promise.resolve(null),
+    ])
+      .then(([nextStatus, launch]) => {
+        if (controller.signal.aborted) return;
+        setSellerReady(launch?.sellerIdentityVerificationReady === true);
+        setStatus(nextStatus);
+      })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
         setError(cause instanceof ApiError ? cause.message : "온보딩 정보를 불러오지 못했습니다.");
       });
     return () => controller.abort();
-  }, []);
+  }, [forSeller, attempt]);
 
   // 이미 온보딩을 마친 계정이 주소로 직접 들어온 경우 되돌려보낸다.
   //
@@ -82,17 +99,32 @@ function OnboardingContent() {
   // `required`가 false로 내려올 수 있어서, 배너를 보고 자발적으로 완성하러 들어온
   // 사용자를 입구에서 되돌려보내게 된다.
   useEffect(() => {
-    if (status !== null && isOnboardingComplete(status)) {
+    if (
+      status !== null &&
+      (!forSeller || sellerReady) &&
+      isOnboardingComplete(status, requirePhone)
+    ) {
       finish();
     }
-  }, [status, finish]);
+  }, [status, finish, forSeller, sellerReady, requirePhone]);
 
   if (error !== undefined) {
     return (
       <OnboardingShell subtitle="잠시 후 다시 시도해 주세요.">
         <div className="flex flex-col gap-4">
           <Text tone="secondary">{error}</Text>
-          <LinkButton href="/login">로그인 화면으로</LinkButton>
+          <Button
+            onClick={() => {
+              setError(undefined);
+              setStatus(null);
+              setAttempt((current) => current + 1);
+            }}
+          >
+            다시 시도
+          </Button>
+          <LinkButton href={loginHrefWithReturnTo(returnTo ?? (forSeller ? "/sell" : "/profile"))}>
+            로그인 화면으로
+          </LinkButton>
         </div>
       </OnboardingShell>
     );
@@ -108,11 +140,22 @@ function OnboardingContent() {
     );
   }
 
-  const current = nextIncompleteStep(status);
+  if (forSeller && !sellerReady) {
+    return (
+      <OnboardingShell
+        title="판매자 인증 준비 중"
+        subtitle="판매자 인증을 준비하고 있어요. 잠시 후 다시 시도해 주세요."
+      >
+        <LinkButton href={returnTo ?? "/sell"}>상품 등록으로 돌아가기</LinkButton>
+      </OnboardingShell>
+    );
+  }
+
+  const current = nextIncompleteStep(status, requirePhone);
   if (current === null) {
     // 마지막 단계까지 끝났다. finish()가 곧 이동시킨다.
     return (
-      <OnboardingShell subtitle="이제 GoLe의 모든 기능을 쓸 수 있어요.">
+      <OnboardingShell subtitle="프로필 확인을 마쳤어요. 하던 작업으로 돌아갑니다.">
         <p role="status" aria-live="polite" className="py-6 text-center text-sm text-neutral-500">
           이동 중…
         </p>
@@ -124,7 +167,7 @@ function OnboardingContent() {
     setStatus((prev) => (prev === null ? prev : withStepCompleted(prev, step)));
   }
 
-  const steps = onboardingSteps(status);
+  const steps = onboardingSteps(status, requirePhone);
   const stepIndex = steps.indexOf(current);
 
   return (
@@ -141,7 +184,9 @@ function OnboardingContent() {
             onCompleted={() => completeStep("interestTags")}
           />
         ) : null}
-        {current === "consent" ? <OnboardingConsentForm onCompleted={finish} /> : null}
+        {current === "consent" ? (
+          <OnboardingConsentForm onCompleted={() => completeStep("consent")} />
+        ) : null}
       </div>
     </OnboardingShell>
   );

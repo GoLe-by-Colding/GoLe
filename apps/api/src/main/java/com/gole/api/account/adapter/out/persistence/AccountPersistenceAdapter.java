@@ -193,7 +193,8 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 onboarding.interestTags().isEmpty() ? null : Set.copyOf(onboarding.interestTags()),
                 onboarding.privacyConsentedAt(),
                 onboarding.marketingConsentedAt(),
-                onboarding.legacyExempt());
+                onboarding.legacyExempt(),
+                account.isPasswordLoginEnabled());
     }
 
     private Account toDomain(AccountDocument document) {
@@ -210,7 +211,8 @@ public class AccountPersistenceAdapter implements AccountRepositoryPort {
                 document.getFailureWindowStartedAt(),
                 document.getLockedUntil(),
                 document.getSuspendedReason(),
-                toOnboardingProfile(document));
+                toOnboardingProfile(document),
+                !Boolean.FALSE.equals(document.getPasswordLoginEnabled()));
     }
 
     /**

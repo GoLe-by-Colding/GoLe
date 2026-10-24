@@ -61,7 +61,7 @@ test.describe("Purchase flow", () => {
 
     // 6) 구매 확정 → 거래 완료. 되돌리기 어려운 조치라 명시적 확인을 거친다.
     await page.getByRole("button", { name: "구매 확정" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "상품을 받았어요" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "상품을 받았어요" }).click();
     await expect(page.getByTestId("order-status")).toHaveText("거래 완료");
   });
 });

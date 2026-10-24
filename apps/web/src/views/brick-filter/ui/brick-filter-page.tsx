@@ -1,9 +1,19 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useSession } from "@entities/user";
+import { LoginPrompt } from "@widgets/login-prompt";
 import { ApiError } from "@shared/api";
+import {
+  BrickIcon,
+  Button,
+  Card,
+  EmptyState,
+  Heading,
+  LinkButton,
+  PageHeader,
+  PageLayout,
+} from "@shared/ui";
 import {
   createBrickJob,
   fetchBrickJob,
@@ -18,26 +28,29 @@ import {
 export function BrickFilterPage() {
   const { session } = useSession();
   return (
-    <section className="mx-auto max-w-5xl space-y-6 px-4 py-10">
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-brand-600">사진으로 만드는 작은 상상</p>
-        <h1 className="text-3xl">브릭 필터</h1>
-        <p className="text-neutral-600">
-          인물은 미니피겨로, 사물은 브릭 모델로 바꿔 보세요. 회원당 두 모드 합산 하루 3회 이용할 수
-          있어요.
-        </p>
-      </header>
+    <PageLayout>
+      <PageHeader
+        title="브릭 필터"
+        eyebrow="사진으로 만드는 작은 상상"
+        description="인물은 미니피겨로, 사물은 브릭 모델로. 사진 한 장으로 나만의 브릭 이미지를 만들어 보세요."
+      />
       {session ? (
         <Editor key={`${session.accountId}:${session.sessionToken}`} />
       ) : (
-        <div className="rounded-xl border border-neutral-200 bg-white p-6">
-          <p className="mb-4">로그인 후 나만의 브릭 이미지를 만들어 보세요.</p>
-          <Link className="text-brand-700 underline" href="/login?returnTo=%2Fbrick-filter">
-            로그인하기
-          </Link>
-        </div>
+        <LoginPrompt
+          title="내 사진으로 시작하는 브릭 놀이"
+          description="로그인 후 사진을 고르고 원하는 모드를 선택하세요. 완성된 결과는 나만 볼 수 있어요."
+          details={[
+            "인물 → 미니피겨",
+            "사물 → 브릭 모델",
+            "두 모드 합산 하루 3회",
+            "결과 이미지 저장",
+          ]}
+          returnTo="/brick-filter"
+          label="로그인하고 만들기"
+        />
       )}
-    </section>
+    </PageLayout>
   );
 }
 function Editor() {
@@ -211,8 +224,6 @@ function Editor() {
       if (alive.current) setBusy(false);
     }
   }
-  const button =
-    "rounded-lg border border-neutral-300 bg-white px-4 py-3 text-sm font-medium disabled:opacity-40";
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-brand-50 p-4">
@@ -221,8 +232,8 @@ function Editor() {
             ? `오늘 남은 횟수 ${quota.remaining} / ${quota.limit} · 서울 자정 초기화`
             : "이용 횟수 확인 중"}
         </p>
-        <button
-          className={button}
+        <Button
+          variant="secondary"
           disabled={busy}
           onClick={() =>
             void refresh().catch((error: unknown) =>
@@ -231,7 +242,7 @@ function Editor() {
           }
         >
           횟수 다시 확인
-        </button>
+        </Button>
       </div>
       {quota && !quota.enabled && (
         <p role="status" className="rounded-lg bg-neutral-100 p-4">
@@ -242,8 +253,10 @@ function Editor() {
         <p role="status">반복 요청 제한에 도달했습니다. 내일 다시 이용해 주세요.</p>
       )}
       <div className="grid gap-6 md:grid-cols-2">
-        <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
-          <h2 className="text-lg">1. 모드와 사진 선택</h2>
+        <Card padded className="space-y-4">
+          <Heading level={2} size={3}>
+            1. 모드와 사진 선택
+          </Heading>
           <fieldset disabled={pending} className="grid grid-cols-2 gap-2">
             <legend className="sr-only">변환 모드</legend>
             {(
@@ -329,8 +342,8 @@ function Editor() {
             />
             이용 권한이 있는 사진이며 이미지 생성 전송에 동의합니다.
           </label>
-          <button
-            className="w-full rounded-lg bg-brand-600 px-4 py-3 font-medium text-white disabled:opacity-40"
+          <Button
+            fullWidth
             disabled={
               authExpired ||
               !quota?.enabled ||
@@ -343,13 +356,12 @@ function Editor() {
             onClick={() => void submit()}
           >
             브릭 이미지 만들기
-          </button>
-        </section>
-        <section
-          className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5"
-          aria-busy={pending}
-        >
-          <h2 className="text-lg">2. 나만의 브릭 이미지</h2>
+          </Button>
+        </Card>
+        <Card padded className="space-y-4" aria-busy={pending}>
+          <Heading level={2} size={3}>
+            2. 나만의 브릭 이미지
+          </Heading>
           {busy || job?.status === "RESERVED" ? (
             <p role="status">
               사진을 확인하고 브릭 이미지를 만들고 있어요. 최대 몇 분이 걸릴 수 있습니다.
@@ -376,53 +388,49 @@ function Editor() {
                 height={1024}
                 className="w-full rounded-lg"
               />
-              <a
-                className="inline-block text-brand-700 underline"
-                href={result}
-                download="gole-brick.png"
-              >
+              <LinkButton href={result} download="gole-brick.png">
                 이미지 저장
-              </a>
+              </LinkButton>
             </>
           ) : (
             !pending && (
-              <div className="flex min-h-48 items-center justify-center rounded-lg bg-neutral-50 p-5 text-sm text-neutral-500">
-                완성된 이미지가 여기에 표시됩니다.
-              </div>
+              <EmptyState
+                variant="inline"
+                icon={<BrickIcon className="size-10 text-brand-300" />}
+                title="완성된 이미지가 여기에 표시됩니다."
+                description="사진과 모드를 고른 뒤 만들기를 눌러 주세요."
+              />
             )
           )}
           {(pendingId || job?.status === "RESERVED") && (
-            <button className={button} disabled={busy} onClick={() => void check()}>
+            <Button variant="secondary" disabled={busy} onClick={() => void check()}>
               요청 상태 다시 확인
-            </button>
+            </Button>
           )}
           {pendingId && canResend && (
-            <button
-              className={button}
+            <Button
+              variant="secondary"
               disabled={busy || authExpired}
               onClick={() => void submit(pendingId)}
             >
               같은 요청 다시 전송
-            </button>
+            </Button>
           )}
           {authExpired ? (
-            <Link
-              className="block text-sm text-brand-700 underline"
-              href="/login?returnTo=%2Fbrick-filter"
-            >
-              로그인 다시 하기
-            </Link>
+            <LinkButton href="/login?returnTo=%2Fbrick-filter">로그인 다시 하기</LinkButton>
           ) : null}
-        </section>
+        </Card>
       </div>
       {recent.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-lg">오늘의 작업</h2>
+          <Heading level={2} size={3}>
+            오늘의 작업
+          </Heading>
           <div className="flex flex-wrap gap-2">
             {recent.map((row) => (
-              <button
+              <Button
                 key={row.id}
-                className={button}
+                variant="secondary"
                 disabled={pending}
                 onClick={() => {
                   setResult("");
@@ -436,7 +444,7 @@ function Editor() {
                   : row.status === "FAILED"
                     ? "실패"
                     : "진행 중"}
-              </button>
+              </Button>
             ))}
           </div>
         </section>

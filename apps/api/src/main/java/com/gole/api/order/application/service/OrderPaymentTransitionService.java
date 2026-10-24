@@ -3,6 +3,7 @@ package com.gole.api.order.application.service;
 import com.gole.api.order.application.port.out.ListingReservationPort;
 import com.gole.api.order.application.port.out.OrderRepositoryPort;
 import com.gole.api.order.application.port.out.PaymentGatewayPort.PaymentVerification;
+import com.gole.api.order.application.port.out.PaymentReviewRequiredException;
 import com.gole.api.order.domain.exception.OrderNotFoundException;
 import com.gole.api.order.domain.model.Order;
 import com.gole.api.order.domain.model.OrderStatus;
@@ -25,6 +26,18 @@ public class OrderPaymentTransitionService {
     @Transactional
     public OrderStatus applyPaymentVerification(String orderId, PaymentVerification verification, Instant now) {
         Order order = load(orderId);
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            switch (verification.result()) {
+                case PAID -> {
+                    order.requestLatePaymentRefund(now, verification.method(), verification.evidenceKind());
+                    return orders.save(order).getStatus();
+                }
+                case REVIEW_REQUIRED -> throw new PaymentReviewRequiredException();
+                default -> {
+                    return order.getStatus();
+                }
+            }
+        }
         if (order.getStatus() != OrderStatus.PAYMENT_PENDING && order.getStatus() != OrderStatus.PAYMENT_REVIEW) {
             return order.getStatus();
         }
@@ -46,6 +59,16 @@ public class OrderPaymentTransitionService {
             }
         }
         return orders.save(order).getStatus();
+    }
+
+    /** 승인과 같은 주문 버전을 경쟁하며 취소·예약 복원을 함께 커밋한다. */
+    @Transactional
+    public void cancelUnpaidOrder(String orderId, Instant now) {
+        Order order = load(orderId);
+        if (order.getStatus() == OrderStatus.CANCELLED) return;
+        order.cancel(now);
+        listings.release(order.getListingId());
+        orders.save(order);
     }
 
     /**
@@ -91,7 +114,9 @@ public class OrderPaymentTransitionService {
             return order.getStatus();
         }
         order.refund(now);
-        listings.release(order.getListingId());
+        if (!order.wasCancelledBeforePayment()) {
+            listings.release(order.getListingId());
+        }
         return orders.save(order).getStatus();
     }
 

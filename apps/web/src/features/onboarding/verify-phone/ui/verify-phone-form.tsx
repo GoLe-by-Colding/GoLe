@@ -28,7 +28,8 @@ const RESEND_COOLDOWN_SECONDS = 60;
 export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sentPhoneNumber, setSentPhoneNumber] = useState<string | null>(null);
+  const sent = sentPhoneNumber !== null;
   const [error, setError] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [sending, setSending] = useState(false);
@@ -45,6 +46,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
   }, [resendAfter]);
 
   async function handleSend() {
+    if (sending || submitting || resendAfter > 0) return;
     const invalid = validatePhoneNumber(phoneNumber);
     if (invalid !== null) {
       setError(invalid);
@@ -54,8 +56,9 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
     setNotice(undefined);
     setSending(true);
     try {
-      const sentTo = await requestPhoneVerification(normalizePhoneNumber(phoneNumber));
-      setSent(true);
+      const requestedPhoneNumber = normalizePhoneNumber(phoneNumber);
+      const sentTo = await requestPhoneVerification(requestedPhoneNumber);
+      setSentPhoneNumber(requestedPhoneNumber);
       setNotice(`${sentTo.maskedPhoneNumber}로 카카오톡 인증 코드를 보냈습니다.`);
       setResendAfter(RESEND_COOLDOWN_SECONDS);
     } catch (cause) {
@@ -69,10 +72,11 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (sentPhoneNumber === null || sending || submitting || !/^\d{6}$/.test(code)) return;
     setError(undefined);
     setSubmitting(true);
     try {
-      await confirmPhoneVerification(code);
+      await confirmPhoneVerification(sentPhoneNumber, code);
       onCompleted();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "인증 중 오류가 발생했습니다.");
@@ -108,7 +112,14 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
             value={phoneNumber}
             placeholder="010-1234-5678"
             aria-describedby={describedBy}
-            onChange={(e) => setPhoneNumber(e.target.value)}
+            disabled={sending || submitting}
+            onChange={(e) => {
+              setPhoneNumber(e.target.value);
+              setSentPhoneNumber(null);
+              setCode("");
+              setNotice(undefined);
+              setError(undefined);
+            }}
             required
           />
         )}
@@ -125,7 +136,8 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
               placeholder="000000"
               maxLength={6}
               aria-describedby={describedBy}
-              onChange={(e) => setCode(e.target.value)}
+              disabled={sending || submitting}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               required
             />
           )}
@@ -133,7 +145,12 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
       ) : null}
 
       {sent ? (
-        <Button type="submit" size="lg" fullWidth disabled={submitting}>
+        <Button
+          type="submit"
+          size="lg"
+          fullWidth
+          disabled={submitting || sending || !/^\d{6}$/.test(code)}
+        >
           {submitting ? "확인 중..." : "인증하고 다음"}
         </Button>
       ) : null}
@@ -143,7 +160,7 @@ export function VerifyPhoneForm({ onCompleted }: VerifyPhoneFormProps) {
         variant={sent ? "ghost" : "primary"}
         size="lg"
         fullWidth
-        disabled={sending || resendAfter > 0 || phoneNumber.trim() === ""}
+        disabled={sending || submitting || resendAfter > 0 || phoneNumber.trim() === ""}
         onClick={handleSend}
       >
         {sending

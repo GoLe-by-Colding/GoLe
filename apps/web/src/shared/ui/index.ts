@@ -1,6 +1,7 @@
 export { Button } from "./button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
 export { LinkButton } from "./button";
+export { RefreshButton } from "./button/refresh-button";
 export type { LinkButtonProps } from "./button";
 
 export { Card } from "./card";
@@ -61,6 +62,9 @@ export {
   CheckCircleIcon,
   FlagIcon,
   HeartIcon,
+  HomeIcon,
+  UserIcon,
+  PlusIcon,
   LoaderIcon,
   MessageCircleIcon,
   SearchIcon,
@@ -73,6 +77,8 @@ export {
 export type { BellIconProps, HeartIconProps, StarIconProps } from "./icon";
 
 export { Heading, Text } from "./typography";
+export { PageLayout, PageHeader } from "./page";
+export type { PageLayoutProps, PageHeaderProps } from "./page";
 export type {
   HeadingProps,
   HeadingLevel,

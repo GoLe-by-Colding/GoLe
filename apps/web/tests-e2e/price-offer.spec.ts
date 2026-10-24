@@ -631,6 +631,218 @@ test.describe("매물 상세 — 제안가 구매·인라인 제안·받은 제�
     expect(orderBodies[1]).not.toHaveProperty("offerId");
   });
 
+  test("연락처 입력 중 제안이 만료되면 정가 주문을 다시 확인한다", async ({ page }) => {
+    const launchResponse = await page.request.get(`${apiBaseUrl}/api/v1/config/launch`);
+    const launch = (await launchResponse.json()) as {
+      stage: number;
+      features: { payments: boolean };
+      sellerIdentityVerificationReady: boolean;
+    };
+    test.skip(
+      !(launch.sellerIdentityVerificationReady && launch.features.payments && launch.stage >= 2),
+      "결제가 닫힌 단계에서는 구매 버튼이 없다",
+    );
+    const listing = await findSeedListing(page);
+    await page.clock.install();
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: [
+          offer({
+            id: "expiring-offer",
+            listingId: listing.id,
+            sellerId: listing.sellerId,
+            price: listing.price - 1000,
+            status: "accepted",
+            respondedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + HOUR).toISOString(),
+          }),
+        ],
+      }),
+    );
+    const orderBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orderBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ status: 201, json: { id: "order-after-expiry" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.clock.fastForward(HOUR + 1000);
+    await page.getByRole("button", { name: "주문하기" }).click();
+
+    await expect(
+      page.getByText("선택한 제안이 만료되거나 변경됐어요.", { exact: false }),
+    ).toContainText("정가 주문을 원하면 다시 확인해 주세요");
+    expect(orderBodies).toHaveLength(0);
+    await expect(
+      page.getByText(`정가 ${listing.price.toLocaleString("ko-KR")}원으로 주문해요.`),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "정가로 주문하기" }).click();
+    await expect(page).toHaveURL(/\/orders\/order-after-expiry$/);
+    expect(orderBodies).toHaveLength(1);
+    expect(orderBodies[0]).not.toHaveProperty("offerId");
+  });
+
+  test("먼저 보낸 수락 제안을 선택하고 다른 제안이 수락돼도 선택한 제안으로 주문한다", async ({
+    page,
+  }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const first = offer({
+      id: "first-accepted",
+      listingId: listing.id,
+      sellerId: listing.sellerId,
+      price: listing.price - 1000,
+      status: "accepted",
+    });
+    const later = offer({
+      ...first,
+      id: "later-accepted",
+      price: listing.price - 2000,
+      createdAt: new Date(Date.parse(first.createdAt) + 1000).toISOString(),
+    });
+    const pending = offer({
+      ...first,
+      id: "earlier-pending",
+      createdAt: new Date(Date.parse(first.createdAt) - 1000).toISOString(),
+      status: "pending",
+    });
+    let offers = [later, first, pending];
+    let reads = 0;
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => {
+      reads += 1;
+      return route.fulfill({ json: offers });
+    });
+    let orderBody: unknown;
+    await page.route("**/api/v1/orders", (route) => {
+      orderBody = route.request().postDataJSON();
+      return route.fulfill({ status: 201, json: { id: "order-selected-offer" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    await page
+      .getByRole("button", { name: `제안가 ${first.price.toLocaleString("ko-KR")}원으로 구매` })
+      .click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    offers = [later, first, { ...pending, status: "accepted" }];
+    const previousReads = reads;
+    await page.evaluate((listingId) => {
+      window.dispatchEvent(
+        new CustomEvent("gole:listing-offers-changed", {
+          detail: { listingId, source: "e2e" },
+        }),
+      );
+    }, listing.id);
+    await expect.poll(() => reads).toBeGreaterThan(previousReads);
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/orders\/order-selected-offer$/);
+    expect(orderBody).toMatchObject({ listingId: listing.id, offerId: first.id });
+  });
+
+  test("서버가 선택한 제안을 거절해도 남은 제안가로 다시 주문할 수 있다", async ({ page }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const first = offer({
+      id: "server-rejected",
+      listingId: listing.id,
+      sellerId: listing.sellerId,
+      price: listing.price - 1000,
+      status: "accepted",
+    });
+    const next = offer({
+      ...first,
+      id: "remaining-accepted",
+      price: listing.price - 2000,
+      createdAt: new Date(Date.parse(first.createdAt) + 1000).toISOString(),
+    });
+    let offers = [next, first];
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: offers }));
+    const orderBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orderBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      if (orderBodies.length === 1) {
+        offers = [next, { ...first, status: "declined" }];
+        return route.fulfill({
+          status: 409,
+          json: { code: "OFFER_NOT_USABLE", message: "not usable" },
+        });
+      }
+      return route.fulfill({ status: 201, json: { id: "order-remaining-offer" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(
+      page.getByText("남은 제안가를 다시 확인해 주세요.", { exact: false }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: `제안가 ${next.price.toLocaleString("ko-KR")}원으로 구매` })
+      .click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/order-remaining-offer$/);
+    expect(orderBodies.map((body) => body.offerId)).toEqual([first.id, next.id]);
+  });
+
+  test("선택한 제안이 만료돼도 다른 수락 제안이 있으면 제안가를 다시 선택한다", async ({
+    page,
+  }) => {
+    const listing = await findSeedListing(page);
+    await page.clock.install();
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const first = offer({
+      id: "first-expiring",
+      listingId: listing.id,
+      sellerId: listing.sellerId,
+      price: listing.price - 1000,
+      status: "accepted",
+      expiresAt: new Date(Date.now() + HOUR).toISOString(),
+    });
+    const next = offer({
+      ...first,
+      id: "next-accepted",
+      price: listing.price - 2000,
+      createdAt: new Date(Date.parse(first.createdAt) + 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 2 * HOUR).toISOString(),
+    });
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: [next, first] }),
+    );
+    const orderBodies: unknown[] = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orderBodies.push(route.request().postDataJSON());
+      return route.fulfill({ status: 201, json: { id: "order-next-offer" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.clock.fastForward(HOUR + 1000);
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+    expect(orderBodies).toHaveLength(0);
+    await expect(
+      page.getByText("남은 제안가를 다시 확인해 주세요.", { exact: false }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: `제안가 ${next.price.toLocaleString("ko-KR")}원으로 구매` })
+      .click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/order-next-offer$/);
+    expect(orderBodies).toEqual([
+      expect.objectContaining({ listingId: listing.id, offerId: next.id }),
+    ]);
+  });
+
   test("인라인 거래 대화에서 가격을 제안한다", async ({ page }) => {
     const listing = await findSeedListing(page);
     await seedSession(page, BUYER_ID);

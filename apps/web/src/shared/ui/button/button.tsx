@@ -5,7 +5,7 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "accent" | "inve
 export type ButtonSize = "sm" | "md" | "lg";
 
 export const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-md font-semibold leading-none whitespace-nowrap transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.98] motion-reduce:transform-none disabled:cursor-not-allowed disabled:opacity-40 disabled:transform-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
+  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold leading-none whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out motion-safe:active:scale-[0.98] motion-reduce:transform-none disabled:cursor-not-allowed disabled:opacity-40 disabled:transform-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400";
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-brand-600 text-white hover:bg-brand-700",
@@ -21,7 +21,7 @@ export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
 };
 
 export const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-9 px-3 text-sm",
+  sm: "h-11 px-3 text-sm sm:h-9 [@media(pointer:coarse)]:min-h-11",
   md: "h-11 px-5 text-base",
   lg: "h-13 px-6 text-lg",
 };
@@ -30,6 +30,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
   readonly fullWidth?: boolean;
+  readonly loading?: boolean;
+  readonly loadingLabel?: string;
   readonly children: ReactNode;
 }
 
@@ -37,6 +39,9 @@ export function Button({
   variant = "primary",
   size = "md",
   fullWidth = false,
+  loading = false,
+  loadingLabel,
+  disabled,
   type = "button",
   className,
   children,
@@ -53,8 +58,10 @@ export function Button({
         className,
       )}
       {...rest}
+      disabled={disabled || loading}
+      aria-busy={loading || rest["aria-busy"]}
     >
-      {children}
+      {loading && loadingLabel ? loadingLabel : children}
     </button>
   );
 }

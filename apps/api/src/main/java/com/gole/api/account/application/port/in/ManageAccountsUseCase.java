@@ -4,6 +4,7 @@ import com.gole.api.account.domain.model.AccountStatus;
 import com.gole.api.account.domain.model.Role;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Inbound port: 운영자의 회원 관리(조회/정지/복구/권한). (admin-console 요구사항 6)
@@ -15,6 +16,9 @@ public interface ManageAccountsUseCase {
 
     /** 최근 가입순 목록. {@code emailQuery}가 있으면 이메일 부분 일치로 좁힌다. (6.1) */
     List<AccountSummary> list(String emailQuery, int limit);
+
+    /** 이메일이 정확히 같은 계정. 형식이 틀리면 비어 있다. 부분 일치 목록(list)으로 찾으면 비슷한 이메일에 밀린다. */
+    Optional<AccountSummary> findByEmail(String email);
 
     /** 계정 정지 + 활성 세션 전량 폐기. (6.2, 6.3) */
     AccountSummary suspend(String accountId, String actorAccountId, String reason);

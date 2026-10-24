@@ -291,8 +291,9 @@ test.describe("Community topics", () => {
     await dialog.getByPlaceholder("상세 내용 (선택, 최대 1000자)").fill("욕설이 포함되어 있어요.");
     await dialog.getByRole("button", { name: "신고 접수" }).click();
 
-    expect(reportBody).toEqual({ reason: "INAPPROPRIATE", detail: "욕설이 포함되어 있어요." });
     await expect(dialog.getByText("신고가 접수되었어요")).toBeVisible();
+    // 클릭 완료와 요청 처리는 별개다. 성공 응답이 화면에 반영된 뒤 본문을 검증한다.
+    expect(reportBody).toEqual({ reason: "INAPPROPRIATE", detail: "욕설이 포함되어 있어요." });
     await expect(dialog.getByText(/필요하면 댓글을 블라인드/)).toBeVisible();
   });
 });

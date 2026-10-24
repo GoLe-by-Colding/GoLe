@@ -1,7 +1,10 @@
 package com.gole.api.bid.adapter.out.listing;
 
 import com.gole.api.bid.application.port.out.BidListingPort;
+import com.gole.api.bid.domain.exception.BidErrors;
 import com.gole.api.listing.application.port.in.GetListingUseCase;
+import com.gole.api.listing.application.port.in.RaiseListingPriceUseCase;
+import com.gole.api.listing.domain.exception.ListingConflictException;
 import com.gole.api.listing.domain.model.Listing;
 import com.gole.api.listing.domain.model.ListingStatus;
 import org.springframework.stereotype.Component;
@@ -14,9 +17,11 @@ import org.springframework.stereotype.Component;
 public class ListingBidListingAdapter implements BidListingPort {
 
     private final GetListingUseCase getListing;
+    private final RaiseListingPriceUseCase raisePrice;
 
-    public ListingBidListingAdapter(GetListingUseCase getListing) {
+    public ListingBidListingAdapter(GetListingUseCase getListing, RaiseListingPriceUseCase raisePrice) {
         this.getListing = getListing;
+        this.raisePrice = raisePrice;
     }
 
     @Override
@@ -30,5 +35,17 @@ public class ListingBidListingAdapter implements BidListingPort {
                 listing.getCondition().key(),
                 listing.getPrice().amount(),
                 listing.getStatus() == ListingStatus.ACTIVE);
+    }
+
+    @Override
+    public void raisePriceTo(String listingId, String sellerId, long expectedPrice, long targetPrice) {
+        try {
+            raisePrice.raisePriceTo(listingId, sellerId, expectedPrice, targetPrice);
+        } catch (ListingConflictException conflict) {
+            if (!ListingConflictException.PRICE_CHANGED.equals(conflict.getCode())) {
+                throw conflict;
+            }
+            throw BidErrors.priceChanged();
+        }
     }
 }

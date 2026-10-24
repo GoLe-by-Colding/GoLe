@@ -78,7 +78,7 @@ export default async function Page({ params }: PageParams) {
 
   return (
     <>
-      <SellerShopPage sellerId={sellerId} />
+      <SellerShopPage key={sellerId} sellerId={sellerId} />
       <JsonLd data={profile} />
       <JsonLd
         data={breadcrumbJsonLd(

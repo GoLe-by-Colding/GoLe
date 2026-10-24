@@ -114,7 +114,7 @@ public class OnboardingController {
     public void confirmPhoneVerification(
             @Valid @RequestBody ConfirmPhoneVerificationRequest request, HttpServletRequest http) {
         confirmPhoneVerificationUseCase.confirm(
-                new ConfirmPhoneVerificationCommand(currentAccountId(http), request.code()));
+                new ConfirmPhoneVerificationCommand(currentAccountId(http), request.phoneNumber(), request.code()));
     }
 
     @Operation(summary = "관심 태그 선택", description = "제공된 목록 중 1~5개를 선택합니다.")

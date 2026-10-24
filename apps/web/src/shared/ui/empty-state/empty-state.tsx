@@ -7,7 +7,7 @@ import { Heading, Text } from "../typography";
 export interface EmptyStateProps {
   /**
    * `panel` — 화면 전체가 비었을 때 쓰는 마스코트형. 로그인 유도·첫 시작처럼 다음 행동이 분명한 자리.
-   * `inline` — 목록 한 칸이 비었을 때 쓰는 점선 상자. 주변 UI를 밀어내지 않는다.
+   * `inline` — 목록 한 칸이 비었을 때 쓰는 간결한 안내. 주변 UI를 밀어내지 않는다.
    */
   readonly variant?: "panel" | "inline";
   /** `inline`에서 제목 위에 놓을 아이콘. `panel`은 마스코트를 쓰므로 무시된다. */
@@ -34,23 +34,23 @@ export function EmptyState({
   description,
   details = [],
   action,
-  animated = true,
+  animated = false,
   className,
 }: EmptyStateProps) {
   if (variant === "inline") {
     return (
       <div
         className={cn(
-          "flex flex-col items-center gap-2 rounded-xl border border-dashed border-neutral-300 px-6 py-14 text-center",
+          "flex flex-col items-center gap-3 rounded-xl border border-neutral-200 bg-white px-6 py-12 text-center",
           className,
         )}
       >
         {icon}
-        <Text tone="secondary" weight="medium">
+        <Heading level={2} className="text-xl">
           {title}
-        </Text>
+        </Heading>
         {description ? (
-          <Text tone="muted" size="sm">
+          <Text tone="secondary" size="sm" className="max-w-[42ch] break-keep leading-relaxed">
             {description}
           </Text>
         ) : null}
@@ -61,33 +61,30 @@ export function EmptyState({
 
   return (
     <section
-      className={cn(
-        "rounded-xl border border-neutral-200/70 bg-neutral-50 px-6 py-8 sm:px-9 sm:py-10",
-        className,
-      )}
+      className={cn("overflow-hidden rounded-2xl border border-neutral-200/70 bg-white", className)}
     >
-      <div className="grid items-center gap-7 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-10">
-        <div className="flex items-center justify-center">
+      <div className="grid sm:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="flex items-center justify-center bg-brand-50 px-6 py-8 sm:py-10">
           <Logo
-            size={160}
+            size={144}
             showWordmark={false}
             spout
             className={animated ? "origin-[50%_62%] motion-safe:animate-mascot-float" : ""}
           />
         </div>
 
-        <div className="flex min-w-0 flex-col items-start gap-4">
+        <div className="flex min-w-0 flex-col items-start gap-4 p-6 sm:p-8">
           {eyebrow ? (
             <span className="border-l-2 border-accent-400 pl-3 text-sm font-semibold text-brand-700">
               {eyebrow}
             </span>
           ) : null}
           <div className="flex flex-col gap-2">
-            <Heading level={2} className="text-2xl">
+            <Heading level={2} className="text-2xl break-keep">
               {title}
             </Heading>
             {description ? (
-              <Text tone="secondary" className="max-w-[42ch] leading-relaxed">
+              <Text tone="secondary" className="max-w-[42ch] leading-relaxed break-keep">
                 {description}
               </Text>
             ) : null}

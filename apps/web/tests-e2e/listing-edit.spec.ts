@@ -336,13 +336,13 @@ test.describe("매물 상세 — 판매자 패널과 찜·가격 인하", () => 
 
     await expect(page).toHaveURL(new RegExp(`/listings/${listingId}$`));
     await expect(page.getByText("₩10,000", { exact: true })).toBeVisible();
-    await expect(page.getByText("2,345원 내림")).toBeVisible();
+    await expect(page.getByRole("main").getByText("2,345원 내림")).toBeVisible();
 
     await switchTo(page, E2E_BUYER);
     await page.reload();
 
     await expect(page.getByTestId("listing-seller-panel")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "찜하기" })).toBeEnabled();
-    await expect(page.getByText("2,345원 내림")).toBeVisible();
+    await expect(page.getByRole("main").getByText("2,345원 내림")).toBeVisible();
   });
 });

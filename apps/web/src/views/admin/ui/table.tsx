@@ -104,10 +104,9 @@ export function AdminStatus({
       >
         <AlertCircleIcon className="mt-0.5 size-5 shrink-0 text-danger" />
         <div className="flex flex-col gap-1">
-          <Text weight="medium">운영 데이터 연결을 확인해 주세요</Text>
+          <Text weight="medium">요청을 처리하지 못했어요</Text>
           <Text tone="secondary" size="sm">
-            {error} 화면 구조와 메뉴는 계속 사용할 수 있으며, API가 복구되면 최신 상태를 다시
-            불러옵니다.
+            {error}
           </Text>
         </div>
       </Card>

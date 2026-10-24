@@ -38,6 +38,7 @@ public class PaymentReconciliationScheduler {
     private final Clock clock;
     private final Duration minimumAge;
     private String refundCursor;
+    private String cancelledCursor;
 
     public PaymentReconciliationScheduler(
             OrderRepositoryPort orders,
@@ -90,6 +91,25 @@ public class PaymentReconciliationScheduler {
         }
         int refundChecked = 0;
         int refundCompleted = 0;
+        // 취소 뒤 열려 있던 PG 창에서 늦게 승인되고 웹훅마저 유실돼도 자금을 회수한다.
+        // 취소 주문도 커서로 순환해 한 번의 실행량을 제한한다.
+        for (Order order : nextCancelledBatch()) {
+            try {
+                PaymentVerification verification =
+                        paymentGateway.verifyPaymentForCancellation(order.getId(), order.getAmount());
+                OrderStatus status = transitions.applyPaymentVerification(order.getId(), verification, now);
+                if (status == OrderStatus.REFUND_PENDING) {
+                    refunds.refund(order.getId());
+                    refundChecked++;
+                }
+            } catch (RuntimeException ex) {
+                failed++;
+                log.warn(
+                        "[cancelled payment reconciliation] orderId={} failed={}",
+                        order.getId(),
+                        ex.getClass().getSimpleName());
+            }
+        }
         var pendingRefunds = nextRefundBatch().stream()
                 .filter(order -> !order.getStatusChangedAt().isAfter(now.minus(minimumAge)))
                 .toList();
@@ -140,6 +160,16 @@ public class PaymentReconciliationScheduler {
         if (!batch.isEmpty()) {
             refundCursor = batch.getLast().getId();
         }
+        return batch;
+    }
+
+    private List<Order> nextCancelledBatch() {
+        var batch = orders.findByStatusAfterId(OrderStatus.CANCELLED, cancelledCursor);
+        if (batch.isEmpty() && cancelledCursor != null) {
+            cancelledCursor = null;
+            batch = orders.findByStatusAfterId(OrderStatus.CANCELLED, null);
+        }
+        if (!batch.isEmpty()) cancelledCursor = batch.getLast().getId();
         return batch;
     }
 }

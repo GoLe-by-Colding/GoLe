@@ -26,7 +26,7 @@ def load_validator():
     return module
 
 
-def render_model() -> dict:
+def render_model(overrides: dict[str, str] | None = None) -> dict:
     environment = dict(os.environ)
     environment.update(
         {
@@ -45,6 +45,7 @@ def render_model() -> dict:
             "DISCORD_SUPPRESS_NOTIFICATIONS": "false",
         }
     )
+    environment.update(overrides or {})
     environment["GOLE_APP_ENV_FILE"] = str(ENV_FIXTURE)
     environment["GOLE_INFRA_ENV_FILE"] = "/dev/null"
     result = subprocess.run(
@@ -146,6 +147,45 @@ class ProductionComposePolicyTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.validator = load_validator()
         cls.model = render_model()
+
+    def test_migrated_billing_render_matches_broker_and_relay_cost_policy(self):
+        values = {
+            "GCP_PROJECT_ID": "project-72a52bf1-06aa-4519-b2c",
+            "GCP_CREDIT_AMOUNT_KRW": "407626",
+            "GCP_CREDIT_DEADLINE": "2027-01-21",
+            "GCP_HARD_STOP_BILLING_ACCOUNT_ID": "013E1F-1D7BF5-E66D50",
+            "GCP_HARD_STOP_BUDGET_ID": "e987694c-e6bc-48ed-90fa-942a74e56e04",
+            "GCP_VM_COST_START": "2026-10-24T00:00:00+09:00",
+            "GCP_RUNTIME_RATE_TRANSITION_AT": "2026-10-24T00:00:00+09:00",
+            "GCP_HIGH_RATE_HOURLY_COST_KRW": "153.390555330",
+            "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW": "26.027340000",
+            "GCP_HARD_STOP_AT": "2026-12-03T00:00:00+09:00",
+            "GCP_HARD_STOP_MAX_RUNTIME_HOURS": "960",
+            "GCP_HARD_STOP_ALL_IN_COST_KRW": "340000",
+            "GCP_COST_GUARD_WARNING_KRW": "320000",
+            "GCP_COST_GUARD_DANGER_KRW": "330000",
+            "GCP_COST_GUARD_RUNTIME_WARNING_HOURS": "840",
+            "GCP_COST_GUARD_RUNTIME_DANGER_HOURS": "936",
+            "GCP_HARD_STOP_PERIOD_START": "2026-10-24",
+            "GCP_HARD_STOP_ARM_ID": "2026-10-billing-013E1F-v1",
+        }
+        model = render_model(values)
+        self.validator.validate(model)
+        # 실제 Compose 출력으로 relay를 구성해 기간 순서와 reserve도 검사한다.
+        import sys
+        relay_path = ROOT / "infra/gcp/budget-relay"
+        sys.path.insert(0, str(relay_path))
+        try:
+            import budget_relay
+            config = budget_relay.Config.from_env(model["services"]["budget-relay"]["environment"])
+            self.assertEqual(str(config.credit_amount_krw), "407626")
+        finally:
+            sys.path.remove(str(relay_path))
+        for key in ("GCP_HARD_STOP_BUDGET_ID", "GCP_HARD_STOP_PERIOD_START", "GCP_MANUAL_SNAPSHOT_HOURLY_COST_KRW"):
+            changed = copy.deepcopy(model)
+            changed["services"]["budget-relay"]["environment"][key] = "unreviewed"
+            with self.subTest(key=key), self.assertRaises(self.validator.ComposePolicyError):
+                self.validator.validate(changed)
 
     def test_previous_release_without_sentry_remains_valid_for_rollback(self) -> None:
         model = copy.deepcopy(self.model)

@@ -76,6 +76,88 @@ class CloudBrokerPolicyTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def migrated_policy(self):
+        raw = policy_values()
+        raw.update({
+            "EXPECTED_BILLING_ACCOUNT_ID": "013E1F-1D7BF5-E66D50",
+            "EXPECTED_BUDGET_ID": "e987694c-e6bc-48ed-90fa-942a74e56e04",
+            "VM_COST_START": "2026-10-24T00:00:00+09:00",
+            "RATE_TRANSITION_AT": "2026-10-24T00:00:00+09:00",
+            "HIGH_RATE_HOURLY_COST_KRW": "153.390555330",
+            "HARD_STOP_AT": "2026-12-03T00:00:00+09:00",
+            "MAX_RUNTIME_HOURS": "960",
+            "ALL_IN_LIMIT_KRW": "340000",
+            "MANUAL_SNAPSHOT_HOURLY_COST_KRW": "26.027340000",
+            "CREDIT_DEADLINE": "2027-01-22T00:00:00+09:00",
+            "BUDGET_PERIOD_START": "2026-10-24",
+        })
+        return self.module.Policy(raw)
+
+    def test_billing_migration_preserves_old_history_and_network_across_restart(self):
+        old = self.module.Cloud(self.policy)
+        old.latest_billing = Decimal("191013.72")
+        old.deadline_alerts = {"d-3"}
+        old._write_state()
+        original = self.module.STATE_PATH.read_bytes()
+        self.module.TX_BYTES_PATH.write_text("1200\n")
+        new = self.module.Cloud(self.migrated_policy())
+        self.assertEqual(new.latest_billing, Decimal("0"))
+        self.assertEqual(new.deadline_alerts, set())
+        self.assertEqual(new.cumulative_tx_bytes, old.cumulative_tx_bytes + 200)
+        self.assertEqual(self.module.STATE_PATH.read_bytes(), original)
+        new.latest_billing = Decimal("1234.56")
+        new.deadline_alerts = {"d-14"}
+        new._write_state()
+        self.module.TX_BYTES_PATH.write_text("5\n")
+        restarted = self.module.Cloud(self.migrated_policy())
+        self.assertEqual(restarted.latest_billing, Decimal("1234.56"))
+        self.assertEqual(restarted.deadline_alerts, {"d-14"})
+        self.assertEqual(restarted.cumulative_tx_bytes, new.cumulative_tx_bytes + 5)
+        self.assertEqual(self.module.STATE_PATH.read_bytes(), original)
+
+    def test_new_period_requires_old_meter_and_does_not_reset_corruption(self):
+        with self.assertRaises(self.module.BrokerError):
+            self.module.Cloud(self.migrated_policy())
+        self.module.Cloud(self.policy)
+        new = self.module.Cloud(self.migrated_policy())
+        new.state_path.write_text("{broken")
+        with self.assertRaises(self.module.BrokerError):
+            self.module.Cloud(self.migrated_policy())
+
+    def test_deleted_new_period_state_fails_closed_instead_of_reinitializing(self):
+        self.module.Cloud(self.policy)
+        new = self.module.Cloud(self.migrated_policy())
+        new.state_path.unlink()
+        with self.assertRaisesRegex(self.module.BrokerError, "initialized billing period"):
+            self.module.Cloud(self.migrated_policy())
+
+    def test_new_period_rejects_wrong_identity_or_relaxed_limits(self):
+        for key, value in {
+            "EXPECTED_BUDGET_ID": "b645c912-d766-43fc-8923-bff70ecfe8d8",
+            "EXPECTED_BILLING_ACCOUNT_ID": "01B490-1BC53A-33E611",
+            "PROJECT_ID": "other-project",
+            "HARD_STOP_AT": "2027-01-23T00:00:00+09:00",
+            "MANUAL_SNAPSHOT_HOURLY_COST_KRW": "13.013670000",
+            "ALL_IN_LIMIT_KRW": "350000",
+        }.items():
+            with self.subTest(key=key):
+                raw = dict(self.migrated_policy().raw)
+                raw[key] = value
+                with self.assertRaises(self.module.BrokerError):
+                    self.module.Policy(raw)
+
+    def test_new_period_upper_bound_includes_two_manual_snapshots_and_tail(self):
+        policy = self.migrated_policy()
+        _, _, all_in, runtime, network = policy.projected_all_in(
+            Decimal("0"), policy.stop_at, 30 * 1024**3
+        )
+        self.assertEqual(runtime, Decimal("960"))
+        self.assertEqual(network, Decimal("30"))
+        self.assertLess(all_in, Decimal("340000"))
+        self.assertGreater(all_in, Decimal("338000"))
+        self.assertEqual(policy.stop_reason(Decimal("0"), policy.stop_at, 0), "absolute-cutoff")
+        self.assertEqual(policy.stop_reason(Decimal("320000"), policy.vm_cost_start, 0), "billing-limit")
+
     def test_network_meter_is_monotonic_across_restart_increment_and_reset(self) -> None:
         cloud = self.module.Cloud(self.policy)
         baseline = 536870912 + 1000
@@ -111,6 +193,7 @@ class CloudBrokerPolicyTest(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        self.module.STATE_PATH.chmod(0o600)
         with mock.patch.object(
             self.module.Cloud, "_write_state", autospec=True
         ) as write_state:

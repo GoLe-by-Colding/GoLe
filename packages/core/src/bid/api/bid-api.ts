@@ -55,9 +55,13 @@ export function fetchBidBookForPage(setNumber: string): Promise<BidBook> {
  * 판매자가 자기 판매 중 매물을 그 세트·상태의 최고 입찰가(본인 입찰 제외)에 판다(D7).
  * 입찰자에게 그 가격의 수락 제안이 생긴다. 판매자 신원확인이 필요하다.
  */
-export function fillBid(setNumber: string, listingId: string): Promise<FillBidResult> {
+export function fillBid(
+  setNumber: string,
+  listingId: string,
+  targetPrice?: number,
+): Promise<FillBidResult> {
   return apiRequest<FillBidResult>(`${bookPath(setNumber)}/fill`, {
     method: "POST",
-    body: { listingId },
+    body: { listingId, targetPrice },
   });
 }

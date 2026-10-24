@@ -81,7 +81,12 @@ class PromotionRunPersistenceAdapterTest {
                         PromotionGuidelineKind.PROCEDURE,
                         "가독성을 우선한다",
                         List.of(PromotionMemoryTarget.IMAGE_EDIT),
-                        List.of(PromotionCategory.FEATURE))));
+                        List.of(PromotionCategory.FEATURE))),
+                List.of(new PromotionMemoryContext.StageSnapshot(
+                        PromotionMemoryContext.Stage.IMAGE_EDIT,
+                        List.of("/collection"),
+                        List.of("feedback-1"),
+                        List.of("g1"))));
         var submitted = new PromotionRun(
                 base.id(),
                 base.runKey(),
