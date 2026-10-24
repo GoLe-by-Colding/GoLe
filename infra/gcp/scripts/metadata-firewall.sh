@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 # GCE does not distinguish Linux UIDs when minting an attached service-account
 # token. Deny metadata to every non-root host process and to every container;
-# preserve TCP/UDP DNS on the same GCE address for systemd-resolved and Docker.
+# preserve TCP/UDP DNS and host IPv4 NTP on the same GCE address.
 # only the root-owned cloud broker can obtain a token.
 METADATA_V4="169.254.169.254/32"
 METADATA_V6="fd20:ce::254/128"
@@ -83,6 +83,10 @@ replace_output_chain() {
   "$tool" -w -N "$candidate"
   "$tool" -w -A "$candidate" -p udp --dport 53 -j RETURN
   "$tool" -w -A "$candidate" -p tcp --dport 53 -j RETURN
+  # GCE 내부 NTP는 metadata IPv4를 공유한다. 호스트 시간 동기화만 허용한다.
+  if [ "$address" = "$METADATA_V4" ]; then
+    "$tool" -w -A "$candidate" -p udp --dport 123 -j RETURN
+  fi
   "$tool" -w -A "$candidate" -m owner --uid-owner 0 -j RETURN
   "$tool" -w -A "$candidate" -j REJECT
   "$tool" -w -I OUTPUT 1 -d "$address" -j "$candidate"

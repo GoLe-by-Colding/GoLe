@@ -70,6 +70,7 @@ fi
 
 metadata_output_valid=false
 if iptables -w -C OUTPUT -d 169.254.169.254/32 -j GOLE_METADATA_OUTPUT >/dev/null 2>&1 &&
+  iptables -w -C GOLE_METADATA_OUTPUT -p udp --dport 123 -j RETURN >/dev/null 2>&1 &&
   iptables -w -C GOLE_METADATA_OUTPUT -m owner --uid-owner 0 -j RETURN >/dev/null 2>&1 &&
   iptables -w -C GOLE_METADATA_OUTPUT -j REJECT >/dev/null 2>&1; then
   metadata_output_valid=true

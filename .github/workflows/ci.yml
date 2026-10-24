@@ -55,6 +55,17 @@ jobs:
       - name: Build
         run: pnpm --filter web build
 
+      - name: Build production web image
+        run: >-
+          docker build -f infra/gcp/docker/web.Dockerfile -t gole/frontend:ci
+          --build-arg NEXT_PUBLIC_API_BASE_URL=https://gole.co.kr
+          --build-arg NEXT_PUBLIC_SITE_URL=https://gole.co.kr
+          --build-arg NEXT_PUBLIC_PAYMENT_MODE=disabled .
+
+      - name: Verify production web image
+        timeout-minutes: 2
+        run: bash infra/gcp/tests/web-image-runtime.smoke.sh gole/frontend:ci
+
   api:
     name: Backend (spotless · test · build)
     runs-on: ubuntu-latest
@@ -479,6 +490,7 @@ jobs:
         run: |
           shellcheck --severity=warning \
             infra/gcp/scripts/*.sh \
+            infra/gcp/tests/*.smoke.sh \
             scripts/*.sh \
             scripts/__tests__/*.test.sh
 
