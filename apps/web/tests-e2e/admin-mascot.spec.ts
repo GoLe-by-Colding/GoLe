@@ -1,5 +1,6 @@
 import { crc32, deflateSync } from "node:zlib";
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { MASCOT_PRESETS } from "@gole/core/mascot";
 
 /**
  * 운영자 콘솔 · 마스코트 — 업로드·삭제·경합·이력 화면 동작. (mascot-assets R2·R3)
@@ -145,6 +146,223 @@ const pageHasNoOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
 test.describe("운영자 콘솔 · 마스코트", () => {
+  test("상단에서 모든 후보와 업로드를 비교해도 사이트 적용본은 바뀌지 않는다", async ({ page }) => {
+    const state: EditorState = {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [upload("asset-1", "비교용 업로드")],
+      history: [],
+    };
+    await openMascotConsole(page, state);
+    let publishRequests = 0;
+    await page.route("**/api/admin/mascot/publish", (route) => {
+      publishRequests += 1;
+      return route.fulfill({ status: 500, json: {} });
+    });
+    await page.goto("/admin/mascot");
+    const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+    const presets = page.getByRole("region", { name: "기본 제공 고래", exact: true });
+    const current = preview.getByRole("figure", { name: "현재 적용 중인 마스코트" });
+    await expect(current).toContainText("옆모습 브릭 고래");
+    await expect(presets.getByRole("button")).toHaveCount(MASCOT_PRESETS.length);
+    const previewBox = await preview.boundingBox();
+    const presetBox = await presets.boundingBox();
+    expect(previewBox!.y).toBeLessThan(presetBox!.y);
+
+    for (const candidate of MASCOT_PRESETS) {
+      await presets
+        .getByRole("button", { name: candidate.name, exact: candidate.key !== "side-brick" })
+        .click();
+      await expect(
+        preview.getByRole("heading", { name: candidate.name, exact: true }),
+      ).toBeVisible();
+      await expect(preview.getByRole("heading")).toBeFocused();
+      await expect(current).toContainText("옆모습 브릭 고래");
+      if (candidate.key !== "side-brick") {
+        await expect(preview.getByText("적용 전", { exact: true })).toBeVisible();
+      }
+    }
+    await page.getByRole("button", { name: "비교용 업로드", exact: true }).click();
+    await expect(preview.getByRole("heading", { name: "비교용 업로드" })).toBeVisible();
+    await expect(preview).toContainText("아직 사이트에 적용하지 않은 미리보기입니다");
+    await expect(current).toContainText("옆모습 브릭 고래");
+    expect(publishRequests).toBe(0);
+    expect(state.current.revision).toBe(0);
+  });
+
+  test("키보드로 이전·다음 후보를 비교하면 검토 확인이 해제되고 초점은 버튼에 남는다", async ({
+    page,
+  }) => {
+    await openMascotConsole(page, {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [],
+      history: [],
+    });
+    await page.goto("/admin/mascot");
+    await page.getByRole("button", { name: "둥근 아기 고래", exact: true }).click();
+    await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("작은 크기의 표정을 비교");
+    const reviewed = page.getByRole("checkbox");
+    await reviewed.check();
+    const apply = page.getByRole("button", { name: "이 마스코트 적용" });
+    await expect(apply).toBeEnabled();
+    const next = page.getByRole("button", { name: "다음 후보", exact: true });
+    await next.focus();
+    await page.keyboard.press("Enter");
+    await expect(reviewed).not.toBeChecked();
+    await expect(apply).toBeDisabled();
+    await expect(next).toBeFocused();
+    const previous = page.getByRole("button", { name: "이전 후보", exact: true });
+    await previous.press("Enter");
+    await expect(
+      page.getByRole("region", { name: "마스코트 비교", exact: true }).getByRole("heading"),
+    ).toHaveText("둥근 아기 고래");
+    await expect(reviewed).not.toBeChecked();
+    await expect(previous).toBeFocused();
+  });
+
+  test("홈 히어로 모드는 큰 그림의 분수만 바꾸고 분수 없는 후보도 비교할 수 있다", async ({
+    page,
+  }) => {
+    await openMascotConsole(page, {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [],
+      history: [],
+    });
+    await page.goto("/admin/mascot");
+    await page.getByRole("button", { name: "말랑 브릭 고래", exact: true }).click();
+    const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+    const large = preview
+      .getByRole("figure", { name: "선택한 마스코트 큰 미리보기" })
+      .locator("svg");
+    const header = preview
+      .getByRole("figure")
+      .filter({ has: page.getByText("헤더", { exact: true }) })
+      .locator("svg");
+    const markBox = await large.getAttribute("viewBox");
+    const headerBox = await header.getAttribute("viewBox");
+    await page.getByRole("button", { name: "홈 히어로", exact: true }).click();
+    await expect(large).not.toHaveAttribute("viewBox", markBox!);
+    await expect(header).toHaveAttribute("viewBox", headerBox!);
+    await expect(page.getByRole("button", { name: "홈 히어로", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByRole("button", { name: "일반 로고", exact: true }).click();
+    await expect(large).toHaveAttribute("viewBox", markBox!);
+    await page.getByRole("button", { name: "통통 고래", exact: true }).click();
+    const plainBox = await large.getAttribute("viewBox");
+    await page.getByRole("button", { name: "홈 히어로", exact: true }).click();
+    await expect(large).toHaveAttribute("viewBox", plainBox!);
+    await expect(large).toBeVisible();
+  });
+
+  test("설정 로딩과 오류를 구분하고 다시 불러오기로 미리보기를 복구한다", async ({ page }) => {
+    const state: EditorState = {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [],
+      history: [],
+    };
+    await openMascotConsole(page, state);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/admin/mascot", async (route) => {
+      await pending;
+      await route.fulfill({ status: 503, json: {} });
+    });
+    await page.goto("/admin/mascot");
+    await expect(page.getByText("마스코트 미리보기를 불러오는 중…")).toBeVisible();
+    await expect(page.getByRole("button", { name: /둥근 아기 고래/ })).toBeDisabled();
+    release();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "마스코트 설정을 불러오지 못했습니다" }),
+    ).toBeVisible();
+    await expect(page.getByText("마스코트 미리보기를 불러오는 중…")).toHaveCount(0);
+    await page.route("**/api/admin/mascot", (route) =>
+      route.fulfill({
+        json: { current: state.current, active: activeOf(state), presets: [], uploads: [] },
+      }),
+    );
+    await page.getByRole("button", { name: "다시 불러오기" }).click();
+    await expect(
+      page.getByRole("region", { name: "마스코트 비교", exact: true }).getByRole("heading"),
+    ).toHaveText("옆모습 브릭 고래");
+    await expect(page.getByRole("button", { name: /둥근 아기 고래/ })).toBeEnabled();
+  });
+
+  test("최신 설정을 불러오는 동안 후보 선택을 막는다", async ({ page }) => {
+    const state: EditorState = {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [],
+      history: [],
+    };
+    await openMascotConsole(page, state);
+    await page.goto("/admin/mascot");
+    const candidate = page.getByRole("button", { name: /둥근 아기 고래/ });
+    await expect(candidate).toBeVisible();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/admin/mascot", async (route) => {
+      await pending;
+      await route.fulfill({
+        json: { current: state.current, active: activeOf(state), presets: [], uploads: [] },
+      });
+    });
+    await page.getByRole("button", { name: "다시 불러오기" }).click();
+    try {
+      await expect(candidate).toBeDisabled();
+    } finally {
+      release();
+    }
+    await expect(candidate).toBeEnabled();
+  });
+
+  test("저장 응답을 기다리는 동안 선택과 중복 적용을 막고 저장한 후보를 유지한다", async ({
+    page,
+  }) => {
+    const state: EditorState = {
+      current: selection(0, "side-brick", "옆모습 브릭 고래"),
+      uploads: [],
+      history: [],
+    };
+    await openMascotConsole(page, state);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const requests: unknown[] = [];
+    await page.route("**/api/admin/mascot/publish", async (route) => {
+      requests.push(route.request().postDataJSON());
+      await pending;
+      state.current = selection(1, "baby-round", "둥근 아기 고래");
+      state.history = [state.current];
+      await route.fulfill({ json: state.current });
+    });
+    await page.goto("/admin/mascot");
+    await page.getByRole("button", { name: "둥근 아기 고래", exact: true }).click();
+    await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("미리보기 확인");
+    await page.getByRole("checkbox").check();
+    const apply = page.getByRole("button", { name: "이 마스코트 적용" });
+    await apply.click();
+    try {
+      await expect(apply).toBeDisabled();
+      await expect(page.getByRole("button", { name: "다음 후보" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "꼬리 든 고래", exact: true })).toBeDisabled();
+      await expect(page.getByLabel("이름 (필수)")).toBeDisabled();
+    } finally {
+      release();
+    }
+    const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+    await expect(preview.getByRole("figure", { name: "현재 적용 중인 마스코트" })).toContainText(
+      "둥근 아기 고래",
+    );
+    await expect(preview.getByRole("heading")).toHaveText("둥근 아기 고래");
+    await expect(preview.getByText("현재 적용본", { exact: true })).toBeVisible();
+    expect(requests).toHaveLength(1);
+  });
+
   test("밝은·어두운 배경 그림을 올리면 치수와 두 키로 등록하고 새 에셋을 미리 본다", async ({
     page,
   }) => {
@@ -250,7 +468,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     await expect(reviewed).not.toBeChecked();
     await page.getByRole("button", { name: "최신 값 불러오기" }).click();
     await expect(
-      page.getByText("revision 1 · 지금 적용: 꼬리 든 고래", { exact: false }),
+      page.getByText("변경 버전 1 · 지금 적용: 꼬리 든 고래", { exact: false }),
     ).toBeVisible();
     await expect(apply).toBeDisabled();
     await reviewed.check();
@@ -299,7 +517,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     );
     await expect(autumn.getByRole("button", { name: "적용 중이라 지울 수 없음" })).toBeDisabled();
     await expect(
-      page.getByText("revision 1 · 지금 적용: 가을 고래", { exact: false }),
+      page.getByText("변경 버전 1 · 지금 적용: 가을 고래", { exact: false }),
     ).toBeVisible();
 
     await uploads
@@ -349,7 +567,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     await expect(page.getByRole("button", { name: /둥근 아기 고래/, pressed: true })).toBeVisible();
   });
 
-  for (const width of [320, 390, 768, 1440]) {
+  for (const width of [320, 375, 414, 768, 1440]) {
     test(`${width}px 폭에서 긴 이름의 업로드 에셋과 이력이 가로로 넘치지 않는다`, async ({
       page,
     }) => {
@@ -365,6 +583,29 @@ test.describe("운영자 콘솔 · 마스코트", () => {
       await expect(page.getByRole("heading", { name: longName })).toBeVisible();
       await page.getByRole("button", { name: /가가가/ }).click();
       expect(await pageHasNoOverflow(page)).toBe(true);
+      const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+      const titleBox = await preview.getByRole("heading").boundingBox();
+      const previewBox = await preview.boundingBox();
+      // 이전·다음 버튼이 제목 폭을 한 글자 너비로 밀어내면 넘침 없이도 읽을 수 없어진다.
+      expect(titleBox!.width).toBeGreaterThan(previewBox!.width * 0.45);
+      const artworkFits = await page
+        .getByRole("region", { name: "기본 제공 고래", exact: true })
+        .getByRole("button")
+        .locator("svg, img")
+        .evaluateAll((images) =>
+          images.every((image) => {
+            const imageBox = image.getBoundingClientRect();
+            const slot = image.parentElement!.parentElement!.getBoundingClientRect();
+            return imageBox.left >= slot.left - 1 && imageBox.right <= slot.right + 1;
+          }),
+        );
+      expect(artworkFits).toBe(true);
+      const removeButtons = page
+        .getByRole("region", { name: "업로드한 마스코트", exact: true })
+        .getByRole("button", { name: /지우기|지울 수 없음/ });
+      for (const button of await removeButtons.all()) {
+        expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
     });
   }
 });
