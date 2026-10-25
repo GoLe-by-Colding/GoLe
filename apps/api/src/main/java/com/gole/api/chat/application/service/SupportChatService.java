@@ -14,6 +14,11 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportAdminAction;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportInternalNote;
+import com.gole.api.chat.domain.model.SupportNotice;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
+import com.gole.api.chat.domain.model.SupportNoticeScope;
+import com.gole.api.chat.domain.model.SupportNoticeSummary;
 import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -71,6 +76,29 @@ public class SupportChatService implements SupportConsoleUseCase {
     @Override
     public long countUnassigned() {
         return tickets.countByStatus(SupportStatus.UNASSIGNED);
+    }
+
+    @Override
+    public List<SupportTicket> noticeInbox(
+            String adminId,
+            SupportStatus status,
+            SupportCategory category,
+            SupportNoticeFilter notice,
+            SupportNoticeScope scope,
+            int limit) {
+        requireAdmin(adminId);
+        return tickets.findByNotice(status, category, notice, scope, Instant.now(clock), limit);
+    }
+
+    @Override
+    public SupportNoticeSummary noticeSummary(String adminId) {
+        requireAdmin(adminId);
+        return tickets.noticeSummary(Instant.now(clock));
+    }
+
+    @Override
+    public List<SupportNotice> notices(String roomId, String adminId) {
+        return requireAssignedTo(roomId, adminId).notices();
     }
 
     @Transactional
@@ -189,6 +217,24 @@ public class SupportChatService implements SupportConsoleUseCase {
         requireAssignedTo(roomId, operator.id());
         ChatMessage message = messaging.sendAdminSupport(roomId, operator.id(), content);
         audit.record(operator, SupportAdminAction.SUPPORT_REPLY, roomId, null);
+        return message;
+    }
+
+    @Transactional
+    @Override
+    public ChatMessage replyWithNotice(
+            String roomId, SupportOperator operator, String content, SupportNoticeKind kind) {
+        java.util.Objects.requireNonNull(kind, "kind");
+        requireAssignedTo(roomId, operator.id());
+        ChatMessage message = messaging.sendAdminSupport(roomId, operator.id(), content);
+        // 메시지 저장이 티켓 상태와 버전을 먼저 갱신한다. 같은 트랜잭션의 최신 버전을 읽는다.
+        SupportTicket current = requireAssignedTo(roomId, operator.id());
+        tickets.save(current.recordNotice(kind, message));
+        audit.record(
+                operator,
+                SupportAdminAction.SUPPORT_REPLY,
+                roomId,
+                "notice=" + kind.name() + "; message=" + message.id());
         return message;
     }
 

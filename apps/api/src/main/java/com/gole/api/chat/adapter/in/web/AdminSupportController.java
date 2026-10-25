@@ -8,6 +8,11 @@ import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportInternalNote;
+import com.gole.api.chat.domain.model.SupportNotice;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
+import com.gole.api.chat.domain.model.SupportNoticeScope;
+import com.gole.api.chat.domain.model.SupportNoticeSummary;
 import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -57,10 +62,14 @@ public class AdminSupportController {
     public List<TicketResponse> inbox(
             @RequestParam(required = false) SupportStatus status,
             @RequestParam(required = false) SupportCategory category,
+            @RequestParam(required = false) SupportNoticeFilter notice,
+            @RequestParam(defaultValue = "ALL") SupportNoticeScope noticeScope,
             @RequestParam(defaultValue = "50") int limit,
             HttpServletRequest http) {
         AdminActor actor = AdminActor.of(http);
-        List<SupportTicket> tickets = support.inbox(actor.id(), status, category, limit);
+        List<SupportTicket> tickets = notice == null
+                ? support.inbox(actor.id(), status, category, limit)
+                : support.noticeInbox(actor.id(), status, category, notice, noticeScope, limit);
         List<String> ownedRoomIds = tickets.stream()
                 .filter(ticket -> actor.id().equals(ticket.assigneeId()))
                 .map(SupportTicket::roomId)
@@ -69,6 +78,17 @@ public class AdminSupportController {
         return tickets.stream()
                 .map(ticket -> response(ticket, analysisByRoom.get(ticket.roomId())))
                 .toList();
+    }
+
+    @Operation(summary = "문의 안내 이행 현황", description = "목록 한도와 무관한 보존 문의 전체의 내부 목표 현황입니다. 고객 읽음이나 법정 준수 증명이 아닙니다.")
+    @GetMapping("/notice-summary")
+    public SupportNoticeSummary noticeSummary(HttpServletRequest http) {
+        return support.noticeSummary(AdminActor.of(http).id());
+    }
+
+    @GetMapping("/{roomId}/notices")
+    public List<SupportNotice> notices(@PathVariable String roomId, HttpServletRequest http) {
+        return support.notices(roomId, AdminActor.of(http).id());
     }
 
     @PostMapping("/{roomId}/assign")
@@ -126,7 +146,10 @@ public class AdminSupportController {
     @PostMapping("/{roomId}/messages")
     public ChatController.MessageResponse reply(
             @PathVariable String roomId, @Valid @RequestBody MessageRequest request, HttpServletRequest http) {
-        ChatMessage message = support.reply(roomId, operator(AdminActor.of(http)), request.content());
+        SupportOperator actor = operator(AdminActor.of(http));
+        ChatMessage message = request.noticeKind() == null
+                ? support.reply(roomId, actor, request.content())
+                : support.replyWithNotice(roomId, actor, request.content(), request.noticeKind());
         return ChatController.MessageResponse.from(message);
     }
 
@@ -170,7 +193,7 @@ public class AdminSupportController {
             @NotBlank(message = "문의 인수 사유를 입력해야 합니다") @Size(max = 500)
             String reason) {}
 
-    public record MessageRequest(@NotBlank @Size(max = 2000) String content) {}
+    public record MessageRequest(@NotBlank @Size(max = 2000) String content, SupportNoticeKind noticeKind) {}
 
     public record NoteRequest(@NotBlank @Size(max = 2000) String note) {}
 
@@ -186,6 +209,8 @@ public class AdminSupportController {
             String resolvedAt,
             String progressDueAt,
             String responseDueAt,
+            Instant progressNotifiedAt,
+            Instant resultNotifiedAt,
             AssistantAnalysisResponse assistantAnalysis) {
 
         static TicketResponse from(SupportTicket ticket, String title, SupportAssistantAnalysis analysis) {
@@ -203,6 +228,8 @@ public class AdminSupportController {
                     ticket.responseDueAt() == null
                             ? null
                             : ticket.responseDueAt().toString(),
+                    ticket.firstNoticeAt(SupportNoticeKind.PROGRESS),
+                    ticket.firstNoticeAt(SupportNoticeKind.RESULT),
                     AssistantAnalysisResponse.from(analysis));
         }
     }
