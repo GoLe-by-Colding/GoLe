@@ -4,6 +4,7 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches/ patches/
 COPY apps/web/package.json apps/web/package.json
 COPY packages/core/package.json packages/core/package.json
 RUN pnpm --filter web... install --frozen-lockfile
@@ -37,11 +38,15 @@ FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3e
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PNPM_HOME=/pnpm
+ENV COREPACK_HOME=/pnpm/corepack
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@10.30.3 --activate \
-    && useradd --system --uid 10001 --create-home gole
+    && useradd --system --uid 10001 --create-home gole \
+    && chown -R gole:gole /pnpm
+ENV COREPACK_ENABLE_NETWORK=0
 WORKDIR /app
 COPY --from=build --chown=gole:gole /src/package.json /src/pnpm-lock.yaml /src/pnpm-workspace.yaml ./
+COPY --from=build --chown=gole:gole /src/patches ./patches
 COPY --from=build --chown=gole:gole /src/node_modules ./node_modules
 COPY --from=build --chown=gole:gole /src/apps/web ./apps/web
 COPY --from=build --chown=gole:gole /src/packages/core ./packages/core
