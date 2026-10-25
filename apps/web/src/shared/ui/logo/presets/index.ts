@@ -8,6 +8,7 @@ import { fountain } from "./fountain";
 import { frontStudHead } from "./front-stud-head";
 import { kawaiiBrick } from "./kawaii-brick";
 import { sideBrickSoft } from "./side-brick-soft";
+import { sideBrickMellow } from "./side-brick-mellow";
 import { sideBrick } from "./side-brick";
 import { sideBrickOriginal } from "./side-brick-original";
 import { tailUp } from "./tail-up";
@@ -19,6 +20,7 @@ export type { MascotArt, MascotViewBox } from "./types";
 /** 기본 제공 마스코트 그림. 키는 `@gole/core/mascot`·서버 `MascotPresets`와 같다. */
 export const MASCOT_ART: Readonly<Record<MascotPresetKey, MascotArt>> = {
   "side-brick-soft": sideBrickSoft,
+  "side-brick-mellow": sideBrickMellow,
   "side-brick": sideBrick,
   "side-brick-original": sideBrickOriginal,
   "baby-round": babyRound,

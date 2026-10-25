@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 class MascotServiceTest {
@@ -40,22 +42,24 @@ class MascotServiceTest {
     }
 
     @Test
-    @DisplayName("기본 제공 마스코트는 13벌이고 이전 12벌을 보존하며 기본값은 미소 브릭 고래다")
+    @DisplayName("기본 제공 마스코트는 14벌이고 이전 13벌과 미소 브릭 고래 기본값을 보존한다")
     void presets_keepPreviousVersionsWithSoftSideBrickDefault() {
-        assertThat(MascotPresets.KEYS).hasSize(13).first().isEqualTo("side-brick-soft");
+        assertThat(MascotPresets.KEYS).hasSize(14).first().isEqualTo("side-brick-soft");
         assertThat(MascotPresets.KEYS).doesNotHaveDuplicates();
         assertThat(MascotSelection.initial().assetId()).isEqualTo(MascotPresets.DEFAULT_KEY);
     }
 
-    @Test
+    @ParameterizedTest
+    @CsvSource({"baby-round, 둥근 아기 고래", "side-brick-mellow, 말랑 브릭 고래"})
     @DisplayName("적용은 다음 리비전을 쌓고 이름 스냅숏·조치자·다듬은 사유를 함께 남긴다")
-    void publish_appendsNextRevisionWithAudit() {
+    void publish_appendsNextRevisionWithAudit(String presetKey, String presetName) {
         when(repository.currentSelection()).thenReturn(MascotSelection.initial());
 
-        var next = service.publish(0, "baby-round", "  가을 이벤트  ", "admin-1");
+        var next = service.publish(0, presetKey, "  가을 이벤트  ", "admin-1");
 
         assertThat(next.revision()).isEqualTo(1);
-        assertThat(next.assetName()).isEqualTo("둥근 아기 고래");
+        assertThat(next.assetId()).isEqualTo(presetKey);
+        assertThat(next.assetName()).isEqualTo(presetName);
         assertThat(next.actorId()).isEqualTo("admin-1");
         assertThat(next.reason()).isEqualTo("가을 이벤트");
         assertThat(next.publishedAt()).isEqualTo(Instant.parse("2026-10-10T12:00:00.123Z"));

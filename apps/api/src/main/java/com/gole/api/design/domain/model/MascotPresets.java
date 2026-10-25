@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 기본 제공 마스코트 — 지금까지 그린 고래 마크 13벌의 키와 이름. (mascot-assets R1)
+ * 기본 제공 마스코트 — 지금까지 그린 고래 마크의 키와 이름. (mascot-assets R1)
  *
  * <p>그림은 웹(`shared/ui/logo/presets/`)이 가진다. 서버는 적용 요청이 아는 키인지 판정하고, 이력에 남길 이름을 안다.
  * 키를 더하거나 지우면 웹 프리셋 목록과 `@gole/core/mascot`의 메타데이터도 함께 고친다.
@@ -24,6 +24,7 @@ public final class MascotPresets {
     static {
         Map<String, String> names = new LinkedHashMap<>();
         names.put(DEFAULT_KEY, DEFAULT_NAME);
+        names.put("side-brick-mellow", "말랑 브릭 고래");
         names.put("side-brick", "옆모습 브릭 고래");
         names.put("side-brick-original", "원본 브릭 고래");
         names.put("baby-round", "둥근 아기 고래");
