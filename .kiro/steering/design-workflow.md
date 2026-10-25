@@ -10,6 +10,7 @@
 2. [`frontend-design`](https://github.com/anthropics/skills/tree/main/skills/frontend-design): 폰트·레이아웃·브랜드 표현을 구체화하고 실제 화면을 보고 수정한다. 제목과 본문은 SUITE·SUIT 두 계열로 고정한다.
 3. [`web-design-guidelines`](https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines): 키보드·초점·터치 영역·로딩/오류·모션·반응형을 검사한다. 매 검수 때 원본 지침을 읽는다.
 4. 기존 React 검토·verification 스킬: 공통 컴포넌트의 소유 레이어, 상태 정리, 실제 API와 사용자 동선을 확인한다.
+5. [`vercel-composition-patterns`](https://github.com/vercel-labs/agent-skills/tree/main/skills/composition-patterns): 2026-10-26 공식 저장소에서 설치했다. 미리보기·후보·업로드처럼 목적이 다른 UI를 작은 조합으로 나누되, 상태의 소유자는 하나로 유지한다. 단순 화면을 불필요한 Context·불리언 모드로 일반화하지 않는다.
 
 설치가 없는 환경에서는 현재 세션의 사용 가능한 스킬 목록부터 확인한다. 임의 이름의 스킬을 호출하지 않는다. 외부 스킬의 일반적인 권장은 저장소 규칙과 사용자의 명시 지시보다 우선하지 않는다.
 

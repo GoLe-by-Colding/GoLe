@@ -33,6 +33,12 @@ GoLe만의 퍼스널 컬러. 흔한 중고거래 앱들의 원색(오렌지/레�
 - 적용 대상(후속 스펙 `brand-icon`): favicon(SVG/ICO), app icon/apple-touch, OG 이미지, 로고 마크.
 - 디자인 시스템은 이 컨셉(고래·바다·브릭)을 일관 기준으로 삼는다.
 
+### 마스코트 비교 후보 (2026-10-26)
+
+- `side-brick-mellow`(말랑 브릭 고래)를 14번째 후보로 추가했다. 작은 남색 눈과 미소·연결된 둥근 꼬리로 옆모습을 다듬었고, 세 스터드와 가운데 골드를 유지한다. 이전 그림 13종과 `side-brick-soft` 기본값은 보존한다.
+- 관리자의 미리보기 선택과 실제 사이트 적용은 별개다. 새 후보는 `/admin/mascot`에서 밝은 헤더·어두운 푸터·작은 크기로 검토하고 변경 사유와 확인을 거쳐 적용한다. 정적 앱 아이콘·favicon·OG는 이 설정으로 바뀌지 않는다.
+- 제작 근거와 검증은 `.kiro/specs/mascot-preview-studio/`에 기록한다.
+
 ## 타이포그래피 (2026-10-21)
 
 - 제목·워드마크는 SUITE Variable(`font-display`), 본문·폼·가격은 SUIT Variable(`font-sans`)이다. 각 글꼴의 실제 WOFF2와 라이선스는 `apps/web/src/app/fonts/`에 둔다.

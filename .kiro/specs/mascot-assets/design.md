@@ -17,7 +17,7 @@
 
 | 레이어 | 클래스 | 하는 일 |
 |---|---|---|
-| domain/model | `MascotPresets` | 기본 제공 에셋 키 12개와 기본값(`side-brick`). 그림은 웹이 가진다 |
+| domain/model | `MascotPresets` | 기본 제공 에셋 키(현재 14개)와 기본값(`side-brick-soft`). 그림은 웹이 가진다 |
 | domain/model | `MascotAsset` | 업로드 에셋. `register()`가 이름·설명·치수·키를 검증한다 |
 | domain/model | `MascotSelection` | 적용 리비전 = 감사 기록. `initial()`은 리비전 0, 기본 고래 |
 | domain/model | `ActiveMascot` | 공개 응답 모양. 프리셋이면 이미지 없음, 업로드면 경로·치수 |
@@ -56,10 +56,10 @@
 
 - 기본 제공 에셋 12벌을 **당시 SVG 그대로** 파일 하나씩 옮겼다(`git show <커밋>:apps/web/src/shared/ui/logo/logo.tsx`의 `<svg>` 내용).
   각 파일은 `MascotArt` 하나를 내보낸다 — `viewBox(spout)`와 `Art({spout})`.
-- 지금 기본 고래(`side-brick`)는 `mark.svg` 정본의 다섯 경로를 그대로 쓴다. `scripts/build-brand-icons.mjs --check`가
-  검사하는 사본 위치를 `logo.tsx`에서 `presets/side-brick.tsx`로 옮긴다.
-- 어두운 배경(`tone="inverse"`): `side-brick`은 기존처럼 CSS 변수로 몸만 흰색이 된다. 나머지 기본 제공 에셋은 색이 SVG에
-  박혀 있어 흰 실루엣 필터(`brightness(0) invert(1)`)로 그린다. 업로드 에셋은 어두운 배경용 이미지가 있으면 그것을, 없으면 원본을 쓴다.
+- 이후 `side-brick-soft`(2026-10-21)와 `side-brick-mellow`(2026-10-26)를 별도 프리셋으로 추가했다. 이전 그림은 교체하지 않았다.
+- 지금 기본 고래(`side-brick-soft`)는 `mark.svg` 정본의 다섯 경로를 그대로 쓴다. `scripts/build-brand-icons.mjs --check`가
+  검사하는 사본은 `presets/side-brick-soft.tsx`와 OG다. 새 비교 후보는 정적 아이콘 생성 정본을 바꾸지 않는다.
+- 어두운 배경(`tone="inverse"`): `themable` 프리셋은 CSS 변수로 몸·얼굴을 바꾼다. 색이 SVG에 박힌 나머지는 흰 실루엣 필터(`brightness(0) invert(1)`)로 그린다. 업로드 에셋은 어두운 배경용 이미지가 있으면 그것을, 없으면 원본을 쓴다.
 
 ### 적용된 에셋 전달
 
@@ -72,8 +72,8 @@
 
 ### 관리자 화면 `/admin/mascot`
 
-- 위: 지금 적용된 마스코트(헤더 32px·푸터 남색·히어로 크기).
-- 에셋 목록: 기본 제공 12 + 업로드. 카드를 누르면 아래 미리보기 패널이 그 에셋을 헤더·푸터·히어로·작은 크기로 보여 준다.
+- 위: 선택한 마스코트와 현재 적용본의 비교. 실제 헤더 40px·푸터 남색·큰 그림·작은 크기를 함께 본다.
+- 에셋 목록: 레지스트리의 모든 기본 제공 + 업로드. 카드를 누르면 위 비교 영역에서 고른 그림을 보여 준다. 이전·다음으로 목록까지 내려가지 않고 후보를 순회한다. 상세 배치는 `../mascot-preview-studio/design.md`를 따른다.
 - 적용: 사유 + "검토했습니다" 체크 + 적용 버튼. 충돌(409)이면 고른 에셋을 유지하고 다시 불러오기를 안내한다.
 - 업로드: 이름·설명·이미지·어두운 배경용 이미지(선택). 파일을 고르면 바로 미리 보고 치수를 읽는다.
 - 이력: 리비전·에셋 이름·사유·시각, "다시 적용"(지운 에셋은 비활성).
