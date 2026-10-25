@@ -147,6 +147,8 @@ function AdminSupportInbox({
   const draftsRef = useRef(new Map<string, SupportDraft>());
   // 문의를 오가도 저장 중인 답변과 메모를 중복 제출하지 않는다.
   const pendingWritesRef = useRef(new Map<string, "reply" | "note">());
+  // 다른 문의를 보는 동안의 거부는 반영하되, 재인수 전의 낡은 응답은 무시한다.
+  const roomReadRequestRef = useRef(new Map<string, number>());
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const inboxHeadingRef = useRef<HTMLDivElement>(null);
   const inboxButtonsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -184,6 +186,7 @@ function AdminSupportInbox({
       selectedRoomRef.current = roomId;
       if (roomId !== null) setSentConfirmation(null);
       invalidateConversation();
+      ownsSelectedConversationRef.current = roomId !== null && ownedRoomIdsRef.current.has(roomId);
       const draft = roomId === null ? undefined : draftsRef.current.get(roomId);
       if (
         roomId !== null &&
@@ -301,7 +304,10 @@ function AdminSupportInbox({
           next.filter((row) => row.assigneeId === accountId).map((row) => row.roomId),
         );
         for (const row of next) {
-          if (row.assigneeId !== accountId) draftsRef.current.delete(row.roomId);
+          if (row.assigneeId !== accountId) {
+            draftsRef.current.delete(row.roomId);
+            roomReadRequestRef.current.delete(row.roomId);
+          }
         }
         if (currentTicket !== undefined && ownsSelectedConversationRef.current && !stillMine) {
           if (current !== null) draftsRef.current.delete(current);
@@ -327,6 +333,7 @@ function AdminSupportInbox({
     (roomId: string) => {
       draftsRef.current.delete(roomId);
       ownedRoomIdsRef.current.delete(roomId);
+      roomReadRequestRef.current.delete(roomId);
       if (selectedRoomRef.current === roomId) selectRoom(null);
       setTickets((current) => current?.filter((row) => row.roomId !== roomId) ?? null);
       setActionError(
@@ -349,28 +356,35 @@ function AdminSupportInbox({
       return;
     }
     const roomId = selected.roomId;
+    roomReadRequestRef.current.set(roomId, requestGeneration);
     setConversationError(undefined);
     const isCurrent = () =>
       conversationScopeGenerationRef.current === scopeGeneration &&
       conversationRequestGenerationRef.current === requestGeneration &&
       selectedRoomRef.current === roomId;
-    void fetchAdminSupportNotices(token, roomId)
+    const guardAccess = <T,>(request: Promise<T>): Promise<T> =>
+      request.catch((cause: unknown) => {
+        if (
+          isOwnershipDenied(cause) &&
+          roomReadRequestRef.current.get(roomId) === requestGeneration
+        ) {
+          revokeRoomAccess(roomId);
+        }
+        throw cause;
+      });
+    void guardAccess(fetchAdminSupportNotices(token, roomId))
       .then((nextNotices) => {
         if (!isCurrent()) return;
         setNotices(nextNotices);
         setNoticesError(undefined);
       })
       .catch((cause: unknown) => {
-        if (isOwnershipDenied(cause)) {
-          revokeRoomAccess(roomId);
-          return;
-        }
         if (!isCurrent()) return;
         setNoticesError(messageOf(cause, "안내 이력을 불러오지 못했습니다."));
       });
     void Promise.all([
-      fetchAdminSupportMessages(token, roomId),
-      fetchAdminSupportNotes(token, roomId),
+      guardAccess(fetchAdminSupportMessages(token, roomId)),
+      guardAccess(fetchAdminSupportNotes(token, roomId)),
     ])
       .then(([nextMessages, nextNotes]) => {
         if (
@@ -387,10 +401,6 @@ function AdminSupportInbox({
         setConversationError(undefined);
       })
       .catch((cause: unknown) => {
-        if (isOwnershipDenied(cause)) {
-          revokeRoomAccess(roomId);
-          return;
-        }
         if (
           conversationScopeGenerationRef.current !== scopeGeneration ||
           conversationRequestGenerationRef.current !== requestGeneration ||
@@ -429,6 +439,7 @@ function AdminSupportInbox({
   }, [isMine, loadConversation]);
 
   function replaceTicket(updated: AdminSupportTicket) {
+    roomReadRequestRef.current.delete(updated.roomId);
     if (updated.assigneeId === accountId) ownedRoomIdsRef.current.add(updated.roomId);
     else ownedRoomIdsRef.current.delete(updated.roomId);
     if (selectedRoomRef.current === updated.roomId) {
@@ -580,6 +591,7 @@ function AdminSupportInbox({
     }
     const roomId = selected.roomId;
     const scopeGeneration = conversationScopeGenerationRef.current;
+    const accessRequest = roomReadRequestRef.current.get(roomId);
     const oldest = messages[0];
     if (oldest === undefined) return;
     setLoadingOlderMessages(true);
@@ -598,7 +610,7 @@ function AdminSupportInbox({
       setMessages((current) => mergeRows(current, older, (row) => row.sentAt));
       setHasOlderMessages(older.length === 60);
     } catch (cause) {
-      if (isOwnershipDenied(cause)) {
+      if (isOwnershipDenied(cause) && roomReadRequestRef.current.get(roomId) === accessRequest) {
         revokeRoomAccess(roomId);
         return;
       }

@@ -518,7 +518,10 @@ for (const stayOnOtherRoom of [false, true]) {
     await page.getByRole("button", { name: /^다른 문의/ }).click();
     await reply.fill("다른 문의의 초안");
     if (!stayOnOtherRoom) {
-      await page.getByRole("button", { name: /거래 문의 안내 확인/ }).click();
+      // 복귀 후 0ms 대화 조회보다 저장 응답이 먼저 도착하는 경계를 고정한다.
+      await page.clock.install();
+      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+      await page.getByRole("button", { name: /거래 문의 안내 확인/ }).dispatchEvent("click");
       await expect(page.getByRole("button", { name: "답변 전송 중…" })).toBeDisabled();
       await expect(reply).toBeDisabled();
     }
@@ -575,6 +578,96 @@ for (const endpoint of ["messages", "notices"]) {
     await expect(page.getByRole("combobox", { name: "답변 종류" })).toHaveValue("GENERAL");
   });
 }
+
+test("대화 조회 실패 뒤 늦게 도착한 메모 권한 거부도 초안을 폐기한다", async ({ page }) => {
+  let denyNotes = () => {};
+  const denial = new Promise<void>((resolve) => {
+    denyNotes = resolve;
+  });
+  let listOffline = false;
+  await page.route(/\/api\/admin\/support(?:\?.*)?$/, (route) =>
+    listOffline
+      ? route.fulfill({ status: 503, json: { message: "목록 조회 실패" } })
+      : route.fulfill({ json: [ticket] }),
+  );
+  await page.route(/\/api\/admin\/support\/notice-room\/messages(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 503, json: { message: "대화 조회 실패" } }),
+  );
+  await page.route("**/api/admin/support/notice-room/notices", (route) =>
+    route.fulfill({ status: 503, json: { message: "이력 조회 실패" } }),
+  );
+  await page.route("**/api/admin/support/notice-room/notes", async (route) => {
+    await denial;
+    return route.fulfill({
+      status: 403,
+      json: { code: "SUPPORT_ASSIGNEE_ONLY", message: "담당자만 조회할 수 있습니다." },
+    });
+  });
+  await page.goto("/admin/support");
+  const reply = page.getByRole("textbox", { name: "사용자에게 보낼 답변" });
+  await reply.fill("권한이 사라진 민감 초안");
+  await expect(page.getByRole("alert").filter({ hasText: "대화 조회 실패" })).toBeVisible();
+  listOffline = true;
+  denyNotes();
+  await expect(reply).toHaveCount(0);
+});
+
+test("이전 열람의 늦은 권한 거부가 재인수 후 새 초안을 지우지 않는다", async ({ page }) => {
+  let denyOldRead = () => {};
+  const denial = new Promise<void>((resolve) => {
+    denyOldRead = resolve;
+  });
+  let firstRead = true;
+  let owner = "notice-admin";
+  await page.route(/\/api\/admin\/support(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: [
+        { ...ticket, assigneeId: owner },
+        { ...ticket, roomId: "second-room", title: "다른 문의" },
+      ],
+    }),
+  );
+  await page.route(
+    /\/api\/admin\/support\/second-room\/(messages|notes|notices)(?:\?.*)?$/,
+    (route) => route.fulfill({ json: [] }),
+  );
+  await page.route(/\/api\/admin\/support\/notice-room\/messages(?:\?.*)?$/, async (route) => {
+    if (!firstRead) return route.fulfill({ json: [] });
+    firstRead = false;
+    await denial;
+    return route.fulfill({
+      status: 403,
+      json: { code: "SUPPORT_ASSIGNEE_ONLY", message: "이전 담당 권한이 없습니다." },
+    });
+  });
+  await page.route("**/api/admin/support/notice-room/takeover", (route) => {
+    owner = "notice-admin";
+    return route.fulfill({ json: { ...ticket, assigneeId: owner } });
+  });
+  await page.goto("/admin/support");
+  await expect.poll(() => firstRead).toBe(false);
+  await page.getByRole("button", { name: /^다른 문의/ }).click();
+  owner = "other-admin";
+  await page.getByRole("button", { name: "새로고침", exact: true }).click();
+  await page.getByRole("button", { name: /거래 문의 안내 확인/ }).click();
+  await page.getByLabel("인수 사유 (필수)").fill("기존 담당자 부재로 재인수");
+  await page.getByRole("button", { name: "사유 남기고 내가 인수" }).click();
+  const reply = page.getByRole("textbox", { name: "사용자에게 보낼 답변" });
+  await reply.fill("재인수 후 새로 작성한 초안");
+  await expect(page.getByText("아직 대화가 없습니다.")).toBeVisible();
+  const deniedResponse = page.waitForResponse(
+    (response) => response.url().includes("/notice-room/messages") && response.status() === 403,
+  );
+  denyOldRead();
+  await (await deniedResponse).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(reply).toHaveValue("재인수 후 새로 작성한 초안");
+});
 
 test("내부 메모 저장 중에도 문의를 오가면 중복 제출을 막고 성공한 초안을 비운다", async ({
   page,
