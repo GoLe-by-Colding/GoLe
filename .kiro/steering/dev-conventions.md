@@ -150,7 +150,7 @@ cd /app && pnpm --filter web build
 ```bash
 # 작업 브랜치 — 워크트리를 새로 만들지 않는다 (AGENTS.md "워크트리를 만들지 않는다")
 git switch dev && git pull
-git switch -c feat/lego-set-wishlist
+git switch -c feature/lego-set-wishlist
 
 # 작업 후 PR — base 는 dev
 gh pr create --base dev --title "feat(web): 브릭 세트 위시리스트를 추가함" --body "$(cat <<'EOF'
