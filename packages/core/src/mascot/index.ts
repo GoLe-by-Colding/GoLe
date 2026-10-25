@@ -7,6 +7,7 @@ import { apiRequest } from "../runtime";
  */
 export const MASCOT_PRESET_KEYS = [
   "side-brick-soft",
+  "side-brick-mellow",
   "side-brick",
   "side-brick-original",
   "baby-round",
@@ -41,6 +42,13 @@ export const MASCOT_PRESETS: readonly MascotPresetMeta[] = [
     description: "옆모습과 스터드 세 개를 유지하고, 또렷한 눈과 작은 미소·들린 꼬리로 다듬은 고래.",
     commit: "2026-10-21 디자인 개정",
     date: "2026-10-21",
+  },
+  {
+    key: "side-brick-mellow",
+    name: "말랑 브릭 고래",
+    description: "작은 눈과 조용한 미소, 자연스럽게 이어지는 둥근 꼬리의 옆모습 브릭 고래.",
+    commit: "2026-10-26 디자인 개정",
+    date: "2026-10-26",
   },
   {
     key: "side-brick",
