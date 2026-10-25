@@ -59,6 +59,22 @@ async function mockMe(
 }
 
 test.beforeEach(async ({ page }) => {
+  // 안내 현황·이력은 운영 문의 화면의 독립 조회다. 합성 세션이 실제 API로 새지 않게 한다.
+  await page.route("**/api/admin/support/notice-summary", (route) =>
+    route.fulfill({
+      json: {
+        generatedAt: "2026-10-25T00:00:00Z",
+        total: 0,
+        progress: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        result: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        activeProgress: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        activeResult: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        resolvedMissingProgress: 0,
+        resolvedMissingResult: 0,
+      },
+    }),
+  );
+  await page.route("**/api/admin/support/*/notices", (route) => route.fulfill({ json: [] }));
   // 메모리 패널도 합성 세션을 쓰는 화면 테스트에서는 실제 API와 분리한다.
   await page.route(/\/api\/admin\/promotion-(?:guidelines|feedback|runs)(?:\?.*)?$/, (route) =>
     route.fulfill({ json: [] }),
@@ -1107,8 +1123,9 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(inbox.getByText("개인정보 열람", { exact: true })).toBeVisible();
     await expect(inbox.getByText(/진행 안내 .*일 남음/)).toBeVisible();
     await expect(inbox.getByText(/결과·방안 .*일 남음/)).toBeVisible();
-    await expect(inbox.getByText("진행 안내 기한 내 처리")).toBeVisible();
-    await expect(inbox.getByText("결과·방안 기한 내 처리")).toBeVisible();
+    await expect(inbox.getByText("진행 안내 기록 확인")).toBeVisible();
+    await expect(inbox.getByText("결과·방안 기록 확인")).toBeVisible();
+    await expect(inbox.getByText(/목표 내 안내|기한 내 처리/)).toHaveCount(0);
 
     await page.getByRole("combobox", { name: "유형" }).selectOption("PRIVACY_ACCESS");
     await expect

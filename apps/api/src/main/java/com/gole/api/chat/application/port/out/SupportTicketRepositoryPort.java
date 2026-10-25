@@ -1,8 +1,12 @@
 package com.gole.api.chat.application.port.out;
 
 import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeScope;
+import com.gole.api.chat.domain.model.SupportNoticeSummary;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +28,21 @@ public interface SupportTicketRepositoryPort {
 
     /** 관리자 작업 배지에 쓸 상태별 티켓 수. */
     long countByStatus(SupportStatus status);
+
+    List<SupportTicket> findByNotice(
+            SupportStatus status,
+            SupportCategory category,
+            SupportNoticeFilter notice,
+            SupportNoticeScope scope,
+            Instant now,
+            int limit);
+
+    default List<SupportTicket> findByNotice(
+            SupportStatus status, SupportCategory category, SupportNoticeFilter notice, Instant now, int limit) {
+        return findByNotice(status, category, notice, SupportNoticeScope.ALL, now, limit);
+    }
+
+    SupportNoticeSummary noticeSummary(Instant now);
 
     /** 관리자 인박스 복합 필터. null인 축은 전체를 뜻한다. */
     default List<SupportTicket> findByStatusAndCategory(SupportStatus status, SupportCategory category, int limit) {
