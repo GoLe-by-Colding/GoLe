@@ -410,7 +410,11 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
   });
 
   /** 판매자 화면을 띄우고 그 세트·상태에 `highest` 입찰이 걸린 호가창과 체결·수정 요청을 가로챈다. */
-  async function openSellerListingWithBid(page: Page, bidOverAsk: number) {
+  async function openSellerListingWithBid(
+    page: Page,
+    bidOverAsk: number,
+    beforeNavigate?: (listing: SeedListing) => Promise<void>,
+  ) {
     const listing = await findSeedListing(page);
     const setNumber = listing.catalogSetNumber ?? "";
     const highest = listing.price + bidOverAsk;
@@ -451,13 +455,213 @@ test.describe("세트·매물 상세 — 호가창·입찰 폼·즉시 판매 (�
     });
     await page.route(`**/api/v1/bids/book/${setNumber}/fill`, async (route) => {
       calls.push("FILL");
-      fills.push(route.request().postDataJSON() as { listingId: string; targetPrice?: number });
+      const body = route.request().postDataJSON() as { listingId: string; targetPrice?: number };
+      fills.push(body);
       await route.fulfill({
-        json: { bidPrice: highest, offerId: "offer-from-fill", listingId: listing.id },
+        json: {
+          bidPrice: body.targetPrice ?? highest,
+          offerId: "offer-from-fill",
+          listingId: listing.id,
+        },
       });
     });
+    await beforeNavigate?.(listing);
     await page.goto(`/listings/${listing.id}`);
     return { listing, highest, calls, revisions, fills, section: page.getByTestId("sell-to-bid") };
+  }
+
+  test("판매자 입찰 조회가 반복 실패해도 다시 확인하고 복구할 수 있다", async ({ page }) => {
+    let reads = 0;
+    let recovered = false;
+    const { section, calls } = await openSellerListingWithBid(page, 20000, async (listing) => {
+      await page.route(`**/api/v1/bids/book/${listing.catalogSetNumber}`, async (route) => {
+        reads += 1;
+        if (recovered) return route.fallback();
+        await route.fulfill({ status: 503, json: { code: "UNAVAILABLE", message: "down" } });
+      });
+    });
+    const failure = section.getByText("입찰 정보를 불러오지 못했어요.", { exact: false });
+    await expect(failure).toBeVisible();
+    await expect(section.getByRole("button", { name: /바로 판매|그대로 판매/ })).toHaveCount(0);
+    const readsBeforeRetry = reads;
+    await section.getByRole("button", { name: "입찰 다시 확인" }).click();
+    await expect.poll(() => reads).toBeGreaterThan(readsBeforeRetry);
+    await expect(failure).toBeVisible();
+
+    recovered = true;
+    await section.getByRole("button", { name: "입찰 다시 확인" }).click();
+    await expect(section.getByRole("button", { name: /올리고 바로 판매/ })).toBeVisible();
+    await expect(failure).toHaveCount(0);
+    expect(calls).toEqual([]);
+  });
+
+  test("판매 수락 실패 뒤 입찰 재조회도 실패해도 원인과 복구 동선을 보존한다", async ({ page }) => {
+    let saleFailed = false;
+    let lookupRecovered = false;
+    let fillCount = 0;
+    const { section, revisions } = await openSellerListingWithBid(page, 20000, async (listing) => {
+      const setNumber = listing.catalogSetNumber ?? "";
+      await page.route(`**/api/v1/bids/book/${setNumber}`, async (route) => {
+        if (!saleFailed) return route.fallback();
+        if (lookupRecovered) return route.fulfill({ json: emptyBook(setNumber) });
+        await route.fulfill({ status: 503, json: { code: "UNAVAILABLE", message: "down" } });
+      });
+      await page.route(`**/api/v1/bids/book/${setNumber}/fill`, async (route) => {
+        fillCount += 1;
+        saleFailed = true;
+        await route.fulfill({
+          status: 409,
+          json: { code: "BID_PRICE_CHANGED", message: "changed" },
+        });
+      });
+    });
+    await section.getByRole("button", { name: /올리고 바로 판매/ }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "판매", exact: true }).click();
+    const saleError = section.getByText("입찰가나 판매가가 바뀌었어요.", { exact: false });
+    await expect(saleError).toBeVisible();
+    await expect(
+      section.getByText("입찰 정보를 불러오지 못했어요.", { exact: false }),
+    ).toBeVisible();
+    await expect(section.getByRole("button", { name: /바로 판매|그대로 판매/ })).toHaveCount(0);
+
+    lookupRecovered = true;
+    await section.getByRole("button", { name: "입찰 다시 확인" }).click();
+    await expect(
+      section.getByText("아직 이 세트·상태에 걸린 입찰이 없어요.", { exact: false }),
+    ).toBeVisible();
+    await expect(saleError).toBeVisible();
+    expect(fillCount).toBe(1);
+    expect(revisions).toEqual([]);
+  });
+
+  test("판매 충돌 뒤 최신 입찰을 읽는 동안 지난 가격으로 다시 팔 수 없다", async ({ page }) => {
+    let saleFailed = false;
+    let releaseLookup: (() => void) | undefined;
+    const lookupGate = new Promise<void>((resolve) => {
+      releaseLookup = resolve;
+    });
+    let newPrice = 0;
+    const { section, fills } = await openSellerListingWithBid(page, 20000, async (listing) => {
+      const setNumber = listing.catalogSetNumber ?? "";
+      newPrice = listing.price + 10000;
+      await page.route(`**/api/v1/bids/book/${setNumber}`, async (route) => {
+        if (!saleFailed) return route.fallback();
+        await lookupGate;
+        const book = emptyBook(setNumber);
+        await route.fulfill({
+          json: {
+            ...book,
+            conditions: book.conditions.map((row) =>
+              row.condition === listing.condition
+                ? { ...row, highestPrice: newPrice, bidCount: 1 }
+                : row,
+            ),
+          },
+        });
+      });
+      await page.route(`**/api/v1/bids/book/${setNumber}/fill`, async (route) => {
+        if (saleFailed) return route.fallback();
+        saleFailed = true;
+        await route.fulfill({
+          status: 409,
+          json: { code: "BID_PRICE_CHANGED", message: "changed" },
+        });
+      });
+    });
+    try {
+      await section.getByRole("button", { name: /올리고 바로 판매/ }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "판매", exact: true })
+        .click();
+      await expect(section.getByText("입찰 정보를 확인하고 있어요.")).toBeVisible();
+      await expect(section.getByRole("button", { name: /바로 판매|그대로 판매/ })).toHaveCount(0);
+      releaseLookup?.();
+      const newLabel = `${newPrice.toLocaleString("ko-KR")}원`;
+      await section
+        .getByRole("button", { name: `판매가를 ${newLabel}으로 올리고 바로 판매` })
+        .click();
+      const confirmation = page.getByRole("alertdialog");
+      await expect(confirmation).toContainText(`주문 금액은 ${newLabel}`);
+      expect(fills).toEqual([]);
+      await confirmation.getByRole("button", { name: "판매", exact: true }).click();
+      await expect.poll(() => fills.length).toBe(1);
+      expect(fills[0]?.targetPrice).toBe(newPrice);
+    } finally {
+      releaseLookup?.();
+    }
+  });
+
+  test("입찰 없음은 조회 실패와 구분하고 새 입찰을 다시 확인할 수 있다", async ({ page }) => {
+    let empty = true;
+    const { section, calls } = await openSellerListingWithBid(page, 20000, async (listing) => {
+      const setNumber = listing.catalogSetNumber ?? "";
+      await page.route(`**/api/v1/bids/book/${setNumber}`, (route) =>
+        empty ? route.fulfill({ json: emptyBook(setNumber) }) : route.fallback(),
+      );
+    });
+    await expect(
+      section.getByText("아직 이 세트·상태에 걸린 입찰이 없어요.", { exact: false }),
+    ).toBeVisible();
+    await expect(section.getByRole("alert")).toHaveCount(0);
+    empty = false;
+    await section.getByRole("button", { name: "입찰 다시 확인" }).click();
+    await expect(section.getByRole("button", { name: /올리고 바로 판매/ })).toBeVisible();
+    expect(calls).toEqual([]);
+  });
+
+  for (const width of [320, 375, 414, 768]) {
+    test(`판매자 입찰 행동은 ${width}px에서 최대 금액도 넘치지 않는다`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const { section, calls } = await openSellerListingWithBid(page, 20000, async (listing) => {
+        const setNumber = listing.catalogSetNumber ?? "";
+        const book = emptyBook(setNumber);
+        await page.route(`**/api/v1/bids/book/${setNumber}`, (route) =>
+          route.fulfill({
+            json: {
+              ...book,
+              conditions: book.conditions.map((row) =>
+                row.condition === listing.condition
+                  ? { ...row, highestPrice: 100_000_000, bidCount: 1 }
+                  : row,
+              ),
+            },
+          }),
+        );
+      });
+      const action = section.getByRole("button", {
+        name: "판매가를 100,000,000원으로 올리고 바로 판매",
+      });
+      await expect(action).toBeVisible();
+      await expect
+        .poll(() => section.evaluate((element) => element.scrollWidth - element.clientWidth))
+        .toBeLessThanOrEqual(1);
+      const box = await action.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      // 버튼 상자만 화면 안에 있어도 가운데 정렬된 긴 문구는 양옆으로 잘릴 수 있다.
+      const textBounds = await action.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const text = range.getBoundingClientRect();
+        const button = element.getBoundingClientRect();
+        return {
+          left: text.left - button.left,
+          right: button.right - text.right,
+          top: text.top - button.top,
+          bottom: button.bottom - text.bottom,
+        };
+      });
+      for (const inset of Object.values(textBounds)) expect(inset).toBeGreaterThanOrEqual(0);
+      await action.focus();
+      await page.keyboard.press("Enter");
+      const confirmation = page.getByRole("alertdialog", { name: "판매가를 올리고 판매" });
+      await expect(confirmation).toBeVisible();
+      await confirmation.getByRole("button", { name: "취소", exact: true }).click();
+      expect(calls).toEqual([]);
+    });
   }
 
   test("입찰가가 판매가보다 높으면 판매가를 입찰가로 올린 뒤 판다", async ({ page }) => {
