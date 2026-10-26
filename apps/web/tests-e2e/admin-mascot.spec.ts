@@ -1,6 +1,15 @@
 import { crc32, deflateSync } from "node:zlib";
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { MASCOT_PRESETS } from "@gole/core/mascot";
+import {
+  DEFAULT_MASCOT_KEY,
+  isMascotPresetKey,
+  isSelectableMascotPresetKey,
+  MASCOT_PRESET_KEYS,
+  MASCOT_PRESETS,
+  parseActiveMascot,
+  SELECTABLE_MASCOT_PRESET_KEYS,
+  SELECTABLE_MASCOT_PRESETS,
+} from "@gole/core/mascot";
 
 /**
  * 운영자 콘솔 · 마스코트 — 업로드·삭제·경합·이력 화면 동작. (mascot-assets R2·R3)
@@ -70,6 +79,7 @@ interface EditorState {
   current: ReturnType<typeof selection>;
   uploads: ReturnType<typeof upload>[];
   history: ReturnType<typeof selection>[];
+  presets?: readonly string[] | null;
 }
 
 function activeOf(state: EditorState) {
@@ -130,7 +140,7 @@ async function openMascotConsole(page: Page, state: EditorState) {
       json: {
         current: state.current,
         active: activeOf(state),
-        presets: [],
+        presets: state.presets === undefined ? SELECTABLE_MASCOT_PRESET_KEYS : state.presets,
         uploads: state.uploads,
       },
     }),
@@ -146,6 +156,31 @@ const pageHasNoOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
 test.describe("운영자 콘솔 · 마스코트", () => {
+  test("전체 프리셋은 이전 키를 읽고 선택 가능 목록만 새 후보와 제외 정책을 따른다", () => {
+    expect(MASCOT_PRESET_KEYS).toHaveLength(17);
+    expect(MASCOT_PRESETS.map((preset) => preset.key)).toEqual(MASCOT_PRESET_KEYS);
+    expect(SELECTABLE_MASCOT_PRESET_KEYS).toHaveLength(13);
+    expect(SELECTABLE_MASCOT_PRESETS.map((preset) => preset.key)).toEqual(
+      SELECTABLE_MASCOT_PRESET_KEYS,
+    );
+    expect(SELECTABLE_MASCOT_PRESET_KEYS.slice(0, 3)).toEqual([
+      "side-brick-assembled",
+      "side-brick-pocket",
+      "side-brick-plate",
+    ]);
+    expect(DEFAULT_MASCOT_KEY).toBe("side-brick-soft");
+    for (const key of ["first-sketch", "chubby", "kawaii-brick", "three-studs"]) {
+      expect(isMascotPresetKey(key)).toBe(true);
+      expect(isSelectableMascotPresetKey(key)).toBe(false);
+      const parsed = parseActiveMascot({ revision: 7, asset: { kind: "PRESET", id: key } });
+      expect(parsed.revision).toBe(7);
+      expect(parsed.asset.id).toBe(key);
+      expect(parsed.asset.name).toBe(MASCOT_PRESETS.find((preset) => preset.key === key)?.name);
+    }
+    expect(isSelectableMascotPresetKey("unknown")).toBe(false);
+    expect(isSelectableMascotPresetKey(null)).toBe(false);
+  });
+
   test("상단에서 모든 후보와 업로드를 비교해도 사이트 적용본은 바뀌지 않는다", async ({ page }) => {
     const state: EditorState = {
       current: selection(0, "side-brick", "옆모습 브릭 고래"),
@@ -163,12 +198,22 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     const presets = page.getByRole("region", { name: "기본 제공 고래", exact: true });
     const current = preview.getByRole("figure", { name: "현재 적용 중인 마스코트" });
     await expect(current).toContainText("옆모습 브릭 고래");
-    await expect(presets.getByRole("button")).toHaveCount(MASCOT_PRESETS.length);
+    await expect(presets.getByRole("button")).toHaveCount(SELECTABLE_MASCOT_PRESETS.length);
+    for (const name of ["첫 고래", "통통 고래", "카와이 브릭 고래", "스터드 세 개 고래"]) {
+      await expect(presets.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    for (const [index, name] of [
+      "조립 브릭 고래",
+      "포켓 브릭 고래",
+      "플레이트 브릭 고래",
+    ].entries()) {
+      await expect(presets.getByRole("button").nth(index)).toHaveAccessibleName(name);
+    }
     const previewBox = await preview.boundingBox();
     const presetBox = await presets.boundingBox();
     expect(previewBox!.y).toBeLessThan(presetBox!.y);
 
-    for (const candidate of MASCOT_PRESETS) {
+    for (const candidate of SELECTABLE_MASCOT_PRESETS) {
       await presets
         .getByRole("button", { name: candidate.name, exact: candidate.key !== "side-brick" })
         .click();
@@ -188,6 +233,129 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     expect(publishRequests).toBe(0);
     expect(state.current.revision).toBe(0);
   });
+
+  for (const [key, name] of [
+    ["first-sketch", "첫 고래"],
+    ["chubby", "통통 고래"],
+    ["kawaii-brick", "카와이 브릭 고래"],
+    ["three-studs", "스터드 세 개 고래"],
+  ] as const) {
+    test(`제외된 현재본 ${name}의 그림과 이력은 유지하고 새 조립 후보를 적용할 수 있다`, async ({
+      page,
+    }) => {
+      const current = selection(7, key, name);
+      const state: EditorState = {
+        current,
+        uploads: [],
+        history: [current, selection(6, "deleted-upload", "삭제된 업로드")],
+      };
+      await openMascotConsole(page, state);
+      const requests: unknown[] = [];
+      await page.route("**/api/admin/mascot/publish", async (route) => {
+        requests.push(route.request().postDataJSON());
+        state.current = selection(8, "side-brick-assembled", "조립 브릭 고래");
+        state.history.unshift(state.current);
+        await route.fulfill({ json: state.current });
+      });
+      await page.goto("/admin/mascot");
+      const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+      const applied = preview.getByRole("figure", { name: "현재 적용 중인 마스코트" });
+      await expect(applied).toContainText(name);
+      await expect(applied.locator("svg")).toHaveAttribute("viewBox", "0 0 40 40");
+      await expect(preview.getByRole("heading")).toHaveText("조립 브릭 고래");
+      await expect(
+        page.getByText("현재 적용 중인 그림은 새 선택에서 제외되었습니다.", { exact: false }),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByRole("region", { name: "기본 제공 고래", exact: true })
+          .getByRole("button", { name }),
+      ).toHaveCount(0);
+
+      const history = page
+        .getByRole("heading", { name: "적용 이력 · 감사 기록" })
+        .locator("xpath=../..");
+      await expect(
+        history
+          .getByRole("listitem")
+          .filter({ hasText: `revision 7 · ${name}` })
+          .getByRole("button", { name: "선택 제외" }),
+      ).toBeDisabled();
+      await expect(
+        history
+          .getByRole("listitem")
+          .filter({ hasText: "삭제된 업로드" })
+          .getByRole("button", { name: "지운 그림" }),
+      ).toBeDisabled();
+      const apply = page.getByRole("button", { name: "이 마스코트 적용" });
+      await expect(apply).toBeDisabled();
+      await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("조립 브릭 고래로 변경");
+      await page.getByRole("checkbox").check();
+      await page.getByRole("button", { name: "다시 불러오기", exact: true }).click();
+      await expect(applied).toContainText(name);
+      await expect(preview.getByRole("heading")).toHaveText("조립 브릭 고래");
+      await expect(page.getByRole("checkbox")).not.toBeChecked();
+      await expect(apply).toBeDisabled();
+      await page.getByRole("checkbox").check();
+      await apply.click();
+      await expect(applied).toContainText("조립 브릭 고래");
+      await expect(page.getByRole("checkbox")).not.toBeChecked();
+      expect(requests).toEqual([
+        { expectedRevision: 7, assetId: "side-brick-assembled", reason: "조립 브릭 고래로 변경" },
+      ]);
+    });
+  }
+
+  for (const { label, presets } of [
+    {
+      label: "구버전",
+      presets: MASCOT_PRESET_KEYS.filter(
+        (key) => !key.startsWith("side-brick-a") && !key.startsWith("side-brick-p"),
+      ),
+    },
+    { label: "빈", presets: [] },
+    { label: "null", presets: null },
+    { label: "알 수 없는", presets: ["unknown", "first-sketch"] },
+  ]) {
+    test(`${label} 서버 목록에서는 새 후보를 미리보기만 허용하고 업로드 적용은 유지한다`, async ({
+      page,
+    }) => {
+      await openMascotConsole(page, {
+        current: selection(0, "side-brick-soft", "미소 브릭 고래"),
+        uploads: [upload("asset-1", "업로드 고래")],
+        history: [],
+        presets,
+      });
+      let publishRequests = 0;
+      await page.route("**/api/admin/mascot/publish", (route) => {
+        publishRequests += 1;
+        return route.fulfill({ status: 500, json: {} });
+      });
+      await page.goto("/admin/mascot");
+      await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("지원 여부 확인");
+      const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
+      const apply = page.getByRole("button", { name: "이 마스코트 적용" });
+      for (const name of ["조립 브릭 고래", "포켓 브릭 고래", "플레이트 브릭 고래"]) {
+        await page.getByRole("button", { name, exact: true }).click();
+        await expect(preview.getByRole("heading")).toHaveText(name);
+        await expect(
+          page.getByText("아직 적용할 수 없는 후보예요. 미리보기로 비교해 주세요."),
+        ).toBeVisible();
+        await expect(page.getByRole("checkbox")).toBeDisabled();
+        await expect(apply).toBeDisabled();
+      }
+      if (label === "구버전") {
+        await page.getByRole("button", { name: "말랑 브릭 고래", exact: true }).click();
+        await page.getByRole("checkbox").check();
+        await expect(apply).toBeEnabled();
+      }
+      await page.getByRole("button", { name: "업로드 고래", exact: true }).click();
+      await expect(page.getByRole("checkbox")).not.toBeChecked();
+      await page.getByRole("checkbox").check();
+      await expect(apply).toBeEnabled();
+      expect(publishRequests).toBe(0);
+    });
+  }
 
   test("키보드로 이전·다음 후보를 비교하면 검토 확인이 해제되고 초점은 버튼에 남는다", async ({
     page,
@@ -248,7 +416,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     );
     await page.getByRole("button", { name: "일반 로고", exact: true }).click();
     await expect(large).toHaveAttribute("viewBox", markBox!);
-    await page.getByRole("button", { name: "통통 고래", exact: true }).click();
+    await page.getByRole("button", { name: "한 획 플랫 고래", exact: true }).click();
     const plainBox = await large.getAttribute("viewBox");
     await page.getByRole("button", { name: "홈 히어로", exact: true }).click();
     await expect(large).toHaveAttribute("viewBox", plainBox!);
@@ -280,7 +448,12 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     await expect(page.getByText("마스코트 미리보기를 불러오는 중…")).toHaveCount(0);
     await page.route("**/api/admin/mascot", (route) =>
       route.fulfill({
-        json: { current: state.current, active: activeOf(state), presets: [], uploads: [] },
+        json: {
+          current: state.current,
+          active: activeOf(state),
+          presets: SELECTABLE_MASCOT_PRESET_KEYS,
+          uploads: [],
+        },
       }),
     );
     await page.getByRole("button", { name: "다시 불러오기" }).click();

@@ -1,5 +1,5 @@
 import { test, expect, request } from "@playwright/test";
-import { MASCOT_PRESET_KEYS } from "@gole/core/mascot";
+import { SELECTABLE_MASCOT_PRESET_KEYS } from "@gole/core/mascot";
 
 /**
  * 운영자 콘솔 — 권한 게이트와 정지 실효성. (admin-console 요구사항 1, 6)
@@ -1451,7 +1451,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
               ? { id: "side-brick-mellow", kind: "PRESET", name: "말랑 브릭 고래" }
               : { id: "side-brick", kind: "PRESET", name: "옆모습 브릭 고래" },
           },
-          presets: [],
+          presets: SELECTABLE_MASCOT_PRESET_KEYS,
           uploads: [],
         },
       }),
@@ -1475,7 +1475,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await expect(page.getByRole("heading", { name: "마스코트", exact: true })).toBeVisible();
     const presets = page.getByRole("region", { name: "기본 제공 고래", exact: true });
     await expect(presets.getByRole("button", { pressed: false })).toHaveCount(
-      MASCOT_PRESET_KEYS.length - 1,
+      SELECTABLE_MASCOT_PRESET_KEYS.length - 1,
     );
     await expect(presets.getByRole("button", { pressed: true })).toContainText("옆모습 브릭 고래");
 
@@ -2158,7 +2158,7 @@ test.describe("관리자 API 가드", () => {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
     expect(editor.status()).toBe(200);
-    expect((await editor.json()).presets).toEqual(MASCOT_PRESET_KEYS);
+    expect((await editor.json()).presets).toEqual(SELECTABLE_MASCOT_PRESET_KEYS);
     await ctx.dispose();
   });
 });

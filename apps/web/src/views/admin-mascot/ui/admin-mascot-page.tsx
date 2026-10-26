@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteMascotAsset,
+  DEFAULT_MASCOT_KEY,
   fetchMascotEditor,
   fetchMascotHistory,
   isMascotPresetKey,
-  MASCOT_PRESETS,
+  isSelectableMascotPresetKey,
+  SELECTABLE_MASCOT_PRESETS,
   MASCOT_PUBLISHED_EVENT,
   mascotPresetMeta,
   publishMascot,
@@ -27,11 +29,20 @@ const HISTORY_PAGE = 25;
 
 type Notice = { readonly tone: "info" | "error"; readonly text: string } | null;
 
+/** 제외된 현재본도 비교 영역에는 남기고, 미리보기 선택은 사용 가능한 후보로 옮긴다. */
+function previewSelection(editor: MascotEditor, previous: string | null = null): string {
+  const available = (id: string) =>
+    isSelectableMascotPresetKey(id) || editor.uploads.some((upload) => upload.id === id);
+  if (previous !== null && available(previous)) return previous;
+  if (available(editor.active.asset.id)) return editor.active.asset.id;
+  return SELECTABLE_MASCOT_PRESETS[0]?.key ?? DEFAULT_MASCOT_KEY;
+}
+
 /**
  * 운영자 콘솔 · 마스코트. (mascot-assets)
  *
  * <p>기본 제공 고래와 업로드한 그림 중 하나를 골라 헤더·푸터·히어로 크기로 미리 보고, 사유와 확인을 거쳐
- * 사이트에 적용한다. 적용은 리비전을 하나씩 쌓으므로 이력에서 언제든 예전 마스코트로 돌아갈 수 있다.
+ * 사이트에 적용한다. 적용은 리비전을 하나씩 쌓으며, 선택 가능한 예전 마스코트는 이력에서 다시 고를 수 있다.
  */
 export function AdminMascotPage() {
   const [editor, setEditor] = useState<MascotEditor | null>(null);
@@ -53,14 +64,8 @@ export function AdminMascotPage() {
     setHasMoreHistory(rows.length >= HISTORY_PAGE);
     setConflict(false);
     setReviewed(false);
-    // 고른 업로드 에셋을 그 사이 누가 지웠으면 적용 중인 에셋으로 돌아간다.
-    setSelectedId((previous) =>
-      keepSelection &&
-      previous !== null &&
-      (isMascotPresetKey(previous) || next.uploads.some((upload) => upload.id === previous))
-        ? previous
-        : next.active.asset.id,
-    );
+    // 고른 그림이 사라지거나 선택 제외됐으면 현재본 또는 첫 후보를 미리 본다.
+    setSelectedId((previous) => previewSelection(next, keepSelection ? previous : null));
   }, []);
 
   useEffect(() => {
@@ -71,7 +76,7 @@ export function AdminMascotPage() {
         setEditor(next);
         setHistory(rows);
         setHasMoreHistory(rows.length >= HISTORY_PAGE);
-        setSelectedId(next.active.asset.id);
+        setSelectedId(previewSelection(next));
       })
       .catch(() => {
         if (alive)
@@ -89,7 +94,7 @@ export function AdminMascotPage() {
   }, []);
 
   const candidates = useMemo<readonly Candidate[]>(() => {
-    const presets = MASCOT_PRESETS.map<Candidate>((preset) => ({
+    const presets = SELECTABLE_MASCOT_PRESETS.map<Candidate>((preset) => ({
       artwork: { kind: "PRESET", id: preset.key, name: preset.name },
       name: preset.name,
       detail: `${preset.date} · ${preset.commit}`,
@@ -113,11 +118,18 @@ export function AdminMascotPage() {
         ? mascotPresetMeta(selected.artwork.id).description
         : (editor?.uploads.find((upload) => upload.id === selected.artwork.id)?.description ?? "");
   const selectedIsActive = selected !== null && selected.artwork.id === activeId;
+  const selectedIsSupported =
+    selected !== null &&
+    editor !== null &&
+    (selected.artwork.kind === "UPLOAD" || editor.presets.some((id) => id === selected.artwork.id));
+  const activeIsExcluded =
+    editor?.active.asset.kind === "PRESET" && !isSelectableMascotPresetKey(editor.active.asset.id);
 
   const selectedIndex = candidates.findIndex((candidate) => candidate.artwork.id === selectedId);
 
   function choose(id: string, revealPreview = true) {
-    if (busy || editor === null) return;
+    if (busy || editor === null || !candidates.some((candidate) => candidate.artwork.id === id))
+      return;
     setSelectedId(id);
     if (id !== selectedId) setReviewed(false);
     if (revealPreview) {
@@ -145,7 +157,17 @@ export function AdminMascotPage() {
   }
 
   async function apply() {
-    if (editor === null || selected === null || busy || !reviewed || reason.trim() === "") return;
+    if (
+      editor === null ||
+      selected === null ||
+      !selectedIsSupported ||
+      selectedIsActive ||
+      conflict ||
+      busy ||
+      !reviewed ||
+      reason.trim() === ""
+    )
+      return;
     setBusy(true);
     try {
       const next = await publishMascot(editor.current.revision, selected.artwork.id, reason);
@@ -331,6 +353,17 @@ export function AdminMascotPage() {
                 지금 적용 중인 마스코트입니다. 다른 고래를 고르면 적용할 수 있습니다.
               </p>
             ) : null}
+            {activeIsExcluded ? (
+              <p className="text-sm break-keep text-neutral-600">
+                현재 적용 중인 그림은 새 선택에서 제외되었습니다. 기존 적용은 유지되며 다른 고래를
+                골라 변경할 수 있습니다.
+              </p>
+            ) : null}
+            {selected !== null && !selectedIsSupported ? (
+              <p className="text-sm break-keep text-neutral-600">
+                아직 적용할 수 없는 후보예요. 미리보기로 비교해 주세요.
+              </p>
+            ) : null}
             <Field label="변경 사유 (감사 기록, 필수)" hint="최대 300자">
               {({ inputId, describedBy }) => (
                 <Textarea
@@ -349,7 +382,7 @@ export function AdminMascotPage() {
                 type="checkbox"
                 className="mt-0.5 shrink-0"
                 checked={reviewed}
-                disabled={busy || selected === null || selectedIsActive}
+                disabled={busy || selected === null || selectedIsActive || !selectedIsSupported}
                 onChange={(event) => setReviewed(event.target.checked)}
               />
               <span className="min-w-0 break-keep">
@@ -362,6 +395,7 @@ export function AdminMascotPage() {
                 editor === null ||
                 selected === null ||
                 selectedIsActive ||
+                !selectedIsSupported ||
                 !reviewed ||
                 reason.trim() === "" ||
                 busy ||
@@ -402,7 +436,7 @@ export function AdminMascotPage() {
       <MascotHistoryList
         history={history}
         hasMore={hasMoreHistory}
-        knownIds={new Set(candidates.map((candidate) => candidate.artwork.id))}
+        selectableIds={new Set(candidates.map((candidate) => candidate.artwork.id))}
         busy={busy}
         onPick={(row) => {
           choose(row.assetId);
