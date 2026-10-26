@@ -159,17 +159,26 @@ test.describe("운영자 콘솔 · 마스코트", () => {
   test("전체 프리셋은 이전 키를 읽고 선택 가능 목록만 새 후보와 제외 정책을 따른다", () => {
     expect(MASCOT_PRESET_KEYS).toHaveLength(17);
     expect(MASCOT_PRESETS.map((preset) => preset.key)).toEqual(MASCOT_PRESET_KEYS);
-    expect(SELECTABLE_MASCOT_PRESET_KEYS).toHaveLength(13);
+    expect(SELECTABLE_MASCOT_PRESET_KEYS).toHaveLength(9);
     expect(SELECTABLE_MASCOT_PRESETS.map((preset) => preset.key)).toEqual(
       SELECTABLE_MASCOT_PRESET_KEYS,
     );
     expect(SELECTABLE_MASCOT_PRESET_KEYS.slice(0, 3)).toEqual([
       "side-brick-assembled",
+      "side-brick-soft",
+      "side-brick-mellow",
+    ]);
+    expect(DEFAULT_MASCOT_KEY).toBe("side-brick-assembled");
+    for (const key of [
+      "first-sketch",
+      "chubby",
+      "kawaii-brick",
+      "three-studs",
+      "blocky",
+      "fountain",
       "side-brick-pocket",
       "side-brick-plate",
-    ]);
-    expect(DEFAULT_MASCOT_KEY).toBe("side-brick-soft");
-    for (const key of ["first-sketch", "chubby", "kawaii-brick", "three-studs"]) {
+    ]) {
       expect(isMascotPresetKey(key)).toBe(true);
       expect(isSelectableMascotPresetKey(key)).toBe(false);
       const parsed = parseActiveMascot({ revision: 7, asset: { kind: "PRESET", id: key } });
@@ -199,14 +208,19 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     const current = preview.getByRole("figure", { name: "현재 적용 중인 마스코트" });
     await expect(current).toContainText("옆모습 브릭 고래");
     await expect(presets.getByRole("button")).toHaveCount(SELECTABLE_MASCOT_PRESETS.length);
-    for (const name of ["첫 고래", "통통 고래", "카와이 브릭 고래", "스터드 세 개 고래"]) {
-      await expect(presets.getByRole("button", { name, exact: true })).toHaveCount(0);
-    }
-    for (const [index, name] of [
-      "조립 브릭 고래",
+    for (const name of [
+      "첫 고래",
+      "통통 고래",
+      "카와이 브릭 고래",
+      "스터드 세 개 고래",
+      "블로키 브릭 고래",
+      "분수 고래",
       "포켓 브릭 고래",
       "플레이트 브릭 고래",
-    ].entries()) {
+    ]) {
+      await expect(presets.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
+    for (const [index, name] of ["조립 브릭 고래", "미소 브릭 고래", "말랑 브릭 고래"].entries()) {
       await expect(presets.getByRole("button").nth(index)).toHaveAccessibleName(name);
     }
     const previewBox = await preview.boundingBox();
@@ -239,6 +253,10 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     ["chubby", "통통 고래"],
     ["kawaii-brick", "카와이 브릭 고래"],
     ["three-studs", "스터드 세 개 고래"],
+    ["blocky", "블로키 브릭 고래"],
+    ["fountain", "분수 고래"],
+    ["side-brick-pocket", "포켓 브릭 고래"],
+    ["side-brick-plate", "플레이트 브릭 고래"],
   ] as const) {
     test(`제외된 현재본 ${name}의 그림과 이력은 유지하고 새 조립 후보를 적용할 수 있다`, async ({
       page,
@@ -261,7 +279,14 @@ test.describe("운영자 콘솔 · 마스코트", () => {
       const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
       const applied = preview.getByRole("figure", { name: "현재 적용 중인 마스코트" });
       await expect(applied).toContainText(name);
-      await expect(applied.locator("svg")).toHaveAttribute("viewBox", "0 0 40 40");
+      await expect(applied.locator("svg")).toHaveAttribute(
+        "viewBox",
+        key === "side-brick-pocket"
+          ? "0 0 204 150"
+          : key === "side-brick-plate"
+            ? "0 0 284 134"
+            : "0 0 40 40",
+      );
       await expect(preview.getByRole("heading")).toHaveText("조립 브릭 고래");
       await expect(
         page.getByText("현재 적용 중인 그림은 새 선택에서 제외되었습니다.", { exact: false }),
@@ -335,7 +360,7 @@ test.describe("운영자 콘솔 · 마스코트", () => {
       await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("지원 여부 확인");
       const preview = page.getByRole("region", { name: "마스코트 비교", exact: true });
       const apply = page.getByRole("button", { name: "이 마스코트 적용" });
-      for (const name of ["조립 브릭 고래", "포켓 브릭 고래", "플레이트 브릭 고래"]) {
+      for (const name of ["조립 브릭 고래"]) {
         await page.getByRole("button", { name, exact: true }).click();
         await expect(preview.getByRole("heading")).toHaveText(name);
         await expect(
