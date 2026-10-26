@@ -5,11 +5,13 @@
 - 사용자가 `side-brick-assembled`를 최종 선택하고 전역 적용·배포를 승인했다. 8개 후보를 신규 선택에서 제외해 알려진 17개·선택 가능한 9개를 유지한다. 과거 적용과 이력은 계속 읽을 수 있다.
 - 사용자 승인 후 기존 Orca API8090 터미널에서 최신 코드로 재시작했다. 실제 로컬 관리자 화면으로 사유와 확인을 입력해 조립 고래를 revision 6으로 게시했고, 공개 API·헤더·비교 화면에서 같은 적용본과 9개 후보를 확인했다.
 - web 포맷·린트·타입·FSD·빌드, core 포맷·타입·플랫폼 경계, mobile 포맷·린트·타입 검사 모두 통과했다. 웹 빌드는 `.next/verify-approved-mascot`에서 수행하고 자동 생성된 tsconfig 항목만 제거했다.
-- 최종 API 대상 회귀 42건(서비스 28·웹 14), 실패·스킵 0. `--rerun-tasks`로 실제 실행했다. 최종 관리자 fixture E2E는 29건, 실패·스킵·재시도 0이다.
+- 최종 API 대상 회귀 42건(서비스 28·웹 14), 실패·스킵 0. `--rerun-tasks`로 실제 실행했다. 최종 관리자 fixture E2E는 폴백 이름 회귀를 포함해 30건, 실패·스킵·재시도 0이다.
 - 다른 Codex가 `assembled-mark.json` 정본과 공용 렌더러·생성기를 맡았다. 초기 승인 프리셋과 최종 프리셋·mark.svg를 1024×600 RGBA로 비교해 변경 채널 0·최대 차이 0을 확인했다.
 - 생성기 `--check`는 파일을 쓰지 않고 17개 산출물 일치와 안전 영역을 확인했다. 별도 임시 복사본의 PNG 변조는 실패로 탐지했다. Android 전경/단색 반경 30.3dp(상한 33), 스플래시 88.5dp(상한 94), 알림 여백 4px, iOS/Apple/Kakao 알파 없음.
 - 실제 `/opengraph-image`는 200·1200×630 PNG다. Satori의 SVG 내부 함수 컴포넌트 오류를 재현하고 기본 SVG 요소를 전달하도록 수정했다.
 - 근거: `/tmp/gole-approved-final-gates-20261026.log`, `/tmp/gole-approved-final-e2e-20261026.log`, `/tmp/gole-approved-mascot-api-tests.log`, `/tmp/gole-approved-brand-worker-20261026.md`, `/tmp/gole-approved-brand-pixels-20261026.json`.
+
+- 최종 독립 `codex review`가 기본 그림 ID와 이름의 불일치 1건을 찾았다. 잘못된 공개 응답의 폴백 테스트가 수정 전 실패함을 확인한 뒤 기본 이름을 프리셋 메타에서 가져오도록 수정했다. 후속 core 3게이트·web 타입과 관리자 30건 재검증 결과를 확인했다. 리뷰의 FSD EMFILE 제한은 감독자 전체 게이트 통과로 보완했다.
 
 ## 배포와 확인 범위
 

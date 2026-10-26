@@ -190,6 +190,15 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     expect(isSelectableMascotPresetKey(null)).toBe(false);
   });
 
+  test("공개 응답이 잘못되면 기본 그림과 이름을 조립 고래로 함께 복원한다", () => {
+    for (const payload of [null, {}, { revision: 7, asset: { kind: "PRESET", id: "unknown" } }]) {
+      expect(parseActiveMascot(payload)).toEqual({
+        revision: 0,
+        asset: { kind: "PRESET", id: "side-brick-assembled", name: "조립 브릭 고래" },
+      });
+    }
+  });
+
   test("상단에서 모든 후보와 업로드를 비교해도 사이트 적용본은 바뀌지 않는다", async ({ page }) => {
     const state: EditorState = {
       current: selection(0, "side-brick", "옆모습 브릭 고래"),

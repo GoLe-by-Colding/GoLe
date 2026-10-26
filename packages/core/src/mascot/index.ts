@@ -229,7 +229,7 @@ export interface ActiveMascot {
 export const DEFAULT_MASCOT: PresetMascot = Object.freeze({
   kind: "PRESET",
   id: DEFAULT_MASCOT_KEY,
-  name: "미소 브릭 고래",
+  name: mascotPresetMeta(DEFAULT_MASCOT_KEY).name,
 });
 
 export const DEFAULT_ACTIVE_MASCOT: ActiveMascot = Object.freeze({
