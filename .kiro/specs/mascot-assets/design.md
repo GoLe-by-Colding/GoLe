@@ -17,7 +17,7 @@
 
 | 레이어 | 클래스 | 하는 일 |
 |---|---|---|
-| domain/model | `MascotPresets` | 알려진 에셋 17개·선택 가능한 에셋 13개와 기본값(`side-brick-soft`). 그림은 웹이 가진다 |
+| domain/model | `MascotPresets` | 알려진 에셋 17개·선택 가능한 에셋 9개와 기본값(`side-brick-assembled`). 그림은 웹이 가진다 |
 | domain/model | `MascotAsset` | 업로드 에셋. `register()`가 이름·설명·치수·키를 검증한다 |
 | domain/model | `MascotSelection` | 적용 리비전 = 감사 기록. `initial()`은 리비전 0, 기본 고래 |
 | domain/model | `ActiveMascot` | 공개 응답 모양. 프리셋이면 이미지 없음, 업로드면 경로·치수 |
@@ -57,8 +57,8 @@
 - 기본 제공 에셋 12벌을 **당시 SVG 그대로** 파일 하나씩 옮겼다(`git show <커밋>:apps/web/src/shared/ui/logo/logo.tsx`의 `<svg>` 내용).
   각 파일은 `MascotArt` 하나를 내보낸다 — `viewBox(spout)`와 `Art({spout})`.
 - 이후 `side-brick-soft`(2026-10-21)와 `side-brick-mellow`(2026-10-26)를 별도 프리셋으로 추가했다. 이전 그림은 교체하지 않았다.
-- 지금 기본 고래(`side-brick-soft`)는 `mark.svg` 정본의 다섯 경로를 그대로 쓴다. `scripts/build-brand-icons.mjs --check`가
-  검사하는 사본은 `presets/side-brick-soft.tsx`와 OG다. 새 비교 후보는 정적 아이콘 생성 정본을 바꾸지 않는다.
+- 현재 기본 고래(`side-brick-assembled`)는 `assembled-mark.json`의 좌표·색을 공용 렌더러로 그린다. 웹 프리셋·OG·정적 아이콘 생성기가 같은 데이터를 쓴다.
+  `scripts/build-brand-icons.mjs --check`는 쓰기 없이 산출물 일치·안전 영역·알파를 검사한다. 이전 프리셋의 그림은 보존한다.
 - 어두운 배경(`tone="inverse"`): `themable` 프리셋은 CSS 변수로 몸·얼굴을 바꾼다. 색이 SVG에 박힌 나머지는 흰 실루엣 필터(`brightness(0) invert(1)`)로 그린다. 업로드 에셋은 어두운 배경용 이미지가 있으면 그것을, 없으면 원본을 쓴다.
 
 ### 적용된 에셋 전달
