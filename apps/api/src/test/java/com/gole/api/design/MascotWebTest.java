@@ -79,7 +79,17 @@ class MascotWebTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"first-sketch", "chubby", "kawaii-brick", "three-studs"})
+    @ValueSource(
+            strings = {
+                "first-sketch",
+                "chubby",
+                "kawaii-brick",
+                "three-studs",
+                "blocky",
+                "fountain",
+                "side-brick-pocket",
+                "side-brick-plate"
+            })
     @DisplayName("선택 제외된 키의 직접 적용 API는 400이고 적용·감사 기록을 만들지 않는다")
     void publishExcludedPreset_returnsBadRequestWithoutAudit(String presetKey) throws Exception {
         var repository = mock(MascotRepositoryPort.class);

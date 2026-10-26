@@ -33,6 +33,10 @@ const EXCLUDED_MASCOT_PRESET_KEYS = [
   "chubby",
   "kawaii-brick",
   "three-studs",
+  "blocky",
+  "fountain",
+  "side-brick-pocket",
+  "side-brick-plate",
 ] as const satisfies readonly MascotPresetKey[];
 
 export type SelectableMascotPresetKey = Exclude<
@@ -51,7 +55,7 @@ export interface MascotPresetMeta {
   readonly date: string;
 }
 
-export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick-soft";
+export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick-assembled";
 
 export const MASCOT_PRESETS: readonly MascotPresetMeta[] = [
   {

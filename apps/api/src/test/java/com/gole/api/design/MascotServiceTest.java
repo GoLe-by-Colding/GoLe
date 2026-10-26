@@ -43,15 +43,13 @@ class MascotServiceTest {
     }
 
     @Test
-    @DisplayName("알려진 17벌은 보존하고 선택 가능한 13벌은 새 세 후보부터 보여 주며 기본값은 유지한다")
+    @DisplayName("알려진 17벌은 보존하고 선택 가능한 9벌은 조립 고래부터 보여 주며 승인된 기본값을 쓴다")
     void presets_keepPreviousVersionsAndSeparateSelectableCandidates() {
         assertThat(MascotPresets.KEYS).hasSize(17);
         assertThat(MascotPresets.KEYS).doesNotHaveDuplicates();
         assertThat(MascotPresets.SELECTABLE_KEYS)
                 .containsExactly(
                         "side-brick-assembled",
-                        "side-brick-pocket",
-                        "side-brick-plate",
                         "side-brick-soft",
                         "side-brick-mellow",
                         "side-brick",
@@ -59,29 +57,30 @@ class MascotServiceTest {
                         "baby-round",
                         "front-stud-head",
                         "tail-up",
-                        "flat-silhouette",
-                        "blocky",
-                        "fountain");
+                        "flat-silhouette");
         assertThat(MascotPresets.KEYS)
                 .containsAll(MascotPresets.SELECTABLE_KEYS)
-                .contains("first-sketch", "chubby", "kawaii-brick", "three-studs");
-        assertThat(MascotSelection.initial().assetId()).isEqualTo("side-brick-soft");
-        assertThat(MascotSelection.initial().assetName()).isEqualTo("미소 브릭 고래");
+                .contains(
+                        "first-sketch",
+                        "chubby",
+                        "kawaii-brick",
+                        "three-studs",
+                        "blocky",
+                        "fountain",
+                        "side-brick-pocket",
+                        "side-brick-plate");
+        assertThat(MascotSelection.initial().assetId()).isEqualTo("side-brick-assembled");
+        assertThat(MascotSelection.initial().assetName()).isEqualTo("조립 브릭 고래");
         assertThat(MascotPresets.isSelectablePreset(null)).isFalse();
         assertThat(MascotPresets.isSelectablePreset("unknown")).isFalse();
     }
 
     @ParameterizedTest
-    @CsvSource({
-        "baby-round, 둥근 아기 고래",
-        "side-brick-mellow, 말랑 브릭 고래",
-        "side-brick-assembled, 조립 브릭 고래",
-        "side-brick-pocket, 포켓 브릭 고래",
-        "side-brick-plate, 플레이트 브릭 고래"
-    })
+    @CsvSource({"baby-round, 둥근 아기 고래", "side-brick-mellow, 말랑 브릭 고래", "side-brick-assembled, 조립 브릭 고래"})
     @DisplayName("적용은 다음 리비전을 쌓고 이름 스냅숏·조치자·다듬은 사유를 함께 남긴다")
     void publish_appendsNextRevisionWithAudit(String presetKey, String presetName) {
-        when(repository.currentSelection()).thenReturn(MascotSelection.initial());
+        when(repository.currentSelection())
+                .thenReturn(new MascotSelection(0, "side-brick-soft", "미소 브릭 고래", "", "", "PUBLISH", Instant.EPOCH));
 
         var next = service.publish(0, presetKey, "  가을 이벤트  ", "admin-1");
 
@@ -95,7 +94,17 @@ class MascotServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"first-sketch", "chubby", "kawaii-brick", "three-studs"})
+    @ValueSource(
+            strings = {
+                "first-sketch",
+                "chubby",
+                "kawaii-brick",
+                "three-studs",
+                "blocky",
+                "fountain",
+                "side-brick-pocket",
+                "side-brick-plate"
+            })
     @DisplayName("선택 제외된 프리셋은 직접 적용 요청이나 이력 재적용으로도 저장되지 않는다")
     void publish_rejectsExcludedPresets(String presetKey) {
         assertThatThrownBy(() -> service.publish(0, presetKey, "이전 그림으로 되돌림", "admin-1"))
@@ -105,7 +114,16 @@ class MascotServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"first-sketch, 첫 고래", "chubby, 통통 고래", "kawaii-brick, 카와이 브릭 고래", "three-studs, 스터드 세 개 고래"})
+    @CsvSource({
+        "first-sketch, 첫 고래",
+        "chubby, 통통 고래",
+        "kawaii-brick, 카와이 브릭 고래",
+        "three-studs, 스터드 세 개 고래",
+        "blocky, 블로키 브릭 고래",
+        "fountain, 분수 고래",
+        "side-brick-pocket, 포켓 브릭 고래",
+        "side-brick-plate, 플레이트 브릭 고래"
+    })
     @DisplayName("선택 제외된 현재본과 과거 이력은 이름·그림 키·리비전을 그대로 읽고 삭제하지 않는다")
     void activeAndHistory_preserveExcludedPresets(String presetKey, String presetName) {
         var current = new MascotSelection(7, presetKey, presetName, "admin-1", "과거 적용", "PUBLISH", Instant.EPOCH);
@@ -233,7 +251,7 @@ class MascotServiceTest {
         assertThat(active.width()).isEqualTo(400);
 
         when(repository.findAsset("u-1")).thenReturn(Optional.empty());
-        assertThat(service.active()).isEqualTo(ActiveMascot.preset(3, "side-brick-soft", "미소 브릭 고래"));
+        assertThat(service.active()).isEqualTo(ActiveMascot.preset(3, "side-brick-assembled", "조립 브릭 고래"));
     }
 
     @Test

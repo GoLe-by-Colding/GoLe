@@ -15,20 +15,28 @@ import java.util.Set;
 public final class MascotPresets {
     private MascotPresets() {}
 
-    /** 아무것도 적용하지 않았을 때의 마스코트 — 2026-10-21 미소 브릭 고래. */
-    public static final String DEFAULT_KEY = "side-brick-soft";
+    /** 아무것도 적용하지 않았을 때의 마스코트 — 2026-10-26 사용자가 전역 적용을 승인한 조립 브릭 고래. */
+    public static final String DEFAULT_KEY = "side-brick-assembled";
 
-    public static final String DEFAULT_NAME = "미소 브릭 고래";
+    public static final String DEFAULT_NAME = "조립 브릭 고래";
 
     private static final Map<String, String> NAMES;
-    private static final Set<String> EXCLUDED_KEYS = Set.of("first-sketch", "chubby", "kawaii-brick", "three-studs");
+    private static final Set<String> EXCLUDED_KEYS = Set.of(
+            "first-sketch",
+            "chubby",
+            "kawaii-brick",
+            "three-studs",
+            "blocky",
+            "fountain",
+            "side-brick-pocket",
+            "side-brick-plate");
 
     static {
         Map<String, String> names = new LinkedHashMap<>();
-        names.put("side-brick-assembled", "조립 브릭 고래");
+        names.put(DEFAULT_KEY, DEFAULT_NAME);
         names.put("side-brick-pocket", "포켓 브릭 고래");
         names.put("side-brick-plate", "플레이트 브릭 고래");
-        names.put(DEFAULT_KEY, DEFAULT_NAME);
+        names.put("side-brick-soft", "미소 브릭 고래");
         names.put("side-brick-mellow", "말랑 브릭 고래");
         names.put("side-brick", "옆모습 브릭 고래");
         names.put("side-brick-original", "원본 브릭 고래");
