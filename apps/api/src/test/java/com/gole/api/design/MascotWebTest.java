@@ -17,12 +17,20 @@ import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.common.web.auth.SessionCookie;
 import com.gole.api.design.adapter.in.web.MascotController;
 import com.gole.api.design.application.port.in.ManageMascotUseCase;
+import com.gole.api.design.application.port.out.MascotMediaPort;
+import com.gole.api.design.application.port.out.MascotRepositoryPort;
+import com.gole.api.design.application.service.MascotService;
 import com.gole.api.design.domain.model.ActiveMascot;
+import com.gole.api.design.domain.model.MascotPresets;
 import com.gole.api.design.domain.model.MascotSelection;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -33,16 +41,59 @@ class MascotWebTest {
     final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
 
     MockMvc mvc() {
+        return mvc(service);
+    }
+
+    MockMvc mvc(ManageMascotUseCase target) {
         when(sessions.resolve("")).thenReturn(Optional.empty());
         when(sessions.resolve("user")).thenReturn(Optional.of(new CurrentSession("user", "u@example.com", Role.USER)));
         when(sessions.resolve("admin"))
                 .thenReturn(Optional.of(new CurrentSession("admin-1", "a@example.test", Role.ADMIN)));
-        return MockMvcBuilders.standaloneSetup(new MascotController(service, audit))
+        return MockMvcBuilders.standaloneSetup(new MascotController(target, audit))
                 .setControllerAdvice(new GlobalExceptionHandler(
                         mock(com.gole.api.common.operations.OperationalEventPublisher.class)))
                 .addMappedInterceptors(
                         new String[] {"/api/admin/**"}, new AdminAuthInterceptor(sessions, new SessionCookie("false")))
                 .build();
+    }
+
+    @Test
+    @DisplayName("편집 목록은 선택 가능한 키만 주며 제외된 현재본은 원래 그림과 이름으로 응답한다")
+    void editor_returnsSelectableKeysAndPreservesExcludedCurrent() throws Exception {
+        when(service.currentSelection())
+                .thenReturn(
+                        new MascotSelection(7, "first-sketch", "첫 고래", "admin-1", "과거 적용", "PUBLISH", Instant.EPOCH));
+        when(service.active()).thenReturn(ActiveMascot.preset(7, "first-sketch", "첫 고래"));
+        when(service.uploads()).thenReturn(List.of());
+
+        mvc().perform(get("/api/admin/mascot").header("Authorization", "Bearer admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.presets")
+                        .value(org.hamcrest.Matchers.contains(MascotPresets.SELECTABLE_KEYS.toArray(String[]::new))))
+                .andExpect(jsonPath("$.current.assetId").value("first-sketch"))
+                .andExpect(jsonPath("$.current.revision").value(7))
+                .andExpect(jsonPath("$.active.asset.kind").value("PRESET"))
+                .andExpect(jsonPath("$.active.asset.id").value("first-sketch"))
+                .andExpect(jsonPath("$.active.asset.name").value("첫 고래"));
+        verifyNoInteractions(audit);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"first-sketch", "chubby", "kawaii-brick", "three-studs"})
+    @DisplayName("선택 제외된 키의 직접 적용 API는 400이고 적용·감사 기록을 만들지 않는다")
+    void publishExcludedPreset_returnsBadRequestWithoutAudit(String presetKey) throws Exception {
+        var repository = mock(MascotRepositoryPort.class);
+        var media = mock(MascotMediaPort.class);
+        var target = new MascotService(repository, media, Clock.systemUTC());
+
+        mvc(target)
+                .perform(post("/api/admin/mascot/publish")
+                        .header("Authorization", "Bearer admin")
+                        .contentType("application/json")
+                        .content("{\"expectedRevision\":0,\"assetId\":\"" + presetKey + "\",\"reason\":\"과거 그림 복원\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MASCOT_PRESET_NOT_SELECTABLE"));
+        verifyNoInteractions(repository, media, audit);
     }
 
     @Test
