@@ -1,10 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
-  <rect width="1024" height="1024" fill="#1D4ED8"/>
-  <g transform="translate(178.800 322.054) scale(2.96862)">
-    <path d="M94 0H116C119.3 0 122 2.7 122 6V22H88V6C88 2.7 90.7 0 94 0Z" fill="#FACC15"/>
-    <path d="M48 14H146C162.6 14 176 27.4 176 44V76C176 101.4 155.4 122 130 122H48C21.5 122 0 100.5 0 74V62C0 35.5 21.5 14 48 14ZM57 0H75C78.3 0 81 2.7 81 6V22H51V6C51 2.7 53.7 0 57 0ZM135 0H153C156.3 0 159 2.7 159 6V22H129V6C129 2.7 131.7 0 135 0ZM163 63C181 66 185 53 194 40C202 28 215 22 229 22C233 22 235.8 26 234 30L226 49C221 61 212 68 200 72C213 72 226 78 231 89C233 94 230 99 225 99H211C195 99 181 92 174 81H163V63ZM87 105C96 104 108 108 115 118C119 123 116 129 111 131C99 132.2 88 126 82 118C78 113 81 107 87 105Z" fill="#FFFFFF"/>
-    <path d="M6 39C14.4 23.9 30.4 14 48 14H146C159 14 170.2 22.3 174.3 34L176 41H12C8 41 6 40 6 39ZM57 0H75C78.3 0 81 2.7 81 6V22H51V6C51 2.7 53.7 0 57 0ZM135 0H153C156.3 0 159 2.7 159 6V22H129V6C129 2.7 131.7 0 135 0Z" fill="#FFFFFF"/>
-    <path d="M48 53C40.8 53 35 58.8 35 66C35 73.2 40.8 79 48 79C55.2 79 61 73.2 61 66C61 58.8 55.2 53 48 53ZM44 88C45.7 86.5 45.8 84 44.3 82.4C42.8 80.8 40.3 80.6 38.7 82.1C35.1 85.3 29.7 85.3 26.1 82.1C24.5 80.6 22 80.8 20.5 82.4C19 84 19.1 86.5 20.8 88C27.5 94 37.3 94 44 88Z" fill="#131E4F"/>
-    <path d="M49 55C52.9 55 56 58.1 56 62C56 65.9 52.9 69 49 69C45.1 69 42 65.9 42 62C42 58.1 45.1 55 49 55Z" fill="#FFFFFF"/>
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <g transform="translate(178.800 313.484) scale(2.73438)">
+<path id="gole-tail-blades" d="M192.9 44.1L214.1 22.9C218.8 18.2 226.4 18.2 231.1 22.9C235.8 27.6 235.8 35.2 231.1 39.9L209.9 61.1C205.2 65.8 197.6 65.8 192.9 61.1C188.2 56.4 188.2 48.8 192.9 44.1ZM208.6 76.8L226.7 85.3C232.2 87.8 234.6 94.4 232 99.9C229.5 105.4 222.9 107.8 217.4 105.2L199.3 96.7C193.8 94.2 191.4 87.6 194 82.1C196.5 76.6 203.1 74.2 208.6 76.8Z" fill="#1D4ED8" transform="translate(209 80) rotate(0) scale(1) translate(-192 -69)"/>
+<rect id="gole-tail-joint" x="171" y="52" width="30" height="34" rx="8" fill="#3B5CF2" transform="translate(209 80) rotate(0) scale(1) translate(-192 -69)"/>
+<circle id="gole-tail-ring" cx="192" cy="69" r="7" stroke="#1A3FC0" stroke-width="3" transform="translate(209 80) rotate(0) scale(1) translate(-192 -69)"/>
+<rect id="gole-stud-left" x="44" y="0" width="32" height="26" rx="6" fill="#6082F7"/>
+<rect id="gole-stud-gold" x="92" y="0" width="32" height="26" rx="6" fill="#EAB308"/>
+<rect id="gole-stud-right" x="140" y="0" width="32" height="26" rx="6" fill="#6082F7"/>
+<path id="gole-fin" d="M96 121L128 132C136 135 131 148 123 145L91 134C83 131 88 118 96 121Z" fill="#1D4ED8"/>
+<path id="gole-body-top" d="M8 66V51C8 31 21 18 41 18H176C186 18 194 26 194 36V66Z" fill="#6082F7"/>
+<path id="gole-body-middle" d="M8 66H194V103H8Z" fill="#3B5CF2"/>
+<path id="gole-body-bottom" d="M8 103H194V108C194 122 184 130 171 130H32C18 130 8 120 8 107Z" fill="#1D4ED8"/>
+<path id="gole-seams" d="M9 66H193M9 103H193" stroke="#1A3FC0" stroke-width="1.5" opacity="0.12"/>
+<circle id="gole-fin-ring" cx="96" cy="127" r="4.5" stroke="#1A3FC0" stroke-width="2.5"/>
+<circle id="gole-eye" cx="42" cy="79" r="7" fill="#131E4F"/>
+<circle id="gole-glint" cx="44" cy="76.5" r="2" fill="#FFFFFF"/>
+<path id="gole-smile" d="M21 92Q28 99 37 93" stroke="#131E4F" stroke-width="3.5" stroke-linecap="round"/>
   </g>
 </svg>

@@ -158,6 +158,9 @@ public class MascotService implements ManageMascotUseCase {
             throw new BadRequestException("MASCOT_ASSET_NOT_FOUND", "적용할 마스코트를 골라 주세요");
         }
         if (MascotPresets.isPreset(assetId)) {
+            if (!MascotPresets.isSelectablePreset(assetId)) {
+                throw new BadRequestException("MASCOT_PRESET_NOT_SELECTABLE", "선택에서 제외된 마스코트입니다. 다른 마스코트를 골라 주세요");
+            }
             return MascotPresets.nameOf(assetId).orElseThrow();
         }
         return repository

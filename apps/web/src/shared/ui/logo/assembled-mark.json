@@ -1,0 +1,189 @@
+{
+  "width": 256,
+  "height": 150,
+  "elements": [
+    {
+      "id": "tail-blades",
+      "monochrome": "body",
+      "tag": "path",
+      "props": {
+        "d": "M192.9 44.1L214.1 22.9C218.8 18.2 226.4 18.2 231.1 22.9C235.8 27.6 235.8 35.2 231.1 39.9L209.9 61.1C205.2 65.8 197.6 65.8 192.9 61.1C188.2 56.4 188.2 48.8 192.9 44.1ZM208.6 76.8L226.7 85.3C232.2 87.8 234.6 94.4 232 99.9C229.5 105.4 222.9 107.8 217.4 105.2L199.3 96.7C193.8 94.2 191.4 87.6 194 82.1C196.5 76.6 203.1 74.2 208.6 76.8Z",
+        "fill": "#1D4ED8",
+        "className": "fill-[var(--gole-mark-body,var(--color-brand-600))]",
+        "transform": "translate(209 80) rotate(0) scale(1) translate(-192 -69)"
+      }
+    },
+    {
+      "id": "tail-joint",
+      "monochrome": "body",
+      "tag": "rect",
+      "props": {
+        "x": "171",
+        "y": "52",
+        "width": "30",
+        "height": "34",
+        "rx": "8",
+        "fill": "#3B5CF2",
+        "className": "fill-[var(--gole-mark-body,var(--color-brand-500))]",
+        "transform": "translate(209 80) rotate(0) scale(1) translate(-192 -69)"
+      }
+    },
+    {
+      "id": "tail-ring",
+      "monochrome": "cutout",
+      "tag": "circle",
+      "props": {
+        "cx": "192",
+        "cy": "69",
+        "r": "7",
+        "stroke": "#1A3FC0",
+        "strokeWidth": "3",
+        "className": "stroke-[var(--gole-mark-face,var(--color-brand-700))]",
+        "transform": "translate(209 80) rotate(0) scale(1) translate(-192 -69)"
+      }
+    },
+    {
+      "id": "stud-left",
+      "monochrome": "body",
+      "tag": "rect",
+      "props": {
+        "x": 44,
+        "y": 0,
+        "width": 32,
+        "height": "26",
+        "rx": "6",
+        "fill": "#6082F7",
+        "className": "fill-[var(--gole-mark-top,var(--gole-mark-body,var(--color-brand-400)))]"
+      }
+    },
+    {
+      "id": "stud-gold",
+      "monochrome": "body",
+      "tag": "rect",
+      "props": {
+        "x": 92,
+        "y": 0,
+        "width": 32,
+        "height": "26",
+        "rx": "6",
+        "fill": "#EAB308",
+        "className": "fill-[var(--gole-mark-accent,var(--color-accent-500))]"
+      }
+    },
+    {
+      "id": "stud-right",
+      "monochrome": "body",
+      "tag": "rect",
+      "props": {
+        "x": 140,
+        "y": 0,
+        "width": 32,
+        "height": "26",
+        "rx": "6",
+        "fill": "#6082F7",
+        "className": "fill-[var(--gole-mark-top,var(--gole-mark-body,var(--color-brand-400)))]"
+      }
+    },
+    {
+      "id": "fin",
+      "monochrome": "body",
+      "tag": "path",
+      "props": {
+        "d": "M96 121L128 132C136 135 131 148 123 145L91 134C83 131 88 118 96 121Z",
+        "fill": "#1D4ED8",
+        "className": "fill-[var(--gole-mark-body,var(--color-brand-600))]"
+      }
+    },
+    {
+      "id": "body-top",
+      "monochrome": "body",
+      "tag": "path",
+      "props": {
+        "d": "M8 66V51C8 31 21 18 41 18H176C186 18 194 26 194 36V66Z",
+        "fill": "#6082F7",
+        "className": "fill-[var(--gole-mark-top,var(--gole-mark-body,var(--color-brand-400)))]"
+      }
+    },
+    {
+      "id": "body-middle",
+      "monochrome": "body",
+      "tag": "path",
+      "props": {
+        "d": "M8 66H194V103H8Z",
+        "fill": "#3B5CF2",
+        "className": "fill-[var(--gole-mark-body,var(--color-brand-500))]"
+      }
+    },
+    {
+      "id": "body-bottom",
+      "monochrome": "body",
+      "tag": "path",
+      "props": {
+        "d": "M8 103H194V108C194 122 184 130 171 130H32C18 130 8 120 8 107Z",
+        "fill": "#1D4ED8",
+        "className": "fill-[var(--gole-mark-body,var(--color-brand-600))]"
+      }
+    },
+    {
+      "id": "seams",
+      "monochrome": "cutout",
+      "tag": "path",
+      "props": {
+        "d": "M9 66H193M9 103H193",
+        "stroke": "#1A3FC0",
+        "strokeWidth": "1.5",
+        "opacity": "0.12",
+        "className": "stroke-[var(--gole-mark-face,var(--color-brand-700))]"
+      }
+    },
+    {
+      "id": "fin-ring",
+      "monochrome": "cutout",
+      "tag": "circle",
+      "props": {
+        "cx": "96",
+        "cy": "127",
+        "r": "4.5",
+        "stroke": "#1A3FC0",
+        "strokeWidth": "2.5",
+        "className": "stroke-[var(--gole-mark-face,var(--color-brand-700))]"
+      }
+    },
+    {
+      "id": "eye",
+      "monochrome": "cutout",
+      "tag": "circle",
+      "props": {
+        "cx": "42",
+        "cy": "79",
+        "r": "7",
+        "fill": "#131E4F",
+        "className": "fill-[var(--gole-mark-face,var(--color-brand-950))]"
+      }
+    },
+    {
+      "id": "glint",
+      "monochrome": "glint",
+      "tag": "circle",
+      "props": {
+        "cx": "44",
+        "cy": "76.5",
+        "r": "2",
+        "fill": "#FFFFFF",
+        "className": "fill-[var(--gole-mark-glint,var(--color-white))]"
+      }
+    },
+    {
+      "id": "smile",
+      "monochrome": "cutout",
+      "tag": "path",
+      "props": {
+        "d": "M21 92Q28 99 37 93",
+        "stroke": "#131E4F",
+        "strokeWidth": "3.5",
+        "strokeLinecap": "round",
+        "className": "stroke-[var(--gole-mark-face,var(--color-brand-950))]"
+      }
+    }
+  ]
+}

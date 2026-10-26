@@ -1,12 +1,17 @@
 import { useState } from "react";
-import { fetchMascotHistory, type MascotSelection } from "@gole/core/mascot";
+import {
+  fetchMascotHistory,
+  isMascotPresetKey,
+  isSelectableMascotPresetKey,
+  type MascotSelection,
+} from "@gole/core/mascot";
 import { Button } from "@shared/ui";
 import { formatTime } from "../lib/mascot-format";
 
 export function MascotHistoryList({
   history,
   hasMore,
-  knownIds,
+  selectableIds,
   busy,
   onPick,
   onMore,
@@ -14,7 +19,7 @@ export function MascotHistoryList({
 }: {
   readonly history: readonly MascotSelection[];
   readonly hasMore: boolean;
-  readonly knownIds: ReadonlySet<string>;
+  readonly selectableIds: ReadonlySet<string>;
   readonly busy: boolean;
   readonly onPick: (row: MascotSelection) => void;
   readonly onMore: (rows: readonly MascotSelection[]) => void;
@@ -37,7 +42,9 @@ export function MascotHistoryList({
       ) : (
         <ul className="space-y-2">
           {history.map((row) => {
-            const available = knownIds.has(row.assetId);
+            const excluded =
+              isMascotPresetKey(row.assetId) && !isSelectableMascotPresetKey(row.assetId);
+            const available = !excluded && selectableIds.has(row.assetId);
             return (
               <li
                 key={row.revision}
@@ -58,7 +65,7 @@ export function MascotHistoryList({
                   disabled={busy || !available}
                   onClick={() => onPick(row)}
                 >
-                  {available ? "다시 고르기" : "지운 그림"}
+                  {excluded ? "선택 제외" : available ? "다시 고르기" : "지운 그림"}
                 </Button>
               </li>
             );

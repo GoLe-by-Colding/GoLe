@@ -87,7 +87,10 @@ public class MascotController {
     @GetMapping("/api/admin/mascot")
     public Editor editor() {
         return new Editor(
-                mascots.currentSelection(), PublicMascot.of(mascots.active()), MascotPresets.KEYS, mascots.uploads());
+                mascots.currentSelection(),
+                PublicMascot.of(mascots.active()),
+                MascotPresets.SELECTABLE_KEYS,
+                mascots.uploads());
     }
 
     @GetMapping("/api/admin/mascot/history")
