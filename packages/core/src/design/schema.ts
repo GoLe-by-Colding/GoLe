@@ -1,4 +1,4 @@
-// Generated from globals.css by .kiro/specs/admin-design/generate-schema.py.
+// .kiro/specs/admin-design/generate-schema.py가 globals.css에서 생성한 파일이다.
 export const DESIGN_SCHEMA = [
   {
     key: "--color-brand-50",

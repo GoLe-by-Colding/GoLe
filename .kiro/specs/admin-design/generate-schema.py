@@ -10,7 +10,7 @@ for key in keys:
 # Explicit base typography token, wired into html in globals.css.
 rows.append(dict(key='--design-font-size',defaultValue='16px',kind='length',min=14,max=20,unit='px'))
 p=Path('packages/core/src/design');p.mkdir(parents=True,exist_ok=True)
-(p/'schema.ts').write_text('// Generated from globals.css by .kiro/specs/admin-design/generate-schema.py.\nexport const DESIGN_SCHEMA = '+json.dumps(rows,indent=2)+' as const;\n')
+(p/'schema.ts').write_text('// .kiro/specs/admin-design/generate-schema.py가 globals.css에서 생성한 파일이다.\nexport const DESIGN_SCHEMA = '+json.dumps(rows,indent=2)+' as const;\n')
 p=Path('apps/api/src/main/java/com/gole/api/design/domain/model');p.mkdir(parents=True,exist_ok=True)
 entries=',\n'.join('        new Token('+', '.join([json.dumps(r['key']),json.dumps(r['defaultValue']),json.dumps(r['kind']),str(r['min']),str(r['max']),json.dumps(r['unit'])])+')' for r in rows)
 (p/'DesignSchema.java').write_text('''package com.gole.api.design.domain.model;

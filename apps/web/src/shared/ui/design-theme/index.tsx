@@ -2,7 +2,7 @@
 import "@shared/config/bootstrap";
 import { useEffect } from "react";
 import { fetchPublishedDesign } from "@gole/core/design";
-/** CSS defaults render immediately; validated publications load after hydration. */
+/** CSS 기본값으로 즉시 렌더링하고 수화 후 검증된 게시 설정을 불러온다. */
 export function DesignTheme() {
   useEffect(() => {
     let active = true;
