@@ -40,7 +40,7 @@ public class DesignController {
                 .cacheControl(CacheControl.noStore())
                 .body(new PublicTheme(r.revision(), DesignSchema.validate(r.tokens())));
     }
-    // Existing AdminWebConfig protects every /api/admin/** method with server-resolved ADMIN role.
+    // 기존 AdminWebConfig가 서버에서 판정한 ADMIN 권한으로 모든 /api/admin/** 요청을 보호한다.
     @GetMapping("/api/admin/design")
     public Editor editor() {
         return new Editor(DesignSchema.TOKENS, design.current());

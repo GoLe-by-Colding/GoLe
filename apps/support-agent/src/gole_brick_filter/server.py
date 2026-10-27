@@ -65,7 +65,7 @@ def make_handler(graph, token: str):
 
 
 def serve():
-    # A key alone never enables billable calls. Support-agent entrypoint is unchanged.
+    # 키만으로 유료 호출을 활성화하지 않는다. 문의 에이전트 진입점은 변경하지 않는다.
     if os.environ.get("BRICK_FILTER_PROVIDER_ENABLED") != "true":
         raise RuntimeError("Brick filter provider is disabled")
     reject_external_tracing()

@@ -39,5 +39,5 @@ def build_graph(editor: Editor, check_active: Callable[[], None], sanitize: Imag
     graph.add_edge("validate", "generate")
     graph.add_edge("generate", "result")
     graph.add_edge("result", END)
-    # No checkpointer, tracing or persistence of source images in graph state.
+    # 그래프 상태의 원본 이미지는 체크포인트·추적·영구 저장 대상으로 삼지 않는다.
     return graph.compile()

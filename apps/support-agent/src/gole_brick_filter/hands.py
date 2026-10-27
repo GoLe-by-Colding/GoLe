@@ -21,7 +21,7 @@ def sanitize_image(data: bytes, limit: int = MAX_INPUT) -> bytes:
                 raise ValueError("IMAGE_PIXELS")
             image.load()
             clean = ImageOps.exif_transpose(image).convert("RGB")
-            # Fresh pixels remove EXIF, ICC and free-text metadata before provider/storage.
+            # 픽셀을 새로 만들어 제공자 전달·저장 전에 EXIF·ICC·자유 형식 메타데이터를 제거한다.
             fresh = Image.new("RGB", clean.size)
             fresh.paste(clean)
             output = io.BytesIO()

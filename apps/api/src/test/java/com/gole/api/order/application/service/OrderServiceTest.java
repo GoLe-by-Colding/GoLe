@@ -586,7 +586,7 @@ class OrderServiceTest {
                 offers);
     }
 
-    // --- fakes ---
+    // --- 테스트 대체 구현 ---
 
     private static final class InMemoryOrders implements OrderRepositoryPort {
         private final Map<String, Order> store = new HashMap<>();

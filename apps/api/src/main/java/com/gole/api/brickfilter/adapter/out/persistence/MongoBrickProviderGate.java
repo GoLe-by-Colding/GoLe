@@ -39,7 +39,7 @@ public class MongoBrickProviderGate implements BrickProviderGatePort {
                     .toList());
             int minuteCalls = current.minute() == minute ? current.minuteCalls() : 0;
             int dayCalls = current.day().equals(day) ? current.dayCalls() : 0;
-            // Deliberately conservative, fail closed; changing budgets requires a reviewed code change.
+            // 안전을 위해 허용 여부가 불확실하면 차단한다. 예산 변경은 코드 검토를 거쳐야 한다.
             if (leases.size() >= 2 || minuteCalls >= 6 || dayCalls >= 100) return false;
             leases.add(new Lease(token, now.plusSeconds(300)));
             var update = new Update()
@@ -63,7 +63,7 @@ public class MongoBrickProviderGate implements BrickProviderGatePort {
     }
 
     public void release(String token) {
-        // Increment revision so a concurrent acquisition cannot restore a removed lease.
+        // 동시에 실행되는 획득 요청이 삭제된 임대를 복원하지 못하도록 리비전을 올린다.
         mongo.updateFirst(
                 Query.query(Criteria.where("_id").is("global")),
                 new Update()

@@ -1,3 +1,4 @@
+import { RecentSets } from "@features/recent-sets";
 import {
   searchListings,
   parseItemCondition,
@@ -215,6 +216,7 @@ export async function SearchPage(props: SearchPageProps) {
       ) : (
         <ListingGrid key={JSON.stringify(params)} listings={listings} priceNotes={priceNotes} />
       )}
+      <RecentSets />
     </PageLayout>
   );
 }

@@ -3,7 +3,7 @@ package com.gole.api.media.adapter.out.image;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** Reads only the bounded IFD0 orientation value. All metadata is discarded after rotation. */
+/** 제한된 범위의 IFD0 방향 값만 읽는다. 회전 후 모든 메타데이터를 버린다. */
 final class ExifOrientation {
     private ExifOrientation() {}
 

@@ -9,7 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.query.*;
 import org.springframework.stereotype.Repository;
 
-/** Private bounded blobs; never routed through generic media keys, URLs or object ACLs. */
+/** 크기가 제한된 비공개 데이터. 일반 미디어 키·URL·객체 접근 제어 경로로 제공하지 않는다. */
 @Repository
 public class MongoBrickBlobs implements BrickBlobPort {
     private final MongoTemplate mongo;

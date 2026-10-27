@@ -94,14 +94,14 @@ if [ "$file_mode" != "600" ]; then
   exit 1
 fi
 
-# Phone verification is a deliberate local opt-in only.
+# 전화번호 인증은 로컬에서 명시적으로 선택한 경우에만 활성화한다.
 GOLE_DEV_ENV_ROOT="$fixture_dir" \
   GOLE_SECRET_SOURCE_FILE="$fixture_dir/production.env" \
   GOLE_SECRET_VERSION=43 \
   bash "$ROOT/scripts/sync-dev-env.sh" --enable-phone-verification >/dev/null
 assert_line 'GOLE_ONBOARDING_PHONE_REQUIRED=true'
 
-# Repeated syncs retain only the two newest 0600 plaintext backups.
+# 동기화를 반복해도 권한 0600인 평문 백업은 최신 두 개만 유지한다.
 for version in 44 45; do
   GOLE_DEV_ENV_ROOT="$fixture_dir" \
     GOLE_SECRET_SOURCE_FILE="$fixture_dir/production.env" \

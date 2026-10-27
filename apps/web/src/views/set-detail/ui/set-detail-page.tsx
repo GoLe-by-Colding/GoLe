@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RecentSets } from "@features/recent-sets";
 import type { BidBook } from "@entities/bid";
 import type { LegoSet } from "@entities/lego-set";
 import { isRetired, isRetiringSoon } from "@entities/lego-set";
@@ -313,6 +314,7 @@ export function SetDetailPage({
           />
         </div>
       </section>
+      <RecentSets current={{ setNumber: set.setNumber, name: set.name }} />
     </Container>
   );
 }

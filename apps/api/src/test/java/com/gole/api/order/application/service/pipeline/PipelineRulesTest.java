@@ -178,7 +178,7 @@ class PipelineRulesTest {
                 null);
     }
 
-    // ---- fakes ----
+    // ---- 테스트 대체 구현 ----
 
     static class InMemoryOrders implements OrderRepositoryPort {
         final Map<String, Order> store = new HashMap<>();

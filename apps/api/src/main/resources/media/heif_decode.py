@@ -6,7 +6,7 @@ import warnings
 
 
 def main():
-    # Apply OS limits before loading native codecs or touching untrusted input.
+    # 네이티브 코덱을 로드하거나 신뢰할 수 없는 입력에 접근하기 전에 운영체제 제한을 적용한다.
     resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024,) * 2)
     resource.setrlimit(resource.RLIMIT_CPU, (8, 8))
     resource.setrlimit(resource.RLIMIT_FSIZE, (32 * 1024 * 1024,) * 2)
@@ -30,8 +30,8 @@ def main():
         w, h = image.size
         if min(w, h) <= 0 or w > width or h > height or w * h > pixels:
             sys.exit(65)
-        # libheif applies irot/imir transformations; the Pillow plugin resets EXIF orientation.
-        # Do not apply the same orientation a second time.
+        # libheif가 irot/imir 변환을 적용하고 Pillow 플러그인이 EXIF 방향을 초기화한다.
+        # 같은 방향 변환을 두 번 적용하지 않는다.
         image.load()
         w, h = image.size
         if min(w, h) <= 0 or w > width or h > height or w * h > pixels:

@@ -10,8 +10,8 @@ ROLLBACK_SHA="${ROLLBACK_SHA:-}"
 COMPOSE=(docker compose --env-file /etc/gole/infra.env --env-file /etc/gole/gole.env -f "$ROOT/infra/gcp/docker-compose.yml")
 HOSTCTL="/usr/local/sbin/gole-hostctl"
 PREPARE_NGINX_SCRIPT="$ROOT/infra/gcp/scripts/prepare-nginx-config.sh"
-# Isolated contract tests run outside /app and may inject rootless fakes. These
-# overrides are deliberately ignored on the production checkout.
+# 격리 계약 테스트는 /app 밖에서 실행하며 관리자 권한 없는 대체 구현을 주입할 수 있다.
+# 운영 체크아웃에서는 이 덮어쓰기 설정을 무시한다.
 if [ "$ROOT" != "/app" ]; then
   HOSTCTL="${GOLE_TEST_HOSTCTL:-$HOSTCTL}"
   PREPARE_NGINX_SCRIPT="${GOLE_TEST_PREPARE_NGINX:-$PREPARE_NGINX_SCRIPT}"
@@ -57,10 +57,9 @@ validate_production_invocation() {
     exit 1
   fi
 
-  # Accidental SSH/manual deploys must not be able to select a partial target or
-  # silently fall back to origin/main. These runner-provided values bind /app to
-  # the single protected-main CD job; hostctl separately proves current main and
-  # its successful push CI before any root-owned mutation.
+  # 실수로 실행한 SSH·수동 배포가 일부 대상만 고르거나 origin/main으로 조용히 대체되지 않게 한다.
+  # 러너가 제공한 값으로 /app을 보호된 main의 단일 CD 작업에 연결한다.
+  # hostctl은 관리자 소유 상태를 변경하기 전에 현재 main과 해당 푸시의 CI 성공을 별도 검증한다.
   require_exact_production_env GITHUB_ACTIONS true
   require_exact_production_env GITHUB_SERVER_URL https://github.com
   require_exact_production_env GITHUB_REPOSITORY GoLe-by-Colding/GoLe
@@ -109,9 +108,8 @@ if [ "$SCRIPT_ROOT" = "/app" ] || [ "$ROOT" = "/app" ]; then
   fi
   PRODUCTION_DEPLOY_CONTEXT=1
 elif [ "${GOLE_TEST_PRODUCTION_DEPLOY_CONTEXT:-0}" = "1" ]; then
-  # Runtime contract tests may exercise the fail-closed gate from a disposable
-  # checkout. This switch can only add production restrictions, never bypass
-  # the real /app detection above.
+  # 런타임 계약 테스트는 임시 체크아웃에서 안전 차단 조건을 검증할 수 있다.
+  # 이 스위치는 운영 제한을 추가할 수만 있으며 위의 실제 /app 판정을 우회하지 못한다.
   PRODUCTION_DEPLOY_CONTEXT=1
   TEST_PRODUCTION_DEPLOY_CONTEXT=1
 fi
@@ -133,9 +131,8 @@ install_discord_overlay() {
   )
   [ "$HOST_DOCKER_CONTROL" = 1 ] || return 0
   if [ "${GOLE_ROLLOUT_LOCK_HELD:-0}" = 1 ]; then
-    # CD/Secret Sync installed the overlay in the immediately preceding step,
-    # before taking fd7. Revalidate only: attempting the install here would
-    # conflict with the already-held rollout lock.
+    # CD·시크릿 동기화가 fd7을 획득하기 직전 단계에서 오버레이를 설치했다.
+    # 여기서는 재검증만 한다. 다시 설치하면 이미 획득한 배포 잠금과 충돌한다.
     sudo -n "$HOSTCTL" discord-overlay-verify
     return
   fi
@@ -153,8 +150,8 @@ install_discord_overlay() {
     echo "Discord suppress 설정은 true 또는 false여야 합니다." >&2
     return 1
   }
-  # Never put webhook values in argv or logs. The root helper validates and
-  # normalizes this fixed-key request before atomically installing 0600 state.
+  # 웹훅 값을 명령 인자나 로그에 넣지 않는다. 관리자 도우미가 고정 키 요청을 검증·정규화한 뒤
+  # 접근 권한 0600으로 상태를 원자적으로 설치한다.
   set +x
   printf '%s\n' \
     'GOLE_DISCORD_ALERTS_ENABLED=true' \
@@ -390,9 +387,9 @@ on_deploy_exit() {
 }
 trap on_deploy_exit EXIT
 
-# This is the only runner→root secret bridge. The helper takes no argv values,
-# holds the rollout lock itself, and completes before recovery/build/container
-# mutation. Role destinations may intentionally share the GoLe room.
+# 러너에서 관리자 권한으로 시크릿을 전달하는 유일한 경로다. 도우미는 명령 인자로 값을 받지 않고
+# 배포 잠금을 직접 획득하며 복구·빌드·컨테이너 변경 전에 완료한다.
+# 역할별 알림 대상이 의도적으로 같은 GoLe 방을 사용할 수 있다.
 install_discord_overlay
 
 # CD와 Secret Sync가 서로 다른 workflow여도 호스트 전체 변이 구간은 하나만 실행한다.
@@ -415,9 +412,8 @@ fi
 complete_pending_initial_tls() {
   local certificate_status=0 completion_status=0
   [ "$HOST_DOCKER_CONTROL" = 1 ] || return 1
-  # sudo closes the runner's inherited fd7. Release it first so the root-only
-  # certificate action can acquire the same host lock as fd8, then reacquire
-  # before touching the deployment journal again.
+  # sudo는 러너에서 상속한 fd7을 닫는다. 먼저 잠금을 해제하여 관리자 전용 인증서 작업이
+  # 같은 호스트 잠금을 fd8로 획득하게 한다. 배포 기록을 다시 변경하기 전에 잠금을 재획득한다.
   flock -u 7
   sudo -n "$HOSTCTL" certificate-issue || certificate_status=$?
   if ! flock -n 7; then
@@ -676,9 +672,8 @@ if [ "$TARGET" = "all" ]; then
   sudo -n "$HOSTCTL" deployment-record-sha "$deployed_sha" "$DEPLOYMENT_TRANSACTION_ID"
   DEPLOYMENT_MARKER_ADVANCED=1
   if [ "$HOST_DOCKER_CONTROL" = "1" ] && [ -z "$PREVIOUS_SHA" ]; then
-    # A fresh disk has no certificate yet. Prove the HTTP-only app first,
-    # retire the deployment Nginx journal, issue GTS under the same durable
-    # deployment transaction, then require the full TLS/HSTS proof.
+    # 새 디스크에는 인증서가 없다. 먼저 HTTP 전용 앱을 검증하고 배포 Nginx 기록을 종료한다.
+    # 같은 영속 배포 트랜잭션 안에서 GTS 인증서를 발급한 뒤 전체 TLS·HSTS 검증을 요구한다.
     sudo -n "$HOSTCTL" deployment-verify-initial-http-commit "$deployed_sha" \
       "$DEPLOYMENT_TRANSACTION_ID"
     sudo -n "$HOSTCTL" nginx-transaction-finalize "$NGINX_TRANSACTION_ID"
