@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
-/** Uses the existing /api/admin/** ADMIN interceptor and session/CSRF conventions. */
+/** 기존 /api/admin/** ADMIN 인터셉터와 세션·CSRF 규약을 따른다. */
 @RestController
 @RequestMapping("/api/admin/operations")
 public class OperationsController {

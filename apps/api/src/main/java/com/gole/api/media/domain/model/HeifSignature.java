@@ -3,7 +3,7 @@ package com.gole.api.media.domain.model;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-/** Bounded ISO-BMFF ftyp sniffing: HEVC still images only, not AVIF or sequences. */
+/** 제한된 범위의 ISO-BMFF ftyp 검사. HEVC 정지 이미지만 허용하며 AVIF와 연속 이미지는 제외한다. */
 public final class HeifSignature {
     private HeifSignature() {}
 

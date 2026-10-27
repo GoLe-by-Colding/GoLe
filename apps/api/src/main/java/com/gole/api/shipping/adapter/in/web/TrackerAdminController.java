@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.*;
 
-/** Existing /api/admin/** interceptor enforces ADMIN before any handler runs. */
+/** 기존 /api/admin/** 인터셉터가 모든 처리기 실행 전에 ADMIN 권한을 검사한다. */
 @RestController
 @RequestMapping("/api/admin/integrations/tracker")
 public class TrackerAdminController {

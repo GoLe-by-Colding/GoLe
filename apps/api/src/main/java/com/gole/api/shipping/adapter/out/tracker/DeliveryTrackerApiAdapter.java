@@ -140,7 +140,7 @@ public class DeliveryTrackerApiAdapter implements DeliveryTrackerPort {
         return diagnostics();
     }
 
-    /** Single-flight and bounded cooldown also protect scheduler/cache-outage paths. */
+    /** 중복 실행 방지와 재시도 대기 시간이 스케줄러·캐시 장애 경로도 보호한다. */
     @Override
     public synchronized TrackingResult track(TrackingQuery query) {
         String key = query.carrier().name() + ":" + query.waybill().value();
@@ -215,7 +215,7 @@ public class DeliveryTrackerApiAdapter implements DeliveryTrackerPort {
         } catch (java.net.http.HttpTimeoutException e) {
             failure("TIMEOUT");
         } catch (Exception e) {
-            // Never log provider bodies, exception messages, credentials or waybill numbers.
+            // 제공자 응답 본문·예외 메시지·인증 정보·운송장 번호는 로그에 남기지 않는다.
             failure("PROVIDER_UNAVAILABLE");
         }
         return null;

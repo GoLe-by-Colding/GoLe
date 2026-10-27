@@ -59,8 +59,8 @@ public class MongoDesignAdapter implements DesignRepositoryPort {
 
     public void append(DesignRevision r) {
         try {
-            // Unique _id is the compare-and-set fence, including concurrent first publication.
-            // Publication and its audit cannot diverge: both are the same immutable insert.
+            // 고유한 _id가 동시 최초 게시를 포함하여 조건부 갱신의 경계를 보장한다.
+            // 게시와 감사 기록을 하나의 불변 문서로 삽입하므로 두 기록이 어긋나지 않는다.
             mongo.insert(new RevisionDocument(
                     r.revision(), r.tokens(), r.actorId(), r.reason(), r.action(), r.publishedAt()));
         } catch (DuplicateKeyException e) {
