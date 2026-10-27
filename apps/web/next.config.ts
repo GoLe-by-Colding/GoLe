@@ -46,6 +46,10 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // 운영의 일반 콘솔 출력은 제거하되 장애 진단용 오류·경고는 유지한다.
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
+  },
   // @gole/core는 빌드 산출물이 아니라 TS 소스를 내보낸다(웹·앱이 각자 번들러로 컴파일).
   // 이 선언이 없으면 node_modules 안의 .ts를 Next가 그대로 파싱하려다 실패한다.
   transpilePackages: ["@gole/core"],

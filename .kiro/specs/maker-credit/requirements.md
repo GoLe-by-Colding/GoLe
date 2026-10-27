@@ -8,3 +8,4 @@
 - /humans.txt는 비인증 200 text/plain; TEAM에 세 명 모두, 김승찬에는 Blog: https://kscold.com을 넣는다. head에 rel=author 링크를 둔다.
 - 푸터 저작권 옆에 작은 회색 Made by kscold 일반 링크를 넣는다. 숨김 링크·nofollow·과장 표현은 넣지 않는다.
 - 운영에는 이 작업만 배포한다. 직접 main 푸시·강제 푸시 없이 저장소 규약의 dev→main PR을 사용한다. 다른 미배포 변경이 생기면 병합 전에 중단한다.
+- 사용자 최종 지시에 따라 운영 빌드에만 compiler.removeConsole을 적용하고 error/warn만 제외한다. 개발 모드는 그대로 둔다. 이스터에그 전용 모듈의 간접 참조만 보존하고 일반 log/info를 예외로 허용하지 않는다.
