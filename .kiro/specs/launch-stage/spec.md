@@ -258,3 +258,10 @@ R9(거래완료 양측 확인)는 완료 사실과 매물 상태만 기록하고
 구현 근거: `LaunchGateInterceptorTest.orderPostMappingsRequireExplicitLaunchGateReview`가
 `OrderController`의 모든 `POST` 매핑을 열거하고, 신규 결제 진입과 기존 거래 후속 조치 중 어느
 분류에도 들어 있지 않은 경로가 추가되면 실패한다.
+
+### 홈 빈 목록의 판매 안내 — 2026-10-27 회귀 수정
+
+판매자 본인확인 준비가 닫혀 있을 때 하단 CTA뿐 아니라 매물 0건 안내도 판매를 유도하지 않는다.
+비어 있음은 판매 가능 여부가 아니다. 같은 `sellerIdentityVerificationReady` 기준으로 안내 문구와
+다음 경로를 함께 결정한다. 닫힌 상태는 준비 사유와 커뮤니티, 열린 상태는 첫 판매와 `/sell`을 제공한다.
+두 상태의 단위 계약과 운영 읽기 전용 smoke의 판매 링크 부재 검사를 모두 유지한다.
