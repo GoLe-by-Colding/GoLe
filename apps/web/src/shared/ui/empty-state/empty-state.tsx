@@ -46,7 +46,7 @@ export function EmptyState({
         )}
       >
         {icon}
-        <Heading level={2} className="text-xl">
+        <Heading level={2} className="text-xl break-keep">
           {title}
         </Heading>
         {description ? (
