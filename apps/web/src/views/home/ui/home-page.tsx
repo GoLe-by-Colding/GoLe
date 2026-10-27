@@ -1,49 +1,17 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { LegoSetCard, fetchFeaturedLegoSets, type LegoSet } from "@entities/lego-set";
-import { fetchFeed, type Post } from "@entities/community";
-import { fetchTrendingSets, type TrendingSet } from "@entities/pricing";
+import { LegoSetCard, fetchFeaturedLegoSets } from "@entities/lego-set";
+import { fetchFeed } from "@entities/community";
+import { fetchTrendingSets } from "@entities/pricing";
 import { fetchLaunchConfig } from "@entities/launch";
-import { fetchActiveListings, ListingCard, type Listing } from "@entities/listing";
+import { fetchActiveListings, ListingCard } from "@entities/listing";
 import { TrendingSets } from "@widgets/trending-sets";
 import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
 import { PriceTicker } from "./price-ticker";
 import { emptyListingsContent } from "../model/empty-listings";
-
-async function loadFeatured(): Promise<readonly LegoSet[]> {
-  try {
-    return await fetchFeaturedLegoSets();
-  } catch {
-    return [];
-  }
-}
-
-async function loadTrending(): Promise<readonly TrendingSet[]> {
-  try {
-    return await fetchTrendingSets(8);
-  } catch {
-    return [];
-  }
-}
-
-async function loadCommunity(): Promise<readonly Post[]> {
-  try {
-    const posts = await fetchFeed({ headers: await serverSessionHeaders(), limit: 4 });
-    return posts.slice(0, 4);
-  } catch {
-    return [];
-  }
-}
-
-async function loadListings(): Promise<readonly Listing[] | null> {
-  try {
-    return await fetchActiveListings();
-  } catch {
-    return null;
-  }
-}
+import { homeIntroduction, loadHomeCollection } from "../model/discovery-state";
 
 /** 실제 목록의 제목과 다음 이동을 같은 기준선에 놓는다. */
 function SectionHeader({ title, aside }: { readonly title: string; readonly aside?: ReactNode }) {
@@ -57,15 +25,19 @@ function SectionHeader({ title, aside }: { readonly title: string; readonly asid
 
 export async function HomePage() {
   const [featured, trending, community, listings, launch] = await Promise.all([
-    loadFeatured(),
-    loadTrending(),
-    loadCommunity(),
-    loadListings(),
+    loadHomeCollection(fetchFeaturedLegoSets),
+    loadHomeCollection(() => fetchTrendingSets(8)),
+    loadHomeCollection(async () => {
+      const posts = await fetchFeed({ headers: await serverSessionHeaders(), limit: 4 });
+      return posts.slice(0, 4);
+    }),
+    loadHomeCollection(fetchActiveListings),
     fetchLaunchConfig(),
   ]);
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
   const emptyListings = emptyListingsContent(sellerTradingOpen);
-  const txCount = trending.reduce((sum, set) => sum + set.tradeCount, 0);
+  const introduction = homeIntroduction(sellerTradingOpen);
+  const txCount = trending?.reduce((sum, set) => sum + set.tradeCount, 0) ?? 0;
   // 데이터가 없는 칸을 마케팅 문구로 채우면 "실시간"이라는 라벨이 거짓이 된다.
   const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
     ...(listings !== null && listings.length > 0
@@ -84,7 +56,7 @@ export async function HomePage() {
             <div className="flex min-w-0 flex-col items-start gap-5 sm:gap-6">
               <div className="flex w-full items-center justify-between gap-4">
                 <p className="text-sm font-semibold break-keep text-brand-700">
-                  레고를 좋아하는 사람들의 마켓
+                  {introduction.label}
                 </p>
                 <Logo size={64} showWordmark={false} className="lg:hidden" />
               </div>
@@ -92,7 +64,7 @@ export async function HomePage() {
                 다음 브릭을 <span className="block">만나는 곳.</span>
               </h1>
               <p className="max-w-[38ch] text-base leading-relaxed break-keep text-neutral-600 sm:text-lg">
-                갖고 싶던 세트를 찾고, 소중히 모은 브릭을 새로운 주인에게 전해 주세요.
+                {introduction.description}
               </p>
               <div className="flex flex-wrap gap-2 pt-1 sm:gap-3">
                 <LinkButton href="/search" variant="primary">
@@ -130,7 +102,7 @@ export async function HomePage() {
             </div>
           </div>
         </Container>
-        <PriceTicker items={trending} />
+        <PriceTicker items={trending ?? []} />
       </section>
 
       <Container width="xl">
@@ -149,6 +121,11 @@ export async function HomePage() {
                 variant="inline"
                 title="매물을 불러오지 못했어요"
                 description="잠시 후 상품 탐색에서 다시 확인해 주세요."
+                action={
+                  <LinkButton href="/search" variant="secondary">
+                    상품 탐색에서 확인하기
+                  </LinkButton>
+                }
               />
             ) : listings.length === 0 ? (
               <EmptyState
@@ -181,7 +158,20 @@ export async function HomePage() {
                 </Text>
               }
             />
-            <TrendingSets items={trending} />
+            {trending === null ? (
+              <EmptyState
+                variant="inline"
+                title="인기 세트를 불러오지 못했어요"
+                description="잠시 후 시세 화면에서 다시 확인해 주세요."
+                action={
+                  <LinkButton href="/prices" variant="secondary">
+                    시세에서 확인하기
+                  </LinkButton>
+                }
+              />
+            ) : (
+              <TrendingSets items={trending} />
+            )}
           </section>
 
           {/* Featured */}
@@ -194,7 +184,18 @@ export async function HomePage() {
                 </Text>
               }
             />
-            {featured.length > 0 ? (
+            {featured === null ? (
+              <EmptyState
+                variant="inline"
+                title="추천 세트를 불러오지 못했어요"
+                description="잠시 후 탐색 화면에서 다시 확인해 주세요."
+                action={
+                  <LinkButton href="/search" variant="secondary">
+                    세트 탐색하기
+                  </LinkButton>
+                }
+              />
+            ) : featured.length > 0 ? (
               // 휴대폰은 검색 목록과 같이 360px부터 2열로 나란히 본다(1열은 카드 한 장이 화면을 다 차지했다).
               <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:[grid-template-columns:repeat(auto-fill,minmax(240px,1fr))] sm:gap-5">
                 {featured.map((set) => (
@@ -211,23 +212,45 @@ export async function HomePage() {
           </section>
 
           {/* Community */}
-          {community.length > 0 ? (
-            <section className="flex flex-col gap-6">
-              <SectionHeader
-                title="커뮤니티"
-                aside={
-                  <LinkButton href="/community" variant="ghost" size="sm">
-                    전체 보기
+          <section className="flex flex-col gap-6" aria-label="커뮤니티 소식">
+            <SectionHeader
+              title="커뮤니티"
+              aside={
+                <LinkButton href="/community" variant="ghost" size="sm">
+                  전체 보기
+                </LinkButton>
+              }
+            />
+            {community === null ? (
+              <EmptyState
+                variant="inline"
+                title="브릭 이야기를 불러오지 못했어요"
+                description="잠시 후 커뮤니티에서 다시 확인해 주세요."
+                action={
+                  <LinkButton href="/community" variant="secondary">
+                    커뮤니티에서 확인하기
                   </LinkButton>
                 }
               />
+            ) : community.length === 0 ? (
+              <EmptyState
+                variant="inline"
+                title="첫 브릭 이야기를 기다리고 있어요"
+                description="좋아하는 세트와 조립 경험을 함께 나눠 보세요."
+                action={
+                  <LinkButton href="/community" variant="secondary">
+                    커뮤니티 둘러보기
+                  </LinkButton>
+                }
+              />
+            ) : (
               <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
                 {community.map((post) => (
                   <PostCard key={post.id} post={post} />
                 ))}
               </div>
-            </section>
-          ) : null}
+            )}
+          </section>
 
           <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-8 sm:px-10 sm:py-12">
             <div className="flex flex-wrap items-center justify-between gap-6">
