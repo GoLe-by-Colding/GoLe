@@ -59,8 +59,11 @@ ls apps/api/build/test-results/test/*.xml | wc -l
 스킵은 실패가 아니라 **초록**이다. 개수를 본다.
 
 - 관리자 권한 E2E 는 `GOLE_ADMIN_EMAIL`/`GOLE_ADMIN_PASSWORD` 가 없으면 조용히 skip 된다.
-  이 값들은 `ci.yml` 에 없다 — **"CI 통과 = 권한 검증됨"이 아니다.**
-- E2E 스킵 수가 평소와 다르면 환경변수를 먼저 의심한다.
+  `ci.yml`의 PR E2E 잡에는 테스트용 값이 주입된다. 로컬 실행 시에도 값을 확인한다.
+- **PR의 테스트별 스킵과 main push의 잡 생략을 구분한다.** E2E는 dev/main 대상 PR에서 실제
+  실행하며 main push에서는 의도적으로 잡 전체를 생략한다. push의 `e2e=skipped`는 정상이며
+  새로 테스트를 통과했다는 뜻이 아니다. main 필수 E2E 체크는 PR에서 유지한다.
+- PR E2E 내부의 스킵 수가 평소와 다르면 환경변수를 먼저 의심한다.
 
 ### 앱 라우트 오타를 CI 가 못 잡는다
 
@@ -89,6 +92,8 @@ pm2 `--update-env` 로는 반영되지 않는다 — 프론트를 **재빌드**�
 두 겹의 게이트가 있다.
 
 1. **CI 가 깨지면 CD 는 아예 안 돈다.** PR 에서 초록이어도 `main` **푸시**여야 한다.
+   main push의 E2E 잡은 PR에서 검증했으므로 정상 생략한다. 다른 CI 검사가 성공하면
+   workflow 결론은 success이고 CD를 시작한다. PR E2E 실패·취소는 병합하지 않는다.
 2. `cd.yml` 은 `vars.GOLE_PRODUCTION_HOST_READY == 'true'` 를 요구한다. **이 변수가 없으면
    배포 job 자체를 만들지 않고 `skipped` 로 끝난다.** 호스트 이관 전까지의 의도된 안전장치다.
 

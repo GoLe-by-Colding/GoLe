@@ -129,6 +129,9 @@ jobs:
 
   e2e:
     name: E2E (Playwright)
+    # dev/main PR에서 검증하며 병합 후 main push에서는 같은 검사를 반복하지 않는다.
+    # 잡 이름은 main 브랜치 보호의 필수 체크와 같게 유지한다.
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -501,6 +504,9 @@ jobs:
           -w /repo
           rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 
+      - name: CI event and result policy
+        run: node --test scripts/__tests__/ci-e2e-policy.test.mjs
+
       - name: Docker Compose config
         env:
           GOLE_INFRA_ENV_FILE: ${{ github.workspace }}/infra/gcp/gole.env.example
@@ -543,7 +549,12 @@ jobs:
         if: ${{ env.DISCORD_CI_WEBHOOK_URL != '' }}
         continue-on-error: true
         run: |
-          if [ "$WEB_RESULT" = success ] && [ "$MOBILE_RESULT" = success ] && [ "$API_RESULT" = success ] && [ "$SUPPORT_AGENT_RESULT" = success ] && [ "$E2E_RESULT" = success ] && [ "$INFRA_RESULT" = success ]; then
+          # main push의 의도된 E2E 생략만 정상으로 인정하고 실패·취소는 숨기지 않는다.
+          e2e_ok=false
+          if [ "$E2E_RESULT" = success ] || { [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] && [ "$E2E_RESULT" = skipped ]; }; then
+            e2e_ok=true
+          fi
+          if [ "$WEB_RESULT" = success ] && [ "$MOBILE_RESULT" = success ] && [ "$API_RESULT" = success ] && [ "$SUPPORT_AGENT_RESULT" = success ] && [ "$e2e_ok" = true ] && [ "$INFRA_RESULT" = success ]; then
             status="✅ CI 통과"
           else
             status="❌ CI 실패"
