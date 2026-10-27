@@ -1,4 +1,5 @@
 export { BUSINESS_INFO } from "./business-info";
+export { MAKERS, MAKER_BLOG_URL, MAKER_CONTACT_URL } from "./makers";
 export { analyticsRuntimeConfig, env, isPaymentRuntimeAvailable } from "./env";
 export type { PaymentRuntimeConfig } from "./env";
 export {

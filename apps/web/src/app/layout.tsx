@@ -5,7 +5,8 @@ import { Suspense, type ReactNode } from "react";
 import "@shared/config/bootstrap";
 import { CoreBootstrap } from "@shared/config/core-bootstrap";
 import { AnalyticsConsentManager } from "@widgets/analytics-consent";
-import { analyticsRuntimeConfig, BUSINESS_INFO, env } from "@shared/config";
+import { MakerCredit } from "@widgets/maker-credit";
+import { analyticsRuntimeConfig, BUSINESS_INFO, env, MAKERS } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import { DesignTheme } from "@shared/ui/design-theme";
 import { SiteMascot } from "@shared/ui/logo";
@@ -50,6 +51,8 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   keywords: KEYWORDS,
   applicationName: SITE_NAME,
+  authors: MAKERS.map(({ name, url }) => ({ name, url })),
+  creator: MAKERS.map(({ name }) => name).join(", "),
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
@@ -81,6 +84,8 @@ function StructuredData() {
         "@id": `${env.siteUrl}/#organization`,
         name: SITE_NAME,
         legalName: BUSINESS_INFO.name,
+        founder: { "@id": `${env.siteUrl}/#maker-kscold` },
+        member: MAKERS.map(({ handle }) => ({ "@id": `${env.siteUrl}/#maker-${handle}` })),
         url: env.siteUrl,
         description: SITE_DESCRIPTION,
         email: BUSINESS_INFO.contactEmail,
@@ -103,6 +108,7 @@ function StructuredData() {
         url: env.siteUrl,
         inLanguage: "ko-KR",
         publisher: { "@id": `${env.siteUrl}/#organization` },
+        creator: MAKERS.map(({ handle }) => ({ "@id": `${env.siteUrl}/#maker-${handle}` })),
         potentialAction: {
           "@type": "SearchAction",
           target: {
@@ -112,6 +118,15 @@ function StructuredData() {
           "query-input": "required name=search_term_string",
         },
       },
+      ...MAKERS.map((maker) => ({
+        "@type": "Person",
+        "@id": `${env.siteUrl}/#maker-${maker.handle}`,
+        name: maker.name,
+        alternateName: maker.handle,
+        jobTitle: maker.role,
+        url: maker.url,
+        sameAs: maker.github,
+      })),
     ],
   };
   return <JsonLd data={json} />;
@@ -124,7 +139,11 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       data-scroll-behavior="smooth"
       className={`${bodyFont.variable} ${displayFont.variable}`}
     >
+      <head>
+        <link rel="author" href="/humans.txt" />
+      </head>
       <body>
+        <MakerCredit />
         <CoreBootstrap />
         <DesignTheme />
         <SiteMascot>{children}</SiteMascot>
