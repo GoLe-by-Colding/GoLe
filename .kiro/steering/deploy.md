@@ -48,6 +48,14 @@ PR CI가 모두 성공한 뒤 `dev`에 병합하고 릴리스 PR을 별도로 �
 장애 복구가 아닌 이상 사용하지 않는다. CD는 CI를 통과한 SHA를 직접 checkout하고,
 Compose 갱신·내부 readiness·공개 HTTPS 확인까지 성공해야 배포 완료 SHA를 기록한다.
 
+E2E는 `dev`/`main` 대상 PR에서만 실행한다. 병합 후 `main` push에서는 E2E 잡을 조건부로
+생략하고 Web/API/Mobile/Support agent/Infra 검사를 유지한다. 이 push CI가 성공해야 기존
+`workflow_run` 경로로 CD가 시작된다. E2E의 의도된 생략은 Discord CI 알림에서 정상으로
+분류하되 `e2e=skipped`를 그대로 표시한다. 실패·취소와 다른 잡의 스킵은 성공으로 표시하지 않는다.
+
+브랜치 보호의 `E2E (Playwright)` 필수 체크는 제거하지 않는다. PR에서 실제 실행·성공을
+확인하고 병합하며, 이 정책을 직접 main push의 근거로 사용하지 않는다. 일일 운영 스모크는 유지한다.
+
 ## 로컬 개발
 
 ```bash
