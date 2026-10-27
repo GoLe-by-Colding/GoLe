@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { fetchLaunchConfig } from "@entities/launch";
-import { analyticsRuntimeConfig, BUSINESS_INFO, isPaymentRuntimeAvailable } from "@shared/config";
+import {
+  analyticsRuntimeConfig,
+  BUSINESS_INFO,
+  isPaymentRuntimeAvailable,
+  MAKER_BLOG_URL,
+} from "@shared/config";
 import { Container, Logo } from "@shared/ui";
 import { AnalyticsSettingsButton } from "./analytics-settings-button";
 
@@ -121,7 +126,15 @@ export async function SiteFooter() {
           </address>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">
-            <span className="text-xs text-brand-300/60">{BUSINESS_INFO.copyright}</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+              <span className="text-brand-300/60">{BUSINESS_INFO.copyright}</span>
+              <a
+                href={MAKER_BLOG_URL}
+                className="text-neutral-400 hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-400"
+              >
+                Made by kscold
+              </a>
+            </div>
             <nav className="flex flex-wrap gap-x-4 gap-y-1">
               {LEGAL.map((l) => (
                 <Link
