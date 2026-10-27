@@ -223,7 +223,45 @@ export interface AdminSupportTicket {
   readonly resolvedAt: string | null;
   readonly progressDueAt: string;
   readonly responseDueAt: string | null;
+  readonly progressNotifiedAt?: string | null;
+  readonly resultNotifiedAt?: string | null;
   readonly assistantAnalysis?: AdminSupportAssistantAnalysis | null;
+}
+
+export type AdminSupportNoticeKind = "PROGRESS" | "RESULT";
+export type AdminSupportNoticeFilter =
+  | "PROGRESS_DUE_SOON"
+  | "PROGRESS_OVERDUE"
+  | "RESULT_DUE_SOON"
+  | "RESULT_OVERDUE"
+  | "PROGRESS_MISSING"
+  | "RESULT_MISSING";
+export type AdminSupportNoticeScope = "ALL" | "ACTIVE" | "RESOLVED";
+
+export interface AdminSupportNotice {
+  readonly kind: AdminSupportNoticeKind;
+  readonly messageId: string;
+  readonly senderId: string;
+  readonly sentAt: string;
+}
+
+export interface AdminSupportNoticeCounts {
+  readonly pending: number;
+  readonly dueSoon: number;
+  readonly overdue: number;
+  readonly onTime: number;
+  readonly late: number;
+}
+
+export interface AdminSupportNoticeSummary {
+  readonly generatedAt: string;
+  readonly total: number;
+  readonly progress: AdminSupportNoticeCounts;
+  readonly result: AdminSupportNoticeCounts;
+  readonly activeProgress: AdminSupportNoticeCounts;
+  readonly activeResult: AdminSupportNoticeCounts;
+  readonly resolvedMissingProgress: number;
+  readonly resolvedMissingResult: number;
 }
 
 export interface AdminSupportMessage {
@@ -525,11 +563,29 @@ export function fetchAdminSupportTickets(
   status?: AdminSupportStatus,
   category?: AdminSupportCategory,
   limit = 50,
+  notice?: AdminSupportNoticeFilter,
+  noticeScope?: AdminSupportNoticeScope,
 ): Promise<readonly AdminSupportTicket[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set("status", status);
   if (category) params.set("category", category);
+  if (notice) params.set("notice", notice);
+  if (noticeScope) params.set("noticeScope", noticeScope);
   return get<readonly AdminSupportTicket[]>(token, `/api/admin/support?${params}`);
+}
+
+export function fetchAdminSupportNoticeSummary(token: string): Promise<AdminSupportNoticeSummary> {
+  return get<AdminSupportNoticeSummary>(token, "/api/admin/support/notice-summary");
+}
+
+export function fetchAdminSupportNotices(
+  token: string,
+  roomId: string,
+): Promise<readonly AdminSupportNotice[]> {
+  return get<readonly AdminSupportNotice[]>(
+    token,
+    `/api/admin/support/${encodeURIComponent(roomId)}/notices`,
+  );
 }
 
 export function assignAdminSupportTicket(
@@ -593,8 +649,12 @@ export function replyAdminSupport(
   token: string,
   roomId: string,
   content: string,
+  noticeKind?: AdminSupportNoticeKind,
 ): Promise<AdminSupportMessage> {
-  return post<AdminSupportMessage>(token, `/api/admin/support/${roomId}/messages`, { content });
+  return post<AdminSupportMessage>(token, `/api/admin/support/${roomId}/messages`, {
+    content,
+    ...(noticeKind ? { noticeKind } : {}),
+  });
 }
 
 export function fetchAdminSupportNotes(

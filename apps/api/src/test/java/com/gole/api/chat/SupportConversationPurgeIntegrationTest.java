@@ -30,7 +30,9 @@ import com.gole.api.chat.application.port.out.SupportConversationPrivacyReposito
 import com.gole.api.chat.application.port.out.SupportInternalNotePort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.application.service.SupportConversationPrivacyService;
+import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
 import com.gole.api.chat.domain.model.SupportTicket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -154,6 +156,7 @@ class SupportConversationPurgeIntegrationTest {
     void oneExplicitOperationPurgesLinkedRecordsAndCannotBeRecreatedOrReplayedDifferently() {
         String roomId = "support-purge-success";
         SupportTicket ticket = seedResolvedConversation(roomId);
+        assertThat(ticket.notices()).hasSize(1);
         service.placeRetentionHold(roomId, ADMIN_ID, roomId, RetentionHoldReasonCode.LEGAL_OBLIGATION);
         service.releaseRetentionHold(roomId, ADMIN_ID, roomId, RetentionReleaseReasonCode.LEGAL_RELEASE_APPROVED);
 
@@ -374,6 +377,9 @@ class SupportConversationPurgeIntegrationTest {
         rooms.save(room);
         SupportTicket ticket = tickets.save(SupportTicket.opened(roomId, "requester-purge", NOW.minusSeconds(90))
                 .assignTo(ADMIN_ID, NOW.minusSeconds(60))
+                .recordNotice(
+                        SupportNoticeKind.RESULT,
+                        new ChatMessage("message-b-" + roomId, roomId, ADMIN_ID, "운영자 답변", NOW.minusSeconds(70)))
                 .resolve(NOW.minusSeconds(30)));
         messageDocuments.saveAll(List.of(
                 new ChatMessageDocument(

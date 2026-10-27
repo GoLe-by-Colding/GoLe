@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,9 +24,15 @@ import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportAssistantAnalysis;
 import com.gole.api.chat.domain.model.SupportAssistantPriority;
 import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportNotice;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
+import com.gole.api.chat.domain.model.SupportNoticeScope;
+import com.gole.api.chat.domain.model.SupportNoticeSummary;
 import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportTicket;
 import com.gole.api.common.exception.BadRequestException;
+import com.gole.api.common.exception.ConflictException;
 import com.gole.api.common.operations.OperationalEventPublisher;
 import com.gole.api.common.web.GlobalExceptionHandler;
 import com.gole.api.common.web.auth.SessionCookie;
@@ -49,10 +56,11 @@ class AdminSupportControllerTest {
     private final ChatMessagingUseCase messaging = mock(ChatMessagingUseCase.class);
     private final GetSupportAssistantAnalysisUseCase supportAssistant = mock(GetSupportAssistantAnalysisUseCase.class);
     private final GetCurrentSessionUseCase sessions = mock(GetCurrentSessionUseCase.class);
+    private final OperationalEventPublisher operationalEvents = mock(OperationalEventPublisher.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(
                     new AdminSupportController(support, rooms, messaging, supportAssistant))
             .addInterceptors(new AdminAuthInterceptor(sessions, new SessionCookie("false")))
-            .setControllerAdvice(new GlobalExceptionHandler(mock(OperationalEventPublisher.class)))
+            .setControllerAdvice(new GlobalExceptionHandler(operationalEvents))
             .build();
 
     @BeforeEach
@@ -227,6 +235,95 @@ class AdminSupportControllerTest {
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
 
         verify(support).resolve("room-1", OPERATOR);
+    }
+
+    @Test
+    void reply_rejectsUnknownNoticeKindBeforeSending() throws Exception {
+        when(support.reply("room-1", OPERATOR, "확인했습니다"))
+                .thenReturn(new ChatMessage("message-9", "room-1", "admin-2", "확인했습니다", NOW));
+
+        mvc.perform(post("/api/admin/support/room-1/messages")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"확인했습니다\",\"noticeKind\":\"RESOLVED\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void adminCanReadNoticeSummary() throws Exception {
+        var counts = new SupportNoticeSummary.Counts(0, 1, 101, 3, 4);
+        when(support.noticeSummary("admin-2"))
+                .thenReturn(new SupportNoticeSummary(NOW, 109, counts, counts, counts, counts, 0, 0));
+        mvc.perform(get("/api/admin/support/notice-summary").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(109))
+                .andExpect(jsonPath("$.progress.overdue").value(101))
+                .andExpect(jsonPath("$.generatedAt").value(NOW.toString()));
+        mvc.perform(get("/api/admin/support/notice-summary").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void noticeReplyUsesAuthenticatedOperatorAndDoesNotTrustClientTime() throws Exception {
+        when(support.replyWithNotice("room-1", OPERATOR, "확인했습니다", SupportNoticeKind.PROGRESS))
+                .thenReturn(new ChatMessage("notice-1", "room-1", "admin-2", "확인했습니다", NOW));
+        mvc.perform(
+                        post("/api/admin/support/room-1/messages")
+                                .header("Authorization", "Bearer admin-token")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"content\":\"확인했습니다\",\"noticeKind\":\"PROGRESS\",\"sentAt\":\"2000-01-01T00:00:00Z\",\"senderId\":\"other\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sentAt").value(NOW.toString()))
+                .andExpect(jsonPath("$.senderId").value("admin-2"));
+        verify(support).replyWithNotice("room-1", OPERATOR, "확인했습니다", SupportNoticeKind.PROGRESS);
+    }
+
+    @Test
+    void noticeHistoryUsesTheAssignedOperatorBoundary() throws Exception {
+        when(support.notices("room-1", "admin-2"))
+                .thenReturn(List.of(new SupportNotice(SupportNoticeKind.RESULT, "notice-1", "admin-2", NOW)));
+        mvc.perform(get("/api/admin/support/room-1/notices").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].messageId").value("notice-1"));
+        verify(support).notices("room-1", "admin-2");
+    }
+
+    @Test
+    void noticeQueueUsesExplicitScopeAndRejectsUnknownScope() throws Exception {
+        mvc.perform(get("/api/admin/support")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("notice", "RESULT_OVERDUE")
+                        .param("noticeScope", "ACTIVE"))
+                .andExpect(status().isOk());
+        verify(support)
+                .noticeInbox("admin-2", null, null, SupportNoticeFilter.RESULT_OVERDUE, SupportNoticeScope.ACTIVE, 50);
+        mvc.perform(get("/api/admin/support")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("notice", "RESULT_MISSING")
+                        .param("noticeScope", "RESOLVED"))
+                .andExpect(status().isOk());
+        verify(support)
+                .noticeInbox(
+                        "admin-2", null, null, SupportNoticeFilter.RESULT_MISSING, SupportNoticeScope.RESOLVED, 50);
+        mvc.perform(get("/api/admin/support")
+                        .header("Authorization", "Bearer admin-token")
+                        .param("notice", "RESULT_OVERDUE")
+                        .param("noticeScope", "UNKNOWN"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void concurrentNoticeReplyReturnsConflictInsteadOfDependencyFailure() throws Exception {
+        when(support.replyWithNotice("room-1", OPERATOR, "안내", SupportNoticeKind.RESULT))
+                .thenThrow(new ConflictException("SUPPORT_CONCURRENT_UPDATE", "문의가 변경되었습니다"));
+        mvc.perform(post("/api/admin/support/room-1/messages")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"안내\",\"noticeKind\":\"RESULT\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SUPPORT_CONCURRENT_UPDATE"));
+        verifyNoInteractions(operationalEvents);
     }
 
     @Test

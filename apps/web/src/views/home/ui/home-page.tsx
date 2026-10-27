@@ -10,6 +10,7 @@ import { PostCard } from "@widgets/post-card";
 import { BrickIcon, Container, EmptyState, Heading, LinkButton, Logo, Text } from "@shared/ui";
 import { serverSessionHeaders } from "@shared/api/server-session-headers";
 import { PriceTicker } from "./price-ticker";
+import { emptyListingsContent } from "../model/empty-listings";
 
 async function loadFeatured(): Promise<readonly LegoSet[]> {
   try {
@@ -63,6 +64,7 @@ export async function HomePage() {
     fetchLaunchConfig(),
   ]);
   const sellerTradingOpen = launch.sellerIdentityVerificationReady;
+  const emptyListings = emptyListingsContent(sellerTradingOpen);
   const txCount = trending.reduce((sum, set) => sum + set.tradeCount, 0);
   // 데이터가 없는 칸을 마케팅 문구로 채우면 "실시간"이라는 라벨이 거짓이 된다.
   const liveStats: ReadonlyArray<{ readonly label: string; readonly value: string }> = [
@@ -151,10 +153,11 @@ export async function HomePage() {
             ) : listings.length === 0 ? (
               <EmptyState
                 variant="inline"
-                title="첫 매물을 기다리고 있어요."
+                title={emptyListings.title}
+                description={emptyListings.description}
                 action={
-                  <LinkButton href="/sell" variant="secondary">
-                    판매 시작하기
+                  <LinkButton href={emptyListings.href} variant="secondary">
+                    {emptyListings.action}
                   </LinkButton>
                 }
               />

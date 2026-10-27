@@ -1,8 +1,9 @@
 package com.gole.api.chat.domain.model;
 
 import com.gole.api.common.exception.BadRequestException;
-import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -18,10 +19,22 @@ public record SupportTicket(
         Instant createdAt,
         Instant updatedAt,
         Instant resolvedAt,
-        long version) {
+        long version,
+        List<SupportNotice> notices) {
 
-    private static final Duration PROGRESS_NOTICE_INTERNAL_TARGET = Duration.ofDays(3);
-    private static final Duration RESULT_NOTICE_INTERNAL_TARGET = Duration.ofDays(10);
+    /** 구버전 문의에는 실제 안내 근거를 추정해서 채우지 않는다. */
+    public SupportTicket(
+            String roomId,
+            String requesterId,
+            SupportCategory category,
+            SupportStatus status,
+            String assigneeId,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant resolvedAt,
+            long version) {
+        this(roomId, requesterId, category, status, assigneeId, createdAt, updatedAt, resolvedAt, version, List.of());
+    }
 
     /** 영속성 버전이 없던 호출부와 테스트를 위한 신규 티켓 생성 생성자. */
     public SupportTicket(
@@ -41,6 +54,7 @@ public record SupportTicket(
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(createdAt, "createdAt");
+        notices = notices == null ? List.of() : List.copyOf(notices);
     }
 
     public static SupportTicket opened(String roomId, String requesterId, Instant now) {
@@ -58,7 +72,7 @@ public record SupportTicket(
      * 잡는다. 이 값은 자동 해결·삭제 기한이 아니다.
      */
     public Instant progressDueAt() {
-        return createdAt.plus(PROGRESS_NOTICE_INTERNAL_TARGET);
+        return SupportNoticeKind.PROGRESS.dueAt(createdAt);
     }
 
     /**
@@ -68,7 +82,30 @@ public record SupportTicket(
      * 같은 보수적 목표를 적용하며, 실제 해결 완료를 보장하는 시각은 아니다.
      */
     public Instant responseDueAt() {
-        return createdAt.plus(RESULT_NOTICE_INTERNAL_TARGET);
+        return SupportNoticeKind.RESULT.dueAt(createdAt);
+    }
+
+    /** 결과 안내도 진행 상황을 포함한다. 반복 안내가 최초 이행 시각을 덮어쓰지 않는다. */
+    public Instant firstNoticeAt(SupportNoticeKind kind) {
+        return notices.stream()
+                .filter(notice -> kind == SupportNoticeKind.PROGRESS || notice.kind() == kind)
+                .map(SupportNotice::sentAt)
+                .min(Instant::compareTo)
+                .orElse(null);
+    }
+
+    public SupportTicket recordNotice(SupportNoticeKind kind, ChatMessage message) {
+        Objects.requireNonNull(kind, "kind");
+        if (!roomId.equals(message.roomId())
+                || !Objects.equals(assigneeId, message.senderId())
+                || message.sentAt().isBefore(createdAt)) {
+            throw new BadRequestException("SUPPORT_NOTICE_MESSAGE_MISMATCH", "현재 담당자가 이 문의에 보낸 답변만 안내로 기록할 수 있습니다");
+        }
+        if (notices.stream().anyMatch(notice -> notice.messageId().equals(message.id()))) return this;
+        List<SupportNotice> next = new ArrayList<>(notices);
+        next.add(new SupportNotice(kind, message.id(), message.senderId(), message.sentAt()));
+        return new SupportTicket(
+                roomId, requesterId, category, status, assigneeId, createdAt, updatedAt, resolvedAt, version, next);
     }
 
     /** 관리자가 가져간다. 완료된 문의는 재개 후에 배정한다. */
@@ -77,7 +114,16 @@ public record SupportTicket(
             throw new BadRequestException("SUPPORT_ALREADY_ASSIGNED", "미배정 문의만 담당자를 지정할 수 있습니다");
         }
         return new SupportTicket(
-                roomId, requesterId, category, SupportStatus.IN_PROGRESS, agentId, createdAt, now, resolvedAt, version);
+                roomId,
+                requesterId,
+                category,
+                SupportStatus.IN_PROGRESS,
+                agentId,
+                createdAt,
+                now,
+                resolvedAt,
+                version,
+                notices);
     }
 
     /** 진행 중인 문의를 다른 관리자에게 넘긴다. 이관은 담당자만 바꾸고 처리 상태는 보존한다. */
@@ -88,7 +134,8 @@ public record SupportTicket(
         if (assigneeId == null) {
             throw new BadRequestException("SUPPORT_NOT_ASSIGNED", "먼저 문의를 담당자에게 배정해야 합니다");
         }
-        return new SupportTicket(roomId, requesterId, category, status, agentId, createdAt, now, resolvedAt, version);
+        return new SupportTicket(
+                roomId, requesterId, category, status, agentId, createdAt, now, resolvedAt, version, notices);
     }
 
     /** 관리자가 답했다 — 이제 사용자 차례다. */
@@ -108,7 +155,8 @@ public record SupportTicket(
                 createdAt,
                 now,
                 resolvedAt,
-                version);
+                version,
+                notices);
     }
 
     /** 사용자가 답했다 — 다시 우리 차례다. 미배정 상태는 그대로 둔다(아무도 안 가져갔으므로). */
@@ -117,7 +165,7 @@ public record SupportTicket(
             // 상태는 그대로여도 활동 시각은 올려야 새 문의가 관리자 인박스 아래로
             // 가라앉지 않는다.
             return new SupportTicket(
-                    roomId, requesterId, category, status, assigneeId, createdAt, now, resolvedAt, version);
+                    roomId, requesterId, category, status, assigneeId, createdAt, now, resolvedAt, version, notices);
         }
         if (status == SupportStatus.RESOLVED) {
             return reopen(now);
@@ -131,7 +179,8 @@ public record SupportTicket(
                 createdAt,
                 now,
                 resolvedAt,
-                version);
+                version,
+                notices);
     }
 
     public SupportTicket resolve(Instant now) {
@@ -142,7 +191,16 @@ public record SupportTicket(
             throw new BadRequestException("SUPPORT_NOT_ASSIGNED", "담당자를 배정한 뒤 완료할 수 있습니다");
         }
         return new SupportTicket(
-                roomId, requesterId, category, SupportStatus.RESOLVED, assigneeId, createdAt, now, now, version);
+                roomId,
+                requesterId,
+                category,
+                SupportStatus.RESOLVED,
+                assigneeId,
+                createdAt,
+                now,
+                now,
+                version,
+                notices);
     }
 
     public SupportTicket reopen(Instant now) {
@@ -158,6 +216,7 @@ public record SupportTicket(
                 createdAt,
                 now,
                 null,
-                version);
+                version,
+                notices);
     }
 }

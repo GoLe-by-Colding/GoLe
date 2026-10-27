@@ -567,6 +567,201 @@ test.describe("매물 상세 — 제안가 구매·인라인 제안·받은 제�
     "실제 API가 렌더하는 상세 화면 — 로컬 백엔드 전용",
   );
 
+  test("초기 HTML에서는 구매를 막고 화면 준비 뒤 첫 클릭으로 연락처를 연다", async ({ page }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
+    let releaseScripts = () => {};
+    const scriptsReady = new Promise<void>((resolve) => {
+      releaseScripts = resolve;
+    });
+    await page.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+      await scriptsReady;
+      await route.continue();
+    });
+
+    try {
+      await page.goto(`/listings/${listing.id}`, { waitUntil: "commit" });
+      await expect(page.getByRole("button", { name: "주문 금액 확인 중…" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "구매하기", exact: true })).toHaveCount(0);
+    } finally {
+      releaseScripts();
+    }
+    await page.getByRole("button", { name: "구매하기", exact: true }).click();
+    await expect(page.getByLabel("CS 연락처")).toBeVisible();
+  });
+
+  test("제안 조회가 늦어도 정가 주문을 먼저 열지 않고 확인한 제안가로 주문한다", async ({
+    page,
+  }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const accepted = offer({
+      listingId: listing.id,
+      sellerId: listing.sellerId,
+      price: listing.price - 1000,
+      status: "accepted",
+    });
+    let releaseOffers = () => {};
+    const offersReady = new Promise<void>((resolve) => {
+      releaseOffers = resolve;
+    });
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, async (route) => {
+      await offersReady;
+      await route.fulfill({ json: [accepted] });
+    });
+    const orders: unknown[] = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orders.push(route.request().postDataJSON());
+      return route.fulfill({ status: 201, json: { id: "order-after-offer-lookup" } });
+    });
+
+    await page.goto(`/listings/${listing.id}`);
+    try {
+      await expect(page.getByRole("button", { name: "주문 금액 확인 중…" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "구매하기", exact: true })).toHaveCount(0);
+      await expect(page.getByLabel("CS 연락처")).toHaveCount(0);
+      expect(orders).toHaveLength(0);
+    } finally {
+      releaseOffers();
+    }
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    const form = page.getByRole("form", { name: "주문 금액 확인" });
+    await expect(
+      form.getByText(`${accepted.price.toLocaleString("ko-KR")}원`, { exact: true }),
+    ).toBeVisible();
+    await form.getByLabel("CS 연락처").fill("010-1234-5678");
+    await form.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/order-after-offer-lookup$/);
+    expect(orders).toEqual([
+      expect.objectContaining({ listingId: listing.id, offerId: accepted.id }),
+    ]);
+  });
+
+  test("제안 조회 실패를 정가로 처리하지 않고 다시 확인해 구매를 이어 간다", async ({ page }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    let failed = true;
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) =>
+      failed
+        ? route.fulfill({
+            status: 503,
+            json: { code: "UNAVAILABLE", message: "offer lookup failed" },
+          })
+        : route.fulfill({
+            json: [
+              offer({ listingId: listing.id, status: "accepted", price: listing.price - 1000 }),
+            ],
+          }),
+    );
+
+    await page.goto(`/listings/${listing.id}`);
+    await expect(page.getByRole("button", { name: "주문 금액 확인 필요" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "구매하기", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("CS 연락처")).toHaveCount(0);
+    failed = false;
+    await page.getByRole("button", { name: "제안 다시 확인" }).click();
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await expect(page.getByRole("form", { name: "주문 금액 확인" })).toContainText(
+      `판매자가 수락한 제안가 ${(listing.price - 1000).toLocaleString("ko-KR")}원으로 주문해요.`,
+    );
+  });
+
+  test("연락처 입력 중 조회 실패는 주문을 막고 재시도 후 입력값과 제안을 보존한다", async ({
+    page,
+  }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const accepted = offer({
+      listingId: listing.id,
+      status: "accepted",
+      price: listing.price - 1000,
+    });
+    let failed = false;
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) =>
+      failed
+        ? route.fulfill({
+            status: 503,
+            json: { code: "UNAVAILABLE", message: "offer lookup failed" },
+          })
+        : route.fulfill({ json: [accepted] }),
+    );
+    const orders: unknown[] = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orders.push(route.request().postDataJSON());
+      return route.fulfill({ status: 201, json: { id: "order-recovered-quote" } });
+    });
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: /제안가 .*으로 구매/ }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    failed = true;
+    await page.evaluate((listingId) => {
+      window.dispatchEvent(
+        new CustomEvent("gole:listing-offers-changed", { detail: { listingId, source: "e2e" } }),
+      );
+    }, listing.id);
+    const form = page.getByRole("form", { name: "주문 금액 확인" });
+    await expect(form.getByRole("button", { name: "주문하기", exact: true })).toBeDisabled();
+    await expect(form.getByRole("alert")).toContainText("주문 금액을 다시 확인해 주세요");
+    expect(orders).toHaveLength(0);
+    failed = false;
+    await form.getByRole("button", { name: "제안 다시 확인" }).click();
+    await expect(form.getByRole("button", { name: "주문하기", exact: true })).toBeEnabled();
+    await expect(form.getByLabel("CS 연락처")).toHaveValue("010-1234-5678");
+    await form.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/order-recovered-quote$/);
+    expect(orders).toEqual([
+      expect.objectContaining({ offerId: accepted.id, buyerPhone: "010-1234-5678" }),
+    ]);
+  });
+
+  test("정가 확인 뒤 도착한 수락 제안은 금액을 다시 확인한 다음 주문한다", async ({ page }) => {
+    const listing = await findSeedListing(page);
+    await seedSession(page, BUYER_ID);
+    await isolateDetailRequests(page, BUYER_ID);
+    const accepted = offer({
+      listingId: listing.id,
+      status: "accepted",
+      price: listing.price - 1000,
+    });
+    let offers: TestOffer[] = [];
+    let reads = 0;
+    await page.route(/\/api\/v1\/offers(?:\?.*)?$/, (route) => {
+      reads += 1;
+      return route.fulfill({ json: offers });
+    });
+    const orders: unknown[] = [];
+    await page.route("**/api/v1/orders", (route) => {
+      orders.push(route.request().postDataJSON());
+      return route.fulfill({ status: 201, json: { id: "order-new-agreement" } });
+    });
+    await page.goto(`/listings/${listing.id}`);
+    await page.getByRole("button", { name: "구매하기", exact: true }).click();
+    await page.getByLabel("CS 연락처").fill("010-1234-5678");
+    offers = [accepted];
+    const previousReads = reads;
+    await page.evaluate((listingId) => {
+      window.dispatchEvent(
+        new CustomEvent("gole:listing-offers-changed", { detail: { listingId, source: "e2e" } }),
+      );
+    }, listing.id);
+    await expect.poll(() => reads).toBeGreaterThan(previousReads);
+    const form = page.getByRole("form", { name: "주문 금액 확인" });
+    await form.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(form.getByRole("alert")).toContainText("변경된 주문 금액을 확인해 주세요.");
+    expect(orders).toHaveLength(0);
+    await expect(form).toContainText(
+      `판매자가 수락한 제안가 ${accepted.price.toLocaleString("ko-KR")}원으로 주문해요.`,
+    );
+    await form.getByRole("button", { name: "주문하기", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders\/order-new-agreement$/);
+    expect(orders).toEqual([expect.objectContaining({ offerId: accepted.id })]);
+  });
+
   test("수락 제안이 있으면 제안가로 주문하고, 서버가 거부하면 정가 주문으로 이어 간다", async ({
     page,
   }) => {

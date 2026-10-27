@@ -22,6 +22,9 @@ import com.gole.api.chat.domain.model.ChatAccount;
 import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportAdminAction;
+import com.gole.api.chat.domain.model.SupportCategory;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
 import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -350,5 +353,87 @@ class SupportChatServiceTest {
 
     private static ChatAccount admin(String id) {
         return new ChatAccount(id, true, true, false);
+    }
+
+    @Test
+    @DisplayName("안내는 전송 후 최신 티켓 버전과 실제 메시지 시각으로 기록한다")
+    void noticeReply_recordsActualMessageAgainstLatestTicket() {
+        SupportTicket initial = SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW);
+        SupportTicket updated = new SupportTicket(
+                "room-1",
+                "user-1",
+                SupportCategory.GENERAL,
+                SupportStatus.WAITING_USER,
+                "admin-1",
+                NOW,
+                NOW.plusSeconds(1),
+                null,
+                7L);
+        ChatMessage sent = new ChatMessage("notice-1", "room-1", "admin-1", "안내", NOW.plusSeconds(1));
+        when(tickets.findByRoomId("room-1")).thenReturn(Optional.of(initial), Optional.of(updated));
+        when(messaging.sendAdminSupport("room-1", "admin-1", "안내")).thenReturn(sent);
+        when(tickets.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        assertThat(service.replyWithNotice("room-1", op("admin-1"), "안내", SupportNoticeKind.RESULT))
+                .isSameAs(sent);
+
+        var saved = org.mockito.ArgumentCaptor.forClass(SupportTicket.class);
+        var order = inOrder(messaging, tickets, audit);
+        order.verify(tickets).findByRoomId("room-1");
+        order.verify(messaging).sendAdminSupport("room-1", "admin-1", "안내");
+        order.verify(tickets).findByRoomId("room-1");
+        order.verify(tickets).save(saved.capture());
+        order.verify(audit)
+                .record(op("admin-1"), SupportAdminAction.SUPPORT_REPLY, "room-1", "notice=RESULT; message=notice-1");
+        assertThat(saved.getValue().version()).isEqualTo(7);
+        assertThat(saved.getValue().status()).isEqualTo(SupportStatus.WAITING_USER);
+        assertThat(saved.getValue().firstNoticeAt(SupportNoticeKind.RESULT)).isEqualTo(sent.sentAt());
+    }
+
+    @Test
+    @DisplayName("실제 답변 저장이 실패하면 안내와 감사를 남기지 않는다")
+    void noticeReply_doesNotRecordWhenSendingFails() {
+        when(tickets.findByRoomId("room-1"))
+                .thenReturn(Optional.of(
+                        SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW)));
+        when(messaging.sendAdminSupport(any(), any(), any())).thenThrow(new ConflictException("CONFLICT", "실패"));
+        assertThatThrownBy(() -> service.replyWithNotice("room-1", op("admin-1"), "안내", SupportNoticeKind.PROGRESS))
+                .isInstanceOf(ConflictException.class);
+        verify(tickets, never()).save(any());
+        verifyNoInteractions(audit);
+    }
+
+    @Test
+    @DisplayName("담당자 외에는 안내 이력 조회와 안내 답변을 모두 거부한다")
+    void noticesRequireCurrentAssignee() {
+        when(tickets.findByRoomId("room-1"))
+                .thenReturn(Optional.of(
+                        SupportTicket.opened("room-1", "user-1", NOW).assignTo("admin-1", NOW)));
+        assertThatThrownBy(() -> service.notices("room-1", "admin-2")).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> service.replyWithNotice("room-1", op("admin-2"), "안내", SupportNoticeKind.RESULT))
+                .isInstanceOf(ForbiddenException.class);
+        verifyNoInteractions(messaging, audit);
+    }
+
+    @Test
+    @DisplayName("운영 큐는 서버 시각과 상태·유형을 저장소 전체 조회에 전달한다")
+    void noticeInboxPassesAllFiltersAndServerTime() {
+        service.noticeInbox(
+                "admin-1",
+                SupportStatus.RESOLVED,
+                SupportCategory.PRIVACY_ACCESS,
+                SupportNoticeFilter.PROGRESS_OVERDUE,
+                com.gole.api.chat.domain.model.SupportNoticeScope.ALL,
+                50);
+        verify(tickets)
+                .findByNotice(
+                        SupportStatus.RESOLVED,
+                        SupportCategory.PRIVACY_ACCESS,
+                        SupportNoticeFilter.PROGRESS_OVERDUE,
+                        com.gole.api.chat.domain.model.SupportNoticeScope.ALL,
+                        NOW,
+                        50);
+        service.noticeSummary("admin-1");
+        verify(tickets).noticeSummary(NOW);
     }
 }

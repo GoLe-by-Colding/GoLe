@@ -6,7 +6,11 @@ import { apiRequest } from "../runtime";
  * <p>그림은 각 플랫폼이 가진다(웹 `shared/ui/logo/presets/`). 키 목록은 서버 `MascotPresets`와 같아야 한다.
  */
 export const MASCOT_PRESET_KEYS = [
+  "side-brick-assembled",
+  "side-brick-pocket",
+  "side-brick-plate",
   "side-brick-soft",
+  "side-brick-mellow",
   "side-brick",
   "side-brick-original",
   "baby-round",
@@ -23,6 +27,25 @@ export const MASCOT_PRESET_KEYS = [
 
 export type MascotPresetKey = (typeof MASCOT_PRESET_KEYS)[number];
 
+/** 과거 적용·이력의 렌더링은 유지하되 새로운 선택에서는 제외한다. */
+const EXCLUDED_MASCOT_PRESET_KEYS = [
+  "first-sketch",
+  "chubby",
+  "kawaii-brick",
+  "three-studs",
+  "blocky",
+  "fountain",
+  "side-brick-pocket",
+  "side-brick-plate",
+] as const satisfies readonly MascotPresetKey[];
+
+export type SelectableMascotPresetKey = Exclude<
+  MascotPresetKey,
+  (typeof EXCLUDED_MASCOT_PRESET_KEYS)[number]
+>;
+
+export const SELECTABLE_MASCOT_PRESET_KEYS = MASCOT_PRESET_KEYS.filter(isSelectableMascotPresetKey);
+
 export interface MascotPresetMeta {
   readonly key: MascotPresetKey;
   readonly name: string;
@@ -32,15 +55,43 @@ export interface MascotPresetMeta {
   readonly date: string;
 }
 
-export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick-soft";
+export const DEFAULT_MASCOT_KEY: MascotPresetKey = "side-brick-assembled";
 
 export const MASCOT_PRESETS: readonly MascotPresetMeta[] = [
+  {
+    key: "side-brick-assembled",
+    name: "조립 브릭 고래",
+    description: "원본의 길쭉한 3단 몸통에 둥근 스터드 세 개와 관절 꼬리를 조합한 고래.",
+    commit: "2026-10-26 디자인 개정",
+    date: "2026-10-26",
+  },
+  {
+    key: "side-brick-pocket",
+    name: "포켓 브릭 고래",
+    description: "짧고 도톰한 몸통에 둥근 스터드 세 개와 작게 접힌 관절 꼬리를 더한 고래.",
+    commit: "2026-10-26 디자인 개정",
+    date: "2026-10-26",
+  },
+  {
+    key: "side-brick-plate",
+    name: "플레이트 브릭 고래",
+    description: "낮게 쌓은 플레이트 몸통과 둥근 스터드 세 개, 길게 열린 꼬리의 고래.",
+    commit: "2026-10-26 디자인 개정",
+    date: "2026-10-26",
+  },
   {
     key: "side-brick-soft",
     name: "미소 브릭 고래",
     description: "옆모습과 스터드 세 개를 유지하고, 또렷한 눈과 작은 미소·들린 꼬리로 다듬은 고래.",
     commit: "2026-10-21 디자인 개정",
     date: "2026-10-21",
+  },
+  {
+    key: "side-brick-mellow",
+    name: "말랑 브릭 고래",
+    description: "작은 눈과 조용한 미소, 자연스럽게 이어지는 둥근 꼬리의 옆모습 브릭 고래.",
+    commit: "2026-10-26 디자인 개정",
+    date: "2026-10-26",
   },
   {
     key: "side-brick",
@@ -129,13 +180,25 @@ export const MASCOT_PRESETS: readonly MascotPresetMeta[] = [
   },
 ];
 
+/** 관리자 후보·이력 재선택에 쓰는 목록. 전체 목록은 기존 적용본을 읽는 데 보존한다. */
+export const SELECTABLE_MASCOT_PRESETS: readonly MascotPresetMeta[] = MASCOT_PRESETS.filter(
+  (preset) => isSelectableMascotPresetKey(preset.key),
+);
+
 export function isMascotPresetKey(value: unknown): value is MascotPresetKey {
   return typeof value === "string" && (MASCOT_PRESET_KEYS as readonly string[]).includes(value);
 }
 
+export function isSelectableMascotPresetKey(value: unknown): value is SelectableMascotPresetKey {
+  return (
+    isMascotPresetKey(value) && !(EXCLUDED_MASCOT_PRESET_KEYS as readonly string[]).includes(value)
+  );
+}
+
 export function mascotPresetMeta(key: MascotPresetKey): MascotPresetMeta {
   return (
-    MASCOT_PRESETS.find((preset) => preset.key === key) ?? (MASCOT_PRESETS[0] as MascotPresetMeta)
+    MASCOT_PRESETS.find((preset) => preset.key === key) ??
+    (MASCOT_PRESETS.find((preset) => preset.key === DEFAULT_MASCOT_KEY) as MascotPresetMeta)
   );
 }
 
@@ -166,7 +229,7 @@ export interface ActiveMascot {
 export const DEFAULT_MASCOT: PresetMascot = Object.freeze({
   kind: "PRESET",
   id: DEFAULT_MASCOT_KEY,
-  name: "미소 브릭 고래",
+  name: mascotPresetMeta(DEFAULT_MASCOT_KEY).name,
 });
 
 export const DEFAULT_ACTIVE_MASCOT: ActiveMascot = Object.freeze({
@@ -275,6 +338,8 @@ export interface MascotUpload {
 export interface MascotEditor {
   readonly current: MascotSelection;
   readonly active: ActiveMascot;
+  /** 서버가 현재 적용을 허용하는 프리셋. 웹에서 제외한 키는 여기에도 넣지 않는다. */
+  readonly presets: readonly SelectableMascotPresetKey[];
   readonly uploads: readonly MascotUpload[];
 }
 
@@ -295,9 +360,15 @@ export async function fetchMascotEditor(): Promise<MascotEditor> {
   const raw = await apiRequest<{
     current: MascotSelection;
     active: unknown;
+    presets: unknown;
     uploads: MascotUpload[];
   }>("/api/admin/mascot", { cache: "no-store" });
-  return { current: raw.current, active: parseActiveMascot(raw.active), uploads: raw.uploads };
+  return {
+    current: raw.current,
+    active: parseActiveMascot(raw.active),
+    presets: Array.isArray(raw.presets) ? raw.presets.filter(isSelectableMascotPresetKey) : [],
+    uploads: raw.uploads,
+  };
 }
 
 export const fetchMascotHistory = (before?: number) =>

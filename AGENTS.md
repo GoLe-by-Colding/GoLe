@@ -420,8 +420,9 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 셋 이상의 형식이 섞여 있는데(`인프라:` `보안:` 처럼 어느 문서에도 없는 것까지), 앞으로는 위
 conventional 형식 하나만 쓴다. `.kiro/steering/dev-conventions.md`의 옛 분류표는 걷어냈다.
 
-브랜치는 `<type>/<kebab-case>` — `feat/card-payment`, `fix/profile-stuck-loading`.
-`temp`·`tmp`·도구가 자동 생성한 이름(`<계정>/...`)을 쓰지 않는다. 머지되면 원격 브랜치도 지운다.
+브랜치는 `<type>/<kebab-case>` — `feature/card-payment`, `fix/profile-stuck-loading`.
+`feature/`는 기능 브랜치에서 `feat/`의 별칭으로 허용한다. 기존 `feat/`도 유지하며 커밋·PR 제목의 타입은 `feat`를 쓴다.
+`temp`·`tmp`·도구가 자동 생성한 이름(`kscold/...` 등 `<계정>/...`)을 쓰지 않는다. 머지되면 원격 브랜치도 지운다.
 
 ### 흐름은 하나뿐이다
 

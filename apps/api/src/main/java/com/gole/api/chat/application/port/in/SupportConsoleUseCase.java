@@ -4,6 +4,11 @@ import com.gole.api.chat.domain.model.ChatMessage;
 import com.gole.api.chat.domain.model.SocialChatRoom;
 import com.gole.api.chat.domain.model.SupportCategory;
 import com.gole.api.chat.domain.model.SupportInternalNote;
+import com.gole.api.chat.domain.model.SupportNotice;
+import com.gole.api.chat.domain.model.SupportNoticeFilter;
+import com.gole.api.chat.domain.model.SupportNoticeKind;
+import com.gole.api.chat.domain.model.SupportNoticeScope;
+import com.gole.api.chat.domain.model.SupportNoticeSummary;
 import com.gole.api.chat.domain.model.SupportOperator;
 import com.gole.api.chat.domain.model.SupportStatus;
 import com.gole.api.chat.domain.model.SupportTicket;
@@ -18,6 +23,19 @@ import java.util.List;
 public interface SupportConsoleUseCase {
 
     List<SupportTicket> inbox(String adminId, SupportStatus status, SupportCategory category, int limit);
+
+    List<SupportTicket> noticeInbox(
+            String adminId,
+            SupportStatus status,
+            SupportCategory category,
+            SupportNoticeFilter notice,
+            SupportNoticeScope scope,
+            int limit);
+
+    SupportNoticeSummary noticeSummary(String adminId);
+
+    /** 전체 안내 참조도 현재 담당자만 열람한다. */
+    List<SupportNotice> notices(String roomId, String adminId);
 
     /** 관리자 작업 배지에 쓸 미배정 문의 수. */
     long countUnassigned();
@@ -34,6 +52,8 @@ public interface SupportConsoleUseCase {
 
     /** 담당자만 답한다. 담당 확인·메시지 저장·감사 기록이 한 트랜잭션이다. */
     ChatMessage reply(String roomId, SupportOperator operator, String content);
+
+    ChatMessage replyWithNotice(String roomId, SupportOperator operator, String content, SupportNoticeKind kind);
 
     void addNote(String roomId, SupportOperator operator, String note);
 

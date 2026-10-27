@@ -1,4 +1,5 @@
 import { test, expect, request } from "@playwright/test";
+import { SELECTABLE_MASCOT_PRESET_KEYS } from "@gole/core/mascot";
 
 /**
  * 운영자 콘솔 — 권한 게이트와 정지 실효성. (admin-console 요구사항 1, 6)
@@ -59,6 +60,22 @@ async function mockMe(
 }
 
 test.beforeEach(async ({ page }) => {
+  // 안내 현황·이력은 운영 문의 화면의 독립 조회다. 합성 세션이 실제 API로 새지 않게 한다.
+  await page.route("**/api/admin/support/notice-summary", (route) =>
+    route.fulfill({
+      json: {
+        generatedAt: "2026-10-25T00:00:00Z",
+        total: 0,
+        progress: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        result: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        activeProgress: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        activeResult: { pending: 0, dueSoon: 0, overdue: 0, onTime: 0, late: 0 },
+        resolvedMissingProgress: 0,
+        resolvedMissingResult: 0,
+      },
+    }),
+  );
+  await page.route("**/api/admin/support/*/notices", (route) => route.fulfill({ json: [] }));
   // 메모리 패널도 합성 세션을 쓰는 화면 테스트에서는 실제 API와 분리한다.
   await page.route(/\/api\/admin\/promotion-(?:guidelines|feedback|runs)(?:\?.*)?$/, (route) =>
     route.fulfill({ json: [] }),
@@ -1107,8 +1124,9 @@ test.describe("운영자 콘솔 — 화면 게이트", () => {
     await expect(inbox.getByText("개인정보 열람", { exact: true })).toBeVisible();
     await expect(inbox.getByText(/진행 안내 .*일 남음/)).toBeVisible();
     await expect(inbox.getByText(/결과·방안 .*일 남음/)).toBeVisible();
-    await expect(inbox.getByText("진행 안내 기한 내 처리")).toBeVisible();
-    await expect(inbox.getByText("결과·방안 기한 내 처리")).toBeVisible();
+    await expect(inbox.getByText("진행 안내 기록 확인")).toBeVisible();
+    await expect(inbox.getByText("결과·방안 기록 확인")).toBeVisible();
+    await expect(inbox.getByText(/목표 내 안내|기한 내 처리/)).toHaveCount(0);
 
     await page.getByRole("combobox", { name: "유형" }).selectOption("PRIVACY_ACCESS");
     await expect
@@ -1401,7 +1419,7 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     );
   });
 
-  test("마스코트는 기본 제공 고래 13벌 중 하나를 사유·확인 후 적용하고 같은 탭 헤더에 바로 반영한다", async ({
+  test("새 옆모습 마스코트를 사유·확인 후 적용하면 같은 탭 헤더에 바로 반영한다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1417,21 +1435,23 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     let published = false;
     let publishBody: unknown = null;
     await page.route("**/api/admin/mascot/history**", (route) =>
-      route.fulfill({ json: published ? [selection(1, "baby-round", "둥근 아기 고래")] : [] }),
+      route.fulfill({
+        json: published ? [selection(1, "side-brick-mellow", "말랑 브릭 고래")] : [],
+      }),
     );
     await page.route("**/api/admin/mascot", (route) =>
       route.fulfill({
         json: {
           current: published
-            ? selection(1, "baby-round", "둥근 아기 고래")
+            ? selection(1, "side-brick-mellow", "말랑 브릭 고래")
             : selection(0, "side-brick", "옆모습 브릭 고래"),
           active: {
             revision: published ? 1 : 0,
             asset: published
-              ? { id: "baby-round", kind: "PRESET", name: "둥근 아기 고래" }
+              ? { id: "side-brick-mellow", kind: "PRESET", name: "말랑 브릭 고래" }
               : { id: "side-brick", kind: "PRESET", name: "옆모습 브릭 고래" },
           },
-          presets: [],
+          presets: SELECTABLE_MASCOT_PRESET_KEYS,
           uploads: [],
         },
       }),
@@ -1439,40 +1459,42 @@ test.describe("운영자 콘솔 — 대시보드 셸", () => {
     await page.route("**/api/admin/mascot/publish", async (route) => {
       publishBody = route.request().postDataJSON();
       published = true;
-      await route.fulfill({ json: selection(1, "baby-round", "둥근 아기 고래") });
+      await route.fulfill({ json: selection(1, "side-brick-mellow", "말랑 브릭 고래") });
     });
     // 적용 이벤트를 받은 사이트 Provider 가 브라우저에서 다시 받는 공개 조회.
     await page.route("**/api/v1/config/mascot", (route) =>
       route.fulfill({
-        json: { revision: 1, asset: { id: "baby-round", kind: "PRESET", name: "둥근 아기 고래" } },
+        json: {
+          revision: 1,
+          asset: { id: "side-brick-mellow", kind: "PRESET", name: "말랑 브릭 고래" },
+        },
       }),
     );
 
     await page.goto("/admin/mascot");
     await expect(page.getByRole("heading", { name: "마스코트", exact: true })).toBeVisible();
-    const presets = page.getByRole("heading", { name: "기본 제공 고래" }).locator("xpath=../..");
-    await expect(presets.getByRole("button", { pressed: false })).toHaveCount(12);
+    const presets = page.getByRole("region", { name: "기본 제공 고래", exact: true });
+    await expect(presets.getByRole("button", { pressed: false })).toHaveCount(
+      SELECTABLE_MASCOT_PRESET_KEYS.length - 1,
+    );
     await expect(presets.getByRole("button", { pressed: true })).toContainText("옆모습 브릭 고래");
 
     const apply = page.getByRole("button", { name: "이 마스코트 적용" });
-    await page.getByRole("button", { name: /둥근 아기 고래/ }).click();
+    await page.getByRole("button", { name: /말랑 브릭 고래/ }).click();
     await expect(apply).toBeDisabled();
     await page.getByLabel("변경 사유 (감사 기록, 필수)").fill("가을 이벤트");
     await expect(apply).toBeDisabled();
     await page.getByRole("checkbox").check();
     await apply.click();
 
-    await expect(page.getByText("revision 1 · 둥근 아기 고래", { exact: true })).toBeVisible();
+    await expect(page.getByText("revision 1 · 말랑 브릭 고래", { exact: true })).toBeVisible();
     expect(publishBody).toEqual({
       expectedRevision: 0,
-      assetId: "baby-round",
+      assetId: "side-brick-mellow",
       reason: "가을 이벤트",
     });
-    // 헤더 로고가 새 고래(정면 아기 고래, viewBox 223.3×172.3)로 바뀐다.
-    await expect(page.locator("header a svg").first()).toHaveAttribute(
-      "viewBox",
-      "0 0 223.3 172.3",
-    );
+    // 헤더 로고가 새 고래(말랑 브릭 고래, viewBox 242×125)로 바뀐다.
+    await expect(page.locator("header a svg").first()).toHaveAttribute("viewBox", "0 0 242 125");
 
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -2136,7 +2158,7 @@ test.describe("관리자 API 가드", () => {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
     expect(editor.status()).toBe(200);
-    expect((await editor.json()).presets).toHaveLength(13);
+    expect((await editor.json()).presets).toEqual(SELECTABLE_MASCOT_PRESET_KEYS);
     await ctx.dispose();
   });
 });
