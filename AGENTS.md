@@ -376,7 +376,7 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 
 | 워크플로 | 트리거 | 내용 |
 |---|---|---|
-| `ci.yml` | `main` 푸시 · PR | Frontend / Backend / E2E 3잡. 위 품질 게이트와 같다 |
+| `ci.yml` | `main` 푸시 · `dev`/`main` 대상 PR | Web / API / Mobile / Support agent / Infra 검사. E2E는 PR에서만 실행하고 `main` 푸시에서는 생략함 |
 | `cd.yml` | `ci.yml` **성공** + `main` **푸시**일 때만 | self-hosted 러너에서 `deploy.sh all` |
 | `e2e.yml` | 매일 03:00 KST | 배포 사이트 읽기전용 스모크(`E2E_BASE_URL`) |
 | `production-health.yml` | 수동 실행만 | 운영 헬스체크 |
@@ -387,6 +387,10 @@ Pages Router와 혼동을 피하려고 **`views`**로 명명했다. 슬라이스
 
 - **CI가 깨지면 CD는 아예 안 돈다.** PR에서 초록이어도 배포되지 않는다 — `main` 푸시여야 한다.
   반대로 문서만 고친 커밋도 `main`에 올리면 배포가 한 번 돈다.
+- **E2E는 `dev`/`main` 대상 PR에서 검증한다.** `main` 푸시는 같은 검사를 반복하지 않고
+  E2E 잡만 조건부로 생략한다. main의 필수 체크 `E2E (Playwright)`는 유지하며 PR에서 반드시
+  실제 성공을 확인한다. push의 의도된 E2E 생략은 CI/CD 실패가 아니지만, 다른 잡의 실패·취소는
+  계속 배포를 막는다. 일일 운영 읽기 전용 스모크(`e2e.yml`)는 그대로 유지한다.
 - **배포 대상은 `https://gole.co.kr`다**(`www`는 apex로 영구 이동). `cd.yml`이
   `GOLE_ENVIRONMENT: production`을 넘긴다. DNS는 GCP VM `gole-production`의 고정 IP를 가리킨다.
   `gole.kscold.com`은 **은퇴한 예전 호스트**이고 배포·DNS·CD 대상이 아니다 — 그쪽이 주는
