@@ -1,8 +1,8 @@
 plugins {
     java
-    id("org.springframework.boot") version "4.1.1"
+    id("org.springframework.boot") version "4.1.2"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "8.10.3"
+    id("com.diffplug.spotless") version "8.10.4"
     id("com.google.protobuf") version "0.10.0"
 }
 
@@ -35,7 +35,7 @@ extra["protobufVersion"] = "4.36.1"
 
 dependencies {
     // 자동 request/logback 수집 없이 기존 운영 오류 경계에서 안전한 이벤트만 보낸다.
-    implementation("io.sentry:sentry:8.60.0")
+    implementation("io.sentry:sentry:8.61.1")
 
     // Web / Validation / Actuator
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -77,7 +77,7 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
 
     // Swagger / OpenAPI 문서. /swagger-ui.html, /v3/api-docs
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")
