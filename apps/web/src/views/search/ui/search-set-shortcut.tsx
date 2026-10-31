@@ -29,8 +29,8 @@ export function SearchSetShortcut({ sets, listingCount }: SearchSetShortcutProps
           <span className="truncate text-sm font-semibold text-neutral-900">{only.name}</span>
           <span className="text-xs leading-relaxed break-keep text-neutral-600">
             {listingCount > 0
-              ? "시세·구매 입찰·이 세트의 매물을 한곳에서 봐요"
-              : "아직 매물이 없어요. 세트 페이지에서 시세를 보고 구매 입찰을 걸어 둘 수 있어요"}
+              ? "세트 정보·시세·구매 희망 가격과 매물을 한곳에서 봐요"
+              : "아직 매물이 없어요. 세트 정보와 시세·구매 희망 가격을 살펴보세요"}
           </span>
         </span>
         <span
