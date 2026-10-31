@@ -1,10 +1,11 @@
-// 검색 SSR 실패·재시도 전용 읽기 서버. 실제 DB에 쓰지 않고 나머지 GET만 개발 API로 전달한다.
+// 검색·세트 SSR 실패·재시도 전용 읽기 서버. 실제 DB에 쓰지 않고 나머지 GET만 개발 API로 전달한다.
 // 실행: node tests-e2e/support/search-api-fixture.mjs (웹 패키지 기준)
 import { createServer } from "node:http";
 
 const port = Number(process.env.SEARCH_FIXTURE_PORT ?? "8093");
 const upstream = process.env.SEARCH_FIXTURE_UPSTREAM ?? "http://localhost:8090";
 const seen = new Set();
+const setReads = new Map();
 const listing = {
   id: "search-fixture",
   sellerId: "fixture-seller",
@@ -44,6 +45,27 @@ createServer(async (request, response) => {
   }
   const url = new URL(request.url ?? "/", "http://localhost");
   const query = url.searchParams.get("query") ?? "";
+  const catalogSetNumber = url.pathname.match(/^\/api\/v1\/catalog\/sets\/(9\d{6})$/)?.[1];
+  if (catalogSetNumber !== undefined) {
+    send(200, {
+      setNumber: catalogSetNumber,
+      name: "조회 복구 검증 세트",
+      theme: "Icons",
+      pieceCount: 100,
+      releaseYear: 2024,
+      retirementStatus: "active",
+      imageUrl: null,
+    });
+    return;
+  }
+  const setNumber = url.searchParams.get("setNumber") ?? "";
+  if (url.pathname === "/api/v1/listings" && /^9\d{6}$/.test(setNumber)) {
+    const reads = (setReads.get(setNumber) ?? 0) + 1;
+    setReads.set(setNumber, reads);
+    if (reads <= 2) send(503, { code: "UNAVAILABLE", message: "세트 매물 조회 일시 오류" });
+    else send(200, []);
+    return;
+  }
   if (url.pathname === "/api/v1/listings" && query.startsWith("__e2e_retry_")) {
     if (!seen.has(query)) {
       seen.add(query);
