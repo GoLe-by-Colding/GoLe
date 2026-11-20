@@ -28,7 +28,7 @@
 - **커서는 문자열 하나다.** 커뮤니티 피드(`/posts/page`)는 `beforeCreatedAt`·`beforeId`를 따로 받지만, 매물은
   정렬에 따라 키가 시각 또는 가격으로 바뀐다. 정렬 이름까지 담은 `base64url("{sort}|{key}|{id}")` 하나로 받아
   정렬이 다른 커서를 거절한다(P5).
-- 데이터 모양: `application/query/ListingPageCursor`(sort, key, id)가 인코딩·해석을 맡는다. 해석 실패는 도메인 오류다.
+- 데이터 모양: `application/query/ListingPageCursor`(sort, key, id)가 인코딩·해석을 맡는다. 해석에 실패하면 빈 값을 돌려주고, 컨트롤러 경계에서 400으로 바꾼다.
 - 다음 페이지 판정은 `limit + 1`건을 읽어 남는지로 정한다. 추가 조회(count)는 하지 않는다.
 - 저장소 조건(`NEWEST` 예): `listedAt < k OR (listedAt == k AND _id < id)`. 가격 정렬도 같은 꼴이다.
 - 헥사고날 순서: query(`ListingPageCursor`·`ListingPage`) → port.in `SearchListingPagesUseCase` → port.out
