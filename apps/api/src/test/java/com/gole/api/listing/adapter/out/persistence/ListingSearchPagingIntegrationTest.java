@@ -86,6 +86,39 @@ class ListingSearchPagingIntegrationTest {
         assertThat(paged).containsExactlyElementsOf(expectedOrder(sort));
     }
 
+    /**
+     * 끌올 도입 전 문서는 {@code listedAt}이 저장돼 있지 않다. 도메인은 {@code createdAt}으로 대신 보지만 Mongo 정렬·커서는
+     * 저장값을 보므로, 시작할 때 도는 백필이 채운 뒤에는 최신순 페이지에서 빠지지 않아야 한다.
+     */
+    @org.junit.jupiter.api.Test
+    void legacyListingWithoutStoredListedAtIsPagedAfterBackfill() {
+        MongoTemplate template = new MongoTemplate(client, "paging-legacy");
+        ListingPersistenceAdapter legacyAdapter = new ListingPersistenceAdapter(
+                new MongoRepositoryFactory(template).getRepository(ListingMongoRepository.class), template);
+        legacyAdapter.save(listing("new-1", 10_000, T2, ListingStatus.ACTIVE));
+        legacyAdapter.save(listing("new-2", 10_000, T2, ListingStatus.ACTIVE));
+        legacyAdapter.save(listing("legacy", 10_000, T1, ListingStatus.ACTIVE));
+        template.getCollection("listings")
+                .updateOne(
+                        new org.bson.Document("_id", "paging-legacy"),
+                        new org.bson.Document("$unset", new org.bson.Document("listedAt", "")));
+
+        new ListingListedAtBackfill(template).backfill();
+
+        ListingSearchQuery newest = new ListingSearchQuery(null, null, null, null, ListingSortOrder.NEWEST, null);
+        List<String> paged = new ArrayList<>();
+        ListingPageCursor after = null;
+        for (int guard = 0; guard < 5; guard++) {
+            List<Listing> page = legacyAdapter.searchPage(newest, after, 2);
+            page.forEach(listing -> paged.add(listing.getId()));
+            if (page.size() < 2) {
+                break;
+            }
+            after = ListingPageCursor.after(page.getLast(), ListingSortOrder.NEWEST);
+        }
+        assertThat(paged).containsExactly("paging-new-2", "paging-new-1", "paging-legacy");
+    }
+
     private static List<String> expectedOrder(ListingSortOrder sort) {
         Comparator<Listing> byId = Comparator.comparing(Listing::getId);
         Comparator<Listing> order =

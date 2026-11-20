@@ -36,6 +36,13 @@
   기존 `SearchListingsUseCase`는 람다로 만드는 시험이 있어 함수형 인터페이스로 두고 따로 나눴다. 컨트롤러도 생성자를
   바꾸지 않으려고 같은 경로 아래 별도 클래스로 뒀다.
 
+## 알려진 성질
+
+- 최신순 커서는 저장된 `listedAt`에 기댄다. 끌올 도입 전 문서는 `ListingListedAtBackfill`이 앱 시작마다 채운다.
+  백필 전 문서는 Mongo 정렬에서 맨 뒤로 가고 커서 조건(`$lt`·`$eq`)에 걸리지 않아 빠진다. 통합 시험
+  `legacyListingWithoutStoredListedAtIsPagedAfterBackfill`이 이 전제를 지킨다. 스크립트로 문서를 직접 넣을 때도 `listedAt`을 채운다.
+- 넘기는 도중 끌올된 매물은 이미 지난 위치로 올라가 이번 탐색에서는 보이지 않는다. 키셋 페이징의 일반적인 성질이라 받아들인다.
+
 ## Tasks
 
 - [x] T1. 백엔드 페이지 경로(P1~P5, P7)와 시험
