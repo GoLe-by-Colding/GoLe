@@ -319,6 +319,7 @@ test.describe("Prices (KREAM-style)", () => {
     // 홈의 "지금 뜨는 세트"는 거래량 기준이라 추천(featured) 목록과 다르다. 추천이 아닌
     // 세트로 들어와도 요청한 세트가 그대로 보여야 한다(조용히 다른 세트를 보여주면 안 된다).
     await expect(page.getByText(new RegExp(`^#${initialSet} ·`))).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "찾지 못했어요" })).toHaveCount(0);
 
     // 목록에서 다른 세트를 고르면 URL이 따라온다(세트 목록만 ol 안의 aria-pressed 버튼).
     // 하이드레이션 전 클릭은 아무 일도 하지 않으므로 이벤트가 붙은 뒤에 누른다.
@@ -329,5 +330,20 @@ test.describe("Prices (KREAM-style)", () => {
     const pickedSet = new URL(page.url()).searchParams.get("set")!;
     expect(pickedSet).not.toBe(initialSet);
     await expect(page.getByText(new RegExp(`^#${pickedSet} ·`))).toBeVisible();
+  });
+
+  test("카탈로그에 없는 세트로 들어오면 추천 시세로 바꿔 보여준다고 알린다", async ({ page }) => {
+    const missing = "0000000-404";
+    const lookup = await page.request.get(
+      `${apiBaseUrl}/api/v1/catalog/sets/${encodeURIComponent(missing)}`,
+    );
+    expect(lookup.status(), "없는 세트 번호는 카탈로그가 404로 답한다").toBe(404);
+
+    await page.goto(`/prices?set=${encodeURIComponent(missing)}`);
+    await expect(page.getByRole("status").filter({ hasText: missing })).toContainText(
+      "카탈로그에서 찾지 못했어요",
+    );
+    await expect(page.getByRole("alert").filter({ hasText: missing })).toHaveCount(0);
+    await expect(page.getByText(new RegExp(`^#${missing} ·`))).toHaveCount(0);
   });
 });

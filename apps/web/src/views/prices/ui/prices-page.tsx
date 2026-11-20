@@ -1,10 +1,18 @@
 import { fetchFeaturedLegoSets, fetchLegoSetByNumber, type LegoSet } from "@entities/lego-set";
 import { fetchPriceSnapshot, type PricePoint, type PriceSnapshot } from "@entities/pricing";
+import { isApiNotFoundError } from "@shared/api";
 import { PageLayout, PageHeader, EmptyState, LinkButton } from "@shared/ui";
 import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
 
+/** 딥링크로 요청한 세트를 보드에 올리지 못한 이유. 올렸거나 요청이 없으면 null 이다. */
+type RequestedSetIssue = "not-found" | "unavailable";
+
 type PriceBoardLoadResult =
-  | { readonly status: "ready"; readonly items: readonly PriceBoardItem[] }
+  | {
+      readonly status: "ready";
+      readonly items: readonly PriceBoardItem[];
+      readonly requestedSetIssue: RequestedSetIssue | null;
+    }
   | { readonly status: "failed"; readonly items: readonly [] };
 
 async function loadBoard(initialSetNumber?: string): Promise<PriceBoardLoadResult> {
@@ -16,18 +24,20 @@ async function loadBoard(initialSetNumber?: string): Promise<PriceBoardLoadResul
   }
 
   // 딥링크로 들어온 세트가 추천 목록에 없을 수 있다. 홈의 "지금 뜨는 세트"는 거래량 기준이라
-  // 추천(featured) 여부와 무관하기 때문이다. 목록에 없으면 PriceExplorer가 조용히 다른 세트를
-  // 대신 보여주는데, 사용자는 자기가 누른 세트의 시세를 본다고 착각하게 된다.
+  // 추천(featured) 여부와 무관하기 때문이다. 못 올리면 PriceExplorer가 다른 세트를 대신 보여주므로,
+  // 사용자가 자기가 누른 세트의 시세로 착각하지 않게 그 이유를 화면에 알린다.
+  let requestedSetIssue: RequestedSetIssue | null = null;
   if (initialSetNumber !== undefined && !sets.some((s) => s.setNumber === initialSetNumber)) {
     try {
       sets = [await fetchLegoSetByNumber(initialSetNumber), ...sets];
-    } catch {
-      // 없는 세트 번호로 들어온 경우. 추천 목록만 보여준다.
+    } catch (cause) {
+      requestedSetIssue = isApiNotFoundError(cause) ? "not-found" : "unavailable";
     }
   }
 
   return {
     status: "ready",
+    requestedSetIssue,
     items: await Promise.all(
       sets.map(async (set): Promise<PriceBoardItem> => {
         const snapshot: PriceSnapshot | null = await fetchPriceSnapshot(set.setNumber).catch(
@@ -101,12 +111,53 @@ export async function PricesPage({ initialSetNumber }: PricesPageProps) {
           }
         />
       ) : (
-        <PriceExplorer
-          key={initialSetNumber ?? "default"}
-          items={board.items}
-          initialSetNumber={initialSetNumber}
-        />
+        <>
+          {board.requestedSetIssue !== null && initialSetNumber !== undefined && (
+            <RequestedSetNotice
+              setNumber={initialSetNumber}
+              issue={board.requestedSetIssue}
+              retryHref={retryHref}
+            />
+          )}
+          <PriceExplorer
+            key={initialSetNumber ?? "default"}
+            items={board.items}
+            initialSetNumber={initialSetNumber}
+          />
+        </>
       )}
     </PageLayout>
+  );
+}
+
+function RequestedSetNotice({
+  setNumber,
+  issue,
+  retryHref,
+}: {
+  readonly setNumber: string;
+  readonly issue: RequestedSetIssue;
+  readonly retryHref: string;
+}) {
+  if (issue === "not-found") {
+    return (
+      <p
+        role="status"
+        className="mb-4 rounded-lg bg-neutral-50 px-4 py-3 text-sm break-keep text-neutral-700"
+      >
+        {setNumber} 세트를 카탈로그에서 찾지 못했어요. 아래는 추천 세트의 시세예요.
+      </p>
+    );
+  }
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm break-keep text-danger"
+    >
+      <span>{setNumber} 세트 정보를 불러오지 못했어요. 아래는 추천 세트의 시세예요.</span>
+      <LinkButton href={retryHref} size="sm" variant="secondary">
+        다시 확인
+      </LinkButton>
+    </div>
   );
 }
