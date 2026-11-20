@@ -220,10 +220,11 @@ NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY=channel-card-test \
 pnpm --filter web e2e
 ```
 
-기대치는 **209 passed / 10 skipped**다(2026-09-13 CI 확인, PR #127). 숫자가 크게 다르면
-코드가 아니라 환경을 먼저 의심한다.
+기대치는 **약 455 passed / 14 skipped**다(2026-11-21 로컬, 위 절차 + 아래 minio 대체, `--project=chromium`).
+그때 실패 1건(`community` 피드 카드 — 반복 실행으로 쌓인 글에 밀린 것으로 추정)과 flaky 2건이 있었다.
+숫자가 크게 다르면 코드가 아니라 환경을 먼저 의심한다. 환경값을 빠뜨리면 18건 안팎이 환경 탓으로 실패한다.
 
-> 2026-09-13 이전 기준선은 206 passed / 13 skipped 였다. 관리자 권한 경계 3건이
+> 2026-09-13 CI 기준선은 209 passed / 10 skipped(PR #127), 그 이전은 206 passed / 13 skipped 였다. 관리자 권한 경계 3건이
 > `GOLE_ADMIN_*` 부재로 skip 되던 것을 PR #127 이 실제로 돌게 만들어 그만큼 옮겨갔다.
 
 - 쓰기 플로우(`create-listing`, `purchase`)는 서버가 검증하는 실제 세션이 필요하므로
