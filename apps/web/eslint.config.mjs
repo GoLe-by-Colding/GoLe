@@ -40,6 +40,20 @@ const eslintConfig = defineConfig([
     rules: {
       // 브라우저 기본 대화상자 대신 `@shared/ui` 의 useDialog 모달을 쓴다(browser-dialogs R1.5).
       "no-alert": "error",
+      // 누름 크기(active:scale-*)는 transition-press 와 함께 쓴다. Tailwind 4의 scale 은 독립 속성이라
+      // transition-[…transform] 만으로는 애니메이션 없이 튄다(design-workflow "누름 반동과 모션 토큰").
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/^(?![\\s\\S]*transition-press)[\\s\\S]*active:scale-/]",
+          message: "active:scale-* 는 transition-press 와 같은 클래스 문자열에 둔다.",
+        },
+        {
+          selector:
+            "TemplateElement[value.raw=/^(?![\\s\\S]*transition-press)[\\s\\S]*active:scale-/]",
+          message: "active:scale-* 는 transition-press 와 같은 클래스 문자열에 둔다.",
+        },
+      ],
       // v7 문법: 규칙명 element-types → dependencies, rules → policies,
       // 타입 문자열 → 엔티티 셀렉터({ element: { type } }), allow 항목에 to 래퍼 필수.
       "boundaries/dependencies": [

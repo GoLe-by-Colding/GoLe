@@ -879,7 +879,7 @@ export function ChatListPage() {
                           suppressDefaultSelectionRef.current = false;
                           setSelectedId(conversation.room.id);
                         }}
-                        className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-[background-color,transform] duration-200 motion-safe:active:scale-[0.99] ${
+                        className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-press motion-safe:active:scale-[0.99] ${
                           active ? "bg-brand-50" : "hover:bg-neutral-50"
                         }`}
                       >
