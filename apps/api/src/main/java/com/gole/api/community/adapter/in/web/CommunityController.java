@@ -201,17 +201,20 @@ public class CommunityController {
         return Optional.of(parsed);
     }
 
+    private static final java.util.regex.Pattern CONTROL_CHARACTERS = java.util.regex.Pattern.compile("\\p{Cntrl}+");
+
     private static Optional<String> parseQuery(String query) {
         if (query == null || query.isBlank()) {
             return Optional.empty();
         }
-        String normalized = query.strip();
+        // 검색어는 Mongo 정규식(BSON cstring)으로 내려가는데, NUL 이 섞이면 직렬화가 실패해 500 이 났다.
+        // 붙여넣은 줄바꿈·탭까지 거절하지 않도록 제어 문자는 공백으로 바꿔 검색한다.
+        String normalized = CONTROL_CHARACTERS.matcher(query).replaceAll(" ").strip();
+        if (normalized.isEmpty()) {
+            return Optional.empty();
+        }
         if (normalized.length() > 100) {
             throw new BadRequestException("COMMUNITY_QUERY_TOO_LONG", "검색어는 100자 이하여야 합니다");
-        }
-        // 검색어는 Mongo 정규식(BSON cstring)으로 내려가는데, NUL 이 섞이면 직렬화가 실패해 500 이 났다.
-        if (normalized.chars().anyMatch(Character::isISOControl)) {
-            throw new BadRequestException("COMMUNITY_QUERY_INVALID", "검색어에 쓸 수 없는 문자가 있습니다");
         }
         return Optional.of(normalized);
     }

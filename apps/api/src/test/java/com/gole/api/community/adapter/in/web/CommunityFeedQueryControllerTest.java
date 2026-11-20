@@ -4,7 +4,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -26,8 +25,6 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -53,14 +50,20 @@ class CommunityFeedQueryControllerTest {
                 .build();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"x\u0000y", "\u0000", "a\u001Fb", "a\u007Fb"})
-    void feedPage_rejectsControlCharactersBeforeTheyReachTheDatabase(String query) throws Exception {
-        mvc.perform(get("/api/v1/community/posts/page").param("q", query))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("COMMUNITY_QUERY_INVALID"));
+    @Test
+    void feedPage_searchesControlCharactersAsSpacesInsteadOfFailing() throws Exception {
+        mvc.perform(get("/api/v1/community/posts/page").param("q", "레고\n테크닉\u0000세트"))
+                .andExpect(status().isOk());
 
-        verify(feed, never()).feedPage(anyInt(), any(), any(), any());
+        verify(feed).feedPage(anyInt(), any(), any(), eq(Optional.of("레고 테크닉 세트")));
+    }
+
+    @Test
+    void feedPage_treatsControlCharactersOnlyQueryAsNoQuery() throws Exception {
+        mvc.perform(get("/api/v1/community/posts/page").param("q", "\u0000\u001F"))
+                .andExpect(status().isOk());
+
+        verify(feed).feedPage(anyInt(), any(), any(), eq(Optional.empty()));
     }
 
     @Test
