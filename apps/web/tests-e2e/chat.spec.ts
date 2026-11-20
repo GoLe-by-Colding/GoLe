@@ -400,6 +400,27 @@ test.describe("채팅 UX", () => {
     await expect(unreadLabel).toHaveCount(0);
   });
 
+  test("읽음 응답이 오기 전에 목록으로 돌아가도 서버가 확정하면 안 읽음 수를 지운다", async ({
+    page,
+  }) => {
+    const mock = await mockChatApis(page);
+    await page.route("**/chat/rooms/room-direct/read", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.fallback();
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/chat");
+
+    const unreadLabel = page.getByText("읽지 않은 메시지 3개", { exact: true });
+    await expect(unreadLabel).toHaveCount(1);
+    await page.getByRole("button", { name: /account-peer/ }).click();
+    await page.getByRole("button", { name: "목록" }).click();
+    await expect(unreadLabel, "응답 전에는 아직 지우지 않는다").toHaveCount(1);
+
+    await expect.poll(() => mock.readRequests).toEqual([{ lastMessageId: "message-1" }]);
+    await expect(unreadLabel).toHaveCount(0, { timeout: 3_000 });
+  });
+
   test("직거래 알림의 room 딥링크는 읽을 수 있는 매물 대화를 모바일에서 바로 연다", async ({
     page,
   }) => {

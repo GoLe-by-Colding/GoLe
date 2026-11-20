@@ -20,22 +20,12 @@ export function useRoomReadReceipt({
 }: UseRoomReadReceiptOptions): void {
   const acknowledgedRef = useRef<string | null>(null);
   const inFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
-  const mountedRef = useRef(false);
-  const currentRoomRef = useRef(roomId);
   const onReadRef = useRef(onRead);
   const lastIncomingId = messages.findLast((message) => message.senderId !== myId)?.id ?? null;
 
   useEffect(() => {
-    currentRoomRef.current = roomId;
     onReadRef.current = onRead;
-  }, [onRead, roomId]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  }, [onRead]);
 
   useEffect(() => {
     if (roomId === null || lastIncomingId === null) return;
@@ -53,9 +43,9 @@ export function useRoomReadReceipt({
       const promise = markRoomRead(roomId, lastIncomingId)
         .then(() => {
           acknowledgedRef.current = requestKey;
-          if (mountedRef.current && currentRoomRef.current === roomId) {
-            onReadRef.current?.(roomId);
-          }
+          // 서버가 확정한 읽음은 응답 전에 방을 닫았더라도 목록에 반영한다. 콜백이 방 ID를 받으므로
+          // 다른 방의 수를 지우지 않는다. 막으면 다음 폴링까지 읽은 방이 안 읽음으로 남는다.
+          onReadRef.current?.(roomId);
         })
         .catch(() => {
           // 서버가 확정하지 않은 읽음 상태는 화면에서도 지우지 않는다.
