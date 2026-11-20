@@ -6,6 +6,6 @@ import com.gole.api.common.exception.DomainException;
 public class PasswordTooLongException extends DomainException {
 
     public PasswordTooLongException() {
-        super("PASSWORD_TOO_LONG", "Password must be at most 72 UTF-8 bytes");
+        super("PASSWORD_TOO_LONG", "비밀번호가 너무 깁니다. 72바이트(한글 약 24자) 이하로 입력해 주세요");
     }
 }

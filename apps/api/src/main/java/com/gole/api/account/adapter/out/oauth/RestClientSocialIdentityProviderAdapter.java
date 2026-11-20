@@ -77,7 +77,7 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
                     .retrieve()
                     .body(Map.class);
             if (token == null || token.get("access_token") == null) {
-                throw new BadRequestException("OAUTH_EXCHANGE_FAILED", "No access token from provider");
+                throw new BadRequestException("OAUTH_EXCHANGE_FAILED", "소셜 로그인 인증을 마치지 못했습니다. 다시 시도해 주세요");
             }
             return String.valueOf(token.get("access_token"));
         } catch (RestClientException e) {
@@ -98,7 +98,7 @@ public class RestClientSocialIdentityProviderAdapter implements SocialIdentityPr
                     .retrieve()
                     .body(Map.class);
             if (body == null) {
-                throw new BadRequestException("OAUTH_PROFILE_FAILED", "Empty profile from provider");
+                throw new BadRequestException("OAUTH_PROFILE_FAILED", "소셜 계정 정보를 받지 못했습니다. 다시 시도해 주세요");
             }
             return body;
         } catch (RestClientException e) {
