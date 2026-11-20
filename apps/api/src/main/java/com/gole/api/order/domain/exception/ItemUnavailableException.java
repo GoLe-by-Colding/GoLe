@@ -8,6 +8,6 @@ import com.gole.api.common.exception.ConflictException;
 public class ItemUnavailableException extends ConflictException {
 
     public ItemUnavailableException(String listingId) {
-        super("ITEM_UNAVAILABLE", "Listing is no longer available: " + listingId);
+        super("ITEM_UNAVAILABLE", "이미 거래 중이거나 판매가 끝난 매물입니다");
     }
 }

@@ -6,6 +6,6 @@ import com.gole.api.common.exception.ConflictException;
 public class DuplicateFollowException extends ConflictException {
 
     public DuplicateFollowException() {
-        super("DUPLICATE_FOLLOW", "Already following this seller");
+        super("DUPLICATE_FOLLOW", "이미 팔로우한 판매자입니다");
     }
 }

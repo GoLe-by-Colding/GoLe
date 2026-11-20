@@ -6,6 +6,6 @@ import com.gole.api.common.exception.BadRequestException;
 public class ImageTooLargeException extends BadRequestException {
 
     public ImageTooLargeException(long maxBytes) {
-        super("IMAGE_TOO_LARGE", "Image exceeds the maximum allowed size of " + maxBytes + " bytes");
+        super("IMAGE_TOO_LARGE", "이미지가 너무 큽니다. " + Math.max(1, maxBytes / (1024 * 1024)) + "MB 이하로 올려 주세요");
     }
 }

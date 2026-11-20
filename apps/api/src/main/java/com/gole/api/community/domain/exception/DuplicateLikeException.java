@@ -8,6 +8,6 @@ import com.gole.api.common.exception.ConflictException;
 public class DuplicateLikeException extends ConflictException {
 
     public DuplicateLikeException() {
-        super("DUPLICATE_LIKE", "Post already liked by this user");
+        super("DUPLICATE_LIKE", "이미 좋아요한 글입니다");
     }
 }

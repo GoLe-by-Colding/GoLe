@@ -8,6 +8,6 @@ import com.gole.api.common.exception.DomainException;
 public class MissingPhotoException extends DomainException {
 
     public MissingPhotoException() {
-        super("LISTING_PHOTO_REQUIRED", "At least one photo is required");
+        super("LISTING_PHOTO_REQUIRED", "사진을 한 장 이상 올려 주세요");
     }
 }

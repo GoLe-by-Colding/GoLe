@@ -20,10 +20,22 @@ import org.junit.jupiter.api.Test;
  */
 class UserFacingMessageLanguageTest {
 
-    private static final List<String> USER_FACING_CONTEXTS = List.of("account");
+    private static final List<String> USER_FACING_CONTEXTS = List.of(
+            "account",
+            "catalog",
+            "collection",
+            "community",
+            "discovery",
+            "listing",
+            "media",
+            "notification",
+            "order",
+            "report",
+            "review");
 
+    /** 메시지 인자 전체(문자열 이어 붙이기 포함)를 문장 끝까지 잡는다. */
     private static final Pattern MESSAGE =
-            Pattern.compile("(?:super|new \\w*Exception)\\(\\s*\"([A-Z_]+)\",\\s*\"([^\"]*)\"");
+            Pattern.compile("(?:super|new \\w*Exception)\\(\\s*\"([A-Z_]+)\",\\s*(\"[^;]*?)\\)\\s*;");
     private static final Pattern HANGUL = Pattern.compile("[가-힣]");
 
     @Test
@@ -36,8 +48,8 @@ class UserFacingMessageLanguageTest {
                     Matcher matcher = MESSAGE.matcher(Files.readString(file));
                     while (matcher.find()) {
                         String message = matcher.group(2);
-                        if (!message.isBlank() && !HANGUL.matcher(message).find()) {
-                            english.add(file.getFileName() + " " + matcher.group(1) + " \"" + message + "\"");
+                        if (!message.equals("\"\"") && !HANGUL.matcher(message).find()) {
+                            english.add(file.getFileName() + " " + matcher.group(1) + " " + message);
                         }
                     }
                 }

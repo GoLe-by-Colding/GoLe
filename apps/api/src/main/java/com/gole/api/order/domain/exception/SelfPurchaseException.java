@@ -12,6 +12,6 @@ import com.gole.api.common.exception.ForbiddenException;
 public class SelfPurchaseException extends ForbiddenException {
 
     public SelfPurchaseException(String listingId) {
-        super("SELF_PURCHASE_NOT_ALLOWED", "Sellers cannot purchase their own listing: " + listingId);
+        super("SELF_PURCHASE_NOT_ALLOWED", "본인이 올린 매물은 구매할 수 없습니다");
     }
 }

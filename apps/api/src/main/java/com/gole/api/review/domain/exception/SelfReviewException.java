@@ -11,6 +11,6 @@ import com.gole.api.common.exception.ForbiddenException;
 public class SelfReviewException extends ForbiddenException {
 
     public SelfReviewException(String orderId) {
-        super("SELF_REVIEW_NOT_ALLOWED", "Reviewers cannot review themselves for order: " + orderId);
+        super("SELF_REVIEW_NOT_ALLOWED", "본인에게는 후기를 남길 수 없습니다");
     }
 }

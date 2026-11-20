@@ -8,6 +8,6 @@ import com.gole.api.common.exception.NotFoundException;
 public class LegoSetNotFoundException extends NotFoundException {
 
     public LegoSetNotFoundException(String setNumber) {
-        super("LEGO_SET_NOT_FOUND", "LEGO set not found: " + setNumber);
+        super("LEGO_SET_NOT_FOUND", "카탈로그에서 세트를 찾을 수 없습니다");
     }
 }

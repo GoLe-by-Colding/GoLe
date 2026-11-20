@@ -8,6 +8,6 @@ import com.gole.api.common.exception.DomainException;
 public class InvalidPriceException extends DomainException {
 
     public InvalidPriceException() {
-        super("INVALID_PRICE", "Price must be 0 or greater");
+        super("INVALID_PRICE", "가격은 0원 이상이어야 합니다");
     }
 }
