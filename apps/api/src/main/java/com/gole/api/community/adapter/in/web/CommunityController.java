@@ -209,6 +209,10 @@ public class CommunityController {
         if (normalized.length() > 100) {
             throw new BadRequestException("COMMUNITY_QUERY_TOO_LONG", "검색어는 100자 이하여야 합니다");
         }
+        // 검색어는 Mongo 정규식(BSON cstring)으로 내려가는데, NUL 이 섞이면 직렬화가 실패해 500 이 났다.
+        if (normalized.chars().anyMatch(Character::isISOControl)) {
+            throw new BadRequestException("COMMUNITY_QUERY_INVALID", "검색어에 쓸 수 없는 문자가 있습니다");
+        }
         return Optional.of(normalized);
     }
 }
