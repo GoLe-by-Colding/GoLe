@@ -193,6 +193,29 @@ class ListingServiceTest {
     }
 
     @Test
+    void searchPage_returnsNextCursorOnlyWhileMoreListingsRemain() {
+        for (int i = 0; i < 3; i++) {
+            service.create(validCommand());
+            clock.advance(java.time.Duration.ofMinutes(1));
+        }
+
+        ListingPage first = service.searchPage(ListingSearchQuery.newestAll(), Optional.empty(), 2);
+        ListingPage second = service.searchPage(ListingSearchQuery.newestAll(), first.next(), 2);
+
+        assertThat(first.items()).hasSize(2);
+        assertThat(first.next()).isPresent();
+        assertThat(second.items()).hasSize(1).doesNotContainAnyElementsOf(first.items());
+        assertThat(second.next()).isEmpty();
+    }
+
+    @Test
+    void searchPage_boundsRequestedSizeToOneThroughSixty() {
+        assertThat(ListingPage.boundedLimit(0)).isEqualTo(1);
+        assertThat(ListingPage.boundedLimit(1_000)).isEqualTo(ListingPage.MAX_LIMIT);
+        assertThat(ListingPage.boundedLimit(24)).isEqualTo(24);
+    }
+
+    @Test
     void search_addsCatalogThemeSetNumbersWhenTextIsAThemeName() {
         // 판매자 대부분이 관심 테마를 달지 않는다 — "스타워즈"로 찾으면 그 테마의 카탈로그 세트로 판 매물도 찾아야 한다.
         themeSets.answer = List.of("75192", "75313");
@@ -221,29 +244,6 @@ class ListingServiceTest {
         service.markSold(id);
         assertThat(service.search(ListingSearchQuery.newestAll())).isEmpty();
         assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
-    }
-
-    @Test
-    void searchPage_returnsNextCursorOnlyWhileMoreListingsRemain() {
-        for (int i = 0; i < 3; i++) {
-            service.create(validCommand());
-            clock.advance(java.time.Duration.ofMinutes(1));
-        }
-
-        ListingPage first = service.searchPage(ListingSearchQuery.newestAll(), Optional.empty(), 2);
-        ListingPage second = service.searchPage(ListingSearchQuery.newestAll(), first.next(), 2);
-
-        assertThat(first.items()).hasSize(2);
-        assertThat(first.next()).isPresent();
-        assertThat(second.items()).hasSize(1).doesNotContainAnyElementsOf(first.items());
-        assertThat(second.next()).isEmpty();
-    }
-
-    @Test
-    void searchPage_boundsRequestedSizeToOneThroughSixty() {
-        assertThat(ListingPage.boundedLimit(0)).isEqualTo(1);
-        assertThat(ListingPage.boundedLimit(1_000)).isEqualTo(ListingPage.MAX_LIMIT);
-        assertThat(ListingPage.boundedLimit(24)).isEqualTo(24);
     }
 
     @Test
