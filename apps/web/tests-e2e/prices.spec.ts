@@ -16,6 +16,11 @@ import {
   buildPriceNotes,
   priceNoteSetNumbers,
 } from "../src/widgets/listing-grid/model/price-notes";
+// 시세판 행 단위 재시도 병합 규칙도 화면 컴포넌트가 아니라 위젯 모델의 순수 함수만 가져온다.
+import {
+  withRecoveredSnapshots,
+  type PriceBoardItem,
+} from "../src/widgets/price-explorer/model/board";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const HOUR_MS = 60 * 60 * 1000;
@@ -99,6 +104,44 @@ test("기간 필터는 0~1건이어도 전체 데이터로 되돌아가지 않�
 
   expect(filterPricePointsByPeriod(points, 31, now)).toEqual([points[1]]);
   expect(filterPricePointsByPeriod(points, 1, now)).toEqual([]);
+});
+
+test("시세판 재시도는 조회에 실패했던 세트만 받은 스냅샷으로 채운다", () => {
+  const snapshot = (sampleCount: number, prices: readonly number[]): PriceSnapshot =>
+    ({
+      state: "OBSERVATIONS_ONLY",
+      sampleCount,
+      observations: prices.map((price, index) => ({
+        price,
+        executedAt: `2026-11-${String(20 - index).padStart(2, "0")}T00:00:00Z`,
+      })),
+    }) as unknown as PriceSnapshot;
+  const item = (setNumber: string, loaded: PriceSnapshot | null): PriceBoardItem => ({
+    setNumber,
+    name: setNumber,
+    theme: "테마",
+    imageUrl: null,
+    points: loaded === null ? null : [...loaded.observations].reverse(),
+    snapshot: loaded,
+  });
+  const kept = snapshot(3, [100, 90]);
+  const items = [item("failed", null), item("loaded", kept), item("still-failed", null)];
+  const recovered = snapshot(2, [300, 200]);
+
+  const merged = withRecoveredSnapshots(
+    items,
+    new Map([
+      ["failed", { status: "ready", snapshot: recovered }],
+      ["loaded", { status: "ready", snapshot: snapshot(9, [1]) }],
+      ["still-failed", { status: "loading" }],
+    ]),
+  );
+
+  expect(merged[0]?.snapshot).toBe(recovered);
+  expect(merged[0]?.points?.map((point) => point.price)).toEqual([200, 300]);
+  expect(merged[1]?.snapshot, "이미 받은 스냅샷은 덮지 않는다").toBe(kept);
+  expect(merged[2]?.snapshot, "다시 확인 중인 세트는 실패 상태 그대로다").toBeNull();
+  expect(withRecoveredSnapshots(items, new Map())).toBe(items);
 });
 
 test("매물 판매가는 같은 등급의 실제 표본 추정 시세와만 비교한다", () => {

@@ -1,8 +1,8 @@
 import { fetchFeaturedLegoSets, fetchLegoSetByNumber, type LegoSet } from "@entities/lego-set";
-import { fetchPriceSnapshot, type PricePoint, type PriceSnapshot } from "@entities/pricing";
+import { fetchPriceSnapshot, type PriceSnapshot } from "@entities/pricing";
 import { ApiError, isApiNotFoundError } from "@shared/api";
 import { PageLayout, PageHeader, EmptyState, LinkButton } from "@shared/ui";
-import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
+import { PriceExplorer, priceBoardPoints, type PriceBoardItem } from "@widgets/price-explorer";
 
 /** 딥링크로 요청한 세트를 보드에 올리지 못한 이유. 올렸거나 요청이 없으면 null 이다. */
 type RequestedSetIssue = "not-found" | "unavailable";
@@ -47,16 +47,12 @@ async function loadBoard(initialSetNumber?: string): Promise<PriceBoardLoadResul
         const snapshot: PriceSnapshot | null = await fetchPriceSnapshot(set.setNumber).catch(
           (): null => null,
         );
-        // snapshot 관측은 최신순이다. 같은 원자적 응답을 뒤집어 차트에 써서 헤드라인과
-        // 시계열이 서로 다른 요청 시점·표본을 가리키지 않게 한다.
-        const points: readonly PricePoint[] | null =
-          snapshot === null ? null : [...snapshot.observations].reverse();
         return {
           setNumber: set.setNumber,
           name: set.name,
           theme: set.theme,
           imageUrl: set.imageUrl,
-          points,
+          points: snapshot === null ? null : priceBoardPoints(snapshot),
           snapshot,
         };
       }),
