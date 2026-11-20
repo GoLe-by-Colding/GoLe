@@ -301,6 +301,25 @@ public class ListingService
     }
 
     @Override
+    public void markSoldBySeller(String listingId) {
+        if (listingRepository.markSoldIfActive(listingId)) {
+            return;
+        }
+        Listing listing = getById(listingId);
+        switch (listing.getStatus()) {
+            case RESERVED -> throw ListingConflictException.orderInProgressForSold();
+            case SOLD -> {}
+            case DELETED -> listing.markSold(); // LISTING_DELETED 로 거절된다
+            case ACTIVE -> {
+                // 위 시도와 다시 읽은 사이에 주문이 풀려 판매 중이 됐다. 한 번 더 원자적으로 바꾼다.
+                if (!listingRepository.markSoldIfActive(listingId)) {
+                    throw ListingConflictException.orderInProgressForSold();
+                }
+            }
+        }
+    }
+
+    @Override
     public boolean markDirectTradeSoldIfActive(String listingId) {
         return listingRepository.markSoldIfActive(listingId);
     }
