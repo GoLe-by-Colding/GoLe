@@ -95,7 +95,7 @@ class ImageIoImageProcessorAdapterTest {
 
         assertThatThrownBy(() -> processor.sanitizeForStorage(animated, "image/png"))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("Animated");
+                .hasMessageContaining("움직이는");
     }
 
     @Test
@@ -106,7 +106,7 @@ class ImageIoImageProcessorAdapterTest {
 
         assertThatThrownBy(() -> processor.sanitizeForStorage(forged, "image/png"))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("dimensions");
+                .hasMessageContaining("크기");
     }
 
     @Test
@@ -115,7 +115,7 @@ class ImageIoImageProcessorAdapterTest {
 
         assertThatThrownBy(() -> strictPixels.sanitizeForStorage(image("png", 10, 10, true), "image/png"))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("dimensions");
+                .hasMessageContaining("크기");
     }
 
     @Test

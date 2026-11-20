@@ -54,10 +54,10 @@ class HeifImageProcessorTest {
         assertThatThrownBy(() ->
                         processor.sanitizeForStorage(new byte[] {(byte) 255, (byte) 216, (byte) 255}, "image/heic"))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("decoded");
+                .hasMessageContaining("읽지 못했습니다");
         assertThatThrownBy(() -> processor.sanitizeForStorage(new byte[31], "image/heic"))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("bytes");
+                .hasMessageContaining("용량");
     }
 
     @Test

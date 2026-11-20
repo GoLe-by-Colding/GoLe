@@ -66,10 +66,10 @@ public class MediaController {
     public List<UploadResponse> uploadBatch(
             @RequestParam("files") List<MultipartFile> files, HttpServletRequest request) {
         if (files == null || files.isEmpty()) {
-            throw new InvalidImageException("No files were uploaded");
+            throw new InvalidImageException("올린 파일이 없습니다");
         }
         if (files.size() > MAX_BATCH_SIZE) {
-            throw new InvalidImageException("Too many files: max " + MAX_BATCH_SIZE + " per request");
+            throw new InvalidImageException("한 번에 " + MAX_BATCH_SIZE + "장까지 올릴 수 있습니다");
         }
         uploadQuota.acquire(AuthenticatedUser.id(request), files.size());
         String ownerId = AuthenticatedUser.id(request);
@@ -78,13 +78,13 @@ public class MediaController {
 
     private UploadResponse storeOne(MultipartFile file, String ownerId) {
         if (file == null || file.isEmpty()) {
-            throw new InvalidImageException("Uploaded file is empty");
+            throw new InvalidImageException("빈 파일은 올릴 수 없습니다");
         }
         byte[] content;
         try {
             content = file.getBytes();
         } catch (IOException e) {
-            throw new InvalidImageException("Failed to read uploaded file");
+            throw new InvalidImageException("올린 파일을 읽지 못했습니다. 다시 시도해 주세요");
         }
         StoredImage stored = uploadImageUseCase.upload(
                 new UploadImageCommand(ownerId, content, file.getContentType(), file.getOriginalFilename()));

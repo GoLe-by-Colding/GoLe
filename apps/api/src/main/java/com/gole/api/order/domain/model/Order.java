@@ -368,7 +368,7 @@ public final class Order {
 
     /** 결제 승인 시점의 결제수단과 증빙 등급을 함께 불변 기록한다. */
     public void confirmFundsHeld(Instant now, PaymentMethod paymentMethod, PaymentEvidenceKind paymentEvidenceKind) {
-        requirePaymentDecisionStatus("funds-held");
+        requirePaymentDecisionStatus("결제 승인");
         this.paymentMethod = paymentMethod == null ? PaymentMethod.UNKNOWN : paymentMethod;
         this.paymentEvidenceKind = paymentEvidenceKind == null ? PaymentEvidenceKind.UNVERIFIED : paymentEvidenceKind;
         transitionTo(OrderStatus.FUNDS_HELD, now);
@@ -381,20 +381,20 @@ public final class Order {
 
     /** 결제 실패. (요구사항 13.3) */
     public void failPayment(Instant now) {
-        requirePaymentDecisionStatus("payment-failed");
+        requirePaymentDecisionStatus("결제 실패 처리");
         transitionTo(OrderStatus.PAYMENT_FAILED, now);
     }
 
     /** PG 미승인을 확인한 결제 대기 주문만 취소한다. */
     public void cancel(Instant now) {
         if (status == OrderStatus.CANCELLED) return;
-        requireStatus(OrderStatus.PAYMENT_PENDING, "cancelled");
+        requireStatus(OrderStatus.PAYMENT_PENDING, "주문 취소");
         transitionTo(OrderStatus.CANCELLED, now);
     }
 
     /** 취소 이후 도착한 승인은 판매·정산하지 않고 즉시 환불 대상으로 보존한다. */
     public void requestLatePaymentRefund(Instant now, PaymentMethod method, PaymentEvidenceKind evidenceKind) {
-        requireStatus(OrderStatus.CANCELLED, "refund-pending");
+        requireStatus(OrderStatus.CANCELLED, "환불 요청");
         paymentMethod = method == null ? PaymentMethod.UNKNOWN : method;
         paymentEvidenceKind = evidenceKind == null ? PaymentEvidenceKind.UNVERIFIED : evidenceKind;
         transitionTo(OrderStatus.REFUND_PENDING, now);
@@ -407,7 +407,7 @@ public final class Order {
 
     /** 금액 불일치·알 수 없는 PG 상태를 자동 실패 처리하지 않고 운영 검토함으로 보낸다. */
     public void flagPaymentReview(Instant now) {
-        requireStatus(OrderStatus.PAYMENT_PENDING, "payment-review");
+        requireStatus(OrderStatus.PAYMENT_PENDING, "결제 검토 전환");
         transitionTo(OrderStatus.PAYMENT_REVIEW, now);
     }
 
@@ -419,7 +419,7 @@ public final class Order {
      */
     public void complete(Instant now) {
         if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.DISPUTED) {
-            throw new OrderStateException("Cannot transition to completed from " + status);
+            throw new OrderStateException("지금 주문 상태에서는 구매확정할 수 없습니다");
         }
         transitionTo(OrderStatus.COMPLETED, now);
     }
@@ -432,7 +432,7 @@ public final class Order {
      * 타이머 정지(R4.2)가 성립한다.
      */
     public void openDispute(DisputeReason reason, String detail, Instant now) {
-        requireStatus(OrderStatus.FUNDS_HELD, "disputed");
+        requireStatus(OrderStatus.FUNDS_HELD, "분쟁 접수");
         this.disputeReason = Objects.requireNonNull(reason, "reason");
         this.disputeDetail = detail;
         this.disputeOpenedAt = now;
@@ -442,10 +442,10 @@ public final class Order {
     /** 비동기 환불 접수. funds-held 또는 분쟁 판정(환불)에서 가능. */
     public void requestRefund(Instant now) {
         if (status != OrderStatus.FUNDS_HELD && status != OrderStatus.DISPUTED) {
-            throw new OrderStateException("Cannot transition to refund-pending from " + status);
+            throw new OrderStateException("지금 주문 상태에서는 환불 요청할 수 없습니다");
         }
         if (status == OrderStatus.FUNDS_HELD && shipmentRegisteredAt != null) {
-            throw new OrderStateException("Cannot refund an order after shipment registration");
+            throw new OrderStateException("발송이 등록된 주문은 환불을 요청할 수 없습니다. 문제가 있다면 분쟁을 접수해 주세요");
         }
         transitionTo(OrderStatus.REFUND_PENDING, now);
     }
@@ -460,7 +460,7 @@ public final class Order {
      * @return 최초 등록 펜스를 새로 기록했으면 {@code true}
      */
     public boolean registerShipment(Instant now) {
-        requireStatus(OrderStatus.FUNDS_HELD, "shipment-registered");
+        requireStatus(OrderStatus.FUNDS_HELD, "발송 등록");
         if (shipmentRegisteredAt != null) {
             return false;
         }
@@ -474,20 +474,20 @@ public final class Order {
             return;
         }
         if (status != OrderStatus.REFUND_PENDING) {
-            throw new OrderStateException("Cannot transition to refunded from " + status);
+            throw new OrderStateException("지금 주문 상태에서는 환불 완료 처리할 수 없습니다");
         }
         transitionTo(OrderStatus.REFUNDED, now);
     }
 
     private void requireStatus(OrderStatus expected, String target) {
         if (status != expected) {
-            throw new OrderStateException("Cannot transition to " + target + " from " + status);
+            throw new OrderStateException("지금 주문 상태에서는 " + target + "할 수 없습니다");
         }
     }
 
     private void requirePaymentDecisionStatus(String target) {
         if (status != OrderStatus.PAYMENT_PENDING && status != OrderStatus.PAYMENT_REVIEW) {
-            throw new OrderStateException("Cannot transition to " + target + " from " + status);
+            throw new OrderStateException("지금 주문 상태에서는 " + target + "할 수 없습니다");
         }
     }
 
