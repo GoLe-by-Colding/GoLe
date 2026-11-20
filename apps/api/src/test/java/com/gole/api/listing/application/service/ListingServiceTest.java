@@ -22,6 +22,8 @@ import com.gole.api.listing.application.port.out.ListingIdGeneratorPort;
 import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
+import com.gole.api.listing.application.query.ListingPage;
+import com.gole.api.listing.application.query.ListingPageCursor;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
 import com.gole.api.listing.domain.exception.ListingBumpCooldownException;
@@ -219,6 +221,29 @@ class ListingServiceTest {
         service.markSold(id);
         assertThat(service.search(ListingSearchQuery.newestAll())).isEmpty();
         assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
+    }
+
+    @Test
+    void searchPage_returnsNextCursorOnlyWhileMoreListingsRemain() {
+        for (int i = 0; i < 3; i++) {
+            service.create(validCommand());
+            clock.advance(java.time.Duration.ofMinutes(1));
+        }
+
+        ListingPage first = service.searchPage(ListingSearchQuery.newestAll(), Optional.empty(), 2);
+        ListingPage second = service.searchPage(ListingSearchQuery.newestAll(), first.next(), 2);
+
+        assertThat(first.items()).hasSize(2);
+        assertThat(first.next()).isPresent();
+        assertThat(second.items()).hasSize(1).doesNotContainAnyElementsOf(first.items());
+        assertThat(second.next()).isEmpty();
+    }
+
+    @Test
+    void searchPage_boundsRequestedSizeToOneThroughSixty() {
+        assertThat(ListingPage.boundedLimit(0)).isEqualTo(1);
+        assertThat(ListingPage.boundedLimit(1_000)).isEqualTo(ListingPage.MAX_LIMIT);
+        assertThat(ListingPage.boundedLimit(24)).isEqualTo(24);
     }
 
     @Test
@@ -804,6 +829,29 @@ class ListingServiceTest {
                     .filter(l -> query.setNumber() == null || query.setNumber().equals(l.getCatalogSetNumber()))
                     .sorted(NEWEST)
                     .toList();
+        }
+
+        @Override
+        public List<Listing> searchPage(ListingSearchQuery query, ListingPageCursor after, int size) {
+            Comparator<Listing> order = Comparator.comparing(Listing::getListedAt)
+                    .thenComparing(Listing::getId)
+                    .reversed();
+            List<Listing> sorted =
+                    store.stream().filter(Listing::isActive).sorted(order).toList();
+            int start = 0;
+            if (after != null) {
+                while (start < sorted.size() && order.compare(sorted.get(start), byCursor(after)) <= 0) {
+                    start++;
+                }
+            }
+            return sorted.subList(start, Math.min(sorted.size(), start + size));
+        }
+
+        private Listing byCursor(ListingPageCursor after) {
+            return store.stream()
+                    .filter(l -> l.getId().equals(after.id()))
+                    .findFirst()
+                    .orElseThrow();
         }
 
         @Override
