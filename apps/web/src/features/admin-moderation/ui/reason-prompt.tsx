@@ -53,7 +53,7 @@ export function ReasonPrompt({
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
     >
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-lg bg-white p-6 shadow-xl">
+      <div className="flex w-full max-w-md flex-col gap-4 rounded-lg bg-white p-6 shadow-overlay">
         <div className="flex flex-col gap-1">
           <Heading level={3}>{title}</Heading>
           <Text tone="muted" size="sm">

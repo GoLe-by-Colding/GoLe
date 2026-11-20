@@ -258,7 +258,7 @@ export function FollowingFeedPage() {
             onClick={() => setTab(value)}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
               tab === value
-                ? "bg-white text-neutral-900 shadow-sm"
+                ? "bg-white text-neutral-900 shadow-soft"
                 : "text-neutral-500 hover:text-neutral-800"
             }`}
           >

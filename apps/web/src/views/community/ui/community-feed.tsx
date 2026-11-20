@@ -216,7 +216,7 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
               type="button"
               onClick={() => setSort(value)}
               className={`rounded px-3 py-1.5 text-sm font-semibold transition-colors ${
-                sort === value ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+                sort === value ? "bg-white text-neutral-900 shadow-soft" : "text-neutral-500"
               }`}
             >
               {value === "latest" ? "최신순" : "인기순"}

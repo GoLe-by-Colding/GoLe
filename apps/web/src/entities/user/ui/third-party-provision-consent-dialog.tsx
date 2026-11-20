@@ -97,7 +97,7 @@ function OpenThirdPartyProvisionConsentDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
-        className="flex max-h-full w-full max-w-xl flex-col gap-5 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+        className="flex max-h-full w-full max-w-xl flex-col gap-5 overflow-y-auto rounded-2xl bg-white p-5 shadow-overlay sm:p-6"
       >
         <div className="flex flex-col gap-2">
           <Heading level={2} id={titleId}>

@@ -797,7 +797,7 @@ function AdminSupportInbox({
                   className={cn(
                     "flex w-full flex-col gap-2 rounded-lg px-3 py-3 text-left transition-colors",
                     selectedRoomId === ticket.roomId
-                      ? "bg-white shadow-sm ring-1 ring-brand-100"
+                      ? "bg-white shadow-soft ring-1 ring-brand-100"
                       : "hover:bg-white/80",
                   )}
                 >
