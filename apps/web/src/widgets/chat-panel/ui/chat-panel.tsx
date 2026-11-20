@@ -18,7 +18,7 @@ export interface ChatPanelProps {
   readonly hiddenSenderIds?: readonly string[];
   readonly showSenderIdentity?: boolean;
   readonly onManageSender?: (senderId: string) => void;
-  readonly onRoomRead?: (roomId: string) => void;
+  readonly onRoomRead?: (roomId: string, readRequestedAt: number) => void;
   /** 운영팀 문의를 제외한 메시지 전송을 제3자 제공 동의 흐름으로 감싼다. */
   readonly runMessageAction?: (action: () => Promise<void>) => Promise<void>;
   /**

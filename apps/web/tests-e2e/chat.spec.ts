@@ -421,6 +421,42 @@ test.describe("채팅 UX", () => {
     await expect(unreadLabel).toHaveCount(0, { timeout: 3_000 });
   });
 
+  test("늦게 온 읽음 확정이 그 사이 도착한 새 안 읽음 수를 지우지 않는다", async ({ page }) => {
+    await page.clock.install();
+    await mockChatApis(page);
+    let unread = 3;
+    await page.route("**/api/v1/chat/unread-counts", (route) =>
+      route.fulfill({ json: { "room-direct": unread } }),
+    );
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let readSent = false;
+    await page.route("**/chat/rooms/room-direct/read", async (route) => {
+      readSent = true;
+      await readGate;
+      await route.fallback();
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/chat");
+
+    await expect(page.getByText("읽지 않은 메시지 3개", { exact: true })).toHaveCount(1);
+    await page.getByRole("button", { name: /account-peer/ }).click();
+    await expect.poll(() => readSent).toBe(true);
+    await page.getByRole("button", { name: "목록" }).click();
+
+    // 읽음 요청이 서버에 반영된 뒤 상대가 새 메시지를 보냈고, 다음 폴링이 그 수를 가져온다.
+    unread = 1;
+    await page.clock.fastForward(11_000);
+    const newerUnread = page.getByText("읽지 않은 메시지 1개", { exact: true });
+    await expect(newerUnread).toHaveCount(1);
+
+    releaseRead();
+    await page.clock.fastForward(1_000);
+    await expect(newerUnread, "늦은 확정이 새 메시지의 안 읽음을 지우면 안 된다").toHaveCount(1);
+  });
+
   test("직거래 알림의 room 딥링크는 읽을 수 있는 매물 대화를 모바일에서 바로 연다", async ({
     page,
   }) => {
