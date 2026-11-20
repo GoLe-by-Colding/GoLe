@@ -55,11 +55,11 @@ const eslintConfig = defineConfig([
         },
         // 그림자는 GoLe 토큰(shadow-soft·md·lift·overlay)만 쓴다. Tailwind 기본 그림자는 색·깊이가 테마와 어긋난다.
         {
-          selector: "Literal[value=/(^|[\\s:])shadow-(sm|lg|xl|2xl)(?![\\w-])/]",
+          selector: "Literal[value=/(^|[\\s:])shadow(-(xs|sm|lg|xl|2xl))?(?![\\w-])/]",
           message: "그림자는 shadow-soft·shadow-md·shadow-lift·shadow-overlay 토큰을 쓴다.",
         },
         {
-          selector: "TemplateElement[value.raw=/(^|[\\s:])shadow-(sm|lg|xl|2xl)(?![\\w-])/]",
+          selector: "TemplateElement[value.raw=/(^|[\\s:])shadow(-(xs|sm|lg|xl|2xl))?(?![\\w-])/]",
           message: "그림자는 shadow-soft·shadow-md·shadow-lift·shadow-overlay 토큰을 쓴다.",
         },
       ],
