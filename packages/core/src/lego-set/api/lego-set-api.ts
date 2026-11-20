@@ -8,7 +8,10 @@ function withSignal(signal: AbortSignal | undefined): RequestOptions {
 }
 
 export function fetchLegoSetByNumber(setNumber: string, signal?: AbortSignal): Promise<LegoSet> {
-  return apiRequest<LegoSet>(`/api/v1/catalog/sets/${setNumber}`, withSignal(signal));
+  return apiRequest<LegoSet>(
+    `/api/v1/catalog/sets/${encodeURIComponent(setNumber)}`,
+    withSignal(signal),
+  );
 }
 
 /**

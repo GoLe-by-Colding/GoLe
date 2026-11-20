@@ -1,6 +1,6 @@
 import { fetchFeaturedLegoSets, fetchLegoSetByNumber, type LegoSet } from "@entities/lego-set";
 import { fetchPriceSnapshot, type PricePoint, type PriceSnapshot } from "@entities/pricing";
-import { isApiNotFoundError } from "@shared/api";
+import { ApiError, isApiNotFoundError } from "@shared/api";
 import { PageLayout, PageHeader, EmptyState, LinkButton } from "@shared/ui";
 import { PriceExplorer, type PriceBoardItem } from "@widgets/price-explorer";
 
@@ -31,7 +31,11 @@ async function loadBoard(initialSetNumber?: string): Promise<PriceBoardLoadResul
     try {
       sets = [await fetchLegoSetByNumber(initialSetNumber), ...sets];
     } catch (cause) {
-      requestedSetIssue = isApiNotFoundError(cause) ? "not-found" : "unavailable";
+      // 400(형식이 틀린 번호)도 다시 시도해 봐야 같은 결과라 "없음"으로 안내한다.
+      requestedSetIssue =
+        isApiNotFoundError(cause) || (cause instanceof ApiError && cause.status === 400)
+          ? "not-found"
+          : "unavailable";
     }
   }
 

@@ -346,4 +346,14 @@ test.describe("Prices (KREAM-style)", () => {
     await expect(page.getByRole("alert").filter({ hasText: missing })).toHaveCount(0);
     await expect(page.getByText(new RegExp(`^#${missing} ·`))).toHaveCount(0);
   });
+
+  test("형식이 틀린 세트 번호도 다시 시도 안내 대신 찾지 못했다고 알린다", async ({ page }) => {
+    const malformed = "abc/../def";
+    await page.goto(`/prices?set=${encodeURIComponent(malformed)}`);
+
+    await expect(
+      page.getByRole("status").filter({ hasText: "카탈로그에서 찾지 못했어요" }),
+    ).toHaveCount(1);
+    await expect(page.getByRole("alert").filter({ hasText: "불러오지 못했어요" })).toHaveCount(0);
+  });
 });
