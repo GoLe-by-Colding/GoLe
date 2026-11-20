@@ -53,6 +53,15 @@ const eslintConfig = defineConfig([
             "TemplateElement[value.raw=/^(?![\\s\\S]*transition-press)[\\s\\S]*active:scale-/]",
           message: "active:scale-* 는 transition-press 와 같은 클래스 문자열에 둔다.",
         },
+        // Tailwind 4의 translate-*·scale-*·rotate-* 는 독립 속성이라 transition-[…transform…] 으로는 움직이지 않는다.
+        {
+          selector: "Literal[value=/transition-\\[[^\\]]*\\btransform\\b/]",
+          message: "transition-[…] 에는 transform 대신 translate·scale·rotate 를 쓴다.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/transition-\\[[^\\]]*\\btransform\\b/]",
+          message: "transition-[…] 에는 transform 대신 translate·scale·rotate 를 쓴다.",
+        },
         // 그림자는 GoLe 토큰(shadow-soft·md·lift·overlay)만 쓴다. Tailwind 기본 그림자는 색·깊이가 테마와 어긋난다.
         {
           selector: "Literal[value=/(^|[\\s:])shadow(-(xs|sm|lg|xl|2xl))?(?![\\w-])/]",

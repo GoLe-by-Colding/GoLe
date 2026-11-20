@@ -22,6 +22,10 @@ import {
 import { AdminStatus } from "./table";
 import { PaymentReadinessPanel } from "./payment-readiness-panel";
 
+// Tailwind 4의 translate-* 는 transform 이 아니라 독립 translate 속성이라 전환 목록에 translate 를 둔다.
+const LIFT_CARD =
+  "h-full transition-[border-color,translate,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft";
+
 /** 대시보드 — 오늘 처리할 일과 플랫폼 지표. (요구사항 2.2, 2.3, 2.4) */
 export function AdminDashboardView() {
   const { session } = useSession();
@@ -92,7 +96,7 @@ export function AdminDashboardView() {
               className={
                 unassignedSupportTickets > 0
                   ? "h-full border-warning/40 bg-warning-soft"
-                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
+                  : LIFT_CARD
               }
             >
               <div className="flex items-center justify-between gap-3">
@@ -110,9 +114,7 @@ export function AdminDashboardView() {
             <Card
               padded
               className={
-                pendingReports > 0
-                  ? "h-full border-warning/40 bg-warning-soft"
-                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
+                pendingReports > 0 ? "h-full border-warning/40 bg-warning-soft" : LIFT_CARD
               }
             >
               <div className="flex items-center justify-between gap-3">
@@ -127,11 +129,7 @@ export function AdminDashboardView() {
           <Link href="/admin/orders?status=PAYMENT_FAILED">
             <Card
               padded
-              className={
-                failedPayments > 0
-                  ? "h-full border-danger/30 bg-danger-soft"
-                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
-              }
+              className={failedPayments > 0 ? "h-full border-danger/30 bg-danger-soft" : LIFT_CARD}
             >
               <div className="flex items-center justify-between gap-3">
                 <Text weight="medium">결제 실패 주문</Text>
@@ -143,10 +141,7 @@ export function AdminDashboardView() {
             </Card>
           </Link>
           <Link href="/admin/orders?status=PAYMENT_PENDING">
-            <Card
-              padded
-              className="h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
-            >
+            <Card padded className={LIFT_CARD}>
               <div className="flex items-center justify-between gap-3">
                 <Text weight="medium">결제 대기 주문</Text>
                 <Badge tone={pendingPayments > 0 ? "warning" : "success"}>
@@ -161,11 +156,7 @@ export function AdminDashboardView() {
           <Link href="/admin/orders?status=PAYMENT_REVIEW">
             <Card
               padded
-              className={
-                reviewPayments > 0
-                  ? "h-full border-danger/30 bg-danger-soft"
-                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
-              }
+              className={reviewPayments > 0 ? "h-full border-danger/30 bg-danger-soft" : LIFT_CARD}
             >
               <div className="flex items-center justify-between gap-3">
                 <Text weight="medium">결제 확인 필요</Text>
@@ -180,9 +171,7 @@ export function AdminDashboardView() {
             <Card
               padded
               className={
-                pendingSettlements > 0
-                  ? "h-full border-warning/40 bg-warning-soft"
-                  : "h-full transition-[border-color,transform,box-shadow] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-soft"
+                pendingSettlements > 0 ? "h-full border-warning/40 bg-warning-soft" : LIFT_CARD
               }
             >
               <div className="flex items-center justify-between gap-3">
