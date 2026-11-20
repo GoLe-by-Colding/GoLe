@@ -453,11 +453,13 @@ test.describe("Auth navigation", () => {
     await page.getByLabel("새 비밀번호 확인").fill("new-password");
     await page.getByRole("button", { name: "비밀번호 바꾸기" }).click();
 
-    expect(confirmationBody).toEqual({
-      email: "member@gole.test",
-      code: "123456",
-      newPassword: "new-password",
-    });
+    await expect
+      .poll(() => confirmationBody)
+      .toEqual({
+        email: "member@gole.test",
+        code: "123456",
+        newPassword: "new-password",
+      });
     await expect(page).toHaveURL(/\/login\?passwordReset=1&returnTo=%2Fcollection/);
     await expect(
       page.getByRole("status").filter({ hasText: "비밀번호가 변경됐어요" }),

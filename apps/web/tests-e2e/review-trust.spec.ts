@@ -139,13 +139,15 @@ test.describe("후기 신뢰 흐름", () => {
       .fill("거래와 무관한 욕설입니다.");
     await dialog.getByRole("button", { name: "신고 접수" }).click();
 
-    expect(reportBody).toEqual({
-      reporterId: "viewer-1",
-      targetType: "REVIEW",
-      targetId: "review-1",
-      reason: "INAPPROPRIATE",
-      detail: "거래와 무관한 욕설입니다.",
-    });
+    await expect
+      .poll(() => reportBody)
+      .toEqual({
+        reporterId: "viewer-1",
+        targetType: "REVIEW",
+        targetId: "review-1",
+        reason: "INAPPROPRIATE",
+        detail: "거래와 무관한 욕설입니다.",
+      });
     await expect(dialog.getByText("신고가 접수되었어요")).toBeVisible();
     await expect(dialog.getByText(/필요하면 후기를 블라인드/)).toBeVisible();
   });
