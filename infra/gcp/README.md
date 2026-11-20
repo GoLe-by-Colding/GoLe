@@ -1325,6 +1325,12 @@ HTTP/HTTPS `www.gole.co.kr`은 모두 path/query를 보존해 `https://gole.co.k
 Nginx는 Docker DNS를 10초마다 다시 해석하고 전송 계층의 64MiB body·64KiB header 여유 상한만
 둔다. 실제 55MiB multipart, 32KiB request header, CORS 허용·거부와 그 로그는 백엔드가 판정한다.
 
+Nginx 이미지는 패치를 받는 stable 계열(`nginx:1.30.7-alpine`)을 digest로 고정한다. 1.29 계열은
+1.29.8 이후 수정판이 없어 2026년 보안 권고 다수에 노출돼 2026-11-21 올렸다. 버전을 올릴 때는
+운영 compose·`gole-hostctl.sh`·`issue-certificate.sh`·검증기의 `EXPECTED_IMAGES`를 같이 바꾸고,
+검증기의 `LKG_PINNED_IMAGE_PATTERNS`에는 직전 릴리스 태그를 남겨 롤백을 막지 않는다.
+`LEGACY_ADOPTION_IMAGES`는 레거시 호스트에 실제로 돌던 참조라 바꾸지 않는다.
+
 최초 Google Trust Services 발급만 runtime service account에
 `roles/publicca.externalAccountKeyCreator`를 임시 부여한다. VM에서 user `gcloud auth login`
 또는 key file을 만들지 않는다. 발급 후 `grant_gts_eab_creator=false`로 회수한다.

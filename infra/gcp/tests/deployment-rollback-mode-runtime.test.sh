@@ -413,7 +413,7 @@ minio|minio/minio:latest
 minio-init|minio/mc:latest
 backend|gole/backend:local
 frontend|gole/frontend:local
-nginx|nginx:1.29-alpine
+nginx|nginx:1.30.7-alpine
 budget-relay|gole/budget-relay:local
 EOF
   if [ "$mode" = strict ]; then
@@ -441,7 +441,7 @@ seed_lkg_runtime() {
   set_ref minio/mc:latest "$minio_init_id"
   set_ref gole/backend:local "$backend_id"
   set_ref gole/frontend:local "$frontend_id"
-  set_ref nginx:1.29-alpine "$nginx_id"
+  set_ref nginx:1.30.7-alpine "$nginx_id"
   set_ref gole/budget-relay:local "$budget_id"
   if [ "$mode" = strict ]; then
     set_ref gole/support-agent:local "$support_id"
@@ -519,7 +519,7 @@ assert_legacy_canonical_refs() {
   assert_ref minio/mc:latest "$minio_init_id"
   assert_ref gole/backend:local "$backend_id"
   assert_ref gole/frontend:local "$frontend_id"
-  assert_ref nginx:1.29-alpine "$nginx_id"
+  assert_ref nginx:1.30.7-alpine "$nginx_id"
   assert_ref gole/budget-relay:local "$budget_id"
 }
 
@@ -875,7 +875,7 @@ SUDO_USER=root /usr/local/sbin/gole-hostctl deployment-rollback "$request_id"
 assert_ref gole/support-agent:local "$support_id"
 assert_ref gole/backend:local "$backend_id"
 assert_ref gole/frontend:local "$frontend_id"
-assert_ref nginx:1.29-alpine "$nginx_id"
+assert_ref nginx:1.30.7-alpine "$nginx_id"
 assert_ref gole/budget-relay:local "$budget_id"
 for service in support-agent backend frontend nginx budget-relay; do
   grep -Fq "  $service:" "$state_root/last-override"
@@ -972,7 +972,7 @@ minio|$minio_ref
 minio-init|$mc_ref
 backend|gole/backend:local
 frontend|gole/frontend:local
-nginx|nginx:1.29-alpine
+nginx|nginx:1.30.7-alpine
 budget-relay|gole/budget-relay:local
 support-agent|gole/support-agent:local
 EOF
@@ -1088,7 +1088,7 @@ minio|$minio_ref
 minio-init|$mc_ref
 backend|gole/backend:local
 frontend|gole/frontend:local
-nginx|nginx:1.29-alpine
+nginx|nginx:1.30.7-alpine
 budget-relay|gole/budget-relay:local
 support-agent|gole/support-agent:local
 EOF
