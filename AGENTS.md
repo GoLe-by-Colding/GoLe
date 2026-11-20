@@ -235,6 +235,16 @@ pnpm --filter web e2e
 - `E2E_BASE_URL`을 주면 배포 대상 읽기전용 검증이 되고 쓰기 플로우는 자동 skip.
 - 브라우저 테스트는 항상 `NEXT_PUBLIC_PAYMENT_MODE=stub`으로 강제된다(실제 결제창은 자동화 불가).
   `portone-request.spec.ts`만 Node 프로세스에서 돌아 실제 모드 값을 읽는다.
+- `pnpm infra:up`의 minio 기본 이미지(quay digest)는 인증 없이 받으면 401이다. 그러면 사진 업로드가 필요한
+  흐름(`create-listing`·`purchase`·`trading-completion` 등)이 환경 탓으로 실패한다. GHCR 이미지 권한이 없으면
+  `cgr.dev/chainguard/minio`를 compose 밖에서 띄우고(이 이미지엔 `curl`·`bash`가 없어 compose 상태 확인이 실패한다)
+  `cgr.dev/chainguard/minio-client`로 `mc mb local/gole-e2e`를 만든 뒤, API에 `STORAGE_S3_ACCESS_KEY`·
+  `STORAGE_S3_SECRET_KEY`를 그 minio 계정으로 넘긴다(2026-11-21 확인).
+- 같은 셀러로 사진 흐름을 여러 번 반복하면 `MEDIA_UPLOAD_RATE_LIMITED`로 실패한다. 격리 Redis의
+  `gole:media-upload-quota:*` 키를 지우면 된다.
+- `pnpm e2e:seed`는 계정·세션만 심고 매물 상태는 되돌리지 않는다. 손으로 시드 매물을 판매완료·예약으로 바꾸며
+  점검했다면 그 매물에 기대는 시험(예: `search-and-listing`의 레거시 상태 링크)이 데이터 탓으로 깨진다.
+- `next dev`·`pnpm install`이 `apps/web/AGENTS.md`의 제목 수준을 고쳐 쓴다. 커밋 전에 되돌린다.
 
 ## 아키텍처
 
