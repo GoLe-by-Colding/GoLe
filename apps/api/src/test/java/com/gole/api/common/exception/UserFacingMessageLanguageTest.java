@@ -19,12 +19,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>두 형태를 본다. {@code super("CODE", "...")}·{@code new XxxException("CODE", "...")}, 그리고 컨텍스트의
  * {@code domain/exception} 예외를 메시지 하나로 만드는 {@code new XxxException("...")}. 메시지 식 전체에 한글이 없으면 실패한다.
- * 컨텍스트를 옮길 때마다 {@link #USER_FACING_CONTEXTS}에 더한다.
+ * 컨텍스트를 옮길 때마다 {@link #USER_FACING_CONTEXTS}에 더한다. promotion 은 운영자 전용이고 다른 작업이 진행 중이라 아직 뺐다.
  */
 class UserFacingMessageLanguageTest {
 
     private static final List<String> USER_FACING_CONTEXTS = List.of(
             "account",
+            "admin",
             "catalog",
             "collection",
             "community",
