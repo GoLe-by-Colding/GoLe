@@ -16,6 +16,7 @@ import com.gole.api.common.operations.OperationalEventPublisher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
+import org.apache.tomcat.util.http.InvalidParameterException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -46,6 +47,18 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().code()).isEqualTo("MALFORMED_JSON");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** {@code ?cursor=%%%}처럼 퍼센트 인코딩이 깨진 쿼리는 Tomcat이 파라미터 해석 단계에서 던진다. */
+    @Test
+    void malformedQueryEncodingIsAClientErrorWithoutOperationalAlert() {
+        var response = handler.handleMalformedQuery(new InvalidParameterException(
+                "Character decoding failed. Parameter [cursor] with value [%%%] has been ignored."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().code()).isEqualTo("MALFORMED_QUERY");
+        assertThat(response.getBody().message()).doesNotContain("%%%");
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 

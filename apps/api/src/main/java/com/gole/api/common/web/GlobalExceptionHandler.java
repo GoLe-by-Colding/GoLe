@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.apache.tomcat.util.http.InvalidParameterException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -143,6 +144,18 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("VALIDATION_ERROR", message));
+    }
+
+    /**
+     * 퍼센트 인코딩이 깨진 쿼리스트링(예: {@code ?cursor=%%%}) → 400.
+     *
+     * <p>Tomcat이 파라미터를 해석하다 던지는 예외라 컨트롤러에 닿기 전에 난다. 잡지 않으면 아래 catch-all이 500 +
+     * ERROR 등급 운영 이벤트로 만든다 — {@code handleTypeMismatch}와 같은 함정이다. 깨진 값은 응답에 싣지 않는다.
+     */
+    @ExceptionHandler(InvalidParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMalformedQuery(InvalidParameterException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("MALFORMED_QUERY", "요청 주소의 쿼리 문자열 형식을 확인해 주세요"));
     }
 
     /**
