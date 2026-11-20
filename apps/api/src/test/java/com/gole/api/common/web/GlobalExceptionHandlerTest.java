@@ -29,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -59,6 +60,17 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().code()).isEqualTo("MALFORMED_QUERY");
         assertThat(response.getBody().message()).doesNotContain("%%%");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** {@code Accept: image/png}처럼 JSON을 받지 않겠다는 요청. 본문을 쓸 수 없으니 상태 코드만 돌려준다. */
+    @Test
+    void unacceptableResponseTypeIsAClientErrorWithoutOperationalAlert() {
+        var response =
+                handler.handleNotAcceptable(new HttpMediaTypeNotAcceptableException("No acceptable representation"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_ACCEPTABLE);
+        assertThat(response.getBody()).isNull();
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 

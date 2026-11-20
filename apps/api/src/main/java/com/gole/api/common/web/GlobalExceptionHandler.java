@@ -30,6 +30,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -144,6 +145,17 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("VALIDATION_ERROR", message));
+    }
+
+    /**
+     * 클라이언트가 받을 수 없는 응답 형식만 요구함(예: {@code Accept: image/png}) → 406, 본문 없음.
+     *
+     * <p>JSON 오류 본문도 받지 않겠다는 요청이라 상태 코드만 돌려준다. 잡지 않으면 catch-all이 ERROR 등급 운영
+     * 이벤트를 낸 뒤에야 406이 된다.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<Void> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
     }
 
     /**
