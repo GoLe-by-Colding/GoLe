@@ -107,6 +107,10 @@ public class MediaController {
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 // 폐기 직후 브라우저·공유 캐시에서도 재노출되지 않도록 사용자 미디어를 저장하지 않는다.
                 .cacheControl(CacheControl.noStore())
+                // 같은 출처에서 SVG도 내보낸다. 주소를 직접 열어도 내용을 추측해 HTML로 읽거나 스크립트를 실행하지 않게
+                // 한다. <img>로 넣은 그림에는 이 응답의 CSP가 적용되지 않아 화면은 그대로다.
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
                 .body(image.content());
     }
 

@@ -72,4 +72,17 @@ class MediaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"));
     }
+
+    /** 같은 출처에서 SVG도 내보내므로, 주소를 직접 열어도 내용 추측·스크립트 실행이 일어나지 않아야 한다. */
+    @Test
+    void media_isNeitherSniffedNorExecutedWhenOpenedDirectly() throws Exception {
+        when(loads.load(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new LoadImageUseCase.LoadedImage("<svg/>".getBytes(), "image/svg+xml"));
+
+        mvc.perform(get("/api/v1/media/catalog/10276.svg"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string(
+                                "Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"));
+    }
 }
