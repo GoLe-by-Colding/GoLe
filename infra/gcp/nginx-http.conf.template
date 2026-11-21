@@ -1,4 +1,6 @@
 resolver 127.0.0.11 valid=10s ipv6=off;
+# 응답 Server 헤더와 오류 페이지에 Nginx 버전을 싣지 않는다. 버전만으로 알려진 취약점을 고를 수 있다.
+server_tokens off;
 
 # 이메일·OAuth code/state 등 query string을 접근 로그에 남기지 않는다.
 log_format gole_safe '$remote_addr [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';

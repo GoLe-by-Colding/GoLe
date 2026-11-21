@@ -82,4 +82,9 @@ test "$(request)" = backend-v2
 test "$(docker inspect --format '{{.Id}}' "$PROXY")" = "$proxy_id"
 test "$(docker inspect --format '{{.State.Status}}' "$PROXY")" = running
 
+server_header="$(docker exec "$PROXY" wget -S -qO /dev/null --header='Host: gole.co.kr' \
+  http://127.0.0.1/api/runtime-dns 2>&1 | grep -i '^ *server:' | tr -d '\r' | sed 's/^ *//')"
+test "$server_header" = "Server: nginx" ||
+  { echo "Nginx version must stay hidden, got: $server_header" >&2; exit 1; }
+
 echo 'Nginx dynamic Docker DNS runtime test passed.'
