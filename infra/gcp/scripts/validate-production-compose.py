@@ -64,8 +64,8 @@ EXPECTED_IMAGES = {
         "b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b"
     ),
     "nginx": (
-        "nginx:1.30.7-alpine@sha256:"
-        "caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3"
+        "nginx:1.29-alpine@sha256:"
+        "5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de"
     ),
     "redis": (
         "redis:7-alpine@sha256:"
@@ -80,8 +80,7 @@ LKG_PINNED_IMAGE_PATTERNS = {
     "minio-init": r"quay\.io/minio/mc:latest@sha256:[0-9a-f]{64}",
     "mongo": r"mongo:7@sha256:[0-9a-f]{64}",
     "mongo-init": r"mongo:7@sha256:[0-9a-f]{64}",
-    # 1.29 는 보안 패치가 끊겨 1.30.7 로 올렸다. 직전 릴리스(1.29)로의 롤백도 받아야 한다.
-    "nginx": r"nginx:1\.(?:29|30\.7)-alpine@sha256:[0-9a-f]{64}",
+    "nginx": r"nginx:1\.29-alpine@sha256:[0-9a-f]{64}",
     "redis": r"redis:7-alpine@sha256:[0-9a-f]{64}",
 }
 
