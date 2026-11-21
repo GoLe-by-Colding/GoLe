@@ -45,3 +45,16 @@
 - 누름 크기는 `motion-safe:not-disabled:active:scale-96`으로 건다. 모션을 줄인 사용자와 비활성 요소에는 반동이 없다. `tests-e2e/press-motion.spec.ts`가 이를 지킨다.
 - 화면마다 `active:scale-*`·`duration-*`를 새로 쓰기 전에 위 유틸리티로 충분한지 먼저 본다. `active:scale-*`를 `transition-press` 없는 클래스 문자열에 쓰면 웹 ESLint(`no-restricted-syntax`)가 막는다.
 - 그림자는 토큰만 쓴다: 카드·작은 요소 `shadow-soft`, 떠 있는 바·메뉴 `shadow-md`·`shadow-lift`, 대화상자·시트 `shadow-overlay`. Tailwind 기본 `shadow-sm/lg/xl/2xl`은 웹 ESLint가 막는다.
+
+## 브릭 누름과 한국어 줄바꿈 (2026-11-21)
+
+- 면이 있는 버튼(primary·secondary·accent·danger)은 `brick` 유틸리티로 아래 4px "턱"을 두고, 누르면 턱만큼
+  내려앉았다가 `--ease-spring`으로 돌아온다. 턱 색은 `--brick-edge`로 변형마다 면보다 진하게 둔다.
+  참고: Duolingo의 두께 있는 버튼, 레고 브릭의 아랫면. 면이 없는 ghost·inverse는 작아지는 누름을 유지한다.
+- 턱은 그림자라 레이아웃 높이를 바꾸지 않는다. 동작 줄이기 설정에서는 내려앉지 않는다.
+- 새 버튼은 `<button>`에 직접 색을 칠하지 말고 `Button`·`LinkButton`(또는 `BUTTON_VARIANT`)을 쓴다.
+- 본문 전체가 `break-keep`(어절 단위 줄바꿈) + `wrap-break-word`다. 컴포넌트마다 `break-keep`을 다시 붙일 필요 없다.
+- 여러 개 중 켜고 끄는 필터·태그는 `Chip`(`@shared/ui`)을 쓴다. 켜진 칩은 2px 브릭 턱을 갖고 `aria-pressed`를 단다.
+  하나만 고르는 정렬·기간 전환은 칩이 아니라 세그먼트다.
+- 하나만 고르는 정렬·기간·피드 전환은 `Segmented`를 쓴다. 칸은 같은 너비이고 흰 선택 표시가 스프링으로 미끄러진다.
+  기본은 `group`+`aria-pressed`, 탭 패널을 바꾸는 곳은 `semantics="tabs"`(tablist·tab·aria-selected).
