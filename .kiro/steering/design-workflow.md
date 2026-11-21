@@ -44,3 +44,4 @@
 - Tailwind 4의 `scale-*`는 `transform`이 아니라 독립 `scale` 속성이다. 전환 목록에 `transform`만 두면 누름이 애니메이션 없이 튄다.
 - 누름 크기는 `motion-safe:not-disabled:active:scale-96`으로 건다. 모션을 줄인 사용자와 비활성 요소에는 반동이 없다. `tests-e2e/press-motion.spec.ts`가 이를 지킨다.
 - 화면마다 `active:scale-*`·`duration-*`를 새로 쓰기 전에 위 유틸리티로 충분한지 먼저 본다. `active:scale-*`를 `transition-press` 없는 클래스 문자열에 쓰면 웹 ESLint(`no-restricted-syntax`)가 막는다.
+- 그림자는 토큰만 쓴다: 카드·작은 요소 `shadow-soft`, 떠 있는 바·메뉴 `shadow-md`·`shadow-lift`, 대화상자·시트 `shadow-overlay`. Tailwind 기본 `shadow-sm/lg/xl/2xl`은 웹 ESLint가 막는다.

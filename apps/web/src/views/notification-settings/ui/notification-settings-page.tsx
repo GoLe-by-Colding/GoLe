@@ -288,7 +288,7 @@ function PreferenceRow({
         <span
           aria-hidden="true"
           className={cn(
-            "inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200",
+            "inline-block h-5 w-5 rounded-full bg-white shadow-soft transition-transform duration-200",
             category.enabled ? "translate-x-5.5" : "translate-x-0.5",
           )}
         />

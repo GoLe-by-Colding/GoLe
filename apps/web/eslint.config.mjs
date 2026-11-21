@@ -53,6 +53,15 @@ const eslintConfig = defineConfig([
             "TemplateElement[value.raw=/^(?![\\s\\S]*transition-press)[\\s\\S]*active:scale-/]",
           message: "active:scale-* 는 transition-press 와 같은 클래스 문자열에 둔다.",
         },
+        // 그림자는 GoLe 토큰(shadow-soft·md·lift·overlay)만 쓴다. Tailwind 기본 그림자는 색·깊이가 테마와 어긋난다.
+        {
+          selector: "Literal[value=/(^|[\\s:])shadow(-(xs|sm|lg|xl|2xl))?(?![\\w-])/]",
+          message: "그림자는 shadow-soft·shadow-md·shadow-lift·shadow-overlay 토큰을 쓴다.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/(^|[\\s:])shadow(-(xs|sm|lg|xl|2xl))?(?![\\w-])/]",
+          message: "그림자는 shadow-soft·shadow-md·shadow-lift·shadow-overlay 토큰을 쓴다.",
+        },
       ],
       // v7 문법: 규칙명 element-types → dependencies, rules → policies,
       // 타입 문자열 → 엔티티 셀렉터({ element: { type } }), allow 항목에 to 래퍼 필수.

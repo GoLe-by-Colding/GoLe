@@ -96,7 +96,7 @@ export function AdminBar() {
         className="pointer-events-none fixed inset-x-0 bottom-[var(--mobile-navigation-height,0px)] z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] print:hidden"
         data-promotion-hide
       >
-        <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white shadow-lg">
+        <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-white shadow-lift">
           <Badge tone="brand">ADMIN</Badge>
 
           {collapsed ? null : (
