@@ -57,3 +57,14 @@ test.describe("공용 버튼 누름 반동", () => {
     expect(await pressAndHold(page, button)).toBe(1);
   });
 });
+
+test("상호작용 카드는 누르는 동안 살짝 작아지고 전환으로 이어진다", async ({ page }) => {
+  test.skip(process.env.E2E_WITH_BACKEND !== "1", "실제 매물 목록이 필요한 통합 테스트");
+  await page.goto("/search");
+  const card = page.getByTestId("listing-card").first();
+  await expect(card).toBeVisible();
+  const transition = await card.evaluate((element) => getComputedStyle(element).transitionProperty);
+  expect(transition.split(", ")).toContain("scale");
+
+  expect(await pressAndHold(page, card)).toBeLessThan(1);
+});
