@@ -68,3 +68,29 @@ test("상호작용 카드는 누르는 동안 살짝 작아지고 전환으로 �
 
   expect(await pressAndHold(page, card)).toBeLessThan(1);
 });
+
+test("관리자 대시보드 카드는 hover 때 떠오르는 움직임을 전환으로 잇는다", async ({ page }) => {
+  const email = process.env.GOLE_ADMIN_EMAIL ?? "";
+  test.skip(
+    process.env.E2E_WITH_BACKEND !== "1" || email === "",
+    "실제 관리자 세션이 필요한 통합 테스트",
+  );
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+  const signIn = await page.request.post(`${apiBaseUrl}/api/v1/accounts/sessions`, {
+    data: { email, password: process.env.GOLE_ADMIN_PASSWORD ?? "" },
+  });
+  expect(signIn.ok()).toBeTruthy();
+  const { accountId, sessionToken, role } = (await signIn.json()) as Record<string, string>;
+  await page.addInitScript(
+    (session) => window.localStorage.setItem("gole.session", session),
+    JSON.stringify({ accountId, sessionToken, role }),
+  );
+
+  await page.goto("/admin");
+  const card = page.locator("[class*='hover:-translate-y-0.5']").first();
+  await expect(card).toBeVisible();
+  const transition = await card.evaluate((element) => getComputedStyle(element).transitionProperty);
+  expect(transition.split(", "), "translate 가 없으면 떠오름이 애니메이션 없이 튄다").toContain(
+    "translate",
+  );
+});
