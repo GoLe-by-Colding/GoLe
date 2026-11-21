@@ -54,4 +54,5 @@
 - 턱은 그림자라 레이아웃 높이를 바꾸지 않는다. 동작 줄이기 설정에서는 내려앉지 않는다.
 - 새 버튼은 `<button>`에 직접 색을 칠하지 말고 `Button`·`LinkButton`(또는 `BUTTON_VARIANT`)을 쓴다.
 - 본문 전체가 `break-keep`(어절 단위 줄바꿈) + `wrap-break-word`다. 컴포넌트마다 `break-keep`을 다시 붙일 필요 없다.
-
+- 여러 개 중 켜고 끄는 필터·태그는 `Chip`(`@shared/ui`)을 쓴다. 켜진 칩은 2px 브릭 턱을 갖고 `aria-pressed`를 단다.
+  하나만 고르는 정렬·기간 전환은 칩이 아니라 세그먼트다.

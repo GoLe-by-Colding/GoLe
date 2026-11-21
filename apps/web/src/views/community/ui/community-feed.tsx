@@ -10,7 +10,7 @@ import {
   type PostType,
 } from "@entities/community";
 import { useSession } from "@entities/user";
-import { Button, SearchIcon, Text } from "@shared/ui";
+import { Button, Chip, SearchIcon, Text } from "@shared/ui";
 import { PostCard } from "@widgets/post-card";
 
 type Filter = PostType | "all" | "following";
@@ -183,14 +183,6 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
     }
   }
 
-  function tabClass(active: boolean): string {
-    return `rounded-md border px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-      active
-        ? "border-brand-600 bg-brand-600 text-white"
-        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
-    }`;
-  }
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -226,31 +218,18 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
       </div>
 
       <div className="flex flex-wrap gap-2" aria-label="게시글 주제">
-        <button
-          type="button"
-          onClick={() => setFilter("all")}
-          className={tabClass(filter === "all")}
-        >
+        <Chip selected={filter === "all"} onClick={() => setFilter("all")}>
           전체
-        </button>
+        </Chip>
         {POST_TOPICS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setFilter(t.key)}
-            className={tabClass(filter === t.key)}
-          >
+          <Chip key={t.key} selected={filter === t.key} onClick={() => setFilter(t.key)}>
             {t.label}
-          </button>
+          </Chip>
         ))}
         {session !== null ? (
-          <button
-            type="button"
-            onClick={() => setFilter("following")}
-            className={tabClass(filter === "following")}
-          >
+          <Chip selected={filter === "following"} onClick={() => setFilter("following")}>
             팔로잉
-          </button>
+          </Chip>
         ) : null}
       </div>
 

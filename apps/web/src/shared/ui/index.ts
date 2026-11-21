@@ -3,6 +3,8 @@ export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
 export { LinkButton } from "./button";
 export { RefreshButton } from "./button/refresh-button";
 export type { LinkButtonProps } from "./button";
+export { Chip } from "./chip";
+export type { ChipProps } from "./chip";
 
 export { Card } from "./card";
 export type { CardProps, CardElevation } from "./card";

@@ -26,9 +26,8 @@ function dropOf(element: Locator): Promise<number> {
 }
 
 async function hold<T>(page: Page, target: Locator, read: () => Promise<T>): Promise<T> {
-  const box = await target.boundingBox();
-  if (box === null) throw new Error("요소 위치를 읽지 못했다");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // 늦게 그려지는 요소(소셜 로그인 등)가 레이아웃을 밀 수 있으니 좌표를 미리 재지 않고 요소 위로 옮긴 뒤 누른다.
+  await target.hover();
   await page.mouse.down();
   await page.waitForTimeout(400);
   const pressed = await read();

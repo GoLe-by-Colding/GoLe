@@ -9,7 +9,7 @@ import {
   setInterestTags,
 } from "@entities/user";
 import { ApiError } from "@shared/api";
-import { Button, Skeleton } from "@shared/ui";
+import { Button, Chip, Skeleton } from "@shared/ui";
 
 export interface InterestTagsPickerProps {
   /** 이전에 고른 태그 key 목록. 재개 시 선택 상태를 되살린다. */
@@ -99,19 +99,9 @@ export function InterestTagsPicker({ initialSelected = [], onCompleted }: Intere
           {tags.map((tag) => {
             const active = selected.includes(tag.key);
             return (
-              <button
-                key={tag.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggle(tag.key)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50"
-                }`}
-              >
+              <Chip key={tag.key} selected={active} onClick={() => toggle(tag.key)}>
                 {tag.label}
-              </button>
+              </Chip>
             );
           })}
         </div>

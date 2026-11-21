@@ -265,12 +265,12 @@
  * 동작 줄이기 설정에서는 내려앉지 않고 색 변화만 남긴다.
  */
 @utility brick {
-  --brick-depth: 4px;
-  box-shadow: 0 var(--brick-depth) 0 var(--brick-edge);
+  /* 깊이는 --brick-depth 로 덮어쓴다(칩은 2px). */
+  box-shadow: 0 var(--brick-depth, 4px) 0 var(--brick-edge);
 
   @media (prefers-reduced-motion: no-preference) {
     &:active:not(:disabled) {
-      translate: 0 calc(var(--brick-depth) - 1px);
+      translate: 0 calc(var(--brick-depth, 4px) - 1px);
       box-shadow: 0 1px 0 var(--brick-edge);
     }
   }
