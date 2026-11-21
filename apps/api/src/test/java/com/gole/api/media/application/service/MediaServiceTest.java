@@ -76,7 +76,7 @@ class MediaServiceTest {
         }
         assertThatThrownBy(() -> service.upload(new UploadImageCommand("owner", heic, "image/png", "photo.png")))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("does not match");
+                .hasMessageContaining("실제 내용이 다릅니다");
         assertThat(storage.objects).isEmpty();
     }
 
@@ -155,10 +155,10 @@ class MediaServiceTest {
     void upload_rejectsGifAndWebp_evenWhenDeclaredTypeMatches() {
         assertThatThrownBy(() -> service.upload(new UploadImageCommand("owner-1", gifBytes(), "image/gif", "a.gif")))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("JPEG and PNG");
+                .hasMessageContaining("JPEG·PNG");
         assertThatThrownBy(() -> service.upload(new UploadImageCommand("owner-1", webpBytes(), "image/webp", "a.webp")))
                 .isInstanceOf(InvalidImageException.class)
-                .hasMessageContaining("JPEG and PNG");
+                .hasMessageContaining("JPEG·PNG");
         assertThat(storage.objects).isEmpty();
     }
 

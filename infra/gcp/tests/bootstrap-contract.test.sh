@@ -250,6 +250,10 @@ while IFS= read -r header_directive; do
 done < <(grep -hE '^[[:space:]]*add_header[[:space:]]' infra/gcp/nginx-*.conf.template)
 [ "$(grep -hc 'Strict-Transport-Security' infra/gcp/nginx-https.conf.template)" -ge 1 ] ||
   fail "HTTPS Nginx template must emit HSTS"
+for nginx_template in infra/gcp/nginx-http.conf.template infra/gcp/nginx-https.conf.template; do
+  grep -Eq '^server_tokens[[:space:]]+off;' "$nginx_template" ||
+    fail "$nginx_template must hide the Nginx version (server_tokens off)"
+done
 grep -q 'gole-gcp-production' infra/gcp/terraform/variables.tf ||
   fail "Terraform must configure the production runner label"
 grep -q 'default[[:space:]]*=[[:space:]]*"goledeploy"' infra/gcp/terraform/variables.tf ||

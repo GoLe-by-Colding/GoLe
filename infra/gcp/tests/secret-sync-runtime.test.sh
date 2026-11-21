@@ -98,7 +98,7 @@ service_for_image_ref() {
     gole/support-agent:local) printf 'support-agent\n' ;;
     gole/backend:local) printf 'backend\n' ;;
     gole/frontend:local) printf 'frontend\n' ;;
-    nginx:1.29-alpine) printf 'nginx\n' ;;
+    nginx:1.30.7-alpine) printf 'nginx\n' ;;
     gole/budget-relay:local) printf 'budget-relay\n' ;;
     *) exit 97 ;;
   esac
@@ -108,7 +108,7 @@ case "$1" in
   compose)
     case "$*" in
       *' config --format json')
-        printf '%s\n' '{"services":{"mongo":{"image":"mongo:7"},"mongo-init":{"image":"mongo:7"},"redis":{"image":"redis:7-alpine"},"minio":{"image":"minio/minio:latest"},"minio-init":{"image":"minio/mc:latest"},"support-agent":{"image":"gole/support-agent:local"},"backend":{"image":"gole/backend:local"},"frontend":{"image":"gole/frontend:local"},"nginx":{"image":"nginx:1.29-alpine"},"budget-relay":{"image":"gole/budget-relay:local"}}}'
+        printf '%s\n' '{"services":{"mongo":{"image":"mongo:7"},"mongo-init":{"image":"mongo:7"},"redis":{"image":"redis:7-alpine"},"minio":{"image":"minio/minio:latest"},"minio-init":{"image":"minio/mc:latest"},"support-agent":{"image":"gole/support-agent:local"},"backend":{"image":"gole/backend:local"},"frontend":{"image":"gole/frontend:local"},"nginx":{"image":"nginx:1.30.7-alpine"},"budget-relay":{"image":"gole/budget-relay:local"}}}'
         ;;
       *' config --services')
         printf '%s\n' mongo mongo-init redis minio minio-init support-agent backend frontend nginx budget-relay

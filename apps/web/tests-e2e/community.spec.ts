@@ -213,17 +213,24 @@ test.describe("Community topics", () => {
     await page.goto(`/community/${postId}`);
     const liked = page.getByRole("button", { name: "좋아요 취소, 5개" });
     await expect(liked).toHaveAttribute("aria-pressed", "true");
+    // 처음부터 좋아요인 글에서는 하트가 튀지 않는다.
+    await expect(liked.locator("svg")).not.toHaveClass(/animate-like-pop/);
 
     await liked.click();
     const unliked = page.getByRole("button", { name: "좋아요, 4개" });
     await expect(unliked).toHaveAttribute("aria-pressed", "false");
+    await expect(unliked.locator("svg")).not.toHaveClass(/animate-like-pop/);
     await unliked.click();
+    await expect(
+      page.getByRole("button", { name: "좋아요 취소, 5개" }).locator("svg"),
+      "직접 누른 좋아요에서만 하트가 튄다",
+    ).toHaveClass(/animate-like-pop/);
 
     await expect(page.getByRole("button", { name: "좋아요 취소, 5개" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(methods).toEqual(["DELETE", "POST"]);
+    await expect.poll(() => methods).toEqual(["DELETE", "POST"]);
     expect(authorizations).toEqual(["Bearer session-like", "Bearer session-like"]);
   });
 

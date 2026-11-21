@@ -272,7 +272,7 @@ function DialogView({
         tabIndex={-1}
         noValidate
         onSubmit={submit}
-        className="flex max-h-full w-full max-w-md min-w-0 flex-col gap-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl outline-none sm:p-6"
+        className="flex max-h-full w-full max-w-md min-w-0 flex-col gap-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-overlay outline-none sm:p-6"
       >
         <h2 id={titleId} className="text-lg font-bold break-keep text-neutral-900">
           {options.title}

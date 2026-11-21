@@ -1,6 +1,7 @@
 package com.gole.api.listing.adapter.out.persistence;
 
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
+import com.gole.api.listing.application.query.ListingPageCursor;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.application.query.ListingSortOrder;
 import com.gole.api.listing.domain.model.Completeness;
@@ -87,6 +88,59 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
 
     @Override
     public List<Listing> search(ListingSearchQuery query) {
+        Query mongoQuery = new Query(searchCriteria(query)).with(toSort(query.sort()));
+        return mongoTemplate.find(mongoQuery, ListingDocument.class).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Listing> searchPage(ListingSearchQuery query, ListingPageCursor after, int size) {
+        Criteria criteria = searchCriteria(query);
+        if (after != null) {
+            criteria = new Criteria().andOperator(criteria, afterCursor(after));
+        }
+        Sort.Direction direction =
+                query.sort() == ListingSortOrder.PRICE_ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Query mongoQuery = new Query(criteria)
+                .with(toSort(query.sort()).and(Sort.by(direction, "_id")))
+                .limit(size);
+        return mongoTemplate.find(mongoQuery, ListingDocument.class).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    /** 커서 다음 위치. 정렬 키가 같으면 {@code _id}로 가른다. (listing-search-paging P3) */
+    private static Criteria afterCursor(ListingPageCursor after) {
+        return switch (after.sort()) {
+            case NEWEST ->
+                new Criteria()
+                        .orOperator(
+                                Criteria.where("listedAt").lt(after.listedAt()),
+                                Criteria.where("listedAt")
+                                        .is(after.listedAt())
+                                        .and("_id")
+                                        .lt(after.id()));
+            case PRICE_ASC ->
+                new Criteria()
+                        .orOperator(
+                                Criteria.where("priceAmount").gt(after.price()),
+                                Criteria.where("priceAmount")
+                                        .is(after.price())
+                                        .and("_id")
+                                        .gt(after.id()));
+            case PRICE_DESC ->
+                new Criteria()
+                        .orOperator(
+                                Criteria.where("priceAmount").lt(after.price()),
+                                Criteria.where("priceAmount")
+                                        .is(after.price())
+                                        .and("_id")
+                                        .lt(after.id()));
+        };
+    }
+
+    private static Criteria searchCriteria(ListingSearchQuery query) {
         // 검색은 항상 활성(ACTIVE) 리스팅만 대상으로 한다. (ListingSearchQuery 규약)
         Criteria criteria = Criteria.where("status").is(ListingStatus.ACTIVE.name());
 
@@ -118,10 +172,7 @@ public class ListingPersistenceAdapter implements ListingRepositoryPort {
             criteria = new Criteria().andOperator(criteria, priceCriteria);
         }
 
-        Query mongoQuery = new Query(criteria).with(toSort(query.sort()));
-        return mongoTemplate.find(mongoQuery, ListingDocument.class).stream()
-                .map(this::toDomain)
-                .toList();
+        return criteria;
     }
 
     @Override

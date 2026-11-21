@@ -88,9 +88,7 @@ test.describe("후기 신뢰 흐름", () => {
     await seedSession(page, { accountId: "seller-1", email: "seller@gole.test" });
     await mockSellerShop(page);
 
-    let replyBody: unknown;
     await page.route("**/api/v1/reviews/review-1/reply", async (route) => {
-      replyBody = route.request().postDataJSON();
       await route.fulfill({
         json: {
           ...review,
@@ -108,9 +106,13 @@ test.describe("후기 신뢰 흐름", () => {
     );
     await page.getByRole("button", { name: "답글 남기기" }).click();
     await page.getByLabel("판매자 답글").fill("좋은 거래 고맙습니다. 즐거운 조립 되세요!");
+    // 클릭이 끝나도 요청은 아직 나가지 않았을 수 있다. 요청 자체를 기다린 뒤 본문을 본다.
+    const replyRequest = page.waitForRequest("**/api/v1/reviews/review-1/reply");
     await page.getByRole("button", { name: "답글 저장" }).click();
 
-    expect(replyBody).toEqual({ content: "좋은 거래 고맙습니다. 즐거운 조립 되세요!" });
+    expect((await replyRequest).postDataJSON()).toEqual({
+      content: "좋은 거래 고맙습니다. 즐거운 조립 되세요!",
+    });
     await expect(page.getByText("판매자 답글", { exact: true })).toBeVisible();
     await expect(page.getByText("좋은 거래 고맙습니다. 즐거운 조립 되세요!")).toBeVisible();
     await expect(page.getByRole("button", { name: "답글 수정" })).toBeVisible();
@@ -139,13 +141,15 @@ test.describe("후기 신뢰 흐름", () => {
       .fill("거래와 무관한 욕설입니다.");
     await dialog.getByRole("button", { name: "신고 접수" }).click();
 
-    expect(reportBody).toEqual({
-      reporterId: "viewer-1",
-      targetType: "REVIEW",
-      targetId: "review-1",
-      reason: "INAPPROPRIATE",
-      detail: "거래와 무관한 욕설입니다.",
-    });
+    await expect
+      .poll(() => reportBody)
+      .toEqual({
+        reporterId: "viewer-1",
+        targetType: "REVIEW",
+        targetId: "review-1",
+        reason: "INAPPROPRIATE",
+        detail: "거래와 무관한 욕설입니다.",
+      });
     await expect(dialog.getByText("신고가 접수되었어요")).toBeVisible();
     await expect(dialog.getByText(/필요하면 후기를 블라인드/)).toBeVisible();
   });

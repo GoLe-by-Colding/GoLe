@@ -249,7 +249,7 @@ class SocialAuthServiceTest {
         assertThatThrownBy(() ->
                         service.login(new SocialLoginCommand(AuthProvider.GOOGLE, "code", "https://app/cb", "s4")))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("not verified");
+                .hasFieldOrPropertyWithValue("code", "OAUTH_EMAIL_UNVERIFIED");
     }
 
     @Test

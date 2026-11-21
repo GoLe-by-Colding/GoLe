@@ -12,6 +12,7 @@ import com.gole.api.listing.application.port.in.RaiseListingPriceUseCase;
 import com.gole.api.listing.application.port.in.ReleaseListingUseCase;
 import com.gole.api.listing.application.port.in.ReserveListingUseCase;
 import com.gole.api.listing.application.port.in.ReviseListingUseCase;
+import com.gole.api.listing.application.port.in.SearchListingPagesUseCase;
 import com.gole.api.listing.application.port.in.SearchListingsUseCase;
 import com.gole.api.listing.application.port.out.CatalogThemeSetsPort;
 import com.gole.api.listing.application.port.out.InterestTagListingNotifierPort;
@@ -21,6 +22,8 @@ import com.gole.api.listing.application.port.out.ListingPhotoPort;
 import com.gole.api.listing.application.port.out.ListingPriceDropNotifierPort;
 import com.gole.api.listing.application.port.out.ListingRepositoryPort;
 import com.gole.api.listing.application.port.out.NewListingNotifierPort;
+import com.gole.api.listing.application.query.ListingPage;
+import com.gole.api.listing.application.query.ListingPageCursor;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.ListingConflictException;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
@@ -48,6 +51,7 @@ public class ListingService
         implements CreateListingUseCase,
                 GetListingUseCase,
                 SearchListingsUseCase,
+                SearchListingPagesUseCase,
                 MarkListingSoldUseCase,
                 ReserveListingUseCase,
                 ReleaseListingUseCase,
@@ -294,10 +298,44 @@ public class ListingService
     }
 
     @Override
+    public ListingPage searchPage(ListingSearchQuery query, Optional<ListingPageCursor> after, int limit) {
+        InterestTag theme = query.interestTagInText();
+        ListingSearchQuery effective =
+                theme == null ? query : query.withThemeSetNumbers(catalogThemeSets.setNumbersInTheme(theme));
+        int size = ListingPage.boundedLimit(limit);
+        // 한 건을 더 읽어 다음 페이지가 있는지 본다. 개수를 따로 세지 않는다.
+        List<Listing> fetched = listingRepository.searchPage(effective, after.orElse(null), size + 1);
+        if (fetched.size() <= size) {
+            return new ListingPage(fetched, Optional.empty());
+        }
+        List<Listing> page = fetched.subList(0, size);
+        return new ListingPage(page, Optional.of(ListingPageCursor.after(page.getLast(), effective.sort())));
+    }
+
+    @Override
     public void markSold(String listingId) {
         Listing listing = getById(listingId);
         listing.markSold();
         listingRepository.save(listing);
+    }
+
+    @Override
+    public void markSoldBySeller(String listingId) {
+        if (listingRepository.markSoldIfActive(listingId)) {
+            return;
+        }
+        Listing listing = getById(listingId);
+        switch (listing.getStatus()) {
+            case RESERVED -> throw ListingConflictException.orderInProgressForSold();
+            case SOLD -> {}
+            case DELETED -> listing.markSold(); // LISTING_DELETED 로 거절된다
+            case ACTIVE -> {
+                // 위 시도와 다시 읽은 사이에 주문이 풀려 판매 중이 됐다. 한 번 더 원자적으로 바꾼다.
+                if (!listingRepository.markSoldIfActive(listingId)) {
+                    throw ListingConflictException.orderInProgressForSold();
+                }
+            }
+        }
     }
 
     @Override

@@ -38,6 +38,9 @@ class ListingReservationAdapterTest {
                     public void markSold(String listingId) {}
 
                     @Override
+                    public void markSoldBySeller(String listingId) {}
+
+                    @Override
                     public boolean markDirectTradeSoldIfActive(String listingId) {
                         return false;
                     }

@@ -133,7 +133,7 @@ export function DirectTradeConfirmation({
             aria-labelledby={titleId}
             aria-describedby={descriptionId}
             tabIndex={-1}
-            className="flex w-full max-w-sm flex-col gap-5 rounded-2xl bg-white p-6 shadow-2xl"
+            className="flex w-full max-w-sm flex-col gap-5 rounded-2xl bg-white p-6 shadow-overlay"
           >
             <div className="flex flex-col gap-2">
               <Heading level={2} id={titleId}>

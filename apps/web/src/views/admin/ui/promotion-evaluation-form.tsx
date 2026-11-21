@@ -185,7 +185,7 @@ export function PromotionEvaluationForm({
       aria-label="품질 평가 입력"
       className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/60 p-4"
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-lg bg-white p-6 shadow-overlay">
         <div className="flex flex-col gap-1">
           <Heading level={3}>품질 평가 입력</Heading>
           <Text tone="muted" size="sm">

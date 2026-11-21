@@ -66,10 +66,10 @@ public class MediaController {
     public List<UploadResponse> uploadBatch(
             @RequestParam("files") List<MultipartFile> files, HttpServletRequest request) {
         if (files == null || files.isEmpty()) {
-            throw new InvalidImageException("No files were uploaded");
+            throw new InvalidImageException("올린 파일이 없습니다");
         }
         if (files.size() > MAX_BATCH_SIZE) {
-            throw new InvalidImageException("Too many files: max " + MAX_BATCH_SIZE + " per request");
+            throw new InvalidImageException("한 번에 " + MAX_BATCH_SIZE + "장까지 올릴 수 있습니다");
         }
         uploadQuota.acquire(AuthenticatedUser.id(request), files.size());
         String ownerId = AuthenticatedUser.id(request);
@@ -78,13 +78,13 @@ public class MediaController {
 
     private UploadResponse storeOne(MultipartFile file, String ownerId) {
         if (file == null || file.isEmpty()) {
-            throw new InvalidImageException("Uploaded file is empty");
+            throw new InvalidImageException("빈 파일은 올릴 수 없습니다");
         }
         byte[] content;
         try {
             content = file.getBytes();
         } catch (IOException e) {
-            throw new InvalidImageException("Failed to read uploaded file");
+            throw new InvalidImageException("올린 파일을 읽지 못했습니다. 다시 시도해 주세요");
         }
         StoredImage stored = uploadImageUseCase.upload(
                 new UploadImageCommand(ownerId, content, file.getContentType(), file.getOriginalFilename()));
@@ -107,6 +107,10 @@ public class MediaController {
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 // 폐기 직후 브라우저·공유 캐시에서도 재노출되지 않도록 사용자 미디어를 저장하지 않는다.
                 .cacheControl(CacheControl.noStore())
+                // 같은 출처에서 SVG도 내보낸다. 주소를 직접 열어도 내용을 추측해 HTML로 읽거나 스크립트를 실행하지 않게
+                // 한다. <img>로 넣은 그림에는 이 응답의 CSP가 적용되지 않아 화면은 그대로다.
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
                 .body(image.content());
     }
 

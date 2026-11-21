@@ -74,7 +74,7 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
 
         // M1.2: 비었거나 이미지가 아니면 거부
         if (content == null || content.length == 0) {
-            throw new InvalidImageException("Uploaded file is empty");
+            throw new InvalidImageException("빈 파일은 올릴 수 없습니다");
         }
         // M1.3: 크기 한도
         if (content.length > maxImageBytes) {
@@ -89,11 +89,11 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
         boolean heif = "image/heic".equals(detectedType);
         boolean genericHeif = heif && (declaredType.isEmpty() || "application/octet-stream".equals(declaredType));
         if (!detectedType.equals(declaredType) && !genericHeif) {
-            throw new InvalidImageException("Declared image type does not match file content");
+            throw new InvalidImageException("파일 형식과 실제 내용이 다릅니다. 사진 파일을 다시 골라 주세요");
         }
         if (!heif && !EXTENSION_BY_TYPE.containsKey(detectedType)) {
             // JDK ImageIO가 안전하게 완전 재인코딩할 수 없는 GIF/WebP는 정지 이미지도 받지 않는다.
-            throw new InvalidImageException("Only non-animated JPEG and PNG images are allowed");
+            throw new InvalidImageException("움직이지 않는 JPEG·PNG 사진만 올릴 수 있습니다");
         }
 
         SanitizedImage sanitized = imageProcessor.sanitizeForStorage(content, detectedType);
@@ -101,7 +101,7 @@ public class MediaService implements UploadImageUseCase, LoadImageUseCase {
                 || sanitized.content() == null
                 || sanitized.content().length == 0
                 || !(heif ? "image/jpeg" : detectedType).equals(sanitized.contentType())) {
-            throw new InvalidImageException("Image could not be safely normalized");
+            throw new InvalidImageException("사진을 안전하게 처리하지 못했습니다. 다른 사진으로 다시 시도해 주세요");
         }
         if (sanitized.content().length > maxImageBytes) {
             throw new ImageTooLargeException(maxImageBytes);

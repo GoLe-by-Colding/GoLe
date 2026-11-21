@@ -37,3 +37,11 @@
 - 구획은 여백과 정렬·얇은 구분선으로 나누고, 같은 정보를 제목·배지·설명에서 반복하지 않는다.
 - 화면마다 다른 폰트·색·버튼을 만들지 않는다. 긴 한글·실제 이미지 비율·빈 데이터로도 구성이 유지되는지 본다.
 - 가로 넘침이 없다는 검사만으로 디자인 검수를 끝내지 않는다. 작은 화면에서 제목이 한두 글자씩 꺾이거나 그림이 슬롯을 벗어나지 않는지 스크린샷으로 확인한다.
+
+## 누름 반동과 모션 토큰 (2026-11-21)
+
+- 누를 수 있는 공용 요소는 `transition-press` 유틸리티(`globals.css`)를 쓴다. 색은 150ms `ease-out`, 크기(`scale`)만 220ms `--ease-spring`으로 따로 움직여 놓을 때 살짝 넘쳤다 돌아온다. 스프링 곡선을 색에 쓰지 않는다.
+- Tailwind 4의 `scale-*`는 `transform`이 아니라 독립 `scale` 속성이다. 전환 목록에 `transform`만 두면 누름이 애니메이션 없이 튄다.
+- 누름 크기는 `motion-safe:not-disabled:active:scale-96`으로 건다. 모션을 줄인 사용자와 비활성 요소에는 반동이 없다. `tests-e2e/press-motion.spec.ts`가 이를 지킨다.
+- 화면마다 `active:scale-*`·`duration-*`를 새로 쓰기 전에 위 유틸리티로 충분한지 먼저 본다. `active:scale-*`를 `transition-press` 없는 클래스 문자열에 쓰면 웹 ESLint(`no-restricted-syntax`)가 막는다.
+- 그림자는 토큰만 쓴다: 카드·작은 요소 `shadow-soft`, 떠 있는 바·메뉴 `shadow-md`·`shadow-lift`, 대화상자·시트 `shadow-overlay`. Tailwind 기본 `shadow-sm/lg/xl/2xl`은 웹 ESLint가 막는다.

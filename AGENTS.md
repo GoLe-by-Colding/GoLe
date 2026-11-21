@@ -220,10 +220,11 @@ NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY=channel-card-test \
 pnpm --filter web e2e
 ```
 
-기대치는 **209 passed / 10 skipped**다(2026-09-13 CI 확인, PR #127). 숫자가 크게 다르면
-코드가 아니라 환경을 먼저 의심한다.
+기대치는 **약 455 passed / 14 skipped**다(2026-11-21 로컬, 위 절차 + 아래 minio 대체, `--project=chromium`).
+그때 실패 1건(`community` 피드 카드)과 flaky 2건이 있었다. 실패 1건은 같은 로컬 DB에서 전체 실행을 여러 번 해 쌓인 글에 시드 글이 첫 페이지 밖으로 밀린 것이었다 — 단독 실행은 통과한다. 반복할 때는 `gole_e2e` DB를 비우고 다시 심는다.
+숫자가 크게 다르면 코드가 아니라 환경을 먼저 의심한다. 환경값을 빠뜨리면 18건 안팎이 환경 탓으로 실패한다.
 
-> 2026-09-13 이전 기준선은 206 passed / 13 skipped 였다. 관리자 권한 경계 3건이
+> 2026-09-13 CI 기준선은 209 passed / 10 skipped(PR #127), 그 이전은 206 passed / 13 skipped 였다. 관리자 권한 경계 3건이
 > `GOLE_ADMIN_*` 부재로 skip 되던 것을 PR #127 이 실제로 돌게 만들어 그만큼 옮겨갔다.
 
 - 쓰기 플로우(`create-listing`, `purchase`)는 서버가 검증하는 실제 세션이 필요하므로
@@ -235,6 +236,16 @@ pnpm --filter web e2e
 - `E2E_BASE_URL`을 주면 배포 대상 읽기전용 검증이 되고 쓰기 플로우는 자동 skip.
 - 브라우저 테스트는 항상 `NEXT_PUBLIC_PAYMENT_MODE=stub`으로 강제된다(실제 결제창은 자동화 불가).
   `portone-request.spec.ts`만 Node 프로세스에서 돌아 실제 모드 값을 읽는다.
+- `pnpm infra:up`의 minio 기본 이미지(quay digest)는 인증 없이 받으면 401이다. 그러면 사진 업로드가 필요한
+  흐름(`create-listing`·`purchase`·`trading-completion` 등)이 환경 탓으로 실패한다. GHCR 이미지 권한이 없으면
+  `cgr.dev/chainguard/minio`를 compose 밖에서 띄우고(이 이미지엔 `curl`·`bash`가 없어 compose 상태 확인이 실패한다)
+  `cgr.dev/chainguard/minio-client`로 `mc mb local/gole-e2e`를 만든 뒤, API에 `STORAGE_S3_ACCESS_KEY`·
+  `STORAGE_S3_SECRET_KEY`를 그 minio 계정으로 넘긴다(2026-11-21 확인).
+- 같은 셀러로 사진 흐름을 여러 번 반복하면 `MEDIA_UPLOAD_RATE_LIMITED`로 실패한다. 격리 Redis의
+  `gole:media-upload-quota:*` 키를 지우면 된다.
+- `pnpm e2e:seed`는 계정·세션만 심고 매물 상태는 되돌리지 않는다. 손으로 시드 매물을 판매완료·예약으로 바꾸며
+  점검했다면 그 매물에 기대는 시험(예: `search-and-listing`의 레거시 상태 링크)이 데이터 탓으로 깨진다.
+- `next dev`·`pnpm install`이 `apps/web/AGENTS.md`의 제목 수준을 고쳐 쓴다. 커밋 전에 되돌린다.
 
 ## 아키텍처
 

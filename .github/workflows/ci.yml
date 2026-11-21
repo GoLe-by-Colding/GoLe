@@ -344,7 +344,9 @@ jobs:
 
   infra:
     name: Infra (budget relay · Compose · Terraform)
-    runs-on: ubuntu-latest
+    # 호스트 스크립트·sudoers 계약은 운영 VM(Terraform boot_image: Ubuntu 24.04)과 같은 OS에서 검사한다.
+    # ubuntu-latest(26.04)의 sudo-rs visudo 는 운영 sudoers 의 정규식 규칙을 문법 오류로 거부한다.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read

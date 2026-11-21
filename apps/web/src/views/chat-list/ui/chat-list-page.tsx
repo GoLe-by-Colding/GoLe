@@ -126,6 +126,8 @@ export function ChatListPage() {
   const resolvedConversationOwnerIdRef = useRef<string | null>(null);
   const blockedAccountIdsRef = useRef<readonly string[] | null>(null);
   const unreadMutationVersionRef = useRef(0);
+  // 화면에 반영한 안 읽음 수 조회를 언제 시작했는지(ms). 늦게 온 읽음 확정보다 새 정보인지 가른다.
+  const unreadFetchedFromRef = useRef(0);
   const tradeMutationVersionRef = useRef(0);
   const sessionAccountIdRef = useRef(sessionAccountId);
   const handledRoomRequestRef = useRef<string | null>(null);
@@ -156,6 +158,7 @@ export function ChatListPage() {
       resolvedConversationOwnerIdRef.current = null;
       blockedAccountIdsRef.current = null;
       unreadMutationVersionRef.current = 0;
+      unreadFetchedFromRef.current = 0;
       return;
     }
 
@@ -170,11 +173,13 @@ export function ChatListPage() {
     resolvedConversationOwnerIdRef.current = null;
     blockedAccountIdsRef.current = null;
     unreadMutationVersionRef.current = 0;
+    unreadFetchedFromRef.current = 0;
 
     const loadRooms = async () => {
       if (!active || requestRunning || document.visibilityState !== "visible") return;
       requestRunning = true;
       const unreadVersionAtStart = unreadMutationVersionRef.current;
+      const unreadRequestedAt = Date.now();
       const resolvedAtStart =
         resolvedConversationOwnerIdRef.current === sessionAccountId
           ? resolvedConversationRef.current
@@ -216,6 +221,7 @@ export function ChatListPage() {
           unreadResult.status === "fulfilled" &&
           unreadMutationVersionRef.current === unreadVersionAtStart
         ) {
+          unreadFetchedFromRef.current = unreadRequestedAt;
           setUnreadCounts(unreadResult.value);
           setUnreadOwnerId(sessionAccountId);
         }
@@ -539,7 +545,9 @@ export function ChatListPage() {
   const managedTargetBlocked =
     managedBlockTarget !== null && (blockedAccountIds?.includes(managedBlockTarget) ?? false);
 
-  const handleRoomRead = useCallback((roomId: string) => {
+  const handleRoomRead = useCallback((roomId: string, readRequestedAt: number) => {
+    // 읽음 요청 뒤에 시작한 조회가 이미 반영됐다면 서버의 수가 더 새롭다(그 사이 온 메시지 포함). 덮지 않는다.
+    if (unreadFetchedFromRef.current > readRequestedAt) return;
     unreadMutationVersionRef.current += 1;
     setUnreadCounts((current) => {
       if (current === null) return current;
@@ -879,7 +887,7 @@ export function ChatListPage() {
                           suppressDefaultSelectionRef.current = false;
                           setSelectedId(conversation.room.id);
                         }}
-                        className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-[background-color,transform] duration-200 motion-safe:active:scale-[0.99] ${
+                        className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-press motion-safe:active:scale-[0.99] ${
                           active ? "bg-brand-50" : "hover:bg-neutral-50"
                         }`}
                       >

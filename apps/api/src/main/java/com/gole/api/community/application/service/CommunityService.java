@@ -180,7 +180,7 @@ public class CommunityService
     public void delete(String postId, String requesterId) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new PostNotFoundException(postId));
         if (!post.getAuthorId().equals(requesterId)) {
-            throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can delete this post");
+            throw new ForbiddenException("NOT_POST_AUTHOR", "작성자만 글을 삭제할 수 있습니다");
         }
         post.delete();
         postRepository.save(post);
@@ -205,7 +205,7 @@ public class CommunityService
     public void edit(EditPostCommand command) {
         Post post = requirePublished(command.postId());
         if (!post.getAuthorId().equals(command.requesterId())) {
-            throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
+            throw new ForbiddenException("NOT_POST_AUTHOR", "작성자만 글을 수정할 수 있습니다");
         }
         postImages.replaceImages(command.requesterId(), command.postId(), command.imageKeys(), true);
         post.edit(command.content(), command.imageKeys());
@@ -220,7 +220,7 @@ public class CommunityService
                 .filter(candidate -> candidate.getStatus() != PostStatus.DELETED)
                 .orElseThrow(() -> new PostNotFoundException(command.postId()));
         if (!post.getAuthorId().equals(command.requesterId())) {
-            throw new ForbiddenException("NOT_POST_AUTHOR", "Only the author can edit this post");
+            throw new ForbiddenException("NOT_POST_AUTHOR", "작성자만 글을 수정할 수 있습니다");
         }
 
         String nextBody = command.body().provided() ? command.body().value() : post.getContent();

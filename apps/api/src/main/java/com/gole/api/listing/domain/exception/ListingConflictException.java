@@ -21,6 +21,11 @@ public class ListingConflictException extends ConflictException {
         return new ListingConflictException("LISTING_ORDER_IN_PROGRESS", "진행 중인 주문이 있는 매물은 수정하거나 끌올할 수 없습니다");
     }
 
+    /** 진행 중 주문(RESERVED)이 있어 판매자가 직접 판매 완료로 바꿀 수 없다. */
+    public static ListingConflictException orderInProgressForSold() {
+        return new ListingConflictException("LISTING_ORDER_IN_PROGRESS", "진행 중인 주문이 있는 매물은 직접 판매 완료로 바꿀 수 없습니다");
+    }
+
     /** 판매 완료·삭제된 매물은 수정할 수 없다. */
     public static ListingConflictException notEditable() {
         return new ListingConflictException("LISTING_NOT_EDITABLE", "판매 중인 매물만 수정할 수 있습니다");

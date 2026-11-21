@@ -181,7 +181,7 @@ test.describe("동적 콘텐츠 경로", () => {
     const unsafeRow = page.getByRole("listitem").filter({ hasText: "잘못된 외부 링크" });
     await expect(unsafeRow.getByRole("link")).toHaveCount(0);
     await unsafeRow.getByRole("button").click();
-    expect(readId).toBe("unsafe-notification");
+    await expect.poll(() => readId).toBe("unsafe-notification");
     await expect(unsafeRow.getByRole("button")).toHaveCount(0);
 
     await page.unroute(`**/api/v1/users/${accountId}/notifications`);
