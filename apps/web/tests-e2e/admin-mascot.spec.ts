@@ -506,7 +506,9 @@ test.describe("운영자 콘솔 · 마스코트", () => {
     await openMascotConsole(page, state);
     await page.goto("/admin/mascot");
     const candidate = page.getByRole("button", { name: /둥근 아기 고래/ });
-    await expect(candidate).toBeVisible();
+    // 후보는 초기 조회 중에도 비활성으로 보인다. 활성이 돼야 초기 조회가 끝난 것이고, 그 전에 아래 지연 route를
+    // 걸면 초기 조회까지 붙잡혀 "다시 불러오기"가 끝내 비활성으로 남는다.
+    await expect(candidate).toBeEnabled();
     let release!: () => void;
     const pending = new Promise<void>((resolve) => {
       release = resolve;
