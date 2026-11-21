@@ -230,7 +230,7 @@ test.describe("Community topics", () => {
       "aria-pressed",
       "true",
     );
-    expect(methods).toEqual(["DELETE", "POST"]);
+    await expect.poll(() => methods).toEqual(["DELETE", "POST"]);
     expect(authorizations).toEqual(["Bearer session-like", "Bearer session-like"]);
   });
 
