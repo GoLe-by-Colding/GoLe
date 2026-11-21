@@ -20,6 +20,9 @@ export function LikeButton({ postId, initialLikeCount, initialLiked = false }: L
   const [count, setCount] = useState(initialLikeCount);
   const [liked, setLiked] = useState(initialLiked);
   const [busy, setBusy] = useState(false);
+  // 사용자가 좋아요를 누른 횟수. 하트의 key 로 써서 누를 때마다 튀는 반응을 다시 재생한다.
+  // 처음부터 좋아요인 글에서는 0 이라 튀지 않는다.
+  const [pops, setPops] = useState(0);
   const [error, setError] = useState<string | undefined>(undefined);
 
   async function handleToggle() {
@@ -35,6 +38,7 @@ export function LikeButton({ postId, initialLikeCount, initialLiked = false }: L
     const nextLiked = !previousLiked;
     setError(undefined);
     setLiked(nextLiked);
+    if (nextLiked) setPops((value) => value + 1);
     setCount(Math.max(0, previousCount + (nextLiked ? 1 : -1)));
     setBusy(true);
     try {
@@ -72,7 +76,11 @@ export function LikeButton({ postId, initialLikeCount, initialLiked = false }: L
           liked ? "text-brand-500" : "text-neutral-500 hover:text-neutral-900",
         )}
       >
-        <HeartIcon className="h-4 w-4" filled={liked} />
+        <HeartIcon
+          key={pops}
+          className={cn("h-4 w-4", pops > 0 && liked && "motion-safe:animate-like-pop")}
+          filled={liked}
+        />
         {count}
       </button>
       <span className="sr-only" role="status" aria-live="polite">

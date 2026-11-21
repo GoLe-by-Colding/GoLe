@@ -99,6 +99,8 @@
   --animate-spout-stream: spout-stream 3.2s ease-in-out infinite;
   --animate-mascot-float: mascot-float 4.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
   --animate-rise-in: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* 좋아요를 누른 순간 하트가 톡 튀었다 돌아온다. */
+  --animate-like-pop: like-pop 420ms var(--ease-spring) both;
   /* 히어로 우측 레일. 분수 → 라이브 지표 → CTA 순서로 시선이 내려가야 하므로
      같은 rise-in을 한 박자씩 늦춰 재생해 읽는 방향 자체를 연출한다. */
   --animate-hero-flow: rise-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -164,6 +166,20 @@
     }
     50% {
       transform: translateY(-5px) rotate(0.4deg);
+    }
+  }
+  @keyframes like-pop {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(1.35);
+    }
+    70% {
+      transform: scale(0.92);
+    }
+    100% {
+      transform: scale(1);
     }
   }
   @keyframes rise-in {
