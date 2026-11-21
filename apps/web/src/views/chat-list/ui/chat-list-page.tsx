@@ -48,6 +48,7 @@ import {
   Skeleton,
   Text,
   Chip,
+  Input,
 } from "@shared/ui";
 
 type Conversation =
@@ -1014,12 +1015,12 @@ export function ChatListPage() {
                       </p>
                     </div>
                     {!managedTargetBlocked ? (
-                      <input
+                      <Input
                         value={blockReason}
                         maxLength={200}
                         onChange={(event) => setBlockReason(event.target.value)}
                         placeholder="차단 사유 (선택)"
-                        className="h-10 rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                        size="sm"
                       />
                     ) : null}
                     <div className="flex justify-end gap-2">
@@ -1384,11 +1385,12 @@ function PeerPicker({
     <div className="min-w-0 flex-1">
       <label className="block text-xs font-semibold text-neutral-600">
         {label}
-        <input
+        <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="대화 상대 이름 검색"
-          className="mt-1 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-brand-400"
+          size="sm"
+          className="mt-1"
         />
       </label>
       <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto" aria-label={label}>
@@ -1424,12 +1426,12 @@ function LabeledInput({
   return (
     <label className="flex flex-col gap-1.5 text-sm font-semibold text-neutral-700">
       {label}
-      <input
+      <Input
         required
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-normal outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        size="sm"
       />
     </label>
   );

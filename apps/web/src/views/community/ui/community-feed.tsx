@@ -10,7 +10,7 @@ import {
   type PostType,
 } from "@entities/community";
 import { useSession } from "@entities/user";
-import { Button, Chip, SearchIcon, Segmented, Text } from "@shared/ui";
+import { Button, Chip, SearchIcon, Segmented, Text, Input } from "@shared/ui";
 import { PostCard } from "@widgets/post-card";
 
 type Filter = PostType | "all" | "following";
@@ -192,13 +192,14 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
             className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400"
           />
           <span className="sr-only">게시글 검색</span>
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="내용이나 작성자로 검색"
             maxLength={100}
-            className="h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 pr-3 pl-9 text-sm outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-50"
+            size="sm"
+            className="pl-9"
           />
         </label>
         <Segmented

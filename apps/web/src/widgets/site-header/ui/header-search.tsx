@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { searchLegoSets, type LegoSet } from "@entities/lego-set";
+import { Input } from "@shared/ui";
 
 export interface HeaderSearchProps {
   /** 모바일 메뉴 등에서 전체 너비로 쓸 때 */
@@ -83,7 +84,7 @@ export function HeaderSearch({ fullWidth = false, onSubmitted }: HeaderSearchPro
               <path d="m20 20-3.2-3.2" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </span>
-          <input
+          <Input
             type="search"
             value={value}
             placeholder="세트번호·이름으로 검색"
@@ -91,7 +92,8 @@ export function HeaderSearch({ fullWidth = false, onSubmitted }: HeaderSearchPro
             autoComplete="off"
             onChange={(e) => setValue(e.target.value)}
             onFocus={() => results.length > 0 && setSearch((s) => ({ ...s, open: true }))}
-            className="h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm text-neutral-900 outline-none transition-colors focus-visible:border-brand-400 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-brand-100"
+            size="sm"
+            className="pl-9"
           />
         </div>
       </form>
