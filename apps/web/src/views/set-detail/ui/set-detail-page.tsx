@@ -9,12 +9,24 @@ import { CONDITION_LABEL, priceEvidenceWarning, type PriceSnapshot } from "@enti
 import { SetBidSection } from "@features/buy-bid";
 import { WishlistButton } from "@features/wishlist-toggle";
 import { buildPriceNotes, ListingGrid } from "@widgets/listing-grid";
-import { Badge, Card, Container, Heading, LinkButton, MediaImage, Text } from "@shared/ui";
+import {
+  Badge,
+  Card,
+  Container,
+  EmptyState,
+  Heading,
+  LinkButton,
+  MediaImage,
+  RefreshButton,
+  Text,
+} from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 
 export interface SetDetailPageProps {
   readonly set: LegoSet;
   readonly listings: readonly Listing[];
+  readonly listingsLoadFailed?: boolean;
+  readonly sellerTradingOpen?: boolean;
   readonly snapshot: PriceSnapshot | null;
   /** 이 세트의 열린 부품 요청 수. 조회에 실패했으면 `null`이고 건수 없이 링크만 보여 준다. */
   readonly openPartRequestCount?: number | null;
@@ -46,6 +58,8 @@ export function SetDetailPage({
   openPartRequestCount = null,
   openPartRequestLimit = 50,
   bidBook = null,
+  listingsLoadFailed = false,
+  sellerTradingOpen = false,
 }: SetDetailPageProps) {
   const activeCount = listings.length;
   const partRequestLabel =
@@ -109,7 +123,10 @@ export function SetDetailPage({
             <StatCell label="세트번호" value={set.setNumber} />
             <StatCell label="부품 수" value={`${set.pieceCount.toLocaleString()}피스`} />
             <StatCell label="출시" value={`${set.releaseYear}년`} />
-            <StatCell label="판매 중" value={`${activeCount}건`} />
+            <StatCell
+              label="판매 중"
+              value={listingsLoadFailed ? "확인 불가" : `${activeCount}건`}
+            />
           </dl>
 
           <div
@@ -276,12 +293,18 @@ export function SetDetailPage({
             구매 입찰
           </Heading>
           <Text size="sm" tone="muted">
-            상태별 최고 입찰가가 곧 판매자가 지금 팔면 받는 값이에요. 실제 대기 수요라 체결 시세와는
-            따로 보여요.
+            {sellerTradingOpen
+              ? "상태별 최고 입찰가가 곧 판매자가 지금 팔면 받는 값이에요. 실제 대기 수요라 체결 시세와는 따로 보여요."
+              : "구매자가 등록한 희망 가격과 수요예요. 판매자 본인확인 준비 전에는 판매 수락과 새 거래 연결이 열리지 않습니다."}
           </Text>
         </div>
         <div className="mt-4">
-          <SetBidSection key={set.setNumber} setNumber={set.setNumber} initialBook={bidBook} />
+          <SetBidSection
+            key={set.setNumber}
+            setNumber={set.setNumber}
+            initialBook={bidBook}
+            sellerTradingOpen={sellerTradingOpen}
+          />
         </div>
       </section>
 
@@ -291,26 +314,55 @@ export function SetDetailPage({
           <Heading level={2} id="set-listings-heading">
             {set.name} 중고 매물
           </Heading>
-          <LinkButton href={sellSetHref(set.setNumber)} size="sm" variant="secondary">
-            이 세트 팔기
-          </LinkButton>
+          {sellerTradingOpen ? (
+            <LinkButton href={sellSetHref(set.setNumber)} size="sm" variant="secondary">
+              이 세트 팔기
+            </LinkButton>
+          ) : null}
         </div>
+        {!sellerTradingOpen ? (
+          <Card padded className="mt-4 flex flex-col items-start gap-2">
+            <Text weight="semibold">신규 판매 등록 준비 중</Text>
+            <Text size="sm" tone="muted">
+              판매자 본인확인 준비가 끝나면 이 세트의 판매 등록과 새 거래 연결을 열어요. 지금은 세트
+              정보와 브릭 이야기를 살펴볼 수 있어요.
+            </Text>
+            <LinkButton
+              href="/chat?compose=support&category=PRODUCT_FEEDBACK"
+              size="sm"
+              variant="secondary"
+            >
+              운영 문의
+            </LinkButton>
+          </Card>
+        ) : null}
         <div className="mt-4">
-          <ListingGrid
-            listings={listings}
-            priceNotes={buildPriceNotes(listings, { [set.setNumber]: snapshot })}
-            emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
-            emptyAction={
-              <div className="flex flex-wrap justify-center gap-2">
-                <LinkButton href={sellSetHref(set.setNumber)} size="sm">
-                  이 세트 팔기
-                </LinkButton>
-                <LinkButton href="/community" size="sm" variant="ghost">
-                  브릭 이야기 보기
-                </LinkButton>
-              </div>
-            }
-          />
+          {listingsLoadFailed ? (
+            <EmptyState
+              variant="inline"
+              title="세트 매물을 불러오지 못했어요"
+              description="매물이 없는 상태가 아니라 일시적인 조회 오류예요. 잠시 후 다시 확인해 주세요."
+              action={<RefreshButton variant="secondary" />}
+            />
+          ) : (
+            <ListingGrid
+              listings={listings}
+              priceNotes={buildPriceNotes(listings, { [set.setNumber]: snapshot })}
+              emptyMessage={`아직 공개된 ${set.name} 매물이 없습니다.`}
+              emptyAction={
+                <div className="flex flex-wrap justify-center gap-2">
+                  {sellerTradingOpen ? (
+                    <LinkButton href={sellSetHref(set.setNumber)} size="sm">
+                      이 세트 팔기
+                    </LinkButton>
+                  ) : null}
+                  <LinkButton href="/community" size="sm" variant="ghost">
+                    브릭 이야기 보기
+                  </LinkButton>
+                </div>
+              }
+            />
+          )}
         </div>
       </section>
     </Container>
