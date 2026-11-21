@@ -8,6 +8,6 @@ import com.gole.api.common.exception.DomainException;
 public class WeakPasswordException extends DomainException {
 
     public WeakPasswordException() {
-        super("PASSWORD_TOO_SHORT", "Password must be at least 8 characters");
+        super("PASSWORD_TOO_SHORT", "비밀번호는 8자 이상이어야 합니다");
     }
 }

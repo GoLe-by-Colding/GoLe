@@ -110,8 +110,8 @@ public class SocialAuthController {
 
     private static AuthProvider parse(String provider) {
         return AuthProvider.from(provider)
-                .orElseThrow(() ->
-                        new BadRequestException("OAUTH_PROVIDER_UNSUPPORTED", "Unsupported provider: " + provider));
+                .orElseThrow(
+                        () -> new BadRequestException("OAUTH_PROVIDER_UNSUPPORTED", "지원하지 않는 소셜 로그인입니다: " + provider));
     }
 
     private static SignupPolicyAcceptance policyAcceptance(

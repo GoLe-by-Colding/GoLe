@@ -234,10 +234,10 @@ public final class Account {
             return; // 멱등
         }
         if (verificationChallenge == null) {
-            throw new VerificationException("VERIFICATION_CODE_MISSING", "No verification code issued");
+            throw new VerificationException("VERIFICATION_CODE_MISSING", "발급된 인증 코드가 없습니다. 새 인증 코드를 요청해 주세요");
         }
         if (verificationChallenge.isExpired(now)) {
-            throw new VerificationException("VERIFICATION_CODE_EXPIRED", "Verification code has expired");
+            throw new VerificationException("VERIFICATION_CODE_EXPIRED", "인증 코드가 만료되었습니다. 새 인증 코드를 요청해 주세요");
         }
         if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
             throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
@@ -247,7 +247,7 @@ public final class Account {
             if (verificationFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                 throw new VerificationException("VERIFICATION_TOO_MANY_ATTEMPTS", "인증 시도가 초과되었습니다. 새 인증 코드를 요청해 주세요");
             }
-            throw new VerificationException("VERIFICATION_CODE_MISMATCH", "Verification code does not match");
+            throw new VerificationException("VERIFICATION_CODE_MISMATCH", "인증 코드가 일치하지 않습니다");
         }
         this.status = AccountStatus.VERIFIED;
         this.verificationChallenge = null;
@@ -257,7 +257,7 @@ public final class Account {
     /** 인증 대기 계정에 새 코드를 발급한다. 과도한 재요청은 60초 동안 차단한다. */
     public void reissueVerificationCode(EmailVerificationChallenge challenge, Instant now) {
         if (status != AccountStatus.UNVERIFIED) {
-            throw new VerificationException("ALREADY_VERIFIED", "Email is already verified");
+            throw new VerificationException("ALREADY_VERIFIED", "이미 인증된 이메일입니다");
         }
         if (verificationChallenge != null
                 && now.isBefore(verificationChallenge.issuedAt().plusSeconds(60))) {

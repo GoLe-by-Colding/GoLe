@@ -124,10 +124,10 @@ public class SocialAuthService implements SocialLoginUseCase {
                 identityProvider.fetchProfile(command.provider(), command.code(), command.redirectUri());
 
         if (profile.email() == null || profile.email().isBlank()) {
-            throw new BadRequestException("OAUTH_EMAIL_UNAVAILABLE", "Provider did not return an email address");
+            throw new BadRequestException("OAUTH_EMAIL_UNAVAILABLE", "소셜 계정에서 이메일을 받지 못했습니다. 이메일 제공에 동의한 뒤 다시 시도해 주세요");
         }
         if (!profile.emailVerified()) {
-            throw new BadRequestException("OAUTH_EMAIL_UNVERIFIED", "Provider email address is not verified");
+            throw new BadRequestException("OAUTH_EMAIL_UNVERIFIED", "소셜 계정의 이메일이 인증되지 않았습니다. 이메일 인증을 마친 뒤 다시 시도해 주세요");
         }
 
         Email email = new Email(profile.email());
