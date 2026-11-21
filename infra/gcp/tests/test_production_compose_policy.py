@@ -356,6 +356,19 @@ class ProductionComposePolicyTest(unittest.TestCase):
         with self.assertRaises(self.validator.ComposePolicyError):
             self.validator.validate(model, allow_lkg_image_pins=True)
 
+    def test_lkg_mode_accepts_previous_nginx_release_and_rejects_other_tags(self) -> None:
+        digest = "b" * 64
+        model = copy.deepcopy(self.model)
+        model["services"]["nginx"]["image"] = f"nginx:1.29-alpine@sha256:{digest}"
+        with self.assertRaises(self.validator.ComposePolicyError):
+            self.validator.validate(model)
+        self.validator.validate(model, allow_lkg_image_pins=True)
+        for image in (f"nginx:1.31-alpine@sha256:{digest}", f"nginx:latest@sha256:{digest}"):
+            with self.subTest(image=image):
+                model["services"]["nginx"]["image"] = image
+                with self.assertRaises(self.validator.ComposePolicyError):
+                    self.validator.validate(model, allow_lkg_image_pins=True)
+
     def test_rejects_edge_service_data_network_membership(self) -> None:
         for service in ("frontend", "nginx", "budget-relay"):
             with self.subTest(service=service):

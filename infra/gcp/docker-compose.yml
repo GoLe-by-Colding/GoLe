@@ -378,7 +378,7 @@ services:
 
   nginx:
     <<: *gole-security
-    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    image: nginx:1.30.7-alpine@sha256:caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3
     container_name: gole-nginx
     logging: *gole-logging
     restart: unless-stopped
