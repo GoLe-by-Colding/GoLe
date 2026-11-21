@@ -68,7 +68,7 @@ export function LikeButton({ postId, initialLikeCount, initialLiked = false }: L
         aria-pressed={liked}
         aria-label={`${liked ? "좋아요 취소" : "좋아요"}, ${count}개`}
         className={cn(
-          "inline-flex items-center gap-1 text-sm font-medium transition-[color,transform,opacity] duration-150 motion-safe:active:scale-90 disabled:opacity-60",
+          "inline-flex items-center gap-1 text-sm font-medium transition-press motion-safe:not-disabled:active:scale-90 disabled:opacity-60",
           liked ? "text-brand-500" : "text-neutral-500 hover:text-neutral-900",
         )}
       >
