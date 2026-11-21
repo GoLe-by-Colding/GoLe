@@ -8,6 +8,6 @@ import com.gole.api.common.exception.DomainException;
 public class PostImageRequiredException extends DomainException {
 
     public PostImageRequiredException() {
-        super("POST_IMAGE_REQUIRED", "At least one image is required");
+        super("POST_IMAGE_REQUIRED", "사진을 한 장 이상 올려 주세요");
     }
 }

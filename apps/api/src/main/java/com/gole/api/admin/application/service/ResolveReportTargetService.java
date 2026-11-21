@@ -26,7 +26,7 @@ public class ResolveReportTargetService implements ResolveReportTargetUseCase {
     public void resolve(String reportId, String reason) {
         ReportCase report = reports.find(reportId);
         if (!report.pending()) {
-            throw new ConflictException("REPORT_ALREADY_HANDLED", "Report already handled: " + reportId);
+            throw new ConflictException("REPORT_ALREADY_HANDLED", "이미 처리된 신고입니다");
         }
         switch (report.targetKind()) {
             case LISTING -> moderation.takedownListing(report.targetId(), reason);

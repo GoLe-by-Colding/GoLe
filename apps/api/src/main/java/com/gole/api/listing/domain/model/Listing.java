@@ -207,7 +207,7 @@ public final class Listing {
     /** 판매 완료 처리. (요구사항 5.6) */
     public void markSold() {
         if (status == ListingStatus.DELETED) {
-            throw new ListingStateException("LISTING_DELETED", "Deleted listing cannot be sold");
+            throw new ListingStateException("LISTING_DELETED", "삭제된 매물은 판매 완료로 바꿀 수 없습니다");
         }
         this.status = ListingStatus.SOLD;
     }
@@ -215,8 +215,7 @@ public final class Listing {
     /** 삭제. 진행 중 주문(RESERVED)이 있으면 거부. (요구사항 5.7, 5.8) */
     public void delete() {
         if (status == ListingStatus.RESERVED) {
-            throw new ListingStateException(
-                    "LISTING_ORDER_IN_PROGRESS", "Listing with an in-progress order cannot be deleted");
+            throw new ListingStateException("LISTING_ORDER_IN_PROGRESS", "진행 중인 주문이 있는 매물은 삭제할 수 없습니다");
         }
         this.status = ListingStatus.DELETED;
         this.photoUrls = List.of();

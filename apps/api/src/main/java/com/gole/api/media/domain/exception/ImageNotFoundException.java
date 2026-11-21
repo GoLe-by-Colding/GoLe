@@ -6,6 +6,6 @@ import com.gole.api.common.exception.NotFoundException;
 public class ImageNotFoundException extends NotFoundException {
 
     public ImageNotFoundException(String key) {
-        super("IMAGE_NOT_FOUND", "Image not found: " + key);
+        super("IMAGE_NOT_FOUND", "이미지를 찾을 수 없습니다");
     }
 }

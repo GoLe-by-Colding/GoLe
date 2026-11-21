@@ -78,8 +78,7 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
 
     @Override
     public SanitizedImage sanitizeForStorage(byte[] source, String contentType) {
-        if (source != null && source.length > maxBytes)
-            throw new InvalidImageException("Image bytes exceed the allowed limit");
+        if (source != null && source.length > maxBytes) throw new InvalidImageException("사진 용량이 너무 큽니다");
         if (source != null && ("image/heic".equals(contentType) || "image/heif".equals(contentType))) {
             if (!com.gole.api.media.domain.model.HeifSignature.matches(source)) throw invalidImage();
             return sanitizeForStorage(heif.decode(source, maxWidth, maxHeight, maxPixels, maxBytes), JPEG);
@@ -88,7 +87,7 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
             throw invalidImage();
         }
         if (PNG.equals(contentType) && containsAnimatedPngChunk(source)) {
-            throw new InvalidImageException("Animated images are not allowed");
+            throw new InvalidImageException("움직이는 사진은 올릴 수 없습니다");
         }
 
         try (ImageInputStream input = new MemoryCacheImageInputStream(new ByteArrayInputStream(source))) {
@@ -215,7 +214,7 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
     private void requireSafeDimensions(int width, int height) {
         long pixels = (long) width * height;
         if (width <= 0 || height <= 0 || width > maxWidth || height > maxHeight || pixels > maxPixels) {
-            throw new InvalidImageException("Image dimensions exceed the allowed limit");
+            throw new InvalidImageException("사진 크기(가로·세로)가 너무 큽니다");
         }
     }
 
@@ -296,6 +295,6 @@ public class ImageIoImageProcessorAdapter implements ImageProcessorPort {
     }
 
     private static InvalidImageException invalidImage() {
-        return new InvalidImageException("Image could not be safely decoded");
+        return new InvalidImageException("사진을 읽지 못했습니다. 다른 사진으로 다시 시도해 주세요");
     }
 }

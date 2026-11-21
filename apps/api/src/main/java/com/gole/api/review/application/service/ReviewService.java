@@ -49,17 +49,16 @@ public class ReviewService
         // R2.1: 주문 존재 확인
         OrderSnapshot order = orderQuery
                 .findById(command.orderId())
-                .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "Order not found: " + command.orderId()));
+                .orElseThrow(() -> new NotFoundException("ORDER_NOT_FOUND", "주문을 찾을 수 없습니다"));
 
         // R2.2: 완료된 주문만 후기 가능
         if (!order.completed()) {
-            throw new ConflictException(
-                    "REVIEW_ORDER_NOT_COMPLETED", "Reviews can only be written for completed orders");
+            throw new ConflictException("REVIEW_ORDER_NOT_COMPLETED", "구매확정한 주문에만 후기를 쓸 수 있습니다");
         }
 
         // R2.3: 요청자가 주문의 구매자여야 함
         if (!order.buyerId().equals(command.reviewerId())) {
-            throw new ForbiddenException("NOT_ORDER_BUYER", "Only the buyer of the order can write a review");
+            throw new ForbiddenException("NOT_ORDER_BUYER", "이 주문의 구매자만 후기를 쓸 수 있습니다");
         }
 
         // R2.5: 자기 자신에게는 후기를 남길 수 없다(자기거래 주문 방어).

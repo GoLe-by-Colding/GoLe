@@ -8,6 +8,6 @@ import com.gole.api.common.exception.ConflictException;
 public class DuplicateReviewException extends ConflictException {
 
     public DuplicateReviewException(String orderId) {
-        super("DUPLICATE_REVIEW", "A review already exists for order: " + orderId);
+        super("DUPLICATE_REVIEW", "이 주문에는 이미 후기를 남겼습니다");
     }
 }

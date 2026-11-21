@@ -53,7 +53,7 @@ public class CollectionService implements ManageCollectionUseCase, EstimateColle
         CollectionItem item =
                 repository.findById(itemId).orElseThrow(() -> new CollectionItemNotFoundException(itemId));
         if (!item.userId().equals(userId)) {
-            throw new ForbiddenException("NOT_COLLECTION_OWNER", "Only the owner can remove this item");
+            throw new ForbiddenException("NOT_COLLECTION_OWNER", "본인 컬렉션의 항목만 지울 수 있습니다");
         }
         repository.delete(item);
     }

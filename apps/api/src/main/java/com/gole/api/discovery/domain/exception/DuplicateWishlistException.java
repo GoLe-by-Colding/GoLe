@@ -6,6 +6,6 @@ import com.gole.api.common.exception.ConflictException;
 public class DuplicateWishlistException extends ConflictException {
 
     public DuplicateWishlistException() {
-        super("DUPLICATE_WISHLIST", "Already in wishlist");
+        super("DUPLICATE_WISHLIST", "이미 찜한 항목입니다");
     }
 }
