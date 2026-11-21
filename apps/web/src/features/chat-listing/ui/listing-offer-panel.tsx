@@ -23,7 +23,7 @@ import {
 } from "@entities/user";
 import { ApiError } from "@shared/api";
 import { useClock } from "@shared/lib";
-import { Button, LinkButton } from "@shared/ui";
+import { Button, LinkButton, Input } from "@shared/ui";
 
 type ConsentRunner = <T>(action: () => Promise<T>, path: ThirdPartyProvisionPath) => Promise<T>;
 type Response = "accept" | "decline" | "withdraw";
@@ -233,7 +233,7 @@ export function ListingOfferPanel({
             제안 금액 (원)
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               id={priceInputId}
               type="number"
               inputMode="numeric"
@@ -246,7 +246,8 @@ export function ListingOfferPanel({
                   ? "금액 입력"
                   : `${formatWon(currentListing.price)}보다 낮게`
               }
-              className="h-9 min-w-0 flex-1 rounded-md border border-neutral-200 bg-white px-3 text-sm tabular-nums outline-none focus-visible:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-100"
+              size="sm"
+              className="min-w-0 flex-1 tabular-nums"
               autoFocus
             />
             <Button type="submit" size="sm" className="shrink-0" disabled={busy !== null}>

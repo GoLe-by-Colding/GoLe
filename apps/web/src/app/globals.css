@@ -211,8 +211,10 @@
     @apply bg-neutral-50 font-sans text-(length:--design-font-size) text-neutral-900 scroll-smooth [scrollbar-gutter:stable] [-webkit-tap-highlight-color:transparent] motion-reduce:scroll-auto;
   }
 
+  /* 한국어는 어절 단위로 줄을 바꾼다("등록/을"처럼 낱말 가운데서 끊지 않는다). 화면보다 긴 어절(URL 등)만
+     어디서든 끊어 넘치지 않게 한다. */
   body {
-    @apply min-h-dvh [-webkit-font-smoothing:antialiased] [text-rendering:optimizeLegibility];
+    @apply break-keep wrap-break-word min-h-dvh [-webkit-font-smoothing:antialiased] [text-rendering:optimizeLegibility];
   }
 
   h1,
@@ -250,9 +252,28 @@
  * Tailwind 4의 scale-* 는 transform 이 아니라 독립 scale 속성이라 전환 목록에 scale 을 직접 넣는다.
  */
 @utility transition-press {
-  transition-property: color, background-color, border-color, opacity, scale;
-  transition-duration: 150ms, 150ms, 150ms, 150ms, 220ms;
-  transition-timing-function: ease-out, ease-out, ease-out, ease-out, var(--ease-spring);
+  transition-property: color, background-color, border-color, opacity, scale, translate, box-shadow;
+  transition-duration: 150ms, 150ms, 150ms, 150ms, 220ms, 220ms, 220ms;
+  transition-timing-function:
+    ease-out, ease-out, ease-out, ease-out, var(--ease-spring), var(--ease-spring),
+    var(--ease-spring);
+}
+
+/*
+ * 브릭 누름. 버튼 아래에 변형 색보다 진한 "턱"(--brick-edge)을 두고, 누르면 그 깊이만큼 내려앉았다가
+ * 스프링으로 튀어 오른다. 레고 브릭을 끼우는 손맛이 GoLe 버튼의 표정이다(design-workflow "브릭 누름").
+ * 동작 줄이기 설정에서는 내려앉지 않고 색 변화만 남긴다.
+ */
+@utility brick {
+  /* 깊이는 --brick-depth 로 덮어쓴다(칩은 2px). */
+  box-shadow: 0 var(--brick-depth, 4px) 0 var(--brick-edge);
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:active:not(:disabled) {
+      translate: 0 calc(var(--brick-depth, 4px) - 1px);
+      box-shadow: 0 1px 0 var(--brick-edge);
+    }
+  }
 }
 
 /*
