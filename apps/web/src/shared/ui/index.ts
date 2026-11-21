@@ -5,6 +5,8 @@ export { RefreshButton } from "./button/refresh-button";
 export type { LinkButtonProps } from "./button";
 export { Chip } from "./chip";
 export type { ChipProps } from "./chip";
+export { Segmented } from "./segmented";
+export type { SegmentedOption, SegmentedProps } from "./segmented";
 
 export { Card } from "./card";
 export type { CardProps, CardElevation } from "./card";

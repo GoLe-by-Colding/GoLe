@@ -56,3 +56,5 @@
 - 본문 전체가 `break-keep`(어절 단위 줄바꿈) + `wrap-break-word`다. 컴포넌트마다 `break-keep`을 다시 붙일 필요 없다.
 - 여러 개 중 켜고 끄는 필터·태그는 `Chip`(`@shared/ui`)을 쓴다. 켜진 칩은 2px 브릭 턱을 갖고 `aria-pressed`를 단다.
   하나만 고르는 정렬·기간 전환은 칩이 아니라 세그먼트다.
+- 하나만 고르는 정렬·기간·피드 전환은 `Segmented`를 쓴다. 칸은 같은 너비이고 흰 선택 표시가 스프링으로 미끄러진다.
+  기본은 `group`+`aria-pressed`, 탭 패널을 바꾸는 곳은 `semantics="tabs"`(tablist·tab·aria-selected).

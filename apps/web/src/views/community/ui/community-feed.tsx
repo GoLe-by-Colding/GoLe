@@ -10,7 +10,7 @@ import {
   type PostType,
 } from "@entities/community";
 import { useSession } from "@entities/user";
-import { Button, Chip, SearchIcon, Text } from "@shared/ui";
+import { Button, Chip, SearchIcon, Segmented, Text } from "@shared/ui";
 import { PostCard } from "@widgets/post-card";
 
 type Filter = PostType | "all" | "following";
@@ -201,20 +201,15 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
             className="h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 pr-3 pl-9 text-sm outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-50"
           />
         </label>
-        <div className="flex rounded-md bg-neutral-100 p-1" aria-label="게시글 정렬">
-          {(["latest", "popular"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setSort(value)}
-              className={`rounded px-3 py-1.5 text-sm font-semibold transition-colors ${
-                sort === value ? "bg-white text-neutral-900 shadow-soft" : "text-neutral-500"
-              }`}
-            >
-              {value === "latest" ? "최신순" : "인기순"}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          aria-label="게시글 정렬"
+          options={[
+            { value: "latest", label: "최신순" },
+            { value: "popular", label: "인기순" },
+          ]}
+          value={sort}
+          onChange={setSort}
+        />
       </div>
 
       <div className="flex flex-wrap gap-2" aria-label="게시글 주제">
