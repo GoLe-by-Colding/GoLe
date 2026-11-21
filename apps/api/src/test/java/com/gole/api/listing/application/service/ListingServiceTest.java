@@ -25,6 +25,7 @@ import com.gole.api.listing.application.port.out.NewListingNotifierPort;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.exception.InvalidPriceException;
 import com.gole.api.listing.domain.exception.ListingBumpCooldownException;
+import com.gole.api.listing.domain.exception.ListingConflictException;
 import com.gole.api.listing.domain.exception.ListingNotFoundException;
 import com.gole.api.listing.domain.exception.ListingStateException;
 import com.gole.api.listing.domain.exception.MissingPhotoException;
@@ -218,6 +219,37 @@ class ListingServiceTest {
         String id = service.create(validCommand());
         service.markSold(id);
         assertThat(service.search(ListingSearchQuery.newestAll())).isEmpty();
+        assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
+    }
+
+    @Test
+    void markSoldBySeller_rejectsListingWithOrderInProgressAndKeepsReservation() {
+        String id = service.create(validCommand());
+        repository.save(copyWithStatus(service.getById(id), ListingStatus.RESERVED));
+
+        assertThatThrownBy(() -> service.markSoldBySeller(id))
+                .isInstanceOf(ListingConflictException.class)
+                .hasFieldOrPropertyWithValue("code", "LISTING_ORDER_IN_PROGRESS");
+        assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.RESERVED);
+    }
+
+    @Test
+    void markSoldBySeller_sellsActiveListingAndRepeatsWithoutError() {
+        String id = service.create(validCommand());
+
+        service.markSoldBySeller(id);
+        service.markSoldBySeller(id);
+
+        assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
+    }
+
+    @Test
+    void markSold_orderCompletionStillSellsReservedListing() {
+        String id = service.create(validCommand());
+        repository.save(copyWithStatus(service.getById(id), ListingStatus.RESERVED));
+
+        service.markSold(id);
+
         assertThat(service.getById(id).getStatus()).isEqualTo(ListingStatus.SOLD);
     }
 

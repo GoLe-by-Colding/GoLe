@@ -202,7 +202,7 @@ public class ListingController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void markSold(@PathVariable String listingId, HttpServletRequest http) {
         requireSeller(listingId, http);
-        markListingSoldUseCase.markSold(listingId);
+        markListingSoldUseCase.markSoldBySeller(listingId);
     }
 
     @DeleteMapping("/{listingId}")
