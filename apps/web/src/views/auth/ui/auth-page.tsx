@@ -148,11 +148,12 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
     );
   }
 
+  /** 로그인·회원가입은 주소가 바뀌는 링크 탭이라 Segmented 대신 같은 모양(회색 트랙 + 흰 선택 표시)만 맞춘다. */
   function tabClass(active: boolean): string {
-    return `block border-b-2 py-2.5 text-center text-sm font-semibold transition-colors ${
+    return `block rounded-md py-2 text-center text-sm font-semibold transition-press ${
       active
-        ? "border-brand-600 text-brand-700"
-        : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
+        ? "brick bg-white text-neutral-900 [--brick-depth:2px] [--brick-edge:var(--color-neutral-200)]"
+        : "text-neutral-500 hover:text-neutral-800"
     }`;
   }
 
@@ -184,7 +185,7 @@ function AuthPageContent({ welcome }: { readonly welcome: boolean }) {
         <div
           role="tablist"
           aria-label="인증 방식"
-          className="grid grid-cols-2 border-b border-neutral-200"
+          className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1"
         >
           <Link
             href={tabHref("/login")}
