@@ -24,6 +24,7 @@ import {
   LinkButton,
   Skeleton,
   Text,
+  Chip,
 } from "@shared/ui";
 import { PARTS_BOARD_TABS, partsBoardPath, type PartsBoardTab } from "../model/board-tab";
 
@@ -40,14 +41,6 @@ export interface PartsBoardPageProps {
   /** `/parts?set=` 로 들어오면 그 세트의 요청만 본다. */
   readonly initialSetNumber?: string | undefined;
   readonly initialTab?: PartsBoardTab | undefined;
-}
-
-function tabClass(active: boolean): string {
-  return `rounded-md border px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-    active
-      ? "border-brand-600 bg-brand-600 text-white"
-      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
-  }`;
 }
 
 /**
@@ -176,15 +169,13 @@ export function PartsBoardPage({
           <div className="flex flex-wrap gap-2" role="group" aria-label="요청 상태">
             {PARTS_BOARD_TABS.filter((item) => item.key !== "mine" || session !== null).map(
               (item) => (
-                <button
+                <Chip
                   key={item.key}
-                  type="button"
-                  aria-pressed={effectiveTab === item.key}
-                  className={tabClass(effectiveTab === item.key)}
+                  selected={effectiveTab === item.key}
                   onClick={() => selectTab(item.key)}
                 >
                   {item.label}
-                </button>
+                </Chip>
               ),
             )}
           </div>

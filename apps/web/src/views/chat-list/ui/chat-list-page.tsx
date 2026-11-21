@@ -47,6 +47,7 @@ import {
   Select,
   Skeleton,
   Text,
+  Chip,
 } from "@shared/ui";
 
 type Conversation =
@@ -1399,19 +1400,9 @@ function PeerPicker({
           </p>
         ) : (
           matches.map((id) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={selected.includes(id)}
-              onClick={() => onToggle(id)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                selected.includes(id)
-                  ? "border-brand-600 bg-brand-600 text-white"
-                  : "border-neutral-200 bg-white text-neutral-700 hover:border-brand-400"
-              }`}
-            >
+            <Chip key={id} size="sm" selected={selected.includes(id)} onClick={() => onToggle(id)}>
               {nameOf(id, `대화 상대 ${id.replaceAll("-", "").slice(0, 8)}`)}
-            </button>
+            </Chip>
           ))
         )}
       </div>
