@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from gole_promotion_agent import policy
 
 
-# --------------------------------------------------------------------------- git
+# --------------------------------------------------------------------------- Git 작업
 
 
 def _git(repo: Path, *args: str, limit: int | None = None) -> str:
@@ -84,7 +84,7 @@ class ReleaseScanner:
         return patch
 
 
-# ------------------------------------------------------------------------ routes
+# ------------------------------------------------------------------------ 경로
 
 
 class AppRouteCatalog:
@@ -118,7 +118,7 @@ class AppRouteCatalog:
         return "/" + "/".join(segments) if segments else "/"
 
 
-# ----------------------------------------------------------------------- browser
+# ----------------------------------------------------------------------- 브라우저
 
 
 class PlaywrightCamera:

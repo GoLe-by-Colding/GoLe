@@ -2,7 +2,7 @@ package com.gole.api.operations.domain;
 
 import java.time.Instant;
 
-/** Persisted audit: no exception messages, credentials, email or user-entered text. */
+/** 영속 감사 기록. 예외 메시지·인증 정보·이메일·사용자 입력 문구는 포함하지 않는다. */
 public record OperationRun(
         String id,
         String jobId,

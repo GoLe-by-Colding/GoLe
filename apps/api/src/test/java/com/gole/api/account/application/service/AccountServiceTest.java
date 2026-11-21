@@ -463,7 +463,7 @@ class AccountServiceTest {
                 repository,
                 new UpgradingHasher(),
                 (email, code) -> {
-                    /* no-op */
+                    /* 별도 동작 없음 */
                 },
                 () -> "123456",
                 new SequentialIdGenerator(),

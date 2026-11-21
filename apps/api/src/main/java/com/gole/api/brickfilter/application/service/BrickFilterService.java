@@ -105,7 +105,7 @@ public class BrickFilterService implements ManageBrickFilterUseCase {
             }
         } catch (RuntimeException failure) {
             if (!reserved) throw failure;
-            // No raw provider errors or user images reach logs or the public API.
+            // 제공자의 원본 오류와 사용자 이미지는 로그나 공개 API로 노출하지 않는다.
             failReservation(owner, day, id);
         } finally {
             if (reserved) safeDelete(owner, id, "source");
@@ -113,7 +113,7 @@ public class BrickFilterService implements ManageBrickFilterUseCase {
                 try {
                     gate.release(providerToken);
                 } catch (RuntimeException ignored) {
-                    /* lease expiry releases capacity */
+                    /* 임대가 만료되면 사용 용량이 반환된다. */
                 }
             capacity.release();
         }
@@ -159,7 +159,7 @@ public class BrickFilterService implements ManageBrickFilterUseCase {
 
     private void failReservation(String owner, String day, String id) {
         boolean changed = ledger.fail(owner, day, id);
-        // A Mongo commit may have succeeded before its response was lost. Never delete a committed result.
+        // 응답을 잃기 전에 Mongo 커밋이 성공했을 수 있다. 커밋된 결과는 삭제하지 않는다.
         if (changed
                 || find(ledger.load(owner, day), id)
                         .map(j -> j.status() == Status.FAILED)
@@ -170,7 +170,7 @@ public class BrickFilterService implements ManageBrickFilterUseCase {
         try {
             blobs.delete(owner, id, kind);
         } catch (RuntimeException ignored) {
-            /* Expiry sweep retries physical deletion. */
+            /* 만료 정리 작업이 실제 파일 삭제를 재시도한다. */
         }
     }
 

@@ -48,7 +48,7 @@ public class StubPaymentGatewayAdapter implements PaymentGatewayPort {
     public PaymentVerification verifyPayment(String orderId, long amount) {
         requireStubAllowed(orderId);
         String transactionId = newTransactionId(orderId);
-        // TODO: integrate real PG (Toss/PortOne)
+        // 테스트용 결제 응답이며 실제 결제 제공자 연동은 운영 어댑터가 담당한다.
         log.info("[STUB-PG] authorize success orderId={} amount={} transactionId={}", orderId, amount, transactionId);
         return PaymentVerification.paid(STUB_PAYMENT_METHOD, PaymentEvidenceKind.TEST);
     }

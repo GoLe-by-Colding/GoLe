@@ -138,7 +138,7 @@ class ShipmentServiceTest {
                 id, "listing-1", "buyer-1", "seller-1", null, null, 100_000, status, NOW, new ArrayList<>(), null);
     }
 
-    // ---- fakes ----
+    // ---- 테스트 대체 구현 ----
 
     static class InMemoryShipments implements ShipmentRepositoryPort {
         final Map<String, Shipment> store = new HashMap<>();

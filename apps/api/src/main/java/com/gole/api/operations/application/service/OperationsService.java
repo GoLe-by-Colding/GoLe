@@ -64,7 +64,7 @@ public class OperationsService implements RunOperationsUseCase {
             throw new ConflictException("OPERATION_RUNNING", "이미 실행 중입니다. 미완료 실행은 운영자 확인이 필요합니다");
         OperationRun run =
                 new OperationRun(id, jobId, actorId, reasonCode, retryOf, "RUNNING", Instant.now(clock), null, null);
-        // Audit persistence must succeed before any job executes. Failed completion persistence retains the lock.
+        // 작업 실행 전에 감사 기록 저장이 성공해야 한다. 완료 기록 저장에 실패하면 잠금을 유지한다.
         try {
             store.save(run);
         } catch (RuntimeException failure) {

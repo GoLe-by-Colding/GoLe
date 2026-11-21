@@ -17,7 +17,7 @@ public class TrackerAdminAuditAdapter implements TrackerAdminAuditPort {
     }
 
     public void record(String actorId, String action, String targetId) {
-        // Fail closed: no provider call if the durable audit cannot be written.
+        // 감사 기록을 영구 저장하지 못하면 외부 제공자를 호출하지 않는다.
         mongo.insert(new Entry(actorId, action, targetId, clock.instant()), "shipping_tracker_admin_actions");
     }
 

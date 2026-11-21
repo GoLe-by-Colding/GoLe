@@ -243,8 +243,8 @@ if [ -f "$TARGET_FILE" ]; then
   chmod 0600 "$backup_file"
 fi
 
-# Plaintext development backups are useful for one-step recovery but must not
-# accumulate forever. Keep exactly the two newest regular, non-symlink files.
+# 평문 개발 백업은 한 번에 복구할 때 유용하지만 계속 쌓이면 안 된다.
+# 심볼릭 링크가 아닌 일반 파일 중 최신 두 개만 유지한다.
 python3 - "$ROOT" <<'PY'
 import pathlib
 import re

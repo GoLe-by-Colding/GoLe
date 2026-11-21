@@ -25,9 +25,8 @@ import sys
 
 raw = open(sys.argv[1], encoding="utf-8").read()
 deploy = open(sys.argv[2], encoding="utf-8").read()
-# Only the live (non-comment) YAML lines matter for the email-latch check
-# below — validator/compose comments that document the conditional latch
-# design are allowed to mention "true" without tripping it.
+# 이메일 잠금 검사에는 주석이 아닌 실제 YAML 설정 줄만 사용한다.
+# 검증기·Compose의 조건부 잠금 설계를 설명하는 주석에 "true"가 있어도 실패로 판정하지 않는다.
 raw_live = "\n".join(
     line for line in raw.splitlines() if not line.strip().startswith("#")
 )

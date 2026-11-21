@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-/** Native code is isolated from the JVM with bounded resources and no inherited credentials. */
+/** 자원을 제한하고 인증 정보를 상속하지 않는 별도 프로세스로 네이티브 코드를 JVM에서 격리한다. */
 final class HeifProcessDecoder {
     private static final Semaphore SLOTS = new Semaphore(2);
     private final String python;
