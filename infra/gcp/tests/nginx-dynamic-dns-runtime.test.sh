@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-IMAGE="nginx:1.30.7-alpine@sha256:caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3"
+IMAGE="nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de"
 TEST_ROOT="$(mktemp -d "$ROOT/.tmp-nginx-dns.XXXXXX")"
 TEST_SUFFIX="$(basename "$TEST_ROOT" | tr -cd 'a-zA-Z0-9' | tail -c 20)"
 NETWORK="gole-dns-$TEST_SUFFIX"
