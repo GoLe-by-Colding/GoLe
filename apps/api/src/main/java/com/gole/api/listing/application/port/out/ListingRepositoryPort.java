@@ -1,5 +1,6 @@
 package com.gole.api.listing.application.port.out;
 
+import com.gole.api.listing.application.query.ListingPageCursor;
 import com.gole.api.listing.application.query.ListingSearchQuery;
 import com.gole.api.listing.domain.model.Listing;
 import java.time.Instant;
@@ -20,6 +21,12 @@ public interface ListingRepositoryPort {
 
     /** 검색 조건/정렬에 따라 활성 리스팅을 조회한다. (요구사항 14) */
     List<Listing> search(ListingSearchQuery query);
+
+    /**
+     * 정렬 키와 {@code _id}로 순서를 고정한 검색. {@code after} 다음부터 최대 {@code size}건을 읽는다.
+     * {@code after}의 정렬은 {@code query.sort()}와 같다.
+     */
+    List<Listing> searchPage(ListingSearchQuery query, ListingPageCursor after, int size);
 
     /**
      * 활성(ACTIVE) 리스팅을 원자적으로 RESERVED로 전이시키고 그 결과를 반환한다.
