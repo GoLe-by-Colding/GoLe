@@ -16,6 +16,7 @@ import com.gole.api.common.operations.OperationalEventPublisher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
+import org.apache.tomcat.util.http.InvalidParameterException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +48,29 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().code()).isEqualTo("MALFORMED_JSON");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** {@code ?cursor=%%%}처럼 퍼센트 인코딩이 깨진 쿼리는 Tomcat이 파라미터 해석 단계에서 던진다. */
+    @Test
+    void malformedQueryEncodingIsAClientErrorWithoutOperationalAlert() {
+        var response = handler.handleMalformedQuery(new InvalidParameterException(
+                "Character decoding failed. Parameter [cursor] with value [%%%] has been ignored."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().code()).isEqualTo("MALFORMED_QUERY");
+        assertThat(response.getBody().message()).doesNotContain("%%%");
+        verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** {@code Accept: image/png}처럼 JSON을 받지 않겠다는 요청. 본문을 쓸 수 없으니 상태 코드만 돌려준다. */
+    @Test
+    void unacceptableResponseTypeIsAClientErrorWithoutOperationalAlert() {
+        var response =
+                handler.handleNotAcceptable(new HttpMediaTypeNotAcceptableException("No acceptable representation"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_ACCEPTABLE);
+        assertThat(response.getBody()).isNull();
         verify(events, never()).publish(org.mockito.ArgumentMatchers.any());
     }
 
