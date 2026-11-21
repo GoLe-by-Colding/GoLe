@@ -3,27 +3,17 @@
 import { useMemo, useState } from "react";
 import {
   CONDITION_LABEL,
+  fetchPriceSnapshot,
   filterPricePointsByPeriod,
   priceEvidenceWarning,
   valuationBasisLabel,
   valuationBasisTone,
   type PricePoint,
-  type PriceSnapshot,
 } from "@entities/pricing";
 import { formatKrw, formatKrwCompact } from "@shared/lib";
 import { Badge, Button, Card, EmptyState, LineChart, MediaImage } from "@shared/ui";
+import { withRecoveredSnapshots, type PriceBoardItem, type SnapshotRecovery } from "../model/board";
 import { SetPriceActions } from "./set-price-actions";
-
-export interface PriceBoardItem {
-  readonly setNumber: string;
-  readonly name: string;
-  readonly theme: string;
-  readonly imageUrl: string | null;
-  /** 미개봉 체결 시계열(오름차순). null은 조회 실패, []는 실제 빈 데이터다. */
-  readonly points: readonly PricePoint[] | null;
-  /** null은 조회 실패다. EMPTY 상태와 섞지 않는다. */
-  readonly snapshot: PriceSnapshot | null;
-}
 
 export interface PriceExplorerProps {
   readonly items: readonly PriceBoardItem[];
@@ -119,8 +109,12 @@ function ObservationList({ points }: { readonly points: readonly PricePoint[] })
 
 export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
   const [sort, setSort] = useState<SortKey>("popular");
+  const [recoveries, setRecoveries] = useState<ReadonlyMap<string, SnapshotRecovery>>(
+    () => new Map(),
+  );
+  const boardItems = useMemo(() => withRecoveredSnapshots(items, recoveries), [items, recoveries]);
   const sorted = useMemo(() => {
-    const copy = [...items];
+    const copy = [...boardItems];
     switch (sort) {
       case "recent":
         return copy.sort((a, b) => lastTime(b) - lastTime(a));
@@ -134,7 +128,7 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
           (a, b) => (b.snapshot?.sampleCount ?? -1) - (a.snapshot?.sampleCount ?? -1),
         );
     }
-  }, [items, sort]);
+  }, [boardItems, sort]);
   const firstWithData =
     sorted.find((item) => item.snapshot?.state === "ESTABLISHED") ??
     sorted.find((item) => (item.snapshot?.sampleCount ?? 0) > 0) ??
@@ -167,7 +161,19 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
     window.history.replaceState(window.history.state, "", url);
   }
 
+  function retrySnapshot(setNumber: string) {
+    const settle = (recovery: SnapshotRecovery) =>
+      setRecoveries((previous) => new Map(previous).set(setNumber, recovery));
+    settle({ status: "loading" });
+    fetchPriceSnapshot(setNumber).then(
+      (recovered) => settle({ status: "ready", snapshot: recovered }),
+      () => settle({ status: "failed" }),
+    );
+  }
+
   const snapshot = current.snapshot;
+  const currentRecovery = recoveries.get(current.setNumber);
+  const recovering = currentRecovery?.status === "loading";
   const evidenceWarning = snapshot === null ? null : priceEvidenceWarning(snapshot.provenance);
   const marketLatest =
     snapshot?.statistics?.latestPrice ?? snapshot?.observations[0]?.price ?? null;
@@ -213,7 +219,9 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
             const itemLatest = lastPrice(item);
             const stateLabel =
               item.snapshot === null
-                ? "불러오기 실패"
+                ? recoveries.get(item.setNumber)?.status === "loading"
+                  ? "다시 확인 중"
+                  : "불러오기 실패"
                 : item.snapshot.state === "EMPTY"
                   ? "체결 전"
                   : item.snapshot.state === "OBSERVATIONS_ONLY"
@@ -279,9 +287,19 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
           <EmptyState
             variant="inline"
             title="시세를 불러오지 못했어요"
-            description="실제 체결 데이터가 없는 상태와 구분되는 일시적인 조회 오류예요."
+            description={
+              currentRecovery?.status === "failed"
+                ? "다시 확인했지만 아직 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요."
+                : "실제 체결 데이터가 없는 상태와 구분되는 일시적인 조회 오류예요."
+            }
             action={
-              <Button size="sm" variant="secondary" onClick={() => window.location.reload()}>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={recovering}
+                loadingLabel="확인 중..."
+                onClick={() => retrySnapshot(current.setNumber)}
+              >
                 다시 시도
               </Button>
             }
