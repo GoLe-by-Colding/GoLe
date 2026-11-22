@@ -14,6 +14,7 @@ import com.gole.api.community.application.port.in.ModerateCommentUseCase;
 import com.gole.api.community.application.port.in.ModeratePostUseCase;
 import com.gole.api.community.application.port.in.PatchPostUseCase;
 import com.gole.api.community.application.port.in.PublishPostUseCase;
+import com.gole.api.community.application.port.out.BlockedAuthorQueryPort;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
 import com.gole.api.community.application.port.out.PostAuthorNotifierPort;
@@ -56,6 +57,7 @@ public class CommunityService
     private final CommunityIdGeneratorPort idGenerator;
     private final PostAuthorNotifierPort postAuthorNotifier;
     private final PostImagePort postImages;
+    private final BlockedAuthorQueryPort blocks;
     private final Clock clock;
 
     public CommunityService(
@@ -64,12 +66,14 @@ public class CommunityService
             CommunityIdGeneratorPort idGenerator,
             PostAuthorNotifierPort postAuthorNotifier,
             PostImagePort postImages,
+            BlockedAuthorQueryPort blocks,
             Clock clock) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.idGenerator = idGenerator;
         this.postAuthorNotifier = postAuthorNotifier;
         this.postImages = postImages;
+        this.blocks = blocks;
         this.clock = clock;
     }
 
@@ -91,6 +95,7 @@ public class CommunityService
     @Override
     public Comment comment(CommentCommand command) {
         Post post = requirePublished(command.postId());
+        requireNotBlocked(command.authorId(), post, "차단 관계인 사용자의 글에는 반응할 수 없습니다");
         Comment comment = new Comment(
                 idGenerator.newId(), post.getId(), command.authorId(), command.content(), Instant.now(clock));
         Comment saved = commentRepository.save(comment);
@@ -104,6 +109,7 @@ public class CommunityService
     @Override
     public void like(String postId, String userId) {
         Post post = requirePublished(postId);
+        requireNotBlocked(userId, post, "차단 관계인 사용자의 글에는 반응할 수 없습니다");
         post.like(userId); // 중복 시 예외
         postRepository.save(post);
         if (!userId.equals(post.getAuthorId())) {
@@ -119,32 +125,49 @@ public class CommunityService
     }
 
     @Override
-    public List<Post> feed(int limit) {
-        return postRepository.findPublishedRecentFirst(clamp(limit, MAX_FEED_ROWS));
+    public List<Post> feed(int limit, String viewerId) {
+        return postRepository.findPublishedRecentFirst(clamp(limit, MAX_FEED_ROWS), blockedFor(viewerId));
     }
 
     @Override
     public FeedPage feedPage(
-            int requestedLimit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> query) {
+            int requestedLimit,
+            Optional<FeedCursor> before,
+            Optional<PostType> topic,
+            Optional<String> query,
+            String viewerId) {
         int limit = clamp(requestedLimit, MAX_FEED_PAGE_ROWS);
         Optional<PostRepositoryPort.FeedCursor> repositoryCursor =
                 before.map(cursor -> new PostRepositoryPort.FeedCursor(cursor.createdAt(), cursor.postId()));
         Optional<String> normalizedQuery = query.map(String::strip).filter(value -> !value.isEmpty());
-        List<Post> fetched = postRepository.findPublishedPage(limit + 1, repositoryCursor, topic, normalizedQuery);
+        List<Post> fetched = postRepository.findPublishedPage(
+                limit + 1, repositoryCursor, topic, normalizedQuery, blockedFor(viewerId));
         boolean hasMore = fetched.size() > limit;
         List<Post> items = fetched.subList(0, Math.min(limit, fetched.size()));
         return new FeedPage(List.copyOf(items), hasMore);
     }
 
     @Override
-    public Post getPost(String postId) {
-        return requirePublished(postId);
+    public Post getPost(String postId, String viewerId) {
+        Post post = requirePublished(postId);
+        if (viewerId != null) {
+            requireNotBlocked(viewerId, post, "차단 관계인 사용자의 글은 볼 수 없습니다");
+        }
+        return post;
     }
 
     @Override
-    public List<Comment> comments(String postId, int limit) {
-        requirePublished(postId);
-        return commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS));
+    public List<Comment> comments(String postId, int limit, String viewerId) {
+        getPost(postId, viewerId);
+        List<Comment> comments = commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS));
+        if (viewerId == null) {
+            return comments;
+        }
+        // ponytail: limit 적용 뒤 거르므로 최대 limit보다 적게 올 수 있다. 댓글 커서가 생기면 쿼리 조건으로 옮긴다
+        List<String> blocked = blocks.blockedCounterparts(viewerId);
+        return comments.stream()
+                .filter(comment -> !blocked.contains(comment.authorId()))
+                .toList();
     }
 
     @Override
@@ -242,6 +265,16 @@ public class CommunityService
             throw new PostNotFoundException(postId);
         }
         return post;
+    }
+
+    private List<String> blockedFor(String viewerId) {
+        return viewerId == null ? List.of() : blocks.blockedCounterparts(viewerId);
+    }
+
+    private void requireNotBlocked(String viewerId, Post post, String message) {
+        if (blocks.blockedBetween(viewerId, post.getAuthorId())) {
+            throw new ForbiddenException("COMMUNITY_BLOCKED", message);
+        }
     }
 
     private static int clamp(int requested, int maximum) {

@@ -83,7 +83,7 @@ public class CommunityController {
     @GetMapping
     public List<PostResponse> feed(@RequestParam(defaultValue = "30") int limit, HttpServletRequest http) {
         String viewerId = AuthenticatedUser.optionalId(http).orElse(null);
-        return getFeedUseCase.feed(limit).stream()
+        return getFeedUseCase.feed(limit, viewerId).stream()
                 .map(post -> PostResponse.from(post, viewerId))
                 .toList();
     }
@@ -99,7 +99,7 @@ public class CommunityController {
         Optional<FeedCursor> cursor = parseCursor(beforeCreatedAt, beforeId);
         String viewerId = AuthenticatedUser.optionalId(http).orElse(null);
         return FeedPageResponse.from(
-                getFeedUseCase.feedPage(limit, cursor, parseTopic(topic), parseQuery(query)), viewerId);
+                getFeedUseCase.feedPage(limit, cursor, parseTopic(topic), parseQuery(query), viewerId), viewerId);
     }
 
     @PostMapping
@@ -107,14 +107,13 @@ public class CommunityController {
     public PostResponse publish(@Valid @RequestBody PublishPostRequest request, HttpServletRequest http) {
         String id = publishPostUseCase.publish(new PublishPostCommand(
                 AuthenticatedUser.id(http), request.content(), request.imageKeys(), request.topic()));
-        return PostResponse.from(getFeedUseCase.getPost(id), AuthenticatedUser.id(http));
+        return PostResponse.from(getFeedUseCase.getPost(id, AuthenticatedUser.id(http)), AuthenticatedUser.id(http));
     }
 
     @GetMapping("/{postId}")
     public PostResponse get(@PathVariable String postId, HttpServletRequest http) {
-        return PostResponse.from(
-                getFeedUseCase.getPost(postId),
-                AuthenticatedUser.optionalId(http).orElse(null));
+        String viewerId = AuthenticatedUser.optionalId(http).orElse(null);
+        return PostResponse.from(getFeedUseCase.getPost(postId, viewerId), viewerId);
     }
 
     @PostMapping("/{postId}/likes")
@@ -130,8 +129,10 @@ public class CommunityController {
     }
 
     @GetMapping("/{postId}/comments")
-    public List<CommentResponse> comments(@PathVariable String postId, @RequestParam(defaultValue = "100") int limit) {
-        return getFeedUseCase.comments(postId, limit).stream()
+    public List<CommentResponse> comments(
+            @PathVariable String postId, @RequestParam(defaultValue = "100") int limit, HttpServletRequest http) {
+        String viewerId = AuthenticatedUser.optionalId(http).orElse(null);
+        return getFeedUseCase.comments(postId, limit, viewerId).stream()
                 .map(CommentResponse::from)
                 .toList();
     }
@@ -167,7 +168,8 @@ public class CommunityController {
             @PathVariable String postId, @Valid @RequestBody EditPostRequest request, HttpServletRequest http) {
         editPostUseCase.edit(
                 new EditPostCommand(postId, AuthenticatedUser.id(http), request.content(), request.imageKeys()));
-        return PostResponse.from(getFeedUseCase.getPost(postId), AuthenticatedUser.id(http));
+        return PostResponse.from(
+                getFeedUseCase.getPost(postId, AuthenticatedUser.id(http)), AuthenticatedUser.id(http));
     }
 
     @DeleteMapping("/{postId}")

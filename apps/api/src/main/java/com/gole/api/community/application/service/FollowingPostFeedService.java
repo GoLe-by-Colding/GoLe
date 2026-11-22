@@ -1,6 +1,7 @@
 package com.gole.api.community.application.service;
 
 import com.gole.api.community.application.port.in.GetFollowingPostFeedUseCase;
+import com.gole.api.community.application.port.out.BlockedAuthorQueryPort;
 import com.gole.api.community.application.port.out.FollowingAuthorQueryPort;
 import com.gole.api.community.application.port.out.PostRepositoryPort;
 import com.gole.api.community.domain.model.Post;
@@ -15,16 +16,21 @@ public class FollowingPostFeedService implements GetFollowingPostFeedUseCase {
 
     private final FollowingAuthorQueryPort followingAuthors;
     private final PostRepositoryPort posts;
+    private final BlockedAuthorQueryPort blocks;
 
-    public FollowingPostFeedService(FollowingAuthorQueryPort followingAuthors, PostRepositoryPort posts) {
+    public FollowingPostFeedService(
+            FollowingAuthorQueryPort followingAuthors, PostRepositoryPort posts, BlockedAuthorQueryPort blocks) {
         this.followingAuthors = followingAuthors;
         this.posts = posts;
+        this.blocks = blocks;
     }
 
     @Override
     public List<Post> feed(String accountId, int limit) {
+        List<String> blocked = blocks.blockedCounterparts(accountId);
         List<String> authorIds = followingAuthors.findFollowingAuthorIds(accountId).stream()
                 .distinct()
+                .filter(authorId -> !blocked.contains(authorId))
                 .toList();
         if (authorIds.isEmpty()) {
             return List.of();

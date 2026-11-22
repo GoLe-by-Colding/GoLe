@@ -63,7 +63,7 @@ public class ReportSeeder implements CommandLineRunner {
 
         // 다른 컨텍스트의 저장소가 아니라 각자의 인바운드 포트로 시드된 대상을 읽는다.
         List<Listing> listings = this.listings.newestActive(3);
-        List<Post> posts = this.posts.feed(1);
+        List<Post> posts = this.posts.feed(1, null);
         if (listings.isEmpty() && posts.isEmpty()) {
             return; // 대상이 없으면 신고도 만들지 않는다.
         }

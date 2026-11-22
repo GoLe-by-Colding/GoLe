@@ -41,19 +41,28 @@ public class PostPersistenceAdapter implements PostRepositoryPort {
     }
 
     @Override
-    public List<Post> findPublishedRecentFirst(int limit) {
-        return repository
-                .findByStatusOrderByCreatedAtDescIdDesc(PostStatus.PUBLISHED.name(), PageRequest.of(0, limit))
-                .stream()
+    public List<Post> findPublishedRecentFirst(int limit, List<String> excludedAuthorIds) {
+        List<Criteria> filters = new java.util.ArrayList<>();
+        filters.add(Criteria.where("status").is(PostStatus.PUBLISHED.name()));
+        excludeAuthors(filters, excludedAuthorIds);
+        Query query = Query.query(new Criteria().andOperator(filters.toArray(Criteria[]::new)))
+                .with(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("_id")))
+                .limit(limit);
+        return mongoTemplate.find(query, PostDocument.class).stream()
                 .map(this::toDomain)
                 .toList();
     }
 
     @Override
     public List<Post> findPublishedPage(
-            int limit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> searchQuery) {
+            int limit,
+            Optional<FeedCursor> before,
+            Optional<PostType> topic,
+            Optional<String> searchQuery,
+            List<String> excludedAuthorIds) {
         List<Criteria> filters = new java.util.ArrayList<>();
         filters.add(Criteria.where("status").is(PostStatus.PUBLISHED.name()));
+        excludeAuthors(filters, excludedAuthorIds);
         topic.ifPresent(value -> filters.add(Criteria.where("type").is(value.name())));
         searchQuery.ifPresent(value -> {
             Pattern safeContains =
@@ -95,6 +104,12 @@ public class PostPersistenceAdapter implements PostRepositoryPort {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    private static void excludeAuthors(List<Criteria> filters, List<String> excludedAuthorIds) {
+        if (!excludedAuthorIds.isEmpty()) {
+            filters.add(Criteria.where("authorId").nin(excludedAuthorIds));
+        }
     }
 
     private PostDocument toDocument(Post post) {
