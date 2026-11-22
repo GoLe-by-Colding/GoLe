@@ -6,6 +6,7 @@ import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.FollowCutPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatAccount;
@@ -42,6 +43,7 @@ public class SocialChatService implements SocialChatUseCase {
     private final ChatAccountPort accounts;
     private final ChatConsentPort consents;
     private final ChatReadStatePort readStates;
+    private final FollowCutPort followCut;
     private final Clock clock;
 
     public SocialChatService(
@@ -51,6 +53,7 @@ public class SocialChatService implements SocialChatUseCase {
             ChatAccountPort accounts,
             ChatConsentPort consents,
             ChatReadStatePort readStates,
+            FollowCutPort followCut,
             Clock clock) {
         this.rooms = rooms;
         this.blocks = blocks;
@@ -58,6 +61,7 @@ public class SocialChatService implements SocialChatUseCase {
         this.accounts = accounts;
         this.consents = consents;
         this.readStates = readStates;
+        this.followCut = followCut;
         this.clock = clock;
     }
 
@@ -235,6 +239,7 @@ public class SocialChatService implements SocialChatUseCase {
     }
 
     @Override
+    @Transactional
     public void block(String actorId, String targetId, String reason) {
         requireRegularAccount(actorId);
         requireRegularAccount(targetId);
@@ -242,6 +247,7 @@ public class SocialChatService implements SocialChatUseCase {
             throw new BadRequestException("CHAT_SELF_BLOCK", "자기 자신을 차단할 수 없습니다");
         }
         blocks.save(new ChatBlock(actorId, targetId, normalizeReason(reason), Instant.now(clock)));
+        followCut.cutBoth(actorId, targetId); // 차단하면 서로의 팔로우도 끊는다 (user-block R1)
     }
 
     @Override

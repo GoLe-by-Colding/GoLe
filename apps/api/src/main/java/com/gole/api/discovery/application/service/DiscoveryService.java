@@ -5,6 +5,7 @@ import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
+import com.gole.api.discovery.application.port.out.FollowBlockCheckPort;
 import com.gole.api.discovery.application.port.out.FollowNotifierPort;
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
@@ -29,22 +30,28 @@ public class DiscoveryService
     private final WishlistRepositoryPort wishlistRepository;
     private final ListingQueryPort listingQuery;
     private final FollowNotifierPort followNotifier;
+    private final FollowBlockCheckPort followBlockCheck;
 
     public DiscoveryService(
             FollowRepositoryPort followRepository,
             WishlistRepositoryPort wishlistRepository,
             ListingQueryPort listingQuery,
-            FollowNotifierPort followNotifier) {
+            FollowNotifierPort followNotifier,
+            FollowBlockCheckPort followBlockCheck) {
         this.followRepository = followRepository;
         this.wishlistRepository = wishlistRepository;
         this.listingQuery = listingQuery;
         this.followNotifier = followNotifier;
+        this.followBlockCheck = followBlockCheck;
     }
 
     @Override
     public void follow(String userId, String sellerId) {
         if (userId.equals(sellerId)) {
             throw new ForbiddenException("FOLLOW_SELF_NOT_ALLOWED", "자기 자신은 팔로우할 수 없습니다");
+        }
+        if (followBlockCheck.blockedBetween(userId, sellerId)) {
+            throw new ForbiddenException("FOLLOW_BLOCKED", "차단 관계인 사용자는 팔로우할 수 없습니다");
         }
         if (followRepository.exists(userId, sellerId)) {
             throw new DuplicateFollowException(); // 요구사항 16.4

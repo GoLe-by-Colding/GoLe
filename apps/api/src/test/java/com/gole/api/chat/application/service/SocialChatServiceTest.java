@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.FollowCutPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatAccount;
@@ -27,7 +29,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
+import org.springframework.transaction.annotation.Transactional;
 
 class SocialChatServiceTest {
 
@@ -39,8 +44,9 @@ class SocialChatServiceTest {
     private final ChatAccountPort accounts = mock(ChatAccountPort.class);
     private final ChatConsentPort consents = mock(ChatConsentPort.class);
     private final ChatReadStatePort readStates = mock(ChatReadStatePort.class);
+    private final FollowCutPort followCut = mock(FollowCutPort.class);
     private final SocialChatService service = new SocialChatService(
-            rooms, blocks, tickets, accounts, consents, readStates, Clock.fixed(NOW, ZoneOffset.UTC));
+            rooms, blocks, tickets, accounts, consents, readStates, followCut, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
     void accounts() {
@@ -264,6 +270,35 @@ class SocialChatServiceTest {
     void userCannotBlockSelf() {
         assertThatThrownBy(() -> service.block("user-1", "user-1", null)).isInstanceOf(BadRequestException.class);
         verify(blocks, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(followCut, never()).cutBoth(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("차단하면 차단을 저장한 뒤 두 사람의 팔로우를 양방향으로 끊는다")
+    void block_cutsFollowsBothWays() {
+        service.block("user-1", "user-2", null);
+
+        InOrder order = inOrder(blocks, followCut);
+        order.verify(blocks).save(any());
+        order.verify(followCut).cutBoth("user-1", "user-2");
+    }
+
+    @Test
+    @DisplayName("차단 해제는 팔로우를 건드리지 않는다")
+    void unblock_doesNotTouchFollows() {
+        service.unblock("user-1", "user-2");
+
+        verify(blocks).delete("user-1", "user-2");
+        verify(followCut, never()).cutBoth(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("block 은 차단 저장과 팔로우 해제를 한 트랜잭션으로 묶는다")
+    void block_isTransactional() throws NoSuchMethodException {
+        assertThat(SocialChatService.class
+                        .getMethod("block", String.class, String.class, String.class)
+                        .isAnnotationPresent(Transactional.class))
+                .isTrue();
     }
 
     @Test

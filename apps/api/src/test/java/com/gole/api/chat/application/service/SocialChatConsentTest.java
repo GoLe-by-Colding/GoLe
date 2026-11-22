@@ -14,6 +14,7 @@ import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.FollowCutPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.SocialChatRoom;
@@ -39,6 +40,7 @@ class SocialChatConsentTest {
             mock(ChatAccountPort.class),
             consents,
             mock(ChatReadStatePort.class),
+            mock(FollowCutPort.class),
             Clock.fixed(NOW, ZoneOffset.UTC)));
 
     @Test
