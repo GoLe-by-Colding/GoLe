@@ -12,6 +12,7 @@ import {
   type Review,
   type SellerRating,
 } from "@entities/review";
+import { BlockUserButton } from "@features/block-user";
 import { FollowButton } from "@features/follow-seller";
 import { ReportButton } from "@features/report-content";
 import { useDisplayNames, useSession } from "@entities/user";
@@ -156,6 +157,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
               </LinkButton>
             ) : null}
             {session?.accountId !== sellerId ? <FollowButton sellerId={sellerId} /> : null}
+            <BlockUserButton targetId={sellerId} />
           </div>
         </div>
 

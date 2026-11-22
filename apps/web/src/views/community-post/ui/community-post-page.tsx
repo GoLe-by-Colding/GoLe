@@ -10,6 +10,8 @@ import {
   type Comment,
   type Post,
 } from "@entities/community";
+import { useRouter } from "next/navigation";
+import { BlockUserButton } from "@features/block-user";
 import { CommentForm } from "@features/comment-post";
 import { LikeButton } from "@features/like-post";
 import { ReportButton } from "@features/report-content";
@@ -34,12 +36,13 @@ export interface CommunityPostPageProps {
 }
 
 export function CommunityPostPage({ postId }: CommunityPostPageProps) {
+  const router = useRouter();
   const { session } = useSession();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<readonly Comment[]>([]);
-  const [postStatus, setPostStatus] = useState<"loading" | "ready" | "missing" | "error">(
-    "loading",
-  );
+  const [postStatus, setPostStatus] = useState<
+    "loading" | "ready" | "missing" | "blocked" | "error"
+  >("loading");
   const [postAttempt, setPostAttempt] = useState(0);
   const [commentsError, setCommentsError] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -78,7 +81,15 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
         }
       } catch (cause) {
         if (active) {
-          setPostStatus(cause instanceof ApiError && cause.status === 404 ? "missing" : "error");
+          setPostStatus(
+            cause instanceof ApiError && cause.status === 404
+              ? "missing"
+              : cause instanceof ApiError &&
+                  cause.status === 403 &&
+                  cause.code === "COMMUNITY_BLOCKED"
+                ? "blocked"
+                : "error",
+          );
         }
       }
     })();
@@ -102,6 +113,30 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
             title="게시글을 찾을 수 없어요"
             description="삭제되었거나 공개되지 않은 글일 수 있어요. 커뮤니티의 다른 이야기를 둘러보세요."
             action={<LinkButton href="/community">커뮤니티로 돌아가기</LinkButton>}
+          />
+        </div>
+      </Container>
+    );
+  }
+
+  if (postStatus === "blocked") {
+    return (
+      <Container width="sm">
+        <div className="pt-10 pb-16">
+          <EmptyState
+            variant="inline"
+            title="볼 수 없는 글이에요"
+            description="차단한(또는 차단된) 사용자의 글이라 볼 수 없어요."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <LinkButton href="/profile/blocks" size="sm" variant="secondary">
+                  차단 관리
+                </LinkButton>
+                <LinkButton href="/community" size="sm">
+                  커뮤니티로 돌아가기
+                </LinkButton>
+              </div>
+            }
           />
         </div>
       </Container>
@@ -184,6 +219,10 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
                 1:1 대화
               </LinkButton>
             ) : null}
+            <BlockUserButton
+              targetId={post.authorId}
+              onBlocked={() => router.replace("/community")}
+            />
           </div>
           <Badge tone={post.type === "moc" || post.type === "easter_egg" ? "brand" : "neutral"}>
             {POST_TOPIC_LABEL[post.type]}
@@ -249,7 +288,23 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
                       {deletingCommentId === c.id ? "삭제 중…" : "삭제"}
                     </button>
                   ) : (
-                    <ReportButton targetType="COMMENT" targetId={c.id} parentId={post.id} compact />
+                    <>
+                      <BlockUserButton
+                        compact
+                        targetId={c.authorId}
+                        onBlocked={() =>
+                          setComments((current) =>
+                            current.filter((candidate) => candidate.authorId !== c.authorId),
+                          )
+                        }
+                      />
+                      <ReportButton
+                        targetType="COMMENT"
+                        targetId={c.id}
+                        parentId={post.id}
+                        compact
+                      />
+                    </>
                   )}
                 </div>
               </li>
