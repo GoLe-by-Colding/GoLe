@@ -249,6 +249,18 @@ class SocialChatServiceTest {
     }
 
     @Test
+    void blockedListingPairCannotSendButCanStillRead() {
+        SocialChatRoom listing = SocialChatRoom.listing("room-1", "listing-1", "user-1", "user-2", NOW);
+        when(rooms.findById("room-1")).thenReturn(Optional.of(listing));
+        when(blocks.blockedBetween("user-1", "user-2")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.requireSendable("room-1", "user-1"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("CHAT_BLOCKED"));
+        assertThat(service.requireReadable("room-1", "user-1")).isSameAs(listing);
+    }
+
+    @Test
     void userCannotBlockSelf() {
         assertThatThrownBy(() -> service.block("user-1", "user-1", null)).isInstanceOf(BadRequestException.class);
         verify(blocks, never()).save(org.mockito.ArgumentMatchers.any());
