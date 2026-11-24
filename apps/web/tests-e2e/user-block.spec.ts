@@ -62,6 +62,7 @@ test.describe("사용자 차단 — 셀러샵", () => {
     });
 
     await page.goto(`/shops/${SELLER}`);
+    await expect(page.getByRole("button", { name: "팔로우", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "차단", exact: true }).click();
     const dialog = page.getByRole("alertdialog", { name: "이 사용자를 차단할까요?" });
     await expect(dialog).toBeVisible();
@@ -72,6 +73,8 @@ test.describe("사용자 차단 — 셀러샵", () => {
       "href",
       "/profile/blocks",
     );
+    await expect(page.getByRole("button", { name: /^팔로(우|잉)$/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "1:1 대화" })).toHaveCount(0);
     expect(blockCalls).toBe(1);
   });
 

@@ -44,6 +44,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
   const [rating, setRating] = useState<SellerRating | null>(null);
   const [reviews, setReviews] = useState<readonly Review[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [reviewStatus, setReviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [reviewRetry, setReviewRetry] = useState(0);
   const nameOf = useDisplayNames([sellerId, ...reviews.map((review) => review.reviewerId)]);
@@ -147,7 +148,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {session?.accountId !== sellerId ? (
+            {session?.accountId !== sellerId && !blocked ? (
               <LinkButton
                 href={`/chat?direct=${encodeURIComponent(sellerId)}`}
                 size="sm"
@@ -156,8 +157,10 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
                 1:1 대화
               </LinkButton>
             ) : null}
-            {session?.accountId !== sellerId ? <FollowButton sellerId={sellerId} /> : null}
-            <BlockUserButton targetId={sellerId} />
+            {session?.accountId !== sellerId && !blocked ? (
+              <FollowButton sellerId={sellerId} />
+            ) : null}
+            <BlockUserButton targetId={sellerId} onBlocked={() => setBlocked(true)} />
           </div>
         </div>
 

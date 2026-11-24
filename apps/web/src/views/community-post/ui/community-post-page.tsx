@@ -293,9 +293,11 @@ export function CommunityPostPage({ postId }: CommunityPostPageProps) {
                         compact
                         targetId={c.authorId}
                         onBlocked={() =>
-                          setComments((current) =>
-                            current.filter((candidate) => candidate.authorId !== c.authorId),
-                          )
+                          c.authorId === post.authorId
+                            ? router.replace("/community")
+                            : setComments((current) =>
+                                current.filter((candidate) => candidate.authorId !== c.authorId),
+                              )
                         }
                       />
                       <ReportButton
