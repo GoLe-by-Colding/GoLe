@@ -131,6 +131,41 @@ async function mockBlockedUsers(
   return state;
 }
 
+/**
+ * 내 정보 화면이 세션과 함께 부르는 조회를 막는다. 알림 폴링·온보딩 등이 실제 백엔드에서 401을 받으면
+ * 전역 stale-session 정리가 먼저 돌아 화면이 로그인 안내로 바뀐다(`profile.spec.ts`의 같은 이유).
+ */
+async function mockProfileShell(page: Page, accountId: string): Promise<void> {
+  await page.route(`**/api/v1/users/${accountId}/notifications/unread-count`, (route) =>
+    route.fulfill({ json: { unreadCount: 0 } }),
+  );
+  await page.route("**/api/v1/accounts/me/onboarding", (route) =>
+    route.fulfill({
+      json: {
+        required: false,
+        legacyExempt: true,
+        nicknameCompleted: true,
+        nickname: "차단테스트",
+        phoneCompleted: true,
+        maskedPhoneNumber: "010-****-0000",
+        interestTagsCompleted: true,
+        interestTags: [],
+        privacyConsented: true,
+        marketingConsented: false,
+      },
+    }),
+  );
+  await page.route("**/api/v1/accounts/me/third-party-provision-consents/current", (route) =>
+    route.fulfill({
+      json: { noticeVersion: "2026-09-04", consented: false, lastDecisionAt: null },
+    }),
+  );
+  await page.route("**/api/v1/orders?buyerId=**", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/orders/sales", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/orders/settlements", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/listings/mine**", (route) => route.fulfill({ json: [] }));
+}
+
 test.describe("사용자 차단 — 차단 관리 화면", () => {
   test.skip(targetsRemoteHost, "로컬 프론트 전용 합성 응답 검증");
 
@@ -184,9 +219,9 @@ test.describe("사용자 차단 — 차단 관리 화면", () => {
 
   test("내 정보에 차단 관리 화면으로 가는 링크가 있다", async ({ page }) => {
     await mockSession(page, VIEWER);
+    await mockProfileShell(page, VIEWER);
 
-    // 내 정보 화면은 목으로 세우지 않은 조회가 많아 다시 그려지므로 클릭 대신 링크 대상을 확인한다.
-    // 차단 관리 화면 자체는 위 테스트들이 다룬다.
+    // 차단 관리 화면 자체는 위 테스트들이 다룬다. 여기서는 내 정보의 링크 대상만 본다.
     await page.goto("/profile");
     await expect(page.getByRole("link", { name: "차단 관리", exact: true })).toHaveAttribute(
       "href",
