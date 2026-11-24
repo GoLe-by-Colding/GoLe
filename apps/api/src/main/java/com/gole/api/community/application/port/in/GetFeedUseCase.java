@@ -19,10 +19,6 @@ public interface GetFeedUseCase {
     FeedPage feedPage(
             int limit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> query, String viewerId);
 
-    default FeedPage feedPage(int limit, Optional<FeedCursor> before) {
-        return feedPage(limit, before, Optional.empty(), Optional.empty(), null);
-    }
-
     /** 차단 관계인 작성자의 글이면 COMMUNITY_BLOCKED. viewerId 는 null 가능(비로그인). */
     Post getPost(String postId, String viewerId);
 
