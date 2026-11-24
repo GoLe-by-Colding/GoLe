@@ -119,6 +119,21 @@ class ListingChatRoomServiceTest {
     }
 
     @Test
+    @DisplayName("차단 관계인 판매자의 매물에는 방을 열지 않는다")
+    void open_rejectsBlockedRelationship() {
+        when(listings.sellerOf("listing-1")).thenReturn("seller");
+        doThrow(new ForbiddenException("CHAT_BLOCKED", "blocked"))
+                .when(socialChats)
+                .requireCanStartPrivateConversation("buyer", "seller");
+
+        assertThatThrownBy(() -> service.open("buyer", "listing-1"))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting("code")
+                .isEqualTo("CHAT_BLOCKED");
+        verify(rooms, never()).createOrGetExisting(any());
+    }
+
+    @Test
     @DisplayName("공개되지 않은 매물에는 새 방을 만들지 않는다")
     void open_doesNotCreateRoomForHiddenListing() {
         when(listings.sellerOf("deleted-listing")).thenReturn("real-seller");
