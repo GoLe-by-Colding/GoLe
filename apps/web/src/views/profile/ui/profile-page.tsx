@@ -357,6 +357,15 @@ export function ProfilePage() {
               </Link>
             </InfoRow>
 
+            <InfoRow label="차단 사용자">
+              <Link
+                href="/profile/blocks"
+                className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+              >
+                차단 관리
+              </Link>
+            </InfoRow>
+
             <InfoRow label="개인정보 권리">
               <Link
                 href="/chat?compose=support&category=PRIVACY_ACCESS"

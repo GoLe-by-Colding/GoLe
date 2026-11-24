@@ -93,3 +93,101 @@ test.describe("사용자 차단 — 셀러샵", () => {
     await expect(page.getByRole("button", { name: "차단", exact: true })).toHaveCount(0);
   });
 });
+
+const BLOCKED = "blocked-1";
+
+/** 차단 목록 API를 흉내 낸다. 해제하면 목록에서 빠지고, 조회·해제 실패를 주문할 수 있다. */
+async function mockBlockedUsers(
+  page: Page,
+  options: { listFailures?: number; unblockFails?: boolean } = {},
+): Promise<{ unblockCalls: number }> {
+  const state = {
+    blocked: [BLOCKED],
+    listFailuresLeft: options.listFailures ?? 0,
+    unblockCalls: 0,
+  };
+  await page.route("**/api/v1/chat/social/blocks", (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (state.listFailuresLeft > 0) {
+      state.listFailuresLeft -= 1;
+      return route.fulfill({ status: 500, json: { code: "INTERNAL_ERROR", message: "서버 오류" } });
+    }
+    return route.fulfill({ json: state.blocked });
+  });
+  await page.route(`**/api/v1/chat/social/blocks/${BLOCKED}`, (route) => {
+    state.unblockCalls += 1;
+    if (options.unblockFails) {
+      return route.fulfill({ status: 500, json: { code: "INTERNAL_ERROR", message: "서버 오류" } });
+    }
+    state.blocked = [];
+    return route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/v1/accounts/public-profiles*", (route) =>
+    route.fulfill({ json: [{ accountId: BLOCKED, nickname: "괴롭힘곰" }] }),
+  );
+  return state;
+}
+
+test.describe("사용자 차단 — 차단 관리 화면", () => {
+  test.skip(targetsRemoteHost, "로컬 프론트 전용 합성 응답 검증");
+
+  test("차단한 사용자는 닉네임으로 보이고, 해제하면 목록에서 사라진다", async ({ page }) => {
+    await mockSession(page, VIEWER);
+    const state = await mockBlockedUsers(page);
+
+    await page.goto("/profile/blocks");
+    await expect(page.getByRole("heading", { level: 1, name: "차단 관리" })).toBeVisible();
+    await expect(page.getByText("괴롭힘곰", { exact: true })).toBeVisible();
+    await expect(page.getByText(BLOCKED)).toHaveCount(0);
+
+    await page.getByRole("button", { name: "차단 해제", exact: true }).click();
+    await expect(page.getByText("차단한 사용자가 없어요.", { exact: true })).toBeVisible();
+    await expect(page.getByText("괴롭힘곰", { exact: true })).toHaveCount(0);
+    expect(state.unblockCalls).toBe(1);
+  });
+
+  test("목록 조회가 실패하면 오류를 보이고, 다시 시도하면 목록을 보인다", async ({ page }) => {
+    await mockSession(page, VIEWER);
+    await mockBlockedUsers(page, { listFailures: 1 });
+
+    await page.goto("/profile/blocks");
+    await expect(page.getByText("차단 목록을 불러오지 못했어요.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "다시 시도", exact: true }).click();
+    await expect(page.getByText("괴롭힘곰", { exact: true })).toBeVisible();
+  });
+
+  test("차단 해제가 실패하면 그 행에 안내를 보이고 행은 남는다", async ({ page }) => {
+    await mockSession(page, VIEWER);
+    await mockBlockedUsers(page, { unblockFails: true });
+
+    await page.goto("/profile/blocks");
+    await page.getByRole("button", { name: "차단 해제", exact: true }).click();
+    await expect(
+      page.getByText("해제하지 못했어요. 다시 시도해 주세요.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("괴롭힘곰", { exact: true })).toBeVisible();
+  });
+
+  test("비로그인이면 로그인 안내를 보인다", async ({ page }) => {
+    await mockSession(page, null);
+
+    await page.goto("/profile/blocks");
+    await expect(page.getByRole("heading", { level: 1, name: "차단 관리" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "로그인하러 가기" })).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Fprofile%2Fblocks",
+    );
+  });
+
+  test("내 정보에 차단 관리 화면으로 가는 링크가 있다", async ({ page }) => {
+    await mockSession(page, VIEWER);
+
+    // 내 정보 화면은 목으로 세우지 않은 조회가 많아 다시 그려지므로 클릭 대신 링크 대상을 확인한다.
+    // 차단 관리 화면 자체는 위 테스트들이 다룬다.
+    await page.goto("/profile");
+    await expect(page.getByRole("link", { name: "차단 관리", exact: true })).toHaveAttribute(
+      "href",
+      "/profile/blocks",
+    );
+  });
+});
