@@ -54,10 +54,15 @@ export function fetchFollowingFeed(signal?: AbortSignal): Promise<readonly Post[
   });
 }
 
-export function fetchPost(postId: string, signal?: AbortSignal): Promise<Post> {
+export function fetchPost(
+  postId: string,
+  signal?: AbortSignal,
+  headers?: Readonly<Record<string, string>>,
+): Promise<Post> {
   return apiRequest<Post>(`${BASE}/${postId}`, {
     cache: "no-store",
     ...(signal === undefined ? {} : { signal }),
+    ...(headers === undefined ? {} : { headers }),
   });
 }
 
