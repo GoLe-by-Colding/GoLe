@@ -45,6 +45,7 @@ async function mockShop(page: Page, sellerId: string): Promise<void> {
     route.fulfill({ json: { sellerId, average: 0, count: 0 } }),
   );
   await page.route(`**/api/v1/sellers/${sellerId}/reviews`, (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/chat/social/blocks", (route) => route.fulfill({ json: [] }));
 }
 
 test.describe("사용자 차단 — 셀러샵", () => {
@@ -76,6 +77,26 @@ test.describe("사용자 차단 — 셀러샵", () => {
     await expect(page.getByRole("button", { name: /^팔로(우|잉)$/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "1:1 대화" })).toHaveCount(0);
     expect(blockCalls).toBe(1);
+  });
+
+  test("이미 차단한 판매자 샵은 처음부터 차단함만 보이고 다시 차단하지 않는다", async ({
+    page,
+  }) => {
+    await mockSession(page, VIEWER);
+    await mockShop(page, SELLER);
+    await page.route("**/api/v1/chat/social/blocks", (route) => route.fulfill({ json: [SELLER] }));
+    let blockCalls = 0;
+    await page.route(`**/api/v1/chat/social/blocks/${SELLER}`, (route) => {
+      blockCalls += 1;
+      return route.fulfill({ status: 204 });
+    });
+
+    await page.goto(`/shops/${SELLER}`);
+    await expect(page.getByText("차단함", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "차단", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^팔로(우|잉)$/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "1:1 대화" })).toHaveCount(0);
+    expect(blockCalls).toBe(0);
   });
 
   test("본인 샵에는 차단 버튼이 없다", async ({ page }) => {

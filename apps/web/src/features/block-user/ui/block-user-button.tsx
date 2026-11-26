@@ -9,6 +9,8 @@ import { Button, useDialog } from "@shared/ui";
 export interface BlockUserButtonProps {
   readonly targetId: string;
   readonly compact?: boolean;
+  /** 이미 내가 차단한 상대면 버튼 대신 "차단함 · 차단 관리"를 보인다. 다시 차단하면 사유가 지워진다. */
+  readonly alreadyBlocked?: boolean;
   /** 차단이 서버에 반영된 직후 한 번 호출된다. */
   readonly onBlocked?: () => void;
 }
@@ -17,7 +19,12 @@ export interface BlockUserButtonProps {
  * 사용자 차단 — 확인 모달을 거쳐 차단하고, 이 자리를 "차단함 · 차단 관리"로 바꾼다.
  * 비로그인이거나 본인이면 그리지 않는다. 해제는 프로필의 차단 관리에서 한다.
  */
-export function BlockUserButton({ targetId, compact = false, onBlocked }: BlockUserButtonProps) {
+export function BlockUserButton({
+  targetId,
+  compact = false,
+  alreadyBlocked = false,
+  onBlocked,
+}: BlockUserButtonProps) {
   const { session } = useSession();
   const dialog = useDialog();
   const [busy, setBusy] = useState(false);
@@ -53,7 +60,7 @@ export function BlockUserButton({ targetId, compact = false, onBlocked }: BlockU
 
   return (
     <>
-      {blocked ? (
+      {blocked || alreadyBlocked ? (
         <span className="inline-flex items-center gap-2 text-xs text-neutral-500">
           <span>차단함</span>
           <Link href="/profile/blocks" className="font-semibold text-brand-700 hover:underline">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { fetchBlockedChatUserIds } from "@entities/chat";
 import { fetchSellerShop, type ListingSummary } from "@entities/discovery";
 import { conditionLabel, priceDropAmount } from "@entities/listing";
 import { fetchPriceSnapshot } from "@entities/pricing";
@@ -45,6 +46,7 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
   const [reviews, setReviews] = useState<readonly Review[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const viewerId = session?.accountId;
   const [reviewStatus, setReviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [reviewRetry, setReviewRetry] = useState(0);
   const nameOf = useDisplayNames([sellerId, ...reviews.map((review) => review.reviewerId)]);
@@ -70,6 +72,20 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
     });
     return () => controller.abort();
   }, [listings]);
+
+  // 이미 차단한 판매자면 처음부터 팔로우·대화 대신 "차단함"을 보인다. 조회가 실패하면 서버가 막는다.
+  useEffect(() => {
+    if (viewerId === undefined || viewerId === sellerId) return;
+    let active = true;
+    fetchBlockedChatUserIds()
+      .then((ids) => {
+        if (active && ids.includes(sellerId)) setBlocked(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [viewerId, sellerId]);
 
   useEffect(() => {
     let active = true;
@@ -160,7 +176,11 @@ export function SellerShopPage({ sellerId }: SellerShopPageProps) {
             {session?.accountId !== sellerId && !blocked ? (
               <FollowButton sellerId={sellerId} />
             ) : null}
-            <BlockUserButton targetId={sellerId} onBlocked={() => setBlocked(true)} />
+            <BlockUserButton
+              targetId={sellerId}
+              alreadyBlocked={blocked}
+              onBlocked={() => setBlocked(true)}
+            />
           </div>
         </div>
 
