@@ -15,6 +15,6 @@ public interface CommentRepositoryPort {
     /** 운영 조치·신고 검증용 단건 조회. 숨김 댓글도 원문 보존을 위해 반환한다. */
     Optional<Comment> findById(String commentId);
 
-    /** 특정 게시글의 공개 댓글만 조회한다. 블라인드된 댓글은 제외한다. */
-    List<Comment> findByPostId(String postId, int limit);
+    /** 특정 게시글의 공개 댓글만 조회한다. 블라인드된 댓글과 제외 작성자의 댓글은 limit을 자르기 전에 뺀다. */
+    List<Comment> findByPostId(String postId, int limit, List<String> excludedAuthorIds);
 }

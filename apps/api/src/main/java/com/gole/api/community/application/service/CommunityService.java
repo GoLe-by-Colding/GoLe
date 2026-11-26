@@ -159,15 +159,8 @@ public class CommunityService
     @Override
     public List<Comment> comments(String postId, int limit, String viewerId) {
         getPost(postId, viewerId);
-        List<Comment> comments = commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS));
-        if (viewerId == null) {
-            return comments;
-        }
-        // ponytail: limit 적용 뒤 거르므로 최대 limit보다 적게 올 수 있다. 댓글 커서가 생기면 쿼리 조건으로 옮긴다
-        List<String> blocked = blocks.blockedCounterparts(viewerId);
-        return comments.stream()
-                .filter(comment -> !blocked.contains(comment.authorId()))
-                .toList();
+        List<String> blocked = viewerId == null ? List.of() : blocks.blockedCounterparts(viewerId);
+        return commentRepository.findByPostId(postId, clamp(limit, MAX_COMMENT_ROWS), blocked);
     }
 
     @Override

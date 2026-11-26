@@ -350,6 +350,21 @@ class CommunityServiceTest {
     }
 
     @Test
+    @DisplayName("차단 상대 댓글이 앞에 몰려 있어도 limit만큼 다른 댓글을 채운다")
+    void comments_excludesBlockedBeforeLimit() {
+        String postId = service.publish(new PublishPostCommand("D", "글", List.of(), "general"));
+        service.comment(new CommentCommand(postId, "B", "B 댓글 1"));
+        service.comment(new CommentCommand(postId, "B", "B 댓글 2"));
+        service.comment(new CommentCommand(postId, "C", "C 댓글 1"));
+        service.comment(new CommentCommand(postId, "C", "C 댓글 2"));
+        blocks.block("A", "B");
+
+        assertThat(service.comments(postId, 2, "A"))
+                .extracting(Comment::content)
+                .containsExactly("C 댓글 1", "C 댓글 2");
+    }
+
+    @Test
     @DisplayName("차단 관계인 글에는 좋아요·댓글이 막히고 저장도 알림도 없다")
     void likeAndComment_rejectedWhenBlocked_withoutSideEffects() {
         String postId = service.publish(new PublishPostCommand("B", "글", List.of(), "general"));
@@ -510,10 +525,11 @@ class CommunityServiceTest {
         }
 
         @Override
-        public List<Comment> findByPostId(String postId, int limit) {
+        public List<Comment> findByPostId(String postId, int limit, List<String> excludedAuthorIds) {
             return store.stream()
                     .filter(c -> c.postId().equals(postId))
                     .filter(c -> !c.isHidden())
+                    .filter(c -> !excludedAuthorIds.contains(c.authorId()))
                     .limit(limit)
                     .toList();
         }
