@@ -258,6 +258,7 @@ class SocialChatServiceTest {
     }
 
     @Test
+    @DisplayName("차단 관계인 매물 대화방은 보내기는 막고 읽기는 허용한다")
     void blockedListingPairCannotSendButCanStillRead() {
         SocialChatRoom listing = SocialChatRoom.listing("room-1", "listing-1", "user-1", "user-2", NOW);
         when(rooms.findById("room-1")).thenReturn(Optional.of(listing));
