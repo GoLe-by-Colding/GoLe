@@ -79,6 +79,22 @@ class DiscoveryServiceTest {
     }
 
     @Test
+    @DisplayName("확인과 저장 사이에 차단이 생기면 방금 저장한 팔로우를 지우고 알리지 않는다")
+    void follow_undoesWhenBlockedDuringSave() {
+        List<String> notified = new ArrayList<>();
+        service = new DiscoveryService(
+                follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> notified.add(sellerId), blocked);
+        when(blocked.blockedBetween("u1", "s1")).thenReturn(false, true);
+
+        assertThatThrownBy(() -> service.follow("u1", "s1"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("FOLLOW_BLOCKED"));
+
+        assertThat(service.following("u1")).isEmpty();
+        assertThat(notified).isEmpty();
+    }
+
+    @Test
     void unfollow_isIdempotent() {
         service.follow("u1", "s1");
         service.unfollow("u1", "s1");

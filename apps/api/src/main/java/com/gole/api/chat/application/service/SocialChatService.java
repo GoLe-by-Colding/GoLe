@@ -32,6 +32,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** 매물과 독립된 DIRECT·GROUP·SUPPORT 방의 생성과 접근 규칙을 담당한다. */
 @Service
@@ -248,6 +250,23 @@ public class SocialChatService implements SocialChatUseCase {
         }
         blocks.save(new ChatBlock(actorId, targetId, normalizeReason(reason), Instant.now(clock)));
         followCut.cutBoth(actorId, targetId); // 차단하면 서로의 팔로우도 끊는다 (user-block R1)
+        cutAgainAfterCommit(actorId, targetId);
+    }
+
+    /**
+     * 차단 트랜잭션의 스냅샷은 그 사이 새로 저장된 팔로우를 못 본다. 커밋 뒤 한 번 더 끊는다.
+     * 커밋 뒤에 저장되는 팔로우는 {@code DiscoveryService.follow}가 저장 후 차단을 다시 확인해 지운다.
+     */
+    private void cutAgainAfterCommit(String actorId, String targetId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                followCut.cutBoth(actorId, targetId);
+            }
+        });
     }
 
     @Override

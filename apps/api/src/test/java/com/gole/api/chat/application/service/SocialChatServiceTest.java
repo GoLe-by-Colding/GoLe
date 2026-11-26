@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class SocialChatServiceTest {
 
@@ -281,6 +284,24 @@ class SocialChatServiceTest {
         InOrder order = inOrder(blocks, followCut);
         order.verify(blocks).save(any());
         order.verify(followCut).cutBoth("user-1", "user-2");
+    }
+
+    @Test
+    @DisplayName("트랜잭션 안에서 차단하면 커밋 뒤에 팔로우를 한 번 더 끊는다")
+    void block_cutsAgainAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            service.block("user-1", "user-2", null);
+            verify(followCut, times(1)).cutBoth("user-1", "user-2");
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+            verify(followCut, times(2)).cutBoth("user-1", "user-2");
+        } finally {
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
