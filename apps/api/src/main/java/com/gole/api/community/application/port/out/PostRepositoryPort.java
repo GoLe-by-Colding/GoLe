@@ -17,12 +17,16 @@ public interface PostRepositoryPort {
     /** id로 단건 조회. 없으면 비어있음. */
     Optional<Post> findById(String postId);
 
-    /** 게시된(PUBLISHED) 글을 최신→오래된 순으로 조회한다. (요구사항 12.6) */
-    List<Post> findPublishedRecentFirst(int limit);
+    /** 게시된(PUBLISHED) 글을 최신→오래된 순으로 조회한다. excludedAuthorIds 의 글은 뺀다. (요구사항 12.6) */
+    List<Post> findPublishedRecentFirst(int limit, List<String> excludedAuthorIds);
 
     /** createdAt/id 내림차순 키셋 커서로 게시글을 조회한다. */
     List<Post> findPublishedPage(
-            int limit, Optional<FeedCursor> before, Optional<PostType> topic, Optional<String> query);
+            int limit,
+            Optional<FeedCursor> before,
+            Optional<PostType> topic,
+            Optional<String> query,
+            List<String> excludedAuthorIds);
 
     /** 지정 작성자의 게시된 글만 최신순으로 조회한다(팔로잉 피드). */
     List<Post> findPublishedByAuthorIdsRecentFirst(List<String> authorIds, int limit);

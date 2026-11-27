@@ -31,8 +31,11 @@ public class CommentPersistenceAdapter implements CommentRepositoryPort {
     }
 
     @Override
-    public List<Comment> findByPostId(String postId, int limit) {
-        return repository.findByPostIdAndHiddenAtIsNullOrderByCreatedAtAsc(postId, PageRequest.of(0, limit)).stream()
+    public List<Comment> findByPostId(String postId, int limit, List<String> excludedAuthorIds) {
+        return repository
+                .findByPostIdAndHiddenAtIsNullAndAuthorIdNotInOrderByCreatedAtAsc(
+                        postId, excludedAuthorIds, PageRequest.of(0, limit))
+                .stream()
                 .map(this::toDomain)
                 .toList();
     }

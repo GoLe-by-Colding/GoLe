@@ -5,6 +5,7 @@ import com.gole.api.discovery.application.port.in.FollowSellerUseCase;
 import com.gole.api.discovery.application.port.in.GetPersonalizedFeedUseCase;
 import com.gole.api.discovery.application.port.in.GetSellerShopUseCase;
 import com.gole.api.discovery.application.port.in.ManageWishlistUseCase;
+import com.gole.api.discovery.application.port.out.FollowBlockCheckPort;
 import com.gole.api.discovery.application.port.out.FollowNotifierPort;
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
@@ -29,16 +30,19 @@ public class DiscoveryService
     private final WishlistRepositoryPort wishlistRepository;
     private final ListingQueryPort listingQuery;
     private final FollowNotifierPort followNotifier;
+    private final FollowBlockCheckPort followBlockCheck;
 
     public DiscoveryService(
             FollowRepositoryPort followRepository,
             WishlistRepositoryPort wishlistRepository,
             ListingQueryPort listingQuery,
-            FollowNotifierPort followNotifier) {
+            FollowNotifierPort followNotifier,
+            FollowBlockCheckPort followBlockCheck) {
         this.followRepository = followRepository;
         this.wishlistRepository = wishlistRepository;
         this.listingQuery = listingQuery;
         this.followNotifier = followNotifier;
+        this.followBlockCheck = followBlockCheck;
     }
 
     @Override
@@ -46,12 +50,24 @@ public class DiscoveryService
         if (userId.equals(sellerId)) {
             throw new ForbiddenException("FOLLOW_SELF_NOT_ALLOWED", "자기 자신은 팔로우할 수 없습니다");
         }
+        if (followBlockCheck.blockedBetween(userId, sellerId)) {
+            throw blocked();
+        }
         if (followRepository.exists(userId, sellerId)) {
             throw new DuplicateFollowException(); // 요구사항 16.4
         }
         followRepository.save(new Follow(userId, sellerId));
+        // 확인과 저장 사이에 차단이 커밋됐으면 방금 저장한 팔로우를 되돌린다 (user-block D5)
+        if (followBlockCheck.blockedBetween(userId, sellerId)) {
+            followRepository.delete(userId, sellerId);
+            throw blocked();
+        }
         // 알림: 새 팔로워를 셀러에게(best-effort)
         followNotifier.notifyNewFollower(sellerId, userId);
+    }
+
+    private static ForbiddenException blocked() {
+        return new ForbiddenException("FOLLOW_BLOCKED", "차단 관계인 사용자는 팔로우할 수 없습니다");
     }
 
     @Override

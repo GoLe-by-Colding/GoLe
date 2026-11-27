@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchPost, POST_TOPIC_LABEL, type Post } from "@entities/community";
 import { CommunityPostPage } from "@views/community-post";
-import { isApiNotFoundError } from "@shared/api";
+import { ApiError, isApiNotFoundError } from "@shared/api";
+import { serverSessionHeaders } from "@shared/api/server-session-headers";
 import { env } from "@shared/config";
 import { JsonLd } from "@shared/ui";
 import { absoluteUrl, breadcrumbJsonLd } from "@shared/lib";
@@ -11,11 +12,18 @@ interface PageParams {
   readonly params: Promise<{ readonly id: string }>;
 }
 
-async function loadPost(id: string): Promise<Post | null> {
+/**
+ * 보는 사람의 세션으로 불러온다. 차단 관계(403 `COMMUNITY_BLOCKED`)면 본문을 메타데이터·JSON-LD에
+ * 싣지 않도록 "blocked"를 돌려준다(user-block R3). 화면 안내는 클라이언트 view가 그린다.
+ */
+async function loadPost(id: string): Promise<Post | "blocked" | null> {
   try {
-    return await fetchPost(id);
+    return await fetchPost(id, undefined, await serverSessionHeaders());
   } catch (cause) {
     if (isApiNotFoundError(cause)) return null;
+    if (cause instanceof ApiError && cause.status === 403 && cause.code === "COMMUNITY_BLOCKED") {
+      return "blocked";
+    }
     throw cause;
   }
 }
@@ -34,7 +42,7 @@ function postHeadline(post: Post): string {
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   const { id } = await params;
   const post = await loadPost(id);
-  if (post === null) {
+  if (post === null || post === "blocked") {
     return {
       title: "커뮤니티",
       description: "GoLe 브릭 커뮤니티",
@@ -67,6 +75,9 @@ export default async function Page({ params }: PageParams) {
   const post = await loadPost(id);
   if (post === null) {
     notFound();
+  }
+  if (post === "blocked") {
+    return <CommunityPostPage postId={id} />;
   }
 
   return (

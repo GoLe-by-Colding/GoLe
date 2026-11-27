@@ -6,6 +6,7 @@ import com.gole.api.chat.application.port.out.ChatAccountPort;
 import com.gole.api.chat.application.port.out.ChatBlockRepositoryPort;
 import com.gole.api.chat.application.port.out.ChatConsentPort;
 import com.gole.api.chat.application.port.out.ChatReadStatePort;
+import com.gole.api.chat.application.port.out.FollowCutPort;
 import com.gole.api.chat.application.port.out.SocialChatRoomRepositoryPort;
 import com.gole.api.chat.application.port.out.SupportTicketRepositoryPort;
 import com.gole.api.chat.domain.model.ChatAccount;
@@ -31,6 +32,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** 매물과 독립된 DIRECT·GROUP·SUPPORT 방의 생성과 접근 규칙을 담당한다. */
 @Service
@@ -42,6 +45,7 @@ public class SocialChatService implements SocialChatUseCase {
     private final ChatAccountPort accounts;
     private final ChatConsentPort consents;
     private final ChatReadStatePort readStates;
+    private final FollowCutPort followCut;
     private final Clock clock;
 
     public SocialChatService(
@@ -51,6 +55,7 @@ public class SocialChatService implements SocialChatUseCase {
             ChatAccountPort accounts,
             ChatConsentPort consents,
             ChatReadStatePort readStates,
+            FollowCutPort followCut,
             Clock clock) {
         this.rooms = rooms;
         this.blocks = blocks;
@@ -58,6 +63,7 @@ public class SocialChatService implements SocialChatUseCase {
         this.accounts = accounts;
         this.consents = consents;
         this.readStates = readStates;
+        this.followCut = followCut;
         this.clock = clock;
     }
 
@@ -235,6 +241,7 @@ public class SocialChatService implements SocialChatUseCase {
     }
 
     @Override
+    @Transactional
     public void block(String actorId, String targetId, String reason) {
         requireRegularAccount(actorId);
         requireRegularAccount(targetId);
@@ -242,6 +249,24 @@ public class SocialChatService implements SocialChatUseCase {
             throw new BadRequestException("CHAT_SELF_BLOCK", "자기 자신을 차단할 수 없습니다");
         }
         blocks.save(new ChatBlock(actorId, targetId, normalizeReason(reason), Instant.now(clock)));
+        followCut.cutBoth(actorId, targetId); // 차단하면 서로의 팔로우도 끊는다 (user-block R1)
+        cutAgainAfterCommit(actorId, targetId);
+    }
+
+    /**
+     * 차단 트랜잭션의 스냅샷은 그 사이 새로 저장된 팔로우를 못 본다. 커밋 뒤 한 번 더 끊는다.
+     * 커밋 뒤에 저장되는 팔로우는 {@code DiscoveryService.follow}가 저장 후 차단을 다시 확인해 지운다.
+     */
+    private void cutAgainAfterCommit(String actorId, String targetId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                followCut.cutBoth(actorId, targetId);
+            }
+        });
     }
 
     @Override

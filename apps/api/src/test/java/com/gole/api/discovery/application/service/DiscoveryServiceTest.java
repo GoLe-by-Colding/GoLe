@@ -2,8 +2,11 @@ package com.gole.api.discovery.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.gole.api.common.exception.ForbiddenException;
+import com.gole.api.discovery.application.port.out.FollowBlockCheckPort;
 import com.gole.api.discovery.application.port.out.FollowRepositoryPort;
 import com.gole.api.discovery.application.port.out.ListingQueryPort;
 import com.gole.api.discovery.application.port.out.WishlistRepositoryPort;
@@ -16,6 +19,7 @@ import com.gole.api.discovery.domain.model.WishlistTargetType;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class DiscoveryServiceTest {
@@ -23,12 +27,14 @@ class DiscoveryServiceTest {
     private InMemoryFollows follows;
     private InMemoryWishlist wishlist;
     private DiscoveryService service;
+    private final FollowBlockCheckPort blocked = mock(FollowBlockCheckPort.class);
 
     @BeforeEach
     void setUp() {
         follows = new InMemoryFollows();
         wishlist = new InMemoryWishlist();
-        service = new DiscoveryService(follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> {});
+        service =
+                new DiscoveryService(follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> {}, blocked);
     }
 
     @Test
@@ -47,6 +53,48 @@ class DiscoveryServiceTest {
     }
 
     @Test
+    @DisplayName("차단 관계인 사용자는 팔로우할 수 없고 저장도 알림도 하지 않는다")
+    void follow_rejectsBlockedPair() {
+        List<String> notified = new ArrayList<>();
+        service = new DiscoveryService(
+                follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> notified.add(sellerId), blocked);
+        when(blocked.blockedBetween("u1", "s1")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.follow("u1", "s1"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("FOLLOW_BLOCKED"));
+
+        assertThat(service.following("u1")).isEmpty();
+        assertThat(notified).isEmpty();
+    }
+
+    @Test
+    @DisplayName("차단이 아니면 기존대로 저장한다")
+    void follow_savesWhenNotBlocked() {
+        when(blocked.blockedBetween("u1", "s1")).thenReturn(false);
+
+        service.follow("u1", "s1");
+
+        assertThat(service.following("u1")).containsExactly("s1");
+    }
+
+    @Test
+    @DisplayName("확인과 저장 사이에 차단이 생기면 방금 저장한 팔로우를 지우고 알리지 않는다")
+    void follow_undoesWhenBlockedDuringSave() {
+        List<String> notified = new ArrayList<>();
+        service = new DiscoveryService(
+                follows, wishlist, new NoopListingQuery(), (sellerId, followerId) -> notified.add(sellerId), blocked);
+        when(blocked.blockedBetween("u1", "s1")).thenReturn(false, true);
+
+        assertThatThrownBy(() -> service.follow("u1", "s1"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("FOLLOW_BLOCKED"));
+
+        assertThat(service.following("u1")).isEmpty();
+        assertThat(notified).isEmpty();
+    }
+
+    @Test
     void unfollow_isIdempotent() {
         service.follow("u1", "s1");
         service.unfollow("u1", "s1");
@@ -57,7 +105,7 @@ class DiscoveryServiceTest {
     @Test
     void feed_isEmptyWithoutFollowingAndBoundsRequestedLimit() {
         RecordingListingQuery listings = new RecordingListingQuery();
-        service = new DiscoveryService(follows, wishlist, listings, (sellerId, followerId) -> {});
+        service = new DiscoveryService(follows, wishlist, listings, (sellerId, followerId) -> {}, blocked);
 
         assertThat(service.feed("u1", 24)).isEmpty();
         assertThat(listings.requestedSellerIds).isEmpty();

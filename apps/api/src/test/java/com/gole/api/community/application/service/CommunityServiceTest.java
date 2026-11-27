@@ -12,6 +12,7 @@ import com.gole.api.community.application.port.in.GetFeedUseCase.FeedCursor;
 import com.gole.api.community.application.port.in.PatchPostUseCase.PatchField;
 import com.gole.api.community.application.port.in.PatchPostUseCase.PatchPostCommand;
 import com.gole.api.community.application.port.in.PublishPostUseCase.PublishPostCommand;
+import com.gole.api.community.application.port.out.BlockedAuthorQueryPort;
 import com.gole.api.community.application.port.out.CommentRepositoryPort;
 import com.gole.api.community.application.port.out.CommunityIdGeneratorPort;
 import com.gole.api.community.application.port.out.PostAuthorNotifierPort;
@@ -28,16 +29,21 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class CommunityServiceTest {
 
     private InMemoryPosts posts;
     private RecordingPostAuthorNotifier notifier;
+    private FakeBlocks blocks;
+    private InMemoryComments comments;
     private CommunityService service;
 
     @BeforeEach
@@ -45,12 +51,15 @@ class CommunityServiceTest {
         posts = new InMemoryPosts();
         notifier = new RecordingPostAuthorNotifier();
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+        blocks = new FakeBlocks();
+        comments = new InMemoryComments();
         service = new CommunityService(
                 posts,
-                new InMemoryComments(),
+                comments,
                 new SeqIds(),
                 notifier,
                 new MediaPostImageAdapter(mock(ManageMediaAssetsUseCase.class)),
+                blocks,
                 clock);
     }
 
@@ -61,7 +70,7 @@ class CommunityServiceTest {
     @Test
     void publish_appearsInFeed() {
         publish();
-        assertThat(service.feed(30)).hasSize(1);
+        assertThat(service.feed(30, null)).hasSize(1);
     }
 
     @Test
@@ -70,17 +79,27 @@ class CommunityServiceTest {
             publish();
         }
 
-        var first = service.feedPage(2, Optional.empty());
+        var first = service.feedPage(2, Optional.empty(), Optional.empty(), Optional.empty(), null);
         assertThat(first.items()).extracting(Post::getId).containsExactly("id-5", "id-4");
         assertThat(first.hasMore()).isTrue();
 
         Post last = first.items().get(1);
-        var second = service.feedPage(2, Optional.of(new FeedCursor(last.getCreatedAt(), last.getId())));
+        var second = service.feedPage(
+                2,
+                Optional.of(new FeedCursor(last.getCreatedAt(), last.getId())),
+                Optional.empty(),
+                Optional.empty(),
+                null);
         assertThat(second.items()).extracting(Post::getId).containsExactly("id-3", "id-2");
         assertThat(second.hasMore()).isTrue();
 
         Post secondLast = second.items().get(1);
-        var finalPage = service.feedPage(2, Optional.of(new FeedCursor(secondLast.getCreatedAt(), secondLast.getId())));
+        var finalPage = service.feedPage(
+                2,
+                Optional.of(new FeedCursor(secondLast.getCreatedAt(), secondLast.getId())),
+                Optional.empty(),
+                Optional.empty(),
+                null);
         assertThat(finalPage.items()).extracting(Post::getId).containsExactly("id-1");
         assertThat(finalPage.hasMore()).isFalse();
     }
@@ -91,7 +110,7 @@ class CommunityServiceTest {
         service.publish(new PublishPostCommand("builder-b", "에펠탑 창작 완성", List.of(), "moc"));
         service.publish(new PublishPostCommand("builder-c", "타이타닉 보관 팁", List.of(), "tip"));
 
-        var page = service.feedPage(2, Optional.empty(), Optional.of(PostType.TIP), Optional.of("에펠탑"));
+        var page = service.feedPage(2, Optional.empty(), Optional.of(PostType.TIP), Optional.of("에펠탑"), null);
 
         assertThat(page.items()).singleElement().satisfies(post -> {
             assertThat(post.getAuthorId()).isEqualTo("builder-a");
@@ -104,9 +123,9 @@ class CommunityServiceTest {
     void like_incrementsOnce_andRejectsDuplicate() {
         String id = publish();
         service.like(id, "user-1");
-        assertThat(service.getPost(id).likeCount()).isEqualTo(1);
+        assertThat(service.getPost(id, null).likeCount()).isEqualTo(1);
         assertThatThrownBy(() -> service.like(id, "user-1")).isInstanceOf(DuplicateLikeException.class);
-        assertThat(service.getPost(id).likeCount()).isEqualTo(1);
+        assertThat(service.getPost(id, null).likeCount()).isEqualTo(1);
     }
 
     @Test
@@ -117,7 +136,7 @@ class CommunityServiceTest {
         service.unlike(id, "user-1");
         service.unlike(id, "user-1");
 
-        Post post = service.getPost(id);
+        Post post = service.getPost(id, null);
         assertThat(post.likeCount()).isZero();
         assertThat(post.isLikedBy("user-1")).isFalse();
     }
@@ -140,7 +159,7 @@ class CommunityServiceTest {
         String id = publish();
         assertThatThrownBy(() -> service.delete(id, "intruder")).isInstanceOf(ForbiddenException.class);
         service.delete(id, "author-1");
-        assertThat(service.feed(30)).isEmpty();
+        assertThat(service.feed(30, null)).isEmpty();
     }
 
     @Test
@@ -149,7 +168,7 @@ class CommunityServiceTest {
         Comment created = service.comment(new CommentCommand(id, "user-2", "멋져요"));
         assertThat(created.id()).isEqualTo("id-2");
         assertThat(created.authorId()).isEqualTo("user-2");
-        assertThat(service.comments(id, 100)).hasSize(1);
+        assertThat(service.comments(id, 100, null)).hasSize(1);
     }
 
     @Test
@@ -159,7 +178,7 @@ class CommunityServiceTest {
 
         service.hide(created.id(), "욕설 포함");
 
-        assertThat(service.comments(postId, 100)).isEmpty();
+        assertThat(service.comments(postId, 100, null)).isEmpty();
         Comment preserved = service.getForModeration(created.id());
         assertThat(preserved.content()).isEqualTo("신고될 원문");
         assertThat(preserved.hiddenReason()).isEqualTo("욕설 포함");
@@ -173,7 +192,7 @@ class CommunityServiceTest {
 
         service.deleteComment(new DeleteCommentCommand(postId, created.id(), "user-2"));
 
-        assertThat(service.comments(postId, 100)).isEmpty();
+        assertThat(service.comments(postId, 100, null)).isEmpty();
         Comment preserved = service.getForModeration(created.id());
         assertThat(preserved.content()).isEqualTo("나중에 지울 댓글");
         assertThat(preserved.hiddenReason()).isEqualTo("작성자가 삭제함");
@@ -186,7 +205,7 @@ class CommunityServiceTest {
 
         assertThatThrownBy(() -> service.deleteComment(new DeleteCommentCommand(postId, created.id(), "intruder")))
                 .isInstanceOf(ForbiddenException.class);
-        assertThat(service.comments(postId, 100)).singleElement().isEqualTo(created);
+        assertThat(service.comments(postId, 100, null)).singleElement().isEqualTo(created);
     }
 
     @Test
@@ -244,6 +263,168 @@ class CommunityServiceTest {
                 .isInstanceOf(PostContentRequiredException.class);
     }
 
+    // ---- 차단 (user-block R2~R5, R10, R13) ----
+
+    private void publishAs(String authorId, int count) {
+        for (int index = 0; index < count; index++) {
+            service.publish(new PublishPostCommand(authorId, "글", List.of(), "general"));
+        }
+    }
+
+    @Test
+    @DisplayName("차단 관계인 작성자의 글은 페이지를 자르기 전에 걸러져 첫 페이지가 꽉 찬다")
+    void feedPage_excludesBlockedAuthorsBeforePaging() {
+        publishAs("B", 12);
+        publishAs("C", 12);
+        blocks.block("A", "B");
+
+        var page = service.feedPage(6, Optional.empty(), Optional.empty(), Optional.empty(), "A");
+
+        assertThat(page.items()).hasSize(6).extracting(Post::getAuthorId).containsOnly("C");
+        assertThat(page.hasMore()).isTrue();
+    }
+
+    @Test
+    @DisplayName("차단은 양방향이라 차단당한 쪽의 피드에서도 상대 글이 빠진다")
+    void feedPage_excludesBlockedAuthorsInBothDirections() {
+        publishAs("A", 3);
+        publishAs("C", 3);
+        blocks.block("A", "B");
+
+        var page = service.feedPage(6, Optional.empty(), Optional.empty(), Optional.empty(), "B");
+
+        assertThat(page.items()).extracting(Post::getAuthorId).containsOnly("C").hasSize(3);
+    }
+
+    @Test
+    @DisplayName("feed 는 viewer 가 있을 때만 차단 작성자를 거르고 비로그인에는 모두 보인다")
+    void feed_excludesBlockedAuthorsOnlyForLoggedInViewer() {
+        publishAs("B", 2);
+        publishAs("C", 2);
+        blocks.block("A", "B");
+
+        assertThat(service.feed(30, "A")).extracting(Post::getAuthorId).containsOnly("C");
+        assertThat(service.feed(30, null)).extracting(Post::getAuthorId).contains("B", "C");
+    }
+
+    @Test
+    @DisplayName("차단 관계인 글의 상세는 COMMUNITY_BLOCKED 로 막고 해제하면 다시 보인다")
+    void getPost_rejectsBlockedAuthorAndRecoversAfterUnblock() {
+        String postId = service.publish(new PublishPostCommand("B", "글", List.of(), "general"));
+        blocks.block("A", "B");
+
+        assertThatThrownBy(() -> service.getPost(postId, "A"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("COMMUNITY_BLOCKED"));
+        assertThat(service.getPost(postId, "C")).isNotNull();
+        assertThat(service.getPost(postId, null)).isNotNull();
+
+        blocks.unblock("A", "B");
+
+        assertThat(service.getPost(postId, "A")).isNotNull();
+        assertThat(service.feed(30, "A")).extracting(Post::getAuthorId).contains("B");
+    }
+
+    @Test
+    @DisplayName("댓글 목록은 글 작성자와 차단이면 막고 차단 상대의 댓글만 숨긴다")
+    void comments_rejectsBlockedPostAuthorAndHidesBlockedCommenters() {
+        String postId = service.publish(new PublishPostCommand("D", "글", List.of(), "general"));
+        service.comment(new CommentCommand(postId, "B", "B 댓글"));
+        service.comment(new CommentCommand(postId, "C", "C 댓글"));
+        blocks.block("A", "B");
+        blocks.block("A", "D");
+
+        assertThatThrownBy(() -> service.comments(postId, 100, "A"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("COMMUNITY_BLOCKED"));
+
+        blocks.unblock("A", "D");
+
+        assertThat(service.comments(postId, 100, "A"))
+                .extracting(Comment::authorId)
+                .containsExactly("C");
+        assertThat(service.comments(postId, 100, "C"))
+                .extracting(Comment::authorId)
+                .containsExactly("B", "C");
+        assertThat(service.comments(postId, 100, null)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("차단 상대 댓글이 앞에 몰려 있어도 limit만큼 다른 댓글을 채운다")
+    void comments_excludesBlockedBeforeLimit() {
+        String postId = service.publish(new PublishPostCommand("D", "글", List.of(), "general"));
+        service.comment(new CommentCommand(postId, "B", "B 댓글 1"));
+        service.comment(new CommentCommand(postId, "B", "B 댓글 2"));
+        service.comment(new CommentCommand(postId, "C", "C 댓글 1"));
+        service.comment(new CommentCommand(postId, "C", "C 댓글 2"));
+        blocks.block("A", "B");
+
+        assertThat(service.comments(postId, 2, "A"))
+                .extracting(Comment::content)
+                .containsExactly("C 댓글 1", "C 댓글 2");
+    }
+
+    @Test
+    @DisplayName("차단 관계인 글에는 좋아요·댓글이 막히고 저장도 알림도 없다")
+    void likeAndComment_rejectedWhenBlocked_withoutSideEffects() {
+        String postId = service.publish(new PublishPostCommand("B", "글", List.of(), "general"));
+        blocks.block("A", "B");
+
+        assertThatThrownBy(() -> service.like(postId, "A"))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("COMMUNITY_BLOCKED"));
+        assertThatThrownBy(() -> service.comment(new CommentCommand(postId, "A", "안녕")))
+                .isInstanceOfSatisfying(
+                        ForbiddenException.class, e -> assertThat(e.getCode()).isEqualTo("COMMUNITY_BLOCKED"));
+
+        assertThat(service.getPost(postId, null).likeCount()).isZero();
+        assertThat(comments.store).isEmpty();
+        assertThat(notifier.likes).isEmpty();
+    }
+
+    @Test
+    @DisplayName("좋아요 취소는 차단 관계여도 허용한다")
+    void unlike_allowedEvenWhenBlocked() {
+        String postId = service.publish(new PublishPostCommand("B", "글", List.of(), "general"));
+        service.like(postId, "A");
+        blocks.block("A", "B");
+
+        service.unlike(postId, "A");
+
+        assertThat(service.getPost(postId, null).isLikedBy("A")).isFalse();
+    }
+
+    private static final class FakeBlocks implements BlockedAuthorQueryPort {
+        private final Set<String> pairs = new HashSet<>();
+
+        void block(String a, String b) {
+            pairs.add(a + ">" + b);
+        }
+
+        void unblock(String a, String b) {
+            pairs.remove(a + ">" + b);
+        }
+
+        @Override
+        public boolean blockedBetween(String a, String b) {
+            return pairs.contains(a + ">" + b) || pairs.contains(b + ">" + a);
+        }
+
+        @Override
+        public List<String> blockedCounterparts(String accountId) {
+            List<String> result = new ArrayList<>();
+            for (String pair : pairs) {
+                String[] parts = pair.split(">");
+                if (parts[0].equals(accountId)) {
+                    result.add(parts[1]);
+                } else if (parts[1].equals(accountId)) {
+                    result.add(parts[0]);
+                }
+            }
+            return result;
+        }
+    }
+
     private void draft(String id, String content, List<String> photos) {
         posts.save(new Post(
                 id,
@@ -272,9 +453,10 @@ class CommunityServiceTest {
         }
 
         @Override
-        public List<Post> findPublishedRecentFirst(int limit) {
+        public List<Post> findPublishedRecentFirst(int limit, List<String> excludedAuthorIds) {
             return store.stream()
                     .filter(Post::isPublished)
+                    .filter(post -> !excludedAuthorIds.contains(post.getAuthorId()))
                     .sorted(Comparator.comparing(Post::getCreatedAt)
                             .thenComparing(Post::getId)
                             .reversed())
@@ -287,9 +469,11 @@ class CommunityServiceTest {
                 int limit,
                 Optional<PostRepositoryPort.FeedCursor> before,
                 Optional<PostType> topic,
-                Optional<String> query) {
+                Optional<String> query,
+                List<String> excludedAuthorIds) {
             return store.stream()
                     .filter(Post::isPublished)
+                    .filter(post -> !excludedAuthorIds.contains(post.getAuthorId()))
                     .filter(post -> topic.map(value -> post.getType() == value).orElse(true))
                     .filter(post -> query.map(value -> {
                                 String needle = value.toLowerCase(java.util.Locale.ROOT);
@@ -341,10 +525,11 @@ class CommunityServiceTest {
         }
 
         @Override
-        public List<Comment> findByPostId(String postId, int limit) {
+        public List<Comment> findByPostId(String postId, int limit, List<String> excludedAuthorIds) {
             return store.stream()
                     .filter(c -> c.postId().equals(postId))
                     .filter(c -> !c.isHidden())
+                    .filter(c -> !excludedAuthorIds.contains(c.authorId()))
                     .limit(limit)
                     .toList();
         }

@@ -3,6 +3,7 @@ package com.gole.api.chat.adapter.out.persistence;
 import java.time.Instant;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "chat_blocks")
@@ -13,7 +14,10 @@ public class ChatBlockDocument {
     private String id;
 
     private String blockerId;
+
+    @Indexed
     private String blockedId;
+
     private String reason;
     private Instant blockedAt;
 
