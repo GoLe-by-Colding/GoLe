@@ -11,7 +11,7 @@ import {
   type PricePoint,
 } from "@entities/pricing";
 import { formatKrw, formatKrwCompact } from "@shared/lib";
-import { Badge, Button, Card, EmptyState, LineChart, MediaImage } from "@shared/ui";
+import { Badge, Button, Card, EmptyState, LineChart, MediaImage, Segmented } from "@shared/ui";
 import { withRecoveredSnapshots, type PriceBoardItem, type SnapshotRecovery } from "../model/board";
 import { SetPriceActions } from "./set-price-actions";
 
@@ -344,23 +344,13 @@ export function PriceExplorer({ items, initialSetNumber }: PriceExplorerProps) {
               </span>
             </div>
 
-            <div className="flex border-b border-neutral-200">
-              {PERIODS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setPeriod(item.value)}
-                  aria-pressed={period === item.value}
-                  className={`flex-1 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
-                    period === item.value
-                      ? "border-brand-600 text-brand-700"
-                      : "border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              fullWidth
+              aria-label="시세 기간"
+              options={PERIODS}
+              value={period}
+              onChange={setPeriod}
+            />
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">

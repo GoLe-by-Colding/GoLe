@@ -10,7 +10,7 @@ import {
   type PostType,
 } from "@entities/community";
 import { useSession } from "@entities/user";
-import { Button, SearchIcon, Text } from "@shared/ui";
+import { Button, Chip, SearchIcon, Segmented, Text, Input } from "@shared/ui";
 import { PostCard } from "@widgets/post-card";
 
 type Filter = PostType | "all" | "following";
@@ -183,14 +183,6 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
     }
   }
 
-  function tabClass(active: boolean): string {
-    return `rounded-md border px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-      active
-        ? "border-brand-600 bg-brand-600 text-white"
-        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
-    }`;
-  }
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -200,57 +192,40 @@ export function CommunityFeed({ initialPage, pageSize }: CommunityFeedProps) {
             className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400"
           />
           <span className="sr-only">게시글 검색</span>
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="내용이나 작성자로 검색"
             maxLength={100}
-            className="h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 pr-3 pl-9 text-sm outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-50"
+            size="sm"
+            className="pl-9"
           />
         </label>
-        <div className="flex rounded-md bg-neutral-100 p-1" aria-label="게시글 정렬">
-          {(["latest", "popular"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setSort(value)}
-              className={`rounded px-3 py-1.5 text-sm font-semibold transition-colors ${
-                sort === value ? "bg-white text-neutral-900 shadow-soft" : "text-neutral-500"
-              }`}
-            >
-              {value === "latest" ? "최신순" : "인기순"}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          aria-label="게시글 정렬"
+          options={[
+            { value: "latest", label: "최신순" },
+            { value: "popular", label: "인기순" },
+          ]}
+          value={sort}
+          onChange={setSort}
+        />
       </div>
 
       <div className="flex flex-wrap gap-2" aria-label="게시글 주제">
-        <button
-          type="button"
-          onClick={() => setFilter("all")}
-          className={tabClass(filter === "all")}
-        >
+        <Chip selected={filter === "all"} onClick={() => setFilter("all")}>
           전체
-        </button>
+        </Chip>
         {POST_TOPICS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setFilter(t.key)}
-            className={tabClass(filter === t.key)}
-          >
+          <Chip key={t.key} selected={filter === t.key} onClick={() => setFilter(t.key)}>
             {t.label}
-          </button>
+          </Chip>
         ))}
         {session !== null ? (
-          <button
-            type="button"
-            onClick={() => setFilter("following")}
-            className={tabClass(filter === "following")}
-          >
+          <Chip selected={filter === "following"} onClick={() => setFilter("following")}>
             팔로잉
-          </button>
+          </Chip>
         ) : null}
       </div>
 
