@@ -45,8 +45,8 @@ async function probeResource(route: ResourceRoute): Promise<Response> {
   };
   const response = await fetch(url, options);
 
-  // Spring MVC GET endpoints support HEAD. Keep a GET fallback so a future upstream that
-  // explicitly rejects HEAD does not silently bring soft 404s back.
+  // Spring MVC의 GET 경로는 HEAD도 지원한다. 이후 상위 서버가 HEAD를 거부하더라도
+  // 없는 리소스가 200으로 응답하지 않도록 GET 재시도를 유지한다.
   if (response.status === 405 || response.status === 501) {
     return fetch(url, { ...options, method: "GET" });
   }
@@ -54,10 +54,10 @@ async function probeResource(route: ResourceRoute): Promise<Response> {
 }
 
 /**
- * Next 16 streams every route below `(main)/loading.tsx`, so page-level notFound() cannot
- * reliably change an already-sent 200. Probe only public detail routes before rendering and
- * rewrite only an explicit upstream 404. A timeout, network failure, or 5xx continues to the
- * page so the application error boundary owns the outage instead of misreporting it as missing.
+ * Next 16은 `(main)/loading.tsx` 아래 경로를 스트리밍하므로 페이지의 notFound()만으로는
+ * 이미 전송한 200을 확실히 바꿀 수 없다. 공개 상세 경로만 렌더링 전에 조회하고,
+ * 상위 서버가 명시적으로 404를 반환한 경우에만 경로를 바꾼다. 시간 초과·통신 실패·5xx는
+ * 페이지 오류 경계에서 처리하여 장애를 리소스 부재로 잘못 안내하지 않는다.
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (request.method !== "GET" && request.method !== "HEAD") {

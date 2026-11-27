@@ -3,7 +3,7 @@ package com.gole.api.design.domain.model;
 import com.gole.api.common.exception.BadRequestException;
 import java.util.*;
 
-/** Reviewed allowlist extracted from the Tailwind theme; never accepts CSS source. */
+/** Tailwind 테마에서 추출하고 검토한 허용 목록. CSS 원문은 받지 않는다. */
 public final class DesignSchema {
     private DesignSchema() {}
 

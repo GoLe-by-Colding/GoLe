@@ -93,7 +93,7 @@ def _queued(home, key="gh-1-1"):
     return job
 
 
-# ---------------------------------------------------------------- submit (SSH)
+# ---------------------------------------------------------------- 제출 (SSH)
 
 
 def test_submit_storesOrderAndStartsWorkerInTheBackground(server):
@@ -227,7 +227,7 @@ def test_missingServerFiles_isMisconfigured(server):
     assert json.loads(completed.stdout)["error"] == "GATEWAY_MISCONFIGURED"
 
 
-# ---------------------------------------------------------------- work (background)
+# ---------------------------------------------------------------- 작업 (백그라운드)
 
 
 def test_work_feedsOrderToDeliverAndClearsTheJob(server):

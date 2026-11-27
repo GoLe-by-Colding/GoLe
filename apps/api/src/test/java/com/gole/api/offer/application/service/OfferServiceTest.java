@@ -498,7 +498,7 @@ class OfferServiceTest {
         return service.make(new MakeOfferCommand("room-2", "buyer-2", 255_000));
     }
 
-    // ---- fakes ----
+    // ---- 테스트 대체 구현 ----
 
     record Post(String roomId, String senderId, String content) {}
 

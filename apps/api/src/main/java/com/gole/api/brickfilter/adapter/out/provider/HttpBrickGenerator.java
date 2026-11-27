@@ -73,7 +73,7 @@ public class HttpBrickGenerator implements BrickGeneratorPort {
             throw unavailable();
         }
     }
-    /** Bounds memory before buffering and makes the deadline cover the entire response body. */
+    /** 버퍼링 전에 메모리를 제한하고 응답 본문 전체 수신에 제한 시간을 적용한다. */
     static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final java.util.concurrent.CompletableFuture<byte[]> result =
                 new java.util.concurrent.CompletableFuture<>();
