@@ -55,5 +55,5 @@
       "@expo/cli@57.0.28": "patches/@expo__cli@57.0.28.patch"
     }
   },
-  "packageManager": "pnpm@10.30.3"
+  "packageManager": "pnpm@10.34.9"
 }

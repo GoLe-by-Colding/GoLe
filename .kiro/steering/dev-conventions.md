@@ -87,7 +87,7 @@ features/lego-set/
 cd /app && pnpm --filter web build
 ```
 
-- Next.js 16.2.7, React 19, Node 22, pnpm 10.30.3
+- Next.js 16.2.7, React 19, Node 22, pnpm 10.34.9
 - 로컬 개발은 `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`을 사용함
 - 운영 빌드는 `NEXT_PUBLIC_API_BASE_URL=https://gole.co.kr`을 사용하며 `main` CD에서 생성함
 - 실행: `pnpm exec next start -p 3000` (--cwd /app/apps/web)

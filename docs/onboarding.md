@@ -16,7 +16,7 @@
 | 도구 | 버전 | 비고 |
 |---|---|---|
 | Node | 22 이상 | `.nvmrc` 참고. CI 도 22 |
-| pnpm | 10.30.3 | `packageManager` 필드가 고정한다 |
+| pnpm | 10.34.9 | `packageManager` 필드가 고정한다 |
 | JDK | 21 (Temurin) | 배포 컨테이너와 맞춘다 |
 | Docker | 실행 중이어야 함 | Mongo·Redis·MinIO |
 | Xcode | iOS 앱을 볼 때만 | 시뮬레이터 필요 |

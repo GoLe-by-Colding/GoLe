@@ -70,7 +70,7 @@ GoLe/
 
 ## Getting Started
 
-필수 환경: Node.js 22+, pnpm 10.30.3, Java 21, Docker Compose 2.20+.
+필수 환경: Node.js 22+, pnpm 10.34.9, Java 21, Docker Compose 2.20+.
 
 ```bash
 # 최초 1회

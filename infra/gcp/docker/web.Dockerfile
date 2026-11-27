@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches/ patches/
@@ -40,7 +40,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PNPM_HOME=/pnpm
 ENV COREPACK_HOME=/pnpm/corepack
 ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@10.30.3 --activate \
+RUN corepack enable && corepack prepare pnpm@10.34.9 --activate \
     && useradd --system --uid 10001 --create-home gole \
     && chown -R gole:gole /pnpm
 ENV COREPACK_ENABLE_NETWORK=0
