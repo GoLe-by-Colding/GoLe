@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { fetchBidBookForPage, type BidBook } from "@entities/bid";
 import { fetchLegoSetForPage, type LegoSet } from "@entities/lego-set";
 import { fetchListingsBySet, type Listing } from "@entities/listing";
+import { fetchLaunchConfig } from "@entities/launch";
 import { fetchPartRequestsForPage } from "@entities/part-request";
 import { fetchPriceSnapshotForPage, type PriceSnapshot } from "@entities/pricing";
 import { SetDetailPage } from "@views/set-detail";
@@ -126,8 +127,8 @@ export default async function Page({ params }: PageParams) {
   }
 
   // 매물·시세·부품 요청 건수·호가창은 실패해도 페이지를 살린다(부분 실패 허용).
-  const [listings, snapshot, openPartRequests, bidBook] = await Promise.all([
-    fetchListingsBySet(set.setNumber).catch((): readonly Listing[] => []),
+  const [listings, snapshot, openPartRequests, bidBook, launch] = await Promise.all([
+    fetchListingsBySet(set.setNumber).catch((): null => null),
     fetchPriceSnapshotForPage(set.setNumber).catch((): PriceSnapshot | null => null),
     fetchPartRequestsForPage({
       setNumber: set.setNumber,
@@ -137,19 +138,22 @@ export default async function Page({ params }: PageParams) {
       .then((requests) => requests.length)
       .catch((): number | null => null),
     fetchBidBookForPage(set.setNumber).catch((): BidBook | null => null),
+    fetchLaunchConfig(),
   ]);
 
   return (
     <>
       <SetDetailPage
         set={set}
-        listings={listings}
+        listings={listings ?? []}
+        listingsLoadFailed={listings === null}
+        sellerTradingOpen={launch.sellerIdentityVerificationReady}
         snapshot={snapshot}
         openPartRequestCount={openPartRequests}
         openPartRequestLimit={OPEN_PART_REQUEST_LIMIT}
         bidBook={bidBook}
       />
-      <JsonLd data={setJsonLd(set, listings, snapshot)} />
+      <JsonLd data={setJsonLd(set, listings ?? [], snapshot)} />
       <JsonLd
         data={breadcrumbJsonLd(
           [

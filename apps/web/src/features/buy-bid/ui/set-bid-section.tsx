@@ -30,6 +30,8 @@ export interface SetBidSectionProps {
    * 못 읽었으면 `null`이고 브라우저에서 다시 읽는다.
    */
   readonly initialBook: BidBook | null;
+  /** 입찰 등록은 유지하며 실제 판매 수락 준비 여부만 안내한다. */
+  readonly sellerTradingOpen?: boolean;
 }
 
 /**
@@ -38,7 +40,11 @@ export interface SetBidSectionProps {
  * 입찰을 걸면 호가창을 브라우저에서 바로 다시 읽는다. 같은 세트·상태의 진행 중 입찰이 있으면
  * 서버가 새로 만들지 않고 가격·기간을 바꾼다(D3).
  */
-export function SetBidSection({ setNumber, initialBook }: SetBidSectionProps) {
+export function SetBidSection({
+  setNumber,
+  initialBook,
+  sellerTradingOpen = false,
+}: SetBidSectionProps) {
   const { session } = useSession();
   const [book, setBook] = useState<BidBook | null>(initialBook);
   const [bookFailed, setBookFailed] = useState(false);
@@ -84,7 +90,7 @@ export function SetBidSection({ setNumber, initialBook }: SetBidSectionProps) {
       setNotice(
         isBidRenewal(bid)
           ? `${conditionLabel(bid.condition)} 입찰가를 ${formatWon(bid.price)}으로 바꿨어요. 기간은 ${bid.durationDays}일로 다시 잡혔어요.`
-          : `${conditionLabel(bid.condition)} 상태에 ${formatWon(bid.price)} 입찰을 걸었어요. 판매자가 수락하면 알려 드려요.`,
+          : `${conditionLabel(bid.condition)} 상태에 ${formatWon(bid.price)} 입찰을 걸었어요. ${sellerTradingOpen ? "판매자가 수락하면 알려 드려요." : "현재는 구매 희망 등록만 가능하며 판매 수락은 준비 중이에요."}`,
       );
       setPriceInput("");
       setBookRequest((current) => current + 1);
@@ -124,8 +130,9 @@ export function SetBidSection({ setNumber, initialBook }: SetBidSectionProps) {
           <>
             {total === 0 ? (
               <Text size="sm" tone="muted">
-                아직 걸린 입찰이 없어요. 첫 입찰을 걸면 판매자에게 &ldquo;지금 팔면 받는
-                값&rdquo;으로 보여요.
+                {sellerTradingOpen
+                  ? "아직 걸린 입찰이 없어요. 첫 입찰을 걸면 판매자에게 ‘지금 팔면 받는 값’으로 보여요."
+                  : "아직 등록된 구매 희망이 없어요. 원하는 상태와 가격을 등록할 수 있지만, 판매 수락은 준비 중이에요."}
               </Text>
             ) : null}
             <ul className="flex flex-col divide-y divide-neutral-100">
@@ -161,7 +168,9 @@ export function SetBidSection({ setNumber, initialBook }: SetBidSectionProps) {
                       ) : null}
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-xs text-neutral-500">지금 팔면 받는 값</span>
+                      <span className="text-xs text-neutral-500">
+                        {sellerTradingOpen ? "지금 팔면 받는 값" : "최고 구매 희망가"}
+                      </span>
                       <span className="text-lg font-bold tabular-nums text-neutral-900">
                         {row.highestPrice === null ? "—" : formatWon(row.highestPrice)}
                       </span>
@@ -180,9 +189,9 @@ export function SetBidSection({ setNumber, initialBook }: SetBidSectionProps) {
             입찰하기
           </h3>
           <Text size="sm" tone="muted">
-            원하는 상태와 가격을 걸어 두면 판매자가 그 가격에 바로 팔 수 있어요. 수락되면 72시간
-            안에 그 가격으로 거래를 진행해요. 같은 상태에 진행 중인 입찰이 있으면 가격·기간이
-            바뀌어요.
+            {sellerTradingOpen
+              ? "원하는 상태와 가격을 걸어 두면 판매자가 그 가격에 바로 팔 수 있어요. 수락되면 72시간 안에 그 가격으로 거래를 진행해요. 같은 상태에 진행 중인 입찰이 있으면 가격·기간이 바뀌어요."
+              : "현재는 구매 희망 가격을 등록하는 단계예요. 판매 수락과 새 거래 연결은 판매자 본인확인 준비 후에 열려요. 입찰 기간 안에 거래가 열리지 않으면 입찰은 만료될 수 있어요. 같은 상태에 진행 중인 입찰이 있으면 가격·기간이 바뀌어요."}
           </Text>
         </div>
         {session === null ? (
