@@ -24,6 +24,7 @@ import {
   MediaImage,
   MessageCircleIcon,
   Text,
+  Segmented,
 } from "@shared/ui";
 import { thumbnailUrl } from "@shared/lib";
 import { buildPriceNotes, priceNoteSetNumbers } from "@widgets/listing-grid";
@@ -238,34 +239,18 @@ export function FollowingFeedPage() {
         </section>
       ) : null}
 
-      <div
-        className="flex gap-1 rounded-lg bg-neutral-100 p-1"
-        role="tablist"
+      <Segmented
+        semantics="tabs"
+        fullWidth
         aria-label="피드 종류"
-      >
-        {(
-          [
-            ["all", "모아보기"],
-            ["listings", "새 매물"],
-            ["posts", "새 이야기"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            onClick={() => setTab(value)}
-            className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-              tab === value
-                ? "bg-white text-neutral-900 shadow-soft"
-                : "text-neutral-500 hover:text-neutral-800"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        options={[
+          { value: "all", label: "모아보기" },
+          { value: "listings", label: "새 매물" },
+          { value: "posts", label: "새 이야기" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {visibleState.status === "loading" && !hasContent ? (
         <FeedSkeleton />

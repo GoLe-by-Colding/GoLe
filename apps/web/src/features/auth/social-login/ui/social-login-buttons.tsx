@@ -6,6 +6,7 @@ import {
   fetchSocialProviders,
   type SignupPolicyAcceptance,
 } from "@entities/user";
+import { Button } from "@shared/ui";
 
 interface ProviderMeta {
   readonly key: string;
@@ -150,9 +151,10 @@ export function SocialLoginButtons({
             ? `${provider.label} (확인 실패)`
             : `${provider.label} (준비 중)`;
         return (
-          <button
+          <Button
             key={provider.key}
-            type="button"
+            variant="secondary"
+            fullWidth
             disabled={
               providerState !== "ready" || !isEnabled || pending !== undefined || !signupPolicyReady
             }
@@ -162,7 +164,7 @@ export function SocialLoginButtons({
                 ? `${provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")}`
                 : unavailableLabel
             }
-            className="relative inline-flex h-12 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-12 text-sm font-semibold text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="relative px-12"
           >
             <span
               aria-hidden="true"
@@ -175,7 +177,7 @@ export function SocialLoginButtons({
               : isEnabled
                 ? provider.label.replace("계속하기", mode === "signup" ? "가입" : "로그인")
                 : unavailableLabel}
-          </button>
+          </Button>
         );
       })}
     </div>
