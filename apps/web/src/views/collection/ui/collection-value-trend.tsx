@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchCollectionValueHistory, type CollectionValuePoint } from "@entities/collection";
 import { ApiError } from "@shared/api";
 import { formatKrw, formatKrwCompact } from "@shared/lib";
-import { Button, Card, LineChart, Skeleton, Text } from "@shared/ui";
+import { Button, Card, LineChart, Segmented, Skeleton, Text } from "@shared/ui";
 
 const PERIODS = [
   { days: 30, label: "30일" },
@@ -93,27 +93,15 @@ export function CollectionValueTrend({ accountId, refreshKey }: CollectionValueT
     <Card padded className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-bold text-neutral-900">내 레고 자산 추이</h2>
-        <div
-          className="flex rounded-md border border-neutral-200 p-0.5"
-          role="group"
+        <Segmented
           aria-label="기간"
-        >
-          {PERIODS.map((period) => (
-            <button
-              key={period.days}
-              type="button"
-              aria-pressed={days === period.days}
-              onClick={() => setDays(period.days)}
-              className={`rounded px-3 py-1 text-sm font-semibold transition-colors ${
-                days === period.days
-                  ? "bg-brand-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
-              }`}
-            >
-              {period.label}
-            </button>
-          ))}
-        </div>
+          options={PERIODS.map((period) => ({ value: String(period.days), label: period.label }))}
+          value={String(days)}
+          onChange={(next) => {
+            const period = PERIODS.find((item) => String(item.days) === next);
+            if (period !== undefined) setDays(period.days);
+          }}
+        />
       </div>
 
       {shown === null && loading ? (

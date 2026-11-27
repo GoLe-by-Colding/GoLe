@@ -17,44 +17,57 @@ function scaleOf(button: Locator): Promise<number> {
   });
 }
 
-async function pressAndHold(page: Page, button: Locator): Promise<number> {
-  const box = await button.boundingBox();
-  if (box === null) throw new Error("버튼 위치를 읽지 못했다");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+/** 누르는 동안의 세로 이동(px). 브릭 버튼은 턱 깊이만큼 내려앉는다. */
+function dropOf(element: Locator): Promise<number> {
+  return element.evaluate((node) => {
+    const translate = getComputedStyle(node).translate;
+    return translate === "none" ? 0 : Number.parseFloat(translate.split(" ")[1] ?? "0");
+  });
+}
+
+async function hold<T>(page: Page, target: Locator, read: () => Promise<T>): Promise<T> {
+  // 늦게 그려지는 요소(소셜 로그인 등)가 레이아웃을 밀 수 있으니 좌표를 미리 재지 않고 요소 위로 옮긴 뒤 누른다.
+  await target.hover();
   await page.mouse.down();
   await page.waitForTimeout(400);
-  const pressed = await scaleOf(button);
+  const pressed = await read();
   await page.mouse.up();
   return pressed;
 }
 
-test.describe("공용 버튼 누름 반동", () => {
-  test("누르는 동안 작아지고 크기 변화가 전환으로 이어진다", async ({ page }) => {
-    const button = await submitButton(page);
-    const transition = await button.evaluate(
-      (element) => getComputedStyle(element).transitionProperty,
-    );
-    expect(
-      transition.split(", "),
-      "scale 이 전환 목록에 없으면 누름이 애니메이션 없이 튄다",
-    ).toContain("scale");
+function pressAndHold(page: Page, target: Locator): Promise<number> {
+  return hold(page, target, () => scaleOf(target));
+}
 
-    expect(await pressAndHold(page, button)).toBeLessThan(0.99);
-    await expect.poll(() => scaleOf(button)).toBe(1);
+test.describe("공용 버튼 브릭 누름", () => {
+  test("아래 턱이 보이고, 누르는 동안 턱만큼 내려앉았다가 전환으로 돌아온다", async ({ page }) => {
+    const button = await submitButton(page);
+    const style = await button.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return { transition: computed.transitionProperty, shadow: computed.boxShadow };
+    });
+    expect(style.shadow, "브릭 턱(아래 그림자)이 있어야 한다").toMatch(/0px 4px 0px/);
+    expect(
+      style.transition.split(", "),
+      "translate 가 전환 목록에 없으면 누름이 애니메이션 없이 튄다",
+    ).toContain("translate");
+
+    expect(await hold(page, button, () => dropOf(button))).toBeGreaterThan(2);
+    await expect.poll(() => dropOf(button)).toBe(0);
   });
 
-  test("비활성 버튼은 눌러도 크기가 그대로다", async ({ page }) => {
+  test("비활성 버튼은 눌러도 내려앉지 않는다", async ({ page }) => {
     const button = await submitButton(page);
     await button.evaluate((element) => element.setAttribute("disabled", ""));
 
-    expect(await pressAndHold(page, button)).toBe(1);
+    expect(await hold(page, button, () => dropOf(button))).toBe(0);
   });
 
-  test("모션을 줄인 사용자에게는 크기 반동을 주지 않는다", async ({ page }) => {
+  test("모션을 줄인 사용자에게는 내려앉는 움직임을 주지 않는다", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const button = await submitButton(page);
 
-    expect(await pressAndHold(page, button)).toBe(1);
+    expect(await hold(page, button, () => dropOf(button))).toBe(0);
   });
 });
 
